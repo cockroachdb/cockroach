@@ -12,24 +12,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAggregator(t *testing.T) {
-	tr := tracing.NewTracer()
+	tr := NewTracer()
 	ctx := context.Background()
-	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
+	ctx, root := tr.StartSpanCtx(ctx, "root", WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
 
 	agg := bulk.TracingAggregatorForContext(ctx)
 	ctx, withListener := tr.StartSpanCtx(ctx, "withListener",
-		tracing.WithEventListeners(agg), tracing.WithParent(root))
+		WithEventListeners(agg), WithParent(root))
 	defer withListener.Finish()
 
-	child := tr.StartSpan("child", tracing.WithParent(withListener))
+	child := tr.StartSpan("child", WithParent(withListener))
 	defer child.Finish()
 	child.RecordStructured(&backuppb.ExportStats{
 		NumFiles: 10,
@@ -37,7 +36,7 @@ func TestAggregator(t *testing.T) {
 		Duration: time.Minute,
 	})
 
-	_, childChild := tracing.ChildSpan(ctx, "childChild")
+	_, childChild := ChildSpan(ctx, "childChild")
 	defer childChild.Finish()
 	childChild.RecordStructured(&backuppb.ExportStats{
 		NumFiles: 20,
@@ -45,7 +44,7 @@ func TestAggregator(t *testing.T) {
 		Duration: time.Minute,
 	})
 
-	remoteChild := tr.StartSpan("remoteChild", tracing.WithRemoteParentFromSpanMeta(childChild.Meta()))
+	remoteChild := tr.StartSpan("remoteChild", WithRemoteParentFromSpanMeta(childChild.Meta()))
 	remoteChild.RecordStructured(&backuppb.ExportStats{
 		NumFiles: 30,
 		DataSize: 30,
@@ -54,7 +53,7 @@ func TestAggregator(t *testing.T) {
 
 	// We only expect to see the aggregated stats from the local children since we
 	// have not imported the remote children's Recording.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event bulk.AggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool
@@ -74,7 +73,7 @@ func TestAggregator(t *testing.T) {
 
 	// Now, we expect the ExportStats from the remote child to show up in the
 	// aggregator.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event bulk.AggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool

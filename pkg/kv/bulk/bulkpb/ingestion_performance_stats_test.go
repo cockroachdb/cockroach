@@ -53,7 +53,7 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	}
 
 	assertAggContainsStats := func(t *testing.T, agg *bulk.TracingAggregator, expected *IngestionPerformanceStats) {
-		agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+		agg.ForEachAggregatedEvent(func(name string, event bulk.AggregatorEvent) {
 			require.Equal(t, name, proto.MessageName(expected))
 			var actual *IngestionPerformanceStats
 			var ok bool
