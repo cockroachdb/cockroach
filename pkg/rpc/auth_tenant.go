@@ -300,7 +300,6 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"store:.*",
-	"system-db",
 }
 
 // authTenantRanges authorizes the provided tenant to invoke the

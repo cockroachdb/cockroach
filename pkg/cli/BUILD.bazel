@@ -121,7 +121,6 @@ go_library(
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/userfile",
         "//pkg/clusterversion",
-        "//pkg/config",
         "//pkg/docs",
         "//pkg/geo/geos",
         "//pkg/gossip",
