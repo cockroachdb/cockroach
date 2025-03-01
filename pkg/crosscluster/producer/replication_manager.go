@@ -32,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -434,21 +436,66 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	return nil
 }
 
-func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.Context) error {
-	err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
-		syntheticprivilege.GlobalPrivilegeObject,
-		privilege.REPLICATIONSOURCE)
+func (r *replicationStreamManagerImpl) authorizeTableLevelReplicationPriv(
+	ctx context.Context, tableNames []string,
+) error {
 
-	if err != nil {
-		// Fallback to legacy REPLICATION priv.
-		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
-			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.REPLICATION); fallbackErr != nil {
+	// this could be replicated on the dest. i wouldn't replicate the higher one, given the create table shenanigans.
+	for _, name := range tableNames {
+		uon, err := parser.ParseTableName(name)
+		if err != nil {
+			return err
+		}
+		lookupFlags := tree.ObjectLookupFlags{
+			Required:             true,
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: tree.ResolveRequireTableDesc,
+		}
+		d, _, err := resolver.ResolveExistingObject(ctx, r.resolver, uon, lookupFlags)
+		if err != nil {
+			return err
+		}
+		td, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return errors.New("expected table descriptor")
+		}
+		if err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx, td, privilege.REPLICATIONSOURCE); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
-	r.authorized = true
+func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(
+	ctx context.Context, tableNames ...string,
+) (err error) {
+
+	defer func() {
+		if err == nil {
+			r.authorized = true
+		}
+	}()
+
+	if err = r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.REPLICATIONSOURCE); err == nil {
+		return nil
+	}
+
+	if len(tableNames) > 0 {
+		if err = r.authorizeTableLevelReplicationPriv(ctx, tableNames); err == nil {
+			return nil
+		}
+	}
+
+	// Fallback to legacy REPLICATION priv.
+	if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.REPLICATION); fallbackErr != nil {
+		// Surface REPLICATIONSOURCE error to nudge user to use new priv
+		return err
+	}
+
 	return nil
 }
 
