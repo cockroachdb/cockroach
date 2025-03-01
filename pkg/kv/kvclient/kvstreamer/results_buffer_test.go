@@ -59,8 +59,9 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
+	reverse := rng.Float64() > 0.5
 	budget := newBudget(mon.NewStandaloneUnlimitedAccount(), math.MaxInt /* limitBytes */)
-	diskBuffer := TestResultDiskBufferConstructor(tempEngine, memAcc, diskMonitor)
+	diskBuffer := TestResultDiskBufferConstructor(tempEngine, memAcc, diskMonitor, reverse)
 	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
 
@@ -85,7 +86,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 					numRanges = rng.Intn(10) + 1
 				}
 				for j := 0; j < numRanges; j++ {
-					scan := makeResultWithScanResp(rng)
+					scan := makeResultWithScanResp(rng, reverse)
 					scan.scanComplete = j+1 == numRanges
 					scan.memoryTok.toRelease = rng.Int63n(100)
 					scan.Position = i
@@ -183,7 +184,7 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 	return r
 }
 
-func makeResultWithScanResp(rng *rand.Rand) Result {
+func makeResultWithScanResp(rng *rand.Rand, reverse bool) Result {
 	var r Result
 	// Sometimes generate zero-length batchResponses.
 	batchResponses := make([][]byte, rng.Intn(20))
@@ -192,8 +193,14 @@ func makeResultWithScanResp(rng *rand.Rand) Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	r.ScanResp = &kvpb.ScanResponse{
-		BatchResponses: batchResponses,
+	if reverse {
+		r.ScanResp = &kvpb.ReverseScanResponse{
+			BatchResponses: batchResponses,
+		}
+	} else {
+		r.ScanResp = &kvpb.ScanResponse{
+			BatchResponses: batchResponses,
+		}
 	}
 	return r
 }
