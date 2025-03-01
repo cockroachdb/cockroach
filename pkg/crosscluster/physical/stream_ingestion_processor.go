@@ -283,7 +283,7 @@ type streamIngestionProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
-	agg      *bulkutil.TracingAggregator
+	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
 }
 
@@ -389,7 +389,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
 	log.Infof(ctx, "starting ingest proc")
-	sip.agg = bulkutil.TracingAggregatorForContext(ctx)
+	sip.agg = tracing.TracingAggregatorForContext(ctx)
 
 	// If the aggregator is nil, we do not want the timer to fire.
 	if sip.agg != nil {
