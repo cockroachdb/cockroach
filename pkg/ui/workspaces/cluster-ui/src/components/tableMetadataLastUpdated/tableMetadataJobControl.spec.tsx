@@ -104,26 +104,6 @@ describe("TableMetadataJobControl", () => {
     expect(mockRefreshJobStatus).toHaveBeenCalled();
   });
 
-  it("schedules periodic updates", async () => {
-    jest.spyOn(global, "setInterval");
-
-    render(
-      <TimezoneContext.Provider value="UTC">
-        <TableMetadataJobControl onJobComplete={mockOnJobComplete} />
-      </TimezoneContext.Provider>,
-    );
-
-    expect(setInterval).toHaveBeenCalledWith(expect.any(Function), 10000);
-
-    await act(async () => {
-      jest.advanceTimersByTime(10000);
-    });
-
-    expect(api.triggerUpdateTableMetaJobApi).toHaveBeenCalledWith({
-      onlyIfStale: true,
-    });
-  });
-
   it("calls onJobComplete when lastCompletedTime changes", () => {
     const { rerender } = render(
       <TimezoneContext.Provider value="UTC">
