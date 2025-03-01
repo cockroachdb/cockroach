@@ -144,7 +144,7 @@ func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value) {
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
 // registered callbacks if the node became live in the process.
 func (c *Cache) maybeUpdate(ctx context.Context, newLivenessRec Record) {
-	if newLivenessRec.Liveness == (livenesspb.Liveness{}) {
+	if newLivenessRec.Liveness.Equal(livenesspb.Liveness{}) {
 		log.Fatal(ctx, "invalid new liveness record; found to be empty")
 	}
 
