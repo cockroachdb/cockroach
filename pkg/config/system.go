@@ -287,13 +287,13 @@ func (s *SystemConfig) GetLargestObjectID(
 	return objID, nil
 }
 
-// TestingGetSystemTenantZoneConfigForKey looks up the zone config the
+// TestingGetZoneConfigForKey looks up the zone config the
 // provided key. This is exposed to facilitate testing the underlying
 // logic.
-func TestingGetSystemTenantZoneConfigForKey(
-	s *SystemConfig, key roachpb.RKey,
+func TestingGetZoneConfigForKey(
+	codec keys.SQLCodec, s *SystemConfig, key roachpb.RKey,
 ) (ObjectID, *zonepb.ZoneConfig, error) {
-	return s.getZoneConfigForKey(keys.SystemSQLCodec, key)
+	return s.getZoneConfigForKey(codec, key)
 }
 
 // getZoneConfigForKey looks up the zone config for the object (table
@@ -378,8 +378,6 @@ func DecodeKeyIntoZoneIDAndSuffix(
 		} else {
 			objectID = keys.SystemRangesID
 		}
-	} else if bytes.HasPrefix(key, keys.TenantPrefix) {
-		objectID = keys.TenantsRangesID
 	}
 	return objectID, keySuffix
 }
@@ -417,7 +415,7 @@ func (s *SystemConfig) PurgeZoneConfigCache() {
 	}
 }
 
-// getZoneEntry returns the zone entry for the given system-tenant
+// getZoneEntry returns the zone entry for the given tenant's
 // object ID. In the fast path, the zone is already in the cache, and is
 // directly returned. Otherwise, getZoneEntry will hydrate new
 // zonepb.ZoneConfig(s) from the SystemConfig and install them as an
