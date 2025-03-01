@@ -171,33 +171,50 @@ func DownloadProfiles(
 			return err
 		}
 		url := urlPrefix + diagID
-		resp, err := client.Get(ctx, url)
-		if err != nil {
+		if err := downloadProfile(ctx, logger, client, url, collectedAt, stmtDir); err != nil {
 			return err
 		}
-		//nolint:deferloop TODO(#137605)
-		defer resp.Body.Close()
-		// Copy the contents of the URL to a BytesBuffer to determine the
-		// filename before saving it below.
-		var buf bytes.Buffer
-		_, err = io.Copy(&buf, resp.Body)
-		if err != nil {
-			return err
-		}
-		filename, err := getFilename(collectedAt, buf)
-		if err != nil {
-			return err
-		}
-		// write the buf to the filename
-		file, err := os.Create(filepath.Join(stmtDir, filename))
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(file, &buf); err != nil {
-			return err
-		}
-		logger.Printf("downloaded profile %s", filename)
 	}
+	return nil
+}
+
+func downloadProfile(
+	ctx context.Context,
+	logger *logger.Logger,
+	client *RoachtestHTTPClient,
+	url string,
+	collectedAt time.Time,
+	targetDir string,
+) error {
+	resp, err := client.Get(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// Copy the contents of the URL to a BytesBuffer to determine the
+	// filename before saving it below.
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, resp.Body)
+	if err != nil {
+		return err
+	}
+	filename, err := getFilename(collectedAt, buf)
+	if err != nil {
+		return err
+	}
+	// write the buf to the filename
+	file, err := os.Create(filepath.Join(targetDir, filename))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(file, &buf); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	logger.Printf("downloaded profile %s", filename)
 	return nil
 }
 
@@ -252,8 +269,7 @@ func MeasureQPS(
 		var dbs []*gosql.DB
 		for _, nodeId := range nodes {
 			db := c.Conn(ctx, t.L(), nodeId)
-			//nolint:deferloop TODO(#137605)
-			defer db.Close()
+			defer db.Close() //nolint:deferloop
 			dbs = append(dbs, db)
 		}
 		// Count the inserts before sleeping.

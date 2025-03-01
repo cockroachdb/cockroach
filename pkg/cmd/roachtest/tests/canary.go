@@ -229,11 +229,10 @@ func repeatGetLatestTag(
 			t.L().Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
-		//nolint:deferloop TODO(#137605)
-		defer resp.Body.Close()
 
 		var tags Tags
 		lastError = json.NewDecoder(resp.Body).Decode(&tags)
+		resp.Body.Close()
 		if lastError != nil {
 			t.L().Printf("error decoding - retrying: %s", lastError)
 			continue
