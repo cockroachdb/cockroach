@@ -7,6 +7,7 @@ package bulksst
 
 import (
 	"bytes"
+	"math/rand"
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,10 +18,12 @@ import (
 func CombineFileInfo(
 	files []SSTFiles, tableSpans []roachpb.Span,
 ) ([]execinfrapb.BulkMergeSpec_SST, []roachpb.Span) {
+	totalSize := uint64(0)
 	result := make([]execinfrapb.BulkMergeSpec_SST, 0)
 	samples := make([]roachpb.Key, 0)
 	for _, file := range files {
 		for _, sst := range file.SST {
+			totalSize += sst.FileSize
 			result = append(result, execinfrapb.BulkMergeSpec_SST{
 				StartKey: []byte(sst.StartKey),
 				EndKey:   []byte(sst.EndKey),
@@ -31,6 +34,12 @@ func CombineFileInfo(
 			samples = append(samples, roachpb.Key(sample))
 		}
 	}
+
+	shuffle(samples)
+
+	// targetSize := uint64(256 << 20)
+	// samples = samples[:totalSize/targetSize]
+
 	// BUGFIX: We need to sort the samples for merge, otherwise the merge can end
 	// up with overlapping spans and duplicate data.
 	slices.SortFunc(samples, func(i, j roachpb.Key) int {
@@ -40,6 +49,13 @@ func CombineFileInfo(
 	spans := getMergeSpans(tableSpans, samples)
 
 	return result, spans
+}
+
+func shuffle[T any](s []T) {
+	for i := range s {
+		j := rand.Intn(len(s))
+		s[i], s[j] = s[j], s[i]
+	}
 }
 
 // getMergeSpans determines which spans should be used as merge tasks. The

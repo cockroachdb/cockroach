@@ -65,7 +65,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
-			expectedError: "out of order ingest sst: (uri:''[start:\"c\", end:\"d\"]) and (uri:''[start:\"a\", end:\"b\"])",
+			expectedError: "out of order ingest sst: (uri:'uri'[start:\"c\", end:\"d\"]) and (uri:'uri'[start:\"a\", end:\"b\"])",
 		},
 		{
 			name: "overlapping ssts",
@@ -76,7 +76,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 				{StartKey: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
-			expectedError: "overlapping ingest sst: (uri:''[start:\"a\", end:\"c\"]) and (uri:''[start:\"b\", end:\"d\"])",
+			expectedError: "overlapping ingest sst: (uri:'uri'[start:\"a\", end:\"c\"]) and (uri:'uri'[start:\"b\", end:\"d\"])",
 		},
 		{
 			name: "sst extends beyond span",
@@ -208,6 +208,11 @@ func TestPickSplits(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			for i := range tc.ssts {
+				// Validation needs some uri to be set. Not important for the test.
+				tc.ssts[i].Uri = "uri"
+			}
+
 			result, err := pickSplits(tc.spans, tc.ssts)
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)

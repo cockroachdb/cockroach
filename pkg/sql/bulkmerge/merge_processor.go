@@ -8,7 +8,6 @@ package bulkmerge
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,6 +64,7 @@ type bulkMergeProcessor struct {
 	input    execinfra.RowSource
 	flowCtx  *execinfra.FlowCtx
 	cloudMux *bulkutil.CloudStorageMux
+	writer   *bulksst.MergeWriter
 }
 
 type mergeProcessorInput struct {
@@ -176,6 +176,17 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 // Start implements execinfra.RowSource.
 func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
+
+	store, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, m.spec.OutputUri, username.RootUserName())
+	if err != nil {
+		m.MoveToDraining(err)
+		return
+	}
+
+	allocator := bulksst.NewExternalFileAllocator(store, m.spec.OutputUri)
+	targetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
+
+	m.writer = bulksst.NewInorderWriter(allocator, targetSize, m.flowCtx.EvalCtx.Settings)
 }
 
 func (m *bulkMergeProcessor) Close(ctx context.Context) {
@@ -207,11 +218,6 @@ func (m *bulkMergeProcessor) mergeSSTs(
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	mergeSpan := m.spec.Spans[taskID]
 	var storeFiles []storageccl.StoreFile
-	destStore, err := m.flowCtx.Cfg.ExternalStorageFromURI(ctx, m.spec.OutputUri, username.RootUserName())
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputUri)
 
 	// Find the ssts that overlap with the given task's key range.
 	for _, sst := range m.spec.Ssts {
@@ -231,7 +237,6 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, nil
 	}
 
-	sstMaxSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: mergeSpan.Key,
@@ -243,21 +248,6 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 	defer iter.Close()
 
-	mergedSSTFile, closer, err := destFileAllocator.AddFile(ctx, int(taskID), mergeSpan, nil, 0)
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	defer closer()
-	mergedSSTWriter := storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-
-	var mergedSSTs execinfrapb.BulkMergeSpec_Output
-
-	// TODO(jeffwenson/annie): record this more efficiently. We are currently making a
-	// clone of every key, which is bad.
-	var firstKey roachpb.Key
-	var lastKey roachpb.Key
-
-	var sstSize int64
 	// Write all KVs
 	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
 		ok, err := iter.Valid()
@@ -273,50 +263,23 @@ func (m *bulkMergeProcessor) mergeSSTs(
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
 
-		if firstKey == nil {
-			firstKey = key.Key.Clone()
-		}
-		lastKey = key.Key.Clone()
-
-		// Flush large SSTs
-		if sstSize >= sstMaxSize {
-			mergedSSTs.Ssts = append(mergedSSTs.Ssts, execinfrapb.BulkMergeSpec_SST{
-				StartKey: firstKey,
-				EndKey:   lastKey,
-				Uri:      m.spec.OutputUri + fmt.Sprintf("/%d.sst", taskID),
-			})
-			firstKey = lastKey
-			if err = mergedSSTWriter.Finish(); err != nil {
-				return execinfrapb.BulkMergeSpec_Output{}, err
-			}
-			mergedSSTWriter.Close()
-
-			mergeSpan.Key = firstKey
-			mergedSSTFile, closer, err = destFileAllocator.AddFile(ctx, int(taskID), mergeSpan, nil, 0)
-			if err != nil {
-				return execinfrapb.BulkMergeSpec_Output{}, err
-			}
-			mergedSSTWriter = storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-			sstSize = 0
-		}
-
-		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
+		if err := m.writer.PutRawMVCCValue(ctx, key, val); err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
-		sstSize += int64(len(key.Key) + len(val))
 	}
 
-	// Finish writing the SST
-	if err := mergedSSTWriter.Finish(); err != nil {
+	ssts, err := m.writer.Flush(ctx)
+	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
-	mergedSSTWriter.Close()
 
-	if sstSize > 0 {
+	// TODO(jeffswenson): harminize the SST encoding used by import/merge/ingest.
+	var mergedSSTs execinfrapb.BulkMergeSpec_Output
+	for _, sst := range ssts.SST {
 		mergedSSTs.Ssts = append(mergedSSTs.Ssts, execinfrapb.BulkMergeSpec_SST{
-			StartKey: firstKey,
-			EndKey:   lastKey,
-			Uri:      m.spec.OutputUri + fmt.Sprintf("/%d.sst", taskID),
+			StartKey: sst.StartKey,
+			EndKey:   sst.EndKey,
+			Uri:      sst.URI,
 		})
 	}
 	return mergedSSTs, nil

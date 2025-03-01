@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Merge creates and waits on a DistSQL flow that merges the provided SSTs into
@@ -30,6 +31,12 @@ func Merge(
 	// TODO(jeffswenson): validate the splits are in order
 
 	execCfg := execCtx.ExecCfg()
+
+	for _, sst := range ssts {
+		if len(sst.Uri) == 0 {
+			return nil, errors.New("invalid merge input: sst uri is empty")
+		}
+	}
 
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, outputURI)
 	if err != nil {

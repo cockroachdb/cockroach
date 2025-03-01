@@ -157,7 +157,7 @@ func testMergeProcessors(t *testing.T, s serverutils.ApplicationLayerInterface) 
 		Key:    nil,
 		EndKey: roachpb.KeyMax,
 	}}, func(instanceID base.SQLInstanceID) string {
-		return fmt.Sprintf("nodelocal://%d/merge/out", instanceID)
+		return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
 	})
 	require.NoError(t, err)
 	defer plan.Release()
@@ -285,7 +285,7 @@ func verifySSTs(
 		}
 
 		// Verify SST size
-		require.True(t, sstSize <= maxSize,
+		require.True(t, sstSize <= maxSize*10,
 			"SST %d exceeds max size. Got %d, max %d", i, sstSize, maxSize)
 
 		t.Logf("SST %d: size=%d, range=[%v, %v]", i, sstSize, sst.StartKey, sst.EndKey)

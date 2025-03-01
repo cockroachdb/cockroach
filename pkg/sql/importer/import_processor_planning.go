@@ -324,7 +324,7 @@ func distImport(
 		inputSSTs, mergeSpans := bulksst.CombineFileInfo(processorOutput, spans)
 
 		merged, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, mergeSpans, func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/job/%d/merge", instanceID, job.ID())
+			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID())
 		})
 		if err != nil {
 			return err

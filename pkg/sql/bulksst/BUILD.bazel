@@ -6,6 +6,7 @@ go_library(
     name = "bulksst",
     srcs = [
         "combine_file_info.go",
+        "merge_writer.go",
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
@@ -22,6 +23,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
         "@com_github_cockroachdb_pebble//vfs",

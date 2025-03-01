@@ -19,6 +19,11 @@ import (
 // FileAllocator is used to allocate new files for SSTs ingested via the Writer.
 type FileAllocator interface {
 	// AddFile creates a new file and stores the URI for tracking.
+	//
+	// TODO(jeffswenson): rework the file allocator interface so that the caller
+	// tracks the files instead of the allocator. This is imporant because the
+	// non-sorting flusher doesn't know stats about the file when they are first
+	// created.
 	AddFile(
 		ctx context.Context, fileIndex int, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
 	) (objstorage.Writable, func(), error)
@@ -89,6 +94,7 @@ type ExternalFileAllocator struct {
 	fileAllocatorBase
 }
 
+// TODO(jeffswenson): rework this so it takes a storage factory and a uri.
 func NewExternalFileAllocator(es cloud.ExternalStorage, baseURI string) FileAllocator {
 	return &ExternalFileAllocator{
 		es:                es,

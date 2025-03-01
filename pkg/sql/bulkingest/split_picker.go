@@ -47,6 +47,13 @@ func pickSplits(
 		}
 	}
 
+	// Validate every SST has a uri
+	for _, sst := range ssts {
+		if len(sst.Uri) == 0 {
+			return nil, errors.New("invalid ingest input: sst uri is empty")
+		}
+	}
+
 	// Validate SSTs are ordered and non-overlapping
 	for i := 1; i < len(ssts); i++ {
 		prev, curr := (ssts[i-1].StartKey), ssts[i].StartKey
