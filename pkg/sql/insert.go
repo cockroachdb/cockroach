@@ -43,6 +43,11 @@ type insertNode struct {
 	// RETURNING clause with some scalar expressions.
 	columns colinfo.ResultColumns
 
+	// vectorInsert is set if this INSERT should be executed via a specialized
+	// implementation in the vectorized engine. Currently only set for inserts
+	// executed on behalf of COPY statements.
+	vectorInsert bool
+
 	run insertRun
 }
 

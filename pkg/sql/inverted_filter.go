@@ -16,11 +16,15 @@ import (
 
 type invertedFilterNode struct {
 	singleInputPlanNode
+	invertedFilterPlanningInfo
+	resultColumns colinfo.ResultColumns
+}
+
+type invertedFilterPlanningInfo struct {
 	expression      *inverted.SpanExpression
 	preFiltererExpr tree.TypedExpr
 	preFiltererType *types.T
 	invColumn       int
-	resultColumns   colinfo.ResultColumns
 }
 
 func (n *invertedFilterNode) startExec(params runParams) error {

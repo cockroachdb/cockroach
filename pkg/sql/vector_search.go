@@ -17,6 +17,10 @@ import (
 
 type vectorSearchNode struct {
 	zeroInputPlanNode
+	vectorSearchPlanningInfo
+}
+
+type vectorSearchPlanningInfo struct {
 	table               catalog.TableDescriptor
 	index               catalog.Index
 	prefixKey           roachpb.Key
@@ -25,8 +29,8 @@ type vectorSearchNode struct {
 
 	// cols is the list of non-vector index columns that will be produced by the
 	// vector-search operator.
-	cols       []catalog.Column
-	resultCols colinfo.ResultColumns
+	cols []catalog.Column
+  resultCols colinfo.ResultColumns
 }
 
 func (vs *vectorSearchNode) startExec(params runParams) error {
@@ -45,17 +49,19 @@ func (vs *vectorSearchNode) Close(ctx context.Context) {}
 
 type vectorMutationSearchNode struct {
 	singleInputPlanNode
+	vectorMutationSearchPlanningInfo
+	// columns are the produced columns, namely the input columns, the partition
+	// column, and (optionally) the quantized vector column.
+	columns colinfo.ResultColumns
+}
 
+type vectorMutationSearchPlanningInfo struct {
 	table          catalog.TableDescriptor
 	index          catalog.Index
 	prefixKeyCols  []exec.NodeColumnOrdinal
 	queryVectorCol exec.NodeColumnOrdinal
 	suffixKeyCols  []exec.NodeColumnOrdinal
 	isIndexPut     bool
-
-	// columns are the produced columns, namely the input columns, the partition
-	// column, and (optionally) the quantized vector column.
-	columns colinfo.ResultColumns
 }
 
 func (vs *vectorMutationSearchNode) startExec(params runParams) error {
