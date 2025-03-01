@@ -1,0 +1,11 @@
+source:
+  type: file
+  directory: /Users/sajain/git/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/
+
+sink:
+  type: file
+  directory: /Users/sajain/git/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/
+
+metrics:
+  - name: kv95
+    type: histogram

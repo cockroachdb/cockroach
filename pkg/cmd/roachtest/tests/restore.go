@@ -44,6 +44,19 @@ import (
 // will restore.
 const defaultRestoreUptoIncremental = 12
 
+var restoreAggregateFunction = func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	metricValue := histogram.Summaries[0].HighestTrackableValue / 1e9
+
+	return roachtestutil.AggregatedPerfMetrics{
+		{
+			Name:           fmt.Sprintf("%s_max", test),
+			Value:          metricValue,
+			Unit:           "MB/s/node",
+			IsHigherBetter: false,
+		},
+	}, nil
+}
+
 func registerRestoreNodeShutdown(r registry.Registry) {
 	sp := restoreSpecs{
 		hardware: makeHardwareSpecs(hardwareSpecs{}),
@@ -136,6 +149,7 @@ func registerRestore(r registry.Registry) {
 		CompatibleClouds:          withPauseSpecs.backup.CompatibleClouds(),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		PostProcessPerfMetrics:    restoreAggregateFunction,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -433,6 +447,7 @@ func registerRestore(r registry.Registry) {
 			Suites:                    sp.suites,
 			TestSelectionOptOutSuites: sp.suites,
 			Skip:                      sp.skip,
+			PostProcessPerfMetrics:    restoreAggregateFunction,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(t, c, sp)
