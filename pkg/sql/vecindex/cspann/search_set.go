@@ -48,6 +48,8 @@ type SearchResult struct {
 	// Vector is the original, full-size data vector. This is nil by default,
 	// and is only set when SearchOptions.SkipRerank is false or
 	// SearchOptions.ReturnVectors is true.
+	// NOTE: If this is an interior centroid vector, then it is randomized.
+	// Otherwise, it's an original, un-randomized leaf vector.
 	Vector vector.T
 	// ValueBytes are the opaque bytes stored alongside the quantized vector.
 	// Depending on the store, this could be empty, or it could contain
