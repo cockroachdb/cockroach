@@ -248,7 +248,9 @@ func prepareRightReplicaForSplit(
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-	if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
+	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
+		state, false, /* waitForPrevLeaseToExpire */
+	); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
