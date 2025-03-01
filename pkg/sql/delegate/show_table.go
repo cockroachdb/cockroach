@@ -53,6 +53,8 @@ func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement,
 	switch n.FmtOpt {
 	case tree.ShowCreateFormatOptionRedactedValues:
 		createField = "crdb_internal.redact(create_redactable)"
+	case tree.ShowCreateFormatOptionIgnoreFKs:
+		createField = "create_nofks"
 	}
 
 	showCreateQuery := `

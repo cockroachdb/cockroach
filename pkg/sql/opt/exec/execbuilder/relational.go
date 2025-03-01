@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	}
 
 	if opt.IsMutationOp(e) {
-		b.flags.Set(exec.PlanFlagContainsMutation)
+		b.setMutationFlags(e)
 		// Raise error if mutation op is part of a read-only transaction.
 		if b.evalCtx.TxnReadOnly {
 			switch tag := b.statementTag(e); tag {
@@ -3489,8 +3490,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
-			b.flags.Set(exec.PlanFlagContainsMutation)
-			break
+			b.setMutationFlags(s)
 		}
 	}
 
@@ -4090,15 +4090,68 @@ func (b *Builder) applyPresentation(
 // getEnvData consolidates the information that must be presented in
 // EXPLAIN (opt, env).
 func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
+	// Catalog objects can show up multiple times in our lists, so deduplicate
+	// them.
+	seen := make(map[tree.TableName]struct{})
+	getNames := func(count int, get func(int) cat.DataSource) ([]tree.TableName, error) {
+		result := make([]tree.TableName, 0, count)
+		for i := 0; i < count; i++ {
+			ds := get(i)
+			tn, err := b.catalog.FullyQualifiedName(b.ctx, ds)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := seen[tn]; !ok {
+				seen[tn] = struct{}{}
+				result = append(result, tn)
+			}
+		}
+		return result, nil
+	}
+
 	envOpts := exec.ExplainEnvData{ShowEnv: true}
-	var err error
-	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
-		b.ctx, b.catalog,
-		func(ds cat.DataSource) (cat.DataSourceName, error) {
-			return b.catalog.FullyQualifiedName(b.ctx, ds)
+	var refTables []cat.Table
+	var refTableIncluded intsets.Fast
+	opt.VisitFKReferenceTables(
+		b.ctx,
+		b.catalog,
+		b.mem.Metadata().AllTables(),
+		func(cat.Table, cat.ForeignKeyConstraint) (exploreFKs bool) {
+			return true
 		},
-		true, /* includeVirtualTables */
+		func(table cat.Table, _ cat.ForeignKeyConstraint) {
+			if refTableIncluded.Contains(int(table.ID())) {
+				return
+			}
+			refTables = append(refTables, table)
+			refTableIncluded.Add(int(table.ID()))
+		},
 	)
+	envOpts.AddFKs = opt.GetAllFKsAmongTables(
+		refTables,
+		func(t cat.Table) (tree.TableName, error) {
+			return b.catalog.FullyQualifiedName(b.ctx, t)
+		},
+	)
+	var err error
+	envOpts.Tables, err = getNames(len(refTables), func(i int) cat.DataSource {
+		return refTables[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
+	envOpts.Sequences, err = getNames(len(b.mem.Metadata().AllSequences()), func(i int) cat.DataSource {
+		return b.mem.Metadata().AllSequences()[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
+	envOpts.Views, err = getNames(len(b.mem.Metadata().AllViews()), func(i int) cat.DataSource {
+		return b.mem.Metadata().AllViews()[i]
+	})
+	if err != nil {
+		return envOpts, err
+	}
 	return envOpts, err
 }
 

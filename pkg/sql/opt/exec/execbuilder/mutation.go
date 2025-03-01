@@ -1336,3 +1336,17 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (_ execPlan, outputCols colOrdM
 	join.CopyGroup(lock)
 	return b.buildLookupJoin(join)
 }
+
+func (b *Builder) setMutationFlags(e memo.RelExpr) {
+	b.flags.Set(exec.PlanFlagContainsMutation)
+	switch e.Op() {
+	case opt.DeleteOp:
+		b.flags.Set(exec.PlanFlagContainsDelete)
+	case opt.InsertOp:
+		b.flags.Set(exec.PlanFlagContainsInsert)
+	case opt.UpdateOp:
+		b.flags.Set(exec.PlanFlagContainsUpdate)
+	case opt.UpsertOp:
+		b.flags.Set(exec.PlanFlagContainsUpsert)
+	}
+}
