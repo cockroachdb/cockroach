@@ -1965,6 +1965,7 @@ func TestUserPrivileges(t *testing.T) {
 			},
 		},
 	}
+	rng, _ := randutil.NewPseudoRand()
 
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
@@ -2028,8 +2029,13 @@ func TestUserPrivileges(t *testing.T) {
 	t.Run("replication-src", func(t *testing.T) {
 		dbB.Exec(t, "CREATE USER testuser3")
 		dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
-		testuser.ExpectErr(t, "user testuser3 does not have REPLICATION system privilege", createStmt, dbBURL2.String())
-		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"3"))
+		testuser.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE system privilege", createStmt, dbBURL2.String())
+		sourcePriv := "REPLICATIONSOURCE"
+		if rng.Intn(3) == 0 {
+			// Test deprecated privilege name.
+			sourcePriv = "REPLICATION"
+		}
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s", sourcePriv, username.TestUser+"3"))
 		testuser.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
 	})
 }
