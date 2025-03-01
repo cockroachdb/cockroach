@@ -431,6 +431,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
+		ctx := p.Context()
 		reproposal := !p.tok.stillTracked()
 
 		// Conditionally reject the proposal based on the state of the raft group.
