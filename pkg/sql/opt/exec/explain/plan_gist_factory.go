@@ -530,6 +530,10 @@ func (u *unknownTable) IsMaterializedView() bool {
 	return false
 }
 
+func (u *unknownTable) LookupColumnOrdinal(descpb.ColumnID) (int, error) {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 func (u *unknownTable) ColumnCount() int {
 	return 0
 }
@@ -662,13 +666,8 @@ func (u *unknownTable) Trigger(i int) cat.Trigger {
 // IsRowLevelSecurityEnabled is part of the cat.Table interface
 func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 
-// PolicyCount is part of the cat.Table interface
-func (u *unknownTable) PolicyCount(polType tree.PolicyType) int { return 0 }
-
-// Policy is part of the cat.Table interface
-func (u *unknownTable) Policy(polType tree.PolicyType, i int) cat.Policy {
-	panic(errors.AssertionFailedf("not implemented"))
-}
+// Policies is part of the cat.Table interface.
+func (u *unknownTable) Policies() *cat.Policies { return nil }
 
 var _ cat.Table = &unknownTable{}
 
