@@ -45,6 +45,7 @@ type DatumAlloc struct {
 	dintervalAlloc    []DInterval
 	duuidAlloc        []DUuid
 	dipnetAlloc       []DIPAddr
+	dMACAddrAlloc     []DMACAddr
 	djsonAlloc        []DJSON
 	dtupleAlloc       []DTuple
 	doidAlloc         []DOid
@@ -656,6 +657,27 @@ func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
 			allocSize = a.DefaultAllocSize
 		}
 		*buf = make([]DIPAddr, allocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDMACAddr allocates a DMACAddr.
+func (a *DatumAlloc) NewDMACAddr(v DMACAddr) *DMACAddr {
+	if a == nil {
+		r := new(DMACAddr)
+		*r = v
+		return r
+	}
+	buf := &a.dMACAddrAlloc
+	if len(*buf) == 0 {
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DMACAddr, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
