@@ -133,6 +133,10 @@ message Statement {
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.
   repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
+  // SQL commenter tags capture application context and provide developers with
+  // visibility into the code responsible for generating slow queries. They also
+  // map application traces to data query plans.
+  repeated SqlCommenterTag sql_commenter_tags = 27;
 }
 
 
@@ -150,4 +154,9 @@ message Insight {
 
   reserved  4; // Previously problem.
   reserved 5; // Previously causes.
+}
+
+message SqlCommenterTag {
+  string name = 1;
+  string value = 2 ;
 }
