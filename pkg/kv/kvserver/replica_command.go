@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -914,11 +915,15 @@ func (r *Replica) AdminMerge(
 		// This must be a single request in a BatchRequest: there are multiple
 		// places that do special logic (needed for safety) that rely on
 		// BatchRequest.IsSingleSubsumeRequest() returning true.
+		shouldPreserveLocks := concurrency.UnreplicatedLockReliability.Get(&r.ClusterSettings().SV)
 		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&kvpb.SubsumeRequest{
-				RequestHeader: kvpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-				LeftDesc:      *origLeftDesc,
-				RightDesc:     rightDesc,
+				RequestHeader: kvpb.RequestHeader{
+					Key: rightDesc.StartKey.AsRawKey(),
+				},
+				PreserveUnreplicatedLocks: shouldPreserveLocks,
+				LeftDesc:                  *origLeftDesc,
+				RightDesc:                 rightDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
