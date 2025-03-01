@@ -132,6 +132,17 @@ func (ic *Context) Init(txn Txn) {
 	ic.txn = txn
 }
 
+// OriginalVector is the original, full-size vector that was passed to the last
+// index operation.
+func (ic *Context) OriginalVector() vector.T {
+	return ic.original
+}
+
+// RandomizedVector is the randomized form of OriginalVector.
+func (ic *Context) RandomizedVector() vector.T {
+	return ic.randomized
+}
+
 // Index implements the C-SPANN algorithm, which adapts Microsoft's SPANN and
 // SPFresh algorithms to work well with CockroachDB's unique distributed
 // architecture. This enables CockroachDB to efficiently answer approximate
@@ -420,8 +431,9 @@ func (vi *Index) SearchForDelete(
 		return nil, err
 	}
 
+	// Don't rerank results, since we just need a key match.
 	vi.setupContext(idxCtx, treeKey, vec, SearchOptions{
-		SkipRerank:  vi.options.DisableErrorBounds,
+		SkipRerank:  true,
 		UpdateStats: true,
 	}, LeafLevel)
 
