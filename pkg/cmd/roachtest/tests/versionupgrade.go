@@ -195,7 +195,8 @@ func makeVersionFixtureAndFatal(
 		}
 	}()
 
-	predecessorVersionStr, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
+	v := version.MustParse(makeFixtureVersion)
+	predecessorVersionStr, err := release.LatestPredecessor(&v)
 	if err != nil {
 		t.Fatal(err)
 	}
