@@ -391,7 +391,11 @@ func (ft *FortificationTracker) QuorumActive() bool {
 // RequireQuorumSupportOnCampaign returns true if quorum support before
 // campaigning is required.
 func (ft *FortificationTracker) RequireQuorumSupportOnCampaign() bool {
-	return ft.storeLiveness.SupportFromEnabled()
+	// Don't check for store liveness support if there is only one voter.
+	// Presumably, it supports itself; and if it doesn't for some reason (e.g.
+	// disk stall), it will not be able to fortify later, which is ok.
+	notSingleVoter := len(ft.config.Voters[0]) > 1 || len(ft.config.Voters[1]) > 1
+	return ft.storeLiveness.SupportFromEnabled() && notSingleVoter
 }
 
 // QuorumSupported returns whether this peer is currently supported by a quorum
