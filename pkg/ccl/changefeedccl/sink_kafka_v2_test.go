@@ -199,7 +199,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -222,7 +222,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `general` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -245,7 +245,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `prefix-_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
