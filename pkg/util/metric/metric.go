@@ -39,6 +39,13 @@ const (
 	CardinalityLimit = 2000
 )
 
+// Pre-defined static label keys. Add to this list as needed.
+// Suffix with "LabelKey" for consistency.
+const (
+	QueryTypeLabelKey          = "query_type"
+	TransactionControlLabelKey = "transaction_control"
+)
+
 // Iterable provides a method for synchronized access to interior objects.
 type Iterable interface {
 	// GetName returns the fully-qualified name of the metric.
@@ -58,6 +65,10 @@ type Iterable interface {
 }
 
 type PrometheusCompatible interface {
+	// GetPrometheusName returns the name of the metric for
+	// Prometheus, which will omit materializing any labels,
+	// if they're set.
+	GetPrometheusName() string
 	// GetName is a method on Metadata
 	GetName() string
 	// GetHelp is a method on Metadata
@@ -136,8 +147,28 @@ type CumulativeHistogram interface {
 	CumulativeSnapshot() HistogramSnapshot
 }
 
-// GetName returns the metric's name.
+type MetricDestination int
+
+const (
+	MetricDestinationUnknown MetricDestination = iota
+	MetricDestinationPrometheus
+	MetricDestinationTSDB
+)
+
+// GetName returns the metric's name for internal use.
+// If a legacy name is provided, it will be returned.
 func (m *Metadata) GetName() string {
+	if m.LegacyStaticName != "" {
+		return m.LegacyStaticName
+	}
+	return m.Name
+}
+
+// GetPrometheusName returns the metric's name for Prometheus.
+// This name is never the legacy name, it's assumed when the
+// metric contains labels, those will be forwarded separately
+// to the prometheus compatible recorder.
+func (m *Metadata) GetPrometheusName() string {
 	return m.Name
 }
 
@@ -160,11 +191,14 @@ func (m *Metadata) GetUnit() Unit {
 // from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
 // in pkg/util/metric/metric.proto.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	lps := make([]*prometheusgo.LabelPair, len(m.Labels))
+	lps := make([]*prometheusgo.LabelPair, len(m.Labels)+len(m.StaticLabels))
 	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
 	var x []byte
 	for i, v := range m.Labels {
 		lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+	}
+	for i, v := range m.StaticLabels {
+		lps[i+len(m.Labels)] = &prometheusgo.LabelPair{Name: &v.Key, Value: &v.Value, XXX_unrecognized: x}
 	}
 	return lps
 }
