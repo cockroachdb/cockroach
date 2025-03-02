@@ -900,7 +900,6 @@ func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, p
 
 	defer startAllocsProfile(b).Stop(b)
 	defer b.StopTimer()
-	b.ResetTimer()
 
 	var id atomic.Int64
 	var errs atomic.Int64
@@ -910,12 +909,24 @@ func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, p
 			s := sys.newClient()
 			defer func() { _ = s.Rollback() }()
 
+			b.ResetTimer()
 			runSysbenchInner(b, opFn, s, &errs, pb.Next, seed)
 		})
 	} else {
 		s := sys.newClient()
 		defer func() { _ = s.Rollback() }()
 
+		// Warm-up.
+		{
+			var i int
+			const iters = 100
+			runSysbenchInner(b, opFn, s, nil /* errors are fatal */, func() bool {
+				i++
+				return i <= iters
+			}, 1)
+		}
+
+		b.ResetTimer()
 		var i int
 		runSysbenchInner(b, opFn, s, nil /* errors are fatal */, func() bool {
 			i++
