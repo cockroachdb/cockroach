@@ -730,7 +730,9 @@ insert_target ::=
 
 insert_rest ::=
 	select_stmt
+	| overriding_value select_stmt
 	| '(' insert_column_list ')' select_stmt
+	| '(' insert_column_list ')' overriding_value select_stmt
 	| 'DEFAULT' 'VALUES'
 
 on_conflict ::=
@@ -1347,6 +1349,7 @@ unreserved_keyword ::=
 	| 'ORDINALITY'
 	| 'OTHERS'
 	| 'OVER'
+	| 'OVERRIDING'
 	| 'OWNED'
 	| 'OWNER'
 	| 'PARALLEL'
@@ -1996,6 +1999,10 @@ kv_option_list ::=
 
 insert_column_item ::=
 	column_name
+
+overriding_value ::=
+	'OVERRIDING_SYSTEM_VALUE' 'SYSTEM' 'VALUE'
+	| 'OVERRIDING_USER_VALUE' 'USER' 'VALUE'
 
 session_var ::=
 	'identifier'
@@ -4123,6 +4130,7 @@ bare_label_keywords ::=
 	| 'OUT'
 	| 'OUTER'
 	| 'OVERLAY'
+	| 'OVERRIDING'
 	| 'OWNED'
 	| 'OWNER'
 	| 'PARALLEL'
