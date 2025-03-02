@@ -9140,6 +9140,41 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 	}, feedTestForceSink("pubsub"))
 }
 
+func TestChangefeedCanceledTelemetryLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	waitForLogs := func(t *testing.T, startTime time.Time) []eventpb.ChangefeedCanceled {
+		var logs []eventpb.ChangefeedCanceled
+		testutils.SucceedsSoon(t, func() error {
+			logs = checkChangefeedCanceledLogs(t, startTime.UnixNano())
+			if len(logs) < 1 {
+				return fmt.Errorf("no logs found")
+			}
+			return nil
+		})
+		return logs
+	}
+
+	cdcTestNamed(t, "canceled enterprise changefeeds", func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		beforeCreate := timeutil.Now()
+		feed, err := f.Feed(`CREATE CHANGEFEED FOR foo`)
+		require.NoError(t, err)
+		enterpriseFeed := feed.(cdctest.EnterpriseTestFeed)
+
+		sqlDB.Exec(t, `CANCEL JOB $1`, enterpriseFeed.JobID())
+
+		canceledLogs := waitForLogs(t, beforeCreate)
+		require.Equal(t, 1, len(canceledLogs))
+		require.Equal(t, enterpriseFeed.JobID().String(), strconv.FormatInt(canceledLogs[0].JobId, 10))
+		require.Equal(t, "changefeed_canceled", canceledLogs[0].EventType)
+		require.NoError(t, feed.Close())
+	}, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedTestTimesOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
