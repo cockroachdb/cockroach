@@ -154,7 +154,9 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 			s.clock.MaxOffset(),
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
+			false, /*leadTargetAutoTune*/
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			0, /*observedMaxNetworkRTT*/
 			pol,
 		)
 	}

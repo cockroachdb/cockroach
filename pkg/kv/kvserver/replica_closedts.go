@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -112,13 +113,24 @@ func (r *Replica) BumpSideTransportClosed(
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
+	leadTargetAutoTune := closedts.LeadForGlobalReadsAutoTune.Get(&r.ClusterSettings().SV)
+	globalReads := r.closedTimestampPolicyRLocked() == roachpb.LEAD_FOR_GLOBAL_READS
+	observedMaxNetworkRTT := time.Duration(0)
+	// Only get the observedMaxNetworkRTT if we're auto-tuning global reads since
+	// this is an expensive operation and only useful if we're auto-tuning lead
+	// time for global reads.
+	if autoTuningGlobalReads := globalReads && leadTargetAutoTune; autoTuningGlobalReads {
+		observedMaxNetworkRTT = r.getMaxReplicaNetworkRTTRLocked()
+	}
 	return closedts.TargetForPolicy(
-		r.Clock().NowAsClockTimestamp(),
-		r.Clock().MaxOffset(),
-		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
-		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
-		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		r.Clock().NowAsClockTimestamp(),                                  /*now*/
+		r.Clock().MaxOffset(),                                            /*maxClockOffset*/
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),             /*lagTargetDuration*/
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV), /*leadTargetOverride*/
+		closedts.LeadForGlobalReadsAutoTune.Get(&r.ClusterSettings().SV), /*leadTargetAutoTune*/
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV), /*sideTransportCloseInterval*/
+		observedMaxNetworkRTT,                                            /*observedMaxNetworkRTT*/
+		r.closedTimestampPolicyRLocked(),                                 /*policy*/
 	)
 }
 
@@ -131,6 +143,21 @@ func (r *Replica) ForwardSideTransportClosedTimestamp(
 	// applied index has been applied locally yet.
 	const knownApplied = false
 	r.sideTransportClosedTimestamp.forward(ctx, closed, lai, knownApplied)
+}
+
+func (r *Replica) getMaxReplicaNetworkRTTRLocked() time.Duration {
+	r.mu.AssertRHeld()
+	desc := r.descRLocked()
+	getNodeLatency := r.store.GetStoreConfig().RPCContext.RemoteClocks.Latency
+
+	maxRTT := time.Duration(0)
+	for _, replica := range desc.InternalReplicas {
+		if rtt, ok := getNodeLatency(replica.NodeID); ok {
+			maxRTT = max(maxRTT, rtt)
+		}
+	}
+
+	return maxRTT
 }
 
 // sidetransportAccess encapsulates state related to the closed timestamp's

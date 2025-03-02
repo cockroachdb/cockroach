@@ -913,9 +913,15 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		// Pass false for leadTargetAutoTune because we don't have a good way to
+		// estimate the network RTT here. Instead, we use the default value
+		// lowerBoundMaxNetworkRTT (read more in closedts.TargetForPolicy). We
+		// choose to be more conservative as this is just for an optimization if
+		// the deadline is far in the future. Missing the optimization is not a
+		// big deal.
 		return closedts.TargetForPolicy(now, maxClockOffset,
-			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
-			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+			lagTargetDuration, leadTargetOverride, false /*leadTargetAutoTune*/, sideTransportCloseInterval,
+			0 /*observedMaxNetworkRTT*/, roachpb.LEAD_FOR_GLOBAL_READS /*policy*/).Add(int64(time.Second), 0)
 	}
 
 	return !txn.mu.deadline.IsEmpty() &&

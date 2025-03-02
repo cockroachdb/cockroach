@@ -77,6 +77,15 @@ type testProposer struct {
 	leaderReplicaType roachpb.ReplicaType
 	// rangePolicy is used in closedTimestampTarget.
 	rangePolicy roachpb.RangeClosedTimestampPolicy
+
+	// leadTargetAutoTune is used by closedTimestampTarget to determine whether to
+	// auto-tune the lead target for global reads.
+	leadTargetAutoTune bool
+
+	// networkRTT is used by closedTimestampTarget to simulate the observed
+	// network round trip latency. This is to estimate the time for raft logs to
+	// propagate closed timestamp to followers.
+	networkRTT time.Duration
 }
 
 var _ proposer = &testProposer{}
@@ -175,12 +184,14 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 		return hlc.Timestamp{}
 	}
 	return closedts.TargetForPolicy(
-		t.clock.NowAsClockTimestamp(),
-		t.clock.MaxOffset(),
-		1*time.Second,
-		0,
-		200*time.Millisecond,
-		t.rangePolicy,
+		t.clock.NowAsClockTimestamp(), /*now*/
+		t.clock.MaxOffset(),           /*maxClockOffset*/
+		1*time.Second,                 /*lagTargetDuration*/
+		0,                             /*leadTargetOverride*/
+		t.leadTargetAutoTune,          /*leadTargetAutoTune*/
+		200*time.Millisecond,          /*sideTransportCloseInterval*/
+		t.networkRTT,                  /*observedMaxNetworkRTT*/
+		t.rangePolicy,                 /*policy*/
 	)
 }
 
@@ -532,10 +543,10 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		// liveness map.
 		leaderNotLive bool
 		// If true, the follower has a valid lease.
-		ownsValidLease bool
-
-		expRejection bool
-		expCampaign  bool
+		ownsValidLease     bool
+		expRejection       bool
+		expCampaign        bool
+		leadTargetAutoTune bool
 	}{
 		{
 			name:   "leader",
@@ -643,6 +654,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.leaderReplicaType = tc.leaderRepType
 			p.validLease = tc.ownsValidLease
 			p.leaderNotLive = tc.leaderNotLive
+			p.leadTargetAutoTune = tc.leadTargetAutoTune
 
 			var b propBuf
 			clock := hlc.NewClockForTesting(nil)
@@ -928,6 +940,14 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	nowPlusGlobalReadLead := nowTS.Add((maxOffset +
 		275*time.Millisecond /* sideTransportPropTime */ +
 		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0)
+
+	const networkRTT = 200 * time.Millisecond
+	const raftTransportOverhead = 20 * time.Millisecond
+	raftTransportPropTime := networkRTT*3/2 + raftTransportOverhead
+	autoTuneGlobalReadLeadFromRaft := nowTS.Add((maxOffset +
+		raftTransportPropTime +
+		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0)
+
 	expiredLeaseTimestamp := nowTS.Add(-1000, 0)
 	someClosedTS := nowTS.Add(-2000, 0)
 
@@ -995,6 +1015,14 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		// prevClosedTimestamp, regardless of whether the proposal carries a closed
 		// timestamp or not (expClosed).
 		expAssignedClosedBumped bool
+
+		// leadTargetAutoTune is used to test the auto-tuning of the lead for global
+		// reads.
+		leadTargetAutoTune bool
+
+		// networkRTT is used to mock the observed latency of max network round trip
+		// latency between the lease replica and its follower replicas.
+		networkRTT time.Duration
 	}{
 		{
 			name:                    "basic",
@@ -1097,6 +1125,20 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			expClosed:               nowPlusGlobalReadLead,
 			expAssignedClosedBumped: true,
 		},
+		{
+			// With the LEAD_FOR_GLOBAL_READS policy and auto-tuning, we're expecting
+			// to close timestamps in the future based on observedRaftPropLatency.
+			name:                    "global range with auto tune",
+			reqType:                 regularWrite,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LEAD_FOR_GLOBAL_READS,
+			prevClosedTimestamp:     hlc.Timestamp{},
+			expClosed:               autoTuneGlobalReadLeadFromRaft,
+			expAssignedClosedBumped: true,
+			leadTargetAutoTune:      true,
+			networkRTT:              networkRTT,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
@@ -1106,10 +1148,12 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 				1: {State: rafttracker.StateReplicate},
 			}
 			p := testProposer{
-				clock:       clock,
-				lai:         10,
-				raftGroup:   r,
-				rangePolicy: tc.rangePolicy,
+				clock:              clock,
+				lai:                10,
+				raftGroup:          r,
+				rangePolicy:        tc.rangePolicy,
+				leadTargetAutoTune: tc.leadTargetAutoTune,
+				networkRTT:         tc.networkRTT,
 			}
 			tracker := mockTracker{
 				lowerBound: tc.trackerLowerBound,
