@@ -1351,6 +1351,60 @@ func constructSideEffectPartitionElem(
 	return elem
 }
 
+// getMostRecentTableZoneCfgSeq returns the most recent seqNum associated with
+// our tableID's zone config (if any).
+//
+// N.B. Adding a new zone config element entails adding a new element where the
+// seqNum is 1 greater than the most recent zone config element. This helps
+// ensure zone config changes are applied in the correct order during explicit
+// transactions.
+func getMostRecentTableZoneCfgSeq(b BuildCtx, tableID catid.DescID) uint32 {
+	maxSeq := uint32(0)
+	b.QueryByID(tableID).FilterTableZoneConfig().
+		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
+			if elem.SeqNum > maxSeq {
+				maxSeq = elem.SeqNum
+			}
+		})
+	return maxSeq
+}
+
+// configureZoneConfigForNewIndexBackfill will ensure that current subzone
+// configs for the given index on tableID are updated to the newIndexID.
+func configureZoneConfigForNewIndexBackfill(
+	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID, newIndexID catid.IndexID,
+) error {
+	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	if currentZoneConfigWithRaw == nil {
+		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
+			"on tableID %d that does not have subzone configs", oldIndexID, tableID)
+	}
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
+	newSubzones := make([]zonepb.Subzone, len(newZoneConfig.Subzones))
+	for i, subzone := range newZoneConfig.Subzones {
+		if subzone.IndexID == uint32(oldIndexID) {
+			subzone.IndexID = uint32(newIndexID)
+		}
+		newSubzones[i] = subzone
+	}
+	newZoneConfig.Subzones = newSubzones
+	newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+	if err != nil {
+		return err
+	}
+	mostRecentSeqNum := getMostRecentTableZoneCfgSeq(b, tableID)
+	tzc := &scpb.TableZoneConfig{
+		TableID:    tableID,
+		ZoneConfig: &newZoneConfig,
+		SeqNum:     mostRecentSeqNum + 1,
+	}
+	b.Add(tzc)
+	return nil
+}
+
 // TODO(annie): This is unused for now.
 var _ = configureZoneConfigForNewIndexPartitioning
 
@@ -1482,20 +1536,11 @@ func ApplyZoneConfigForMultiRegionTable(
 	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
 		return nil
 	}
-	// Adding a new zone config element entails adding a new element where the
-	// seqNum is 1 greater than the most recent zone config element. This ensures
-	// zone config changes are applied in the correct order during schema changes.
-	maxSeq := uint32(0)
-	b.QueryByID(tableID).FilterTableZoneConfig().
-		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
-			if elem.SeqNum > maxSeq {
-				maxSeq = elem.SeqNum
-			}
-		})
+	mostRecentSeqNum := getMostRecentTableZoneCfgSeq(b, tableID)
 	tzc := &scpb.TableZoneConfig{
 		TableID:    tableID,
 		ZoneConfig: &newZoneConfig,
-		SeqNum:     maxSeq + 1,
+		SeqNum:     mostRecentSeqNum + 1,
 	}
 	b.Add(tzc)
 	return nil
