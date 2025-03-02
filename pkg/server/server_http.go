@@ -353,7 +353,7 @@ func startHTTPService(
 // gzip middleware, then delegates to the mux for handling the request.
 func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
+	w.Header().Set("Cache-control", "no-store")
 
 	if HSTSEnabled.Get(&s.cfg.Settings.SV) {
 		w.Header().Set("Strict-Transport-Security", hstsHeaderValue)
