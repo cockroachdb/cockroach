@@ -210,4 +210,6 @@ type Cluster interface {
 
 	// CaptureSideEyeSnapshot triggers a side-eye snapshot if side-eye is enabled in the enviroment.
 	CaptureSideEyeSnapshot(ctx context.Context) string
+
+	RegisterClusterHook(hookName string, hookType option.ClusterHookType, hook func(context.Context) error)
 }

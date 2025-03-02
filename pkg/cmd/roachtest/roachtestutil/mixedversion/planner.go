@@ -557,14 +557,27 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	}
 
 	setupContext := p.nonUpgradeContext(initialVersion, SystemSetupStage)
+	var clusterStartSteps []testStep
+
+	clusterInitHooks := p.hooks.ClusterInitSteps(setupContext, p.prng)
+	if len(clusterInitHooks) > 0 {
+		clusterStartSteps = append(clusterStartSteps, clusterInitHooks...)
+	}
+	// N.B. Add the cluster start step after user hooks as the framework will run liveness
+	// checks once the start step is run, which is incompatible with cluster init hooks.
+	clusterStartSteps = append(clusterStartSteps,
+		p.newSingleStepWithContext(setupContext,
+			startStep{
+				version:            initialVersion,
+				rt:                 p.rt,
+				initTarget:         p.currentContext.System.Descriptor.Nodes[0],
+				waitForReplication: p.shouldWaitForReplication(),
+				settings:           p.clusterSettingsForSystem(initialVersion),
+			}),
+	)
+
+	steps = append(steps, p.concurrently(clusterInitLabel, clusterStartSteps)...)
 	return append(steps,
-		p.newSingleStepWithContext(setupContext, startStep{
-			version:            initialVersion,
-			rt:                 p.rt,
-			initTarget:         p.currentContext.System.Descriptor.Nodes[0],
-			waitForReplication: p.shouldWaitForReplication(),
-			settings:           p.clusterSettingsForSystem(initialVersion),
-		}),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.System.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
@@ -579,6 +592,7 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 // passed is the version in which the tenant is created.
 func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	setupContext := p.nonUpgradeContext(v, TenantSetupStage)
+	var steps []testStep
 	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
 		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
@@ -597,20 +611,26 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 			settings: p.clusterSettingsForTenant(v),
 		}
 	}
+	var clusterStartSteps []testStep
+	clusterInitHooks := p.hooks.ClusterInitSteps(setupContext, p.prng)
+	if len(clusterInitHooks) > 0 {
+		clusterStartSteps = append(clusterStartSteps, clusterInitHooks...)
+	}
+	clusterStartSteps = append(clusterStartSteps, p.newSingleStepWithContext(setupContext, startStep))
+	steps = append(steps, p.concurrently(clusterInitLabel, clusterStartSteps)...)
 
 	// We are creating a virtual cluster: we first create it, then wait
 	// for the cluster version to match the expected version, then set
 	// it as the default cluster, and finally give it all capabilities
 	// if necessary.
-	steps := []testStep{
-		p.newSingleStepWithContext(setupContext, startStep),
+	steps = append(steps,
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
 			desiredVersion:     versionToClusterVersion(v),
 			virtualClusterName: p.tenantName(),
 		}),
-	}
+	)
 
 	// We only use the 'default tenant' cluster setting in
 	// shared-process deployments. For separate-process deployments, we
