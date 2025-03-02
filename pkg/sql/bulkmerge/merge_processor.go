@@ -60,10 +60,12 @@ var bulkMergeProcessorOutputTypes = []*types.T{
 // The last task is to process the input range from [split(len(split)-1), nil).
 type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
-	spec    execinfrapb.BulkMergeSpec
-	input   execinfra.RowSource
-	flowCtx *execinfra.FlowCtx
-	writer  *bulksst.MergeWriter
+	spec     execinfrapb.BulkMergeSpec
+	input    execinfra.RowSource
+	flowCtx  *execinfra.FlowCtx
+	writer   *bulksst.MergeWriter
+	cloudMux *bulkutil.CloudStorageMux
+	iter     storage.SimpleMVCCIterator
 }
 
 type mergeProcessorInput struct {
@@ -173,6 +175,20 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 	}, nil
 }
 
+func containsKey(mergeSpan roachpb.Span, key roachpb.Key) bool {
+	// key is to left
+	if bytes.Compare(key, mergeSpan.Key) < 0 {
+		return false
+	}
+
+	// key is to right
+	if bytes.Compare(mergeSpan.EndKey, key) <= 0 {
+		return false
+	}
+
+	return true
+}
+
 // Start implements execinfra.RowSource.
 func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
@@ -187,26 +203,17 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	targetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
 
 	m.writer = bulksst.NewInorderWriter(allocator, targetSize, m.flowCtx.EvalCtx.Settings)
+	m.cloudMux = bulkutil.NewCloudStorageMux(m.flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName())
+
+	m.iter, err = m.createIter(ctx)
+	if err != nil {
+		m.MoveToDraining(err)
+		return
+	}
 }
 
 func (m *bulkMergeProcessor) Close(ctx context.Context) {
 	m.ProcessorBase.Close(ctx)
-}
-
-// isOverlapping returns true if the sst may contribute keys to the merge span.
-// The merge span is a [start, end) range. The SST is a [start, end] range.
-func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bool {
-	// No overlap if sst.EndKey < mergeSpan.Key (SST is entirely left).
-	if bytes.Compare(sst.EndKey, mergeSpan.Key) < 0 {
-		return false
-	}
-
-	// No overlap if sst.EndKey < mergeSpan.Key (SST is entirely left).
-	if bytes.Compare(mergeSpan.EndKey, sst.StartKey) <= 0 {
-		return false
-	}
-
-	return true
 }
 
 func (m *bulkMergeProcessor) mergeSSTs(
@@ -221,50 +228,32 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}()
 
 	mergeSpan := m.spec.Spans[taskID]
-	var storeFiles []storageccl.StoreFile
 
-	// Find the ssts that overlap with the given task's key range.
-	for _, sst := range m.spec.Ssts {
-		if !isOverlapping(mergeSpan, sst) {
-			continue
-		}
-		file, err := cloudMux.StoreFile(ctx, sst.Uri)
-		if err != nil {
-			return execinfrapb.BulkMergeSpec_Output{}, err
-		}
-		storeFiles = append(storeFiles, file)
+	// Seek the iterator if its not positioned within the current task's span.
+	// The spans are disjoint, so the only way the iterator would be contained
+	// within the span is if the previous task's span proceeded it
+	if ok, _ := m.iter.Valid(); !(ok && containsKey(mergeSpan, m.iter.UnsafeKey().Key)) {
+		// TODO(jeffswenson): Does this prevent us from constantly reading new
+		// chunks of the SSTs?
+		m.iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key})
 	}
 
-	// It's possible that there are no ssts to merge for this task. In that case,
-	// we return an empty output.
-	if len(storeFiles) == 0 {
-		return execinfrapb.BulkMergeSpec_Output{}, nil
-	}
-
-	iterCtx, cancel := context.WithCancel(context.Background()) // TODO(jeffswenson): testing if the context is leaking buffers
-	defer cancel()
-	iterOpts := storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: mergeSpan.Key,
-		UpperBound: mergeSpan.EndKey,
-	}
-	iter, err := storageccl.ExternalSSTReader(iterCtx, storeFiles, nil, iterOpts)
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	defer iter.Close()
-
-	// Write all KVs
-	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
-		ok, err := iter.Valid()
+	for ; ; m.iter.NextKey() {
+		ok, err := m.iter.Valid()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
 		if !ok {
 			break
 		}
-		key := iter.UnsafeKey()
-		val, err := iter.UnsafeValue()
+
+		key := m.iter.UnsafeKey()
+		if mergeSpan.EndKey.Compare(roachpb.Key(key.Key)) <= 0 {
+			// We've reached the end of the span.
+			break
+		}
+
+		val, err := m.iter.UnsafeValue()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
@@ -289,6 +278,34 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		})
 	}
 	return mergedSSTs, nil
+}
+
+func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCCIterator, error) {
+	var storeFiles []storageccl.StoreFile
+
+	// Find the ssts that overlap with the given task's key range.
+	for _, sst := range m.spec.Ssts {
+		file, err := m.cloudMux.StoreFile(ctx, sst.Uri)
+		if err != nil {
+			m.MoveToDraining(err)
+		}
+		storeFiles = append(storeFiles, file)
+	}
+
+	iterOpts := storage.IterOptions{
+		KeyTypes: storage.IterKeyTypePointsAndRanges,
+		// We don't really need bounds here because the merge iterator covers the
+		// entire intput data set, but the iterator has validation ensuring they
+		// are set. These bounds work because the spans are non-overlapping and
+		// sorted.
+		LowerBound: m.spec.Spans[0].Key,
+		UpperBound: m.spec.Spans[len(m.spec.Spans)-1].EndKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	if err != nil {
+		return nil, err
+	}
+	return iter, nil
 }
 
 func init() {
