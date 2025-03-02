@@ -869,9 +869,31 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 		mutationCols := mb.mutationColumnIDs()
+		var seenRLSConstraint bool
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
 			check := mb.tab.Check(i)
+
+			// For tables with RLS enabled, we create a synthetic check constraint
+			// to enforce the policies. Since this check varies based on the role
+			// and command used, it must be generated each time it is needed rather
+			// than being included with the table's actual check constraints.
+			if check.IsRLSConstraint() {
+				if seenRLSConstraint {
+					panic(errors.AssertionFailedf("a table should only have one RLS constraint"))
+				}
+				seenRLSConstraint = true
+				chkBuilder := optRLSConstraintBuilder{
+					tab:      mb.tab,
+					md:       mb.md,
+					tabMeta:  mb.md.TableMeta(mb.tabID),
+					oc:       mb.b.catalog,
+					user:     mb.b.checkPrivilegeUser,
+					isUpdate: isUpdate,
+				}
+				check = chkBuilder.Build(mb.b.ctx)
+			}
+
 			expr, err := parser.ParseExpr(check.Constraint())
 			if err != nil {
 				panic(err)
@@ -881,7 +903,12 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 
 			// Use an anonymous name because the column cannot be referenced
 			// in other expressions.
-			colName := scopeColName("").WithMetadataName(fmt.Sprintf("check%d", i+1))
+			colName := scopeColName("")
+			if check.IsRLSConstraint() {
+				colName = colName.WithMetadataName("rls")
+			} else {
+				colName = colName.WithMetadataName(fmt.Sprintf("check%d", i+1))
+			}
 			scopeCol := projectionsScope.addColumn(colName, texpr)
 
 			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
@@ -889,11 +916,17 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 			referencedCols := &opt.ColSet{}
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
 
-			// If the mutation is not an UPDATE, track the synthesized check
-			// columns in checkColIDS. If the mutation is an UPDATE, only track
-			// the check columns if the columns referenced in the check
-			// expression are being mutated.
-			if !isUpdate || referencedCols.Intersects(mutationCols) {
+			// For non-UPDATE mutations, track the synthesized check columns in
+			// checkColIDs. For UPDATE mutations, track the check columns in two
+			// scenarios:
+			// - If the check expression is a real check constraint and the columns
+			//   referenced in the check expression are being mutated.
+			// - If the check expression is a synthetic one used for row-level
+			//   security (RLS). Since it's not a real check expression, different
+			//   expressions can exist for read and write operations. This means it's
+			//   possible to read a row whose column values would violate the write
+			//   expression.
+			if !isUpdate || check.IsRLSConstraint() || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
 
 				// TODO(michae2): Under weaker isolation levels we need to use shared
