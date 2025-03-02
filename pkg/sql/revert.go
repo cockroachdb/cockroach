@@ -8,12 +8,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -55,7 +57,7 @@ func DeleteTableWithPredicate(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	sv *settings.Values,
+	clusterSettings *cluster.Settings,
 	distSender *kvcoord.DistSender,
 	tableID catid.DescID,
 	predicates kvpb.DeleteRangePredicates,
@@ -71,8 +73,8 @@ func DeleteTableWithPredicate(
 	// The partitions are sent to the workers via the spansToDo channel.
 	//
 	// TODO (msbutler): tune these
-	rangesPerBatch := rollbackBatchSize.Get(sv)
-	numWorkers := int(predicateDeleteRangeNumWorkers.Get(sv))
+	rangesPerBatch := rollbackBatchSize.Get(&clusterSettings.SV)
+	numWorkers := int(predicateDeleteRangeNumWorkers.Get(&clusterSettings.SV))
 
 	spansToDo := make(chan *roachpb.Span, 1)
 
@@ -108,7 +110,7 @@ func DeleteTableWithPredicate(
 								Key:    span.Key,
 								EndKey: span.EndKey,
 							},
-							UseRangeTombstone: true,
+							UseRangeTombstone: !clusterSettings.Version.IsActive(ctx, clusterversion.V25_2),
 							Predicates:        predicates,
 						}
 						log.VEventf(ctx, 2, "deleting range %s - %s; attempt %v", span.Key, span.EndKey, resumeCount)
