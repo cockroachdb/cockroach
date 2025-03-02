@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // required for backup.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -149,7 +149,7 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 	return json.Marshal(m)
 }
 
-var _ bulk.TracingAggregatorEvent = &ExportStats{}
+var _ tracing.AggregatorEvent = &ExportStats{}
 
 // Render implements the LazyTag interface.
 func (e *ExportStats) Render() []attribute.KeyValue {
@@ -181,16 +181,16 @@ func (e *ExportStats) Render() []attribute.KeyValue {
 	return tags
 }
 
-// Identity implements the TracingAggregatorEvent interface.
-func (e *ExportStats) Identity() bulk.TracingAggregatorEvent {
+// Identity implements the AggregatorEvent interface.
+func (e *ExportStats) Identity() tracing.AggregatorEvent {
 	return &ExportStats{
 		StartTime: hlc.Timestamp{WallTime: math.MaxInt64},
 		EndTime:   hlc.Timestamp{WallTime: math.MinInt64},
 	}
 }
 
-// Combine implements the TracingAggregatorEvent interface.
-func (e *ExportStats) Combine(other bulk.TracingAggregatorEvent) {
+// Combine implements the AggregatorEvent interface.
+func (e *ExportStats) Combine(other tracing.AggregatorEvent) {
 	otherExportStats, ok := other.(*ExportStats)
 	if !ok {
 		panic(fmt.Sprintf("`other` is not of type ExportStats: %T", other))
@@ -234,7 +234,7 @@ func (e *ExportStats) String() string {
 	return b.String()
 }
 
-// ProtoName implements the TracingAggregatorEvent interface.
+// ProtoName implements the AggregatorEvent interface.
 func (e *ExportStats) ProtoName() string {
 	return proto.MessageName(e)
 }
