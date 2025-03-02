@@ -550,7 +550,7 @@ func NewColIndexJoin(
 			// which will close the acc.
 			diskBufferMemAcc := streamerBudgetAcc.Monitor().MakeBoundAccount()
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
-				flowCtx.Cfg.TempStorage, diskBufferMemAcc, diskMonitor,
+				flowCtx.Cfg.TempStorage, diskBufferMemAcc, diskMonitor, false, /* reverse */
 			)
 		}
 		kvFetcher = row.NewStreamingKVFetcher(
@@ -568,6 +568,7 @@ func NewColIndexJoin(
 			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
+			false, /* reverse */
 			diskBuffer,
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,

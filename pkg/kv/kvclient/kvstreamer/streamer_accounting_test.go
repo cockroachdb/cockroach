@@ -8,6 +8,7 @@ package kvstreamer
 import (
 	"context"
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -72,7 +73,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 	acc := monitor.MakeBoundAccount()
 	defer acc.Close(ctx)
 
-	getStreamer := func() *Streamer {
+	getStreamer := func(reverse bool) *Streamer {
 		require.Zero(t, acc.Used())
 		rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 		leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
@@ -101,6 +102,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			nil, /* kvPairsRead */
 			lock.None,
 			lock.Unreplicated,
+			reverse,
 		)
 		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
@@ -108,7 +110,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 
 	t.Run("get", func(t *testing.T) {
 		acc.Clear(ctx)
-		streamer := getStreamer()
+		streamer := getStreamer(false /* reverse */)
 		defer streamer.Close(ctx)
 
 		// Get the row with pk=0.
@@ -126,48 +128,66 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		acc.Clear(ctx)
-		streamer := getStreamer()
-		defer streamer.Close(ctx)
+		for _, reverse := range []bool{false, true} {
+			t.Run("reverse="+strconv.FormatBool(reverse), func(t *testing.T) {
+				acc.Clear(ctx)
+				streamer := getStreamer(reverse)
+				defer streamer.Close(ctx)
 
-		// Scan the row with pk=0.
-		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeScanRequest(codec, uint32(tableID), 0, 1)
-		require.NoError(t, streamer.Enqueue(ctx, reqs))
-		results, err := streamer.GetResults(ctx)
-		require.NoError(t, err)
-		require.Equal(t, 1, len(results))
-		// 29 is usually the number of bytes in
-		// ScanResponse.BatchResponse[0]. We choose to hard-code this number
-		// rather than consult NumBytes field directly as an additional
-		// sanity-check. We also adjust the estimate to account for possible
-		// tenant prefix.
-		expectedMemToken := scanResponseOverhead + 29 + int64(len(codec.TenantPrefix()))
-		if results[0].ScanResp.NumBytes == 33+int64(len(codec.TenantPrefix())) {
-			// For some reason, sometimes it's not 29, but 33, and we do
-			// allow for this.
-			expectedMemToken += 4
+				// Scan the row with pk=0.
+				reqs := make([]kvpb.RequestUnion, 1)
+				reqs[0] = makeScanRequest(codec, uint32(tableID), 0, 1, reverse)
+				require.NoError(t, streamer.Enqueue(ctx, reqs))
+				results, err := streamer.GetResults(ctx)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(results))
+				// 29 is usually the number of bytes in
+				// ScanResponse.BatchResponse[0]. We choose to hard-code this number
+				// rather than consult NumBytes field directly as an additional
+				// sanity-check. We also adjust the estimate to account for possible
+				// tenant prefix.
+				expectedMemToken := scanResponseOverhead + 29 + int64(len(codec.TenantPrefix()))
+				var numBytes int64
+				if reverse {
+					numBytes = results[0].ScanResp.(*kvpb.ReverseScanResponse).NumBytes
+				} else {
+					numBytes = results[0].ScanResp.(*kvpb.ScanResponse).NumBytes
+				}
+				if numBytes == 33+int64(len(codec.TenantPrefix())) {
+					// For some reason, sometimes it's not 29, but 33, and we do
+					// allow for this.
+					expectedMemToken += 4
+				}
+				require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
+				expectedUsed := expectedMemToken + resultSize
+				// This is streamer.numRangesPerScanRequestAccountedFor.
+				expectedUsed += 4
+				require.Equal(t, expectedUsed, acc.Used())
+			})
 		}
-		require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
-		expectedUsed := expectedMemToken + resultSize
-		// This is streamer.numRangesPerScanRequestAccountedFor.
-		expectedUsed += 4
-		require.Equal(t, expectedUsed, acc.Used())
 	})
 }
 
-func makeScanRequest(codec keys.SQLCodec, tableID uint32, start, end int) kvpb.RequestUnion {
+func makeScanRequest(
+	codec keys.SQLCodec, tableID uint32, start, end int, reverse bool,
+) kvpb.RequestUnion {
 	var res kvpb.RequestUnion
-	var scan kvpb.ScanRequest
-	var union kvpb.RequestUnion_Scan
 	makeKey := func(pk int) []byte {
 		// These numbers essentially make a key like '/t/primary/pk'.
 		return append(codec.IndexPrefix(tableID, 1), byte(136+pk))
 	}
-	scan.Key = makeKey(start)
-	scan.EndKey = makeKey(end)
-	scan.ScanFormat = kvpb.BATCH_RESPONSE
-	union.Scan = &scan
-	res.Value = &union
+	if reverse {
+		var scan kvpb.ReverseScanRequest
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		scan.ScanFormat = kvpb.BATCH_RESPONSE
+		res.Value = &kvpb.RequestUnion_ReverseScan{ReverseScan: &scan}
+	} else {
+		var scan kvpb.ScanRequest
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		scan.ScanFormat = kvpb.BATCH_RESPONSE
+		res.Value = &kvpb.RequestUnion_Scan{Scan: &scan}
+	}
 	return res
 }

@@ -40,6 +40,33 @@ func ScanIsReverse(mem *memo.Memo, scan *memo.ScanExpr, required *props.Ordering
 	return reverse
 }
 
+// ScanDirection represents the direction of a scan, either for a Scan operator
+// or a LookupJoin.
+type ScanDirection uint8
+
+const (
+	// EitherDirection indicates that the scan can be in either direction.
+	EitherDirection ScanDirection = iota
+	// ForwardDirection indicates a forward scan.
+	ForwardDirection
+	// ReverseDirection indicates a reverse scan.
+	ReverseDirection
+)
+
+// String implements the fmt.Stringer interface.
+func (d ScanDirection) String() string {
+	switch d {
+	case EitherDirection:
+		return "either"
+	case ForwardDirection:
+		return "forward"
+	case ReverseDirection:
+		return "reverse"
+	default:
+		return "unknown"
+	}
+}
+
 // ScanPrivateCanProvide returns true if the scan operator returns rows
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
@@ -57,23 +84,18 @@ func ScanPrivateCanProvide(
 	// We start off as accepting either a forward or a reverse scan. Until then,
 	// the reverse variable is unset. Once the direction is known, reverseSet is
 	// true and reverse indicates whether we need to do a reverse scan.
-	const (
-		either = 0
-		fwd    = 1
-		rev    = 2
-	)
-	direction := either
+	var direction ScanDirection
 	if s.HardLimit.IsSet() {
 		// When we have a limit, the limit forces a certain scan direction (because
 		// it affects the results, not just their ordering).
-		direction = fwd
+		direction = ForwardDirection
 		if s.HardLimit.Reverse() {
-			direction = rev
+			direction = ReverseDirection
 		}
 	} else if s.Flags.Direction != 0 {
-		direction = fwd
+		direction = ForwardDirection
 		if s.Flags.Direction == tree.Descending {
-			direction = rev
+			direction = ReverseDirection
 		}
 	}
 	index := md.Table(s.Table).Index(s.Index)
@@ -98,13 +120,13 @@ func ScanPrivateCanProvide(
 		}
 		// The directions of the index column and the required column impose either
 		// a forward or a reverse scan.
-		required := fwd
+		requiredDirection := ForwardDirection
 		if indexCol.Descending != reqCol.Descending {
-			required = rev
+			requiredDirection = ReverseDirection
 		}
-		if direction == either {
-			direction = required
-		} else if direction != required {
+		if direction == EitherDirection {
+			direction = requiredDirection
+		} else if direction != requiredDirection {
 			// We already determined the direction, and according to it, this column
 			// has the wrong direction.
 			return false, false
@@ -112,7 +134,7 @@ func ScanPrivateCanProvide(
 		left, right = left+1, right+1
 	}
 	// If direction is either, we prefer forward scan.
-	return true, direction == rev
+	return true, direction == ReverseDirection
 }
 
 func scanBuildProvided(
