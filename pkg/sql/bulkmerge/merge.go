@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -29,6 +30,7 @@ func Merge(
 	outputURI func(sqlInstance base.SQLInstanceID) string,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	// TODO(jeffswenson): validate the splits are in order
+	log.Infof(ctx, "bulk merge ssts:%d spans:%d", len(ssts), len(spans))
 
 	execCfg := execCtx.ExecCfg()
 

@@ -37,8 +37,8 @@ func CombineFileInfo(
 
 	shuffle(samples)
 
-	// targetSize := uint64(256 << 20)
-	// samples = samples[:totalSize/targetSize]
+	targetSize := uint64(256 << 20)
+	samples = samples[:totalSize/targetSize]
 
 	// BUGFIX: We need to sort the samples for merge, otherwise the merge can end
 	// up with overlapping spans and duplicate data.

@@ -60,11 +60,10 @@ var bulkMergeProcessorOutputTypes = []*types.T{
 // The last task is to process the input range from [split(len(split)-1), nil).
 type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
-	spec     execinfrapb.BulkMergeSpec
-	input    execinfra.RowSource
-	flowCtx  *execinfra.FlowCtx
-	cloudMux *bulkutil.CloudStorageMux
-	writer   *bulksst.MergeWriter
+	spec    execinfrapb.BulkMergeSpec
+	input   execinfra.RowSource
+	flowCtx *execinfra.FlowCtx
+	writer  *bulksst.MergeWriter
 }
 
 type mergeProcessorInput struct {
@@ -111,7 +110,6 @@ func newBulkMergeProcessor(
 		spec:    spec,
 		flowCtx: flowCtx,
 		// TODO(jeffswenson): should this use the root user or the user executing the job?
-		cloudMux: bulkutil.NewCloudStorageMux(flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName()),
 	}
 	err := mp.Init(ctx, mp, post, bulkMergeProcessorOutputTypes, flowCtx, processorID, nil, execinfra.ProcStateOpts{
 		InputsToDrain: []execinfra.RowSource{input},
@@ -156,6 +154,8 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 		return nil, err
 	}
 
+	log.Infof(m.Ctx(), "merging ssts for task %d [%s, %s)", input.taskID, m.spec.Spans[input.taskID].Key, m.spec.Spans[input.taskID].EndKey)
+
 	results, err := m.mergeSSTs(m.Ctx(), input.taskID)
 	if err != nil {
 		return nil, err
@@ -190,10 +190,6 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 }
 
 func (m *bulkMergeProcessor) Close(ctx context.Context) {
-	err := m.cloudMux.Close()
-	if err != nil {
-		log.Errorf(ctx, "failed to close cloud storage mux: %v", err)
-	}
 	m.ProcessorBase.Close(ctx)
 }
 
@@ -216,6 +212,14 @@ func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bo
 func (m *bulkMergeProcessor) mergeSSTs(
 	ctx context.Context, taskID taskset.TaskId,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
+	cloudMux := bulkutil.NewCloudStorageMux(m.flowCtx.Cfg.ExternalStorageFromURI, username.RootUserName())
+	defer func() {
+		err := cloudMux.Close()
+		if err != nil {
+			log.Errorf(ctx, "error closing cloudMux: %+v", err)
+		}
+	}()
+
 	mergeSpan := m.spec.Spans[taskID]
 	var storeFiles []storageccl.StoreFile
 
@@ -224,7 +228,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		if !isOverlapping(mergeSpan, sst) {
 			continue
 		}
-		file, err := m.cloudMux.StoreFile(ctx, sst.Uri)
+		file, err := cloudMux.StoreFile(ctx, sst.Uri)
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
@@ -237,12 +241,14 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, nil
 	}
 
+	iterCtx, cancel := context.WithCancel(context.Background()) // TODO(jeffswenson): testing if the context is leaking buffers
+	defer cancel()
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: mergeSpan.Key,
 		UpperBound: mergeSpan.EndKey,
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	iter, err := storageccl.ExternalSSTReader(iterCtx, storeFiles, nil, iterOpts)
 	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}

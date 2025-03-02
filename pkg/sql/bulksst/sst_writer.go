@@ -47,7 +47,7 @@ var BatchSize = settings.RegisterByteSizeSetting(settings.ApplicationLevel,
 var BatchKeyCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 	"bulkio.sst_writer.batch_key_count",
 	"Writer in memory batch key count",
-	1024*10)
+	8*1024*1024)
 
 // NewUnsortedSSTBatcher creates a new SST batcher, a file allocator must be
 // provided which will be used to create new files either locally or remotely

@@ -16,23 +16,25 @@ import (
 
 type MergeWriter struct {
 	allocator FileAllocator
-	files SSTFiles
-	settings *cluster.Settings
+	files     SSTFiles
+	settings  *cluster.Settings
 
 	targetSize int64
-	fileCount int
+	fileCount  int
 
 	scratch []byte
 
-	writer *storage.SSTWriter
-	writerInfo SSTFileInfo
+	writer      *storage.SSTWriter
+	writerInfo  SSTFileInfo
 	fileCleanup func()
 
 	firstKey []byte
-	lastKey []byte
+	lastKey  []byte
 }
 
-func NewInorderWriter(allocator FileAllocator, targetSize int64, settings *cluster.Settings) *MergeWriter {
+func NewInorderWriter(
+	allocator FileAllocator, targetSize int64, settings *cluster.Settings,
+) *MergeWriter {
 	return &MergeWriter{
 		allocator:  allocator,
 		targetSize: targetSize,
@@ -40,7 +42,9 @@ func NewInorderWriter(allocator FileAllocator, targetSize int64, settings *clust
 	}
 }
 
-func (m *MergeWriter) PutRawMVCCValue(ctx context.Context, key storage.MVCCKey, value []byte) error {
+func (m *MergeWriter) PutRawMVCCValue(
+	ctx context.Context, key storage.MVCCKey, value []byte,
+) error {
 	if m.writer != nil && m.targetSize <= m.writer.DataSize {
 		if err := m.flushCurrentWriter(); err != nil {
 			return errors.Wrap(err, "failed to flush SST writer")
@@ -106,19 +110,22 @@ func (m *MergeWriter) flushCurrentWriter() error {
 	if err := m.writer.Finish(); err != nil {
 		return errors.Wrap(err, "failed to finish SST writer")
 	}
+	m.writer.Close()
+	m.writer = nil
+
 	m.fileCleanup()
+	m.fileCleanup = nil
 
 	// TODO(jeffswenson): can we get the first and last key from the write
 	// instead of explicitly tracking it?
 	m.files.SST = append(m.files.SST, &SSTFileInfo{
 		URI:      m.writerInfo.URI,
-		StartKey: roachpb.Key(m.firstKey),
-		EndKey:   roachpb.Key(m.lastKey),
+		StartKey: roachpb.Key(m.firstKey).Clone(),
+		EndKey:   roachpb.Key(m.lastKey).Clone(),
 		FileSize: m.writerInfo.FileSize,
 	})
-	m.firstKey = nil
-	m.lastKey = nil
-	m.writer = nil
+	m.firstKey = m.firstKey[:0]
+	m.lastKey = m.lastKey[:0]
 
 	return nil
 }
