@@ -84,6 +84,10 @@ const (
 	replicaChangeTxnUpdateDescOpName = "change-replica-update-desc"
 
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
+
+	// Since term changes are rare and the term cache mainly holds
+	// term change entries, there is less benefit of tuning the cache size.
+	rafttermCacheSize = 10
 )
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC

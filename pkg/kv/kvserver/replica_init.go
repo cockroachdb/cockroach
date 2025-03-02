@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttermcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -215,6 +216,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
 		// given range ID, to ensure that callbacks are processed in order.
 		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],
+		TermCache:  rafttermcache.NewTermCache(rafttermCacheSize),
 		EntryCache: store.raftEntryCache,
 		Settings:   store.cfg.Settings,
 		Metrics: logstore.Metrics{
@@ -311,6 +313,11 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	r.shMu.raftTruncState = s.TruncState
 	r.shMu.lastIndexNotDurable = s.LastEntryID.Index
 	r.shMu.lastTermNotDurable = s.LastEntryID.Term
+
+	// Initialize the term cache with the last EntryID in storage.
+	// In the special case where raftLog is empty, lastIndex and lastTerm is the
+	// truncated state which we use to initialize the term cache.
+	r.raftMu.logStorage.TermCache.ResetWithFirst(r.shMu.lastTermNotDurable, r.shMu.lastIndexNotDurable)
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.

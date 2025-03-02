@@ -166,6 +166,7 @@ go_library(
         "//pkg/kv/kvserver/multiqueue",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/kv/kvserver/rafttermcache",
         "//pkg/kv/kvserver/rafttrace",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/kv/kvserver/rditer",
