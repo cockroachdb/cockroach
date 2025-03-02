@@ -553,6 +553,8 @@ user testuser
 statement ok
 COMMIT
 
+subtest end
+
 subtest regression_130661
 
 statement ok
@@ -575,5 +577,20 @@ SELECT * FROM t130661 WHERE id = 1 FOR UPDATE
 
 statement ok
 COMMIT
+
+subtest end
+
+subtest regression_141961
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED;
+
+query I
+SELECT * FROM (WITH foo AS (SELECT * FROM t FOR UPDATE LIMIT 1) SELECT 1);
+----
+1
+
+statement ok
+ROLLBACK;
 
 subtest end

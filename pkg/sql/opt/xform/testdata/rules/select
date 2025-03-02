@@ -10434,6 +10434,7 @@ inner-join (lookup b)
  │    ├── right fixed columns: [9] = ['\x376300012a0400']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
+ │    ├── volatile
  │    └── filters (true)
  └── filters (true)
 
