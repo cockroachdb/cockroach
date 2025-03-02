@@ -284,21 +284,37 @@ func newTenantServer(
 		baseCfg.SQLAddrListener = sqlAddrListener
 	}
 
-	// The setting of tenant id may have not been done until now. If this is the
-	// case, DelayedSetTenantID will be set and should be used to populate
-	// TenantID in the config. We call it here as we need a valid TenantID below.
-	if sqlCfg.DelayedSetTenantID != nil {
-		cfgTenantID, cfgLocality, err := sqlCfg.DelayedSetTenantID(ctx)
-		if err != nil {
-			return nil, err
+	// The setting of tenant id or tenant name may have not been done until now.
+	// If this is the case, DelayedSetTenantID or DelayedSetTenantName will be
+	// set and should be used to populate TenantID or TenantName in the config.
+	// We call it here as we need a valid tenant information below.
+	if sqlCfg.DelayedSetTenantName != nil || sqlCfg.DelayedSetTenantID != nil {
+		var cfgLocality roachpb.Locality
+    var err error
+    cfgTenantID, cfgTenantName := sqlCfg.TenantID, sqlCfg.TenantName
+
+		if sqlCfg.DelayedSetTenantName != nil {
+      cfgTenantName, cfgLocality, err = sqlCfg.DelayedSetTenantName(ctx)
+			if err != nil {
+				return nil, err
+			}
+	    log.Ops.Infof(ctx, "server starting for tenant %q", redact.Safe(sqlCfg.TenantName))
+		} else if sqlCfg.DelayedSetTenantID != nil {
+			cfgTenantID, cfgLocality, err = sqlCfg.DelayedSetTenantID(ctx)
+			if err != nil {
+				return nil, err
+			}
+	    log.Ops.Infof(ctx, "server starting for tenant %q", redact.Safe(sqlCfg.TenantID))
 		}
+
 		// We need to update sqlCfg and baseCfg here explicitly since copies
 		// were passed into newTenantServer instead of the original serverCfg
 		// object.
-		sqlCfg.TenantID = cfgTenantID
+    sqlCfg.TenantID = cfgTenantID
+		sqlCfg.TenantName = cfgTenantName
 		baseCfg.Locality = cfgLocality
 	}
-	log.Ops.Infof(ctx, "server starting for tenant %q", redact.Safe(sqlCfg.TenantID))
+
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	//
