@@ -7,6 +7,7 @@ package failures
 
 import (
 	"context"
+	"github.com/cockroachdb/errors"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -54,7 +55,9 @@ type FailureMode interface {
 type GenericFailure struct {
 	c *install.SyncedCluster
 	// runTitle is the title to prefix command output with.
-	runTitle string
+	runTitle          string
+	diskDevice        string
+	networkInterfaces []string
 }
 
 func (f *GenericFailure) Run(
@@ -83,4 +86,29 @@ func (f *GenericFailure) RunWithDetails(
 		return install.RunResultDetails{}, err
 	}
 	return res[0], nil
+}
+
+func (f *GenericFailure) DiskDevice(ctx context.Context, l *logger.Logger) (string, error) {
+	if f.diskDevice == "" {
+		res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(f.c.Nodes[:1]), "Get Disk Device", "lsblk | grep /mnt/data1 | awk '{print $1}'")
+		if err != nil {
+			return "", errors.Wrapf(err, "error when determining block device")
+		}
+		f.diskDevice = "/dev/" + strings.TrimSpace(res[0].Stdout)
+	}
+	return f.diskDevice, nil
+}
+
+func (f *GenericFailure) NetworkInterfaces(ctx context.Context, l *logger.Logger) ([]string, error) {
+	if f.networkInterfaces == nil {
+		res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(f.c.Nodes[:1]), "Get Network Interfaces", "ip -o link show | awk -F ': ' '{print $2}'")
+		if err != nil {
+			return nil, errors.Wrapf(err, "error when determining network interfaces")
+		}
+		interfaces := strings.Split(strings.TrimSpace(res[0].Stdout), "\n")
+		for _, iface := range interfaces {
+			f.networkInterfaces = append(f.networkInterfaces, strings.TrimSpace(iface))
+		}
+	}
+	return f.networkInterfaces, nil
 }

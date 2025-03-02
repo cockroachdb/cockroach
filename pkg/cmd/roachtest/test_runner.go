@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/failureinjection"
 	"html"
 	"io"
 	"math/rand"
@@ -940,6 +941,36 @@ func (r *testRunner) runWorker(
 				}
 				c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
 				t.AddParam("metamorphicBufferedSender", fmt.Sprint(useBufferedSender))
+
+				switch testSpec.ArtificialLatency {
+				case registry.NoLatency:
+				case registry.MetamorphicLatency:
+					useGeo := prng.Intn(2) == 0
+					if !useGeo {
+						break
+					}
+					fallthrough
+				case registry.GeoDistributedLatency:
+					latencyInjector, err := failureinjection.MakeArtificialLatencyInjector(c, t.L())
+					if err != nil {
+						t.Fatal(errors.Wrap(err, "failed to create latency injector"))
+					}
+					var doOnce sync.Once
+					c.RegisterTestHook("simulate geo distributed cluster", preStartHook, func(ctx context.Context) error {
+						var err error
+						// A test may stop and start a cluster multiple times, but the ports and ips
+						// shouldn't change. The same filters can be used throughout even if the cluster is restarted.
+						doOnce.Do(func() {
+							err = latencyInjector.CreateDefaultMultiRegionCluster(ctx)
+						})
+						return err
+					})
+					c.RegisterTestHook("restore artificial latency", postTestHook, func(ctx context.Context) error {
+						return latencyInjector.Restore(ctx)
+					})
+					t.AddParam("artificialLatency", testSpec.ArtificialLatency.String())
+				}
+
 				c.goCoverDir = t.GoCoverArtifactsDir()
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
@@ -1388,6 +1419,13 @@ func (r *testRunner) runTest(
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
 		t.suppressFailures()
 		timedOut = true
+	}
+
+	for _, hook := range c.postTestHooks {
+		l.Printf("running post test hook: %s", hook.Name)
+		if err := hook.Fn(ctx); err != nil {
+			t.Error(errors.Wrapf(err, "post test hook %s failed", hook.Name))
+		}
 	}
 
 	// Replacing the logger is best effort.

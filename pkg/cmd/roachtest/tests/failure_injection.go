@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -39,7 +40,7 @@ func (t *failureSmokeTest) run(
 	// TODO(darryl): In the future, roachtests should interact with the failure injection library
 	// through helper functions in roachtestutil so they don't have to interface with roachprod
 	// directly.
-	failureMode, err := fr.GetFailureMode(c.MakeNodes(), t.failureName, l, c.IsSecure())
+	failureMode, err := fr.GetFailureMode(c.MakeNodes(c.CRDBNodes()), t.failureName, l, c.IsSecure())
 	if err != nil {
 		return err
 	}
@@ -233,6 +234,62 @@ var asymmetricOutgoingNetworkPartitionTest = func(c cluster.Cluster) failureSmok
 	}
 }
 
+var latencyTest = func(c cluster.Cluster) failureSmokeTest {
+	nodes := c.CRDBNodes()
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	srcNode := nodes[0]
+	destNode := nodes[1]
+	unaffectedNode := nodes[2]
+	return failureSmokeTest{
+		testName:    "Network Latency",
+		failureName: failures.NetworkLatencyName,
+		args: failures.NetworkLatencyArgs{
+			ArtificialLatencies: []failures.ArtificialLatency{
+				{
+					Source:      install.Nodes{install.Node(srcNode)},
+					Destination: install.Nodes{install.Node(destNode)},
+					Delay:       2 * time.Second,
+				},
+				{
+					Source:      install.Nodes{install.Node(destNode)},
+					Destination: install.Nodes{install.Node(srcNode)},
+					Delay:       2 * time.Second,
+				},
+			},
+		},
+		validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+			delayedRTT, err := roachtestutil.NodeRTT(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			normalRTT, err := roachtestutil.NodeRTT(ctx, l, c, c.Nodes(unaffectedNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			if delayedRTT < normalRTT*2 {
+				return errors.Errorf("expected RTT between nodes %d and %d to be much higher than between nodes %d and %d", srcNode, destNode, unaffectedNode, destNode)
+			}
+			return nil
+		},
+		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+			delayedRTT, err := roachtestutil.NodeRTT(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			normalRTT, err := roachtestutil.NodeRTT(ctx, l, c, c.Nodes(unaffectedNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			if delayedRTT > 2*normalRTT {
+				return errors.Errorf("expected RTT between nodes %d and %d to be restored to normal", srcNode, destNode)
+			}
+			return nil
+		},
+	}
+}
+
 func setupFailureSmokeTests(ctx context.Context, t test.Test, c cluster.Cluster) error {
 	// Download any dependencies needed.
 	if err := c.Install(ctx, t.L(), c.CRDBNodes(), "nmap"); err != nil {
@@ -258,6 +315,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 		bidirectionalNetworkPartitionTest(c),
 		asymmetricIncomingNetworkPartitionTest(c),
 		asymmetricOutgoingNetworkPartitionTest(c),
+		latencyTest(c),
 	}
 
 	// Randomize the order of the tests in case any of the failures have unexpected side

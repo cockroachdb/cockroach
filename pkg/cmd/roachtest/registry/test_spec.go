@@ -114,6 +114,11 @@ type TestSpec struct {
 	// to epoch leases.
 	Leases LeaseType
 
+	// ArtificialLatency specifies the latency to inject into the cluster, e.g.
+	// to simulate a multiregion cluster. Defaults to no latency injected.
+	// Currently only supports system only deployments.
+	ArtificialLatency ArtificialLatencyType
+
 	// SkipPostValidations is a bit-set of post-validations that should be skipped
 	// after the test completes. This is useful for tests that are known to be
 	// incompatible with some validations. By default, tests will run all
@@ -248,6 +253,31 @@ const (
 //
 // The list does not contain aliases like "default" and "metamorphic".
 var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
+
+// ArtificialLatencyType specifies the type of artificial latency to inject in the cluster.
+type ArtificialLatencyType int
+
+func (l ArtificialLatencyType) String() string {
+	switch l {
+	case NoLatency:
+		return "no latency"
+	case GeoDistributedLatency:
+		return "geo distributed"
+	case MetamorphicLatency:
+		return "metamorphic"
+	default:
+		panic(fmt.Sprintf("unknown artificial latency type: %d", l))
+	}
+}
+
+const (
+	// NoLatency injects no artificial latency.
+	NoLatency = ArtificialLatencyType(iota)
+	// GeoDistributedLatency simulates a geo-distributed cluster.
+	GeoDistributedLatency
+	// MetamorphicLatency randomly chooses between all options.
+	MetamorphicLatency
+)
 
 // CloudSet represents a set of clouds.
 //

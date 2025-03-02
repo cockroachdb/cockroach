@@ -35,6 +35,7 @@ go_library(
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestflags",
         "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/roachtestutil/failureinjection",
         "//pkg/cmd/roachtest/roachtestutil/operations",
         "//pkg/cmd/roachtest/roachtestutil/task",
         "//pkg/cmd/roachtest/spec",

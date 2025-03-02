@@ -125,10 +125,11 @@ func registerFollowerReads(r registry.Registry) {
 			4, /* nodeCount */
 			spec.CPU(2),
 		),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Randomized:       true,
-		Run:              runFollowerReadsMixedVersionSingleRegionTest,
+		CompatibleClouds:  registry.OnlyGCE,
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
+		ArtificialLatency: registry.GeoDistributedLatency,
+		Randomized:        true,
+		Run:               runFollowerReadsMixedVersionSingleRegionTest,
 	})
 
 	r.Add(registry.TestSpec{
