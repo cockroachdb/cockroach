@@ -203,7 +203,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"primary index with new columns should exist before secondary indexes",
+		"primary index with new columns should validated before secondary indexes",
 		scgraph.Precedence,
 		"primary-index", "secondary-index",
 		func(from, to NodeVars) rel.Clauses {
@@ -216,7 +216,27 @@ func init() {
 					to, screl.SourceIndexID,
 					"primary-index-id",
 				),
-				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_BACKFILL_ONLY),
+				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_BACKFILL_ONLY),
+			}
+		})
+
+	// This rule guarantees that the primary index can only go public, once the
+	// secondary index is ready to go public.
+	registerDepRule(
+		"secondary indexes should be in a validated state before primary indexes can go public",
+		scgraph.Precedence,
+		"secondary-index", "primary-index",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
+					from, screl.SourceIndexID,
+					to, screl.IndexID,
+					"primary-index-id",
+				),
+				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_PUBLIC),
 			}
 		})
 
@@ -234,7 +254,7 @@ func init() {
 					to, screl.SourceIndexID,
 					"primary-index-id",
 				),
-				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_DELETE_ONLY),
+				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_DELETE_ONLY),
 			}
 		})
 }
