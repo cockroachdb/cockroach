@@ -152,7 +152,7 @@ func (r *Replica) updateTimestampCache(
 			//  [Get("a"), Get("c")]
 			if err := kvpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
 				addToTSCache(key, nil, ts, txnID)
-			}); err != nil {
+			}, false /* includeLockedNonExisting */); err != nil {
 				log.Errorf(ctx, "error iterating over response keys while "+
 					"updating timestamp cache for ba=%v, br=%v: %v", ba, br, err)
 			}
