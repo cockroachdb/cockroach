@@ -32,10 +32,10 @@ func LookupJoinCanProvideOrdering(
 	mem *memo.Memo,
 	expr memo.RelExpr,
 	required *props.OrderingChoice,
-) (canProvide bool, direction ScanDirection) {
+) (canProvide bool, direction opt.ScanDirection) {
 	if required.Any() {
 		// LookupJoin can always provide the empty ordering.
-		return true, EitherDirection
+		return true, opt.ScanEitherDirection
 	}
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 
@@ -63,9 +63,9 @@ func LookupJoinCanProvideOrdering(
 			// This case indicates that we didn't do a good job pushing down equalities
 			// (see #36219), but it should be handled correctly here nevertheless.
 			res = trimColumnGroups(&res, &child.Relational().FuncDeps)
-			return CanProvide(ctx, evalCtx, mem, child, &res), EitherDirection
+			return CanProvide(ctx, evalCtx, mem, child, &res), opt.ScanEitherDirection
 		}
-		return true, EitherDirection
+		return true, opt.ScanEitherDirection
 	}
 
 	// It is not possible to serve the required ordering using only input
@@ -91,15 +91,15 @@ func LookupJoinCanProvideOrdering(
 	// Check whether appending index columns to the input ordering would satisfy
 	// the required ordering.
 	_, direction, ok := getLookupOrdCols(mem, lookupJoin, &remainingRequired, canProjectPrefixCols)
-	if ok && direction == ReverseDirection {
+	if ok && direction == opt.ScanReverseDirection {
 		// Make sure the cluster is at least at v25.2 before planning a lookup
 		// join with reverse scans.
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-			return false, EitherDirection
+			return false, opt.ScanEitherDirection
 		}
 		// Check the session setting.
 		if !evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans {
-			return false, EitherDirection
+			return false, opt.ScanEitherDirection
 		}
 	}
 	return ok, direction
@@ -259,7 +259,7 @@ func getLookupOrdCols(
 	lookupJoin *memo.LookupJoinExpr,
 	required *props.OrderingChoice,
 	inputOrderingCols opt.ColSet,
-) (lookupOrdering opt.Ordering, direction ScanDirection, ok bool) {
+) (lookupOrdering opt.Ordering, direction opt.ScanDirection, ok bool) {
 	if !lookupJoin.Input.Relational().FuncDeps.ColsAreStrictKey(inputOrderingCols) {
 		// Ensure that the ordering forms a key over the input columns. Lookup
 		// joins can only maintain the index ordering for each individual input
@@ -272,7 +272,7 @@ func getLookupOrdCols(
 		// However, in this case the addition of the index ordering columns would be
 		// trivial, since the ordering could be simplified to just include the input
 		// ordering columns (see OrderingChoice.Simplify).
-		return nil, EitherDirection, false
+		return nil, opt.ScanEitherDirection, false
 	}
 	// The columns from the prefix of the required ordering satisfied by the
 	// input are considered optional for the index ordering.
@@ -305,11 +305,19 @@ func getLookupOrdCols(
 		}
 		indexOrder = append(indexOrder, opt.MakeOrderingColumn(idxColID, idx.Column(i).Descending))
 	}
+	// The scan direction may have already been specified for the lookup join.
+	requiredDirection := lookupJoin.Direction
 
 	// Check if the index ordering satisfies the postfix of the required
 	// ordering that cannot be satisfied by the input.
 	indexOrder, remaining, direction := trySatisfyRequired(required, indexOrder)
-	if direction == ReverseDirection {
+	if requiredDirection != opt.ScanEitherDirection && direction != opt.ScanEitherDirection &&
+		requiredDirection != direction {
+		// The scan direction has already been determined, and is not compatible
+		// with the required output ordering.
+		return nil, opt.ScanEitherDirection, false
+	}
+	if direction == opt.ScanReverseDirection {
 		// Invert the directions of the ordering columns.
 		for i := range indexOrder {
 			indexOrder[i] = opt.MakeOrderingColumn(indexOrder[i].ID(), !indexOrder[i].Descending())
@@ -332,7 +340,7 @@ func getLookupOrdCols(
 // mutate.
 func trySatisfyRequired(
 	required *props.OrderingChoice, provided opt.Ordering,
-) (prefix opt.Ordering, toExtend *props.OrderingChoice, direction ScanDirection) {
+) (prefix opt.Ordering, toExtend *props.OrderingChoice, direction opt.ScanDirection) {
 	var requiredIdx, providedIdx int
 	for requiredIdx < len(required.Columns) && providedIdx < len(provided) {
 		requiredCol, providedCol := required.Columns[requiredIdx], provided[providedIdx]
@@ -346,11 +354,11 @@ func trySatisfyRequired(
 			// OrderingChoice columns, or be part of the optional column set.
 			break
 		}
-		columnRequiredDirection := ForwardDirection
+		columnRequiredDirection := opt.ScanForwardDirection
 		if requiredCol.Descending != providedCol.Descending() {
-			columnRequiredDirection = ReverseDirection
+			columnRequiredDirection = opt.ScanReverseDirection
 		}
-		if direction == EitherDirection {
+		if direction == opt.ScanEitherDirection {
 			direction = columnRequiredDirection
 		} else if columnRequiredDirection != direction {
 			// We've determined the direction the index must be scanned, and this

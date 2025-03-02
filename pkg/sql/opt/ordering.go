@@ -113,3 +113,30 @@ func (o Ordering) Equals(rhs Ordering) bool {
 	}
 	return true
 }
+
+// ScanDirection represents the direction of a scan, either for a Scan operator
+// or a LookupJoin.
+type ScanDirection uint8
+
+const (
+	// ScanEitherDirection indicates that the scan can be in either direction.
+	ScanEitherDirection ScanDirection = iota
+	// ScanForwardDirection indicates a forward scan.
+	ScanForwardDirection
+	// ScanReverseDirection indicates a reverse scan.
+	ScanReverseDirection
+)
+
+// String implements the fmt.Stringer interface.
+func (d ScanDirection) String() string {
+	switch d {
+	case ScanEitherDirection:
+		return "either"
+	case ScanForwardDirection:
+		return "forward"
+	case ScanReverseDirection:
+		return "reverse"
+	default:
+		return "unknown"
+	}
+}
