@@ -6,6 +6,7 @@
 import "./protobufInit";
 import * as api from "./api";
 import * as util from "./util";
+
 export * from "./anchor";
 export * from "./badge";
 export * from "./barCharts";
@@ -48,7 +49,7 @@ export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
 export * from "./antdTheme";
-export * from "./databasesV2";
+export * from "./pages/databases";
 export * from "./databaseDetailsV2";
 export * from "./tableDetailsV2";
 // Reexport ConfigProvider instance from cluster-ui as exact instance
