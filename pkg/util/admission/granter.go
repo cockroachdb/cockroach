@@ -299,17 +299,17 @@ type kvStoreTokenGranter struct {
 		// blocks if availableElasticIOTokens <= 0.
 		availableIOTokens            [admissionpb.NumWorkClasses]int64
 		elasticIOTokensUsedByElastic int64
-		// TODO(aaditya): add support for read/IOPS tokens.
 		// Disk bandwidth tokens.
 		diskTokensAvailable diskTokens
 		diskTokensError     struct {
 			// prevObserved{Writes,Reads} is the observed disk metrics in the last
 			// call to adjustDiskTokenErrorLocked. These are used to compute the
-			// delta.
-			prevObservedWrites             uint64
-			prevObservedReads              uint64
-			diskWriteTokensAlreadyDeducted int64
-			diskReadTokensAlreadyDeducted  int64
+			// delta
+			prevObservedWriteBytes uint64
+			prevObservedReadBytes  uint64
+			prevObservedWriteIOPS  uint64
+			prevObservedReadIOPS   uint64
+			tokensAlreadyDeducted  diskTokens
 		}
 		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 	}
@@ -325,7 +325,7 @@ type kvStoreTokenGranter struct {
 	tokensTakenMetric    *metric.Counter
 
 	// Estimation models.
-	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel
+	l0WriteLM, l0IngestLM, ingestLM, writeAmpLM, writeIOPSLM tokensLinearModel
 }
 
 var _ granterWithLockedCalls = &kvStoreTokenGranter{}
@@ -427,33 +427,45 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		// we skip applying the model for those writes.
 		diskWriteTokens = sg.writeAmpLM.applyLinearModel(count)
 	}
+	diskWriteIOPSTokens := sg.writeIOPSLM.applyLinearModel(diskWriteTokens)
 	switch wt {
 	case admissionpb.RegularStoreWorkType:
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
+			sg.coordMu.diskTokensAvailable.writeIOPSTokens -= diskWriteIOPSTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskWriteIOPSTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensUsed[wt].writeIOPSTokens += diskWriteIOPSTokens
 			return grantSuccess
 		}
 	case admissionpb.ElasticStoreWorkType:
 		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 &&
+			sg.coordMu.diskTokensAvailable.writeIOPSTokens > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] > 0 {
+
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
+			sg.coordMu.diskTokensAvailable.writeIOPSTokens -= diskWriteIOPSTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskWriteIOPSTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensUsed[wt].writeIOPSTokens += diskWriteIOPSTokens
 			return grantSuccess
 		}
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Snapshot ingests do not go into L0, so we only subject them to
 		// writeByteTokens.
-		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 {
+		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 && sg.coordMu.diskTokensAvailable.writeIOPSTokens > 0 {
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
-			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
+			sg.coordMu.diskTokensAvailable.writeIOPSTokens -= diskWriteIOPSTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskWriteIOPSTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
+			sg.coordMu.diskTokensUsed[wt].writeIOPSTokens += diskWriteIOPSTokens
 			return grantSuccess
 		}
 	}
@@ -488,14 +500,18 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	switch wt {
 	case admissionpb.RegularStoreWorkType, admissionpb.ElasticStoreWorkType:
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
+		diskIOPSTokens := sg.writeIOPSLM.applyLinearModel(diskTokenCount)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
-		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskTokenCount
+		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += diskTokenCount
+		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskIOPSTokens
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
+		diskIOPSTokens := sg.writeIOPSLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
-		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += count
+		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += count
+		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskIOPSTokens
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
 	}
 }
@@ -520,29 +536,40 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 // interval, and not across them. For reads, this is so that we don't grow
 // arbitrarily large "burst" tokens, since they are not capped to an allocation
 // period.
-func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
-	intWrites := int64(writeBytes - sg.coordMu.diskTokensError.prevObservedWrites)
-	intReads := int64(readBytes - sg.coordMu.diskTokensError.prevObservedReads)
+func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(stats DiskStats) {
+	intWriteBytes := int64(stats.BytesWritten - sg.coordMu.diskTokensError.prevObservedWriteBytes)
+	intWriteIOPS := int64(stats.WriteCount - sg.coordMu.diskTokensError.prevObservedWriteIOPS)
+	intReadBytes := int64(stats.BytesRead - sg.coordMu.diskTokensError.prevObservedReadBytes)
+	intReadIOPS := int64(stats.ReadCount - sg.coordMu.diskTokensError.prevObservedReadIOPS)
 
 	// Compensate for error due to writes.
-	writeError := intWrites - sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted
-	if writeError > 0 {
-		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeError
+	writeBytesError := intWriteBytes - sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens
+	if writeBytesError > 0 {
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeBytesError
+	}
+	writeIOPSError := intWriteIOPS - sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens
+	if writeIOPSError > 0 {
+		sg.coordMu.diskTokensAvailable.writeIOPSTokens -= writeIOPSError
 	}
 
 	// Compensate for error due to reads.
-	readError := intReads - sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted
-	if readError > 0 {
-		sg.coordMu.diskTokensAvailable.writeByteTokens -= readError
+	readBytesError := intReadBytes - sg.coordMu.diskTokensError.tokensAlreadyDeducted.readByteTokens
+	if readBytesError > 0 {
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= readBytesError
+	}
+	readIOPSError := intReadIOPS - sg.coordMu.diskTokensError.tokensAlreadyDeducted.readIOPSTokens
+	if readIOPSError > 0 {
+		sg.coordMu.diskTokensAvailable.writeIOPSTokens -= readIOPSError
 	}
 
 	// We have compensated for error, if any, in this interval, so we reset the
 	// deducted count for the next compensation interval.
-	sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
-	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = 0
+	sg.coordMu.diskTokensError.tokensAlreadyDeducted = diskTokens{}
 
-	sg.coordMu.diskTokensError.prevObservedWrites = writeBytes
-	sg.coordMu.diskTokensError.prevObservedReads = readBytes
+	sg.coordMu.diskTokensError.prevObservedWriteBytes = stats.BytesWritten
+	sg.coordMu.diskTokensError.prevObservedWriteIOPS = stats.WriteCount
+	sg.coordMu.diskTokensError.prevObservedReadBytes = stats.BytesRead
+	sg.coordMu.diskTokensError.prevObservedReadIOPS = stats.ReadCount
 }
 
 func (sg *kvStoreTokenGranter) tookWithoutPermission(
@@ -650,11 +677,11 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 func (sg *kvStoreTokenGranter) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	diskWriteTokens int64,
-	diskReadTokens int64,
+	elasticDiskTokens diskTokens,
 	ioTokenCapacity int64,
 	elasticIOTokenCapacity int64,
 	diskWriteTokensCapacity int64,
+	diskWriteIOPSTokensCapacity int64,
 	lastTick bool,
 ) (ioTokensUsed int64, ioTokensUsedByElasticWork int64) {
 	sg.coord.mu.Lock()
@@ -697,15 +724,21 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	sg.startingIOTokens = sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
 
 	// Allocate disk write and read tokens.
-	sg.coordMu.diskTokensAvailable.writeByteTokens += diskWriteTokens
+	sg.coordMu.diskTokensAvailable.writeByteTokens += elasticDiskTokens.writeByteTokens
 	if sg.coordMu.diskTokensAvailable.writeByteTokens > diskWriteTokensCapacity {
 		sg.coordMu.diskTokensAvailable.writeByteTokens = diskWriteTokensCapacity
 	}
+	sg.coordMu.diskTokensAvailable.writeIOPSTokens += elasticDiskTokens.writeIOPSTokens
+	if sg.coordMu.diskTokensAvailable.writeIOPSTokens > diskWriteIOPSTokensCapacity {
+		sg.coordMu.diskTokensAvailable.writeIOPSTokens = diskWriteIOPSTokensCapacity
+	}
+
 	// NB: We don't cap the disk read tokens as they are only deducted during the
 	// error accounting loop. So essentially, we give reads the "burst" capacity
 	// of the error accounting interval. See `adjustDiskTokenErrorLocked` for the
 	// error accounting logic, and where we reset this bucket to 0.
-	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted += diskReadTokens
+	sg.coordMu.diskTokensError.tokensAlreadyDeducted.readByteTokens += elasticDiskTokens.readByteTokens
+	sg.coordMu.diskTokensError.tokensAlreadyDeducted.readIOPSTokens += elasticDiskTokens.readIOPSTokens
 
 	return ioTokensUsed, ioTokensUsedByElasticWork
 }
@@ -729,6 +762,7 @@ func (sg *kvStoreTokenGranter) setLinearModels(
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	writeIOPSLM tokensLinearModel,
 ) {
 	sg.coord.mu.Lock()
 	defer sg.coord.mu.Unlock()
@@ -736,6 +770,7 @@ func (sg *kvStoreTokenGranter) setLinearModels(
 	sg.l0IngestLM = l0IngestLM
 	sg.ingestLM = ingestLM
 	sg.writeAmpLM = writeAmpLM
+	sg.writeIOPSLM = writeIOPSLM
 }
 
 func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
@@ -824,8 +859,14 @@ type DiskStats struct {
 	BytesRead uint64
 	// BytesWritten is the cumulative bytes written.
 	BytesWritten uint64
+	// ReadCount is the number of read IO operations completed.
+	ReadCount uint64
+	// WriteCount is the number of write IO operations completed.
+	WriteCount uint64
 	// ProvisionedBandwidth is the total provisioned bandwidth in bytes/s.
 	ProvisionedBandwidth int64
+	// ProvisionedIOPS is the total provisioned IOPS in op/s.
+	ProvisionedIOPS int64
 }
 
 var (
