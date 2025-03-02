@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -113,12 +114,14 @@ func (r *Replica) BumpSideTransportClosed(
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 	return closedts.TargetForPolicy(
-		r.Clock().NowAsClockTimestamp(),
-		r.Clock().MaxOffset(),
-		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
-		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
-		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		r.Clock().NowAsClockTimestamp(),                                  /*now*/
+		r.Clock().MaxOffset(),                                            /*maxClockOffset*/
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),             /*lagTargetDuration*/
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV), /*leadTargetOverride*/
+		closedts.LeadForGlobalReadsAutoTune.Get(&r.ClusterSettings().SV), /*leadTargetAutoTune*/
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV), /*sideTransportCloseInterval*/
+		r.getMaxReplicaNetworkRTTRLocked(),                               /*observedMaxNetworkRTT*/
+		r.closedTimestampPolicyRLocked(),                                 /*policy*/
 	)
 }
 
@@ -131,6 +134,21 @@ func (r *Replica) ForwardSideTransportClosedTimestamp(
 	// applied index has been applied locally yet.
 	const knownApplied = false
 	r.sideTransportClosedTimestamp.forward(ctx, closed, lai, knownApplied)
+}
+
+func (r *Replica) getMaxReplicaNetworkRTTRLocked() time.Duration {
+	r.mu.AssertRHeld()
+	desc := r.descRLocked()
+	getNodeLatency := r.store.GetStoreConfig().RPCContext.RemoteClocks.Latency
+
+	maxRTT := time.Duration(0)
+	for _, replica := range desc.InternalReplicas {
+		if rtt, ok := getNodeLatency(replica.NodeID); ok {
+			maxRTT = max(maxRTT, rtt)
+		}
+	}
+
+	return maxRTT
 }
 
 // sidetransportAccess encapsulates state related to the closed timestamp's
