@@ -450,7 +450,6 @@ var debugCtx struct {
 	replicated        bool
 	inputFile         string
 	ballastSize       storagepb.SizeSpec
-	printSystemConfig bool
 	maxResults        int
 	decodeAsTableDesc string
 	verbose           bool
@@ -469,7 +468,6 @@ func setDebugContextDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.ballastSize = storagepb.SizeSpec{Capacity: 1000000000}
 	debugCtx.maxResults = 0
-	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
 	debugCtx.keyTypes = showAll
