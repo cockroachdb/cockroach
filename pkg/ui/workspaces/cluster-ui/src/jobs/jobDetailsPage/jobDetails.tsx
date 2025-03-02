@@ -28,7 +28,7 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { Text, TextTypes } from "src/text";
 import {
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
+  DATE_WITH_SECONDS_FORMAT_24_TZ,
   DATE_WITH_SECONDS_FORMAT,
   TimestampToMoment,
   getMatchParamByName,
@@ -206,7 +206,7 @@ export class JobDetails extends React.Component<
               value={
                 <Timestamp
                   time={TimestampToMoment(job.created, null)}
-                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                  format={DATE_WITH_SECONDS_FORMAT_24_TZ}
                 />
               }
             />
@@ -216,7 +216,7 @@ export class JobDetails extends React.Component<
                 value={
                   <Timestamp
                     time={TimestampToMoment(job.modified, null)}
-                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
                   />
                 }
               />
@@ -227,7 +227,7 @@ export class JobDetails extends React.Component<
                 value={
                   <Timestamp
                     time={TimestampToMoment(job.finished, null)}
-                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
                   />
                 }
               />
@@ -244,6 +244,14 @@ export class JobDetails extends React.Component<
                 }
               />
             )}
+            <SummaryCardItem
+              label="Coordinator Node"
+              value={
+                job.coordinator_id.isZero()
+                  ? "-"
+                  : job.coordinator_id.toString()
+              }
+            />
           </SummaryCard>
         </Col>
         <Col className="gutter-row" span={16}>
