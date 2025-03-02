@@ -367,12 +367,15 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
-	// creationTime is initialized to a zero value and populated at read time.
-	// See the comment in desc.MaybeIncrementVersion.
-	//
-	// TODO(ajwerner): remove the timestamp from newTableDesc and its friends,
-	// it's	currently relied on in import and restore code and tests.
+	// creationTime is usually initialized to a zero value and populated at read
+	// time. See the comment in desc.MaybeIncrementVersion. However, for CREATE
+	// TABLE AS, we need to set the creation time to the specified timestamp.
 	var creationTime hlc.Timestamp
+	if asOf := params.p.extendedEvalCtx.AsOfSystemTime; asOf != nil {
+		if asOf.ForBackfill {
+			creationTime = asOf.Timestamp
+		}
+	}
 	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
