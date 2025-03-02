@@ -33,11 +33,18 @@ import (
 // pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {
 	singleInputPlanNode
+	windowPlanningInfo
+}
+
+type windowPlanningInfo struct {
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
 
 	// The window functions handled by this windowNode.
 	funcs []*windowFuncHolder
+
+	partitionIdxs  []uint32
+	columnOrdering colinfo.ColumnOrdering
 }
 
 func (n *windowNode) startExec(params runParams) error {
@@ -67,22 +74,7 @@ type windowFuncHolder struct {
 	filterColIdx int      // optional index of filtering column, -1 if no filter
 	outputColIdx int      // index of the column that the output should be put into
 
-	partitionIdxs  []int
-	columnOrdering colinfo.ColumnOrdering
-	frame          *tree.WindowFrame
-}
-
-// samePartition returns whether w and other have the same PARTITION BY clause.
-func (w *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
-	if len(w.partitionIdxs) != len(other.partitionIdxs) {
-		return false
-	}
-	for i, p := range w.partitionIdxs {
-		if p != other.partitionIdxs[i] {
-			return false
-		}
-	}
-	return true
+	frame *tree.WindowFrame
 }
 
 func (*windowFuncHolder) Variable() {}

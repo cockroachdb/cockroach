@@ -479,6 +479,11 @@ define Insert {
     # multiple mutations in a statement, or the output of the mutation is
     # processed through side-effecting expressions.
     AutoCommit bool
+
+    # If set, the operator will use a specialized vectorized implementation.
+    # This is currently only used for inserts performed on behalf of COPY
+    # statements.
+    VectorInsert bool
 }
 
 # InsertFastPath implements a special (but very common) case of insert,
