@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1221,6 +1222,9 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	p.proposedAtTicks = rp.mu.ticks
 	if p.createdAtTicks == 0 {
 		p.createdAtTicks = rp.mu.ticks
+	}
+	if p.createdAtTs == 0 {
+		p.createdAtTs = crtime.NowMono()
 	}
 	rp.mu.lastProposalAtTicks = rp.mu.ticks // monotonically increasing
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
