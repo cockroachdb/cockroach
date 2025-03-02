@@ -335,7 +335,13 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 		idKey:           raftlog.MakeCmdIDKey(),
 		proposedAtTicks: 0, // set in registerProposalLocked
 		createdAtTicks:  0, // set in registerProposalLocked
-		command:         &newCommand,
+		// Copy createdAtTs over since re-proposal in
+		// propBuf.FlushLockedWithRaftGroup does not compute for a new closed
+		// timestamp target, so it took longer to propagate the original closed
+		// timestamp. We want to capture this latency correctly when the proposal is
+		// applied.
+		createdAtTs: origP.createdAtTs,
+		command:     &newCommand,
 
 		// Next comes the block of fields that are "moved" to the new proposal. See
 		// the deferred function call below which, correspondingly, clears these
