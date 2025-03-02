@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulk_test
+package tracing_test
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/proto"
@@ -24,7 +23,7 @@ func TestAggregator(t *testing.T) {
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
 
-	agg := bulk.TracingAggregatorForContext(ctx)
+	agg := tracing.TracingAggregatorForContext(ctx)
 	ctx, withListener := tr.StartSpanCtx(ctx, "withListener",
 		tracing.WithEventListeners(agg), tracing.WithParent(root))
 	defer withListener.Finish()
@@ -54,7 +53,7 @@ func TestAggregator(t *testing.T) {
 
 	// We only expect to see the aggregated stats from the local children since we
 	// have not imported the remote children's Recording.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event tracing.AggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool
@@ -74,7 +73,7 @@ func TestAggregator(t *testing.T) {
 
 	// Now, we expect the ExportStats from the remote child to show up in the
 	// aggregator.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event tracing.AggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool
