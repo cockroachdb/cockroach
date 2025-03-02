@@ -76,10 +76,22 @@ func TestPCRPrivs(t *testing.T) {
 	testuser.ExpectErr(t, "user testuser does not have MANAGEVIRTUALCLUSTER system privilege", streamReplStmt)
 
 	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
-	testuser.ExpectErr(t, "user testuser2 does not have REPLICATION system privilege", streamReplStmt)
+	testuser.ExpectErr(t, "user testuser2 does not have REPLICATIONSOURCE system privilege", streamReplStmt)
 
-	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
+	sourcePriv := "REPLICATIONSOURCE"
+	if c.Rng.Intn(3) == 0 {
+		sourcePriv = "REPLICATION"
+	}
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s", sourcePriv, username.TestUser+"2"))
 	c.DestSysSQL.Exec(t, streamReplStmt)
+
+	// Ensure job based auth allows the replication to prceed.
+	var ingestionJobID jobspb.JobID
+	c.DestSysSQL.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'").Scan(&ingestionJobID)
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, ingestionJobID)
+
+	srcTime := c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, ingestionJobID)
 
 }
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
