@@ -939,6 +939,12 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// maxReplicaRTT is a cache of the maximum network RTT to any replica
+		// in the range. It is used to approximate the time it takes to propagate
+		// a closed timestamp from the leaseholder to the followers during closed
+		// timestamp target computation.
+		maxReplicaRTT maxReplicaRTTCache
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
