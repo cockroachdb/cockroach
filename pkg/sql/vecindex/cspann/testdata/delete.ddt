@@ -219,6 +219,17 @@ search max-results=1 beam-size=1
 ----
 1 leaf vectors, 3 vectors, 1 full vectors, 2 partitions
 
+# Delete the missing vector.
+delete
+vec1: (1, 2)
+----
+• 1 (4.25, 3.5)
+│
+└───• 2 (6, 4.5)
+    │
+    ├───• vec4 (5, 5)
+    └───• vec2 (7, 4)
+
 # ----------
 # Search root partition with only missing vectors.
 # ----------
