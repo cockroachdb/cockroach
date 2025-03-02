@@ -540,7 +540,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "The amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.",
+      "description": "The amount of time Go’s garbage collector spent in stop-the-world pauses per second across all nodes. During stop-the-world garbage collection phases (sweep termination and mark termination), application code execution is paused.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
