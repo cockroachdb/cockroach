@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -165,7 +166,7 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 
 	if tc.DefaultTenantDeploymentMode().IsExternal() {
 		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
+			map[tenantcapabilities.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
 
 	db := sqlutils.MakeSQLRunner(tc.Conns[0])

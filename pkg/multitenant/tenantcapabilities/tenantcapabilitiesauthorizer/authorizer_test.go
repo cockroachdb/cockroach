@@ -12,8 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -178,7 +178,7 @@ func (m mockReader) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapab
 
 func TestAllBatchCapsAreBoolean(t *testing.T) {
 	checkCap := func(t *testing.T, capID tenantcapabilities.ID) {
-		if capID >= tenantcapabilities.MaxCapabilityID {
+		if capID >= tenantcapabilitiespb.MaxCapabilityID {
 			// One of the special values.
 			return
 		}

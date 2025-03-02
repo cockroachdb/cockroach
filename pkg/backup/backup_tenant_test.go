@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
@@ -66,7 +67,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 
 	hostDB.Exec(t, "ALTER TENANT test GRANT ALL CAPABILITIES")
 	err = tc.Server(0).TenantController().WaitForTenantCapabilities(ctx, testTenantID, map[tenantcapabilities.ID]string{
-		tenantcapabilities.CanUseNodelocalStorage: "true",
+		tenantcapabilitiespb.CanUseNodelocalStorage: "true",
 	}, "")
 	require.NoError(t, err)
 
