@@ -315,18 +315,14 @@ func (ed *EncDatum) Encode(
 
 func mustUseValueEncodingForFingerprinting(t *types.T) bool {
 	switch t.Family() {
-	// Both TSQuery and TSVector types don't have key-encoding, so we must use
-	// the value encoding for them. JSON type now (as of 23.2) has key-encoding
-	// available, but for historical reasons we will keep on using the
-	// value-encoding (Fingerprint is used by hash routers, so changing its
+	// TSQuery, TSVector, and PGVector types don't have key-encoding, so we must
+	// use the value encoding for them. JSON type now (as of 23.2) has
+	// key-encoding available, but for historical reasons we will keep on using
+	// the value-encoding (Fingerprint is used by hash routers, so changing its
 	// behavior can result in incorrect results in mixed version clusters).
 	case types.JsonFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		return true
 	case types.ArrayFamily:
-		// Note that at time of this writing we don't support arrays of JSON
-		// (tracked via #23468) nor of TSQuery / TSVector / PGVector types (tracked by
-		// #90886, #121432), so technically we don't need to do a recursive call here,
-		// but we choose to be on the safe side, so we do it anyway.
 		return mustUseValueEncodingForFingerprinting(t.ArrayContents())
 	case types.TupleFamily:
 		for _, tupleT := range t.TupleContents() {
