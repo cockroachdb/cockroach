@@ -130,6 +130,7 @@ func FlushTracingAggregatorStats(
 			clusterWideSummary.WriteString(event.String())
 		}
 
+		clusterWideSummary.WriteString("\n")
 		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
 		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
 	})
