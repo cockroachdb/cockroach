@@ -9,13 +9,17 @@ import (
 	"context"
 	"hash"
 	"hash/crc32"
+	"net"
+	"net/url"
 	"runtime"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -99,11 +103,44 @@ func newEventConsumer(
 	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
-		var err error
+		var sourceNodeLocality, nodeName, nodeID string
+		tiers := cfg.Locality.Tiers
+
+		nodeLocalities := make([]string, 0, len(tiers))
+		for _, t := range tiers {
+			nodeLocalities = append(nodeLocalities, t.String())
+		}
+		sourceNodeLocality = strings.Join(nodeLocalities, ",")
+
+		nodeInfo := cfg.ExecutorConfig.(*sql.ExecutorConfig).NodeInfo
+		getPGURL := nodeInfo.PGURL
+		pgurl, err := getPGURL(url.User(username.RootUser))
+		if err != nil {
+			return nil, err
+		}
+		parsedUrl, err := url.Parse(pgurl.String())
+		if err != nil {
+			return nil, err
+		}
+		host, _, err := net.SplitHostPort(parsedUrl.Host)
+		if err == nil {
+			nodeName = host
+		}
+
+		if optionalNodeID, ok := nodeInfo.NodeID.OptionalNodeID(); ok {
+			nodeID = optionalNodeID.String()
+		}
+
 		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
 			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, newEnrichedSourceProvider(
 				encodingOpts, enrichedSourceData{
-					jobId: spec.JobID.String(),
+					jobID:              spec.JobID.String(),
+					dbVersion:          cfg.Settings.Version.ActiveVersion(ctx).String(),
+					clusterName:        cfg.ExecutorConfig.(*sql.ExecutorConfig).RPCContext.ClusterName(),
+					clusterID:          nodeInfo.LogicalClusterID().String(),
+					sourceNodeLocality: sourceNodeLocality,
+					nodeName:           nodeName,
+					nodeID:             nodeID,
 				}),
 		)
 		if err != nil {

@@ -598,12 +598,13 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	// Validate the encoder. We can pass an empty slimetrics struct here since the encoder will not be used.
+	// Validate the encoder. We can pass an empty slimetrics struct and source provider
+	// here since the encoder will not be used.
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
 		return nil, err
 	}
-	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{jobId: jobID.String()})
+	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{})
 	if _, err := getEncoder(ctx, encodingOpts, AllTargets(details), details.Select != "",
 		makeExternalConnectionProvider(ctx, p.ExecCfg().InternalDB), nil, sourceProvider); err != nil {
 		return nil, err
