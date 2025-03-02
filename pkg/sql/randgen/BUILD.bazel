@@ -45,6 +45,7 @@ go_library(
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/jsonpath/parser",
+        "//pkg/util/macaddr",
         "//pkg/util/randident",
         "//pkg/util/randident/randidentcfg",
         "//pkg/util/randutil",

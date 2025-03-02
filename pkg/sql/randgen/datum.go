@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/macaddr"
+
 	// TODO(normanchenn): temporarily import the parser here to ensure that
 	// init() is called.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -226,6 +228,16 @@ func RandDatumWithNullChance(
 	case types.INetFamily:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
+	case types.MACAddrFamily:
+		macAddrBytes, err := uuid.RandomHardwareAddrFunc()
+		if err != nil {
+			panic(errors.AssertionFailedf("failed to generated random MAC address: %v", err))
+		}
+		macAddr, err := macaddr.ParseMAC(macAddrBytes.String())
+		if err != nil {
+			panic(errors.AssertionFailedf("failed to parse random MAC address: %v", err))
+		}
+		return tree.NewDMACAddr(macAddr)
 	case types.JsonFamily:
 		j, err := json.Random(20, rng)
 		if err != nil {
