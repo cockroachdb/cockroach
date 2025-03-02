@@ -46,6 +46,10 @@ func CombineFileInfo(
 		return bytes.Compare(i, j)
 	})
 
+	slices.SortFunc(tableSpans, func(i, j roachpb.Span) int {
+		return bytes.Compare(i.Key, j.Key)
+	})
+
 	spans := getMergeSpans(tableSpans, samples)
 
 	return result, spans
