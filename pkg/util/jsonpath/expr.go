@@ -112,7 +112,7 @@ type ArrayIndex Numeric
 var _ Path = ArrayIndex{}
 
 func (a ArrayIndex) String() string {
-	return fmt.Sprintf("[%s]", Numeric(a).String())
+	return Numeric(a).String()
 }
 
 type ArrayIndexRange struct {
@@ -123,5 +123,22 @@ type ArrayIndexRange struct {
 var _ Path = ArrayIndexRange{}
 
 func (a ArrayIndexRange) String() string {
-	return fmt.Sprintf("[%s to %s]", Numeric(a.Start), Numeric(a.End))
+	return fmt.Sprintf("%s to %s", Numeric(a.Start), Numeric(a.End))
+}
+
+type ArrayList []Path
+
+var _ Path = ArrayList{}
+
+func (a ArrayList) String() string {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i, p := range a {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(p.String())
+	}
+	sb.WriteString("]")
+	return sb.String()
 }

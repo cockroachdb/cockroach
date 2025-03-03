@@ -90,6 +90,10 @@ func (u *jsonpathSymUnion) numVal() *tree.NumVal {
   return u.val.(*tree.NumVal)
 }
 
+func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
+  return u.val.(jsonpath.ArrayList)
+}
+
 func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
   paths := path.(jsonpath.Paths)
   if len(paths) != 1 {
@@ -240,14 +244,18 @@ array_accessor:
   }
 | '[' index_list ']'
   {
-    $$.val = jsonpath.Paths($2.paths())
+    $$.val = $2.path()
   }
 ;
 
 index_list:
   index_elem
   {
-    $$.val = []jsonpath.Path{$1.path()}
+    $$.val = jsonpath.ArrayList{$1.path()}
+  }
+| index_list ',' index_elem
+  {
+    $$.val = append($1.arrayList(), $3.path())
   }
 ;
 

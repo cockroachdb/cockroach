@@ -217,6 +217,21 @@ $.abc[5 to 5]
 ----
 $."abc"[5 to 5] -- normalized!
 
+parse
+$.abc[1, 2, 3]
+----
+$."abc"[1,2,3] -- normalized!
+
+parse
+$.abc[1 to 3, 4 to 3, 5, 9 to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
+parse
+$.abc[  1    to    3   , 4 to 3, 5  , 9     to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
