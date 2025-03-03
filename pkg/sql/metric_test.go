@@ -47,6 +47,8 @@ type queryCounter struct {
 	restartSavepointCount           int64
 	releaseRestartSavepointCount    int64
 	rollbackToRestartSavepointCount int64
+	statementTimeoutCount           int64
+	transactionTimeoutCount         int64
 }
 
 func TestQueryCounts(t *testing.T) {
@@ -104,6 +106,18 @@ func TestQueryCounts(t *testing.T) {
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
+		{
+			query:       "BEGIN; SET LOCAL statement_timeout = '10ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, statementTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
+		{
+			query:       "BEGIN; SET LOCAL transaction_timeout = '10ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, transactionTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -112,6 +126,13 @@ func TestQueryCounts(t *testing.T) {
 		t.Run(tc.query, func(t *testing.T) {
 			if _, err := sqlDB.Exec(tc.query); err != nil && !tc.expectError {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
+			}
+			// If the query included a BEGIN statement and failed, we need to abort the transaction
+			// to set up for the next test.
+			if tc.txnBeginCount > 0 && tc.expectError {
+				if _, err := sqlDB.Exec("ABORT"); err != nil {
+					t.Fatalf("unexpected error when attempt to abort opened txn: %s'", err)
+				}
 			}
 
 			// Force metric snapshot refresh.
@@ -129,7 +150,7 @@ func TestQueryCounts(t *testing.T) {
 			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 0); err != nil {
+			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, tc.txnAbortCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelectStarted, accum.selectCount, tc.selectCount); err != nil {
@@ -163,6 +184,12 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.transactionTimeoutCount, err = checkCounterDelta(s, sql.MetaTransactionTimeout, accum.transactionTimeoutCount, tc.transactionTimeoutCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 		})
