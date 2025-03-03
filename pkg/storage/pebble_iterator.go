@@ -551,7 +551,7 @@ func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 		valLen = lv.Len()
 	} else {
 		// Must be an in-place value, since it did not have a short attribute.
-		val := lv.InPlaceValue()
+		val := lv.ValueOrHandle
 		var err error
 		isTombstone, err = EncodedMVCCValueIsTombstone(val)
 		if err != nil {
