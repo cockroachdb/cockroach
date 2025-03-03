@@ -101,6 +101,8 @@ func (u *jsonpathSymUnion) bool() bool {
 %token <str> STRICT
 %token <str> LAX
 
+%token <str> VARIABLE
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -109,6 +111,7 @@ func (u *jsonpathSymUnion) bool() bool {
 %type <jsonpath.Path> path_primary
 %type <jsonpath.Path> key
 %type <jsonpath.Path> array_accessor
+%type <jsonpath.Path> scalar_value
 %type <str> key_name
 %type <str> any_identifier
 %type <str> unreserved_keyword
@@ -169,6 +172,10 @@ path_primary:
   {
     $$.val = jsonpath.Root{}
   }
+| scalar_value
+  {
+    $$.val = $1.path()
+  }
 ;
 
 accessor_op:
@@ -200,6 +207,13 @@ array_accessor:
   '[' '*' ']'
   {
     $$.val = jsonpath.Wildcard{}
+  }
+;
+
+scalar_value:
+  VARIABLE
+  {
+    $$.val = jsonpath.Variable($1)
   }
 ;
 
