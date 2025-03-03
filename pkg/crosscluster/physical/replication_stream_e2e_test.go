@@ -140,6 +140,42 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
 
+func TestFailbackFailsWithExpiredPTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "takes too long")
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	// init cutover
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
+
+	// Make producer job pts job easily time out
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='10ms'`, c.Args.SrcTenantName))
+	jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	destPgURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.DestSysServer.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupSinkCert()
+
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER '%s' STOP SERVICE", c.Args.SrcTenantName))
+	waitUntilTenantServerStopped(t, c.DestSysServer, string(c.Args.SrcTenantName))
+
+	c.SrcSysSQL.ExpectErr(c.T, `cannot resume replication into tenant`,
+		`ALTER TENANT $1 START REPLICATION OF $2 ON $3`,
+		args.SrcTenantName, args.DestTenantName, destPgURL.String())
+}
+
 // TestTenantStreamingJobRetryReset tests that the job level retry counter
 // resets after the replicated time progresses. To do this, the test conducts a
 // few retries before the initial scan completes, lets the initial scan
