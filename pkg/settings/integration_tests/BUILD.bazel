@@ -8,6 +8,7 @@ go_test(
         "settings_test.go",
     ],
     args = ["-test.timeout=295s"],
+    exec_properties = {"test.Pool": "large"},
     shard_count = 6,
     deps = [
         "//pkg/base",
