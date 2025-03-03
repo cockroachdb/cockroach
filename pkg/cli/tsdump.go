@@ -57,6 +57,8 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:         "/tmp/tsdump.yaml",
 }
 
+var gobRegisterOnce sync.Once
+
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
 	Short: "dump all the raw timeseries values in a cluster",
@@ -80,6 +82,10 @@ will then convert it to the --format requested in the current invocation.
 		if len(args) > 0 {
 			convertFile = args[0]
 		}
+
+		gobRegisterOnce.Do(func() {
+			gob.Register(&roachpb.KeyValue{})
+		})
 
 		var w tsWriter
 		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
@@ -204,7 +210,6 @@ will then convert it to the --format requested in the current invocation.
 			}
 
 			dec := gob.NewDecoder(f)
-			gob.Register(&roachpb.KeyValue{})
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
 				var v roachpb.KeyValue
 				err := dec.Decode(&v)
