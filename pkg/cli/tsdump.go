@@ -204,7 +204,6 @@ will then convert it to the --format requested in the current invocation.
 			}
 
 			dec := gob.NewDecoder(f)
-			gob.Register(&roachpb.KeyValue{})
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
 				var v roachpb.KeyValue
 				err := dec.Decode(&v)
