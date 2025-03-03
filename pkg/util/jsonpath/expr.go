@@ -114,3 +114,14 @@ var _ Path = ArrayIndex{}
 func (a ArrayIndex) String() string {
 	return fmt.Sprintf("[%s]", Numeric(a).String())
 }
+
+type ArrayIndexRange struct {
+	Start ArrayIndex
+	End   ArrayIndex
+}
+
+var _ Path = ArrayIndexRange{}
+
+func (a ArrayIndexRange) String() string {
+	return fmt.Sprintf("[%s to %s]", Numeric(a.Start), Numeric(a.End))
+}
