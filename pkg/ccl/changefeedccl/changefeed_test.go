@@ -382,6 +382,39 @@ AS SELECT *, event_op() AS op  FROM foo`)
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestRLSBlocking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE rls (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `SET enable_row_level_security = on`)
+		sqlDB.Exec(t, `INSERT INTO rls VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `INSERT INTO rls VALUES (1, 'second')`)
+
+		// Make sure CDC query cannot start if table is RLS enabled.
+		sqlDB.Exec(t, `ALTER TABLE rls ENABLE ROW LEVEL SECURITY`)
+		expErrSubstr := "CDC queries are not supported on tables with row-level security enabled"
+		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED AS SELECT * FROM rls WHERE a != 0`, expErrSubstr)
+
+		// Ensure that CDC query fails after creating if table becomes RLS enabled.
+		sqlDB.Exec(t, "ALTER TABLE rls DISABLE ROW LEVEL SECURITY")
+		tf := feed(t, f, `CREATE CHANGEFEED AS SELECT * FROM rls WHERE a != 0`)
+		defer closeFeed(t, tf)
+		assertPayloads(t, tf, []string{
+			`rls: [1]->{"a": 1, "b": "second"}`,
+		})
+		sqlDB.Exec(t, `ALTER TABLE rls ENABLE ROW LEVEL SECURITY`)
+		sqlDB.Exec(t, `INSERT INTO rls VALUES (2, 'third')`)
+		_, err := readNextMessages(context.Background(), tf, 1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), expErrSubstr)
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestToJSONAsChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
