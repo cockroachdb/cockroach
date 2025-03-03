@@ -169,7 +169,6 @@ func ActivateRestoredTenant(
 	// Mark the tenant as active.
 	info.DataState = mtinfopb.DataStateReady
 	info.ServiceMode = serviceMode
-	info.PreviousSourceTenant.CutoverAsOf = txn.KV().DB().Clock().Now()
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
