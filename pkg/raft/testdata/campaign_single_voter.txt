@@ -1,0 +1,45 @@
+log-level info
+----
+ok
+
+add-nodes 1 voters=(1) index=2
+----
+INFO 1 switched to configuration voters=(1)
+INFO 1 became follower at term 0
+INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+
+# Withdraw support to simulate the case where the store doesn't support itself
+# yet (e.g. upon startup).
+withdraw-support 1 1
+----
+  1
+1 x
+
+# A new election is expected even though support is not provided yet, because
+# this is a single-voter group.
+campaign 1
+----
+INFO 1 is starting a new election at term 0
+INFO 1 became candidate at term 1
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+  INFO 1 received MsgVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
+  INFO 1 became leader at term 1
+  INFO 1 leader at term 1 does not support itself in the liveness fabric
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
+  Entries:
+  1/3 EntryNormal ""
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
+  CommittedEntries:
+  1/3 EntryNormal ""
