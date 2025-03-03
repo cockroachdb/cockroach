@@ -23,12 +23,19 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		return
 	}
 
-	// TODO(normanchenn): This check will not work for valid JSONPath expressions
-	// like '$.1key'. We don't support this case yet since expressions like
-	// '$.1e' should fail due to being interpreted as a numeric literal.
-	if sqllexbase.IsIdentStart(ch) {
-		s.scanIdent(lval)
+	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
+	switch ch {
+	case identQuote:
+		// "[^"]"
+		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
+			lval.SetID(lexbase.IDENT)
+		}
 		return
+	default:
+		if sqllexbase.IsIdentStart(ch) {
+			s.scanIdent(lval)
+			return
+		}
 	}
 	// Everything else is a single character token which we already initialized
 	// lval for above.

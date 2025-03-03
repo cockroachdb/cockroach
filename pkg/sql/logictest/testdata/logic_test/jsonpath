@@ -65,7 +65,7 @@ true
 statement error pq: could not parse "" as type jsonpath: at or near "EOF": syntax error
 SELECT ''::JSONPATH
 
-statement error pq: could not parse "\$\.1a\[\*\]" as type jsonpath: at or near "1": syntax error
+statement error pq: could not parse "\$\.1a\[\*\]" as type jsonpath
 SELECT '$.1a[*]'::JSONPATH
 
 query T
@@ -159,3 +159,8 @@ $.ABC[*].DEF.GHI[*]
 # SELECT '$.a.type()'::JSONPATH
 # ----
 # $.a.type()
+
+# query T
+# SELECT '$.a ? ($.b == 1)'::JSONPATH
+# ----
+# $.a ? ($.b == 1)
