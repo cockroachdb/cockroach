@@ -8,6 +8,7 @@ package admission
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -67,7 +68,8 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
+	// see #141977
+	if sg.usedSlots < sg.totalSlots || !bazel.BuiltWithBazel() {
 		sg.usedSlots++
 		if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 			sg.exhaustedStart = timeutil.Now()
