@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -66,13 +67,13 @@ func (c *CompareResult) regressed() bool {
 }
 
 // compare compares the metrics of a benchmark between two revisions.
-func (b *Benchmark) compare() (*CompareResult, error) {
+func (b *Benchmark) compare(lines int) (*CompareResult, error) {
 	builder := model.NewBuilder(model.WithThresholds(&benchmath.Thresholds{
 		CompareAlpha: b.CompareAlpha,
 	}))
 	compareResult := CompareResult{Benchmark: b}
 	for _, revision := range []Revision{Old, New} {
-		data, err := os.ReadFile(path.Join(suite.artifactsDir(revision), b.cleanLog()))
+		data, err := logTail(path.Join(suite.artifactsDir(revision), b.cleanLog()), lines)
 		if err != nil {
 			return nil, err
 		}
@@ -107,11 +108,42 @@ func (b *Benchmark) compare() (*CompareResult, error) {
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
-		compareResult, err := benchmark.compare()
+		compareResult, err := benchmark.compare(0)
 		if err != nil {
 			return nil, err
 		}
 		compareResults = append(compareResults, compareResult)
 	}
 	return compareResults, nil
+}
+
+// logTail returns the last N lines of a file.
+// If N is 0, it returns the entire file.
+func logTail(filePath string, N int) ([]byte, error) {
+	if N == 0 {
+		return os.ReadFile(filePath)
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	lines := make([]string, 0, N)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) > N {
+			lines = lines[1:]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+	for _, line := range lines {
+		buffer.WriteString(line + "\n")
+	}
+	return buffer.Bytes(), nil
 }

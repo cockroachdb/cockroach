@@ -77,29 +77,37 @@ func (b *Benchmark) run() error {
 			return err
 		}
 	}
-
-	log.Printf("Running benchmark %q for %d iterations", b.Name, b.Count)
-	for i := 0; i < b.Count; i++ {
-		for _, revision := range []Revision{New, Old} {
-			log.Printf("%s binary iteration (%d out of %d)",
-				revision, i+1, b.Count,
-			)
-			err := b.runIteration(revision, fmt.Sprintf("%d", i+1))
-			if err != nil {
-				return err
+	regressed := true
+	tries := 0
+	for retries := 0; retries < b.Retries; retries++ {
+		log.Printf("Running benchmark %q for %d iterations", b.Name, b.Count)
+		for i := 1; i <= b.Count; i++ {
+			for _, revision := range []Revision{New, Old} {
+				log.Printf("%s binary iteration (%d out of %d)",
+					revision, i, b.Count,
+				)
+				err := b.runIteration(revision, fmt.Sprintf("%d", (tries*b.Count)+i))
+				if err != nil {
+					return err
+				}
 			}
+		}
+		tries++
+
+		compareResult, err := b.compare(b.Count)
+		if err != nil {
+			return err
+		}
+		if !compareResult.regressed() {
+			regressed = false
+			break
 		}
 	}
 
 	// Write failure marker file if the benchmark regressed.
-	compareResult, err := b.compare()
-	if err != nil {
-		return err
-	}
-	if compareResult.regressed() {
-		// Mark the revision as failed.
+	if regressed {
 		for _, revision := range []Revision{New, Old} {
-			err = os.WriteFile(path.Join(suite.artifactsDir(revision), ".FAILED"), nil, 0644)
+			err := os.WriteFile(path.Join(suite.artifactsDir(revision), ".FAILED"), nil, 0644)
 			if err != nil {
 				return err
 			}
@@ -108,7 +116,7 @@ func (b *Benchmark) run() error {
 
 	// Concat profiles.
 	for _, profileType := range []ProfileType{ProfileCPU, ProfileMemory, ProfileMutex} {
-		err = b.concatProfile(profileType)
+		err := b.concatProfile(profileType, tries*b.Count)
 		if err != nil {
 			return errors.Wrapf(err, "failed to concat %s profiles", profileType)
 		}
@@ -116,13 +124,13 @@ func (b *Benchmark) run() error {
 	return nil
 }
 
-func (b *Benchmark) concatProfile(profileType ProfileType) error {
+func (b *Benchmark) concatProfile(profileType ProfileType, count int) error {
 	for _, revision := range []Revision{New, Old} {
 		profiles := make([]*profile.Profile, 0, b.Count)
 		deleteProfiles := make([]func() error, 0)
-		for i := 0; i < b.Count; i++ {
+		for i := 1; i <= count; i++ {
 			profilePath := path.Join(suite.artifactsDir(revision),
-				b.profile(profileType, fmt.Sprintf("%d", i+1)))
+				b.profile(profileType, fmt.Sprintf("%d", i)))
 			profileData, err := os.ReadFile(profilePath)
 			if err != nil {
 				return err
