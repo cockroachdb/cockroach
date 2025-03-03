@@ -27,16 +27,26 @@ BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 1
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2368213 B/op 10378 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2375306 B/op 10377 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852036 ns/op 2358650 B/op 10287 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9898707 ns/op 2365463 B/op 10398 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9879350 ns/op 2364281 B/op 10361 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9808429 ns/op 2352326 B/op 10246 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9849367 ns/op 2369187 B/op 10379 allocs/op 0 errs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9872510 ns/op 2367752 B/op 10392 allocs/op 0 errs/op
 
 ----
 
@@ -51,16 +61,26 @@ BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9979350 ns/op 2364281 B/op 1
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9908429 ns/op 2352326 B/op 10246 allocs/op
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9949367 ns/op 2369187 B/op 10379 allocs/op
 BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9972510 ns/op 2367752 B/op 10392 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2368213 B/op 10378 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2375306 B/op 10377 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2358650 B/op 10287 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2370670 B/op 10411 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2367582 B/op 10386 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2365463 B/op 10398 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2364281 B/op 10361 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2352326 B/op 10246 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2369187 B/op 10379 allocs/op
-BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9852000 ns/op 2367752 B/op 10392 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2368213 B/op 10378 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2375306 B/op 10377 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2358650 B/op 10287 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9998707 ns/op 2365463 B/op 10398 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9979350 ns/op 2364281 B/op 10361 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9908429 ns/op 2352326 B/op 10246 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9949367 ns/op 2369187 B/op 10379 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9972510 ns/op 2367752 B/op 10392 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2368213 B/op 10378 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2375306 B/op 10377 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9952036 ns/op 2358650 B/op 10287 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9982428 ns/op 2370670 B/op 10411 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9926623 ns/op 2367582 B/op 10386 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9998707 ns/op 2365463 B/op 10398 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9979350 ns/op 2364281 B/op 10361 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9908429 ns/op 2352326 B/op 10246 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9949367 ns/op 2369187 B/op 10379 allocs/op
+BenchmarkSysbench/SQL/3node/oltp_read_write-16 2500 9972510 ns/op 2367752 B/op 10392 allocs/op
 
 ----
 
@@ -68,12 +88,12 @@ run group=1
 ----
 ----
 
-<details><summary><strong>⚪ Sysbench</strong> [SQL, 3node, oltp_read_write]</summary>
+<details><summary><strong>🔴 Sysbench</strong> [SQL, 3node, oltp_read_write]</summary>
 
 | Metric                      | Old Commit     | New Commit     | Delta      | Note         |
 |-----------------------------|----------------|----------------|------------|--------------|
-| ⚪ **sec/op** | 9.852m ±0% | 9.880m ±1% | ~ | p=0.084 n=20    |
-| ⚪ **allocs/op** | 10.38k ±0% | 10.38k ±0% | ~ | p=1.000 n=20    |
+| 🔴 **sec/op** | 9.862m ±0% | 9.952m ±0% | +0.91% | p=0.000 n=30    |
+| ⚪ **allocs/op** | 10.38k ±0% | 10.38k ±0% | ~ | p=1.000 n=30    |
 
 <details><summary>Reproduce</summary>
 
@@ -115,7 +135,7 @@ gcloud storage cp gs://cockroach-microbench-ci/artifacts/abcdef123//\* old/
 
 </details>
 
-No regressions detected!
+A regression has been detected, please investigate further!
 
 _built with commit: [qwerty456](https://github.com/cockroachdb/cockroach/commit/qwerty456)_
 ----
@@ -161,31 +181,41 @@ json
             "Metric": "B/op",
             "Summary": {
               "Center": 2367667,
-              "Lo": 2364281,
-              "Hi": 2369187,
-              "Confidence": 0.95861,
+              "Lo": 2365463,
+              "Hi": 2368213,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 2352326,
                 2352326,
+                2352326,
+                2358650,
                 2358650,
                 2358650,
                 2364281,
                 2364281,
+                2364281,
+                2365463,
                 2365463,
                 2365463,
                 2367582,
                 2367582,
+                2367582,
+                2367752,
                 2367752,
                 2367752,
                 2368213,
                 2368213,
+                2368213,
+                2369187,
                 2369187,
                 2369187,
                 2370670,
                 2370670,
+                2370670,
+                2375306,
                 2375306,
                 2375306
               ],
@@ -199,31 +229,41 @@ json
             "Metric": "allocs/op",
             "Summary": {
               "Center": 10378.50000,
-              "Lo": 10361,
-              "Hi": 10392,
-              "Confidence": 0.95861,
+              "Lo": 10377,
+              "Hi": 10386,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 10246,
                 10246,
+                10246,
+                10287,
                 10287,
                 10287,
                 10361,
                 10361,
+                10361,
+                10377,
                 10377,
                 10377,
                 10378,
                 10378,
+                10378,
+                10379,
                 10379,
                 10379,
                 10386,
                 10386,
+                10386,
+                10392,
                 10392,
                 10392,
                 10398,
                 10398,
+                10398,
+                10411,
                 10411,
                 10411
               ],
@@ -236,33 +276,43 @@ json
           {
             "Metric": "sec/op",
             "Summary": {
-              "Center": 0.00988,
-              "Lo": 0.00985,
-              "Hi": 0.00995,
-              "Confidence": 0.95861,
+              "Center": 0.00995,
+              "Lo": 0.00995,
+              "Hi": 0.00997,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
                 0.00991,
+                0.00991,
+                0.00991,
+                0.00993,
+                0.00993,
                 0.00993,
                 0.00995,
                 0.00995,
                 0.00995,
                 0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00995,
+                0.00997,
+                0.00997,
                 0.00997,
                 0.00998,
                 0.00998,
+                0.00998,
+                0.00998,
+                0.00998,
+                0.00998,
+                0.01000,
+                0.01000,
                 0.01000
               ],
               "Thresholds": {
@@ -277,31 +327,41 @@ json
             "Metric": "B/op",
             "Summary": {
               "Center": 2367667,
-              "Lo": 2364281,
-              "Hi": 2369187,
-              "Confidence": 0.95861,
+              "Lo": 2365463,
+              "Hi": 2368213,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 2352326,
                 2352326,
+                2352326,
+                2358650,
                 2358650,
                 2358650,
                 2364281,
                 2364281,
+                2364281,
+                2365463,
                 2365463,
                 2365463,
                 2367582,
                 2367582,
+                2367582,
+                2367752,
                 2367752,
                 2367752,
                 2368213,
                 2368213,
+                2368213,
+                2369187,
                 2369187,
                 2369187,
                 2370670,
                 2370670,
+                2370670,
+                2375306,
                 2375306,
                 2375306
               ],
@@ -315,31 +375,41 @@ json
             "Metric": "allocs/op",
             "Summary": {
               "Center": 10378.50000,
-              "Lo": 10361,
-              "Hi": 10392,
-              "Confidence": 0.95861,
+              "Lo": 10377,
+              "Hi": 10386,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 10246,
                 10246,
+                10246,
+                10287,
                 10287,
                 10287,
                 10361,
                 10361,
+                10361,
+                10377,
                 10377,
                 10377,
                 10378,
                 10378,
+                10378,
+                10379,
                 10379,
                 10379,
                 10386,
                 10386,
+                10386,
+                10392,
                 10392,
                 10392,
                 10398,
                 10398,
+                10398,
+                10411,
                 10411,
                 10411
               ],
@@ -355,11 +425,21 @@ json
               "Center": 0,
               "Lo": 0,
               "Hi": 0,
-              "Confidence": 0.95861,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -390,14 +470,16 @@ json
           {
             "Metric": "sec/op",
             "Summary": {
-              "Center": 0.00985,
+              "Center": 0.00986,
               "Lo": 0.00985,
-              "Hi": 0.00985,
-              "Confidence": 0.95861,
+              "Hi": 0.00988,
+              "Confidence": 0.95723,
               "Warnings": null
             },
             "Sample": {
               "Values": [
+                0.00981,
+                0.00981,
                 0.00981,
                 0.00985,
                 0.00985,
@@ -411,12 +493,20 @@ json
                 0.00985,
                 0.00985,
                 0.00985,
-                0.00985,
-                0.00985,
+                0.00987,
+                0.00987,
                 0.00987,
                 0.00988,
+                0.00988,
+                0.00988,
+                0.00990,
+                0.00990,
                 0.00990,
                 0.00993,
+                0.00993,
+                0.00993,
+                0.00998,
+                0.00998,
                 0.00998
               ],
               "Thresholds": {
