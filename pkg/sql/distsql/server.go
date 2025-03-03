@@ -271,31 +271,36 @@ func (ds *ServerImpl) setupFlow(
 		// this allows us to avoid an unnecessary deserialization of the eval
 		// context proto.
 		evalCtx = localState.EvalContext
-		// We create an eval context variable scoped to this block and reference
-		// it in the onFlowCleanupEnd closure. If the closure referenced
-		// evalCtx, then the pointer would be heap allocated because it is
-		// modified in the other branch of the conditional, and Go's escape
-		// analysis cannot determine that the capture and modification are
-		// mutually exclusive.
-		localEvalCtx := evalCtx
-		// We're about to mutate the evalCtx and we want to restore its original
-		// state once the flow cleans up. Note that we could have made a copy of
-		// the whole evalContext, but that isn't free, so we choose to restore
-		// the original state in order to avoid performance regressions.
-		origTxn := localEvalCtx.Txn
-		onFlowCleanupEnd = func(ctx context.Context) {
-			localEvalCtx.Txn = origTxn
-			reserved.Close(ctx)
-		}
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf(ctx)
 			if err != nil {
 				return nil, nil, nil, err
 			}
+			// We create an eval context variable scoped to this block and
+			// reference it in the onFlowCleanupEnd closure. If the closure
+			// referenced evalCtx, then the pointer would be heap allocated
+			// because it is modified in the other branch of the conditional,
+			// and Go's escape analysis cannot determine that the capture and
+			// modification are mutually exclusive.
+			localEvalCtx := evalCtx
+			// We're about to mutate the evalCtx and we want to restore its
+			// original state once the flow cleans up. Note that we could have
+			// made a copy of the whole evalContext, but that isn't free, so we
+			// choose to restore the original state in order to avoid
+			// performance regressions.
+			origTxn := localEvalCtx.Txn
+			onFlowCleanupEnd = func(ctx context.Context) {
+				localEvalCtx.Txn = origTxn
+				reserved.Close(ctx)
+			}
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			localEvalCtx.Txn = leafTxn
+		} else {
+			onFlowCleanupEnd = func(ctx context.Context) {
+				reserved.Close(ctx)
+			}
 		}
 	} else {
 		onFlowCleanupEnd = func(ctx context.Context) {
