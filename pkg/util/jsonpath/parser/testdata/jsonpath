@@ -139,7 +139,25 @@ $.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
 ----
 $.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
 
-# parse
-# $.1a
-# ----
-# $.1a
+parse
+$."1a"
+----
+$.1a -- normalized!
+
+parse
+$."2e"
+----
+$.2e -- normalized!
+
+error
+$.2e
+----
+at or near "2": syntax error
+DETAIL: source SQL:
+$.2e
+  ^
+
+#  parse
+#  $.1a
+#  ----
+#  $.1a
