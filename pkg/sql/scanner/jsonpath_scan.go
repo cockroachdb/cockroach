@@ -25,6 +25,24 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 
 	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
 	switch ch {
+	case '$':
+		// Root path ($.)
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' {
+			return
+		}
+
+		// Handle variables like $var, $1a, $"var", etc.
+		if s.peek() == identQuote {
+			s.pos++
+			if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
+				lval.SetID(lexbase.VARIABLE)
+			}
+			return
+		}
+		s.pos++
+		s.scanIdent(lval)
+		lval.SetID(lexbase.VARIABLE)
+		return
 	case identQuote:
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {

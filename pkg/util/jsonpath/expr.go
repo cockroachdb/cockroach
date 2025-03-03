@@ -64,3 +64,11 @@ func (p Paths) String() string {
 	}
 	return sb.String()
 }
+
+type Variable string
+
+var _ Path = Variable("")
+
+func (v Variable) String() string {
+	return fmt.Sprintf("$%q", string(v))
+}
