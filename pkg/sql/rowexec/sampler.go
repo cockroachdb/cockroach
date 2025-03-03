@@ -14,6 +14,7 @@ import (
 	hllNew "github.com/axiomhq/hyperloglog"
 	hllOld "github.com/axiomhq/hyperloglog/000"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -520,18 +522,17 @@ func (s *sketchInfo) addRow(
 	}
 
 	s.numRows++
-	isNull := true
+	allNulls := true
 	*buf = (*buf)[:0]
 	for _, col := range s.spec.Columns {
-		if b := row[col].EncodedBytes(); b != nil && !containsCollatedString(typs[col]) {
-			// If the datum is already encoded and does not contain a collated
-			// string, we can insert the encoded bytes directly into the sketch.
-			// Even though the encoded bytes contain the column ID and type,
-			// this will not break the "loose invariant" that equal datums will
-			// have equal bytes added to the sketch because we are always adding
-			// datums from the same table column, i.e., the column ID and type
-			// should be the same for every value in the column.
-			//
+		// Avoid calling IsNull() if the datum is unset because it will panic.
+		// Instead, return an assertion error that might help in debugging.
+		if row[col].IsUnset() {
+			return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+		}
+		isNull := row[col].IsNull()
+		allNulls = allNulls && isNull
+		if b := row[col].EncodedBytes(); b != nil && !containsCollatedString(typs[col]) && !isNull {
 			// Composite, value encoded datums may have different encodings for
 			// semantically equivalent types, so using the encoded bytes can
 			// skew the cardinality estimate slightly. This should be rare and
@@ -551,11 +552,33 @@ func (s *sketchInfo) addRow(
 			// "fOO", and "FOO". For this reason, we fall-back to using
 			// Fingerprint for collated strings.
 			//
+			// For NULL datums we use the Fingerprint method so that regardless
+			// of datum encoding, all of them got the same encoding.
+			//
 			// TODO(mgartner): We should probably truncate b to some max size to
 			// prevent a really wide value from growing buf. Since the distinct
 			// count is an estimate anyway, truncating the value shouldn't have
 			// any real impact.
-			*buf = append(*buf, b...)
+			if enc, _ := row[col].Encoding(); enc == catenumpb.DatumEncoding_VALUE {
+				// Value encoding includes column ID delta in the prefix which
+				// can differ based on the values of other columns within the
+				// same row (i.e. whether the previous columns had NULL or
+				// non-NULL values). To prevent this detail from artificially
+				// increasing the distinct estimate, we'll remove the column ID
+				// delta from encoding that we use for the current datum.
+				_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
+				if err != nil {
+					return err
+				}
+				// Including the value tag (i.e. the type) allows us to
+				// differentiate some non-NULL values (like integer 0) from NULL
+				// ones.
+				*buf = append(*buf, byte(typ))
+				*buf = append(*buf, b[dataOffset:]...)
+			} else {
+				// Key-encoded datums can be used as is.
+				*buf = append(*buf, b...)
+			}
 		} else {
 			// Fallback to using the Fingerprint method to generate bytes to
 			// insert into the sketch.
@@ -564,8 +587,8 @@ func (s *sketchInfo) addRow(
 			// independent (to prevent bounded memory leaks like we've seen in
 			// #136394). The problem in that issue was that the same backing
 			// slice of datums was shared across rows, so if a single row was
-			// kept as a sample, it could keep many garbage alive. To go around
-			// that we simply disabled the batching.
+			// kept as a sample, it could keep many garbage datums alive. To go
+			// around that we simply disabled the batching.
 			//
 			// We choose to not perform the memory accounting for possibly
 			// decoded tree.Datum because we will lose the references to row
@@ -575,19 +598,10 @@ func (s *sketchInfo) addRow(
 				return err
 			}
 		}
-		if isNull {
-			// Avoid calling IsNull() if the datum is unset because it will
-			// panic. Instead return an assertion error that might help in
-			// debugging.
-			if row[col].IsUnset() {
-				return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
-			}
-			isNull = row[col].IsNull()
-		}
 		s.size += int64(row[col].DiskSize())
 	}
 
-	if isNull {
+	if allNulls {
 		s.numNulls++
 	}
 	if s.sketchNew != nil {

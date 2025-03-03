@@ -2553,8 +2553,8 @@ const NoColumnID uint32 = 0
 // methods.
 //
 // The prefix uses varints to encode a column id and type, packing them into a
-// single byte when they're small (colID < 8 and typ < 15). This works by
-// shifting the colID "left" by 4 and putting any type less than 15 in the low
+// single byte when they're small (colIDDelta < 8 and typ < 15). This works by
+// shifting the colIDDelta "left" by 4 and putting any type less than 15 in the low
 // bytes. The result is uvarint encoded and fits in one byte if the original
 // column id fit in 3 bits. If it doesn't fit in one byte, the most significant
 // bits spill to the "left", leaving the type bits always at the very "right".
@@ -2565,45 +2565,45 @@ const NoColumnID uint32 = 0
 //
 // Together, this means the everything but the last byte of the first uvarint
 // can be dropped if the column id isn't needed.
-func EncodeValueTag(appendTo []byte, colID uint32, typ Type) []byte {
+func EncodeValueTag(appendTo []byte, colIDDelta uint32, typ Type) []byte {
 	if typ >= SentinelType {
-		appendTo = EncodeNonsortingUvarint(appendTo, uint64(colID)<<4|uint64(SentinelType))
+		appendTo = EncodeNonsortingUvarint(appendTo, uint64(colIDDelta)<<4|uint64(SentinelType))
 		return EncodeNonsortingUvarint(appendTo, uint64(typ))
 	}
-	if colID == NoColumnID {
+	if colIDDelta == NoColumnID {
 		// TODO(dan): EncodeValueTag is not inlined by the compiler. Copying this
 		// special case into one of the EncodeFooValue functions speeds it up by
 		// ~4ns.
 		return append(appendTo, byte(typ))
 	}
-	return EncodeNonsortingUvarint(appendTo, uint64(colID)<<4|uint64(typ))
+	return EncodeNonsortingUvarint(appendTo, uint64(colIDDelta)<<4|uint64(typ))
 }
 
 // EncodeNullValue encodes a null value, appends it to the supplied buffer, and
 // returns the final buffer.
-func EncodeNullValue(appendTo []byte, colID uint32) []byte {
-	return EncodeValueTag(appendTo, colID, Null)
+func EncodeNullValue(appendTo []byte, colIDDelta uint32) []byte {
+	return EncodeValueTag(appendTo, colIDDelta, Null)
 }
 
 // EncodeNotNullValue encodes a not null value, appends it to the supplied
 // buffer, and returns the final buffer.
-func EncodeNotNullValue(appendTo []byte, colID uint32) []byte {
-	return EncodeValueTag(appendTo, colID, NotNull)
+func EncodeNotNullValue(appendTo []byte, colIDDelta uint32) []byte {
+	return EncodeValueTag(appendTo, colIDDelta, NotNull)
 }
 
 // EncodeBoolValue encodes a bool value, appends it to the supplied buffer, and
 // returns the final buffer.
-func EncodeBoolValue(appendTo []byte, colID uint32, b bool) []byte {
+func EncodeBoolValue(appendTo []byte, colIDDelta uint32, b bool) []byte {
 	if b {
-		return EncodeValueTag(appendTo, colID, True)
+		return EncodeValueTag(appendTo, colIDDelta, True)
 	}
-	return EncodeValueTag(appendTo, colID, False)
+	return EncodeValueTag(appendTo, colIDDelta, False)
 }
 
 // EncodeIntValue encodes an int value with its value tag, appends it to the
 // supplied buffer, and returns the final buffer.
-func EncodeIntValue(appendTo []byte, colID uint32, i int64) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Int)
+func EncodeIntValue(appendTo []byte, colIDDelta uint32, i int64) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Int)
 	return EncodeUntaggedIntValue(appendTo, i)
 }
 
@@ -2617,8 +2617,8 @@ const floatValueEncodedLength = uint64AscendingEncodedLength
 
 // EncodeFloatValue encodes a float value with its value tag, appends it to the
 // supplied buffer, and returns the final buffer.
-func EncodeFloatValue(appendTo []byte, colID uint32, f float64) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Float)
+func EncodeFloatValue(appendTo []byte, colIDDelta uint32, f float64) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Float)
 	return EncodeUntaggedFloatValue(appendTo, f)
 }
 
@@ -2636,8 +2636,8 @@ func EncodeUntaggedFloat32Value(appendTo []byte, f float32) []byte {
 
 // EncodeBytesValue encodes a byte array value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeBytesValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Bytes)
+func EncodeBytesValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Bytes)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
@@ -2650,15 +2650,15 @@ func EncodeUntaggedBytesValue(appendTo []byte, data []byte) []byte {
 
 // EncodeArrayValue encodes a byte array value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeArrayValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Array)
+func EncodeArrayValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Array)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
 // EncodeTimeValue encodes a time.Time value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Time)
+func EncodeTimeValue(appendTo []byte, colIDDelta uint32, t time.Time) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Time)
 	return EncodeUntaggedTimeValue(appendTo, t)
 }
 
@@ -2671,8 +2671,8 @@ func EncodeUntaggedTimeValue(appendTo []byte, t time.Time) []byte {
 
 // EncodeTimeTZValue encodes a timetz.TimeTZ value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeTimeTZValue(appendTo []byte, colID uint32, t timetz.TimeTZ) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, TimeTZ)
+func EncodeTimeTZValue(appendTo []byte, colIDDelta uint32, t timetz.TimeTZ) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, TimeTZ)
 	return EncodeUntaggedTimeTZValue(appendTo, t)
 }
 
@@ -2685,14 +2685,14 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 
 // EncodeVoidValue encodes a void with its value tag, appends it to
 // the supplied buffer and returns the final buffer.
-func EncodeVoidValue(appendTo []byte, colID uint32) []byte {
-	return EncodeValueTag(appendTo, colID, Void)
+func EncodeVoidValue(appendTo []byte, colIDDelta uint32) []byte {
+	return EncodeValueTag(appendTo, colIDDelta, Void)
 }
 
 // EncodeBox2DValue encodes a geopb.BoundingBox with its value tag, appends it to
 // the supplied buffer and returns the final buffer.
-func EncodeBox2DValue(appendTo []byte, colID uint32, b geopb.BoundingBox) ([]byte, error) {
-	appendTo = EncodeValueTag(appendTo, colID, Box2D)
+func EncodeBox2DValue(appendTo []byte, colIDDelta uint32, b geopb.BoundingBox) ([]byte, error) {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Box2D)
 	return EncodeUntaggedBox2DValue(appendTo, b)
 }
 
@@ -2708,8 +2708,8 @@ func EncodeUntaggedBox2DValue(appendTo []byte, b geopb.BoundingBox) ([]byte, err
 
 // EncodeGeoValue encodes a geopb.SpatialObject value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeGeoValue(appendTo []byte, colID uint32, so *geopb.SpatialObject) ([]byte, error) {
-	appendTo = EncodeValueTag(appendTo, colID, Geo)
+func EncodeGeoValue(appendTo []byte, colIDDelta uint32, so *geopb.SpatialObject) ([]byte, error) {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Geo)
 	return EncodeUntaggedGeoValue(appendTo, so)
 }
 
@@ -2725,8 +2725,8 @@ func EncodeUntaggedGeoValue(appendTo []byte, so *geopb.SpatialObject) ([]byte, e
 
 // EncodeDecimalValue encodes an apd.Decimal value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
-func EncodeDecimalValue(appendTo []byte, colID uint32, d *apd.Decimal) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Decimal)
+func EncodeDecimalValue(appendTo []byte, colIDDelta uint32, d *apd.Decimal) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Decimal)
 	return EncodeUntaggedDecimalValue(appendTo, d)
 }
 
@@ -2749,8 +2749,8 @@ func EncodeUntaggedDecimalValue(appendTo []byte, d *apd.Decimal) []byte {
 
 // EncodeDurationValue encodes a duration.Duration value with its value tag,
 // appends it to the supplied buffer, and returns the final buffer.
-func EncodeDurationValue(appendTo []byte, colID uint32, d duration.Duration) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, Duration)
+func EncodeDurationValue(appendTo []byte, colIDDelta uint32, d duration.Duration) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, Duration)
 	return EncodeUntaggedDurationValue(appendTo, d)
 }
 
@@ -2764,8 +2764,8 @@ func EncodeUntaggedDurationValue(appendTo []byte, d duration.Duration) []byte {
 
 // EncodeBitArrayValue encodes a bit array value with its value tag,
 // appends it to the supplied buffer, and returns the final buffer.
-func EncodeBitArrayValue(appendTo []byte, colID uint32, d bitarray.BitArray) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, BitArray)
+func EncodeBitArrayValue(appendTo []byte, colIDDelta uint32, d bitarray.BitArray) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, BitArray)
 	return EncodeUntaggedBitArrayValue(appendTo, d)
 }
 
@@ -2784,8 +2784,8 @@ func EncodeUntaggedBitArrayValue(appendTo []byte, d bitarray.BitArray) []byte {
 
 // EncodeUUIDValue encodes a uuid.UUID value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeUUIDValue(appendTo []byte, colID uint32, u uuid.UUID) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, UUID)
+func EncodeUUIDValue(appendTo []byte, colIDDelta uint32, u uuid.UUID) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, UUID)
 	return EncodeUntaggedUUIDValue(appendTo, u)
 }
 
@@ -2797,8 +2797,8 @@ func EncodeUntaggedUUIDValue(appendTo []byte, u uuid.UUID) []byte {
 
 // EncodeIPAddrValue encodes a ipaddr.IPAddr value with its value tag, appends
 // it to the supplied buffer, and returns the final buffer.
-func EncodeIPAddrValue(appendTo []byte, colID uint32, u ipaddr.IPAddr) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, IPAddr)
+func EncodeIPAddrValue(appendTo []byte, colIDDelta uint32, u ipaddr.IPAddr) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, IPAddr)
 	return EncodeUntaggedIPAddrValue(appendTo, u)
 }
 
@@ -2811,32 +2811,32 @@ func EncodeUntaggedIPAddrValue(appendTo []byte, u ipaddr.IPAddr) []byte {
 // EncodeJSONValue encodes an already-byte-encoded JSON value with no value tag
 // but with a length prefix, appends it to the supplied buffer, and returns the
 // final buffer.
-func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, JSON)
+func EncodeJSONValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, JSON)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
 // EncodeTSQueryValue encodes an already-byte-encoded TSQuery value with no
 // value tag but with a length prefix, appends it to the supplied buffer, and
 // returns the final buffer.
-func EncodeTSQueryValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, TSQuery)
+func EncodeTSQueryValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, TSQuery)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
 // EncodeTSVectorValue encodes an already-byte-encoded TSVector value with no
 // value tag but with a length prefix, appends it to the supplied buffer, and
 // returns the final buffer.
-func EncodeTSVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, TSVector)
+func EncodeTSVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, TSVector)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
 // EncodePGVectorValue encodes an already-byte-encoded PGVector value with no
 // value tag but with a length prefix, appends it to the supplied buffer, and
 // returns the final buffer.
-func EncodePGVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
-	appendTo = EncodeValueTag(appendTo, colID, PGVector)
+func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, PGVector)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
@@ -2848,12 +2848,12 @@ func EncodePGVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
 // PeekValueLength and each of the DecodeFooValue methods will still work as
 // expected with `b[typeOffset:]`. (Except, obviously, the column id is no
 // longer encoded so if this suffix is passed back to DecodeValueTag, the
-// returned colID should be discarded.)
+// returned colIDDelta should be discarded.)
 //
 // Concretely:
 //
 //	b := ...
-//	typeOffset, _, colID, typ, err := DecodeValueTag(b)
+//	typeOffset, _, colIDDelta, typ, err := DecodeValueTag(b)
 //	_, _, _, typ, err := DecodeValueTag(b[typeOffset:])
 //
 // will return the same typ and err and
@@ -2863,7 +2863,9 @@ func EncodePGVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
 //
 // will return the same thing. PeekValueLength works as expected with either of
 // `b` or `b[typeOffset:]`.
-func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ Type, err error) {
+func DecodeValueTag(
+	b []byte,
+) (typeOffset int, dataOffset int, colIDDelta uint32, typ Type, err error) {
 	// TODO(dan): This can be made faster by special casing the single byte
 	// version and skipping the column id extraction when it's not needed.
 	if len(b) == 0 {
@@ -2875,7 +2877,7 @@ func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ
 	if err != nil {
 		return 0, 0, 0, Unknown, err
 	}
-	colID = uint32(tag >> 4)
+	colIDDelta = uint32(tag >> 4)
 
 	typ = Type(tag & 0xf)
 	typeOffset = n - 1
@@ -2888,7 +2890,7 @@ func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ
 		typ = Type(tag)
 		dataOffset += n
 	}
-	return typeOffset, dataOffset, colID, typ, nil
+	return typeOffset, dataOffset, colIDDelta, typ, nil
 }
 
 // DecodeBoolValue decodes a value encoded by EncodeBoolValue.
