@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	// TODO(normanchenn): temporarily import the parser here to ensure that
@@ -2275,16 +2277,18 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
 		if p.extendedEvalCtx.AsOfSystemTime == nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
-			if !asOf.BoundedStaleness {
-				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
-				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+			if !asOf.ForBackfill {
+				if !asOf.BoundedStaleness {
+					p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
+					if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
+						return err
+					}
+				}
+				if err := ex.state.setReadOnlyMode(tree.ReadOnly); err != nil {
 					return err
 				}
+				p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly.Load()
 			}
-			if err := ex.state.setReadOnlyMode(tree.ReadOnly); err != nil {
-				return err
-			}
-			p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly.Load()
 			return nil
 		}
 		if *p.extendedEvalCtx.AsOfSystemTime == *asOf {
@@ -2306,16 +2310,24 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 			asOf.Timestamp,
 		)
 	}
-	// If we're in an explicit txn, we allow AOST but only if it matches with
-	// the transaction's timestamp. This is useful for running AOST statements
-	// using the Executor inside an external transaction; one might want
-	// to do that to force p.avoidLeasedDescriptors to be set below.
+	// Bounded staleness and backfills with a historical timestamp are both not
+	// allowed in explicit transactions.
 	if asOf.BoundedStaleness {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"cannot use a bounded staleness query in a transaction",
 		)
 	}
+	if asOf.ForBackfill {
+		return unimplemented.NewWithIssuef(
+			35712,
+			"cannot run a backfill with AS OF SYSTEM TIME in a transaction",
+		)
+	}
+	// If we're in an explicit txn, we allow AOST but only if it matches with
+	// the transaction's timestamp. This is useful for running AOST statements
+	// using the Executor inside an external transaction; one might want
+	// to do that to force p.avoidLeasedDescriptors to be set below.
 	if readTs := ex.state.getReadTimestamp(); asOf.Timestamp != readTs {
 		err = pgerror.Newf(pgcode.FeatureNotSupported,
 			"inconsistent AS OF SYSTEM TIME timestamp; expected: %s, got: %s", readTs, asOf.Timestamp)
@@ -2771,8 +2783,46 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 
-	var err error
+	// If we've been tasked with backfilling a schema change operation at a
+	// particular system time, it's important that we do planning for the
+	// operation at the timestamp that we're expecting to perform the backfill at,
+	// in case the schema of the objects that we read have changed in between the
+	// present transaction timestamp and the user-defined backfill timestamp.
+	//
+	// Set the planner's transaction to a new historical transaction pinned at
+	// that timestamp, and give it a new collection. We'll restore it after
+	// planning.
+	var restoreOriginalPlanner func() error
+	if asOf := planner.extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill {
+		nodeID, _ := planner.execCfg.NodeInfo.NodeID.OptionalNodeID()
+		historicalTxn := kv.NewTxnWithSteppingEnabled(ctx, planner.execCfg.DB, nodeID, ex.QualityOfService())
+		if err := historicalTxn.SetFixedTimestamp(ctx, asOf.Timestamp); err != nil {
+			res.SetError(err)
+			return nil
+		}
+		originalTxn := planner.txn
+		planner.txn = historicalTxn
+		planner.schemaResolver.txn = historicalTxn
+		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(planner.sessionDataStack)
+		historicalCollection := planner.execCfg.CollectionFactory.NewCollection(
+			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
+		)
+		planner.descCollection = historicalCollection
+		planner.extendedEvalCtx.Descs = historicalCollection
+		restoreOriginalPlanner = func() error {
+			planner.txn = originalTxn
+			planner.schemaResolver.txn = originalTxn
+			planner.descCollection = ex.extraTxnState.descCollection
+			planner.extendedEvalCtx.Descs = ex.extraTxnState.descCollection
+			historicalCollection.ReleaseAll(ctx)
+			if err := historicalTxn.Commit(ctx); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
 
+	var err error
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
@@ -2813,6 +2863,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// https://github.com/cockroachdb/cockroach/issues/99410
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, crtime.NowMono())
 	ex.sessionTracing.TracePlanEnd(ctx, err)
+
+	if restoreOriginalPlanner != nil {
+		// Reset the planner's transaction to the current-timestamp, original
+		// transaction.
+		if err := restoreOriginalPlanner(); err != nil {
+			res.SetError(err)
+			return nil
+		}
+	}
 
 	// Finally, process the planning error from above.
 	if err != nil {

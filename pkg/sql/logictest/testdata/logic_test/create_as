@@ -1,3 +1,6 @@
+let $ts
+SELECT now()
+
 statement ok
 CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 15), ('forks', 30)
 
@@ -40,8 +43,8 @@ forks blue
 forks red
 forks green
 
-statement error pq: AS OF SYSTEM TIME must be provided on a top-level statement
-CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '2016-01-01'
+statement error pgcode 42P01 relation "stock" does not exist
+CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
 
 statement error pgcode 42601 CREATE TABLE specifies 3 column names, but data source has 2 columns
 CREATE TABLE t2 (col1, col2, col3) AS SELECT * FROM stock
@@ -409,6 +412,9 @@ CREATE TABLE e105393 (a PRIMARY KEY, b) AS TABLE db105393_1.public.t105393;
 statement error pq: cross database type references are not supported: db105393_1.public.e105393
 CREATE TABLE e105393 (b) AS SELECT b FROM db105393_1.public.t105393;
 
+statement ok
+USE test
+
 # Regression test for #105887
 subtest regression_105887
 
@@ -461,3 +467,103 @@ CREATE TABLE v00 (c01 INT, c02 STRING);
 
 statement ok
 CREATE TEMP TABLE v300 AS ( ( TABLE [ SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE v00 ] ) ) ;
+
+# Test CTAS as of system time.
+subtest ctas_aost
+
+# Get a timestamp from after the insert into the stock table.
+let $ts
+SELECT now()
+
+statement ok
+CREATE TABLE stockcopy AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
+
+query TI rowsort
+SELECT item, quantity FROM stockcopy
+----
+cups    10
+plates  15
+forks   30
+
+statement ok
+INSERT INTO stock VALUES ('spoons', 10)
+
+statement ok
+CREATE TABLE stocknospoons AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
+
+query TI rowsort
+SELECT item, quantity FROM stocknospoons WHERE item = 'spoons'
+----
+
+# Make sure that testing after the timestamp produces a result that
+# includes the new row.
+
+let $ts
+SELECT now()
+
+statement ok
+CREATE TABLE stockwithspoons AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
+
+query TI rowsort
+SELECT item, quantity FROM stockwithspoons WHERE item = 'spoons'
+----
+spoons  10
+
+statement ok
+ALTER TABLE stock ADD COLUMN newcol INT DEFAULT 1
+
+statement ok
+CREATE TABLE stockafterschemachange AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
+
+query error column "newcol" does not exist
+SELECT newcol FROM stockafterschemachange
+
+query TI rowsort
+SELECT item, quantity FROM stockafterschemachange
+----
+cups    10
+plates  15
+forks   30
+spoons  10
+
+let $ts
+SELECT now()
+
+## Test that CTAS AOST doesn't mix with explicit txns.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+
+statement error unimplemented: cannot run a backfill with AS OF SYSTEM TIME in a transaction
+CREATE TABLE willfail AS SELECT * FROM stock AS OF SYSTEM TIME '-1s'
+
+statement ok
+ROLLBACK
+
+statement error syntax error
+CREATE TABLE willfail (a INT) AS OF SYSTEM TIME '-1s'
+
+let $laterts
+SELECT now()
+
+statement error unimplemented: cannot specify AS OF SYSTEM TIME with different timestamps
+CREATE TABLE willfail AS
+SELECT *, (SELECT count(1) FROM stock AS OF SYSTEM TIME '$ts')
+FROM stock AS OF SYSTEM TIME '$laterts'
+
+statement ok
+DROP TABLE stock
+
+# Test that CTAS AOST works with a table that has been dropped.
+statement ok
+CREATE TABLE stockbeforedrop AS SELECT * FROM stock AS OF SYSTEM TIME '$ts'
+
+query TII rowsort
+SELECT item, quantity, newcol FROM stockbeforedrop
+----
+cups    10  1
+plates  15  1
+forks   30  1
+spoons  10  1
+
+subtest end
