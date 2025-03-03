@@ -12,7 +12,9 @@ import (
 	"log"
 	"math"
 	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -57,7 +59,12 @@ func (c *CompareResult) generateSummaryData(
 	statusTemplateFunc func(status Status) string,
 ) []SummaryData {
 	summaryData := make([]SummaryData, 0, len(c.MetricMap))
-	for metricName, entry := range c.MetricMap {
+	for _, metricName := range c.Benchmark.Metrics {
+		entry := c.MetricMap[metricName]
+		if entry == nil {
+			log.Printf("WARN: no metric found for benchmark metric %q", metricName)
+			continue
+		}
 		benchmark := entry.BenchmarkEntries[c.EntryName]
 		cc := entry.ComputeComparison(c.EntryName, string(Old), string(New))
 		if cc == nil {
@@ -110,13 +117,6 @@ func (c *CompareResult) benchdiffData() BenchdiffData {
 // writeJSONSummary writes a JSON summary of the comparison results to the given
 // path.
 func (c CompareResults) writeJSONSummary(path string) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
 	type (
 		Data struct {
 			Metric  string
@@ -159,13 +159,20 @@ func (c CompareResults) writeJSONSummary(path string) error {
 			Data:       data,
 		}
 	}
-	return encoder.Encode(struct {
+
+	jsonData, err := json.MarshalIndent(struct {
 		Entries   []Entry
 		Revisions Revisions
 	}{
 		Entries:   entries,
 		Revisions: suite.Revisions,
-	})
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	formattedData := formatFloats(jsonData, 5)
+	return os.WriteFile(path, formattedData, 0644)
 }
 
 // writeGitHubSummary writes a markdown summary of the comparison results to the
@@ -232,4 +239,17 @@ func statusToDot(status Status) string {
 func formatValue(val float64, metric string) string {
 	cls := benchunit.ClassOf(metric)
 	return benchunit.Scale(val, cls)
+}
+
+// formatFloats formats all floating point numbers in the JSON data to the given
+// precision.
+func formatFloats(jsonData []byte, precision int) []byte {
+	re := regexp.MustCompile(`\d+\.\d+`)
+	return re.ReplaceAllFunc(jsonData, func(match []byte) []byte {
+		f, err := strconv.ParseFloat(string(match), 64)
+		if err != nil {
+			return match
+		}
+		return []byte(strconv.FormatFloat(f, 'f', precision, 64))
+	})
 }
