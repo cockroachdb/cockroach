@@ -55,12 +55,24 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
 	}
 	// When new schema changer is on we will not support it for explicit
-	// transaction, since we don't know if subsequent statements don't
-	// support it.
-	if mode == sessiondatapb.UseNewSchemaChangerOff ||
-		((mode == sessiondatapb.UseNewSchemaChangerOn ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
+	// transaction, since we don't know if subsequent statements don't support it.
+	// If the autocommit_before_ddl setting is enabled, we can use the new schema
+	// changer as long as this is not an internal query (since the internal
+	// executor ignores the autocommit_before_ddl setting).
+	switch {
+	case mode == sessiondatapb.UseNewSchemaChangerOff:
 		return nil, nil
+	case mode == sessiondatapb.UseNewSchemaChangerOn || mode == sessiondatapb.UseNewSchemaChangerUnsafe:
+		if !p.extendedEvalCtx.TxnIsSingleStmt &&
+			(p.SessionData().Internal || !p.SessionData().AutoCommitBeforeDDL) {
+			return nil, nil
+		}
+		if len(p.semaCtx.Placeholders.Types) > 0 {
+			// The declarative schema changer does not have good support for
+			// placeholder arguments. Adding support for placeholders is tracked in
+			// https://github.com/cockroachdb/cockroach/issues/142256.
+			return nil, nil
+		}
 	}
 
 	scs := p.extendedEvalCtx.SchemaChangerState

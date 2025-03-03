@@ -4080,4 +4080,67 @@ DROP FUNCTION update_listing_balance ;
 statement ok
 drop table listings_balance cascade;
 
+# Test that CREATE and DROP TRIGGER work when sent in a statement batch.
+
+subtest create_drop_in_batch_statement
+
+statement ok
+CREATE TABLE tab_141810 (
+  id  INT PRIMARY KEY,
+  a   INT,
+  b   INT
+);
+CREATE OR REPLACE FUNCTION func_141810() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF TG_OP = 'INSERT' THEN
+      NEW.a := 1;
+    END IF;
+    NEW.b := 2;
+    RETURN NEW;
+  END;
+$$;
+CREATE TRIGGER trg_141810
+  BEFORE INSERT OR UPDATE ON tab_141810
+  FOR EACH ROW
+  EXECUTE FUNCTION func_141810();
+INSERT INTO tab_141810 (id) VALUES (1);
+DROP TRIGGER trg_141810 ON tab_141810;
+INSERT INTO tab_141810 (id) VALUES (2);
+
+query III
+SELECT id, a, b FROM tab_141810 ORDER BY id
+----
+1  1     2
+2  NULL  NULL
+
+# Test that CREATE and DROP TRIGGER work in a prepared statement.
+
+subtest create_drop_prepared
+
+statement ok
+PREPARE foo AS CREATE TRIGGER trg_141810 BEFORE INSERT ON tab_141810 FOR EACH ROW EXECUTE FUNCTION func_141810();
+
+statement ok
+EXECUTE foo;
+
+statement ok
+INSERT INTO tab_141810 VALUES (3);
+
+statement ok
+PREPARE bar AS DROP TRIGGER trg_141810 ON tab_141810;
+
+statement ok
+EXECUTE bar;
+
+statement ok
+INSERT INTO tab_141810 VALUES (4);
+
+query III
+SELECT id, a, b FROM tab_141810 ORDER BY id
+----
+1  1     2
+2  NULL  NULL
+3  1     2
+4  NULL  NULL
+
 subtest end
