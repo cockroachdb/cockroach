@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -126,6 +127,9 @@ type logicalReplicationWriterProcessor struct {
 	checkpointCh chan []jobspb.ResolvedSpan
 
 	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+
+	agg      *tracing.TracingAggregator
+	aggTimer timeutil.Timer
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -263,6 +267,11 @@ func newLogicalReplicationWriterProcessor(
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				lrw.close()
+				if lrw.agg != nil {
+					meta := bulk.ConstructTracingAggregatorProducerMeta(ctx,
+						lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
+				}
 				return nil
 			},
 		},
@@ -289,9 +298,15 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
 	ctx = logtags.AddTag(ctx, "src-node", lrw.spec.PartitionSpec.PartitionID)
 	ctx = logtags.AddTag(ctx, "proc", lrw.ProcessorID)
+	lrw.agg = tracing.TracingAggregatorForContext(ctx)
+	var listeners []tracing.EventListener
+	if lrw.agg != nil {
+		lrw.aggTimer.Reset(time.Second)
+		listeners = []tracing.EventListener{lrw.agg}
+	}
 	streampb.RegisterActiveLogicalConsumerStatus(&lrw.debug)
 
-	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
+	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName, listeners...)
 
 	lrw.metrics = lrw.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 
@@ -397,6 +412,12 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 				return nil, lrw.DrainHelper()
 			}
 		}
+	case <-lrw.aggTimer.C:
+		lrw.aggTimer.Read = true
+		lrw.aggTimer.Reset(15 * time.Second)
+		return nil, bulk.ConstructTracingAggregatorProducerMeta(lrw.Ctx(),
+			lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.FlowCtx.ID, lrw.agg)
+
 	case stats := <-lrw.rangeStatsCh:
 		meta, err := lrw.newRangeStatsProgressMeta(stats)
 		if err != nil {
