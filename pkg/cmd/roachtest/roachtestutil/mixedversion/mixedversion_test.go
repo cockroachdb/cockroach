@@ -206,6 +206,33 @@ func Test_assertValidTest(t *testing.T) {
 	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)
+
+	// Test that if there are fewer upgrades possible between the minimum
+	// bootstrap version and the current version than MaxUpgrades, maxUpgrades
+	// is overridden to the former.
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MaxUpgrades(10))
+	assertValidTest(mvt, fatalFunc())
+	require.NoError(t, fatalErr)
+	require.Equal(t, mvt.options.maxUpgrades, 3)
+
+	// Test that if there are fewer upgrades possible between the minimum
+	// bootstrap version and the current version than MinUpgrades, the test
+	// is invalid.
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MinUpgrades(10))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades`,
+		fatalErr.Error(),
+	)
+
+	mvt = newTest(MinimumBootstrapVersion("v24.2.0"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v24.2.0) should be from an older release series than current version (v23.1.2)`,
+		fatalErr.Error(),
+	)
 }
 
 func Test_choosePreviousReleases(t *testing.T) {
@@ -275,6 +302,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 				for _, er := range tc.expectedReleases {
 					expectedVersions = append(expectedVersions, clusterupgrade.MustParseVersion(er))
 				}
+				expectedVersions = append(expectedVersions, clusterupgrade.CurrentVersion())
 				require.Equal(t, expectedVersions, releases)
 			} else {
 				require.Error(t, err)
