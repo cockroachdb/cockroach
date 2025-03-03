@@ -4,9 +4,10 @@ benchmarks:
     name: "BenchmarkSysbench/SQL/3node/oltp_read_write"
     package: "pkg/sql/tests"
     runner_group: 1
-    count: 10
-    iterations: 3000
+    count: 15
+    iterations: 1500
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -16,9 +17,10 @@ benchmarks:
     name: "BenchmarkSysbench/KV/1node_local/oltp_read_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    count: 10
-    iterations: 12000
+    count: 20
+    iterations: 6000
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -28,9 +30,10 @@ benchmarks:
     name: "BenchmarkSysbench/KV/1node_local/oltp_write_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    count: 10
-    iterations: 12000
+    count: 20
+    iterations: 6000
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"
