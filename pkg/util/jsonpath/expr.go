@@ -39,13 +39,13 @@ var _ Path = &Root{}
 
 func (r Root) String() string { return "$" }
 
-type Key struct {
-	Key string
+type Key string
+
+var _ Path = Key("")
+
+func (k Key) String() string {
+	return fmt.Sprintf(".%q", string(k))
 }
-
-var _ Path = &Key{}
-
-func (k Key) String() string { return "." + k.Key }
 
 type Wildcard struct{}
 

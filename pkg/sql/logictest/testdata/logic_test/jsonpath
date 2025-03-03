@@ -8,7 +8,7 @@ jsonpath
 query T
 SELECT '$.a'::JSONPATH
 ----
-$.a
+$."a"
 
 statement error pq: value type jsonpath cannot be used for table columns
 CREATE TABLE a (j JSONPATH)
@@ -34,7 +34,7 @@ $
 query T
 SELECT '$.a1[*]'::JSONPATH
 ----
-$.a1[*]
+$."a1"[*]
 
 query B
 SELECT '$'::JSONPATH IS NULL
@@ -71,12 +71,12 @@ SELECT '$.1a[*]'::JSONPATH
 query T
 SELECT '$.abc[*].DEF.ghi[*]'::JSONPATH
 ----
-$.abc[*].DEF.ghi[*]
+$."abc"[*]."DEF"."ghi"[*]
 
 query T
 SELECT '$.ABC[*].DEF.GHI[*]'::JSONPATH
 ----
-$.ABC[*].DEF.GHI[*]
+$."ABC"[*]."DEF"."GHI"[*]
 
 ## When we allow table creation
 

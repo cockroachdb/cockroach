@@ -185,7 +185,7 @@ accessor_op:
 key:
   key_name
   {
-    $$.val = jsonpath.Key{Key: $1}
+    $$.val = jsonpath.Key($1)
   }
 ;
 

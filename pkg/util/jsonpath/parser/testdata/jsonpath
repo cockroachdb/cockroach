@@ -23,27 +23,27 @@ $
 parse
 $.abc
 ----
-$.abc
+$."abc" -- normalized!
 
 parse
 $.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
 ----
-$.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
+$."a"."b"."c"."d"."e"."f"."g"."h"."i"."j"."k"."l"."m"."n"."o"."p"."q"."r"."s"."t"."u"."v"."w"."x"."y"."z" -- normalized!
 
 parse
    $ .a .b . c
 ----
-$.a.b.c -- normalized!
+$."a"."b"."c" -- normalized!
 
 parse
 $.a[*].b.c[*]
 ----
-$.a[*].b.c[*]
+$."a"[*]."b"."c"[*] -- normalized!
 
 parse
   $  .  a  [  *  ] .  bcd
 ----
-$.a[*].bcd -- normalized!
+$."a"[*]."bcd" -- normalized!
 
 error
 $.a[
@@ -74,7 +74,7 @@ $ -- normalized!
 parse
 strict $.strict.lax
 ----
-strict $.strict.lax
+strict $."strict"."lax" -- normalized!
 
 error
 strict lax $.strict.lax
@@ -109,9 +109,14 @@ $.a$a
    ^
 
 parse
+$."a$b"
+----
+$."a$b"
+
+parse
 $.a1
 ----
-$.a1
+$."a1" -- normalized!
 
 error
 word $
@@ -132,22 +137,22 @@ $.1e
 parse
 $.abc.ABC
 ----
-$.abc.ABC
+$."abc"."ABC" -- normalized!
 
 parse
 $.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
 ----
-$.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
+$."mLmTGLKZsrNL"."ZawfwNmnfbFoRsISbQXD"[*]."JgTODFNN" -- normalized!
 
 parse
 $."1a"
 ----
-$.1a -- normalized!
+$."1a"
 
 parse
 $."2e"
 ----
-$.2e -- normalized!
+$."2e"
 
 error
 $.2e
