@@ -123,7 +123,7 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 	// Note we always use the start key of the span. We could
 	// take the average of the byte slices, but that seems
 	// unnecessarily complex for practical usage.
-	f.samples[idx] = sample{key: span.Key}
+	f.samples[idx] = sample{key: span.Key, contained: 1}
 }
 
 // Key implements the LoadBasedSplitter interface. Key returns the candidate
@@ -221,6 +221,24 @@ func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
+}
+
+// AccessDirection returns a value in [-1, 1] indicating the direction of access
+// requests over time. A negative value implies more traffic is moving to the left
+// (lower keys), a positive value implies more traffic is moving to the right
+// (higher keys), and zero indicates even distribution.
+func (f *UnweightedFinder) AccessDirection() float64 {
+	var left, right int
+	for _, s := range f.samples {
+		// Multiply left and right counts by contained to factor in spanning requests.
+		left += s.left * s.contained
+		right += s.right * s.contained
+	}
+	if left+right == 0 {
+		return 0
+	}
+	// Return ratio in [-1, 1].
+	return float64(right-left) / float64(right+left)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
