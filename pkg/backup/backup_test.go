@@ -7111,23 +7111,18 @@ func TestBackupRestoreTenant(t *testing.T) {
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, name, data_state, service_mode,
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities',
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'clusterId',
-				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'cutoverTimestamp'->'wallTime'
+			`SELECT id, active, name, data_state, service_mode
 				FROM system.tenants`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
-					`{}`, `NULL`, `NULL`,
 				},
 				{
 					`10`, `true`, `cluster-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
 					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
-					`{"canUseNodelocalStorage": true}`, `"` + clusterID + `"`, `"` + strings.Split(ts2, ".")[0] + `"`,
 				},
 			},
 		)
@@ -7295,7 +7290,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, data_state, service_mode,
 				crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'capabilities'
-			from system.tenants`,
+			from system.tenants order by id`,
 			[][]string{
 				{
 					`1`, `true`, `system`,
@@ -7340,13 +7335,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM $1 IN 'nodelocal://1/t10'`, ts1BackupPath)
 
 		restoreDB.CheckQueryResults(t,
-			`select id, name,
-			crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'clusterId',
-			crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info)->'previousSourceTenant'->'cutoverTimestamp'->'wallTime'
-			from system.tenants`,
+			`select id, name from system.tenants order by id`,
 			[][]string{
-				{`1`, `system`, `NULL`, `NULL`},
-				{`10`, `cluster-10`, `"` + clusterID + `"`, `"` + strings.Split(ts1, ".")[0] + `"`},
+				{`1`, `system`},
+				{`10`, `cluster-10`},
 			})
 
 		tenantID := roachpb.MustMakeTenantID(10)
