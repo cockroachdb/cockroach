@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -378,6 +379,18 @@ func (c *cdcOptCatalog) ResolveDataSource(
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, c.planner, name, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
+	}
+
+	// We block tables with row-level security enabled because they can inject
+	// filters into the select op. This conflicts with the CDC expression's
+	// expectation that the SELECT contains no filters — that all filters are
+	// converted into a projection for the __crdb_filter column (see
+	// predicateAsProjection). Since the RLS filters aren’t included in
+	// __crdb_filter, we block this functionality until that work is complete.
+	if desc.IsRowLevelSecurityEnabled() {
+		return nil, cat.DataSourceName{}, unimplemented.NewWithIssuef(
+			142171,
+			"CDC queries are not supported on tables with row-level security enabled")
 	}
 
 	ds, err := c.newCDCDataSource(ctx, desc, c.targetFamilyID)
