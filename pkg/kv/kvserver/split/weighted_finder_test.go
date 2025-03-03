@@ -335,7 +335,7 @@ func TestWeightedFinderNoSplitKeyCause(t *testing.T) {
 	assert.Equal(t, 13, imbalance, "unexpected imbalance counters")
 }
 
-func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
+func TestWeightedFinderPopularKey(t *testing.T) {
 	uniqueKeyUnweightedSample := [splitKeySampleSize]weightedSample{}
 	for i, idx := range rand.Perm(splitKeySampleSize) {
 		uniqueKeyUnweightedSample[idx] = weightedSample{
@@ -387,22 +387,24 @@ func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 	const eps = 1e-3
 	testCases := []struct {
 		samples                     [splitKeySampleSize]weightedSample
+		expectedPopularKey          roachpb.Key
 		expectedPopularKeyFrequency float64
 	}{
-		{uniqueKeyUnweightedSample, 1.0 / 20.0},
-		{uniqueKeyWeightedSample, 20.0 / 210.0}, // 20/(1+2+...+20)
-		{duplicateKeyUnweightedSample, 5.0 / 20.0},
-		{duplicateKeyWeightedSample, 84.0 / 210.0}, // (9+10+...+15)/(1+2+...+20)
-		{sameKeySample, 1},
+		{uniqueKeyUnweightedSample, keys.SystemSQLCodec.TablePrefix(uint32(0)), 1.0 / 20.0},
+		{uniqueKeyWeightedSample, keys.SystemSQLCodec.TablePrefix(uint32(19)), 20.0 / 210.0}, // 20/(1+2+...+20)
+		{duplicateKeyUnweightedSample, keys.SystemSQLCodec.TablePrefix(uint32(2)), 5.0 / 20.0},
+		{duplicateKeyWeightedSample, keys.SystemSQLCodec.TablePrefix(uint32(2)), 84.0 / 210.0}, // (9+10+...+15)/(1+2+...+20)
+		{sameKeySample, keys.SystemSQLCodec.TablePrefix(uint32(0)), 1},
 	}
 
 	randSource := rand.New(rand.NewSource(2022))
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
-		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
-		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,
+		popularKey := weightedFinder.PopularKey()
+		assert.Equal(t, test.expectedPopularKey, popularKey.Key)
+		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKey.Frequency) < eps,
 			"%d: expected popular key frequency %f, got %f",
-			i, test.expectedPopularKeyFrequency, popularKeyFrequency)
+			i, test.expectedPopularKeyFrequency, popularKey.Frequency)
 	}
 }
