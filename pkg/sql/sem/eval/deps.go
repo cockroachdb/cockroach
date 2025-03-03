@@ -762,4 +762,8 @@ type AsOfSystemTime struct {
 	// This is be zero if there is no maximum bound.
 	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
+
+	// ForBackfill indicates if this AOST expression was added to an operation
+	// that requires a backfill, like CREATE TABLE AS.
+	ForBackfill bool
 }

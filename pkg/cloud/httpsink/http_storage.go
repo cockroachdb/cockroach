@@ -178,6 +178,9 @@ func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 	return timeutil.RunWithTimeout(ctx, redact.Sprintf("DELETE %s", basename),
 		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
+			if errors.Is(err, cloud.ErrFileDoesNotExist) {
+				return nil
+			}
 			return err
 		})
 }
@@ -211,6 +214,10 @@ func (h *httpStorage) reqNoBody(
 		resp.Body.Close()
 	}
 	return resp, err
+}
+
+func isNotFoundErr(resp *http.Response) bool {
+	return resp != nil && resp.StatusCode == http.StatusNotFound
 }
 
 func (h *httpStorage) req(
@@ -251,22 +258,17 @@ func (h *httpStorage) req(
 
 	switch resp.StatusCode {
 	case 200, 201, 204, 206:
-	// Pass.
+		// Pass.
+		return resp, nil
 	default:
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
-		if err != nil && resp.StatusCode == 404 {
-			// nolint:errwrap
-			err = errors.Wrapf(
-				errors.Wrap(cloud.ErrFileDoesNotExist, "http storage file does not exist"),
-				"%v",
-				err.Error(),
-			)
+		if isNotFoundErr(resp) {
+			return nil, cloud.WrapErrFileDoesNotExist(err, "http storage file does not exist")
 		}
 		return nil, err
 	}
-	return resp, nil
 }
 
 func init() {
