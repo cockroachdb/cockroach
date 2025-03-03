@@ -489,14 +489,6 @@ func pickReplicationResume(
 func checkReplicationStartTime(
 	ctx context.Context, p sql.PlanHookState, tenInfo *mtinfopb.TenantInfo, ts hlc.Timestamp,
 ) error {
-	// TODO(az): remove the conditional once we figure out how to validate PTS on the
-	// source cluster when it has no producer jobs.
-	// When starting a replication job for a tenant with BACKUP and RESTORE instead
-	// of an initial scan, the source will not have producer jobs associated with
-	// the tenant, thus no PTS to validate.
-	if tenInfo.PreviousSourceTenant != nil && tenInfo.PreviousSourceTenant.CutoverTimestamp.Equal(ts) {
-		return nil
-	}
 
 	pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 
