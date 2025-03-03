@@ -434,14 +434,14 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
-	if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
+	if err := batchFirstJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
 		return nil, err
 	}
 
 	return jobIDs, nil
 }
 
-func batchJobWriteToJobInfo(
+func batchFirstJobWriteToJobInfo(
 	ctx context.Context, txn isql.Txn, jobs []*Job, modifiedMicros int64,
 ) error {
 	for _, j := range jobs {
@@ -452,7 +452,7 @@ func batchJobWriteToJobInfo(
 		if payloadBytes, err = protoutil.Marshal(&payload); err != nil {
 			return err
 		}
-		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
 		}
 		progress := j.Progress()
@@ -460,7 +460,7 @@ func batchJobWriteToJobInfo(
 			return err
 		}
 		progress.ModifiedMicros = modifiedMicros
-		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyProgress(ctx, progressBytes); err != nil {
 			return err
 		}
 	}
@@ -631,10 +631,10 @@ func (r *Registry) CreateJobWithTxn(
 		}
 
 		infoStorage := j.InfoStorage(txn)
-		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
 		}
-		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyProgress(ctx, progressBytes); err != nil {
 			return err
 		}
 
@@ -759,10 +759,10 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		}
 
 		infoStorage := j.InfoStorage(txn)
-		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
 		}
-		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+		if err := infoStorage.writeFirstLegacyProgress(ctx, progressBytes); err != nil {
 			return err
 		}
 
