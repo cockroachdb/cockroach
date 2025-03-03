@@ -96,14 +96,16 @@ func TestTableSet(t *testing.T) {
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			ts := hlc.Timestamp{WallTime: op.expiration}
+			s.expiration.Store(&ts)
 			set.insert(s)
 
 		case remove:
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
+			ts := hlc.Timestamp{WallTime: op.expiration}
+			s.expiration.Store(&ts)
 			set.remove(s)
 
 		case newest:
@@ -232,7 +234,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableVersion := &descriptorVersionState{
 		Descriptor: tables[0],
 	}
-	tableVersion.mu.expiration = tables[5].GetModificationTime()
+	modTS := tables[5].GetModificationTime()
+	tableVersion.expiration.Store(&modTS)
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
@@ -1143,13 +1146,13 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 				t:          descStates[tableID],
 				Descriptor: versionDesc(v),
 			}
-			addedDescVState.mu.Lock()
 			if v < maxVersion {
-				addedDescVState.mu.expiration = versionTS(v + 1)
+				ts := versionTS(v + 1)
+				addedDescVState.expiration.Store(&ts)
 			} else {
-				addedDescVState.mu.expiration = hlc.MaxTimestamp
+				ts := hlc.MaxTimestamp
+				addedDescVState.expiration.Store(&ts)
 			}
-			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)
 		}
 	}

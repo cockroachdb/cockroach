@@ -80,7 +80,10 @@ func (c *nameCache) get(
 	}
 
 	desc.incRefCountLocked(ctx, expensiveLogEnabled)
-	return desc, desc.mu.expiration
+	if exp := desc.expiration.Load(); exp != nil {
+		return desc, *exp
+	}
+	return desc, hlc.Timestamp{}
 }
 
 func (c *nameCache) insert(ctx context.Context, desc *descriptorVersionState) {
