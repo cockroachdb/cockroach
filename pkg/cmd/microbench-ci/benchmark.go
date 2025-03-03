@@ -27,6 +27,7 @@ type (
 		Count        int      `yaml:"count"`
 		Iterations   int      `yaml:"iterations"`
 		CompareAlpha float64  `yaml:"compare_alpha"`
+		Retries      int      `yaml:"retries"`
 		Metrics      []string `yaml:"metrics"`
 	}
 	Benchmarks  []Benchmark
