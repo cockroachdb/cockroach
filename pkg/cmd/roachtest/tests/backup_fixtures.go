@@ -202,6 +202,31 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 	}, nil
 }
 
+// runAsyncGC runs the GC asynchronously and returns a function that is used to
+// clean up the GC. This function can be called in tests that generate fixtures
+// which ensruse the GC runs a few times per day. Failure to run the GC will
+// not fail the test. There is a seperate GC roachtest that ensures the GC
+// periodically runs to completion.
+func (bd *backupDriver) runAsyncGC(ctx context.Context) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	m := bd.c.NewMonitor(ctx)
+	m.Go(func(ctx context.Context) error {
+		err := bd.registry.GC(ctx, bd.t.L())
+		if err != nil {
+			bd.t.L().Printf("error running GC: %v", err)
+		} else {
+			bd.t.L().Printf("GC finished successfully")
+		}
+		// NOTE: GC has its own roachtest that will fail with an error. The GC run
+		// concurrently to fixture generation is best effort.
+		return nil
+	})
+	return func() {
+		cancel()
+		m.Wait()
+	}
+}
+
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
 	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
@@ -347,6 +372,10 @@ func registerBackupFixtures(r registry.Registry) {
 				// worker is not colocated with the fixture repository, so there is a
 				// large amount of network latency.
 				// require.NoError(t, registry.GC(ctx, t.L()))
+				gcMonitor := c.NewMonitor(ctx)
+				gcMonitor.Go(func(ctx context.Context) error {
+					return registry.GC(ctx, t.L())
+				})
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
 				require.NoError(t, err)
@@ -360,6 +389,7 @@ func registerBackupFixtures(r registry.Registry) {
 				}
 				bd.prepareCluster(ctx)
 				bd.initWorkload(ctx)
+				defer bd.runAsyncGC(ctx)()
 
 				stopWorkload, err := bd.runWorkload(ctx)
 				require.NoError(t, err)
@@ -373,4 +403,21 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 		})
 	}
+}
+
+func registerBlobFixtureGC(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "blobfixture/gc",
+		Owner:            registry.OwnerDisasterRecovery,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(2)),
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.AWS),
+		Timeout:          1 * time.Hour,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// TODO(jeffswenson): ideally we would run the GC on the scheduled node
+			// so that it is close to the fixture repository.
+			registry := newFixtureRegistry(ctx, t, c)
+			require.NoError(t, registry.GC(ctx, t.L()))
+		},
+	})
 }
