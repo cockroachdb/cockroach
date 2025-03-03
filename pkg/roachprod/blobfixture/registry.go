@@ -37,7 +37,8 @@ type Registry struct {
 	// it can be replaced in tests.
 	clock func() time.Time
 
-	// uri is the prefix for all fixture data and metadata.
+	// uri is the prefix for all fixture data and metadata. Do not log the uri.
+	// It may contain authentication information.
 	//
 	// Fixtures are stored in the following layout:
 	// <uri>/metadata/<kind>/<timestamp> contains metadata for a fixture instance
@@ -47,6 +48,7 @@ type Registry struct {
 	// expected to be of the form "scheme://<bucket>/roachprod/<version>". So a
 	// full metadata path looks like:
 	// gs://cockroach-fixtures/roachprod/v25.1/metadata/backup-tpcc-30k/20220101-1504
+	//
 	uri url.URL
 }
 
@@ -169,6 +171,9 @@ func (r *Registry) Close() {
 }
 
 // URI returns a new URL with the given path appended to the registry's URI.
+//
+// Be careful when logging the URI. The query paremeters may contain
+// authentication information.
 //
 // Example:
 // fixture = r.GetLatest(ctx, "backup-tpcc-30k")
