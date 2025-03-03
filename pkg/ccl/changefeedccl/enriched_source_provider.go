@@ -6,9 +6,18 @@
 package changefeedccl
 
 import (
+	"context"
+	"net"
+	"net/url"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/linkedin/goavro/v2"
@@ -27,6 +36,47 @@ type enrichedSourceData struct {
 type enrichedSourceProvider struct {
 	opts       enrichedSourceProviderOpts
 	sourceData enrichedSourceData
+}
+
+func newEnrichedSourceData(ctx context.Context, cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec) (enrichedSourceData, error) {
+	var sourceNodeLocality, nodeName, nodeID string
+	tiers := cfg.Locality.Tiers
+
+	nodeLocalities := make([]string, 0, len(tiers))
+	for _, t := range tiers {
+		nodeLocalities = append(nodeLocalities, t.String())
+	}
+	sourceNodeLocality = strings.Join(nodeLocalities, ",")
+
+	nodeInfo := cfg.ExecutorConfig.(*sql.ExecutorConfig).NodeInfo
+	getPGURL := nodeInfo.PGURL
+	pgurl, err := getPGURL(url.User(username.RootUser))
+	if err != nil {
+		return enrichedSourceData{}, err
+	}
+	parsedUrl, err := url.Parse(pgurl.String())
+	if err != nil {
+		return enrichedSourceData{}, err
+	}
+	host, _, err := net.SplitHostPort(parsedUrl.Host)
+	if err == nil {
+		nodeName = host
+	}
+
+	if optionalNodeID, ok := nodeInfo.NodeID.OptionalNodeID(); ok {
+		nodeID = optionalNodeID.String()
+	}
+
+	return enrichedSourceData{
+		jobID:              spec.JobID.String(),
+		dbVersion:          cfg.Settings.Version.ActiveVersion(ctx).String(),
+		clusterName:        cfg.ExecutorConfig.(*sql.ExecutorConfig).RPCContext.ClusterName(),
+		clusterID:          nodeInfo.LogicalClusterID().String(),
+		sourceNodeLocality: sourceNodeLocality,
+		nodeName:           nodeName,
+		nodeID:             nodeID,
+	}, nil
 }
 
 func newEnrichedSourceProvider(

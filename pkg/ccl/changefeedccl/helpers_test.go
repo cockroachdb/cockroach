@@ -131,15 +131,44 @@ func readNextMessages(
 	return actual, nil
 }
 
-func stripTsFromPayloads(
-	envelopeType changefeedbase.EnvelopeType,
+func applySourceAssertion(
 	payloads []cdctest.TestFeedMessage,
 	sourceAssertion func(source map[string]interface{}),
-) ([]string, error) {
-	var actual []string
+) error {
 	if sourceAssertion == nil {
 		sourceAssertion = func(source map[string]interface{}) {}
 	}
+	for _, m := range payloads {
+		var message map[string]interface{}
+		if err := gojson.Unmarshal(m.Value, &message); err != nil {
+			return errors.Wrapf(err, `unmarshal: %s`, m.Value)
+		}
+
+		// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
+		if message["payload"] == nil {
+			if message["source"] != nil {
+				sourceAssertion(message["source"].(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		} else {
+			payload := message["payload"].(map[string]any)
+			source := payload["source"]
+			if source != nil {
+				sourceAssertion(source.(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		}
+	}
+	return nil
+}
+
+func stripTsFromPayloads(
+	envelopeType changefeedbase.EnvelopeType,
+	payloads []cdctest.TestFeedMessage,
+) ([]string, error) {
+	var actual []string
 	for _, m := range payloads {
 		var value []byte
 		var message map[string]interface{}
@@ -151,21 +180,10 @@ func stripTsFromPayloads(
 		case changefeedbase.OptEnvelopeEnriched:
 			// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
 			if message["payload"] == nil {
-				if message["source"] != nil {
-					sourceAssertion(message["source"].(map[string]any))
-				} else {
-					sourceAssertion(nil)
-				}
 				delete(message, "ts_ns")
 				delete(message, "source")
 			} else {
 				payload := message["payload"].(map[string]any)
-				source := payload["source"]
-				if source != nil {
-					sourceAssertion(source.(map[string]any))
-				} else {
-					sourceAssertion(nil)
-				}
 				delete(payload, "ts_ns")
 				delete(payload, "source")
 			}
@@ -274,10 +292,17 @@ func assertPayloadsBaseErr(
 		}
 	}
 
+	if sourceAssertion != nil {
+		err := applySourceAssertion(actual, sourceAssertion)
+		if err != nil {
+			return err
+		}
+	}
+
 	// strip timestamps after checking per-key ordering since check uses timestamps
 	if stripTs {
 		// format again with timestamps stripped
-		actualFormatted, err = stripTsFromPayloads(envelopeType, actual, sourceAssertion)
+		actualFormatted, err = stripTsFromPayloads(envelopeType, actual)
 		if err != nil {
 			return err
 		}
