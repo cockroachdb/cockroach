@@ -9,8 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
-	"github.com/cockroachdb/errors"
 	"math/rand"
 	"sync"
 	"time"
@@ -21,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
 type versionFeatureTest struct {
