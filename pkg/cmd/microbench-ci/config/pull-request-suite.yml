@@ -7,6 +7,7 @@ benchmarks:
     count: 10
     iterations: 3000
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -19,6 +20,7 @@ benchmarks:
     count: 10
     iterations: 12000
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"
@@ -31,6 +33,7 @@ benchmarks:
     count: 10
     iterations: 12000
     compare_alpha: 0.025
+    retries: 3
     metrics:
       - "sec/op"
       - "allocs/op"

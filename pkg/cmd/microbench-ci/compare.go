@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -66,7 +67,7 @@ func (c *CompareResult) regressed() bool {
 }
 
 // compare compares the metrics of a benchmark between two revisions.
-func (b *Benchmark) compare() (*CompareResult, error) {
+func (b *Benchmark) compare(lines int) (*CompareResult, error) {
 	builder := model.NewBuilder(model.WithThresholds(&benchmath.Thresholds{
 		CompareAlpha: b.CompareAlpha,
 	}))
@@ -107,11 +108,37 @@ func (b *Benchmark) compare() (*CompareResult, error) {
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
-		compareResult, err := benchmark.compare()
+		compareResult, err := benchmark.compare(0)
 		if err != nil {
 			return nil, err
 		}
 		compareResults = append(compareResults, compareResult)
 	}
 	return compareResults, nil
+}
+
+func logTail(filePath string, N int) ([]byte, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	lines := make([]string, 0, N)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) > N {
+			lines = lines[1:]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+	for _, line := range lines {
+		buffer.WriteString(line + "\n")
+	}
+	return buffer.Bytes(), nil
 }
