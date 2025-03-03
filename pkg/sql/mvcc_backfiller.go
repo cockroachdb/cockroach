@@ -125,16 +125,16 @@ func (im *IndexBackfillerMergePlanner) plan(
 	mergeTimestamp hlc.Timestamp,
 ) (func(context.Context) error, error) {
 	var p *PhysicalPlan
-	var evalCtx extendedEvalContext
+	var extEvalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 
 	if err := DescsTxn(ctx, im.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewInternalSessionData(ctx, im.execCfg.Settings, "plan-index-backfill-merge")
-		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
+		extEvalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(
-			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 
 		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
@@ -156,15 +156,18 @@ func (im *IndexBackfillerMergePlanner) plan(
 			im.execCfg.RangeDescriptorCache,
 			nil, /* txn - the flow does not run wholly in a txn */
 			im.execCfg.Clock,
-			evalCtx.Tracing,
+			extEvalCtx.Tracing,
 		)
 		defer recv.Release()
-		evalCtxCopy := evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := extEvalCtx.Context.Copy()
 		im.execCfg.DistSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
-			p, recv, &evalCtxCopy,
+			p,
+			recv,
+			evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 		return cbw.Err()

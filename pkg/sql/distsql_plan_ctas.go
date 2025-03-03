@@ -47,10 +47,10 @@ func PlanAndRunCTAS(
 	// The bulk row writers will emit a binary encoded BulkOpSummary.
 	physPlan.PlanToStreamColMap = []int{0}
 
-	// Make copy of evalCtx as Run might modify it.
-	evalCtxCopy := planner.ExtendedEvalContextCopy()
 	FinalizePlan(ctx, planCtx, physPlan)
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := planner.ExtendedEvalContext().Context.Copy()
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, finishedSetupFn)
 }

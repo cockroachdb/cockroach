@@ -179,16 +179,16 @@ func (ib *IndexBackfillPlanner) plan(
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
-	var evalCtx extendedEvalContext
+	var extEvalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
 	if err := DescsTxn(ctx, ib.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewInternalSessionData(ctx, ib.execCfg.Settings, "plan-index-backfill")
-		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
+		extEvalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(
-			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 		// TODO(ajwerner): Adopt metamorphic.ConstantWithTestRange for the
 		// batch size. Also plumb in a testing knob.
@@ -216,11 +216,12 @@ func (ib *IndexBackfillPlanner) plan(
 			ib.execCfg.RangeDescriptorCache,
 			nil, /* txn - the flow does not run wholly in a txn */
 			ib.execCfg.Clock,
-			evalCtx.Tracing,
+			extEvalCtx.Tracing,
 		)
 		defer recv.Release()
-		evalCtxCopy := evalCtx
-		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil)
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := extEvalCtx.Context.Copy()
+		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
 }
