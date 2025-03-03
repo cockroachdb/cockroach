@@ -202,6 +202,21 @@ $.abc[213].def[23198]
 ----
 $."abc"[213]."def"[23198] -- normalized!
 
+parse
+$.abc[1 to 2]
+----
+$."abc"[1 to 2] -- normalized!
+
+parse
+$.abc[4 to 1]
+----
+$."abc"[4 to 1] -- normalized!
+
+parse
+$.abc[5 to 5]
+----
+$."abc"[5 to 5] -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

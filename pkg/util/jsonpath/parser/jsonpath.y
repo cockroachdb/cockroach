@@ -90,6 +90,18 @@ func (u *jsonpathSymUnion) numVal() *tree.NumVal {
   return u.val.(*tree.NumVal)
 }
 
+func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
+  paths := path.(jsonpath.Paths)
+  if len(paths) != 1 {
+    return jsonpath.ArrayIndex{}, errors.New("expected exactly one path")
+  }
+  n, ok := paths[0].(jsonpath.Numeric)
+  if !ok {
+    return jsonpath.ArrayIndex{}, errors.New("expected numeric index")
+  }
+  return jsonpath.ArrayIndex(n), nil
+}
+
 %}
 
 %union{
@@ -117,6 +129,7 @@ func (u *jsonpathSymUnion) numVal() *tree.NumVal {
 %token <str> LAX
 
 %token <str> VARIABLE
+%token <str> TO
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -241,15 +254,25 @@ index_list:
 index_elem:
   expr
   {
-    paths := $1.path().(jsonpath.Paths)
-    if len(paths) != 1 {
-      return setErr(jsonpathlex, errors.New("expected exactly one path"))
+    index, err := pathToIndex($1.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
     }
-    n, ok := paths[0].(jsonpath.Numeric)
-    if !ok {
-      return setErr(jsonpathlex, errors.New("expected numeric index"))
+    $$.val = index
+  }
+| expr TO expr
+  {
+    firstIndex, err := pathToIndex($1.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
     }
-    $$.val = jsonpath.ArrayIndex(n)
+
+    secondIndex, err := pathToIndex($3.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+
+    $$.val = jsonpath.ArrayIndexRange{Start: firstIndex, End: secondIndex}
   }
 ;
 
@@ -281,6 +304,7 @@ any_identifier:
 unreserved_keyword:
   STRICT
 | LAX
+| TO
 ;
 
 %%
