@@ -6569,6 +6569,7 @@ ALTER TABLE t ADD CHECK (i > 0);
 				`
 SET sql_safe_updates = false;
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE t DROP COLUMN j;
 INSERT INTO t VALUES(-5);
 DELETE FROM t WHERE i=-5;
