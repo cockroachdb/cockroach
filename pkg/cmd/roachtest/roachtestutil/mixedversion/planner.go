@@ -558,8 +558,6 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	if len(clusterInitHooks) > 0 {
 		clusterStartSteps = append(clusterStartSteps, clusterInitHooks...)
 	}
-	// N.B. Add the cluster start step after user hooks as the framework will run liveness
-	// checks once the start step is run, which is incompatible with cluster init hooks.
 	clusterStartSteps = append(clusterStartSteps,
 		p.newSingleStepWithContext(setupContext,
 			startStep{
