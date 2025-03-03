@@ -110,4 +110,81 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
+send
+Query {"String": "COMMIT"}
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Severity":"WARNING","SeverityUnlocalized":"WARNING","Code":"25P01","Message":"there is no transaction in progress","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"exec_util.go","Line":0,"Routine":"init","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
+
+# Verify that CREATE and DROP TRIGGER statements can be prepared. These
+# statements are only implemented in the declarative schema changer, so this
+# tests the logic that determines if the schema change is supported by the
+# declarative schema changer.
+subtest triggers
+
+send
+Query {"String": "DROP TABLE IF EXISTS t141810;"}
+Query {"String": "DROP FUNCTION IF EXISTS f141810;"}
+Query {"String": "CREATE TABLE t141810 (x INT, y INT);"}
+Query {"String": "CREATE FUNCTION f141810() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'HERE'; RETURN NEW; END $$;"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TRIGGER tr141810 BEFORE INSERT ON t141810 FOR EACH ROW EXECUTE FUNCTION f141810();"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TRIGGER"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "DROP TRIGGER tr141810 ON t141810;"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DROP TRIGGER"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 subtest end
