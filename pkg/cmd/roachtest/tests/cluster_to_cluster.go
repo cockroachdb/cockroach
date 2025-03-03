@@ -231,6 +231,7 @@ func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeList
 func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
 	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
 		Flag("warehouses", tpcc.warehouses).
+		Flag("ramp", "2m").
 		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
 		MaybeOption(tpcc.tolerateErrors, "tolerate-errors").
 		MaybeOption(tpcc.repairOrderIDs, "repair-order-ids").
