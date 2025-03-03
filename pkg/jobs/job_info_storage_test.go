@@ -78,7 +78,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	// Write kA = v1.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job1.InfoStorage(txn)
-		return infoStorage.Write(ctx, kA, v1)
+		return infoStorage.WriteFirstKey(ctx, kA, v1)
 	}))
 	// Write kD = v2.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
