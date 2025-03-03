@@ -129,7 +129,7 @@ word $
 error
 $.1e
 ----
-at or near "1": syntax error
+at or near "invalid floating point literal": syntax error
 DETAIL: source SQL:
 $.1e
   ^
@@ -157,7 +157,7 @@ $."2e"
 error
 $.2e
 ----
-at or near "2": syntax error
+at or near "invalid floating point literal": syntax error
 DETAIL: source SQL:
 $.2e
   ^
@@ -187,7 +187,48 @@ $"2e"
 ----
 $"2e"
 
+parse
+$.a[1]
+----
+$."a"[1] -- normalized!
+
+parse
+$.abc[0]
+----
+$."abc"[0] -- normalized!
+
+parse
+$.abc[213].def[23198]
+----
+$."abc"[213]."def"[23198] -- normalized!
+
+# postgres allows floats as array indexes
+# parse
+# $.abc[1.0]
+# ----
+
+# parse
+# $.abc[1.1]
+# ----
+
+# in postgres this becomes $."a"[1000000000]
+# parse
+# $.abc[1e9]
+# ----
+
+# parse
+# $.abc[0.0]
+# ----
+
+# postgres allows negatives as array indexes
+# parse
+# $.abc[-0]
+# ----
+
+# parse
+# $.abc[-1.99]
+# ----
+
 # parse
 # $.1a
 # ----
-# $.1a

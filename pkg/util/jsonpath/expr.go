@@ -72,3 +72,45 @@ var _ Path = Variable("")
 func (v Variable) String() string {
 	return fmt.Sprintf("$%q", string(v))
 }
+
+type Numeric struct {
+	IsNegative bool
+	IsFloat    bool
+	FloatValue float64
+	IntValue   int64
+}
+
+var _ Path = Numeric{}
+
+func NewNumericFloat(f float64) Numeric {
+	return Numeric{
+		IsFloat:    true,
+		FloatValue: f,
+	}
+}
+
+func NewNumericInt(i int64) Numeric {
+	return Numeric{
+		IsFloat:    false,
+		IntValue:   i,
+		IsNegative: false,
+	}
+}
+
+func (n Numeric) String() string {
+	if n.IsFloat {
+		return fmt.Sprintf("%g", n.FloatValue)
+	}
+	if n.IsNegative {
+		return fmt.Sprintf("-%d", n.IntValue)
+	}
+	return fmt.Sprintf("%d", n.IntValue)
+}
+
+type ArrayIndex Numeric
+
+var _ Path = ArrayIndex{}
+
+func (a ArrayIndex) String() string {
+	return fmt.Sprintf("[%s]", Numeric(a).String())
+}

@@ -3,12 +3,24 @@ package parser
 
 import (
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
+  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+  "github.com/cockroachdb/errors"
 )
 
 %}
 
 %{
+
+func setErr(jsonpathlex jsonpathLexer, err error) int {
+  jsonpathlex.(*lexer).setErr(err)
+  return 1
+}
+
+func unimplemented(jsonpathlex jsonpathLexer, feature string) int {
+  jsonpathlex.(*lexer).Unimplemented(feature)
+  return 1
+}
 
 var _ scanner.ScanSymType = &jsonpathSymType{}
 
@@ -74,6 +86,10 @@ func (u *jsonpathSymUnion) bool() bool {
   return u.val.(bool)
 }
 
+func (u *jsonpathSymUnion) numVal() *tree.NumVal {
+  return u.val.(*tree.NumVal)
+}
+
 %}
 
 %union{
@@ -95,7 +111,6 @@ func (u *jsonpathSymUnion) bool() bool {
 %token <*tree.NumVal> ICONST PARAM
 %token <str> TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
 %token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-
 %token <str> ERROR
 
 %token <str> STRICT
@@ -112,6 +127,8 @@ func (u *jsonpathSymUnion) bool() bool {
 %type <jsonpath.Path> key
 %type <jsonpath.Path> array_accessor
 %type <jsonpath.Path> scalar_value
+%type <jsonpath.Path> index_elem
+%type <[]jsonpath.Path> index_list
 %type <str> key_name
 %type <str> any_identifier
 %type <str> unreserved_keyword
@@ -208,12 +225,51 @@ array_accessor:
   {
     $$.val = jsonpath.Wildcard{}
   }
+| '[' index_list ']'
+  {
+    $$.val = jsonpath.Paths($2.paths())
+  }
 ;
+
+index_list:
+  index_elem
+  {
+    $$.val = []jsonpath.Path{$1.path()}
+  }
+;
+
+index_elem:
+  expr
+  {
+    paths := $1.path().(jsonpath.Paths)
+    if len(paths) != 1 {
+      return setErr(jsonpathlex, errors.New("expected exactly one path"))
+    }
+    n, ok := paths[0].(jsonpath.Numeric)
+    if !ok {
+      return setErr(jsonpathlex, errors.New("expected numeric index"))
+    }
+    $$.val = jsonpath.ArrayIndex(n)
+  }
+;
+
 
 scalar_value:
   VARIABLE
   {
     $$.val = jsonpath.Variable($1)
+  }
+| ICONST
+  {
+    i, err := $1.numVal().AsInt64()
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = jsonpath.NewNumericInt(i)
+  }
+| FCONST
+  {
+    return unimplemented(jsonpathlex, "float consts")
   }
 ;
 
