@@ -492,6 +492,20 @@ func TestCreateTables(t *testing.T) {
 		sqlF.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH PARENT = '124'", fURL.String()).Scan(&jobIDDiff)
 		require.NotEqual(t, jobID, jobIDDiff)
 	})
+	t.Run("dest table rename", func(t *testing.T) {
+		sqlA.Exec(t, "CREATE DATABASE g")
+		sqlG := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("g")))
+		gURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("g"))
+
+		sqlG.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
+
+		var jobID jobspb.JobID
+		// use create logically replicated table syntax
+		sqlG.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab ON $1 WITH UNIDIRECTIONAL", gURL.String()).Scan(&jobID)
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlG, jobID)
+		// check that tab2 is empty
+		sqlG.CheckQueryResults(t, "SELECT * FROM tab2", [][]string{})
+	})
 }
 
 // TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances
