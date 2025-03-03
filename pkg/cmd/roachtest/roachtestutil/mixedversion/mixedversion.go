@@ -73,7 +73,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -329,6 +328,10 @@ type (
 		minUpgrades             int
 		maxUpgrades             int
 		minimumSupportedVersion *clusterupgrade.Version
+		// N.B. If unset, then there is no minimum bootstrap version enforced.
+		// We do this over, e.g. setting it to the oldest version we have release data
+		// for, because unit tests can use fake release data much older than that.
+		minimumBootstrapVersion *clusterupgrade.Version
 		// predecessorFunc computes the predecessor of a particular
 		// release. By default, random predecessors are used, but tests
 		// may choose to always use the latest predecessor as well.
@@ -455,6 +458,16 @@ func NumUpgrades(n int) CustomOption {
 func MinimumSupportedVersion(v string) CustomOption {
 	return func(opts *testOptions) {
 		opts.minimumSupportedVersion = clusterupgrade.MustParseVersion(v)
+	}
+}
+
+// MinimumBootstrapVersion allows tests to specify that the
+// cluster created should only be bootstrapped on a version
+// `v` or above. May override MaxUpgrades if the minimum bootstrap
+// version does not support that many upgrades.
+func MinimumBootstrapVersion(v string) CustomOption {
+	return func(opts *testOptions) {
+		opts.minimumBootstrapVersion = clusterupgrade.MustParseVersion(v)
 	}
 }
 
@@ -831,20 +844,19 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 		}
 	}()
 	var retries int
-	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 200 times.
+	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 100 times.
 	// N.B. Statistically, the expected number of retries is miniscule; see #138014 for more info.
-	for ; retries < 200; retries++ {
+	for ; retries < 100; retries++ {
 
 		// Pick a random deployment mode to use in this test run among the
 		// list of enabled deployment modes enabled for this test.
 		deploymentMode := t.deploymentMode()
 		t.updateOptionsForDeploymentMode(deploymentMode)
 
-		upgradePath, err := t.choosePreviousReleases()
+		upgradePath, err := t.chooseUpgradePath()
 		if err != nil {
 			return nil, err
 		}
-		upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
 
 		if override := os.Getenv(upgradePathOverrideEnv); override != "" {
 			upgradePath, err = parseUpgradePathOverride(override)
@@ -907,14 +919,15 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc 
 	}
 }
 
-// choosePreviousReleases returns a list of predecessor releases
-// relative to the current build version. It uses the `predecessorFunc`
-// field to compute the actual list of predecessors. This function
-// may also choose to skip releases when supported. Special care is
-// taken to avoid using releases that are not available under a
-// certain cluster architecture. Specifically, ARM64 builds are
-// only available on v22.2.0+.
-func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
+// chooseUpgradePath returns a valid upgrade path for the test to
+// take. An upgrade path is a list of predecessor versions that can
+// be upgraded into eachother, ending at the current build version.
+// It uses the `predecessorFunc` field to compute the actual list of
+// predecessors. This function may also choose to skip releases when
+// supported. Special care is taken to avoid using releases that are
+// not available under a certain cluster architecture. Specifically,
+// ARM64 builds are only available on v22.2.0+.
+func (t *Test) chooseUpgradePath() ([]*clusterupgrade.Version, error) {
 	skipVersions := t.prng.Float64() < t.options.skipVersionProbability
 	isAvailable := func(v *clusterupgrade.Version) bool {
 		if t.clusterArch() != vm.ArchARM64 {
@@ -966,35 +979,79 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 		return []*clusterupgrade.Version{pred, predPred}, nil
 	}
 
+	// possibleUpgradePathsMap maps a version to the possible upgrade paths that
+	// can be taken with exactly n upgrades.
+	possibleUpgradePathsMap := make(map[*clusterupgrade.Version]map[int][][]*clusterupgrade.Version)
+	// findPossibleUpgradePaths finds all legal upgrade paths ending at version `v` with
+	// exactly `numUpgrades` upgrades.
+	var findPossibleUpgradePaths func(v *clusterupgrade.Version, numUpgrades int) ([][]*clusterupgrade.Version, error)
+	findPossibleUpgradePaths = func(v *clusterupgrade.Version, numUpgrades int) ([][]*clusterupgrade.Version, error) {
+		// If there are no upgrades, then the only possible path is the current version.
+		if numUpgrades == 0 {
+			return [][]*clusterupgrade.Version{{v}}, nil
+		}
+		// Check if we have already computed the possible upgrade paths for this version.
+		if _, ok := possibleUpgradePathsMap[v]; !ok {
+			possibleUpgradePathsMap[v] = make(map[int][][]*clusterupgrade.Version)
+		} else if paths, ok := possibleUpgradePathsMap[v][numUpgrades]; ok {
+			return paths, nil
+		}
+
+		// The possible upgrade paths for this version with exactly `numUpgrades` upgrades
+		// is the possible upgrade paths of `v's` predecessors with `numUpgrades-1`
+		// upgrades plus version `v`.
+		var paths [][]*clusterupgrade.Version
+		predecessors, err := possiblePredecessorsFor(v)
+		if err != nil {
+			return nil, err
+		}
+		for _, pred := range predecessors {
+			// If the predecessor is older than the minimum bootstrapped version, then
+			// it's not a legal upgrade path.
+			if t.options.minimumBootstrapVersion != nil && pred.LessThan(t.options.minimumBootstrapVersion) {
+				continue
+			}
+			predPaths, err := findPossibleUpgradePaths(pred, numUpgrades-1)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range predPaths {
+				paths = append(paths, append(p, v))
+			}
+		}
+
+		possibleUpgradePathsMap[v][numUpgrades] = paths
+		return paths, nil
+	}
+
 	currentVersion := clusterupgrade.CurrentVersion()
 	var upgradePath []*clusterupgrade.Version
 	numUpgrades := t.numUpgrades()
 
-	for j := 0; j < numUpgrades; j++ {
-		predecessors, err := possiblePredecessorsFor(currentVersion)
+	// Best effort to find a valid upgrade path with exactly numUpgrades. If one is
+	// not found because some release is not available for the cluster architecture,
+	// retry with fewer upgrades. We log a warning  below in case we have a shorter
+	// upgrade path than requested because of this.
+	for j := numUpgrades; j > 0; j-- {
+		// N.B. We need to enumerate all possible upgrade paths in order to respect the
+		// minimum bootstrap version of the test. Due to skip upgrades, we can't just
+		// greedily pick the first path we find with `numUpgrades` upgrades.
+		possibleUpgradePaths, err := findPossibleUpgradePaths(currentVersion, j)
 		if err != nil {
 			return nil, err
 		}
-
-		// If there are no valid predecessors, it means some release is
-		// not available for the cluster architecture. We log a warning
-		// below in case we have a shorter upgrade path than requested
-		// because of this.
-		if len(predecessors) == 0 {
+		if possibleUpgradePaths != nil {
+			upgradePath = possibleUpgradePaths[t.prng.Intn(len(possibleUpgradePaths))]
 			break
 		}
-
-		chosenPredecessor := predecessors[t.prng.Intn(len(predecessors))]
-		upgradePath = append(upgradePath, chosenPredecessor)
-		currentVersion = chosenPredecessor
 	}
 
 	if len(upgradePath) < numUpgrades {
+		if t.clusterArch() != vm.ArchARM64 {
+			return nil, errors.Newf("unable to find a valid upgrade path with %d upgrades", numUpgrades)
+		}
 		t.logger.Printf("WARNING: skipping upgrades as ARM64 is only supported on %s+", minSupportedARM64Version)
 	}
-
-	// The upgrade path to be returned is from oldest to newest release.
-	slices.Reverse(upgradePath)
 	return upgradePath, nil
 }
 
@@ -1059,7 +1116,7 @@ func randomPredecessor(
 		)
 	}
 
-	// If the patch version of `minSupporrted` is 0, it means that we
+	// If the patch version of `minSupported` is 0, it means that we
 	// can choose any patch release in the predecessor series. It is
 	// also safe to return `predV` here if the `minSupported` version is
 	// a pre-release: we already validated that `predV`is at least
@@ -1345,6 +1402,8 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 	fail := func(err error) {
 		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
 	}
+	minUpgrades := test.options.minUpgrades
+	maxUpgrades := test.options.maxUpgrades
 
 	if test.options.useFixturesProbability > 0 && len(test.crdbNodes) != numNodesInFixtures {
 		fail(
@@ -1355,11 +1414,11 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		)
 	}
 
-	if test.options.minUpgrades > test.options.maxUpgrades {
+	if minUpgrades > maxUpgrades {
 		fail(
 			fmt.Errorf(
 				"invalid test options: maxUpgrades (%d) must be greater than minUpgrades (%d)",
-				test.options.maxUpgrades, test.options.minUpgrades,
+				maxUpgrades, minUpgrades,
 			),
 		)
 	}
@@ -1420,6 +1479,42 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 			"invalid test options: %s deployments require cluster with at least %d nodes",
 			SeparateProcessDeployment, minSeparateProcessNodes,
 		))
+	}
+
+	// Validate that the minimum bootstrap version if set.
+	if minBootstrapVersion := test.options.minimumBootstrapVersion; minBootstrapVersion != nil {
+		// The minimum bootstrap version should be from an older major
+		// version or, if from the same major version, from an older minor
+		// version.
+		validVersion = minBootstrapVersion.Major() < currentVersion.Major() ||
+			(minBootstrapVersion.Major() == currentVersion.Major() && minBootstrapVersion.Minor() < currentVersion.Minor())
+
+		if !validVersion {
+			fail(
+				fmt.Errorf(
+					"invalid test options: minimum bootstrap version (%s) should be from an older release series than current version (%s)",
+					minBootstrapVersion.Version.String(), currentVersion.Version.String(),
+				),
+			)
+		}
+
+		// The minimum bootstrap version should be compatible with the min and max upgrades.
+		maxUpgradesFromBootstrapVersion, err := release.MajorReleasesBetween(&minBootstrapVersion.Version, &currentVersion.Version)
+		if err != nil {
+			fail(err)
+		}
+		if maxUpgradesFromBootstrapVersion < minUpgrades {
+			fail(errors.Newf(
+				"invalid test options: minimum bootstrap version (%s) does not allow for min %d upgrades",
+				minBootstrapVersion, minUpgrades,
+			))
+		}
+		// Override the max upgrades if the minimum bootstrap version does not allow for that
+		// many upgrades.
+		if maxUpgrades > maxUpgradesFromBootstrapVersion {
+			test.logger.Printf("WARN: overriding maxUpgrades, minimum bootstrap version (%s) allows for at most %d upgrades", minBootstrapVersion, maxUpgradesFromBootstrapVersion)
+			test.options.maxUpgrades = maxUpgradesFromBootstrapVersion
+		}
 	}
 }
 
