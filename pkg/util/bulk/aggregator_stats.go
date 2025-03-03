@@ -130,6 +130,9 @@ func FlushTracingAggregatorStats(
 			clusterWideSummary.WriteString(event.String())
 		}
 
+		// Ensure the file always has a trailing newline, regardless of whether or
+		// not the loops above wrote anything.
+		clusterWideSummary.WriteString("\n")
 		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
 		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
 	})

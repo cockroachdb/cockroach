@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -75,6 +77,13 @@ var maxWait = time.Minute * 5
 
 type logicalReplicationResumer struct {
 	job *jobs.Job
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats emitted by the processors.
+		perNodeAggregatorStats bulk.ComponentAggregatorStats
+	}
 }
 
 var _ jobs.Resumer = (*logicalReplicationResumer)(nil)
@@ -114,7 +123,7 @@ func (r *logicalReplicationResumer) updateStatusMessage(
 	}
 }
 
-func (r logicalReplicationResumer) getClusterUris(
+func (r *logicalReplicationResumer) getClusterUris(
 	ctx context.Context, job *jobs.Job, db *sql.InternalDB,
 ) ([]streamclient.ClusterUri, error) {
 	var (
@@ -280,6 +289,7 @@ func (r *logicalReplicationResumer) ingest(
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
 			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
+			r:                     r,
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
@@ -726,9 +736,27 @@ type rowHandler struct {
 	rangeStats rangeStatsByProcessorID
 
 	lastPartitionUpdate time.Time
+
+	r *logicalReplicationResumer
+}
+
+func (rh *rowHandler) handleTraceAgg(agg *execinfrapb.TracingAggregatorEvents) {
+	componentID := execinfrapb.ComponentID{
+		FlowID:        agg.FlowID,
+		SQLInstanceID: agg.SQLInstanceID,
+	}
+	// Update the running aggregate of the component with the latest received
+	// aggregate.
+	rh.r.mu.Lock()
+	defer rh.r.mu.Unlock()
+	rh.r.mu.perNodeAggregatorStats[componentID] = agg.Events
 }
 
 func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+	if meta.AggregatorEvents != nil {
+		rh.handleTraceAgg(meta.AggregatorEvents)
+	}
+
 	if meta.BulkProcessorProgress == nil {
 		log.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
 		return nil
@@ -924,9 +952,32 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	return nil
 }
 
-// CollectProfile implements jobs.Resumer interface
-func (r *logicalReplicationResumer) CollectProfile(_ context.Context, _ interface{}) error {
+// CollectProfile implements the jobs.Resumer interface.
+func (r *logicalReplicationResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+	var aggStatsCopy bulk.ComponentAggregatorStats
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+
+	if err := bulk.FlushTracingAggregatorStats(ctx, r.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy); err != nil {
+		return errors.Wrap(err, "failed to flush aggregator stats")
+	}
+
 	return nil
+}
+
+// ForceRealSpan implements the TraceableJob interface.
+func (r *logicalReplicationResumer) ForceRealSpan() bool {
+	return true
+}
+
+// DumpTraceAfterRun implements the TraceableJob interface.
+func (r *logicalReplicationResumer) DumpTraceAfterRun() bool {
+	return false
 }
 
 func (r *logicalReplicationResumer) completeProducerJob(
@@ -991,6 +1042,12 @@ func init() {
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return &logicalReplicationResumer{
 				job: job,
+				mu: struct {
+					syncutil.Mutex
+					perNodeAggregatorStats bulk.ComponentAggregatorStats
+				}{
+					perNodeAggregatorStats: make(bulk.ComponentAggregatorStats),
+				},
 			}
 		},
 		jobs.WithJobMetrics(m),
