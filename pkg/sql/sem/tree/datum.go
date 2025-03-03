@@ -3904,7 +3904,15 @@ func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 	if !ok {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
-	return strings.Compare(string(*d), string(*v)), nil
+	dParsed, err := ValidateJSONPath(string(*d))
+	if err != nil {
+		return 0, err
+	}
+	vParsed, err := ValidateJSONPath(string(*v))
+	if err != nil {
+		return 0, err
+	}
+	return strings.Compare(dParsed, vParsed), nil
 }
 
 // Prev implements the Datum interface.
