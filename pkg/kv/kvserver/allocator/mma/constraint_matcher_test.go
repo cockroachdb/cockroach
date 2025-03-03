@@ -17,29 +17,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseStoreDescriptor(t *testing.T, d *datadriven.TestData) roachpb.StoreDescriptor {
+func parseStoreDescriptor(t *testing.T, in string) roachpb.StoreDescriptor {
 	var desc roachpb.StoreDescriptor
-	var storeID int
-	d.ScanArgs(t, "store-id", &storeID)
-	desc.StoreID = roachpb.StoreID(storeID)
-	var nodeID int
-	if d.HasArg("node-id") {
-		d.ScanArgs(t, "node-id", &nodeID)
-		desc.Node.NodeID = roachpb.NodeID(nodeID)
+	for _, field := range strings.Fields(in) {
+		parts := strings.SplitN(field, "=", 2)
+		switch parts[0] {
+		case "store-id":
+			desc.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
+		case "node-id":
+			desc.Node.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
+		case "attrs":
+			desc.Attrs.Attrs = append(
+				desc.Attrs.Attrs,
+				strings.Split(parts[1], ",")...,
+			)
+		case "locality-tiers":
+			desc.Node.Locality = parseLocalityTiers(t, parts[1])
+		}
 	}
-	var attrs string
-	d.ScanArgs(t, "attrs", &attrs)
-	for _, v := range strings.Split(attrs, ",") {
-		v = strings.TrimSpace(v)
-		desc.Attrs.Attrs = append(desc.Attrs.Attrs, v)
-	}
-	var lts string
-	d.ScanArgs(t, "locality-tiers", &lts)
-	desc.Node.Locality = parseLocalityTiers(t, d, lts)
 	return desc
 }
 
-func parseLocalityTiers(t *testing.T, d *datadriven.TestData, lts string) roachpb.Locality {
+func parseLocalityTiers(t *testing.T, lts string) roachpb.Locality {
 	var locality roachpb.Locality
 	for _, v := range strings.Split(lts, ",") {
 		v = strings.TrimSpace(v)
@@ -93,7 +92,7 @@ func TestConstraintMatcher(t *testing.T) {
 
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d)
+				desc := parseStoreDescriptor(t, d.Input)
 				cm.setStore(desc)
 				var b strings.Builder
 				printMatcher(&b)

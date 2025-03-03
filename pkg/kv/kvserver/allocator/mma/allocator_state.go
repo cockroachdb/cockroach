@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type allocatorState struct {
@@ -29,9 +30,9 @@ type allocatorState struct {
 	changeRangeLimiter *storeChangeRateLimiter
 }
 
-func newAllocatorState() *allocatorState {
+func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 	interner := newStringInterner()
-	cs := newClusterState(interner)
+	cs := newClusterState(ts, interner)
 	return &allocatorState{
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
