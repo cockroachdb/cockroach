@@ -50,6 +50,10 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		}
 		return
 	default:
+		if sqllexbase.IsDigit(ch) {
+			s.scanNumber(lval, ch)
+			return
+		}
 		if sqllexbase.IsIdentStart(ch) {
 			s.scanIdent(lval)
 			return
@@ -68,4 +72,9 @@ func isIdentMiddle(ch int) bool {
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
 	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
+}
+
+// scanNumber is similar to Scanner.scanNumber, but uses Jsonpath tokens.
+func (s *JSONPathScanner) scanNumber(lval ScanSymType, ch int) {
+	s.scanNumberImpl(lval, ch, lexbase.ERROR, lexbase.FCONST, lexbase.ICONST)
 }
