@@ -306,11 +306,11 @@ func (d *Decoder) Decode(a *tree.DatumAlloc, bytes []byte) (tree.Datums, error) 
 
 	var lastColID descpb.ColumnID
 	for len(bytes) > 0 {
-		_, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(bytes)
+		_, dataOffset, colIDDelta, typ, err := encoding.DecodeValueTag(bytes)
 		if err != nil {
 			return nil, err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		idx, ok := d.colIdxMap.Get(colID)
 		if !ok {

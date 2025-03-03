@@ -106,3 +106,19 @@ FROM [SHOW STATISTICS FOR TABLE t139381]
 {k}  histogram_collected
 {j}  histogram_collected
 {v}  histogram_collected
+
+# Regression test for inflating the distinct count due to including column ID
+# delta in the sketch (#141448).
+statement ok
+CREATE TABLE t141448 (i INT, f FLOAT, b BOOL);
+
+statement ok
+INSERT INTO t141448 VALUES (NULL, NULL, false), (NULL, 1, false), (1, 1, false);
+
+statement ok
+ANALYZE t141448;
+
+query II
+SELECT row_count, distinct_count FROM [SHOW STATISTICS FOR TABLE t141448] WHERE column_names = ARRAY['b'];
+----
+3  1

@@ -945,17 +945,17 @@ func (v Value) PrettyPrint() (ret string) {
 			if i != 0 {
 				buf.WriteRune('/')
 			}
-			_, _, colIDDiff, typ, err := encoding.DecodeValueTag(b)
+			_, _, colIDDelta, typ, err := encoding.DecodeValueTag(b)
 			if err != nil {
 				break
 			}
-			colID += colIDDiff
+			colID += colIDDelta
 			var s string
 			b, s, err = encoding.PrettyPrintValueEncoded(b)
 			if err != nil {
 				break
 			}
-			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDiff, colID, typ, s)
+			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDelta, colID, typ, s)
 		}
 	case ValueType_INT:
 		var i int64
