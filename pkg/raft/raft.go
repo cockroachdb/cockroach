@@ -19,6 +19,7 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math"
@@ -1150,6 +1151,8 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	} else if !r.raftLog.append(app) {
 		r.logger.Panicf("%x leader could not append to its log", r.id)
 	}
+
+	r.raftLog.termCache.ScanAppend(context.TODO(), app.Entries())
 
 	// On appending entries, the leader is effectively "sending" a MsgApp to its
 	// local "acceptor". Since we don't actually send this self-MsgApp, update the

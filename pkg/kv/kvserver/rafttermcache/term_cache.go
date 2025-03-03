@@ -149,6 +149,7 @@ var errInvalidEntryID = errors.New("invalid entry ID")
 
 // NewTermCache initializes a TermCache with a fixed maxSize.
 func NewTermCache(size uint64) *TermCache {
+	log.Info(context.TODO(), "termcache: newtermcache")
 	return &TermCache{
 		cache:     make([]entryID, 0, size),
 		maxSize:   size,
@@ -163,6 +164,8 @@ func (tc *TermCache) Term(
 ) (term kvpb.RaftTerm, found bool) {
 	tc.mu.RLock()
 	defer tc.mu.RUnlock()
+
+	log.Info(context.TODO(), "termcache: Term")
 
 	if len(tc.cache) == 0 {
 		log.Fatalf(ctx, "term cache is empty when calling Term(), should not happen")
@@ -194,6 +197,8 @@ func (tc *TermCache) Term(
 func (tc *TermCache) ClearTo(hi kvpb.RaftIndex) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	log.Info(context.TODO(), "termcache: ClearTo")
 
 	if len(tc.cache) == 0 || hi <= tc.firstEntry().index {
 		return
@@ -243,6 +248,8 @@ func (tc *TermCache) ClearTo(hi kvpb.RaftIndex) {
 func (tc *TermCache) ScanAppend(ctx context.Context, entries []pb.Entry) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	log.Info(context.TODO(), "termcache: ScanAppend")
 
 	if len(entries) == 0 {
 		return
@@ -367,6 +374,7 @@ func (tc *TermCache) firstEntry() entryID {
 func (tc *TermCache) ResetWithFirst(term kvpb.RaftTerm, index kvpb.RaftIndex) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	log.Info(context.TODO(), "termcache: resetwithfrist")
 	tc.reset()
 	_ = tc.append(entryID{term, index})
 }
