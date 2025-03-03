@@ -252,8 +252,8 @@ func (f *WeightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 		insufficientCounters, imbalance)
 }
 
-// PopularKeyFrequency implements the LoadBasedSplitter interface.
-func (f *WeightedFinder) PopularKeyFrequency() float64 {
+// PopularKey implements the LoadBasedSplitter interface.
+func (f *WeightedFinder) PopularKey() PopularKey {
 	// Sort the sample slice to determine the frequency that a popular key
 	// appears. We could copy the slice, however it would require an allocation.
 	// The probability a sample is replaced doesn't change as it is independent
@@ -266,6 +266,7 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	currentKeyWeight := weight
 	popularKeyWeight := weight
 	totalWeight := weight
+	var key roachpb.Key
 	for i := 1; i < len(f.samples); i++ {
 		weight := f.samples[i].weight
 		if f.samples[i].key.Equal(f.samples[i-1].key) {
@@ -274,12 +275,16 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 			currentKeyWeight = weight
 		}
 		if popularKeyWeight < currentKeyWeight {
+			key = f.samples[i].key
 			popularKeyWeight = currentKeyWeight
 		}
 		totalWeight += weight
 	}
 
-	return popularKeyWeight / totalWeight
+	return PopularKey{
+		Key:       key,
+		Frequency: popularKeyWeight / totalWeight,
+	}
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.

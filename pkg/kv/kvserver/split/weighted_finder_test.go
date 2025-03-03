@@ -400,7 +400,7 @@ func TestWeightedFinderPopularKeyFrequency(t *testing.T) {
 	for i, test := range testCases {
 		weightedFinder := NewWeightedFinder(timeutil.Now(), randSource)
 		weightedFinder.samples = test.samples
-		popularKeyFrequency := weightedFinder.PopularKeyFrequency()
+		popularKeyFrequency := weightedFinder.PopularKey().Frequency
 		assert.True(t, math.Abs(test.expectedPopularKeyFrequency-popularKeyFrequency) < eps,
 			"%d: expected popular key frequency %f, got %f",
 			i, test.expectedPopularKeyFrequency, popularKeyFrequency)

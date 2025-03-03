@@ -397,7 +397,7 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 	for i, test := range testCases {
 		finder := NewUnweightedFinder(timeutil.Now(), randSource)
 		finder.samples = test.samples
-		popularKeyFrequency := finder.PopularKeyFrequency()
+		popularKeyFrequency := finder.PopularKey().Frequency
 		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
 	}
 }
