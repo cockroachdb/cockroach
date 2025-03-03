@@ -101,11 +101,11 @@ $.a$
    ^
 
 error
-$.a$a
+$.a$b
 ----
-at or near "$": syntax error
+at or near "b": syntax error
 DETAIL: source SQL:
-$.a$a
+$.a$b
    ^
 
 parse
@@ -162,7 +162,32 @@ DETAIL: source SQL:
 $.2e
   ^
 
-#  parse
-#  $.1a
-#  ----
-#  $.1a
+parse
+$var
+----
+$"var" -- normalized!
+
+parse
+$1a
+----
+$"1a" -- normalized!
+
+parse
+$2e
+----
+$"2e" -- normalized!
+
+parse
+$"1a"
+----
+$"1a"
+
+parse
+$"2e"
+----
+$"2e"
+
+# parse
+# $.1a
+# ----
+# $.1a
