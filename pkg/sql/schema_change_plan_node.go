@@ -58,8 +58,9 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	// transaction, since we don't know if subsequent statements don't
 	// support it.
 	if mode == sessiondatapb.UseNewSchemaChangerOff ||
-		((mode == sessiondatapb.UseNewSchemaChangerOn ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
+		((mode == sessiondatapb.UseNewSchemaChangerOn || mode == sessiondatapb.UseNewSchemaChangerUnsafe) &&
+			!p.extendedEvalCtx.TxnIsSingleStmt &&
+			!p.SessionData().AutoCommitBeforeDDL) {
 		return nil, nil
 	}
 
