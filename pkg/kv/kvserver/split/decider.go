@@ -49,6 +49,10 @@ type LoadBasedSplitter interface {
 
 	// String formats the state of the load based splitter.
 	String() string
+
+	// AccessDirection returns a value in [-1, 1] indicating
+	// how requests are shifting over time (left/descending vs right/ascending).
+	AccessDirection() float64
 }
 
 type LoadSplitConfig interface {
