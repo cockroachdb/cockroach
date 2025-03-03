@@ -388,10 +388,14 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskWriteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokens)
-			require.LessOrEqual(t, int64(0), ioll.diskReadTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.writeByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.readByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.writeIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAvailable.readIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.writeByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.readByteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.writeIOPSTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskTokensAllocated.readIOPSTokens)
 		}
 	}
 }
@@ -428,20 +432,21 @@ var _ granterWithIOTokens = &testGranterWithIOTokens{}
 func (g *testGranterWithIOTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticReadBandwidthTokens int64,
+	elasticDiskTokens diskTokens,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
 	maxElasticDiskBandwidthTokens int64,
+	maxElasticWriteIOPSTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
+	// TODO(aaditya): update for iops
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
 		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
 		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.writeByteTokens),
+		tokensForTokenTickDurationToString(elasticDiskTokens.readByteTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
 		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
@@ -464,6 +469,7 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	iopsLM tokensLinearModel,
 ) {
 	fmt.Fprintf(&g.buf, "setAdmittedDoneModelsLocked: l0-write-lm: ")
 	printLinearModel(&g.buf, l0WriteLM)
@@ -473,6 +479,8 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	printLinearModel(&g.buf, ingestLM)
 	fmt.Fprintf(&g.buf, " write-amp-lm: ")
 	printLinearModel(&g.buf, writeAmpLM)
+	fmt.Fprintf(&g.buf, " write-iops-lm: ")
+	printLinearModel(&g.buf, iopsLM)
 	fmt.Fprintf(&g.buf, "\n")
 }
 
@@ -494,8 +502,8 @@ var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticDiskReadBandwidthTokens int64,
+	elasticDiskTokens diskTokens,
+	_ int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -503,8 +511,8 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskTokens.writeByteTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskTokens.readByteTokens)
 	return 0, 0
 }
 
@@ -519,6 +527,7 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	l0IngestLM tokensLinearModel,
 	ingestLM tokensLinearModel,
 	writeAmpLM tokensLinearModel,
+	iopsLM tokensLinearModel,
 ) {
 	require.LessOrEqual(g.t, 0.5, l0WriteLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), l0WriteLM.constant)
@@ -528,6 +537,8 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 	require.LessOrEqual(g.t, 1.0, writeAmpLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), writeAmpLM.constant)
+	require.Less(g.t, 0.0, iopsLM.multiplier)
+	require.LessOrEqual(g.t, int64(0), iopsLM.constant)
 }
 
 // Tests if the tokenAllocationTicker produces correct adjustment interval

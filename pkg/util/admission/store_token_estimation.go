@@ -111,8 +111,12 @@ const ingestMultiplierMin = 0.5
 const ingestMultiplierMax = 1.5
 const writeAmpMultiplierMin = 1.0
 const writeAmpMultiplierMax = 100.0
-const writeIOPSMultiplierMin = 1.0 / (256 * 1024) // 256KiB sequential write can be 1 IO operation.
-const writeIOPSMultiplierMax = 1.0                // Worst case scenario is that 1B written will use up 1 IO operation on its own.
+
+// 256KiB sequential write can be 1 IO operation.
+const writeIOPSMultiplierMin = 1.0 / (256 * 1024)
+
+// Worst case scenario is that a 1B random write will use up 1 IO operation on its own.
+const writeIOPSMultiplierMax = 1.0
 
 type storePerWorkTokenEstimator struct {
 	atAdmissionWorkTokens int64

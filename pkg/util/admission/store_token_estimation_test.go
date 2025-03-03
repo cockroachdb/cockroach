@@ -99,13 +99,17 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				if d.HasArg("unflushed-too-large") {
 					unflushedTooLarge = true
 				}
+
+				// TODO(aaditya): update this
+				cumDiskWriteCount := uint64(0)
 				estimator.updateEstimates(
-					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats, unflushedTooLarge)
-				wL0lm, iL0lm, ilm, wamplm := estimator.getModelsAtDone()
+					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, cumDiskWriteCount, admissionStats, unflushedTooLarge)
+				wL0lm, iL0lm, ilm, wamplm, iopsLM := estimator.getModelsAtDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, ilm, estimator.atDoneIngestTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, wamplm, estimator.atDoneWriteAmpLinearModel.smoothedLinearModel)
+				require.Equal(t, iopsLM, estimator.atDoneWriteIOPSLinearModel.smoothedLinearModel)
 				var b strings.Builder
 				fmt.Fprintf(&b, "interval state: %+v\n", estimator.aux)
 				fmt.Fprintf(&b, "at-admission-tokens: %d\n",

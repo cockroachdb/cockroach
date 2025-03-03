@@ -502,17 +502,21 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
 		diskIOPSTokens := sg.writeIOPSLM.applyLinearModel(diskTokenCount)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
+		sg.coordMu.diskTokensAvailable.writeIOPSTokens -= diskIOPSTokens
 		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += diskTokenCount
 		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskIOPSTokens
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
+		sg.coordMu.diskTokensUsed[wt].writeIOPSTokens += diskIOPSTokens
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
 		diskIOPSTokens := sg.writeIOPSLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
+		sg.coordMu.diskTokensAvailable.writeIOPSTokens -= diskIOPSTokens
 		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeByteTokens += count
 		sg.coordMu.diskTokensError.tokensAlreadyDeducted.writeIOPSTokens += diskIOPSTokens
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
+		sg.coordMu.diskTokensUsed[wt].writeIOPSTokens += diskIOPSTokens
 	}
 }
 
@@ -646,19 +650,21 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 			req = sg.snapshotRequester
 		}
 		if req.hasWaitingRequests() {
-			res := sg.tryGetLocked(1, int8(wt))
+			// We use count = 0 here so that we only check for available tokens,
+			// without deducting yet. If the requester grants a queued request, it
+			// will return the number of tokens requested and we adjust thereafter.
+			res := sg.tryGetLocked(0, int8(wt))
 			if res == grantSuccess {
 				tookTokenCount := req.granted(grantChainID)
 				if tookTokenCount == 0 {
 					// Did not accept grant.
-					sg.returnGrantLocked(1, int8(wt))
 					// Continue with the loop since this requester does not have waiting
 					// requests. If the loop terminates we will correctly return
 					// grantFailLocal.
 				} else {
-					// May have taken more.
-					if tookTokenCount > 1 {
-						sg.tookWithoutPermissionLocked(tookTokenCount-1, int8(wt))
+					// Accepted grant.
+					if tookTokenCount > 0 {
+						sg.tookWithoutPermissionLocked(tookTokenCount, int8(wt))
 					}
 					return grantSuccess
 				}
@@ -804,6 +810,12 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	additionalDiskWriteTokens := actualDiskWriteTokens - originalDiskTokens
 	sg.coordMu.diskTokensAvailable.writeByteTokens -= additionalDiskWriteTokens
 	sg.coordMu.diskTokensUsed[wt].writeByteTokens += additionalDiskWriteTokens
+	// Adjust IOPS.
+	actualIOPSTokens := sg.writeIOPSLM.applyLinearModel(actualDiskWriteTokens)
+	originalIOPSTokens := sg.writeIOPSLM.applyLinearModel(originalDiskTokens)
+	additionalIOPSTokens := actualIOPSTokens - originalIOPSTokens
+	sg.coordMu.diskTokensAvailable.writeIOPSTokens -= additionalIOPSTokens
+	sg.coordMu.diskTokensUsed[wt].writeByteTokens += additionalIOPSTokens
 
 	if canGrantAnother && (additionalL0TokensNeeded < 0) {
 		isExhausted := exhaustedFunc()
