@@ -317,6 +317,10 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // 3. Scans are always sent to the KV layer, but if the key span being scanned
 // overlaps with any buffered writes, then the response from the KV layer needs
 // to be merged with buffered writes. These are collected as transformations.
+// 4. ReverseScans, similar to scans, are also always sent to the KV layer and
+// their response needs to be merged with any buffered writes. The only
+// difference is the direction in which the buffer is iterated when doing the
+// merge. As a result, they're also collected as tranformations.
 //
 // TODO(arul): Augment this comment as these expand.
 func (twb *txnWriteBuffer) applyTransformations(
@@ -421,7 +425,19 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
 			baRemote.Requests = append(baRemote.Requests, ru)
-
+		case *kvpb.ReverseScanRequest:
+			overlaps := twb.scanOverlaps(t.Key, t.EndKey)
+			if overlaps {
+				ts = append(ts, transformation{
+					stripped:    false,
+					index:       i,
+					origRequest: req,
+				})
+			}
+			// Similar to the reasoning above, regardless of whether the reverse
+			// scan overlaps with any writes in the buffer or not, we must send
+			// the request to the KV layer.
+			baRemote.Requests = append(baRemote.Requests, ru)
 		default:
 			baRemote.Requests = append(baRemote.Requests, ru)
 		}
@@ -477,6 +493,36 @@ func (twb *txnWriteBuffer) scanOverlaps(key roachpb.Key, endKey roachpb.Key) boo
 	return it.Valid()
 }
 
+func (twb *txnWriteBuffer) mergeWithReverseScanResp(
+	req *kvpb.ReverseScanRequest, resp *kvpb.ReverseScanResponse,
+) (*kvpb.ReverseScanResponse, error) {
+	if req.ScanFormat == kvpb.COL_BATCH_RESPONSE {
+		return nil, errors.AssertionFailedf("unexpectedly called mergeWithScanResp on a ScanRequest " +
+			"with COL_BATCH_RESPONSE scan format")
+	}
+	if req.ScanFormat == kvpb.BATCH_RESPONSE {
+		// TODO(arul): See pebbleResults.put for how this should be done.
+		return nil, errors.AssertionFailedf("unimplemented")
+	}
+
+	respIter := newReverseScanRespIter(req, resp)
+	// First, calculate the size of the merged response. This then allows us to
+	// exactly pre-allocate the response slice when constructing the
+	// scanRespMerger.
+	respSize := 0
+	twb.mergeBufferAndResp(
+		respIter,
+		func(roachpb.Key, *roachpb.Value) { respSize++ },
+		func() { respSize++ },
+		true, /* reverse */
+	)
+
+	respIter.reset()
+	rm := makeRespMerger(respIter, respSize)
+	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, true /* reverse */)
+	return rm.toReverseScanResp(), nil
+}
+
 // mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
 // response returned by the KV layer, and merges it with any writes that were
 // buffered by the transaction to correctly uphold read-your-own-write
@@ -498,48 +544,63 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 	// exactly pre-allocate the response slice when constructing the
 	// scanRespMerger.
 	respSize := 0
-	twb.mergeBufferAndScanResp(
+	twb.mergeBufferAndResp(
 		respIter,
 		func(roachpb.Key, *roachpb.Value) { respSize++ },
 		func() { respSize++ },
+		false, /* reverse */
 	)
 
 	respIter.reset()
-	srm := makeScanRespMerger(respIter, respSize)
-	twb.mergeBufferAndScanResp(respIter, srm.acceptKV, srm.acceptServerResp)
-	return srm.toResp(), nil
+	rm := makeRespMerger(respIter, respSize)
+	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, false /* reverse */)
+	return rm.toScanResp(), nil
 }
 
 // mergeBufferAndScanResp merges (think the merge step from merge sort) the
-// buffer and the server's response. It does so by iterating over both,
-// in-order, and calling the appropriate accept function, based on which KV pair
-// should be preferred[1] by the combined response.
+// buffer and the server's response to a Scan or ReverseScan request. It does so
+// by iterating over both, in-order[1], and calling the appropriate accept
+// function, based on which KV pair should be preferred[2] by the combined
+// response.
 //
-// [1] See inline comments for more details on what "preferred" means.
-func (twb *txnWriteBuffer) mergeBufferAndScanResp(
-	respIter *scanRespIter, acceptBuffer func(roachpb.Key, *roachpb.Value), acceptResp func(),
+// [1] Forward or reverse order, depending on the direction of the scan.
+// [2] See inline comments for more details on what "preferred" means.
+func (twb *txnWriteBuffer) mergeBufferAndResp(
+	respIter *respIter, acceptBuffer func(roachpb.Key, *roachpb.Value), acceptResp func(), reverse bool,
 ) {
 	it := twb.buffer.MakeIter()
 	seek := &twb.bufferSeek
 	seek.key = respIter.startKey()
 	seek.endKey = respIter.endKey()
-	it.FirstOverlap(seek)
+
+	if reverse {
+		it.LastOverlap(seek)
+	} else {
+		it.FirstOverlap(seek)
+	}
 
 	for respIter.valid() && it.Valid() {
 		k := respIter.peekKey()
 		switch it.Cur().key.Compare(k) {
 		case -1:
 			// The key in the buffer is less than the next key in the server's
-			// response. Accept it.
-			val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
-			if served && val.IsPresent() {
-				// NB: Only include a buffered value in the response if it hasn't been
-				// deleted by the transaction previously. This matches the behaviour
-				// of MVCCScan, which configures Pebble to not return deletion
-				// tombstones. See pebbleMVCCScanner.add().
-				acceptBuffer(it.Cur().key, val)
+			// response. When scanning in the reverse direction, we prefer the
+			// key from the server's response; on the other hand, when scanning
+			// in the forward direction, we prefer the key in the buffer.
+			if reverse {
+				acceptResp()
+				respIter.next()
+			} else {
+				val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+				if served && val.IsPresent() {
+					// NB: Only include a buffered value in the response if it hasn't been
+					// deleted by the transaction previously. This matches the behaviour
+					// of MVCCScan, which configures Pebble to not return deletion
+					// tombstones. See pebbleMVCCScanner.add().
+					acceptBuffer(it.Cur().key, val)
+				}
+				it.NextOverlap(seek)
 			}
-			it.NextOverlap(seek)
 
 		case 0:
 			// The key exists in the buffer. We must serve the read from the buffer,
@@ -560,12 +621,33 @@ func (twb *txnWriteBuffer) mergeBufferAndScanResp(
 			}
 			// Move on to the next key, both in the buffer and the response.
 			respIter.next()
-			it.NextOverlap(seek)
+			if reverse {
+				it.PrevOverlap(seek)
+			} else {
+				it.NextOverlap(seek)
+			}
+
 		case 1:
-			// The key in the buffer is greater than the current key in the server's
-			// response. Accept the response and move on to the next one.
-			acceptResp()
-			respIter.next()
+			// The key in the buffer is greater than the current key in the
+			// server's response. When scanning in the reverse direction, we
+			// prefer the key in the buffer; on the other hand, when scanning in
+			// the forward direction, we prefer the key in the server's
+			// response.
+			if reverse {
+				val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+				if served && val.IsPresent() {
+					// NB: Only include a buffered value in the response if it
+					// hasn't been deleted by the transaction previously. This
+					// matches the behaviour of MVCCScan, which configures
+					// Pebble to not return deletion tombstones. See
+					// pebbleMVCCScanner.add().
+					acceptBuffer(it.Cur().key, val)
+				}
+				it.PrevOverlap(seek)
+			} else {
+				acceptResp()
+				respIter.next()
+			}
 		}
 	}
 
@@ -581,7 +663,11 @@ func (twb *txnWriteBuffer) mergeBufferAndScanResp(
 			// tombstone.
 			acceptBuffer(it.Cur().key, val)
 		}
-		it.NextOverlap(seek)
+		if reverse {
+			it.PrevOverlap(seek)
+		} else {
+			it.NextOverlap(seek)
+		}
 	}
 }
 
@@ -688,6 +774,15 @@ func (t transformation) toResp(
 			return kvpb.ResponseUnion{}, err
 		}
 		ru.MustSetInner(scanResp)
+	case *kvpb.ReverseScanRequest:
+		reverseScanResp, err := twb.mergeWithReverseScanResp(
+			t.origRequest.(*kvpb.ReverseScanRequest), br.GetInner().(*kvpb.ReverseScanResponse),
+		)
+		if err != nil {
+			return kvpb.ResponseUnion{}, err
+		}
+		ru.MustSetInner(reverseScanResp)
+
 	default:
 		// This is only possible once we start decomposing read-write requests into
 		// separate bits.
@@ -870,112 +965,223 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 	return ru
 }
 
-// scanRespIter is an iterator over a scan response returned by the KV layer.
-type scanRespIter struct {
-	req   *kvpb.ScanRequest
-	resp  *kvpb.ScanResponse
-	index int
+// respIter is an iterator over a scan or reverse scan response returned by
+// the KV layer.
+type respIter struct {
+	// One and only one of scanReq/reverseScanReq (and by extension,
+	// scanResp/reverseScanResp) should ever be set.
+	scanReq         *kvpb.ScanRequest
+	scanResp        *kvpb.ScanResponse
+	reverseScanReq  *kvpb.ReverseScanRequest
+	reverseScanResp *kvpb.ReverseScanResponse
+	index           int
 }
 
-// newScanRespIter constructs and returns a new scanRespIter.
-func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *scanRespIter {
-	return &scanRespIter{
-		req:   req,
-		resp:  resp,
-		index: 0,
+// newScanRespIter constructs and returns a new iterator to iterate over a
+// ScanRequest/Response.
+func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
+	return &respIter{
+		scanReq:  req,
+		scanResp: resp,
+		index:    0,
+	}
+}
+
+// newReverseScanRespIter constructs and returns a new iterator to iterate over
+// a ReverseScanRequest/Response.
+func newReverseScanRespIter(req *kvpb.ReverseScanRequest, resp *kvpb.ReverseScanResponse) *respIter {
+	return &respIter{
+		reverseScanReq:  req,
+		reverseScanResp: resp,
+		index:           0,
 	}
 }
 
 // peekKey returns the key at the current iterator position.
-func (s *scanRespIter) peekKey() roachpb.Key {
-	switch s.req.ScanFormat {
-	case kvpb.KEY_VALUES:
-		return s.resp.Rows[s.index].Key
+func (s *respIter) peekKey() roachpb.Key {
+	switch s.method() {
+	case kvpb.Scan:
+		switch s.scanFormat() {
+		case kvpb.KEY_VALUES:
+			return s.scanResp.Rows[s.index].Key
+		default:
+			panic("unexpected")
+		}
+
+	case kvpb.ReverseScan:
+		switch s.scanFormat() {
+		case kvpb.KEY_VALUES:
+			return s.reverseScanResp.Rows[s.index].Key
+		default:
+			panic("unexpected")
+		}
 	default:
 		panic("unexpected")
 	}
 }
 
 // next moves the iterator forward.
-func (s *scanRespIter) next() {
+func (s *respIter) next() {
 	s.index++
 }
 
 // valid returns whether the iterator is (still) positioned to a valid  index.
-func (s *scanRespIter) valid() bool {
-	switch s.req.ScanFormat {
-	case kvpb.KEY_VALUES:
-		return s.index < len(s.resp.Rows)
+func (s *respIter) valid() bool {
+	switch s.method() {
+	case kvpb.Scan:
+		switch s.scanFormat() {
+		case kvpb.KEY_VALUES:
+			return s.index < len(s.scanResp.Rows)
+		default:
+			panic("unexpected")
+		}
+	case kvpb.ReverseScan:
+		switch s.scanFormat() {
+		case kvpb.KEY_VALUES:
+			return s.index < len(s.reverseScanResp.Rows)
+		default:
+			panic("unexpected")
+		}
 	default:
 		panic("unexpected")
 	}
 }
 
 // reset re-positions the iterator to the beginning of the response.
-func (s *scanRespIter) reset() {
+func (s *respIter) reset() {
 	s.index = 0
 }
 
 // scanFormat returns the scan format of the request/response.
-func (s *scanRespIter) scanFormat() kvpb.ScanFormat {
-	return s.req.ScanFormat
+func (s *respIter) scanFormat() kvpb.ScanFormat {
+	switch s.method() {
+	case kvpb.Scan:
+		return s.scanReq.ScanFormat
+	case kvpb.ReverseScan:
+		return s.reverseScanReq.ScanFormat
+	default:
+		panic("unexpected")
+	}
 }
 
 // startKey returns the start key of the request in response to which the
 // iterator was created.
-func (s *scanRespIter) startKey() roachpb.Key {
-	return s.req.Key
+func (s *respIter) startKey() roachpb.Key {
+	switch s.method() {
+	case kvpb.Scan:
+		return s.scanReq.Key
+	case kvpb.ReverseScan:
+		return s.reverseScanReq.Key
+	default:
+		panic("unexpected")
+	}
 }
 
 // endKey returns the end key of the request in response to which the iterator
 // was created.
-func (s *scanRespIter) endKey() roachpb.Key {
-	return s.req.EndKey
+func (s *respIter) endKey() roachpb.Key {
+	switch s.method() {
+	case kvpb.Scan:
+		return s.scanReq.EndKey
+	case kvpb.ReverseScan:
+		return s.reverseScanReq.EndKey
+	default:
+		panic("unexpected")
+	}
 }
 
 // seq returns the sequence number of the request in response to which the
 // iterator was created.
-func (s *scanRespIter) seq() enginepb.TxnSeq {
-	return s.req.Sequence
-}
-
-// scanRespMerger encapsulates state to combine a ScanResponse, returned by the
-// KV layer, with any overlapping buffered writes to correctly uphold
-// read-your-own-write semantics. It can be used to accumulate a response when
-// merging a ScanResponse with buffered writes.
-type scanRespMerger struct {
-	serverRespIter *scanRespIter
-	resp           *kvpb.ScanResponse
-	respIdx        int
-}
-
-// makeScanRespMerger constructs and returns a new scanRespMerger.
-func makeScanRespMerger(serverSideRespIter *scanRespIter, size int) scanRespMerger {
-	resp := serverSideRespIter.resp.ShallowCopy().(*kvpb.ScanResponse)
-	switch serverSideRespIter.scanFormat() {
-	case kvpb.KEY_VALUES:
-		resp.Rows = make([]roachpb.KeyValue, size)
+func (s *respIter) seq() enginepb.TxnSeq {
+	switch s.method() {
+	case kvpb.Scan:
+		return s.scanReq.Sequence
+	case kvpb.ReverseScan:
+		return s.reverseScanReq.Sequence
 	default:
 		panic("unexpected")
 	}
-	return scanRespMerger{
+}
+
+func (s *respIter) method() kvpb.Method {
+	switch {
+	case s.scanReq != nil:
+		return kvpb.Scan
+	case s.reverseScanReq != nil:
+		return kvpb.ReverseScan
+	default:
+		panic("unexpected")
+	}
+}
+
+// respMerger encapsulates state to combine a {,Reverse}ScanResponse, returned
+// by the KV layer, with any overlapping buffered writes to correctly uphold
+// read-your-own-write semantics. It can be used to accumulate a response when
+// merging a {,Reverse}ScanResponse with buffered writes.
+type respMerger struct {
+	serverRespIter *respIter
+	// We should only ever be accumulating either one of scanResp or
+	// reverseScanResp; the other field should be nil.
+	scanResp        *kvpb.ScanResponse
+	reverseScanResp *kvpb.ReverseScanResponse
+	respIdx         int
+}
+
+// makeRespMerger constructs and returns a new respMerger.
+func makeRespMerger(serverSideRespIter *respIter, size int) respMerger {
+	m := respMerger{
 		serverRespIter: serverSideRespIter,
-		resp:           resp,
 		respIdx:        0,
 	}
+	switch serverSideRespIter.method() {
+	case kvpb.Scan:
+		resp := serverSideRespIter.scanResp.ShallowCopy().(*kvpb.ScanResponse)
+		switch serverSideRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			resp.Rows = make([]roachpb.KeyValue, size)
+		default:
+			panic("unexpected")
+		}
+		m.scanResp = resp
+	case kvpb.ReverseScan:
+		resp := serverSideRespIter.reverseScanResp.ShallowCopy().(*kvpb.ReverseScanResponse)
+		switch serverSideRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			resp.Rows = make([]roachpb.KeyValue, size)
+		default:
+			panic("unexpected")
+		}
+		m.reverseScanResp = resp
+	default:
+		panic("unexpected")
+	}
+	return m
 }
 
 // acceptKV takes a key and a value (presumably from the write buffer) and adds
 // it to the result set.
-func (m *scanRespMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
-	switch m.serverRespIter.scanFormat() {
-	case kvpb.KEY_VALUES:
-		m.resp.Rows[m.respIdx] = roachpb.KeyValue{
-			Key:   key,
-			Value: *value,
+func (m *respMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
+	switch m.serverRespIter.method() {
+	case kvpb.Scan:
+		switch m.serverRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			m.scanResp.Rows[m.respIdx] = roachpb.KeyValue{
+				Key:   key,
+				Value: *value,
+			}
+		default:
+			panic("unexpected")
 		}
-	default:
-		panic("unexpected")
+	case kvpb.ReverseScan:
+		switch m.serverRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			m.reverseScanResp.Rows[m.respIdx] = roachpb.KeyValue{
+				Key:   key,
+				Value: *value,
+			}
+		default:
+			panic("unexpected")
+		}
 	}
 	m.respIdx++
 }
@@ -985,26 +1191,53 @@ func (m *scanRespMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
 //
 // Note that the iterator is not moved forward after accepting the response; the
 // responsibility of doing so, if desired, is the caller's.
-func (m *scanRespMerger) acceptServerResp() {
-	switch m.serverRespIter.scanFormat() {
-	case kvpb.KEY_VALUES:
-		m.resp.Rows[m.respIdx] = m.serverRespIter.resp.Rows[m.serverRespIter.index]
+func (m *respMerger) acceptServerResp() {
+	switch m.serverRespIter.method() {
+	case kvpb.Scan:
+		switch m.serverRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			m.scanResp.Rows[m.respIdx] = m.serverRespIter.scanResp.Rows[m.serverRespIter.index]
+		default:
+			panic("unexpected")
+		}
+	case kvpb.ReverseScan:
+		switch m.serverRespIter.scanFormat() {
+		case kvpb.KEY_VALUES:
+			m.reverseScanResp.Rows[m.respIdx] = m.serverRespIter.reverseScanResp.Rows[m.serverRespIter.index]
+		default:
+			panic("unexpected")
+		}
 	default:
 		panic("unexpected")
 	}
 	m.respIdx++
 }
 
-// toResp returns the final merged response.
-func (m *scanRespMerger) toResp() *kvpb.ScanResponse {
+// toScanResp returns the final merged ScanResponse.
+func (m *respMerger) toScanResp() *kvpb.ScanResponse {
+	assertTrue(m.serverRespIter.method() == kvpb.Scan, "weren't accumulating a scan resp")
 	// If we've done everything correctly, resIdx == len(response rows).
 	switch m.serverRespIter.scanFormat() {
 	case kvpb.KEY_VALUES:
-		assertTrue(m.respIdx == len(m.resp.Rows), "did not fill in all rows; did we miscount?")
+		assertTrue(m.respIdx == len(m.scanResp.Rows), "did not fill in all rows; did we miscount?")
 	default:
 		panic("unexpected")
 	}
-	return m.resp
+	return m.scanResp
+}
+
+// toReverseScanResp returns the final merged ScanResponse.
+func (m *respMerger) toReverseScanResp() *kvpb.ReverseScanResponse {
+	assertTrue(m.serverRespIter.method() == kvpb.ReverseScan,
+		"weren't accumulating a reverse scan resp")
+	// If we've done everything correctly, resIdx == len(response rows).
+	switch m.serverRespIter.scanFormat() {
+	case kvpb.KEY_VALUES:
+		assertTrue(m.respIdx == len(m.reverseScanResp.Rows), "did not fill in all rows; did we miscount?")
+	default:
+		panic("unexpected")
+	}
+	return m.reverseScanResp
 }
 
 // assertTrue panics with a message if the supplied condition isn't true.
