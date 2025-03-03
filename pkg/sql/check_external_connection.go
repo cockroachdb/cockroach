@@ -58,8 +58,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 	defer store.Close()
 
 	dsp := params.p.DistSQLPlanner()
-	evalCtx := params.extendedEvalCtx
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, params.ExecCfg())
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, params.extendedEvalCtx, params.ExecCfg())
 	if err != nil {
 		return err
 	}
@@ -109,13 +108,14 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 			nil, /* rangeCache */
 			nil, /* txn - the flow does not read or write the database */
 			nil, /* clockUpdater */
-			evalCtx.Tracing,
+			params.extendedEvalCtx.Tracing,
 		)
 		defer recv.Release()
 		defer close(n.rows)
 
-		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, nil, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := params.extendedEvalCtx.Context.Copy()
+		dsp.Run(ctx, planCtx, nil, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	}()
 	return nil
 }
