@@ -101,14 +101,20 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		}
 	}
 
+	// We need the view query to include user-defined types as a 3-part name to
+	// properly detect cross-database type access.
+	fmtFlags := tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames
+	if cv.Materialized {
+		// Don't include any AS OF SYSTEM TIME clauses here: our materialized view
+		// shouldn't get refreshed as of a particular time.
+		fmtFlags = fmtFlags | tree.FmtSkipAsOfSystemTimeClauses
+	}
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Syntax: cv,
-			Schema: schID,
-			// We need the view query to include user-defined types as a 3-part name to
-			// properly detect cross-database type access.
-			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable|tree.FmtAlwaysQualifyUserDefinedTypeNames),
+			Syntax:    cv,
+			Schema:    schID,
+			ViewQuery: tree.AsStringWithFlags(cv.AsSource, fmtFlags),
 			Columns:   p,
 			Deps:      b.schemaDeps,
 			TypeDeps:  b.schemaTypeDeps,

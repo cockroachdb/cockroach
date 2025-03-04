@@ -1485,9 +1485,11 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 	// We need to look at the original statement to know if the AOST clause was
 	// specified for a backfill, This must be set correctly in order to pass
 	// the validations below.
-	switch b.stmt.(type) {
-	case *tree.CreateTable:
+	switch s := b.stmt.(type) {
+	case *tree.CreateTable, *tree.RefreshMaterializedView:
 		asOf.ForBackfill = true
+	case *tree.CreateView:
+		asOf.ForBackfill = s.Materialized
 	}
 
 	if b.evalCtx.AsOfSystemTime == nil {
