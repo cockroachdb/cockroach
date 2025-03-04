@@ -1,10 +1,10 @@
 {{- range .GitHubSummaryData}}
 <details><summary><strong>{{.BenchmarkStatus}} {{.DisplayName}}</strong> [{{.Labels}}]</summary>
 
-| Metric                      | Old Commit     | New Commit     | Delta      | Note         | Threshold      |
-|-----------------------------|----------------|----------------|------------|--------------|----------------|
+| Metric                      | Old Commit     | New Commit     | Delta      | Note         |
+|-----------------------------|----------------|----------------|------------|--------------|
 {{- range .Summaries}}
-| {{.Status}} **{{.Metric}}** | {{.OldCenter}} | {{.NewCenter}} | {{.Delta}} | {{.Note}}    | {{.Threshold}} |
+| {{.Status}} **{{.Metric}}** | {{.OldCenter}} | {{.NewCenter}} | {{.Delta}} | {{.Note}}    |
 {{- end}}
 
 <details><summary>Reproduce</summary>
