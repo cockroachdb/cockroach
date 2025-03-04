@@ -493,6 +493,20 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			annotateNodeForTable(e.Table)
 		case *memo.VectorSearchExpr:
 			annotateNodeForTable(e.Table)
+		case *memo.InsertExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.UpdateExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.DeleteExpr:
+			// If the input is a scan, which is the case for a delete range, use the
+			// table ID that comes from that scan.
+			if scan, ok := e.Input.(*memo.ScanExpr); ok {
+				annotateNodeForTable(scan.Table)
+			} else {
+				annotateNodeForTable(e.Table)
+			}
+		case *memo.UpsertExpr:
+			annotateNodeForTable(e.Table)
 		}
 	}
 }
