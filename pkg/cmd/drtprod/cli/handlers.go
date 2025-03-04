@@ -8,6 +8,8 @@ package cli
 import (
 	"context"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli/commands"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
@@ -20,6 +22,18 @@ func init() {
 	_ = os.Setenv("ROACHPROD_GCE_DNS_DOMAIN", "drt.crdb.io")
 	_ = os.Setenv("ROACHPROD_GCE_DNS_ZONE", "drt")
 	_ = os.Setenv("ROACHPROD_GCE_DEFAULT_PROJECT", "cockroach-drt")
+
+	if _, exists := os.LookupEnv("DD_API_KEY"); !exists {
+		// set the DD_API_KEY if we are able to fetch it from the secrets.
+		// this is for audit logging all events by drtprod
+		cmd := exec.Command("gcloud", "--project=cockroach-drt", "secrets", "versions", "access", "latest",
+			"--secret", "datadog-api-key")
+		output, err := cmd.Output()
+		if err == nil && string(output) != "" {
+			// std output has the new line in the end. That is trimmed.
+			_ = os.Setenv("DD_API_KEY", strings.TrimRight(string(output), "\n"))
+		}
+	}
 }
 
 // Initialize sets up the environment and initializes the command-line interface.
