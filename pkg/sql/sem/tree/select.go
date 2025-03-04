@@ -239,8 +239,10 @@ type AsOfClause struct {
 
 // Format implements the NodeFormatter interface.
 func (a *AsOfClause) Format(ctx *FmtCtx) {
-	ctx.WriteString("AS OF SYSTEM TIME ")
-	ctx.FormatNode(a.Expr)
+	if !ctx.flags.HasFlags(FmtSkipAsOfSystemTimeClauses) {
+		ctx.WriteString("AS OF SYSTEM TIME ")
+		ctx.FormatNode(a.Expr)
+	}
 }
 
 // From represents a FROM clause.

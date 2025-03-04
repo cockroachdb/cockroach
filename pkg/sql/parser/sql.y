@@ -3355,14 +3355,15 @@ alter_attribute_action:
 // %Help: REFRESH - recalculate a materialized view
 // %Category: Misc
 // %Text:
-// REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name [WITH [NO] DATA]
+// REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name [AS OF SYSTEM TIME <expr>>] [WITH [NO] DATA]
 refresh_stmt:
-  REFRESH MATERIALIZED VIEW opt_concurrently view_name opt_clear_data
+  REFRESH MATERIALIZED VIEW opt_concurrently view_name opt_as_of_clause opt_clear_data
   {
     $$.val = &tree.RefreshMaterializedView{
       Name: $5.unresolvedObjectName(),
       Concurrently: $4.bool(),
-      RefreshDataOption: $6.refreshDataOption(),
+      AsOf: $6.asOfClause(),
+      RefreshDataOption: $7.refreshDataOption(),
     }
   }
 | REFRESH error // SHOW HELP: REFRESH

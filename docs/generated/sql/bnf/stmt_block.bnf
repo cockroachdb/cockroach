@@ -148,7 +148,7 @@ release_stmt ::=
 	'RELEASE' savepoint_name
 
 refresh_stmt ::=
-	'REFRESH' 'MATERIALIZED' 'VIEW' opt_concurrently view_name opt_clear_data
+	'REFRESH' 'MATERIALIZED' 'VIEW' opt_concurrently view_name opt_as_of_clause opt_clear_data
 
 nonpreparable_set_stmt ::=
 	set_transaction_stmt
@@ -462,6 +462,10 @@ opt_concurrently ::=
 view_name ::=
 	table_name
 
+opt_as_of_clause ::=
+	as_of_clause
+	| 
+
 opt_clear_data ::=
 	'WITH' 'DATA'
 	| 'WITH' 'NO' 'DATA'
@@ -571,10 +575,6 @@ sconst_or_placeholder ::=
 string_or_placeholder_opt_list ::=
 	string_or_placeholder
 	| '(' string_or_placeholder_list ')'
-
-opt_as_of_clause ::=
-	as_of_clause
-	| 
 
 opt_with_backup_options ::=
 	'WITH' backup_options_list
@@ -1652,6 +1652,9 @@ type_name_list ::=
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
+as_of_clause ::=
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
+
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
@@ -1799,9 +1802,6 @@ set_or_reset_clause ::=
 	'SET' set_rest
 	| 'RESET_ALL' 'ALL'
 	| 'RESET' session_var
-
-as_of_clause ::=
-	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
 backup_options_list ::=
 	( backup_options ) ( ( ',' backup_options ) )*

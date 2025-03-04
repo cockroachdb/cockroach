@@ -2224,6 +2224,7 @@ func (p *planner) EvalAsOfTimestamp(
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
 func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSystemTime, error) {
 	var asOf tree.AsOfClause
+	var forBackfill bool
 	switch s := stmt.(type) {
 	case *tree.Select:
 		selStmt := s.Select
@@ -2268,6 +2269,27 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 			ts.ForBackfill = true
 		}
 		return ts, nil
+	case *tree.CreateView:
+		if !s.Materialized {
+			return nil, nil
+		}
+		// N.B.: If the AS OF SYSTEM TIME value here is older than the most recent
+		// schema change to any of the tables that the view depends on, we should
+		// reject this update.
+		ts, err := p.isAsOf(ctx, s.AsSource)
+		if err != nil {
+			return nil, err
+		}
+		if ts != nil {
+			ts.ForBackfill = true
+		}
+		return ts, nil
+	case *tree.RefreshMaterializedView:
+		if s.AsOf.Expr == nil {
+			return nil, nil
+		}
+		asOf = s.AsOf
+		forBackfill = true
 	default:
 		return nil, nil
 	}
@@ -2275,6 +2297,7 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 	if err != nil {
 		return nil, err
 	}
+	asOfRet.ForBackfill = forBackfill
 	return &asOfRet, err
 }
 
