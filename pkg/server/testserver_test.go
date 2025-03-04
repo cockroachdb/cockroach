@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -49,9 +48,6 @@ func BenchmarkTestServerStartup(b *testing.B) {
 						},
 					},
 				}
-				// Disable leader fortification as it currently causes large variability in runtime.
-				kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
-
 				s := serverutils.StartServerOnly(b, args)
 				s.Stopper().Stop(context.Background())
 			}
@@ -77,8 +73,6 @@ func TestServerStartup(t *testing.T) {
 			DefaultTestTenant: tc.tenantOpt,
 			Settings:          cluster.MakeTestingClusterSettings(),
 		}
-		// Disable leader fortification as it currently causes large variability in runtime.
-		kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
 
 		t.Run(tc.name, func(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "slim", func(t *testing.T, useSlimServer bool) {
