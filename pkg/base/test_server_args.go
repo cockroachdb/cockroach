@@ -169,6 +169,52 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	SlimTestSeverConfig *SlimTestServerConfig
+}
+
+type slimOptions struct {
+	EnableSpanConfigJob bool
+	EnableAutoStats     bool
+	EnableTimeseries    bool
+}
+
+type SlimServerOption func(*slimOptions)
+
+func WithSpanConfigJob() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableSpanConfigJob = true
+	}
+}
+
+func WithAutoStats() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAutoStats = true
+	}
+}
+
+func WithTimeseries() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableTimeseries = true
+	}
+}
+
+func processOptions(opts []SlimServerOption) *slimOptions {
+	ret := &slimOptions{}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
+}
+
+func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
+	a.SlimTestSeverConfig = &SlimTestServerConfig{
+		Options: *processOptions(opts),
+	}
+}
+
+type SlimTestServerConfig struct {
+	Options slimOptions
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

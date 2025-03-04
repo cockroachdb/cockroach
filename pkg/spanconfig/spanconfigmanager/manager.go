@@ -38,7 +38,7 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 //
 // TODO(irfansharif): This should be a tenant read-only setting once the work
 // for #73349 is completed.
-var jobEnabledSetting = settings.RegisterBoolSetting(
+var JobEnabledSetting = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.enabled",
 	"enable the use of the kv accessor", true)
@@ -109,7 +109,7 @@ func (m *Manager) run(ctx context.Context) {
 	//   skip starting the reconciliation job, learning about the cluster
 	//   version shortly, and only checking the job after an interval has
 	//   passed.
-	jobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
+	JobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
@@ -124,7 +124,7 @@ func (m *Manager) run(ctx context.Context) {
 			fn()
 		}
 
-		if !jobEnabledSetting.Get(&m.settings.SV) {
+		if !JobEnabledSetting.Get(&m.settings.SV) {
 			return
 		}
 

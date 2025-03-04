@@ -293,6 +293,24 @@ func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterf
 	return s
 }
 
+var ConfigureSlimTestServer func(params base.TestServerArgs) base.TestServerArgs
+
+func StartSlimServerOnly(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) TestServerInterface {
+	params.SlimServerConfig(slimOpts...)
+	return StartServerOnly(t, params)
+}
+
+func StartSlimServer(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartSlimServerOnly(t, params, slimOpts...)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
+}
+
 // StartServer creates and starts a test server.
 // The returned server should be stopped by calling
 // server.Stopper().Stop().
