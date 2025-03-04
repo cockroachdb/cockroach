@@ -340,6 +340,7 @@ func (ds *ServerImpl) setupFlow(
 			Regions:                   &faketreeeval.DummyRegionOperator{},
 			Txn:                       leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
+			BlockingSQLLivenessReader: ds.ServerConfig.BlockingSQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
 			SchemaTelemetryController: ds.ServerConfig.SchemaTelemetryController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
