@@ -24,6 +24,7 @@ type Putter interface {
 	Put(key, value interface{})
 	PutMustAcquireExclusiveLock(key, value interface{})
 	Del(key ...interface{})
+	DelMustAcquireExclusiveLock(key ...interface{})
 
 	CPutBytesEmpty(kys []roachpb.Key, values [][]byte)
 	CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value)
@@ -65,6 +66,11 @@ func (t *TracePutter) PutMustAcquireExclusiveLock(key, value interface{}) {
 func (t *TracePutter) Del(key ...interface{}) {
 	log.VEventfDepth(t.Ctx, 1, 2, "Del %v", key...)
 	t.Putter.Del(key...)
+}
+
+func (t *TracePutter) DelMustAcquireExclusiveLock(key ...interface{}) {
+	log.VEventfDepth(t.Ctx, 1, 2, "Del (locking) %v", key...)
+	t.Putter.DelMustAcquireExclusiveLock(key...)
 }
 
 func (t *TracePutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
@@ -193,6 +199,10 @@ func (s *SortingPutter) Del(key ...interface{}) {
 	s.Putter.Del(key...)
 }
 
+func (s *SortingPutter) DelMustAcquireExclusiveLock(key ...interface{}) {
+	s.Putter.DelMustAcquireExclusiveLock(key...)
+}
+
 func (s *SortingPutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
 	kvs := KVBytes{Keys: kys, Values: values}
 	sort.Sort(&kvs)
@@ -288,6 +298,10 @@ func (k *KVBatchAdapter) PutMustAcquireExclusiveLock(key, value interface{}) {
 
 func (k *KVBatchAdapter) Del(key ...interface{}) {
 	k.Batch.Del(key...)
+}
+
+func (k *KVBatchAdapter) DelMustAcquireExclusiveLock(key ...interface{}) {
+	k.Batch.DelMustAcquireExclusiveLock(key...)
 }
 
 func (k *KVBatchAdapter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
