@@ -31,11 +31,12 @@ type queryCounter struct {
 	selectCount                     int64
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
-	fallbackCount                   int64
 	updateCount                     int64
 	insertCount                     int64
 	deleteCount                     int64
 	ddlCount                        int64
+	callSPCount                     int64
+	callSPExecutedCount             int64
 	miscCount                       int64
 	miscExecutedCount               int64
 	copyCount                       int64
@@ -66,6 +67,10 @@ func TestQueryCounts(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+
+	if _, err := sqlDB.Exec("CREATE PROCEDURE p_select() LANGUAGE SQL AS 'SELECT 1'"); err != nil {
+		t.Fatal(err)
+	}
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -107,17 +112,18 @@ func TestQueryCounts(t *testing.T) {
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
 		{
-			query:       "BEGIN; SET LOCAL statement_timeout = '10ms'; SELECT pg_sleep(10)",
+			query:       "BEGIN; SET LOCAL statement_timeout = '100ms'; SELECT pg_sleep(10)",
 			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
 			miscExecutedCount: 1, failureCount: 1, statementTimeoutCount: 1,
 			txnRollbackCount: 1, txnAbortCount: 1,
 		},
 		{
-			query:       "BEGIN; SET LOCAL transaction_timeout = '10ms'; SELECT pg_sleep(10)",
+			query:       "BEGIN; SET LOCAL transaction_timeout = '100ms'; SELECT pg_sleep(10)",
 			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
 			miscExecutedCount: 1, failureCount: 1, transactionTimeoutCount: 1,
 			txnRollbackCount: 1, txnAbortCount: 1,
 		},
+		{query: "CALL p_select()", callSPCount: 1, callSPExecutedCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -131,7 +137,7 @@ func TestQueryCounts(t *testing.T) {
 			// to set up for the next test.
 			if tc.txnBeginCount > 0 && tc.expectError {
 				if _, err := sqlDB.Exec("ABORT"); err != nil {
-					t.Fatalf("unexpected error when attempt to abort opened txn: %s'", err)
+					t.Fatalf("unexpected error when attempting to abort opened txn: %s'", err)
 				}
 			}
 
@@ -171,6 +177,12 @@ func TestQueryCounts(t *testing.T) {
 			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdlStarted, accum.ddlCount, tc.ddlCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
+			if accum.callSPCount, err = checkCounterDelta(s, sql.MetaCallStoredProcStarted, accum.callSPCount, tc.callSPCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.callSPExecutedCount, err = checkCounterDelta(s, sql.MetaCallStoredProcExecuted, accum.callSPExecutedCount, tc.callSPExecutedCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
 			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMiscStarted, accum.miscCount, tc.miscCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
@@ -181,9 +193,6 @@ func TestQueryCounts(t *testing.T) {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
-				t.Errorf("%q: %s", tc.query, err)
-			}
-			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {

@@ -1738,8 +1738,6 @@ var cockroachdbMetrics = map[string]string{
 	"sql_misc_started_count":                                      "sql.misc.started.count",
 	"sql_misc_started_count_internal":                             "sql.misc.started.internal",
 	"sql_new_conns":                                               "sql.new_conns",
-	"sql_optimizer_fallback_count":                                "sql.optimizer.fallback.count",
-	"sql_optimizer_fallback_count_internal":                       "sql.optimizer.fallback.internal",
 	"sql_optimizer_plan_cache_hits":                               "sql.optimizer.plan_cache.hits",
 	"sql_optimizer_plan_cache_hits_internal":                      "sql.optimizer.plan_cache.hits.internal",
 	"sql_optimizer_plan_cache_misses":                             "sql.optimizer.plan_cache.misses",
