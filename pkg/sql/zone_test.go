@@ -26,7 +26,7 @@ func TestValidSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -95,6 +95,8 @@ func TestValidSetShowZones(t *testing.T) {
 		Config: partialZoneOverride,
 	}
 
+	includeMetaRange := !s.StartedDefaultTestTenant()
+
 	// Remove stock zone configs installed at cluster bootstrap. Otherwise this
 	// test breaks whenever these stock zone configs are adjusted.
 	sqlutils.RemoveAllZoneConfigs(t, sqlDB)
@@ -112,7 +114,9 @@ func TestValidSetShowZones(t *testing.T) {
 	// no other zones.
 	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE d", gcOverride)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialDbRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	if includeMetaRange {
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
@@ -121,26 +125,34 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure a table zone config applies to that table and no others.
 	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t", gcOverride)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialDbRow, partialTableRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	if includeMetaRange {
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
 
-	// Ensure a named zone config applies to that named zone and no others.
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", gcOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialMetaRow, partialDbRow, partialTableRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	if includeMetaRange {
+		// Ensure a named zone config applies to that named zone and no others.
+		sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", gcOverride)
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialMetaRow, partialDbRow, partialTableRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	}
 
 	// Ensure updating the default zone propagates to zones without an override,
 	// but not to those with overrides.
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", gcOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialDbRow, partialTableRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
+	if includeMetaRange {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialDbRow, partialTableRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
+	} else {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialDbRow, partialTableRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultOverrideRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultOverrideRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
@@ -149,22 +161,34 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure deleting a database deletes only the database zone, and not the
 	// table zone.
 	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialTableRow)
+	if includeMetaRange {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialTableRow)
+	} else {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialTableRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultOverrideRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
 
 	// Ensure deleting a table zone works.
 	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow)
+	if includeMetaRange {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow)
+	} else {
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultOverrideRow)
 
-	// Ensure deleting a named zone works.
-	sqlutils.DeleteZoneConfig(t, sqlDB, "RANGE meta")
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultOverrideRow)
+	if includeMetaRange {
+		// Ensure deleting a named zone works.
+		sqlutils.DeleteZoneConfig(t, sqlDB, "RANGE meta")
+		sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow)
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultOverrideRow)
+	}
 
 	// Ensure deleting non-overridden zones is not an error.
-	sqlutils.DeleteZoneConfig(t, sqlDB, "RANGE meta")
+	if includeMetaRange {
+		sqlutils.DeleteZoneConfig(t, sqlDB, "RANGE meta")
+	}
 	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
 	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
 
@@ -173,7 +197,9 @@ func TestValidSetShowZones(t *testing.T) {
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", gcDefault)
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE default", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	if includeMetaRange {
+		sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
+	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
