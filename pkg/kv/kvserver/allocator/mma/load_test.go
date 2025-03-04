@@ -81,10 +81,10 @@ func TestMeansMemo(t *testing.T) {
 					StoreID:         desc.StoreID,
 					StoreDescriptor: desc,
 					NodeID:          desc.Node.NodeID,
-					reportedLoad:    loadVector{loadValue(cpuLoad), loadValue(wbLoad), loadValue(bsLoad)},
-					capacity: loadVector{
-						loadValue(cpuCapacity), loadValue(wbCapacity), loadValue(bsCapacity)},
-					reportedSecondaryLoad: secondaryLoadVector{loadValue(leaseCountLoad)},
+					reportedLoad:    LoadVector{LoadValue(cpuLoad), LoadValue(wbLoad), LoadValue(bsLoad)},
+					capacity: LoadVector{
+						LoadValue(cpuCapacity), LoadValue(wbCapacity), LoadValue(bsCapacity)},
+					reportedSecondaryLoad: secondaryLoadVector{LoadValue(leaseCountLoad)},
 				}
 				for i := range sLoad.capacity {
 					if sLoad.capacity[i] < 0 {
@@ -103,8 +103,8 @@ func TestMeansMemo(t *testing.T) {
 				d.ScanArgs(t, "cpu-capacity", &cpuCapacity)
 				nLoad := &nodeLoad{
 					nodeID:      roachpb.NodeID(nodeID),
-					reportedCPU: loadValue(cpuLoad),
-					capacityCPU: loadValue(cpuCapacity),
+					reportedCPU: LoadValue(cpuLoad),
+					capacityCPU: LoadValue(cpuCapacity),
 				}
 				loadProvider.nloads[nLoad.nodeID] = nLoad
 				return ""
@@ -125,12 +125,12 @@ func TestMeansMemo(t *testing.T) {
 				printPostingList(&b, mss.stores)
 				fmt.Fprintf(&b, "\nstore-means (load,cap,util): ")
 				for i := range mss.storeLoad.load {
-					switch loadDimension(i) {
-					case cpu:
+					switch LoadDimension(i) {
+					case CPURate:
 						fmt.Fprintf(&b, "cpu: ")
-					case writeBandwidth:
+					case WriteBandwidth:
 						fmt.Fprintf(&b, " write-bw: ")
-					case byteSize:
+					case ByteSize:
 						fmt.Fprintf(&b, " bytes: ")
 					}
 					capacity := mss.storeLoad.capacity[i]
