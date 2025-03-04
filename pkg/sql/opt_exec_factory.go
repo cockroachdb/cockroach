@@ -1370,7 +1370,7 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 }
 
 func ordinalsToIndexes(table cat.Table, ords cat.IndexOrdinals) []catalog.Index {
-	if ords == nil {
+	if len(ords) == 0 {
 		return nil
 	}
 
@@ -1562,6 +1562,7 @@ func (ef *execFactory) ConstructUpdate(
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// TODO(radu): the execution code has an annoying limitation that the fetch
@@ -1586,6 +1587,7 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
+		ordinalsToIndexes(table, lockedIndexes),
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1660,6 +1662,7 @@ func (ef *execFactory) ConstructUpsert(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1694,6 +1697,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
 		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
+		ordinalsToIndexes(table, lockedIndexes),
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1760,6 +1764,7 @@ func (ef *execFactory) ConstructDelete(
 	fetchColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1772,6 +1777,7 @@ func (ef *execFactory) ConstructDelete(
 	rd := row.MakeDeleter(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
+		ordinalsToIndexes(table, lockedIndexes),
 		fetchCols,
 		&ef.planner.ExecCfg().Settings.SV,
 		internal,

@@ -2953,8 +2953,8 @@ func indexTruncateInTxn(
 	for done := false; !done; done = sp.Key == nil {
 		internal := evalCtx.SessionData().Internal
 		rd := row.MakeDeleter(
-			execCfg.Codec, tableDesc, nil /* requestedCols */, &execCfg.Settings.SV, internal,
-			execCfg.GetRowMetrics(internal),
+			execCfg.Codec, tableDesc, nil /* lockedIndexes */, nil, /* requestedCols */
+			&execCfg.Settings.SV, internal, execCfg.GetRowMetrics(internal),
 		)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn.KV(), evalCtx); err != nil {
