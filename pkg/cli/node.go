@@ -8,7 +8,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"reflect"
@@ -610,29 +609,23 @@ func runDecommissionNodeImpl(
 					)
 					continue
 				}
-				drainReq := &serverpb.DrainRequest{
-					Shutdown: false,
-					DoDrain:  true,
-					NodeId:   targetNode.String(),
-				}
-				stream, err := c.Drain(ctx, drainReq)
-				if err != nil {
-					fmt.Fprintln(stderr)
-					return errors.Wrapf(err, "while trying to drain n%d", targetNode)
-				}
+				_, _ = fmt.Fprintf(stderr, "draining node n%d\n", targetNode)
 
-				// Consume responses until the stream ends (which signals drain
-				// completion).
-				for {
-					_, err := stream.Recv()
-					if err == io.EOF {
-						// Stream gracefully closed by other side.
-						break
-					}
-					if err != nil {
-						fmt.Fprintln(stderr)
-						return errors.Wrapf(err, "while trying to drain n%d", targetNode)
-					}
+				if _, _, err := doDrain(ctx, c, targetNode.String()); err != nil {
+					// NB: doDrain already prints to stdErr.
+					//
+					// Defense in depth: in decommission invocations that don't have to
+					// do much work, if the target node was _just_ shutdown prior to
+					// starting `node decommission`, the node may be absent but the liveness
+					// status sent us here anyway. We don't want to fail out on the drain
+					// step to make the decommissioning command more robust.
+					_, _ = fmt.Fprintf(stderr,
+						"drain step for node n%d failed; decommissioning anyway\n", targetNode,
+					)
+					_ = err // discard intentionally
+				} else {
+					// NB: this output is matched on in the decommission/drains roachtest.
+					_, _ = fmt.Fprintf(stderr, "node n%d drained successfully\n", targetNode)
 				}
 			}
 
