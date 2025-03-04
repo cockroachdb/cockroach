@@ -84,6 +84,8 @@ type kv struct {
 	writeSeq                             string
 	sequential                           bool
 	zipfian                              bool
+	zipfianS                             float64
+	zipfianV                             float64
 	sfuDelay                             time.Duration
 	splits                               int
 	scatter                              bool
@@ -169,6 +171,10 @@ var kvMeta = workload.Meta{
 			`Use SFU and transactional writes with a sleep after SFU.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
+		g.flags.Float64Var(&g.zipfianS, `zipfian-s`, 1.1,
+			`Zipf parameter s (must be > 1)`)
+		g.flags.Float64Var(&g.zipfianV, `zipfian-v`, 1.0,
+			`Zipf parameter v (must be >= 1)`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
@@ -333,7 +339,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	switch {
 	case w.zipfian:
 		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
+			return newZipfianGenerator(seq, rand.New(rand.NewSource(randSeedGet())), w.zipfianS, w.zipfianV)
 		}
 		kr = keyRange{
 			min: 0,
@@ -1010,7 +1016,7 @@ type zipfGenerator struct {
 	seq       *sequence
 }
 
-func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
+func newZipfianGenerator(seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64) *zipfGenerator {
 	writeSS := writeSequenceSource{
 		sequence: seq,
 		hasher:   fnv.New64a(),
@@ -1020,8 +1026,8 @@ func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
 		hasher:   fnv.New64a(),
 	}
 	return &zipfGenerator{
-		writeZipf: rand.NewZipf(rand.New(writeSS), 1.1, 1, uint64(math.MaxInt64)),
-		readZipf:  rand.NewZipf(rand.New(readSS), 1.1, 1, uint64(math.MaxInt64)),
+		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
+		readZipf:  rand.NewZipf(rand.New(readSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
 		random:    rng,
 		seq:       seq,
 	}
