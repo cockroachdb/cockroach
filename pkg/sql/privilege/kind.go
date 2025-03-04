@@ -63,6 +63,8 @@ const (
 	REPAIRCLUSTER            Kind = 36
 	TRIGGER                  Kind = 37
 	BYPASSRLS                Kind = 38
+	REPLICATIONSOURCE        Kind = 39
+	REPLICATIONDEST          Kind = 40
 	largestKind                   = BYPASSRLS
 )
 
@@ -153,6 +155,10 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "TRIGGER"
 	case BYPASSRLS:
 		return "BYPASSRLS"
+	case REPLICATIONSOURCE:
+		return "REPLICATIONSOURCE"
+	case REPLICATIONDEST:
+		return "REPLICATIONDEST"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
