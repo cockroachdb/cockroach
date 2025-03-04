@@ -2307,7 +2307,8 @@ func (rs *replicaState) createReplicaSendStreamRaftMuLocked(
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Must be in StateReplicate on creation.
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "creating send stream %v for replica %v", rs.stream, rs.desc)
+		log.VEventf(ctx, 1, "r%v creating send stream %v for replica %v",
+			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream = &replicaSendStream{
 		parent: rs,
@@ -2695,7 +2696,8 @@ func (rs *replicaState) scheduledRaftMuLocked(
 func (rs *replicaState) closeSendStreamRaftMuLocked(ctx context.Context) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "closing send stream %v for replica %v", rs.stream, rs.desc)
+		log.VEventf(ctx, 1, "r%v closing send stream %v for replica %v",
+			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream.mu.Lock()
 	defer rs.sendStream.mu.Unlock()
