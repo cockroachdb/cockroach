@@ -114,13 +114,15 @@ func (p *provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) 
 // Create implements vm.Provider and returns Unimplemented.
 func (p *provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, providerOpts vm.ProviderOpts,
-) error {
-	return errors.Newf("%s", p.unimplemented)
+) (vm.List, error) {
+	return nil, errors.Newf("%s", p.unimplemented)
 }
 
 // Grow implements vm.Provider and returns Unimplemented.
-func (p *provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
-	return errors.Newf("%s", p.unimplemented)
+func (p *provider) Grow(
+	l *logger.Logger, vms vm.List, clusterName string, names []string,
+) (vm.List, error) {
+	return nil, errors.Newf("%s", p.unimplemented)
 }
 
 func (p *provider) Shrink(*logger.Logger, vm.List, string) error {

@@ -113,6 +113,12 @@ func loadCluster(name string) (*cloud.Cluster, error) {
 	return c, nil
 }
 
+// deleteCluster deletes the file in config.ClusterDir for a given cluster name.
+func deleteCluster(name string) error {
+	filename := clusterFilename(name)
+	return os.Remove(filename)
+}
+
 // shouldIgnoreCluster returns true if the cluster references a project that is
 // not active. This is relevant if we have a cluster that was cached when
 // another project was in use.
