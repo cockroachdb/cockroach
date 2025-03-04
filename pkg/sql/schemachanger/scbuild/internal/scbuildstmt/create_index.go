@@ -160,20 +160,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			"%s indexes can't be unique", strings.ToLower(n.Type.String())))
 	}
 
-	switch n.Type {
-	case idxtype.INVERTED:
-		b.IncrementSchemaChangeIndexCounter("inverted")
-		if len(n.Columns) > 1 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
-		}
-
-	case idxtype.VECTOR:
-		b.IncrementSchemaChangeIndexCounter("vector")
-		if len(n.Columns) > 1 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_vector")
-		}
-	}
-
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
 	idxSpec.secondary.SourceIndexID = sourceIndex.IndexID
@@ -188,6 +174,21 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Picks up any geoconfig/vecconfig parameters, hash sharded ones are
 	// picked independently.
 	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec)
+
+	switch n.Type {
+	case idxtype.INVERTED:
+		b.IncrementSchemaChangeIndexCounter("inverted")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
+		}
+
+	case idxtype.VECTOR:
+		b.IncrementSchemaChangeIndexCounter("vector")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_vector")
+		}
+	}
+
 	// Assign the secondary constraint ID now, since we may have added a check
 	// constraint earlier.
 	if idxSpec.secondary.IsUnique {
