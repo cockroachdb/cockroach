@@ -54,6 +54,8 @@ func ParseAndRequireString(
 		d, err = ParseDFloat(strings.TrimSpace(s))
 	case types.INetFamily:
 		d, err = ParseDIPAddrFromINetString(s)
+	case types.MACAddrFamily:
+		d, err = ParseDMACAddr(s)
 	case types.IntFamily:
 		d, err = ParseDInt(strings.TrimSpace(s))
 	case types.IntervalFamily:

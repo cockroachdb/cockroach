@@ -532,6 +532,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
+			c: tree.NewStrVal("08:00:2b:01:02:03"),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.INet,
+				types.TSVector, types.TSQuery, types.RefCursor, types.MACAddr),
+		},
+		{
 			c: tree.NewStrVal("111000110101"),
 			parseOptions: typeSet(
 				types.String,
@@ -543,6 +548,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.Decimal,
 				types.Interval,
 				types.Jsonb,
+				types.MACAddr,
 				types.TSVector,
 				types.TSQuery,
 				types.RefCursor,

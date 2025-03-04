@@ -502,6 +502,15 @@ var (
 		},
 	}
 
+	// MACAddr is the type representing a 6 byte MAC address.
+	MACAddr = &T{
+		InternalType: InternalType{
+			Family: MACAddrFamily,
+			Oid:    oid.T_macaddr,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Void is the type representing void.
 	Void = &T{
 		InternalType: InternalType{
@@ -584,6 +593,7 @@ var (
 		Oid,
 		Uuid,
 		INet,
+		MACAddr,
 		PGLSN,
 		RefCursor,
 		Time,
@@ -680,6 +690,10 @@ var (
 	// PGVectorArray is the type of an array value having PGVector-typed elements.
 	PGVectorArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: PGVector, Oid: oidext.T__pgvector, Locale: &emptyLocale}}
+
+	// MACAddrArray is the type of an array value having MACAddr-typed elements.
+	MACAddrArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: MACAddr, Oid: oid.T__macaddr, Locale: &emptyLocale}}
 
 	// RefCursorArray is the type of an array value having REFCURSOR-typed elements.
 	RefCursorArray = &T{InternalType: InternalType{
@@ -883,6 +897,13 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 		geoMetadata = &GeoMetadata{}
 	case GeographyFamily:
 		geoMetadata = &GeoMetadata{}
+	case MACAddrFamily:
+		switch width {
+		// The macaddr type in postgres has to be exactly 48 bits.
+		case 48:
+		default:
+			panic(errors.AssertionFailedf("invalid width %d for MACAddrFamily type", width))
+		}
 	default:
 		if width != 0 {
 			panic(errors.AssertionFailedf("type %s cannot have width", family))
@@ -1354,6 +1375,7 @@ func (t *T) Locale() string {
 //	COLLATEDSTRING: max # of characters
 //	BIT           : max # of bits
 //	VECTOR        : # of dimensions
+//	MACADDR       : # of bits (48)
 //
 // Width is always 0 for other types.
 func (t *T) Width() int32 {
@@ -1568,6 +1590,7 @@ var familyNames = map[Family]redact.SafeString{
 	IntFamily:            "int",
 	IntervalFamily:       "interval",
 	JsonFamily:           "jsonb",
+	MACAddrFamily:        "macaddr",
 	OidFamily:            "oid",
 	PGLSNFamily:          "pg_lsn",
 	PGVectorFamily:       "vector",
@@ -1649,6 +1672,9 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
+
+	case MACAddrFamily:
+		return t.SQLStandardName()
 
 	case OidFamily:
 		return t.SQLStandardName()
@@ -1838,6 +1864,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "jsonb"
 	case JsonpathFamily:
 		return "jsonpath"
+	case MACAddrFamily:
+		return "macaddr"
 	case OidFamily:
 		switch t.Oid() {
 		case oid.T_oid:
@@ -2157,7 +2185,7 @@ func (t *T) SQLStringForError() redact.RedactableString {
 		return redact.Sprint(redact.Safe(t.SQLString()))
 	case BoolFamily, IntFamily, FloatFamily, DecimalFamily, DateFamily, TimestampFamily,
 		IntervalFamily, StringFamily, BytesFamily, TimestampTZFamily, CollatedStringFamily, OidFamily,
-		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, TimeTZFamily, BitFamily,
+		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, MACAddrFamily, TimeTZFamily, BitFamily,
 		GeometryFamily, GeographyFamily, Box2DFamily, VoidFamily, EncodedKeyFamily, TSQueryFamily,
 		TSVectorFamily, AnyFamily, PGLSNFamily, PGVectorFamily, RefCursorFamily:
 		// These types do not contain other types, and do not require redaction.
@@ -3121,6 +3149,7 @@ var unreservedTypeTokens = map[string]*T{
 	"int8":       Int,
 	"int64":      Int,
 	"int2vector": Int2Vector,
+	"macaddr":    MACAddr,
 	// NOTE(sql-exp): Change the line below to Json if we support the JSON type.
 	"json":      Jsonb,
 	"jsonb":     Jsonb,
@@ -3156,7 +3185,6 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
-	"macaddr":       45813,
 	"macaddr8":      45813,
 	"money":         41578,
 	"path":          21286,
