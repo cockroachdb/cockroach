@@ -768,6 +768,18 @@ message AbortSpanEntry {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];
 }
 
+// BufferedWrite contains information about all writes buffered on the root txn
+// for a given key.
+message BufferedWrite {
+  message Val {
+    Value val = 1 [(gogoproto.nullable) = false];
+    int32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  }
+  uint64 id = 1 [(gogoproto.customname) = "ID"];
+  bytes key = 2 [(gogoproto.casttype) = "Key"];
+  repeated Val vals = 3 [(gogoproto.nullable) = false];
+}
+
 // LeafTxnInputState is the state from a transaction coordinator
 // necessary and sufficient to set up a leaf transaction coordinator
 // on another node.
@@ -796,6 +808,13 @@ message LeafTxnInputState {
   // updated via the (kv.TxnSender).Step() operation.
   int32 read_seq_num = 10 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+  // buffered_writes stores all writes that are buffered on the root txn (on the
+  // gateway node). Overlapping read requests need to be aware of these in order
+  // to support read-your-own-writes.
+  // TODO(#139060): ship only a part of the write buffer that intersects with
+  // tables that we'll be scanned by the leaf. Also consider applying the same
+  // optimization to in_flight_writes.
+  repeated BufferedWrite buffered_writes = 11 [(gogoproto.nullable) = false];
 }
 
 // LeafTxnFinalState is the state from a leaf transaction coordinator
