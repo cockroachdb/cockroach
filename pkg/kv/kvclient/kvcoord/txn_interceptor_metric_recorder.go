@@ -61,6 +61,9 @@ func (m *txnMetricRecorder) setWrapped(wrapped lockedSender) { m.wrapped = wrapp
 // populateLeafInputState is part of the txnInterceptor interface.
 func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
+// initializeLeaf is part of the txnInterceptor interface.
+func (*txnMetricRecorder) initializeLeaf(tis *roachpb.LeafTxnInputState) {}
+
 // populateLeafFinalState is part of the txnInterceptor interface.
 func (*txnMetricRecorder) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 

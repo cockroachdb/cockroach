@@ -122,7 +122,7 @@ func (s *txnSeqNumAllocator) populateLeafInputState(tis *roachpb.LeafTxnInputSta
 	tis.ReadSeqNum = s.readSeq
 }
 
-// initializeLeaf loads the read seqnum for a leaf transaction.
+// initializeLeaf is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	s.steppingMode = kv.SteppingMode(tis.SteppingModeEnabled)
 	s.readSeq = tis.ReadSeqNum

@@ -228,7 +228,60 @@ func (twb *txnWriteBuffer) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) populateLeafInputState(*roachpb.LeafTxnInputState) {}
+func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+	if !twb.enabled || twb.buffer.Len() == 0 {
+		return
+	}
+	tis.BufferedWrites = make([]roachpb.BufferedWrite, 0, twb.buffer.Len())
+	it := twb.buffer.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		bw := it.Cur()
+		// TODO(yuzefovich): optimize allocation of vals slices.
+		vals := make([]roachpb.BufferedWrite_Val, 0, len(bw.vals))
+		for _, v := range bw.vals {
+			vals = append(vals, roachpb.BufferedWrite_Val{
+				Val: v.val,
+				Seq: v.seq,
+			})
+		}
+		tis.BufferedWrites = append(tis.BufferedWrites, roachpb.BufferedWrite{
+			ID:   bw.id,
+			Key:  bw.key,
+			Vals: vals,
+		})
+	}
+}
+
+// initializeLeaf is part of the txnInterceptor interface.
+func (twb *txnWriteBuffer) initializeLeaf(tis *roachpb.LeafTxnInputState) {
+	if len(tis.BufferedWrites) == 0 {
+		// Regardless of whether the buffered writes are enabled on the root,
+		// there are no actual buffered writes, so we can disable the
+		// interceptor.
+		twb.enabled = false
+		return
+	}
+	// We have some buffered writes, so they must be enabled on the root.
+	twb.enabled = true
+	for _, bw := range tis.BufferedWrites {
+		// TODO(yuzefovich): optimize allocation of vals slices.
+		vals := make([]bufferedValue, 0, len(bw.Vals))
+		for _, bv := range bw.Vals {
+			vals = append(vals, bufferedValue{
+				val: bv.Val,
+				seq: bv.Seq,
+			})
+		}
+		twb.buffer.Set(&bufferedWrite{
+			id:   bw.ID,
+			key:  bw.Key,
+			vals: vals,
+		})
+	}
+	// Note that we'll leave bufferIDAlloc field unchanged since we can't
+	// perform any writes on the leaf, meaning that we won't add any new
+	// buffered writes to the btree.
+}
 
 // populateLeafFinalState is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
