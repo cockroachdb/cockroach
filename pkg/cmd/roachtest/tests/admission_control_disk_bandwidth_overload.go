@@ -171,9 +171,11 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 				// Allow a 5% room for error.
 				const bandwidthThreshold = bandwidthLimit * 1.05
+				const sampleCountForBW = 12
 				const collectionIntervalSeconds = 10.0
 				// Loop for ~20 minutes.
 				const numIterations = int(20 / (collectionIntervalSeconds / 60))
+				var writeBWValues []float64
 				numErrors := 0
 				numSuccesses := 0
 				for i := 0; i < numIterations; i++ {
@@ -189,10 +191,16 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 						continue
 					}
 					totalBW := writeVal + readVal
-					// TODO(aaditya): We should be asserting on total bandwidth once reads
-					// are being paced.
-					if writeVal > bandwidthThreshold {
-						t.Fatalf("write bandwidth %f exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", writeVal, bandwidthThreshold, readVal, totalBW)
+					writeBWValues = append(writeBWValues, writeVal)
+					// We want to use the mean of the last 2m of data to avoid short-lived
+					// spikes causing failures.
+					if len(writeBWValues) >= sampleCountForBW {
+						// TODO(aaditya): We should be asserting on total bandwidth once reads
+						// are being paced.
+						latestSampleMeanForBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, writeBWValues)
+						if latestSampleMeanForBW > bandwidthThreshold {
+							t.Fatalf("mean write bandwidth over the last 2m %f (last iter: %f) exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", latestSampleMeanForBW, writeVal, bandwidthThreshold, readVal, totalBW)
+						}
 					}
 					numSuccesses++
 				}
