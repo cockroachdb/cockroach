@@ -208,7 +208,7 @@ SELECT * FROM t LIMIT 2
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "full",
+	"Distribution": "local",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
@@ -246,7 +246,7 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "full",
+	"Distribution": "local",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
@@ -260,7 +260,7 @@ BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "full",
+	"Distribution": "local",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQQAAAAAAg==",
 	"ScanCount": 1,
