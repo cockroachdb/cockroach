@@ -133,22 +133,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
-	// Inverted indexes do not support hash sharding or unique.
-	if n.Inverted {
-		if n.Sharded != nil {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
-		}
-		if len(n.Storing) > 0 {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
-		}
-		if n.Unique {
-			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
-		}
-		b.IncrementSchemaChangeIndexCounter("inverted")
-		if len(n.Columns) > 1 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
-		}
-	}
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
 		case *scpb.TableLocalityGlobal, *scpb.TableLocalityPrimaryRegion, *scpb.TableLocalitySecondaryRegion:
@@ -183,6 +167,24 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Picks up any geoconfig parameters, hash sharded one are
 	// picked independently.
 	maybeApplyStorageParameters(b, n, &idxSpec)
+
+	// Inverted indexes do not support hash sharding or unique.
+	if n.Inverted {
+		if n.Sharded != nil {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
+		}
+		if len(n.Storing) > 0 {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
+		}
+		if n.Unique {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
+		}
+		b.IncrementSchemaChangeIndexCounter("inverted")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
+		}
+	}
+
 	// Assign the secondary constraint ID now, since we may have added a check
 	// constraint earlier.
 	if idxSpec.secondary.IsUnique {
