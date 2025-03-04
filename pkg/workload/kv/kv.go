@@ -12,11 +12,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+	"hash/fnv"
 	"math"
 	"math/big"
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -99,6 +101,21 @@ func init() {
 	workload.Register(kvMeta)
 }
 
+var (
+	randSeed struct {
+		once sync.Once
+		v    int64
+	}
+)
+
+func randSeedGet() int64 {
+	randSeed.once.Do(func() {
+		randSeed.v = RandomSeed.Seed()
+	})
+
+	return randSeed.v
+}
+
 var kvMeta = workload.Meta{
 	Name:        `kv`,
 	Description: `KV reads and writes to keys spread randomly across the cluster.`,
@@ -156,8 +173,8 @@ var kvMeta = workload.Meta{
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
 			`Initial write sequence value. Can be used to use the data produced by a previous run. `+
-				`It has to be of the form (R|S)<number>, where S implies that it was taken from a `+
-				`previous --sequential run and R implies a previous random run.`)
+				`It has to be of the form (R|S|Z)<number>, where S implies that it was taken from a `+
+				`previous --sequential run, R implies a previous random run, and Z implies a previous zipfian run.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false,
@@ -316,7 +333,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	switch {
 	case w.zipfian:
 		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newZipfianGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
 		}
 		kr = keyRange{
 			min: 0,
@@ -324,7 +341,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	case w.sequential:
 		gen = func() keyGenerator {
-			return newSequentialGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newSequentialGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
 		}
 		kr = keyRange{
 			min: 0,
@@ -332,7 +349,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	default:
 		gen = func() keyGenerator {
-			return newHashGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newHashGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
 		}
 		kr = keyRange{
 			min: math.MinInt64,
@@ -429,7 +446,7 @@ func (w *kv) Tables() []workload.Table {
 				valCol := cb.ColVec(1).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it.
 				valCol.Reset()
-				rndBlock := rand.New(rand.NewSource(RandomSeed.Seed()))
+				rndBlock := rand.New(rand.NewSource(randSeedGet()))
 
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
@@ -883,7 +900,7 @@ func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
 
 func (g *hashGenerator) hash(v int64) int64 {
 	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(randSeedGet()))
 	g.hasher.Reset()
 	_, _ = g.hasher.Write(g.buf[:16])
 	g.hasher.Sum(g.buf[:0])
@@ -942,40 +959,80 @@ func (g *sequentialGenerator) state() string {
 	return fmt.Sprintf("S%d", g.seq.read())
 }
 
+type writeSequenceSource struct {
+	*sequence
+	hasher hash.Hash
+	buf    [8]byte // fnv.Size() from Fnv64a.Size()
+}
+
+func (wss writeSequenceSource) Int63() int64 {
+	return int64(wss.Uint64() & 0x7fffffffffffffff)
+}
+
+func (wss writeSequenceSource) Uint64() uint64 {
+	binary.BigEndian.PutUint64(wss.buf[:8], uint64(wss.write()))
+	wss.hasher.Reset()
+	_, _ = wss.hasher.Write(wss.buf[:8])
+	wss.hasher.Sum(wss.buf[:0])
+	return binary.BigEndian.Uint64(wss.buf[:8])
+}
+
+func (wss writeSequenceSource) Seed(seed int64) {
+	wss.val.Store(seed)
+}
+
+type readSequenceSource struct {
+	*sequence
+	hasher hash.Hash
+	buf    [8]byte // fnv.Size() from Fnv64a.Size()
+}
+
+func (rss readSequenceSource) Int63() int64 {
+	return int64(rss.Uint64() & 0x7fffffffffffffff)
+}
+
+func (rss readSequenceSource) Uint64() uint64 {
+	binary.BigEndian.PutUint64(rss.buf[:8], uint64(rss.write()))
+	rss.hasher.Reset()
+	_, _ = rss.hasher.Write(rss.buf[:8])
+	rss.hasher.Sum(rss.buf[:0])
+	return binary.BigEndian.Uint64(rss.buf[:8])
+}
+
+func (rss readSequenceSource) Seed(seed int64) {
+	// noop
+}
+
 type zipfGenerator struct {
-	seq    *sequence
-	random *rand.Rand
-	zipf   *zipf
+	writeZipf *rand.Zipf
+	readZipf  *rand.Zipf
+	random    *rand.Rand
+	seq       *sequence
 }
 
-// Creates a new zipfian generator.
 func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
+	writeSS := writeSequenceSource{
+		sequence: seq,
+		hasher:   fnv.New64a(),
+	}
+	readSS := readSequenceSource{
+		sequence: seq,
+		hasher:   fnv.New64a(),
+	}
 	return &zipfGenerator{
-		seq:    seq,
-		random: rng,
-		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
+		writeZipf: rand.NewZipf(rand.New(writeSS), 1.1, 1, uint64(math.MaxInt64)),
+		readZipf:  rand.NewZipf(rand.New(readSS), 1.1, 1, uint64(math.MaxInt64)),
+		random:    rng,
+		seq:       seq,
 	}
 }
 
-// Get a random number seeded by v that follows the
-// zipfian distribution.
-func (g *zipfGenerator) zipfian(seed int64) int64 {
-	randomWithSeed := rand.New(rand.NewSource(seed))
-	return int64(g.zipf.Uint64(randomWithSeed))
-}
-
-// Get a zipf write key appropriately.
 func (g *zipfGenerator) writeKey() int64 {
-	return g.zipfian(g.seq.write())
+	return int64(g.writeZipf.Uint64())
 }
 
-// Get a zipf read key appropriately.
 func (g *zipfGenerator) readKey() int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
-	}
-	return g.zipfian(g.random.Int63n(v))
+	return int64(g.readZipf.Uint64())
 }
 
 func (g *zipfGenerator) rand() *rand.Rand {

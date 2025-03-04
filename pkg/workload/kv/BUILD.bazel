@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kv",
-    srcs = [
-        "kv.go",
-        "zipfian.go",
-    ],
+    srcs = ["kv.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/kv",
     visibility = ["//visibility:public"],
     deps = [
