@@ -751,6 +751,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			paramIsDelete := t.StorageParams.GetVal("ttl_delete_rate_limit") != nil
+			paramIsSelect := t.StorageParams.GetVal("ttl_select_rate_limit") != nil
+
+			if paramIsDelete || paramIsSelect {
+				printTTLRateLimitNotice(params.ctx, params.p)
+			}
+
 		case *tree.AlterTableResetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Reset(
