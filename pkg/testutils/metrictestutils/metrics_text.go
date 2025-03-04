@@ -21,7 +21,7 @@ import (
 func GetMetricsText(registry *metric.Registry, re *regexp.Regexp) (string, error) {
 	ex := metric.MakePrometheusExporter()
 	scrape := func(ex *metric.PrometheusExporter) {
-		ex.ScrapeRegistry(registry, true /* includeChildMetrics */)
+		ex.ScrapeRegistry(registry, true /* includeChildMetrics */, true)
 	}
 	var in bytes.Buffer
 	if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
