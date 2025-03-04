@@ -1016,7 +1016,9 @@ type zipfGenerator struct {
 	seq       *sequence
 }
 
-func newZipfianGenerator(seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64) *zipfGenerator {
+func newZipfianGenerator(
+	seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64,
+) *zipfGenerator {
 	writeSS := writeSequenceSource{
 		sequence: seq,
 		hasher:   fnv.New64a(),
