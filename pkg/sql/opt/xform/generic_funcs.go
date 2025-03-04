@@ -9,7 +9,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -28,15 +30,101 @@ func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
 }
 
-// GenerateParameterizedJoinValuesAndFilters returns a single-row Values
-// expression containing placeholders and stable expressions in the given
-// filters. It also returns a new set of filters where the placeholders and
-// stable expressions have been replaced with variables referencing the columns
-// produced by the returned Values expression. If the given filters have no
-// placeholders or stable expressions, ok=false is returned.
-func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
-	filters memo.FiltersExpr,
-) (values memo.RelExpr, newFilters memo.FiltersExpr, ok bool) {
+// GenerateParameterizedJoin generates joins to optimize generic query plans
+// with unknown placeholder values. See the GenerateParameterizedJoin
+// exploration rule description for more details.
+func (c *CustomFuncs) GenerateParameterizedJoin(
+	grp memo.RelExpr, required *physical.Required, scan *memo.ScanExpr, filters memo.FiltersExpr,
+) {
+	if ok := c.generateParameterizedIndexJoin(grp, &scan.ScanPrivate, filters); ok {
+		return
+	}
+	c.generateParameterizedInnerJoin(grp, required, scan, filters)
+}
+
+// generateParameterizedIndexJoin tries to generate a parameterized index join.
+// The given filters must constrain all PK columns to placeholder values and
+// must not constrain any other columns. If successful, it adds the index join
+// to grp and returns ok=true.
+//
+// TODO(mgartner): Expand this special case to allow filters that constrain PK
+// columns to stable expressions and filters that constrain more than just the
+// PK columns.
+func (c *CustomFuncs) generateParameterizedIndexJoin(
+	grp memo.RelExpr, sp *memo.ScanPrivate, filters memo.FiltersExpr,
+) (ok bool) {
+	var pkCols opt.ColSet
+	tab := c.e.mem.Metadata().Table(sp.Table)
+	pkIndex := tab.Index(cat.PrimaryIndex)
+	for i, n := 0, pkIndex.KeyColumnCount(); i < n; i++ {
+		col := sp.Table.IndexColumnID(pkIndex, i)
+		pkCols.Add(col)
+	}
+
+	// Every filter must constrain a PK column to a placeholder.
+	var exprs memo.ScalarListExpr
+	var cols opt.ColList
+	var eqCols opt.ColSet
+	for i := range filters {
+		eq, ok := filters[i].Condition.(*memo.EqExpr)
+		if !ok {
+			return false
+		}
+		v, ok := eq.Left.(*memo.VariableExpr)
+		if !ok {
+			return false
+		}
+		if !pkCols.Contains(v.Col) {
+			return false
+		}
+		p, ok := eq.Right.(*memo.PlaceholderExpr)
+		if !ok {
+			return false
+		}
+		if !v.Typ.Identical(p.Typ) {
+			return false
+		}
+		eqCols.Add(v.Col)
+		cols = append(cols, v.Col)
+		exprs = append(exprs, eq.Right)
+	}
+
+	// Every PK column must be constrained.
+	if !eqCols.Equals(pkCols) {
+		return false
+	}
+
+	// Create the Values expression with one row and one column for each PK
+	// column.
+	typs := make([]*types.T, len(exprs))
+	for i, e := range exprs {
+		typs[i] = e.DataType()
+	}
+	tupleTyp := types.MakeTuple(typs)
+	rows := memo.ScalarListExpr{c.e.f.ConstructTuple(exprs, tupleTyp)}
+	values := c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols: cols,
+		ID:   c.e.f.Metadata().NextUniqueID(),
+	})
+
+	var indexJoin memo.IndexJoinExpr
+	indexJoin.Input = values
+	indexJoin.IndexJoinPrivate = memo.IndexJoinPrivate{
+		Table:   sp.Table,
+		Cols:    sp.Cols,
+		Locking: sp.Locking,
+	}
+	c.e.mem.AddIndexJoinToGroup(&indexJoin, grp)
+	return true
+}
+
+// generateParameterizedInnerJoin generates an inner join between scan and a
+// Values expression. This join may be further transformed into a lookup join;
+// see the GenerateParameterizedJoin rule for more details. This function only
+// succeeds if the given filters have placeholders or stable expressions.
+func (c *CustomFuncs) generateParameterizedInnerJoin(
+	grp memo.RelExpr, required *physical.Required, scan *memo.ScanExpr, filters memo.FiltersExpr,
+) {
 	var exprs memo.ScalarListExpr
 	var cols opt.ColList
 	placeholderCols := make(map[tree.PlaceholderIdx]opt.ColumnID)
@@ -78,6 +166,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	}
 
 	// Replace placeholders and stable expressions in each filter.
+	var newFilters memo.FiltersExpr
 	for i := range filters {
 		cond := filters[i].Condition
 		if newCond := replace(cond).(opt.ScalarExpr); newCond != cond {
@@ -97,7 +186,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	// If no placeholders or stable expressions were replaced, there is nothing
 	// to do.
 	if len(exprs) == 0 {
-		return nil, nil, false
+		return
 	}
 
 	// Create the Values expression with one row and one column for each
@@ -108,19 +197,18 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	}
 	tupleTyp := types.MakeTuple(typs)
 	rows := memo.ScalarListExpr{c.e.f.ConstructTuple(exprs, tupleTyp)}
-	values = c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
+	values := c.e.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: cols,
 		ID:   c.e.f.Metadata().NextUniqueID(),
 	})
 
-	return values, newFilters, true
-}
-
-// ParameterizedJoinPrivate returns JoinPrivate that disabled join reordering and
-// merge join exploration.
-func (c *CustomFuncs) ParameterizedJoinPrivate() *memo.JoinPrivate {
-	return &memo.JoinPrivate{
+	// Join the Values expression with the input scan and project away unneeded
+	// columns.
+	var project memo.ProjectExpr
+	project.Input = c.e.f.ConstructInnerJoin(values, scan, newFilters, &memo.JoinPrivate{
 		Flags:            memo.DisallowMergeJoin,
 		SkipReorderJoins: true,
-	}
+	})
+	project.Passthrough = grp.Relational().OutputCols
+	c.e.mem.AddProjectToGroup(&project, grp)
 }
