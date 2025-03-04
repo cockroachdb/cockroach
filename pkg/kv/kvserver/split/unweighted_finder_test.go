@@ -401,3 +401,81 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
 	}
 }
+
+func TestUnweightedFinderAccessDirection(t *testing.T) {
+	testCases := []struct {
+		name              string
+		samples           [splitKeySampleSize]sample
+		expectedDirection float64
+	}{
+		{
+			name: "all samples to the left",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 0, contained: 1},
+				{left: 20, right: 0, contained: 1},
+				{left: 30, right: 0, contained: 1},
+			},
+			expectedDirection: -1,
+		},
+		{
+			name: "all samples to the right",
+			samples: [splitKeySampleSize]sample{
+				{left: 0, right: 10, contained: 1},
+				{left: 0, right: 20, contained: 1},
+				{left: 0, right: 30, contained: 1},
+			},
+			expectedDirection: 1,
+		},
+		{
+			name: "balanced samples",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 10, contained: 1},
+				{left: 20, right: 20, contained: 1},
+				{left: 30, right: 30, contained: 1},
+			},
+			expectedDirection: 0,
+		},
+		{
+			name: "more samples to the left",
+			samples: [splitKeySampleSize]sample{
+				{left: 30, right: 10, contained: 1},
+				{left: 40, right: 20, contained: 1},
+				{left: 50, right: 30, contained: 1},
+			},
+			expectedDirection: -(1.0 / 3),
+		},
+		{
+			name: "more samples to the right",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 30, contained: 1},
+				{left: 20, right: 40, contained: 1},
+				{left: 30, right: 50, contained: 1},
+			},
+			expectedDirection: (1.0 / 3),
+		},
+		{
+			name: "contained samples influences direction",
+			samples: [splitKeySampleSize]sample{
+				{left: 10, right: 0, contained: 1},
+				{left: 0, right: 10, contained: 2},
+			},
+			expectedDirection: (1.0 / 3),
+		},
+		{
+			name:              "no samples",
+			samples:           [splitKeySampleSize]sample{},
+			expectedDirection: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			finder := NewUnweightedFinder(timeutil.Now(), rand.New(rand.NewSource(2022)))
+			finder.samples = tc.samples
+			direction := finder.AccessDirection()
+			if direction != tc.expectedDirection {
+				t.Errorf("expected direction %v, but got %v", tc.expectedDirection, direction)
+			}
+		})
+	}
+}
