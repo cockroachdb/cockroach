@@ -213,7 +213,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
 				opts.cmd(useHAProxy)+" run")
 
-			if msg := detectSysbenchCrash(result); msg != "" {
+			if msg, crashed := detectSysbenchCrash(result); crashed {
 				t.L().Printf("%s; proceeding to main workload anyway", msg)
 				err = nil
 			}
@@ -224,7 +224,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		start = timeutil.Now()
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
 
-		if msg := detectSysbenchCrash(result); msg != "" {
+		if msg, crashed := detectSysbenchCrash(result); crashed {
 			t.L().Printf("%s; passing test anyway", msg)
 			return nil
 		}
@@ -503,15 +503,15 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 	return metricsBuf.Bytes()
 }
 
-func detectSysbenchCrash(result install.RunResultDetails) string {
+func detectSysbenchCrash(result install.RunResultDetails) (string, bool) {
 	// Sysbench occasionally segfaults. When that happens, don't fail the
 	// test.
 	if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
-		return "sysbench segfaulted"
+		return "sysbench segfaulted", true
 	} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
-		return "sysbench crashed with illegal instruction"
+		return "sysbench crashed with illegal instruction", true
 	} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
-		return "sysbench crashed with an assertion failure"
+		return "sysbench crashed with an assertion failure", true
 	}
-	return ""
+	return "", false
 }
