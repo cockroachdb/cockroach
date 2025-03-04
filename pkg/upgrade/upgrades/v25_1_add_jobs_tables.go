@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // addJobsTables adds the job_progress, job_progress_history, job_status and
@@ -158,6 +159,20 @@ func backfillJobsTablesAndColumns(
 				if err != nil {
 					return err
 				}
+				// row shouldn't be nil -- we read the job row in this txn already so it
+				// does exist -- but if somehow a job is missing its legacy_payload row
+				// in job_info then the legacy vtable does render a row for it. We can't
+				// proceeed to the line below with a nil row or we will crash. We do not
+				// currently know of a path that would get us here, so for now we'll
+				// treat this as an error and fail the migration job, which will block
+				// the upgrade but if/when we identify a path that gets here, we should
+				// consider instead marking the job as backfilled (e.g. by setting the
+				// owner to an empty string) and continuing so that the upgrade
+				// completes.
+				if row == nil {
+					return errors.Newf("job %d missing from crdb_internal.jobs", id)
+				}
+
 				// Update the job row.
 				if _, err := tx.ExecEx(ctx, "jobs-backfill-jobs", tx.KV(),
 					sessiondata.NodeUserSessionDataOverride,
