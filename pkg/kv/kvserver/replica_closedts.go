@@ -7,6 +7,8 @@ package kvserver
 
 import (
 	"context"
+	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -16,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
@@ -113,12 +116,14 @@ func (r *Replica) BumpSideTransportClosed(
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 	return closedts.TargetForPolicy(
-		r.Clock().NowAsClockTimestamp(),
-		r.Clock().MaxOffset(),
-		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
-		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
-		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		r.Clock().NowAsClockTimestamp(),                                  /*now*/
+		r.Clock().MaxOffset(),                                            /*maxClockOffset*/
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),             /*lagTargetDuration*/
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV), /*leadTargetOverride*/
+		closedts.LeadForGlobalReadsAutoTune.Get(&r.ClusterSettings().SV), /*leadTargetAutoTune*/
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV), /*sideTransportCloseInterval*/
+		r.getMaxReplicaNetworkRTTRLocked(),                               /*observedMaxNetworkRTT*/
+		r.closedTimestampPolicyRLocked(),                                 /*policy*/
 	)
 }
 
@@ -131,6 +136,81 @@ func (r *Replica) ForwardSideTransportClosedTimestamp(
 	// applied index has been applied locally yet.
 	const knownApplied = false
 	r.sideTransportClosedTimestamp.forward(ctx, closed, lai, knownApplied)
+}
+
+// maxReplicaRTTCache caches the maximum network round-trip time (RTT) to any replica
+// in the range. This value is used to compute closed timestamp targets that account
+// for network propagation delays.
+type maxReplicaRTTCache struct {
+	// Value stores the maximum RTT across all replicas.
+	value time.Duration
+	// LastUpdated tracks when the cache was last refreshed.
+	lastUpdated crtime.Mono
+}
+
+const (
+	// Acceptable RTT range is 0-400ms. Values outside this are considered
+	// outliers.
+	minValidRTT = 0
+	maxValidRTT = 400 * time.Millisecond
+
+	// Cache refresh intervals.
+	baseAggressiveRefresh = 5 * time.Minute
+	baseNormalRefresh     = 10 * time.Second
+	// Jitter range (±50% of base interval)
+	jitterFraction = 0.5
+)
+
+// getMaxReplicaNetworkRTTRLocked returns the maximum network RTT to any
+// replica. This value helps compute closed timestamp targets that account for
+// network propagation delays between the leaseholder and followers. The cached
+// is refreshed every 10s if the cached value is invalid (outside 0-400ms) or
+// every 5min. Caller must hold r.mu. Note that the returned value may still be
+// an outlier, and the caller is expected to handle this according to its
+// requirements.
+func (r *Replica) getMaxReplicaNetworkRTTRLocked() time.Duration {
+	isValidRTT := func(rtt time.Duration) bool {
+		return rtt > minValidRTT && rtt < maxValidRTT
+	}
+
+	// Add jitter to refresh interval to scatter different replicas' refresh
+	// schedules to avoid contention on the rpc context.
+	getRefreshInterval := func(baseInterval time.Duration) time.Duration {
+		// Use the unique storeID and rangeID to generate a unique offset for the
+		// random number generator.
+		uniqueOffset := (int64(r.store.StoreID()) << 32) ^ int64(r.RangeID)
+		rng := rand.New(rand.NewSource(uniqueOffset))
+		jitter := float64(baseInterval) * jitterFraction
+		return baseInterval + time.Duration(rng.Float64()*2*jitter-jitter)
+	}
+
+	shouldRefreshCache := func(hasValidCachedRTT bool) bool {
+		elapsed := r.mu.maxReplicaRTT.lastUpdated.Elapsed()
+		if !hasValidCachedRTT {
+			return elapsed > getRefreshInterval(baseAggressiveRefresh)
+		}
+		return elapsed > getRefreshInterval(baseNormalRefresh)
+	}
+
+	hasValidCachedRTT := isValidRTT(r.mu.maxReplicaRTT.value)
+	if shouldRefreshCache(hasValidCachedRTT) {
+		desc := r.descRLocked()
+		getNodeLatency := r.store.GetStoreConfig().RPCContext.RemoteClocks.Latency
+
+		maxRTT := time.Duration(0)
+		for _, replica := range desc.InternalReplicas {
+			if rtt, ok := getNodeLatency(replica.NodeID); ok {
+				maxRTT = max(maxRTT, rtt)
+			}
+		}
+
+		// Update cache if new RTT is valid or current cached value is invalid.
+		if isValidRTT(maxRTT) || !hasValidCachedRTT {
+			r.mu.maxReplicaRTT.value = maxRTT
+			r.mu.maxReplicaRTT.lastUpdated = crtime.NowMono()
+		}
+	}
+	return r.mu.maxReplicaRTT.value
 }
 
 // sidetransportAccess encapsulates state related to the closed timestamp's

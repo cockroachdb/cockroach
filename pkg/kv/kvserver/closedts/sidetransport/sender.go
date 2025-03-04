@@ -79,6 +79,17 @@ type Sender struct {
 	// to this buffer signals the connections to send it on their streams.
 	buf *updatesBuf
 
+	// avgMaxNetWorkLatency tracks the average maximum roundtrip network latency
+	// between the sender and any of its follower nodes. It uses an exponentially
+	// weighted moving average with an effective window size of 30, meaning recent
+	// data points influence the average more while the older data gradually fade.
+	// Thread safe.
+	//
+	// This estimates the maximum time for a sender's closed timestamp update to
+	// reach a follower node, enabling dynamic adjustment of the lead time for the
+	// target closed timestamp. See closedts.TargetForPolicy for details.
+	avgMaxNetWorkLatency *rpc.ThreadSafeMovingAverage
+
 	// conns contains connections to all nodes with follower replicas of any of
 	// the registered leaseholder. connections are added as nodes get replicas for
 	// ranges with local leases and removed when the respective node no longer has
@@ -203,11 +214,12 @@ func newSenderWithConnFactory(
 	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, connFactory connFactory,
 ) *Sender {
 	s := &Sender{
-		stopper:     stopper,
-		st:          st,
-		clock:       clock,
-		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		stopper:              stopper,
+		st:                   st,
+		clock:                clock,
+		connFactory:          connFactory,
+		buf:                  newUpdatesBuf(),
+		avgMaxNetWorkLatency: rpc.NewThreadMovingAverage(),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
@@ -325,7 +337,9 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	maxClockOffset := s.clock.MaxOffset()
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
+	leadTargeAutoTune := closedts.LeadForGlobalReadsAutoTune.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+	avgMaxNetWorkLatency := time.Duration(s.avgMaxNetWorkLatency.Value())
 	for i := range s.trackedMu.lastClosed {
 		pol := roachpb.RangeClosedTimestampPolicy(i)
 		target := closedts.TargetForPolicy(
@@ -333,7 +347,9 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			maxClockOffset,
 			lagTargetDuration,
 			leadTargetOverride,
+			leadTargeAutoTune,
 			sideTransportCloseInterval,
+			avgMaxNetWorkLatency,
 			pol,
 		)
 		s.trackedMu.lastClosed[pol] = target
@@ -441,9 +457,11 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			}
 		}
 
+		maxLatency := time.Duration(0)
 		// Open connections to any node that needs info from us and is missing a conn.
 		nodesWithFollowers.ForEach(func(nid int) {
 			nodeID := roachpb.NodeID(nid)
+			maxLatency = max(maxLatency, s.connFactory.latency(nodeID))
 			// We don't need to update leaseholders because timestamps we are closing
 			// are written directly to the sideTransportClosedTimestamp fields of the
 			// local replicas in BumpSideTransportClosed.
@@ -456,6 +474,12 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 				s.connsMu.conns[nodeID] = c
 			}
 		})
+
+		// If we are unable to retrieve the latency or if there are no follower
+		// nodes, skip updating avgMaxNetWorkLatency.
+		if maxLatency != 0 {
+			s.avgMaxNetWorkLatency.Add(float64(maxLatency.Nanoseconds()))
+		}
 		s.connsMu.Unlock()
 	}
 
@@ -641,6 +665,9 @@ func (b *updatesBuf) Close() {
 // connFactory is capable of creating new connections to specific nodes.
 type connFactory interface {
 	new(*Sender, roachpb.NodeID) conn
+	// Latency returns an estimate of the latency from this node to the given
+	// remote node. Note that it can return zero if it fails retrieve latency.
+	latency(nodeID roachpb.NodeID) time.Duration
 }
 
 // conn is a side-transport connection to a node. A conn watches an updatesBuf
@@ -670,9 +697,18 @@ func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 	return newRPCConn(f.dialer, s, nodeID, f.testingKnobs)
 }
 
+// latency implements the connFactory interface.
+func (f *rpcConnFactory) latency(nodeID roachpb.NodeID) time.Duration {
+	// Ignore errors, as failing to retrieve latency from a node is not a big deal
+	// and will simply return zero. The caller is expected to handle this case.
+	latency, _ := f.dialer.Latency(nodeID)
+	return latency
+}
+
 // nodeDialer abstracts *nodedialer.Dialer.
 type nodeDialer interface {
 	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass) (_ *grpc.ClientConn, err error)
+	Latency(nodeID roachpb.NodeID) (time.Duration, error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
