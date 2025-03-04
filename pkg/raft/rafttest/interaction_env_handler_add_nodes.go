@@ -104,8 +104,11 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
 		id := pb.PeerID(1 + len(env.Nodes))
+		memStorage := raft.NewMemoryStorage()
+		memStorage.Logger = env.Output
+		_ = memStorage.Term // <-- logger used here
 		s := snapOverrideStorage{
-			Storage: raft.NewMemoryStorage(),
+			Storage: memStorage,
 			// When you ask for a snapshot, you get the most recent snapshot.
 			//
 			// TODO(tbg): this is sort of clunky, but MemoryStorage itself will
