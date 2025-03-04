@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -189,6 +190,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		timeout = cliCtx.cmdTimeout
 	}
 
+	serverCfg.User = username.MakeSQLUsernameFromPreNormalizedString(cliCtx.clientOpts.User)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -283,6 +285,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			cliCtx.IsInteractive = false
 			sqlExecCtx.TerminalOutput = false
 			sqlExecCtx.ShowTimes = false
+			cliCtx.clientOpts.User = "root"
 
 			if !cmd.Flags().Changed(cliflags.TableDisplayFormat.Name) {
 				// Use a streaming format to avoid accumulating all rows in RAM.
