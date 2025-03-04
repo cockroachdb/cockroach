@@ -1297,7 +1297,7 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	grpcServer, err := newGRPCServer(startupCtx, rpcContext)
+	grpcServer, err := newGRPCServer(startupCtx, rpcContext, NewGrpcServerMetrics(registry, baseCfg.Settings))
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

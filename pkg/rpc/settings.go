@@ -119,7 +119,8 @@ var sourceAddr = func() net.Addr {
 }()
 
 type serverOpts struct {
-	interceptor func(fullMethod string) error
+	interceptor             func(fullMethod string) error
+	unaryServerInterceptors []grpc.UnaryServerInterceptor
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -140,5 +141,13 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 				return f(fullMethod)
 			}
 		}
+	}
+}
+
+// WithUnaryServerInterceptors registers grpc.UnaryServerInterceptor with the grpc server. These
+// interceptors are added in the order they are provided, after any interceptors already registered.
+func WithUnaryServerInterceptors(interceptors ...grpc.UnaryServerInterceptor) ServerOption {
+	return func(opts *serverOpts) {
+		opts.unaryServerInterceptors = append(opts.unaryServerInterceptors, interceptors...)
 	}
 }
