@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// storeTxn provides a context to make transactional changes to a vector index.
+// Txn provides a context to make transactional changes to a vector index.
 // Calling methods here will use the wrapped KV Txn to update the vector index's
 // internal data. Committing changes is the responsibility of the caller.
-type storeTxn struct {
+type Txn struct {
 	kv    *kv.Txn
 	store *Store
 
@@ -47,7 +47,7 @@ type storeTxn struct {
 	tmpSpanIDs    []int
 }
 
-var _ cspann.Txn = (*storeTxn)(nil)
+var _ cspann.Txn = (*Txn)(nil)
 
 // storeCodec abstracts quantizer specific encode/decode operations from the
 // rest of the store.
@@ -56,8 +56,8 @@ type storeCodec struct {
 	tmpVectorSet quantize.QuantizedVectorSet
 }
 
-// newStoreCodec creates a new StoreCodec wrapping the provided quantizer.
-func newStoreCodec(quantizer quantize.Quantizer) storeCodec {
+// makeStoreCodec creates a new StoreCodec wrapping the provided quantizer.
+func makeStoreCodec(quantizer quantize.Quantizer) storeCodec {
 	return storeCodec{
 		quantizer: quantizer,
 	}
@@ -118,34 +118,33 @@ func (sc *storeCodec) encodeVectorFromSet(vs quantize.QuantizedVectorSet, idx in
 	return nil, errors.Errorf("unknown quantizer type %T", sc.quantizer)
 }
 
-// newTxn wraps a Store transaction around a kv transaction for use with the
-// cspann.Store API.
-func newTxn(store *Store, kv *kv.Txn) *storeTxn {
-	tx := storeTxn{
-		kv:        kv,
-		store:     store,
-		codec:     newStoreCodec(store.quantizer),
-		rootCodec: newStoreCodec(store.rootQuantizer),
-	}
+// Init sets initial values for the transaction, wrapping it around a kv
+// transaction for use with the cspann.Store API. The Init pattern is used
+// rather than New so that Txn can be embedded within larger structs and so that
+// temporary state can be reused.
+func (tx *Txn) Init(store *Store, kv *kv.Txn) {
+	tx.kv = kv
+	tx.store = store
+	tx.codec = makeStoreCodec(store.quantizer)
+	tx.rootCodec = makeStoreCodec(store.rootQuantizer)
+
 	// TODO (mw5h): This doesn't take into account session variables that control
-	// lock durability. This doesn't matter for partition maintenance operations that
-	// don't have a session, but may lead to unexpected behavior for CRUD operations.
-	// The logic for determining what to do there is in optBuilder, so there may be
-	// some plumbing involved to get it down here.
+	// lock durability. This doesn't matter for partition maintenance operations
+	// that don't have a session, but may lead to unexpected behavior for CRUD
+	// operations. The logic for determining what to do there is in optBuilder,
+	// so there may be some plumbing involved to get it down here.
 	if kv.IsoLevel() == isolation.Serializable {
 		tx.lockDurability = kvpb.BestEffort
 	} else {
 		tx.lockDurability = kvpb.GuaranteedDurability
 	}
-
-	return &tx
 }
 
 // getCodecForPartitionKey returns the correct codec to use for interacting with
 // the partition indicated. This will be the unquantized codec for the root
 // partition, the codec for the quantizer indicated when the store was created
 // otherwise.
-func (tx *storeTxn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *storeCodec {
+func (tx *Txn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *storeCodec {
 	// We always store the full sized vectors in the root partition
 	if partitionKey == cspann.RootKey {
 		return &tx.rootCodec
@@ -162,7 +161,7 @@ func (tx *storeTxn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *s
 // vectors for the partition and may be the same as the metadataResult. The
 // partdataOffset is the offset into the partdataResult where the vectors start
 // (generally 1 if partdataResult and metadataResult are the same, 0 otherwise).
-func (tx *storeTxn) decodePartition(
+func (tx *Txn) decodePartition(
 	codec *storeCodec, metadataResult *kv.Result, partdataResult *kv.Result, partdataOffset int,
 ) (*cspann.Partition, error) {
 	if metadataResult.Err != nil {
@@ -216,7 +215,7 @@ func (tx *storeTxn) decodePartition(
 // GetPartition is part of the cspann.Txn interface. Read the partition
 // indicated by `partitionKey` and build a Partition data structure, which is
 // returned.
-func (tx *storeTxn) GetPartition(
+func (tx *Txn) GetPartition(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) (*cspann.Partition, error) {
 	b := tx.kv.NewBatch()
@@ -250,7 +249,7 @@ func (tx *storeTxn) GetPartition(
 // existing metadata, but existing vectors will not be deleted. Vectors in the
 // new partition will overwrite existing vectors if child keys collide, but
 // otherwise the resulting partition will be a union of the two partitions.
-func (tx *storeTxn) insertPartition(
+func (tx *Txn) insertPartition(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
@@ -285,7 +284,7 @@ func (tx *storeTxn) insertPartition(
 }
 
 // SetRootPartition implements the cspann.Txn interface.
-func (tx *storeTxn) SetRootPartition(
+func (tx *Txn) SetRootPartition(
 	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
 ) error {
 	if err := tx.DeletePartition(ctx, treeKey, cspann.RootKey); err != nil {
@@ -295,7 +294,7 @@ func (tx *storeTxn) SetRootPartition(
 }
 
 // InsertPartition implements the cspann.Txn interface.
-func (tx *storeTxn) InsertPartition(
+func (tx *Txn) InsertPartition(
 	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
 ) (cspann.PartitionKey, error) {
 	instanceID := tx.store.db.KV().Context().NodeID.SQLInstanceID()
@@ -304,7 +303,7 @@ func (tx *storeTxn) InsertPartition(
 }
 
 // DeletePartition implements the cspann.Txn interface.
-func (tx *storeTxn) DeletePartition(
+func (tx *Txn) DeletePartition(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) error {
 	b := tx.kv.NewBatch()
@@ -317,7 +316,7 @@ func (tx *storeTxn) DeletePartition(
 }
 
 // GetPartitionMetadata implements the cspann.Txn interface.
-func (tx *storeTxn) GetPartitionMetadata(
+func (tx *Txn) GetPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, forUpdate bool,
 ) (cspann.PartitionMetadata, error) {
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
@@ -356,7 +355,7 @@ func (tx *storeTxn) GetPartitionMetadata(
 }
 
 // AddToPartition implements the cspann.Txn interface.
-func (tx *storeTxn) AddToPartition(
+func (tx *Txn) AddToPartition(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
@@ -421,7 +420,7 @@ func (tx *storeTxn) AddToPartition(
 }
 
 // RemoveFromPartition implements the cspann.Txn interface.
-func (tx *storeTxn) RemoveFromPartition(
+func (tx *Txn) RemoveFromPartition(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
@@ -462,7 +461,7 @@ func (tx *storeTxn) RemoveFromPartition(
 }
 
 // SearchPartitions implements the cspann.Txn interface.
-func (tx *storeTxn) SearchPartitions(
+func (tx *Txn) SearchPartitions(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKeys []cspann.PartitionKey,
@@ -517,7 +516,7 @@ func (tx *storeTxn) SearchPartitions(
 // getFullVectorsFromPK fills in refs that are specified by primary key. Refs
 // that specify a partition ID are ignored. The values are returned in-line in
 // the refs slice.
-func (tx *storeTxn) getFullVectorsFromPK(
+func (tx *Txn) getFullVectorsFromPK(
 	ctx context.Context, refs []cspann.VectorWithKey, numPKLookups int,
 ) (err error) {
 	if cap(tx.tmpSpans) >= numPKLookups {
@@ -584,7 +583,7 @@ func (tx *storeTxn) getFullVectorsFromPK(
 
 // getFullVectorsFromPartitionMetadata traverses the refs list and fills in refs
 // specified by partition ID. Primary key references are ignored.
-func (tx *storeTxn) getFullVectorsFromPartitionMetadata(
+func (tx *Txn) getFullVectorsFromPartitionMetadata(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
 ) (numPKLookups int, err error) {
 	var b *kv.Batch
@@ -627,7 +626,7 @@ func (tx *storeTxn) getFullVectorsFromPartitionMetadata(
 }
 
 // GetFullVectors implements the cspann.Txn interface.
-func (tx *storeTxn) GetFullVectors(
+func (tx *Txn) GetFullVectors(
 	ctx context.Context, treeKey cspann.TreeKey, refs []cspann.VectorWithKey,
 ) error {
 	numPKLookups, err := tx.getFullVectorsFromPartitionMetadata(ctx, treeKey, refs)
@@ -643,7 +642,7 @@ func (tx *storeTxn) GetFullVectors(
 // encodePartitionKey takes a partition key and creates a KV key to read that
 // partition's metadata. Vector data can be read by scanning from the metadata to
 // the next partition's metadata.
-func (tx *storeTxn) encodePartitionKey(
+func (tx *Txn) encodePartitionKey(
 	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) roachpb.Key {
 	capacity := len(tx.store.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
@@ -656,7 +655,7 @@ func (tx *storeTxn) encodePartitionKey(
 
 // createRootPartition lazily creates a root partition for the specified K-means
 // tree.
-func (tx *storeTxn) createRootPartition(
+func (tx *Txn) createRootPartition(
 	ctx context.Context, treeKey cspann.TreeKey,
 ) (cspann.PartitionMetadata, error) {
 	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel)
@@ -667,6 +666,22 @@ func (tx *storeTxn) createRootPartition(
 		Level:    cspann.LeafLevel,
 		Centroid: make(vector.T, tx.store.rootQuantizer.GetDims()),
 	}, nil
+}
+
+// QuantizeAndEncode quantizes the given vector (which has already been
+// randomized by the caller) with respect to the given centroid. It returns the
+// encoded form of that quantized vector.
+func (tx *Txn) QuantizeAndEncode(
+	partitionKey cspann.PartitionKey, centroid, randomizedVec vector.T,
+) (quantized []byte, err error) {
+	// Quantize and encode the randomized vector.
+	var codec *storeCodec
+	if partitionKey == cspann.RootKey {
+		codec = &tx.codec
+	} else {
+		codec = &tx.rootCodec
+	}
+	return codec.encodeVector(&tx.workspace, randomizedVec, centroid)
 }
 
 // getMetadataFromKVResult extracts the K-means tree level and centroid from the

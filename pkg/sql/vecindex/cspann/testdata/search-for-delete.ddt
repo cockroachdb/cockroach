@@ -112,13 +112,15 @@ vec1
         ├───• vec5 (5, 1)
         └───• vec1 (MISSING)
 
-# Try to find the missing vector.
+# Try to find the missing vector. Since it's in the index, it should be found,
+# even though it's missing from the primary index.
 search-for-delete
 vec1: (1, 2)
 ----
-vec1: vector not found
+vec1: partition 3
 
-# Vector should now be gone from the index.
+# Vector should still be in the index, since re-ranking is disabled for the
+# SearchForDelete function.
 format-tree
 ----
 • 1 (3.2083, 5.125)
@@ -152,4 +154,5 @@ format-tree
     └───• 3 (3.3333, 2)
         │
         ├───• vec3 (4, 3)
-        └───• vec5 (5, 1)
+        ├───• vec5 (5, 1)
+        └───• vec1 (MISSING)
