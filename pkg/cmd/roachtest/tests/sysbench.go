@@ -191,31 +191,41 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
 		cmd := opts.cmd(useHAProxy /* haproxy */)
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" prepare")
-		if err != nil {
-			return err
-		} else if strings.Contains(result.Stdout, "FATAL") {
-			// sysbench prepare doesn't exit on errors for some reason, so we have
-			// to check that it didn't silently fail. We've seen it do so, causing
-			// the run step to segfault. Segfaults are an ignored error, so in the
-			// past, this would cause the test to silently fail.
-			return errors.Newf("sysbench prepare failed with FATAL error")
+		{
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" prepare")
+			if err != nil {
+				return err
+			} else if strings.Contains(result.Stdout, "FATAL") {
+				// sysbench prepare doesn't exit on errors for some reason, so we have
+				// to check that it didn't silently fail. We've seen it do so, causing
+				// the run step to segfault. Segfaults are an ignored error, so in the
+				// past, this would cause the test to silently fail.
+				return errors.Newf("sysbench prepare failed with FATAL error")
+			}
+		}
+
+		t.Status("warming up via oltp_read_only")
+		{
+			opts := opts
+			opts.workload = oltpReadOnly
+			opts.duration = 3 * time.Minute
+
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
+				opts.cmd(useHAProxy)+" run")
+
+			if msg, crashed := detectSysbenchCrash(result); crashed {
+				t.L().Printf("%s; proceeding to main workload anyway", msg)
+				err = nil
+			}
+			require.NoError(t, err)
 		}
 
 		t.Status("running workload")
 		start = timeutil.Now()
-		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
 
-		// Sysbench occasionally segfaults. When that happens, don't fail the
-		// test.
-		if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
-			t.L().Printf("sysbench segfaulted; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
-			t.L().Printf("sysbench crashed with illegal instruction; passing test anyway")
-			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
-			t.L().Printf("sysbench crashed with an assertion failure; passing test anyway")
+		if msg, crashed := detectSysbenchCrash(result); crashed {
+			t.L().Printf("%s; passing test anyway", msg)
 			return nil
 		}
 
@@ -224,6 +234,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 
 		t.Status("exporting results")
+		idx := strings.Index(result.Stdout, "SQL statistics:")
+		if idx < 0 {
+			return errors.Errorf("no SQL statistics found in sysbench output:\n%s", result.Stdout)
+		}
+		t.L().Printf("sysbench results:\n%s", result.Stdout[idx:])
 		return exportSysbenchResults(t, c, result.Stdout, start, opts)
 	}
 	if opts.usePostgres {
@@ -486,4 +501,17 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 	// Add # EOF at the end for openmetrics
 	metricsBuf.WriteString("# EOF\n")
 	return metricsBuf.Bytes()
+}
+
+func detectSysbenchCrash(result install.RunResultDetails) (string, bool) {
+	// Sysbench occasionally segfaults. When that happens, don't fail the
+	// test.
+	if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
+		return "sysbench segfaulted", true
+	} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
+		return "sysbench crashed with illegal instruction", true
+	} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
+		return "sysbench crashed with an assertion failure", true
+	}
+	return "", false
 }
