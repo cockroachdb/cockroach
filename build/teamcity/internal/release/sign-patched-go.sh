@@ -8,38 +8,40 @@
 
 set -xeuo pipefail
 
-KEYCHAIN_NAME=signing
-KEYCHAIN_PROFILE=notarization
-curr_dir=$(pwd)
-
 cleanup() {
-    security lock-keychain "${KEYCHAIN_NAME}"
-    rm -rf darwin.zip staging darwin-amd64 darwin-arm64 *.tar.gz TIMESTAMP.txt
+    rm -rf darwin.zip staging darwin-amd64 darwin-arm64 ./*.tar.gz TIMESTAMP.txt
+    rm -rf .secrets
 }
 trap cleanup EXIT
 
+mkdir -p .secrets
+gcloud secrets versions access latest --secret=apple-signing-cert | base64 -d > .secrets/cert.p12
+gcloud secrets versions access latest --secret=apple-signing-cert-password > .secrets/cert.pass
+gcloud secrets versions access latest --secret=appstoreconnect-api-key > .secrets/api_key.json
+
 mkdir artifacts
 mv TIMESTAMP.txt artifacts/TIMESTAMP.txt
-security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_NAME}"
-
 sign() {
-    archive=$(find . -name go*.darwin-$1.tar.gz -d 1 | head -n1 | xargs basename)
-    mkdir darwin-$1
-    tar -xf $archive -C darwin-$1
-    rm $archive
+    archive=$(ls -1 go*.darwin-$1.tar.gz | head -n1 | xargs basename)
+    mkdir "darwin-$1"
+    tar -xf "$archive" -C "darwin-$1"
+    rm "$archive"
     for bin in go gofmt; do
-        codesign --timestamp --options=runtime -f --keychain "$KEYCHAIN_NAME" -s "$SIGNING_IDENTITY" darwin-$1/go/bin/$bin
+        rcodesign sign \
+          --p12-file .secrets/cert.p12 --p12-password-file .secrets/cert.pass \
+          --code-signature-flags runtime \
+          "darwin-$1/go/bin/$bin"
     done
-    tar cf - -C darwin-$1 go | gzip -9 > artifacts/$archive
+    tar cf - -C "darwin-$1" go | gzip -9 > "artifacts/$archive"
     mkdir staging
-    cp darwin-$1/go/bin/gofmt staging
-    cp darwin-$1/go/bin/go    staging
+    cp "darwin-$1/go/bin/gofmt" staging
+    cp "darwin-$1/go/bin/go"    staging
     zip -r darwin.zip staging
     rm -rf staging
-    xcrun notarytool submit darwin.zip --wait \
-          --team-id "$TEAM_ID" --keychain-profile "$KEYCHAIN_PROFILE" \
-          --apple-id "$APPLE_ID" --verbose \
-          --keychain "${HOME}/Library/Keychains/${KEYCHAIN_NAME}-db"
+    rcodesign notary-submit \
+      --api-key-file .secrets/api_key.json \
+      --wait \
+      darwin.zip
 }
 
 sign amd64
