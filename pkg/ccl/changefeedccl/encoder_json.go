@@ -537,6 +537,9 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 	}
 
 	payloadKeys := []string{"after", "op", "ts_ns"}
+	if e.beforeField {
+		payloadKeys = append(payloadKeys, "before")
+	}
 	if e.keyInValue {
 		payloadKeys = append(payloadKeys, "key")
 	}
@@ -566,14 +569,28 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 			return nil, err
 		}
 
+		if e.beforeField {
+			var before json.JSON
+			if prev.IsInitialized() && !prev.IsDeleted() {
+				before, err = e.versionEncoder(prev.EventDescriptor, true).rowAsGoNative(ctx, prev, emitDeletedRowAsNull, nil)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				before = json.NullJSONValue
+			}
+
+			if err := payloadBuilder.Set("before", before); err != nil {
+				return nil, err
+			}
+		}
 		if e.keyInValue {
 			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder); err != nil {
 				return nil, err
 			}
 		}
-
 		if e.sourceField {
-			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated)
+			sourceJson, err := e.enrichedEnvelopeSourceProvider.GetJSON(updated, evCtx.updated, evCtx.mvcc)
 			if err != nil {
 				return nil, err
 			}
@@ -661,9 +678,10 @@ func EncodeAsJSONChangefeedWithFlags(
 	if err != nil {
 		return nil, err
 	}
-	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{
-		jobId: "ccl_builtin", // This encoder is not used in the context of a real changefeed.
-	})
+	// This encoder is not used in the context of a real changefeed so make an empty
+	// source provider.
+	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{})
+
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.

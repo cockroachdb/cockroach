@@ -1337,7 +1337,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, changefeedbase.OptEnvelopeWrapped)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, nil, changefeedbase.OptEnvelopeWrapped)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				// Skip errors that may come up during SQL execution. If the SQL query
@@ -3914,25 +3914,22 @@ func TestChangefeedEnriched(t *testing.T) {
 					topic = ""
 				}
 
-				var jobID int64
-				// Fetching the jobId this way is not supported by the sinkless sink.
-				// In that case we will assert the job_id is 0, so we don't need this query.
-				if _, ok := foo.(*sinklessFeed); !ok {
-					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
-				}
-
-				var sourceMsg string
-				if slices.Contains(tc.enrichedProperties, "source") {
-					sourceMsg = fmt.Sprintf(`, "source": {"job_id": "%d"}`, jobID)
-				}
-
-				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"%s}`, topic, sourceMsg)
+				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
 				if slices.Contains(tc.enrichedProperties, "schema") {
 					// TODO(#139658): add the schema to the key and the value here
-					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"%s}}`, topic, sourceMsg)
+					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
 				}
 
-				assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{msg})
+				sourceIsNotNilWhenSpecified := func(actualSource map[string]interface{}) {
+					if slices.Contains(tc.enrichedProperties, "source") {
+						require.NotNil(t, actualSource)
+						return
+					}
+
+					require.Nil(t, actualSource)
+				}
+
+				assertPayloadsEnriched(t, foo, []string{msg}, sourceIsNotNilWhenSpecified)
 			}
 			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
 			for _, sink := range supportedSinks {
@@ -3940,7 +3937,6 @@ func TestChangefeedEnriched(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestChangefeedEnrichedAvro(t *testing.T) {
@@ -3962,14 +3958,203 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 
 		assertionKey := `{"a":{"long":0}}`
 		assertionAfter := `"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}`
-		assertionSource := fmt.Sprintf(`"source": {"source": {"job_id": {"string": "%d"}}}`, jobID)
 
-		assertPayloadsEnvelopeStripTs(t, foo, changefeedbase.OptEnvelopeEnriched, []string{
-			fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}, %s}`,
-				assertionKey, assertionAfter, assertionSource),
-		})
+		assertPayloadsEnriched(t, foo, []string{
+			fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}}`,
+				assertionKey, assertionAfter),
+		}, nil)
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedEnrichedWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name    string
+		options []string
+	}{
+		{name: "with diff", options: []string{"diff"}},
+		{name: "without diff", options: []string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				var diffOption string
+				if slices.Contains(tc.options, "diff") {
+					diffOption = ", diff"
+				}
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched%s`, diffOption))
+				defer closeFeed(t, foo)
+
+				sqlDB.Exec(t, `UPDATE foo SET b = 'cat'`)
+				sqlDB.Exec(t, `DELETE FROM foo WHERE b = 'cat'`)
+
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				if slices.Contains(tc.options, "diff") {
+					assertPayloadsEnriched(t, foo, []string{
+						fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "before": null, "op": "c"}`, topic),
+						fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "before": {"a": 0, "b": "dog"}, "op": "u"}`, topic),
+						fmt.Sprintf(`%s: {"a": 0}->{"after": null, "before": {"a": 0, "b": "cat"}, "op": "d"}`, topic),
+					}, nil)
+				} else {
+					assertPayloadsEnriched(t, foo, []string{
+						fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic),
+						fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "op": "u"}`, topic),
+						fmt.Sprintf(`%s: {"a": 0}->{"after": null, "op": "d"}`, topic),
+					}, nil)
+				}
+			}
+			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+			for _, sink := range supportedSinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
+		})
+	}
+}
+
+func TestChangefeedEnrichedWithTimestampOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name    string
+		options []string
+	}{
+		{name: "with updated", options: []string{"updated"}},
+		{name: "with mvcc_timestamp", options: []string{"mvcc_timestamp"}},
+		{name: "with updated and mvcc_timestamp", options: []string{"updated", "mvcc_timestamp"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				beforeInsertTS := timeutil.Now()
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', %s`,
+					strings.Join(tc.options, ", ")))
+				defer closeFeed(t, foo)
+
+				// TODO(#139660): the webhook sink forces topic_in_value, but
+				// this is not supported by the enriched envelope type. We should adapt
+				// the test framework to account for this.
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				assertSourceTimestamps := func(actualSource map[string]interface{}) {
+					require.NotNil(t, actualSource)
+					tsHlc := actualSource["ts_hlc"]
+					tsNs := actualSource["ts_ns"]
+					mvccTs := actualSource["mvcc_timestamp"]
+					afterInsertTS := timeutil.Now()
+					if slices.Contains(tc.options, "updated") {
+						require.NotNil(t, tsHlc)
+						require.NotNil(t, tsNs)
+
+						tsTime := parseTimeToHLC(t, tsHlc.(string))
+						require.Equal(t, float64(tsTime.WallTime), tsNs.(float64))
+						require.Greater(t, tsTime.WallTime, beforeInsertTS.UnixNano())
+						require.Greater(t, afterInsertTS.UnixNano(), tsTime.WallTime)
+					} else {
+						require.Nil(t, tsHlc)
+						require.Nil(t, tsNs)
+					}
+
+					if slices.Contains(tc.options, "mvcc_timestamp") {
+						require.NotNil(t, mvccTs)
+						mvccTs := parseTimeToHLC(t, mvccTs.(string))
+						require.Greater(t, mvccTs.WallTime, beforeInsertTS.UnixNano())
+						require.Greater(t, afterInsertTS.UnixNano(), mvccTs.WallTime)
+					} else {
+						require.Nil(t, mvccTs)
+					}
+				}
+				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
+				assertPayloadsEnriched(t, foo, []string{msg}, assertSourceTimestamps)
+			}
+			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+			for _, sink := range supportedSinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
+		})
+	}
+}
+
+func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := tc.Server(0)
+
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dbWithHandler := gosql.OpenDB(pgBase)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+	ctx := context.Background()
+	clusterID := s.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+	// clusterName is "" in tests. This is a valid value.
+	clusterName := s.ExecutorConfig().(sql.ExecutorConfig).RPCContext.ClusterName()
+	dbVersion := s.ClusterSettings().Version.ActiveVersion(ctx).String()
+
+	t.Run("kafka", func(t *testing.T) {
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=json`)
+		defer closeFeed(t, testFeed)
+
+		var jobID int64
+		var nodeName string
+		// Fetching the jobId this way is not supported by the sinkless sink.
+		// In that case we will assert the job_id is 0, so we don't need this query.
+		if _, ok := testFeed.(*sinklessFeed); !ok {
+			sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+			sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
+		}
+
+		sourceAssertion := func(actualSource map[string]interface{}) {
+			nodeID := actualSource["node_id"].(string)
+			require.NotEqual(t, "", nodeID)
+
+			sourceNodeLocality := fmt.Sprintf(`region=us-east%s`, nodeID)
+			assertion := fmt.Sprintf(`{"cluster_id": "%s", "cluster_name": "%s", "db_version": "%s", "job_id": "%d", "node_id": "%s", "node_name": "%s", "origin": "cockroachdb", "source_node_locality": "%s"}`,
+				clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sourceNodeLocality)
+
+			value, err := reformatJSON(actualSource)
+			require.NoError(t, err)
+			require.Equal(t, assertion, fmt.Sprintf(`%s`, value))
+		}
+
+		assertPayloadsEnriched(t, testFeed, []string{`foo: {"i": 0}->{"after": {"i": 0}, "op": "c"}`}, sourceAssertion)
+	})
 }
 
 func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
@@ -9232,7 +9417,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, changefeedbase.OptEnvelopeWrapped)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false, nil, changefeedbase.OptEnvelopeWrapped)
 					})
 				return nil
 			}, 20*expectTimeout))
