@@ -269,9 +269,9 @@ type granterWithIOTokens interface {
 	// negative, though that will be rare, since it is possible for tokens to be
 	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64, elasticDiskReadTokens int64,
+		ioTokens int64, elasticIOTokens int64, elasticDiskTokens diskTokens,
 		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
-		lastTick bool,
+		elasticDiskWriteIOPSTokensCapacity int64, lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
 	// last such call.
@@ -283,7 +283,7 @@ type granterWithIOTokens interface {
 	// granter. This asymmetry is due to the need to use all the functionality
 	// of WorkQueue at admission time. See the long explanatory comment at the
 	// beginning of store_token_estimation.go, regarding token estimation.
-	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel)
+	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM, writeIOPSLM tokensLinearModel)
 }
 
 // granterWithStoreReplicatedWorkAdmitted is used to abstract
