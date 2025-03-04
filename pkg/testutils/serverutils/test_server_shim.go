@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -299,6 +300,9 @@ func StartSlimServerOnly(
 	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
 ) TestServerInterface {
 	params.SlimServerConfig(slimOpts...)
+	if params.Settings == nil {
+		params.Settings = cluster.MakeTestingClusterSettings()
+	}
 	return StartServerOnly(t, params)
 }
 

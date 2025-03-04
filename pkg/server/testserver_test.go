@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,15 +32,23 @@ func BenchmarkTestServerStartup(b *testing.B) {
 	}
 
 	for _, tc := range testCases {
+		args := base.TestServerArgs{
+			DefaultTestTenant: tc.tenantOpt,
+		}
 		b.Run(tc.name, func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-
-				args := base.TestServerArgs{
-					DefaultTestTenant: tc.tenantOpt,
-				}
-				s := serverutils.StartServerOnly(b, args)
-				s.Stopper().Stop(context.Background())
+			for _, useSlimServer := range []bool{true, false} {
+				b.Run("slim="+strconv.FormatBool(useSlimServer), func(b *testing.B) {
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						var s serverutils.TestServerInterface
+						if useSlimServer {
+							s = serverutils.StartSlimServerOnly(b, args)
+						} else {
+							s = serverutils.StartServerOnly(b, args)
+						}
+						s.Stopper().Stop(context.Background())
+					}
+				})
 			}
 		})
 	}
@@ -70,7 +79,6 @@ func TestServerStartup(t *testing.T) {
 					s = serverutils.StartSlimServerOnly(t, args)
 				} else {
 					s = serverutils.StartServerOnly(t, args)
-
 				}
 				s.Stopper().Stop(context.Background())
 			})
