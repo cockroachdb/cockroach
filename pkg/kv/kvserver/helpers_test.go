@@ -415,7 +415,7 @@ func (r *Replica) NumPendingProposals() int64 {
 	return r.numPendingProposalsRLocked()
 }
 
-func (r *Replica) LastUpdateTimes() map[roachpb.ReplicaID]time.Time {
+func (r *Replica) LastUpdateTimes() map[roachpb.ReplicaID]lastReplicaUpdateTime {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return maps.Clone(r.mu.lastUpdateTimes)
