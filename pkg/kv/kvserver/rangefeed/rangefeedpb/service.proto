@@ -1,0 +1,32 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.rangefeed.rangefeedpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+message Rangefeed {
+  int64 consumer_id = 1 [(gogoproto.customname) = "ConsumerID"];
+  roachpb.Span span = 2  [(gogoproto.nullable) = false];
+  int64 stream_id = 3 [(gogoproto.customname) = "StreamID"];
+  util.hlc.Timestamp resolved_ts = 4 [
+    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+}
+
+message InspectStoreRangefeedsRequest {}
+
+message InspectStoreRangefeedsResponse {
+  repeated RangefeedInfoPerStore rangefeed_info_per_store = 1 [(gogoproto.nullable) = false];
+}
+
+message RangefeedInfoPerStore {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  repeated Rangefeed rangefeed = 2 [(gogoproto.nullable) = false];
+}
