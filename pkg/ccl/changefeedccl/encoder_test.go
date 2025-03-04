@@ -1248,7 +1248,7 @@ func TestJsonRountrip(t *testing.T) {
 
 			// TODO(#139660): test this with other envelopes.
 			opts := jsonEncoderOptions{EncodingOptions: changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}}
-			encoder, err := makeJSONEncoder(context.Background(), opts, getTestingEnrichedSourceProvider(opts.EncodingOptions))
+			encoder, err := makeJSONEncoder(context.Background(), opts, getTestingEnrichedSourceProvider(opts.EncodingOptions), makeChangefeedTargets(test.name))
 			require.NoError(t, err)
 
 			// Encode the value to a string and parse it. Assert that the parsed json matches the
