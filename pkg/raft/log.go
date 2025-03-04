@@ -18,8 +18,11 @@
 package raft
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttermcache"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
@@ -42,6 +45,8 @@ type LogSnapshot struct {
 	storage LogStorage
 	// unstable contains the unstable log entries.
 	unstable LogSlice
+	// termCache
+	termCache *rafttermcache.TermCache
 	// logger gives access to logging errors.
 	logger raftlogger.Logger
 }
@@ -53,6 +58,10 @@ type raftLog struct {
 	// unstable contains all unstable entries and snapshot.
 	// they will be saved into storage.
 	unstable unstable
+
+	// termCache contains a suffix of the whole raftLog(both stable and unstable)
+	// used for term lookup.
+	termCache *rafttermcache.TermCache
 
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
@@ -105,9 +114,16 @@ func newLogWithSize(
 		panic(err) // TODO(pav-kv): the storage should always cache the last term.
 	}
 	last := entryID{term: lastTerm, index: lastIndex}
+
+	// TODO(hakuuww): can simplify this
+	//  by initializing with a single function
+	tCache := rafttermcache.NewTermCache(20)
+	tCache.ResetWithFirst(kvpb.RaftTerm(lastTerm), kvpb.RaftIndex(lastIndex))
+
 	return &raftLog{
 		storage:             storage,
 		unstable:            newUnstable(last, logger),
+		termCache:           tCache,
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
 		// Initialize our committed and applied pointers to the time of the last compaction.
@@ -172,7 +188,12 @@ func (l *raftLog) maybeAppend(a LogSlice) bool {
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	return l.unstable.truncateAndAppend(a)
+
+	if ok = l.unstable.truncateAndAppend(a); ok {
+		l.termCache.ScanAppend(context.TODO(), a.Entries())
+	}
+
+	return ok
 }
 
 // append adds the given log slice to the end of the log.
@@ -444,6 +465,13 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 		return 0, ErrCompacted
 	}
 
+	// TODO(hakuuww): refactor for more cleanness
+	t, found := l.termCache.Term(context.TODO(), kvpb.RaftIndex(index))
+	term := uint64(t)
+	if found {
+		return term, nil
+	}
+
 	term, err := l.storage.Term(index)
 	if err == nil {
 		return term, nil
@@ -660,9 +688,10 @@ func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 // read from while the underlying storage is not mutated.
 func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	return LogSnapshot{
-		first:    l.firstIndex(),
-		storage:  storage,
-		unstable: l.unstable.LogSlice,
-		logger:   l.logger,
+		first:     l.firstIndex(),
+		storage:   storage,
+		unstable:  l.unstable.LogSlice,
+		termCache: l.termCache,
+		logger:    l.logger,
 	}
 }

@@ -21,6 +21,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/rafttermcache",
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
         "//pkg/raft/raftlogger",
