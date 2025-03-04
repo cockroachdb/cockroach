@@ -340,14 +340,6 @@ func registerBackupFixtures(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				registry := newFixtureRegistry(ctx, t, c)
 
-				// Piggy back on fixture generation to run the GC. Run the GC first to
-				// bound the number of fixtures leaked if fixture creation is broken.
-				// TODO(jeffswenson): run GC as its own test. GC'ing a huge fixture can
-				// take more time than small fixture creation because the teamcity
-				// worker is not colocated with the fixture repository, so there is a
-				// large amount of network latency.
-				// require.NoError(t, registry.GC(ctx, t.L()))
-
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
 				require.NoError(t, err)
 
@@ -373,4 +365,21 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 		})
 	}
+}
+
+func registerBlobFixtureGC(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "blobfixture/gc",
+		Owner:            registry.OwnerDisasterRecovery,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(2)),
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.AWS),
+		Timeout:          1 * time.Hour,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// TODO(jeffswenson): ideally we would run the GC on the scheduled node
+			// so that it is close to the fixture repository.
+			registry := newFixtureRegistry(ctx, t, c)
+			require.NoError(t, registry.GC(ctx, t.L()))
+		},
+	})
 }
