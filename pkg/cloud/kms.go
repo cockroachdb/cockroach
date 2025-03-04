@@ -20,7 +20,14 @@ import (
 type KMS interface {
 	// MasterKeyID will return the identifier used to reference the master key
 	// associated with the KMS object.
+	// Used when writing encryption metadata.
 	MasterKeyID() string
+	// TODO(benbardin): Remove when 24.3 compatibility is dropped.
+	MasterKeyID24_3Compatible() string
+	// Needed and implemented meaningfully only for AWS. Other cloud providers use
+	// the same ID for all replicas. Includes the MasterKeyID in the slice, and may duplicate it.
+	// Used when reading encryption metadata.
+	ReplicaIDs() []string
 	// Encrypt returns the ciphertext version of data after encrypting it using
 	// the KMS.
 	Encrypt(ctx context.Context, data []byte) ([]byte, error)
