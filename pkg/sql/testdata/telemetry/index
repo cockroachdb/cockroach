@@ -141,7 +141,6 @@ sql.schema.partial_inverted_index
 # invalid.
 feature-usage
 CREATE INVERTED INDEX err ON d (i, j) WHERE i;
-CREATE INVERTED INDEX err ON g4 (i, geom) WHERE i
 ----
 error: pq: expected INDEX PREDICATE expression to have type bool, but 'i' has type int
 
