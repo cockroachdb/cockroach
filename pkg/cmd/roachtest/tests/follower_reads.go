@@ -232,8 +232,7 @@ func runFollowerReadsTest(
 	for i := 0; i < c.Spec().NodeCount; i++ {
 		isoLevel := isoLevels[rng.Intn(len(isoLevels))]
 		conn := c.Conn(ctx, l, i+1, option.ConnectionOption("default_transaction_isolation", isoLevel))
-		//nolint:deferloop TODO(#137605)
-		defer conn.Close()
+		defer conn.Close() //nolint:deferloop
 		conns = append(conns, conn)
 	}
 	db := conns[0]

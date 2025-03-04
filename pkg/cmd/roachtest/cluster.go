@@ -2199,11 +2199,10 @@ func (c *clusterImpl) StartE(
 			if err != nil {
 				return errors.Wrapf(err, "failed to connect to n%d", n)
 			}
-			//nolint:deferloop TODO(#137605)
-			defer conn.Close()
-
 			// N.B. We must ensure SQL session is fully initialized before attempting to execute any SQL commands.
-			if err := roachtestutil.WaitForSQLReady(ctx, conn); err != nil {
+			err = roachtestutil.WaitForSQLReady(ctx, conn)
+			conn.Close()
+			if err != nil {
 				return errors.Wrap(err, "failed to wait for SQL to be ready")
 			}
 		}
