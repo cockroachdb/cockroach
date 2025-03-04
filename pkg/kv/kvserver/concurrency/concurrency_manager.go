@@ -120,7 +120,7 @@ var UnreplicatedLockReliability = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.enabled",
 	"whether the replica should attempt to keep unreplicated locks during various node operations",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability_upgrade.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.enabled", true),
 )
 
 // managerImpl implements the Manager interface.
@@ -568,6 +568,11 @@ func (m *managerImpl) QueryLockTableState(
 	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return m.lt.QueryLockTableState(span, opts)
+}
+
+// ExportUnreplicatedLocks implements the LockManager interface.
+func (m *managerImpl) ExportUnreplicatedLocks(span roachpb.Span, f func(*roachpb.LockAcquisition)) {
+	m.lt.ExportUnreplicatedLocks(span, f)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.
