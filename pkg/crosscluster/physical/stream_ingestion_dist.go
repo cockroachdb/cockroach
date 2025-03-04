@@ -226,9 +226,9 @@ func startDistIngestion(
 		)
 		defer recv.Release()
 
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := *execCtx.ExtendedEvalContext()
-		dsp.Run(ctx, planner.initialPlanCtx, noTxn, planner.initialPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+		dsp.Run(ctx, planner.initialPlanCtx, noTxn, planner.initialPlan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 		return rw.Err()
 	}
 

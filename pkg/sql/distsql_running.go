@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -389,7 +390,7 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 // DistSQLReceiver with the error and cancels the gateway flow.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *eval.Context,
 	planCtx *PlanningCtx,
 	leafInputState *roachpb.LeafTxnInputState,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
@@ -454,7 +455,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           v,
-		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
+		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
 	}
@@ -464,7 +465,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
 	} else {
 		// In distributed plans populate some extra state.
-		setupReq.EvalContext = execinfrapb.MakeEvalContext(&evalCtx.Context)
+		setupReq.EvalContext = execinfrapb.MakeEvalContext(evalCtx)
 		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
 			setupReq.JobTag = jobTag.ValueStr()
 		}
@@ -712,7 +713,7 @@ func (dsp *DistSQLPlanner) Run(
 	txn *kv.Txn,
 	plan *PhysicalPlan,
 	recv *DistSQLReceiver,
-	evalCtx *extendedEvalContext,
+	evalCtx *eval.Context,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
 	// Ignore the cleanup function since we will release each spec separately.
@@ -731,9 +732,9 @@ func (dsp *DistSQLPlanner) Run(
 		localState     distsql.LocalState
 		leafInputState *roachpb.LeafTxnInputState
 	)
-	// NB: putting part of evalCtx in localState means it might be mutated down
+	// NB: putting eval.Context into localState means it might be mutated down
 	// the line.
-	localState.EvalContext = &evalCtx.Context
+	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
 	localState.MustUseLeaf = planCtx.mustUseLeafTxn
 	localState.Txn = txn
@@ -1931,7 +1932,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlans[planIdx].started = true
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
-	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, finishedSetupFn)
+	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, &evalCtx.Context, finishedSetupFn)
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -2056,7 +2057,7 @@ var distributedQueryRerunAsLocalEnabled = settings.RegisterBoolSetting(
 // execution, then finishedSetupFn will be called twice.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	extEvalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	plan planMaybePhysical,
@@ -2074,7 +2075,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
+		dsp.Run(ctx, planCtx, txn, physPlan, recv, &extEvalCtx.Context, finishedSetupFn)
 	}
 	if planCtx.isLocal {
 		// If the plan was local, then we're done regardless of whether an error
@@ -2135,7 +2136,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		// is no point in providing the locality filter since it will be ignored
 		// anyway, so we don't use NewPlanningCtxWithOracle constructor.
 		localPlanCtx := dsp.NewPlanningCtx(
-			ctx, evalCtx, planCtx.planner, evalCtx.Txn, LocalDistribution,
+			ctx, extEvalCtx, planCtx.planner, extEvalCtx.Txn, LocalDistribution,
 		)
 		localPlanCtx.setUpForMainQuery(ctx, planCtx.planner, recv)
 		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)
@@ -2148,7 +2149,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.expectedRowsRead = int64(localPhysPlan.TotalEstimatedScannedRows)
 		// We already called finishedSetupFn in the previous call to Run, since we
 		// only got here if we got a distributed error, not an error during setup.
-		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, &extEvalCtx.Context, nil /* finishedSetupFn */)
 	}
 }
 
@@ -2520,7 +2521,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryRecv.batchWriter = postqueryResultWriter
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
-	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, finishedSetupFn)
+	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, &evalCtx.Context, finishedSetupFn)
 	return postqueryRecv.resultWriter.Err()
 }
 

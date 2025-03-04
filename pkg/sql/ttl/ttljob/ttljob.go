@@ -158,11 +158,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		}
 
 		distSQLPlanner := jobExecCtx.DistSQLPlanner()
-		evalCtx := jobExecCtx.ExtendedEvalContext()
 
 		// We don't return the compatible nodes here since PartitionSpans will
 		// filter out incompatible nodes.
-		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext(), execCfg)
 		if err != nil {
 			return err
 		}
@@ -262,19 +261,19 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
 			nil, /* clockUpdater */
-			evalCtx.Tracing,
+			jobExecCtx.ExtendedEvalContext().Tracing,
 		)
 		defer distSQLReceiver.Release()
 
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := *evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
 		distSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn */
 			physicalPlan,
 			distSQLReceiver,
-			&evalCtxCopy,
+			evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 

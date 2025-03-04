@@ -163,7 +163,6 @@ func distBackup(
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "backup.distBackup")
 	defer span.Finish()
-	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn
 
 	if len(backupSpecs) == 0 {
@@ -214,7 +213,7 @@ func distBackup(
 		nil,   /* rangeCache */
 		noTxn, /* txn - the flow does not read or write the database */
 		nil,   /* clockUpdater */
-		evalCtx.Tracing,
+		execCtx.ExtendedEvalContext().Tracing,
 	)
 	defer recv.Release()
 
@@ -223,8 +222,8 @@ func distBackup(
 	execCfg := execCtx.ExecCfg()
 	jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+	dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return rowResultWriter.Err()
 }

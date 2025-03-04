@@ -155,7 +155,6 @@ func (r *logicalReplicationResumer) ingest(
 	var (
 		execCfg        = jobExecCtx.ExecCfg()
 		distSQLPlanner = jobExecCtx.DistSQLPlanner()
-		evalCtx        = jobExecCtx.ExtendedEvalContext()
 
 		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
@@ -299,18 +298,18 @@ func (r *logicalReplicationResumer) ingest(
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
 			nil, /* clockUpdater */
-			evalCtx.Tracing,
+			jobExecCtx.ExtendedEvalContext().Tracing,
 		)
 		defer distSQLReceiver.Release()
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := *evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
 		distSQLPlanner.Run(
 			ctx,
 			initialPlanCtx,
 			nil, /* txn */
 			initialPlan,
 			distSQLReceiver,
-			&evalCtxCopy,
+			evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 
