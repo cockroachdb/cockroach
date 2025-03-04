@@ -293,6 +293,10 @@ type RangeStateListener interface {
 	// going to modify the lock table as its evaluating.
 	OnRangeLeaseTransferEval() []*roachpb.LockAcquisition
 
+	// OnRangeSubsumeEval informs the concurrency manager that the range is
+	// evaluating a merge.
+	OnRangeSubsumeEval() []*roachpb.LockAcquisition
+
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
