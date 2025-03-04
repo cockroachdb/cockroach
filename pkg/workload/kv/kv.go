@@ -12,7 +12,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
-	"hash/fnv"
+	"hash/crc64"
 	"math"
 	"math/big"
 	"math/rand"
@@ -967,8 +967,6 @@ func (g *sequentialGenerator) state() string {
 
 type writeSequenceSource struct {
 	*sequence
-	hasher hash.Hash
-	buf    [8]byte // fnv.Size() from Fnv64a.Size()
 }
 
 func (wss writeSequenceSource) Int63() int64 {
@@ -976,11 +974,12 @@ func (wss writeSequenceSource) Int63() int64 {
 }
 
 func (wss writeSequenceSource) Uint64() uint64 {
-	binary.BigEndian.PutUint64(wss.buf[:8], uint64(wss.write()))
-	wss.hasher.Reset()
-	_, _ = wss.hasher.Write(wss.buf[:8])
-	wss.hasher.Sum(wss.buf[:0])
-	return binary.BigEndian.Uint64(wss.buf[:8])
+	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf[:8], uint64(wss.write()))
+	_, _ = hasher.Write(buf[:8])
+	hasher.Sum(buf[:0])
+	return binary.BigEndian.Uint64(buf[:8])
 }
 
 func (wss writeSequenceSource) Seed(seed int64) {
@@ -989,8 +988,6 @@ func (wss writeSequenceSource) Seed(seed int64) {
 
 type readSequenceSource struct {
 	*sequence
-	hasher hash.Hash
-	buf    [8]byte // fnv.Size() from Fnv64a.Size()
 }
 
 func (rss readSequenceSource) Int63() int64 {
@@ -998,11 +995,13 @@ func (rss readSequenceSource) Int63() int64 {
 }
 
 func (rss readSequenceSource) Uint64() uint64 {
-	binary.BigEndian.PutUint64(rss.buf[:8], uint64(rss.write()))
-	rss.hasher.Reset()
-	_, _ = rss.hasher.Write(rss.buf[:8])
-	rss.hasher.Sum(rss.buf[:0])
-	return binary.BigEndian.Uint64(rss.buf[:8])
+	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf[:8], uint64(rss.read()))
+	hasher.Reset()
+	_, _ = hasher.Write(buf[:8])
+	buf = hasher.Sum(buf[:0])
+	return binary.BigEndian.Uint64(buf[:8])
 }
 
 func (rss readSequenceSource) Seed(seed int64) {
@@ -1021,11 +1020,9 @@ func newZipfianGenerator(
 ) *zipfGenerator {
 	writeSS := writeSequenceSource{
 		sequence: seq,
-		hasher:   fnv.New64a(),
 	}
 	readSS := readSequenceSource{
 		sequence: seq,
-		hasher:   fnv.New64a(),
 	}
 	return &zipfGenerator{
 		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
