@@ -10,7 +10,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/serverccl",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

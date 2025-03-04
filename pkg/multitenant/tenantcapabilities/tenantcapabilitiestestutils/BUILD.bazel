@@ -10,7 +10,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigbounds",
         "//pkg/sql/protoreflect",

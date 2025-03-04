@@ -251,7 +251,7 @@ go_test(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptutil",
         "//pkg/multitenant/mtinfopb",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/scheduledjobs/schedulebase",
