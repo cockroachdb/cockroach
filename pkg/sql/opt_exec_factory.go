@@ -1276,8 +1276,6 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 		}
 	}
 
-	// TODO(justin): it might also be relevant in some cases to print the create
-	// statements for tables referenced via FKs in these tables.
 	for i := range envOpts.Tables {
 		out.writef("")
 		if err := c.PrintCreateTable(
@@ -1297,6 +1295,11 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 		if err != nil {
 			return nil, err
 		}
+	}
+	// PrintCreateTable above omitted the FK constraints from the schema, so we
+	// need to add them separately.
+	for _, addFK := range envOpts.AddFKs {
+		fmt.Fprintf(&out.buf, "%s;\n", addFK)
 	}
 
 	for i := range envOpts.Views {
