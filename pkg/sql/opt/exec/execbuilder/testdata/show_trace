@@ -43,7 +43,12 @@ SELECT $$
 $$
 
 statement ok
-SET tracing = on,kv,results; CREATE DATABASE t; SET tracing = off
+BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+SET tracing = on,kv,results;
+CREATE DATABASE t;
+SET tracing = off;
+COMMIT;
 
 # Check the KV trace; we need to remove the eventlog entry and
 # internal queries since the timestamp is non-deterministic.
@@ -59,7 +64,12 @@ sql query        rows affected: 0
 
 # More KV operations.
 statement ok
-SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v)); SET tracing = off
+BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+SET tracing = on,kv,results;
+CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v));
+SET tracing = off;
+COMMIT;
 
 query TT
 $trace_query
@@ -75,7 +85,12 @@ sql query     rows affected: 0
 # timestamp index, and we can't use (non-deterministic) timestamp
 # values in expected values.
 statement ok
-SET tracing = on,kv,results; CREATE UNIQUE INDEX woo ON t.kv(v); SET tracing = off
+BEGIN;
+SET LOCAL autocommit_before_ddl = false;
+SET tracing = on,kv,results;
+CREATE UNIQUE INDEX woo ON t.kv(v);
+SET tracing = off;
+COMMIT;
 
 query TT
 $trace_query
