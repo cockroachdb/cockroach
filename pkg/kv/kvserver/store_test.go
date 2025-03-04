@@ -318,14 +318,6 @@ func createTestStoreWithConfig(
 	ctx context.Context, t testing.TB, stopper *stop.Stopper, opts testStoreOpts, cfg *StoreConfig,
 ) *Store {
 	store := createTestStoreWithoutStart(ctx, t, stopper, opts, cfg)
-	// Put an empty system config into gossip.
-	//
-	// TODO(ajwerner): Remove this in 22.2. It's possible it can be removed
-	// already.
-	if err := store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig,
-		&config.SystemConfigEntries{}, 0); err != nil {
-		t.Fatal(err)
-	}
 	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
