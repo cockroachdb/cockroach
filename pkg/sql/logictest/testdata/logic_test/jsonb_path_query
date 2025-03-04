@@ -1,0 +1,304 @@
+# LogicTest: local
+
+query T
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[0 to 0]');
+----
+"hello"
+
+query T
+SELECT jsonb_path_query('{}', '$')
+----
+{}
+
+statement error pgcode 2203A JSON object does not contain key "a"
+SELECT jsonb_path_query('{}', 'strict $.a')
+
+query T
+SELECT jsonb_path_query('{"a": "b"}', '$')
+----
+{"a": "b"}
+
+query T
+SELECT jsonb_path_query('{"a": ["b", true, false, null]}', '$')
+----
+{"a": ["b", true, false, null]}
+
+# WITH a AS (
+#     SELECT '{
+#         "a": {
+#             "aa": {
+#                 "aaa": "s1",
+#                 "aab": 123,
+#                 "aac": true,
+#                 "aad": false,
+#                 "aae": null,
+#                 "aaf": [1, 2, 3],
+#                 "aag": {
+#                     "aaga": "s2"
+#                 }
+#             },
+#             "ab": "s3"
+#         },
+#         "b": "s4",
+#         "c": [
+#             {"ca": "s5"},
+#             {"ca": "s6"},
+#             1,
+#             true,
+#         ],
+#         "d": 123.45,
+#     }'::JSONB AS data
+# )
+
+statement ok
+CREATE TABLE a AS SELECT '{"a": {"aa": {"aaa": "s1", "aab": 123, "aac": true, "aad": false, "aae": null, "aaf": [1, 2, 3], "aag": {"aaga": "s2"}}, "ab": "s3"}, "b": "s4", "c": [{"ca": "s5"}, {"ca": "s6"}, 1, true], "d": 123.45}'::JSONB AS data
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aaa') FROM a
+----
+"s1"
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aab') FROM a
+----
+123
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aac') FROM a
+----
+true
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aad') FROM a
+----
+false
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aae') FROM a
+----
+null
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aaf') FROM a
+----
+[1, 2, 3]
+
+query T
+SELECT jsonb_path_query(data, '$.a.aa.aag') FROM a
+----
+{"aaga": "s2"}
+
+query T
+SELECT jsonb_path_query(data, '$.c') FROM a
+----
+[{"ca": "s5"}, {"ca": "s6"}, 1, true]
+
+query T
+SELECT jsonb_path_query(data, '$.d') FROM a
+----
+123.45
+
+query T rowsort
+SELECT jsonb_path_query(data, '$.c[*].ca') FROM a
+----
+"s5"
+"s6"
+
+statement error pgcode 2203A JSON object does not contain key "aa"
+SELECT jsonb_path_query(data, 'strict $.aa') FROM a
+
+statement error pgcode 2203A JSON object does not contain key "aa"
+SELECT jsonb_path_query(data, 'strict $.aa.aaa.aaaa') FROM a
+
+query empty
+SELECT jsonb_path_query('{}', '$.a')
+
+
+statement ok
+CREATE TABLE b (j JSONB)
+
+statement ok
+INSERT INTO b VALUES ('{"a": [1, 2, 3], "b": "hello"}'), ('{"a": false}')
+
+query T rowsort
+SELECT jsonb_path_query(j, '$.a') FROM b
+----
+[1, 2, 3]
+false
+
+query T
+SELECT jsonb_path_query(j, '$.b') FROM b
+----
+"hello"
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1, 2, {"b": [4, 5]}, null, [true, false]]}', '$.a[*]')
+----
+1
+2
+{"b": [4, 5]}
+null
+[true, false]
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1, 2, {"b": [{"c": true}, {"c": false}]}, null, [true, false], {"b": [{"c": 0.1}, {"d": null}, {"c": 10}]}]}', '$.a[*].b[*].c')
+----
+true
+false
+0.1
+10
+
+query T
+SELECT jsonb_path_query('{"a": [1]}', '$.a', '{}');
+----
+[1]
+
+statement error pgcode 22023 "vars" argument is not an object
+SELECT jsonb_path_query('{"a": [1]}', '$.a', '[]');
+
+query T
+SELECT jsonb_path_query('{"a": [1]}', '$.b', '{}', false);
+----
+
+query T
+SELECT jsonb_path_query('{"a": [1]}', '$.b', '{}', true);
+----
+
+statement error pgcode 2203A JSON object does not contain key "b"
+SELECT jsonb_path_query('{"a": [1]}', 'strict $.b', '{}', false);
+
+query T
+SELECT jsonb_path_query('{"a": [1]}', 'strict $.b', '{}', true);
+----
+
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": [1, 2, 3]}}', '$.a[*].b[*]');
+----
+1
+2
+3
+
+statement error pgcode 22039 jsonpath wildcard array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": {"b": [1, 2, 3]}}', 'strict $.a[*].b[*]');
+
+query T
+SELECT jsonb_path_query('{"a": [1, 2, 3, 4, 5]}', '$.a[0]');
+----
+1
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1 to 3, 2, 1 to 3]');
+----
+2
+3
+4
+3
+2
+3
+4
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[3 to 1]');
+
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[4 to 4]');
+----
+5
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [[5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][0]');
+----
+5
+7
+6
+10
+
+statement error pgcode 22033 jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('{"a": [[5, 4], [7, 6], [6, 7], [10], []]}', 'strict $.a[*][0]');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [{}, [5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][0]');
+----
+{}
+5
+7
+6
+10
+
+statement error pgcode 22039 jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": [{}, [5, 4], [7, 6], [6, 7], [10], []]}', 'strict $.a[*][0]');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": ["hello", [5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][0]');
+----
+"hello"
+5
+7
+6
+10
+
+query T rowsort
+SELECT jsonb_path_query('{"a": ["hello", [5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][1]');
+----
+4
+6
+7
+
+statement error pgcode 22039 jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": "hello"}', 'strict $.a[1 to 3]');
+
+statement error pgcode 22039 jsonpath array accessor can only be applied to an array
+SELECT jsonb_path_query('{"a": [1, 2, 3, 4, 5]}', 'strict $[3 to 1]');
+
+query empty
+SELECT jsonb_path_query('{"a": [1, 2, 3]}', '$.a.b');
+
+
+statement error pgcode 2203A jsonpath member accessor can only be applied to an object
+SELECT jsonb_path_query('{"a": [1, 2, 3]}', 'strict $.a.b');
+
+query T
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1]');
+----
+2
+
+query T
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varInt]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+----
+9
+
+# TODO(normanchenn): this will be changed after floats are supported.
+statement error pgcode 22033 jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varFloat]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+
+statement error pgcode 22033 jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varString]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+
+statement error pgcode 22033 jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varBool]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+
+statement error pgcode 22033 jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varNull]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+
+query T
+SELECT jsonb_path_query('{"foo": [{"bar": "value"}]}', '$.foo.bar');
+----
+"value"
+
+query T rowsort
+SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}, {"baz": "value3"}]}', '$.foo.bar');
+----
+"value"
+"value2"
+
+statement error pgcode 2203A jsonpath member accessor can only be applied to an object
+SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}]}', 'strict $.foo.bar');
+
+# select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
+# select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
+
+# interesting functionality
+# select jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
+# select jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a');

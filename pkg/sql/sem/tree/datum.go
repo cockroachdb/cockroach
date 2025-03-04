@@ -96,6 +96,9 @@ var (
 
 	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
 	ValidateJSONPath func(string) (string, error)
+
+	// EmptyDJSON is an empty JSON object.
+	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons
@@ -3969,6 +3972,30 @@ func ParseDJsonpath(s string) (Datum, error) {
 		return nil, MakeParseError(s, types.Jsonpath, err)
 	}
 	return NewDJsonpath(jp), nil
+}
+
+// AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DJsonpath wrapped by a
+// *DOidWrapper is possible.
+func AsDJsonpath(e Expr) (*DJsonpath, bool) {
+	switch t := e.(type) {
+	case *DJsonpath:
+		return t, true
+	case *DOidWrapper:
+		return AsDJsonpath(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDJsonpath attempts to retrieve a DJsonpath from an Expr, panicking if the
+// assertion fails.
+func MustBeDJsonpath(e Expr) DJsonpath {
+	i, ok := AsDJsonpath(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DJsonpath, found %T", e))
+	}
+	return *i
 }
 
 // DJSON is the JSON Datum.
