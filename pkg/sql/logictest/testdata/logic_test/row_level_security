@@ -985,17 +985,46 @@ statement ok
 GRANT ALL ON sensitive_data_table TO sensitive_user;
 
 statement ok
-CREATE FUNCTION my_sec_definer_function() RETURNS TABLE(ID INT)
+CREATE FUNCTION my_sec_definer_reader_function() RETURNS TABLE(ID INT)
 LANGUAGE SQL AS
 $$
  SELECT * FROM sensitive_data_table
 $$ SECURITY DEFINER;
 
 statement ok
-CREATE FUNCTION my_non_sec_definer_function() RETURNS TABLE(ID INT)
+CREATE FUNCTION my_non_sec_definer_reader_function() RETURNS TABLE(ID INT)
 LANGUAGE SQL AS
 $$
  SELECT * FROM sensitive_data_table
+$$;
+
+statement ok
+CREATE FUNCTION my_sec_definer_inserter_function(v INT) RETURNS VOID
+LANGUAGE SQL AS
+$$
+ INSERT INTO sensitive_data_table VALUES (v)
+$$ SECURITY DEFINER;
+
+statement ok
+CREATE FUNCTION my_non_sec_definer_inserter_function(v INT) RETURNS VOID
+LANGUAGE SQL AS
+$$
+ INSERT INTO sensitive_data_table VALUES (v)
+$$;
+
+
+statement ok
+CREATE FUNCTION my_sec_definer_updater_function(v INT) RETURNS VOID
+LANGUAGE SQL AS
+$$
+ UPDATE sensitive_data_table SET c1=v*2 WHERE c1 = v
+$$ SECURITY DEFINER;
+
+statement ok
+CREATE FUNCTION my_non_sec_definer_updater_function(v INT) RETURNS VOID
+LANGUAGE SQL AS
+$$
+ UPDATE sensitive_data_table SET c1=v*2 WHERE c1 = v
 $$;
 
 statement ok
@@ -1005,16 +1034,45 @@ query I rowsort
 SELECT * FROM sensitive_data_table;
 ----
 
+query I
+select my_sec_definer_inserter_function(10);
+----
+NULL
+
+query I
+select my_sec_definer_updater_function(2);
+----
+NULL
+
 query I rowsort
-SELECT my_sec_definer_function();
+SELECT my_sec_definer_reader_function();
 ----
 0
 1
-2
+4
+10
 
 query I rowsort
-SELECT my_non_sec_definer_function();
+SELECT my_non_sec_definer_reader_function();
 -----
+
+statement error pq: new row violates row-level security policy for table "sensitive_data_table"
+select my_non_sec_definer_inserter_function(20);
+
+# No error from the update because the lack of policies won't read any rows to
+# update. We verify nothing has changed right after.
+query I
+select my_non_sec_definer_updater_function(4);
+----
+NULL
+
+query I rowsort
+SELECT my_sec_definer_reader_function();
+----
+0
+1
+4
+10
 
 statement ok
 SET ROLE root
@@ -1026,29 +1084,70 @@ statement ok
 SET ROLE sensitive_user;
 
 query I rowsort
-SELECT my_sec_definer_function();
+SELECT my_sec_definer_reader_function();
 ----
 0
 1
-2
+4
+10
 
 query I rowsort
-SELECT my_non_sec_definer_function()
+SELECT my_non_sec_definer_reader_function()
 ----
 1
-2
+4
+10
+
+statement ok
+SET ROLE root;
+
+statement ok
+CREATE POLICY p2 ON sensitive_data_table FOR INSERT TO sensitive_user WITH CHECK (C1 != 55);
+
+statement ok
+CREATE POLICY p3 ON sensitive_data_table FOR UPDATE TO sensitive_user USING (true) WITH CHECK (C1 >= 10);
+
+statement ok
+SET ROLE sensitive_user;
+
+# violates new policy for insert
+statement error pq: new row violates row-level security policy for table "sensitive_data_table"
+select my_non_sec_definer_inserter_function(55);
+
+query I
+select my_non_sec_definer_inserter_function(54);
+----
+NULL
+
+# violates new policy for update
+statement error pq: new row violates row-level security policy for table "sensitive_data_table"
+select my_non_sec_definer_updater_function(4);
+
+query I
+select my_non_sec_definer_updater_function(10);
+----
+NULL
+
+query I rowsort
+SELECT my_sec_definer_reader_function();
+----
+0
+1
+4
+20
+54
 
 statement ok
 SET ROLE root
 
 statement ok
-DROP FUNCTION my_sec_definer_function;
+DROP FUNCTION my_sec_definer_reader_function;
 
 statement ok
-DROP FUNCTION my_non_sec_definer_function;
+DROP FUNCTION my_non_sec_definer_reader_function;
 
 statement ok
-DROP TABLE sensitive_data_table;
+DROP TABLE sensitive_data_table CASCADE;
 
 subtest truncate
 
@@ -1327,5 +1426,168 @@ REVOKE SYSTEM EXTERNALIOIMPLICITACCESS FROM z;
 
 statement ok
 DROP USER z;
+
+subtest rls_for_insert
+
+statement ok
+CREATE TABLE rlsInsert (c1 int not null primary key, c2 text, c3 date, family (c1,c2,c3));
+
+statement ok
+ALTER TABLE rlsInsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_insert ON rlsInsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 not between '2012-01-01' and '2012-12-31');
+
+statement ok
+CREATE POLICY p_select ON rlsInsert AS PERMISSIVE FOR SELECT TO buck USING (true);
+
+statement ok
+GRANT ALL on rlsInsert TO buck;
+
+# Sanity that the admin can insert anything
+statement ok
+INSERT INTO rlsInsert VALUES (1, 'first', '2012-06-30');
+
+statement ok
+SET ROLE buck;
+
+statement ok
+INSERT INTO rlsInsert VALUES (2, 'second', '2010-06-30');
+
+# Violates policy because date is in 2012.
+statement error pq: new row violates row-level security policy for table "rlsinsert"
+INSERT INTO rlsInsert VALUES (3, 'third', '2012-07-08');
+
+# Violates policy because date is in 2012.
+statement error pq: new row violates row-level security policy for table "rlsinsert"
+INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert;
+
+statement ok
+INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert WHERE c3 not between '2012-01-01' and '2012-12-31';
+
+statement ok
+SET ROLE root;
+
+query TT
+SHOW CREATE TABLE rlsInsert
+----
+rlsinsert  CREATE TABLE public.rlsinsert (
+             c1 INT8 NOT NULL,
+             c2 STRING NULL,
+             c3 DATE NULL,
+             CONSTRAINT rlsinsert_pkey PRIMARY KEY (c1 ASC),
+             FAMILY fam_0_c1_c2_c3 (c1, c2, c3)
+           );
+           ALTER TABLE public.rlsinsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+           CREATE POLICY p_insert ON public.rlsinsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 NOT BETWEEN '2012-01-01':::DATE AND '2012-12-31':::DATE);
+           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true)
+
+statement ok
+DROP POLICY p_insert on rlsInsert;
+
+statement ok
+SET ROLE buck;
+
+# There is no policy for insert, so we deny everything.
+statement error pq: new row violates row-level security policy for table "rlsinsert"
+INSERT INTO rlsInsert VALUES (4, 'fourth', '2022-10-08');
+
+query I
+select c1 from rlsInsert ORDER BY c1;
+----
+1
+2
+7
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE rlsInsert;
+
+subtest rls_for_update
+
+statement ok
+CREATE TYPE league AS ENUM('AL','NL');
+
+statement ok
+CREATE FUNCTION al_only(l league) RETURNS BOOL AS $$
+BEGIN
+  RETURN l = 'AL';
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE SEQUENCE seq1;
+
+statement ok
+CREATE TABLE bbteams (team text, league league, wins int, family (team, league, wins));
+
+statement ok
+ALTER TABLE bbteams ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_update ON bbteams FOR UPDATE TO buck USING (true) WITH CHECK (league = 'AL' and nextval('seq1') < 1000);
+
+statement ok
+CREATE POLICY p_select ON bbteams FOR SELECT TO buck USING (true);
+
+statement ok
+CREATE POLICY p_insert ON bbteams FOR INSERT TO buck WITH CHECK (nextval('seq1') < 1000);
+
+statement ok
+GRANT ALL on bbteams TO buck;
+
+statement ok
+GRANT USAGE ON seq1 TO buck;
+
+statement ok
+GRANT UPDATE ON seq1 TO buck;
+
+statement ok
+SET ROLE buck;
+
+statement ok
+INSERT INTO bbteams(team, league) VALUES ('guardians', 'AL'), ('royals', 'AL'), ('expos', 'NL');
+
+# Should be violated because expos are not in the AL league.
+statement error pq: new row violates row-level security policy for table "bbteams"
+UPDATE bbteams SET wins = 91 WHERE team = 'expos';
+
+# Is allowed because league changed to AL at the same time.
+statement ok
+UPDATE bbteams SET wins = 87, league = 'AL' WHERE team = 'expos';
+
+# Change the sequence so that it's value violates the WITH CHECK expression for
+# the update policy.
+statement ok
+select setval('seq1', 1500, true);
+
+statement error pq: new row violates row-level security policy for table "bbteams"
+UPDATE bbteams SET wins = 82  WHERE team = 'royals';
+
+statement ok
+SET ROLE root
+
+query I
+SELECT nextval('seq1')
+----
+1502
+
+query TTI
+select team, league, wins from bbteams order by team;
+----
+expos      AL  87
+guardians  AL  NULL
+royals     AL  NULL
+
+statement ok
+DROP TABLE bbteams;
+
+statement ok
+DROP FUNCTION al_only;
+
+statement ok
+DROP SEQUENCE seq1;
 
 subtest end
