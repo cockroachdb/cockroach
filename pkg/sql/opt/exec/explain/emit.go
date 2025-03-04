@@ -1397,8 +1397,10 @@ func (e *emitter) emitPolicies(
 		ob.AddField("policies", "row-level security enabled, no policies applied.")
 	} else {
 		var sb strings.Builder
-		for i := 0; i < table.PolicyCount(tree.PolicyTypePermissive); i++ {
-			policy := table.Policy(tree.PolicyTypePermissive, i)
+		policies := table.Policies()
+		// TODO(136742): Add support for restrictive policies.
+		for i := range policies.Permissive {
+			policy := policies.Permissive[i]
 			if applied.Policies.Contains(policy.ID) {
 				if sb.Len() > 0 {
 					sb.WriteString(", ")

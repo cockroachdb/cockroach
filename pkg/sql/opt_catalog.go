@@ -1046,7 +1046,7 @@ func newOptTable(
 			invertedColumnName := idx.InvertedColumnName()
 			invertedColumnType := idx.InvertedColumnKeyType()
 
-			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(invertedColumnID)
+			invertedSourceColOrdinal, _ := ot.LookupColumnOrdinal(invertedColumnID)
 
 			// Add an inverted column that refers to the inverted index key.
 			invertedCol, invertedColOrd := newColumn()
@@ -1132,8 +1132,19 @@ func newOptTable(
 		ot.families[i].init(ot, &desc.GetFamilies()[i+1])
 	}
 
+	// Store row-level security information
+	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
+	ot.policies = getOptPolicies(desc.GetPolicies())
+
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
+	if ot.rlsEnabled {
+		// Add a placeholder constraint for RLS. The actual constraint contents
+		// are determined at runtime based on the role and command requiring it.
+		synthesizedChecks = append(synthesizedChecks, optCheckConstraint{
+			isRLSConstraint: true,
+		})
+	}
 	for i := 0; i < ot.ColumnCount(); i++ {
 		col := ot.Column(i)
 		if col.IsMutation() {
@@ -1171,7 +1182,7 @@ func newOptTable(
 			validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 			columnCount: len(check.CheckDesc().ColumnIDs),
 			lookupColumnOrdinal: func(j int) (int, error) {
-				return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
+				return ot.LookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
 			},
 		})
 	}
@@ -1179,10 +1190,6 @@ func newOptTable(
 
 	// Move all triggers into the opt table.
 	ot.triggers = getOptTriggers(desc.GetTriggers())
-
-	// Store row-level security information
-	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
-	ot.policies = getOptPolicies(desc.GetPolicies())
 
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
@@ -1512,32 +1519,17 @@ func (ot *optTable) Trigger(i int) cat.Trigger {
 // IsRowLevelSecurityEnabled is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 
-// PolicyCount is part of the cat.Table interface
-func (ot *optTable) PolicyCount(polType tree.PolicyType) int {
+// Policies is part of the cat.Table interface.
+func (ot *optTable) Policies() *cat.Policies {
 	if !ot.rlsEnabled {
-		return 0
+		return nil
 	}
-	switch polType {
-	case tree.PolicyTypeRestrictive:
-		return len(ot.policies.Restrictive)
-	default:
-		return len(ot.policies.Permissive)
-	}
+	return &ot.policies
 }
 
-// Policy is part of the cat.Table interface
-func (ot *optTable) Policy(polType tree.PolicyType, i int) cat.Policy {
-	switch polType {
-	case tree.PolicyTypeRestrictive:
-		return ot.policies.Restrictive[i]
-	default:
-		return ot.policies.Permissive[i]
-	}
-}
-
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// LookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+func (ot *optTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -1678,7 +1670,7 @@ func (oi *optIndex) init(
 		notNull := true
 		for i := 0; i < idx.NumKeyColumns(); i++ {
 			id := idx.GetKeyColumnID(i)
-			ord, _ := tab.lookupColumnOrdinal(id)
+			ord, _ := tab.LookupColumnOrdinal(id)
 			if tab.Column(ord).IsNullable() {
 				notNull = false
 				break
@@ -1716,11 +1708,11 @@ func (oi *optIndex) init(
 		case inverted && i == numKeyCols-1:
 			ord = oi.invertedColOrd
 		case i < numKeyCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		case i < numKeyCols+numKeySuffixCols:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.idx.GetKeySuffixColumnID(i - numKeyCols))
 		default:
-			ord, _ = oi.tab.lookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
+			ord, _ = oi.tab.LookupColumnOrdinal(oi.storedCols[i-numKeyCols-numKeySuffixCols])
 		}
 		oi.columnOrds[i] = ord
 	}
@@ -1898,9 +1890,10 @@ func (op *optPartition) PartitionByListPrefixes() []tree.Datums {
 // optCheckConstraint implements cat.CheckConstraint. See that interface
 // for more information on the fields.
 type optCheckConstraint struct {
-	constraint  string
-	validated   bool
-	columnCount int
+	constraint      string
+	validated       bool
+	columnCount     int
+	isRLSConstraint bool
 
 	// lookupColumnOrdinal returns the table column ordinal of the ith column in
 	// this constraint.
@@ -1931,6 +1924,11 @@ func (oc *optCheckConstraint) ColumnOrdinal(i int) int {
 		panic(err)
 	}
 	return ord
+}
+
+// IsRLSConstraint is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) IsRLSConstraint() bool {
+	return oc.isRLSConstraint
 }
 
 type optTableStat struct {
@@ -2092,7 +2090,7 @@ func (oi *optFamily) ColumnCount() int {
 
 // Column is part of the cat.Family interface.
 func (oi *optFamily) Column(i int) cat.FamilyColumn {
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.desc.ColumnIDs[i])
 	return cat.FamilyColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
 
@@ -2144,7 +2142,7 @@ func (u *optUniqueConstraint) ColumnOrdinal(tab cat.Table, i int) int {
 		))
 	}
 	optTab := convertTableToOptTable(tab)
-	ord, _ := optTab.lookupColumnOrdinal(u.columns[i])
+	ord, _ := optTab.LookupColumnOrdinal(u.columns[i])
 	return ord
 }
 
@@ -2232,7 +2230,7 @@ func (fk *optForeignKeyConstraint) OriginColumnOrdinal(originTable cat.Table, i 
 	}
 
 	tab := convertTableToOptTable(originTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.originColumns[i])
+	ord, _ := tab.LookupColumnOrdinal(fk.originColumns[i])
 	return ord
 }
 
@@ -2245,7 +2243,7 @@ func (fk *optForeignKeyConstraint) ReferencedColumnOrdinal(referencedTable cat.T
 		))
 	}
 	tab := convertTableToOptTable(referencedTable)
-	ord, _ := tab.lookupColumnOrdinal(fk.referencedColumns[i])
+	ord, _ := tab.LookupColumnOrdinal(fk.referencedColumns[i])
 	return ord
 }
 
@@ -2531,7 +2529,7 @@ func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
 		validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
 		columnCount: len(check.CheckDesc().ColumnIDs),
 		lookupColumnOrdinal: func(j int) (int, error) {
-			return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
+			return ot.LookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
 		},
 	}
 }
@@ -2645,13 +2643,8 @@ func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
 // IsRowLevelSecurityEnabled is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
 
-// PolicyCount is part of the cat.Table interface
-func (ot *optVirtualTable) PolicyCount(polType tree.PolicyType) int { return 0 }
-
-// Policy is part of the cat.Table interface
-func (ot *optVirtualTable) Policy(polType tree.PolicyType, i int) cat.Policy {
-	panic(errors.AssertionFailedf("no policies"))
-}
+// Policies is part of the cat.Table interface.
+func (ot *optVirtualTable) Policies() *cat.Policies { return nil }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
@@ -2737,9 +2730,9 @@ func (oi *optVirtualIndex) PrefixColumnCount() int {
 	panic(errors.AssertionFailedf("virtual indexes cannot be inverted or vector indexes"))
 }
 
-// lookupColumnOrdinal returns the ordinal of the column with the given ID. A
+// LookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
+func (ot *optVirtualTable) LookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	col, ok := ot.colMap.Get(colID)
 	if ok {
 		return col, nil
@@ -2756,7 +2749,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 	length := oi.idx.NumKeyColumns()
 	if i < length {
-		ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
+		ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetKeyColumnID(i))
 		return cat.IndexColumn{
 			Column: oi.tab.Column(ord),
 		}
@@ -2768,7 +2761,7 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	}
 
 	i -= length + 1
-	ord, _ := oi.tab.lookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
+	ord, _ := oi.tab.LookupColumnOrdinal(oi.idx.GetStoredColumnID(i))
 	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
@@ -3008,11 +3001,13 @@ func getOptPolicies(descPolicies []descpb.PolicyDescriptor) cat.Policies {
 	for i := range descPolicies {
 		descPolicy := &descPolicies[i]
 		policy := cat.Policy{
-			Name:          tree.Name(descPolicy.Name),
-			ID:            descPolicy.ID,
-			UsingExpr:     descPolicy.UsingExpr,
-			WithCheckExpr: descPolicy.WithCheckExpr,
-			Command:       descPolicy.Command,
+			Name:               tree.Name(descPolicy.Name),
+			ID:                 descPolicy.ID,
+			UsingExpr:          descPolicy.UsingExpr,
+			UsingColumnIDs:     descPolicy.UsingColumnIDs,
+			WithCheckExpr:      descPolicy.WithCheckExpr,
+			WithCheckColumnIDs: descPolicy.WithCheckColumnIDs,
+			Command:            descPolicy.Command,
 		}
 		policy.InitRoles(descPolicy.RoleNames)
 		if descPolicy.Type != catpb.PolicyType_RESTRICTIVE {
