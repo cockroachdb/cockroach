@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -40,13 +39,6 @@ func BenchmarkTestServerStartup(b *testing.B) {
 				args := base.TestServerArgs{
 					DefaultTestTenant: tc.tenantOpt,
 					Settings:          cluster.MakeTestingClusterSettings(),
-					Knobs: base.TestingKnobs{
-						SQLEvalContext: &eval.TestingKnobs{
-							// We disable the randomization of some batch sizes to get consistent
-							// results.
-							ForceProductionValues: true,
-						},
-					},
 				}
 				s := serverutils.StartServerOnly(b, args)
 				s.Stopper().Stop(context.Background())
