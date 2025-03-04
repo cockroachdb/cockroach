@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -72,7 +73,6 @@ func TestServerStartup(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-
 		args := base.TestServerArgs{
 			DefaultTestTenant: tc.tenantOpt,
 			Settings:          cluster.MakeTestingClusterSettings(),
@@ -81,8 +81,16 @@ func TestServerStartup(t *testing.T) {
 		kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
 
 		t.Run(tc.name, func(t *testing.T) {
-			s := serverutils.StartServerOnly(t, args)
-			s.Stopper().Stop(context.Background())
+			testutils.RunTrueAndFalse(t, "slim", func(t *testing.T, useSlimServer bool) {
+				var s serverutils.TestServerInterface
+				if useSlimServer {
+					s = serverutils.StartSlimServerOnly(t, args)
+				} else {
+					s = serverutils.StartServerOnly(t, args)
+
+				}
+				s.Stopper().Stop(context.Background())
+			})
 		})
 	}
 }
