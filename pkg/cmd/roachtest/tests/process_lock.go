@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +40,7 @@ func registerProcessLock(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Timeout:           2 * runDuration,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()
 			startSettings := install.MakeClusterSettings()
@@ -57,17 +59,17 @@ func registerProcessLock(r registry.Registry) {
 
 			seed := int64(1666467482296309000)
 			rng := randutil.NewTestRandWithSeed(seed)
+			g := t.NewGroup()
 
 			t.Status("starting workload")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--duration %s --concurrency 512 --max-rate 4096 --tolerate-errors `+
 					` --min-block-bytes=1024 --max-block-bytes=1024 `+
 					`{pgurl:1-3}`, runDuration.String()))
 				return nil
 			})
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, l *logger.Logger) error {
 				// Query /proc/ on each of the nodes to retrieve the exact
 				// command used to start the node. This is more future proof
 				// than trying to reconstruct the command deposited into the
@@ -80,7 +82,7 @@ func registerProcessLock(r registry.Registry) {
 					// grepping for `./cockroach start` in ps's output, and
 					// grabbing the first field after stripping leading
 					// whitespace. Then, use this pid cat /proc/<pid>/cmdline.
-					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(n)),
+					result, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(c.Node(n)),
 						"cat /proc/`ps -eo pid,args | grep -E '([0-9]+) ./cockroach start' |  sed 's/^ *//' | cut -d ' ' -f 1`/cmdline")
 					if err != nil {
 						return err
@@ -107,7 +109,7 @@ func registerProcessLock(r registry.Registry) {
 						}
 					}
 					startCommands[n-1] = cmd.String()
-					t.L().PrintfCtx(ctx, "Retrieved n%d's start command: %s", n, startCommands[n-1])
+					l.PrintfCtx(ctx, "Retrieved n%d's start command: %s", n, startCommands[n-1])
 				}
 
 				done := time.After(runDuration)
@@ -128,30 +130,29 @@ func registerProcessLock(r registry.Registry) {
 							func() {
 								// Try to start the node again.
 								err := c.RunE(ctx, option.WithNodes(c.Node(n)), startCommands[n-1])
-								t.L().PrintfCtx(ctx, "Attempt to start cockroach process on n%d while another cockroach process is still running; error expected: %v", n, err)
+								l.PrintfCtx(ctx, "Attempt to start cockroach process on n%d while another cockroach process is still running; error expected: %v", n, err)
 							},
 							func() {
 								// Try to perform a manual compaction.
 								err := c.RunE(ctx, option.WithNodes(c.Node(n)), fmt.Sprintf("./cockroach debug compact /mnt/data1/cockroach %s", enterpriseEncryption[n-1]))
-								t.L().PrintfCtx(ctx, "Attempt to manual compact store on n%d while another cockroach process is still running; error expected: %v", n, err)
+								l.PrintfCtx(ctx, "Attempt to manual compact store on n%d while another cockroach process is still running; error expected: %v", n, err)
 							},
 							func() {
 								// Restart the node. This verifies that the
 								// other operations that were performed
 								// concurrently with the running process did not
 								// corrupt the on-disk state.
-								m.ExpectDeath()
-								c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(n))
-								c.Start(ctx, t.L(), startOpts, startSettings, c.Node(n))
-								m.ResetDeaths()
+								t.Monitor().ExpectDeath()
+								c.Stop(ctx, l, option.DefaultStopOpts(), c.Node(n))
+								c.Start(ctx, l, startOpts, startSettings, c.Node(n))
+								t.Monitor().ResetDeaths()
 							},
 						}
 						ops[randutil.RandIntInRange(rng, 0, len(ops))]()
 					}
 				}
 			})
-
-			m.Wait()
+			g.Wait()
 		},
 	})
 }
