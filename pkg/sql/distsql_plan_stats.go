@@ -763,7 +763,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	extEvalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	semaCtx *tree.SemaContext,
 	txn *kv.Txn,
@@ -786,13 +786,15 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		ctx,
 		resultWriter,
 		tree.DDL,
-		evalCtx.ExecCfg.RangeDescriptorCache,
+		extEvalCtx.ExecCfg.RangeDescriptorCache,
 		txn,
-		evalCtx.ExecCfg.Clock,
-		evalCtx.Tracing,
+		extEvalCtx.ExecCfg.Clock,
+		extEvalCtx.Tracing,
 	)
 	defer recv.Release()
 
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := extEvalCtx.Context.Copy()
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return resultWriter.Err()
 }

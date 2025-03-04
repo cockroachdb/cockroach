@@ -1015,7 +1015,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	readAsOf := sc.clock.Now()
 
 	var p *PhysicalPlan
-	var evalCtx extendedEvalContext
+	var extEvalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
@@ -1039,9 +1039,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return err
 		}
 		sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "dist-index-backfill")
-		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
+		extEvalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.KV().ReadTimestamp(), txn.Descriptors())
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(
-			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
@@ -1099,7 +1099,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		sc.rangeDescriptorCache,
 		nil, /* txn - the flow does not run wholly in a txn */
 		sc.clock,
-		evalCtx.Tracing,
+		extEvalCtx.Tracing,
 	)
 	defer recv.Release()
 
@@ -1219,13 +1219,15 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if err := sc.jobRegistry.CheckPausepoint("indexbackfill.before_flow"); err != nil {
 			return err
 		}
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := extEvalCtx.Context.Copy()
 		sc.distSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
-			p, recv, &evalCtxCopy,
+			p,
+			recv,
+			evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 		return cbw.Err()
@@ -1359,11 +1361,15 @@ func (sc *SchemaChanger) distColumnBackfill(
 			if err != nil {
 				return err
 			}
+			// Copy the eval.Context, as dsp.Run() might change it.
+			evalCtxCopy := evalCtx.Context.Copy()
 			sc.distSQLPlanner.Run(
 				ctx,
 				planCtx,
 				nil, /* txn - the processors manage their own transactions */
-				plan, recv, &evalCtx,
+				plan,
+				recv,
+				evalCtxCopy,
 				nil, /* finishedSetupFn */
 			)
 			return cbw.Err()

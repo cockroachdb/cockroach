@@ -257,7 +257,6 @@ func startDistChangefeed(
 	var noTxn *kv.Txn
 
 	dsp := execCtx.DistSQLPlanner()
-	evalCtx := execCtx.ExtendedEvalContext()
 
 	//lint:ignore SA1019 deprecated usage
 	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
@@ -304,7 +303,7 @@ func startDistChangefeed(
 			execCtx.ExecCfg().RangeDescriptorCache,
 			noTxn,
 			nil, /* clockUpdater */
-			evalCtx.Tracing,
+			execCtx.ExtendedEvalContext().Tracing,
 		)
 		defer recv.Release()
 
@@ -328,10 +327,10 @@ func startDistChangefeed(
 		// closing (which closes the current planner's monitor) and changefeed
 		// DistSQL flow being cleaned up.
 		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
-		// Copy the evalCtx, as dsp.Run() might change it.
-		evalCtxCopy := *evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
 		// p is the physical plan, recv is the DistSQLReceiver.
-		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
+		dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
 	}
 
