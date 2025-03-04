@@ -10,10 +10,12 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -89,6 +92,21 @@ func newKVNativeAndEngine(tb testing.TB) (*kvNative, storage.Engine) {
 func (kv *kvNative) Insert(rows, run int) error {
 	firstRow := rows * run
 	lastRow := rows * (run + 1)
+
+	const hack = true
+	if hack {
+		var b kv2.Batch
+		for i := firstRow; i < lastRow; i++ {
+			key := fmt.Sprintf("%s%08d", kv.prefix, rand.NewSource(int64(i)).Int63())
+			// For some reason probes take a lot longer:
+			// req := &kvpb.ProbeRequest{}
+			// req.Key = roachpb.Key(fmt.Sprintf("%s%08d", kv.prefix, i))
+			// b.AddRawRequest(req)
+			b.Put(key, i)
+		}
+		return kv.db.Run(context.Background(), &b)
+	}
+
 	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
@@ -356,35 +374,66 @@ func BenchmarkKV(b *testing.B) {
 				kvTyp := runtime.FuncForPC(reflect.ValueOf(kvFn).Pointer()).Name()
 				kvTyp = strings.TrimPrefix(kvTyp, "github.com/cockroachdb/cockroach/pkg/sql/tests_test.newKV")
 				b.Run(kvTyp, func(b *testing.B) {
-					for _, rows := range []int{1, 10, 100, 1000, 10000} {
-						b.Run(fmt.Sprintf("rows=%d", rows), func(b *testing.B) {
-							kv := kvFn(b)
-							defer kv.done()
+					for _, splits := range []int{0, 10, 100, 1000} {
+						b.Run(fmt.Sprintf("splits=%d", splits), func(b *testing.B) {
+							for _, rows := range []int{1, 10, 100, 1000, 10000} { // batch size really
+								b.Run(fmt.Sprintf("rows=%d", rows), func(b *testing.B) {
+									kv := kvFn(b)
+									defer kv.done()
 
-							var prepRows int
-							switch i {
-							case 0: // Insert
-								prepRows = 0
-							case 1: // Update
-								prepRows = rows
-							case 2: // Delete
-								prepRows = rows * b.N
-							case 3: // Scan
-								prepRows = rows
-							default:
-								b.Fatal("unexpected op")
-							}
+									kvN, ok := kv.(*kvNative)
+									if !ok {
+										b.Skip("unsupported with splits")
+									}
+									// Split at k*splitWidth, for k in [1, splits].
+									if splits > 0 {
+										splitWidth := math.MaxInt64 / splits
+										for i := 1; i <= splits; i++ {
+											key := fmt.Sprintf("%s%08d", kvN.prefix, i*splitWidth)
+											require.NoError(b, kvN.db.AdminSplit(context.Background(), key, hlc.Timestamp{}))
+										}
+										b.Logf("splits=%d", splits)
+									}
 
-							if err := kv.prep(prepRows); err != nil {
-								b.Fatal(err)
+									var prepRows int
+									switch i {
+									case 0: // Insert
+										prepRows = 0
+									case 1: // Update
+										prepRows = rows
+									case 2: // Delete
+										prepRows = rows * b.N
+									case 3: // Scan
+										prepRows = rows
+									default:
+										b.Fatal("unexpected op")
+									}
+
+									if err := kv.prep(prepRows); err != nil {
+										b.Fatal(err)
+									}
+									b.ResetTimer()
+									defer b.StopTimer()
+									const parallel = true
+									if !parallel {
+										for i := 0; i < b.N; i++ {
+											if err := opFn(kv, rows, i); err != nil {
+												b.Fatal(err)
+											}
+										}
+									} else {
+										var i atomic.Int64
+										b.RunParallel(func(pb *testing.PB) {
+											for pb.Next() {
+												run := i.Add(1)
+												if err := opFn(kv, rows, int(run)); err != nil {
+													b.Fatal(err)
+												}
+											}
+										})
+									}
+								})
 							}
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								if err := opFn(kv, rows, i); err != nil {
-									b.Fatal(err)
-								}
-							}
-							b.StopTimer()
 						})
 					}
 				})
