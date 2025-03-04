@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttermcache"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -182,6 +183,7 @@ type LogStore struct {
 	Sideload    SideloadStorage
 	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
+	TermCache   *rafttermcache.TermCache
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
@@ -380,8 +382,8 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		}
 	}
 
-	// Update raft log entry cache. We clear any older, uncommitted log entries
-	// and cache the latest ones.
+	// Update raft term cache and raft log entry cache.
+	// We clear any older, uncommitted log entries and cache the latest ones.
 	//
 	// In the blocking log sync case, these entries are already durable. In the
 	// non-blocking case, these entries have been written to the pebble engine (so
@@ -391,6 +393,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	// splitting its log into an unstable portion for entries that are not known
 	// to be durable and a stable portion for entries that are known to be
 	// durable.
+	s.TermCache.ScanAppend(ctx, m.Entries)
 	s.EntryCache.Add(s.RangeID, m.Entries, true /* truncate */)
 
 	return state, nil
@@ -616,9 +619,15 @@ func LoadTerm(
 	rsl StateLoader,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
+	tCache *rafttermcache.TermCache,
 	eCache *raftentry.Cache,
 	index kvpb.RaftIndex,
 ) (kvpb.RaftTerm, error) {
+	term, found := tCache.Term(ctx, index)
+	if found {
+		return term, nil
+	}
+
 	entry, found := eCache.Get(rangeID, index)
 	if found {
 		return kvpb.RaftTerm(entry.Term), nil

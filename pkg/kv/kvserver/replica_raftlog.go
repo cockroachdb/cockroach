@@ -114,7 +114,7 @@ func (r *replicaLogStorage) termLocked(i kvpb.RaftIndex) (kvpb.RaftTerm, error) 
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.raftMu.logStorage.TermCache, r.store.raftEntryCache, i,
 	)
 }
 
@@ -249,7 +249,7 @@ func (r *replicaRaftMuLogSnap) termRaftMuLocked(i kvpb.RaftIndex) (kvpb.RaftTerm
 	}
 	return logstore.LoadTerm(r.AnnotateCtx(context.TODO()),
 		r.raftMu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
-		r.store.raftEntryCache, i,
+		r.raftMu.logStorage.TermCache, r.store.raftEntryCache, i,
 	)
 }
 

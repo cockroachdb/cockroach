@@ -19,6 +19,7 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/kv/kvserver/rafttermcache",
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
