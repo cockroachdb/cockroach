@@ -171,6 +171,7 @@ inner-join (lookup inverted)
  │    ├── right fixed columns: [6] = ['\x8a']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
+ │    ├── volatile
  │    └── filters (true)
  └── filters (true)
 
@@ -288,5 +289,6 @@ inner-join (lookup zigzag)
  │    ├── right fixed columns: [7] = ['\x3766000112670001']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
+ │    ├── volatile
  │    └── filters (true)
  └── filters (true)
