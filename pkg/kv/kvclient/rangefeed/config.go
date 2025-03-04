@@ -39,6 +39,7 @@ type config struct {
 	withDiff              bool
 	withFiltering         bool
 	withMatchingOriginIDs []uint32
+	consumerID            int64
 	onUnrecoverableError  OnUnrecoverableError
 	onCheckpoint          OnCheckpoint
 	frontierQuantize      time.Duration
@@ -156,6 +157,12 @@ func WithFiltering(withFiltering bool) Option {
 func WithOriginIDsMatching(originIDs ...uint32) Option {
 	return optionFunc(func(c *config) {
 		c.withMatchingOriginIDs = originIDs
+	})
+}
+
+func WithConsumerID(cid int64) Option {
+	return optionFunc(func(c *config) {
+		c.consumerID = cid
 	})
 }
 
