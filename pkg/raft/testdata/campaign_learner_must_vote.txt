@@ -124,7 +124,13 @@ stabilize 2 3
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:2 Log:1/4 Rejected (Hint: 3) Commit:3
   DEBUG 2 received MsgAppResp(rejected, hint: (index 3, term 1)) from 3 for index 4
-  DEBUG 2 decreased progress of 3 to [StateProbe match=0 next=4 sentCommit=3 matchCommit=3]
+  DEBUG 2 progress before for 3 was [StateProbe match=0 next=4 sentCommit=3 matchCommit=3]
+  DEBUG nextTerm: 1, logTerm: 1
+  DEBUG state: StateProbe
+  DEBUG nextProbeIdx=3, match=0
+  DEBUG hint: index 3, term 1
+  DEBUG becomeReplicate
+  DEBUG 2 decreased progress of 3 to [StateReplicate match=0 next=4 sentCommit=3 matchCommit=3]
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
