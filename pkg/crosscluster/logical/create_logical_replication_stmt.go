@@ -435,7 +435,11 @@ func doLDRPlan(
 			ingestedCatalog externalpb.ExternalCatalog
 		)
 		if details.CreateTable {
-			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */)
+			ingestingTableNames := make([]string, len(resolvedDestObjects.TableNames))
+			for i := range resolvedDestObjects.TableNames {
+				ingestingTableNames[i] = resolvedDestObjects.TableNames[i].Table()
+			}
+			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */, ingestingTableNames)
 			if err != nil {
 				return err
 			}

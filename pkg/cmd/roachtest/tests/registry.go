@@ -27,6 +27,7 @@ func RegisterTests(r registry.Registry) {
 	registerBackupRestoreRoundTrip(r)
 	registerBackupFixtures(r)
 	registerBackupS3Clones(r)
+	registerBlobFixtureGC(r)
 	registerCDC(r)
 	registerCDCBench(r)
 	registerCDCFiltering(r)

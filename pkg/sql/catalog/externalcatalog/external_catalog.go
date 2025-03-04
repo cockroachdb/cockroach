@@ -111,7 +111,8 @@ func getUDTsForTable(
 // IngestExternalCatalog ingests the tables in the external catalog into into
 // the database and schema.
 //
-// TODO: provide a list of databaseID/schemaID pairs to ingest into.
+// TODO: provide a more general list of rewrite rules other than the ingesting
+// table names and the ingesting parent schema and db id.
 func IngestExternalCatalog(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -122,6 +123,7 @@ func IngestExternalCatalog(
 	databaseID descpb.ID,
 	schemaID descpb.ID,
 	setOffline bool,
+	ingestingUnqualifiedTableNames []string,
 ) (externalpb.ExternalCatalog, error) {
 
 	ingestedCatalog := externalpb.ExternalCatalog{}
@@ -133,7 +135,7 @@ func IngestExternalCatalog(
 	}
 	tablesToWrite := make([]catalog.TableDescriptor, 0, len(externalCatalog.Tables))
 	var originalParentID descpb.ID
-	for _, table := range externalCatalog.Tables {
+	for i, table := range externalCatalog.Tables {
 		if originalParentID == 0 {
 			originalParentID = table.ParentID
 		} else if originalParentID != table.ParentID {
@@ -150,6 +152,7 @@ func IngestExternalCatalog(
 			// other things.
 			mutTable.SetOffline("")
 		}
+		mutTable.Name = ingestingUnqualifiedTableNames[i]
 		mutTable.UnexposedParentSchemaID = schemaID
 		mutTable.ParentID = dbDesc.GetID()
 		mutTable.Version = 1
