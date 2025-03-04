@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -116,5 +117,7 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 }
 
 func (kvsa *kvSlotAdjuster) isOverloaded() bool {
-	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots && !kvsa.granter.skipSlotEnforcement
+	return kvsa.granter.usedSlots >= kvsa.granter.totalSlots && !kvsa.granter.skipSlotEnforcement &&
+		// See https://github.com/cockroachdb/cockroach/issues/142262.
+		grunning.Supported()
 }
