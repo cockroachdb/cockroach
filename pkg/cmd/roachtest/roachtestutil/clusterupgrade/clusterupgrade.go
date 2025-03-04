@@ -74,13 +74,13 @@ func (v *Version) IsCurrent() bool {
 // Equal compares the two versions, returning whether they represent
 // the same version.
 func (v *Version) Equal(other *Version) bool {
-	return v.Version.Compare(&other.Version) == 0
+	return v.Version.Compare(other.Version) == 0
 }
 
 // AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
 // allowing two `Version` objects to be compared directly.
 func (v *Version) AtLeast(other *Version) bool {
-	return v.Version.AtLeast(&other.Version)
+	return v.Version.AtLeast(other.Version)
 }
 
 // Series returns the release series this version is a part of.
@@ -95,7 +95,7 @@ func CurrentVersion() *Version {
 		return &Version{*TestBuildVersion} // test-only
 	}
 
-	return &Version{*version.MustParse(build.BinaryVersion())}
+	return &Version{version.MustParse(build.BinaryVersion())}
 }
 
 // MustParseVersion parses the version string given (with or without
@@ -129,7 +129,7 @@ func ParseVersion(v string) (*Version, error) {
 		return nil, err
 	}
 
-	return &Version{*parsedVersion}, nil
+	return &Version{parsedVersion}, nil
 }
 
 // LatestPatchRelease returns the latest patch release version for a given
@@ -292,7 +292,7 @@ func uploadBinaryVersion(
 			// a build for a specific release. Instead, we stage the binary
 			// for the corresponding release branch, which is good enough in
 			// most cases.
-			stageVersion = fmt.Sprintf("release-%d.%d", v.Major(), v.Minor())
+			stageVersion = v.Format("release-%X.%Y")
 		}
 
 		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
@@ -317,7 +317,7 @@ func InstallFixtures(
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
 	name := CheckpointName(
-		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
+		roachpb.Version{Major: int32(v.Major().Year), Minor: int32(v.Major().Ordinal)}.String(),
 	)
 	for n := 1; n <= len(nodes); n++ {
 		if err := c.PutE(ctx, l,
