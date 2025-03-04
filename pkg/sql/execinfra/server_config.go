@@ -133,6 +133,10 @@ type ServerConfig struct {
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
