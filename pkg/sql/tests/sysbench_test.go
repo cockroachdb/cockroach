@@ -900,39 +900,51 @@ func runSysbenchOuter(b *testing.B, sys sysbenchDriver, opFn sysbenchWorkload, p
 
 	defer startAllocsProfile(b).Stop(b)
 	defer b.StopTimer()
-	b.ResetTimer()
+
+	const warmupIters = 100
 
 	var id atomic.Int64
 	var errs atomic.Int64
 	if parallel {
 		b.RunParallel(func(pb *testing.PB) {
-			seed := id.Add(1) - 1
 			s := sys.newClient()
 			defer func() { _ = s.Rollback() }()
 
-			runSysbenchInner(b, opFn, s, &errs, pb.Next, seed)
+			warmup := times(warmupIters / runtime.GOMAXPROCS(0))
+			for _, next := range []func() bool{warmup, pb.Next} {
+				errs.Store(0)
+				seed := id.Add(1) - 1
+				runSysbenchInner(b, opFn, s, &errs, next, seed)
+			}
 		})
 	} else {
 		s := sys.newClient()
 		defer func() { _ = s.Rollback() }()
 
-		var i int
-		runSysbenchInner(b, opFn, s, nil /* errors are fatal */, func() bool {
-			i++
-			return i <= b.N
-		}, 0)
+		for seed, n := range []int{warmupIters, b.N} {
+			next := times(n)
+			runSysbenchInner(b, opFn, s, nil /* errors are fatal */, next, int64(seed))
+		}
 	}
 	b.ReportMetric(float64(errs.Load())/float64(b.N), "errs/op")
 }
 
+func times(n int) func() bool {
+	return func() bool {
+		n--
+		return n >= 0
+	}
+}
+
 func runSysbenchInner(
-	b testing.TB,
+	b *testing.B,
 	opFn sysbenchWorkload,
 	s sysbenchClient,
 	errs *atomic.Int64, // if nil, errors are fatal
 	next func() bool, // like pb.Next
 	seed int64,
 ) {
+	b.ResetTimer()
 	goro := goid.Get()
 	rng := rand.New(rand.NewSource(seed))
 
