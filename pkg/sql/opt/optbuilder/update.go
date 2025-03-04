@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,12 +209,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		} else {
 			// GENERATED ALWAYS AS IDENTITY columns are not allowed to be
 			// explicitly written to.
-			//
-			// TODO(janexing): Implement the OVERRIDING SYSTEM VALUE syntax for
-			// INSERT which allows a GENERATED ALWAYS AS IDENTITY column to be
-			// overwritten.
-			// See https://github.com/cockroachdb/cockroach/issues/68201.
-			if targetCol.IsGeneratedAlwaysAsIdentity() {
+			if targetCol.GeneratedAsIdentityType() == cat.GeneratedAlwaysAsIdentity {
 				panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnUpdateError(string(targetCol.ColName())))
 			}
 		}
