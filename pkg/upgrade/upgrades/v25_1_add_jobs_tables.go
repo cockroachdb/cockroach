@@ -158,6 +158,26 @@ func backfillJobsTablesAndColumns(
 				if err != nil {
 					return err
 				}
+				// row shouldn't be nil -- we read the job row in this txn already so it
+				// does exist -- but if somehow a job is missing its legacy_payload row
+				// in job_info then the legacy vtable does render a row for it. If we do
+				// not have a row with the old info to use for, we can't backfill it and
+				// should skip it, but we do need to mark it as backfilled enough to
+				// avoid continuing to be picked as a candiadate and causing the upgrade
+				// to loop forever on it. Thus if we find ourself here with a nil row,
+				// we just update the job to have an empty string owner, which is not
+				// null and thus no longer a candidate for backfill, so that while the
+				// job is still missing data, at least the upgrade isn't going to crash
+				// on the empty row nor get stuck retrying it forever.
+				if row == nil {
+					if _, err := tx.ExecEx(ctx, "jobs-backfill-jobs", tx.KV(),
+						sessiondata.NodeUserSessionDataOverride,
+						`UPDATE system.jobs SET owner = '' WHERE id = $2`,
+					); err != nil {
+						return err
+					}
+				}
+
 				// Update the job row.
 				if _, err := tx.ExecEx(ctx, "jobs-backfill-jobs", tx.KV(),
 					sessiondata.NodeUserSessionDataOverride,
