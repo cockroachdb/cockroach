@@ -71,7 +71,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 				getLegacyPayload := func(ctx context.Context) (*jobspb.Payload, error) {
 					return md.Payload, nil
 				}
-				if err := jobsauth.Authorize(params.ctx, params.p,
+				if err := jobsauth.AuthorizeAllowLegacyAuth(params.ctx, params.p,
 					md.ID, getLegacyPayload, md.Payload.UsernameProto.Decode(), md.Payload.Type(), jobsauth.ControlAccess, globalPrivileges); err != nil {
 					return err
 				}
