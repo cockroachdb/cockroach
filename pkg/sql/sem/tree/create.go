@@ -1998,6 +1998,7 @@ type RefreshMaterializedView struct {
 	Name              *UnresolvedObjectName
 	Concurrently      bool
 	RefreshDataOption RefreshDataOption
+	AsOf              AsOfClause
 }
 
 // RefreshDataOption corresponds to arguments for the REFRESH MATERIALIZED VIEW
@@ -2023,6 +2024,10 @@ func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
 		ctx.WriteString("CONCURRENTLY ")
 	}
 	ctx.FormatNode(node.Name)
+	if node.AsOf.Expr != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.AsOf)
+	}
 	switch node.RefreshDataOption {
 	case RefreshDataWithData:
 		ctx.WriteString(" WITH DATA")

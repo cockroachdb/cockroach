@@ -191,6 +191,10 @@ const (
 	// FmtShowFullURIs instructs the pretty-printer to not sanitize URIs. If not
 	// set, URIs are sanitized to prevent leaking secrets.
 	FmtShowFullURIs
+
+	// FmtSkipAsOfSystemTimeClauses prevents the formatter from printing AS OF
+	// SYSTEM TIME clauses.
+	FmtSkipAsOfSystemTimeClauses
 )
 
 const genericArityIndicator = "__more__"
