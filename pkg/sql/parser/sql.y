@@ -8873,6 +8873,10 @@ opt_show_create_format_options:
   {
     $$.val = tree.ShowCreateFormatOptionRedactedValues
   }
+| WITH IGNORE_FOREIGN_KEYS
+  {
+    $$.val = tree.ShowCreateFormatOptionIgnoreFKs
+  }
 
 // %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
 // %Category: DDL
