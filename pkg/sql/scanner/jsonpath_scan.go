@@ -26,8 +26,8 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
 	switch ch {
 	case '$':
-		// Root path ($.)
-		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' {
+		// Root path ($)
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' {
 			return
 		}
 
