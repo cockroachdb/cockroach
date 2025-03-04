@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -97,6 +98,21 @@ type kv struct {
 
 func init() {
 	workload.Register(kvMeta)
+}
+
+var (
+	randSeed struct {
+		once sync.Once
+		v    int64
+	}
+)
+
+func randSeedGet() int64 {
+	randSeed.once.Do(func() {
+		randSeed.v = RandomSeed.Seed()
+	})
+
+	return randSeed.v
 }
 
 var kvMeta = workload.Meta{
@@ -316,7 +332,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	switch {
 	case w.zipfian:
 		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newZipfianGenerator(seq, randSeedGet())
 		}
 		kr = keyRange{
 			min: 0,
@@ -324,7 +340,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	case w.sequential:
 		gen = func() keyGenerator {
-			return newSequentialGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newSequentialGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
 		}
 		kr = keyRange{
 			min: 0,
@@ -332,7 +348,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	default:
 		gen = func() keyGenerator {
-			return newHashGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+			return newHashGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
 		}
 		kr = keyRange{
 			min: math.MinInt64,
@@ -429,7 +445,7 @@ func (w *kv) Tables() []workload.Table {
 				valCol := cb.ColVec(1).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it.
 				valCol.Reset()
-				rndBlock := rand.New(rand.NewSource(RandomSeed.Seed()))
+				rndBlock := rand.New(rand.NewSource(randSeedGet()))
 
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
@@ -883,7 +899,7 @@ func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
 
 func (g *hashGenerator) hash(v int64) int64 {
 	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(randSeedGet()))
 	g.hasher.Reset()
 	_, _ = g.hasher.Write(g.buf[:16])
 	g.hasher.Sum(g.buf[:0])
@@ -942,40 +958,167 @@ func (g *sequentialGenerator) state() string {
 	return fmt.Sprintf("S%d", g.seq.read())
 }
 
+type zipfCycle struct {
+	ops          atomic.Int64 // ops tracks the number of operations in the current cycle
+	cycleLength  int64        // size of the keyspace for each cycle
+	originalSeed int64        // fixed seed used for resetting zipf every cycleLength
+
+	mtx  sync.Mutex
+	zipf *rand.Zipf // zipf is replaced every ops
+}
+
+func (c *zipfCycle) getKey() int64 {
+	ops := c.ops.Add(1)
+
+	// Reset the Zipf generator if we've reached the sequence cycle length.
+	if ops >= c.cycleLength {
+		c.mtx.Lock()
+		ops = c.ops.Load()        //nolint:deferunlockcheck
+		if ops >= c.cycleLength { //nolint:deferunlockcheck
+			c.ops.Store(0)
+			c.resetZipf() //nolint:deferunlockcheck
+		}
+		c.mtx.Unlock() //nolint:deferunlockcheck
+	}
+	return int64(c.zipf.Uint64())
+}
+
+func (c *zipfCycle) resetZipf() {
+	c.zipf = rand.NewZipf(rand.New(rand.NewSource(c.originalSeed)), 1.1, 1, uint64(math.MaxInt64))
+}
+
 type zipfGenerator struct {
-	seq    *sequence
+	writesEnabled bool
+	write         zipfCycle
+	read          zipfCycle // values of last resort
+
+	// keyQueue is a FIFO of recently generated keys by write()
+	keyQueue chan int64
+
+	// random is the built-in rng generator used for statements.  This value is
+	// never refreshed.
 	random *rand.Rand
-	zipf   *zipf
+
+	// randomIndex tracks the current index in randomKeys (decremented atomically)
+	randomIndex atomic.Int64
+	keys        struct {
+		// protects the swap between pending and random
+		sync.Mutex
+		// random is a shuffled array of keys that we pop from for reads
+		random []int64
+
+		// pending holds keys from keyQueue until they're shuffled into random
+		pending []int64
+	}
 }
 
 // Creates a new zipfian generator.
-func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
-	return &zipfGenerator{
-		seq:    seq,
-		random: rng,
-		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
+func newZipfianGenerator(seq *sequence, originalSeed int64) *zipfGenerator {
+	const bufferSize = 65535
+	g := &zipfGenerator{
+		keyQueue: make(chan int64, bufferSize),
+		random:   rand.New(rand.NewSource(originalSeed)),
+		write: zipfCycle{
+			cycleLength:  seq.max,
+			originalSeed: originalSeed,
+		},
+		read: zipfCycle{
+			cycleLength:  seq.max,
+			originalSeed: originalSeed,
+		},
 	}
+	g.write.resetZipf()
+	g.read.resetZipf()
+	return g
 }
 
-// Get a random number seeded by v that follows the
-// zipfian distribution.
-func (g *zipfGenerator) zipfian(seed int64) int64 {
-	randomWithSeed := rand.New(rand.NewSource(seed))
-	return int64(g.zipf.Uint64(randomWithSeed))
-}
-
-// Get a zipf write key appropriately.
+// writeKey generates a key using the built-in Zipf generator and pushes it into
+// the buffered channel, dropping it if the channel is full. It also resets the
+// Zipf RNG after every writeOps write operations.
 func (g *zipfGenerator) writeKey() int64 {
-	return g.zipfian(g.seq.write())
+	g.writesEnabled = true
+
+	key := g.write.getKey()
+
+	// Attempt a non-blocking write to the ring buffer; if the buffer is full, drop the key.
+	select {
+	case g.keyQueue <- key:
+		// Successfully pushed the key.
+	default:
+		// Buffer full; key dropped.
+	}
+	return key
 }
 
-// Get a zipf read key appropriately.
+// readKey attempts to use a value out of the keyQueue, otherwise pulls a value
+// of last resort from a dedicated read-only zipf RNG.
 func (g *zipfGenerator) readKey() int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
+	// If we're in read-only mode or no writes have occurred, skip the key queue
+	// and go straight to the Zipf generator
+	if !g.writesEnabled {
+		return g.read.getKey()
 	}
-	return g.zipfian(g.random.Int63n(v))
+
+	// First, try to drain the keyQueue into a temporary buffer
+	drainedCap := len(g.keyQueue)
+	drained := make([]int64, 0, drainedCap)
+drainLoop:
+	for {
+		select {
+		case key := <-g.keyQueue:
+			drained = append(drained, key)
+		default:
+			break drainLoop
+		}
+	}
+
+	// Step 3: If randomKeys is empty (indicated by atomic counter <= 0), refill
+	// it from accumulatedKeys.
+	rndIdx := g.randomIndex.Load()
+	if rndIdx <= 0 {
+		g.keys.Lock()
+
+		// Recheck predicate
+		rndIdx = g.randomIndex.Load() //nolint:deferunlockcheck
+		if rndIdx <= 0 {              //nolint:deferunlockcheck
+			if len(g.keys.random) == 0 && len(g.keys.pending) > 0 {
+				// Shuffle pending
+				for i := len(g.keys.pending) - 1; i > 0; i-- {
+					rand.Shuffle(len(g.keys.pending), func(i, j int) {
+						g.keys.pending[i], g.keys.pending[j] = g.keys.pending[j], g.keys.pending[i]
+					})
+				}
+				// Swap: move pending into random and clear random
+				g.keys.random, g.keys.pending = g.keys.pending, g.keys.random[:0]
+				// Reset the atomic counter to the number of keys in randomKeys.
+				g.randomIndex.Store(int64(len(g.keys.random)))
+			}
+		}
+		g.keys.Unlock() //nolint:deferunlockcheck
+	}
+
+	// Step 3 (continued): Attempt to pop a key from randomKeys.
+	if g.randomIndex.Load() > 0 {
+		// Atomically decrement the counter.
+		idx := g.randomIndex.Add(-1)
+		g.keys.Lock()
+		// Ensure idx is within bounds.
+		//nolint:deferunlockcheck
+		randLen := int64(len(g.keys.random))
+		if idx < randLen { //nolint:deferunlockcheck
+			// Pop the key at index idx.
+			key := g.keys.random[idx]
+			// Shorten the slice by removing the last element.
+			g.keys.random = g.keys.random[:idx]
+			g.keys.Unlock() //nolint:deferunlockcheck
+			return key
+		}
+		g.keys.Unlock()
+	}
+
+	// Step 4: If no keys are available in randomKeys, use the value of last
+	// resort.
+	return g.read.getKey()
 }
 
 func (g *zipfGenerator) rand() *rand.Rand {
@@ -983,7 +1126,7 @@ func (g *zipfGenerator) rand() *rand.Rand {
 }
 
 func (g *zipfGenerator) state() string {
-	return fmt.Sprintf("Z%d", g.seq.read())
+	return fmt.Sprintf("Z%d", g.write.ops.Load())
 }
 
 // randBlock returns a sequence of random bytes according to the kv
