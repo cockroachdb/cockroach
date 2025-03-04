@@ -153,39 +153,30 @@ func (tx *Txn) getCodecForPartitionKey(partitionKey cspann.PartitionKey) *storeC
 	}
 }
 
-// decodePartition decodes the KV row set into an ephemeral partition. This
-// partition will become invalid when the codec is next reset, so it needs to be
-// cloned if it will be used outside of the store. metadataResult is the result
-// of the KV request that contains the encoded metadata for the partition. The
-// partdataResult is the result of the KV request that contains the encoded
-// vectors for the partition and may be the same as the metadataResult. The
-// partdataOffset is the offset into the partdataResult where the vectors start
-// (generally 1 if partdataResult and metadataResult are the same, 0 otherwise).
+// decodePartition decodes the metadata and data KV results into an ephemeral
+// partition. This partition will become invalid when the codec is next reset,
+// so it needs to be cloned if it will be used outside of the store.
 func (tx *Txn) decodePartition(
-	codec *storeCodec, metadataResult *kv.Result, partdataResult *kv.Result, partdataOffset int,
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, metaResult, dataResult *kv.Result,
 ) (*cspann.Partition, error) {
-	if metadataResult.Err != nil {
-		return nil, metadataResult.Err
-	}
-	if partdataResult.Err != nil {
-		return nil, partdataResult.Err
-	}
-	if len(metadataResult.Rows) == 0 || metadataResult.Rows[0].Value == nil {
-		return nil, cspann.ErrPartitionNotFound
-	}
-
-	// Partition metadata is stored in /Prefix/PartitionID, with vector data
-	// following in /Prefix/PartitionID/ChildKey.
-	level, centroid, err := DecodePartitionMetadata(metadataResult.Rows[0].ValueBytes())
+	// Get the partition metadata from the metadata result. Note that this has
+	// the side effect of dropping the metadata row from metaResult.Rows (and
+	// also dataResult.Rows when metaResult == dataResult in the SearchPartitions
+	// case).
+	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, metaResult)
 	if err != nil {
 		return nil, err
 	}
-	metaKeyLen := len(metadataResult.Rows[0].Key)
-	vectorEntries := partdataResult.Rows[partdataOffset:]
+
+	if dataResult.Err != nil {
+		return nil, dataResult.Err
+	}
+	vectorEntries := dataResult.Rows
 
 	// Clear and ensure storage for the vector entries, child keys, and value
 	// bytes.
-	codec.clear(len(vectorEntries), centroid)
+	codec := tx.getCodecForPartitionKey(partitionKey)
+	codec.clear(len(vectorEntries), metadata.Centroid)
 	if cap(tx.tmpChildKeys) < len(vectorEntries) {
 		tx.tmpChildKeys = make([]cspann.ChildKey, len(vectorEntries))
 	}
@@ -195,8 +186,9 @@ func (tx *Txn) decodePartition(
 	}
 	tx.tmpValueBytes = tx.tmpValueBytes[:len(vectorEntries)]
 
+	metaKeyLen := calculateMetaKeyLen(tx.store, treeKey, partitionKey)
 	for i, entry := range vectorEntries {
-		childKey, err := DecodeChildKey(entry.Key[metaKeyLen:], level)
+		childKey, err := DecodeChildKey(entry.Key[metaKeyLen:], metadata.Level)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +201,7 @@ func (tx *Txn) decodePartition(
 	}
 
 	return cspann.NewPartition(
-		codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes, level), nil
+		codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes, metadata.Level), nil
 }
 
 // GetPartition is part of the cspann.Txn interface. Read the partition
@@ -220,25 +212,18 @@ func (tx *Txn) GetPartition(
 ) (*cspann.Partition, error) {
 	b := tx.kv.NewBatch()
 
-	startKey := tx.encodePartitionKey(treeKey, partitionKey)
-	endKey := startKey.PrefixEnd()
-
 	// GetPartition is used by fixup to split and merge partitions, so we want to
 	// block concurrent writes.
-	b.GetForUpdate(startKey, tx.lockDurability)
-	b.Scan(startKey.Next(), endKey)
+	metadataKey := tx.encodePartitionKey(treeKey, partitionKey)
+	b.GetForUpdate(metadataKey, tx.lockDurability)
+	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
 		return nil, err
 	}
 
-	codec := tx.getCodecForPartitionKey(partitionKey)
-	partition, err := tx.decodePartition(codec, &b.Results[0], &b.Results[1], 0 /* partdataOffset */)
+	partition, err := tx.decodePartition(treeKey, partitionKey, &b.Results[0], &b.Results[1])
 	if err != nil {
-		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition has not yet been created, so return empty partition.
-			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel), nil
-		}
 		return nil, err
 	}
 	return partition.Clone(), nil
@@ -332,25 +317,18 @@ func (tx *Txn) GetPartitionMetadata(
 	}
 
 	// This scan is purely for returning partition cardinality.
-	b.Scan(metadataKey, metadataKey.PrefixEnd())
+	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 
 	// Run the batch and extract the partition metadata from results.
 	if err := tx.kv.Run(ctx, b); err != nil {
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
-	metadata, err := getMetadataFromKVResult(&b.Results[0])
+	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
-		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition has not yet been created, so create empty metadata.
-			return cspann.PartitionMetadata{
-				Level:    cspann.LeafLevel,
-				Centroid: make(vector.T, tx.store.rootQuantizer.GetDims()),
-			}, nil
-		}
 		return cspann.PartitionMetadata{}, err
 	}
-	metadata.Count = len(b.Results[1].Rows) - 1
+	metadata.Count = len(b.Results[1].Rows)
 	return metadata, nil
 }
 
@@ -378,15 +356,9 @@ func (tx *Txn) AddToPartition(
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
-	metadata, err := getMetadataFromKVResult(&b.Results[0])
+	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
-		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-			// Root partition has not yet been created, so create it now.
-			metadata, err = tx.createRootPartition(ctx, treeKey)
-		}
-		if err != nil {
-			return cspann.PartitionMetadata{}, err
-		}
+		return cspann.PartitionMetadata{}, err
 	}
 
 	// Cap the metadata key so that the append allocates a new slice for the
@@ -406,16 +378,14 @@ func (tx *Txn) AddToPartition(
 	b.Put(entryKey, encodedValue)
 
 	// This scan is purely for returning partition cardinality.
-	startKey := tx.encodePartitionKey(treeKey, partitionKey)
-	endKey := startKey.PrefixEnd()
-	b.Scan(startKey, endKey)
+	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 
 	// Run the batch and set the metadata Count field from the results.
 	if err = tx.kv.Run(ctx, b); err != nil {
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
-	metadata.Count = len(b.Results[1].Rows) - 1
+	metadata.Count = len(b.Results[1].Rows)
 	return metadata, nil
 }
 
@@ -438,9 +408,7 @@ func (tx *Txn) RemoveFromPartition(
 	b.Del(entryKey)
 
 	// Scan to get current cardinality.
-	startKey := metadataKey
-	endKey := startKey.PrefixEnd()
-	b.Scan(startKey, endKey)
+	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 
 	if err := tx.kv.Run(ctx, b); err != nil {
 		return cspann.PartitionMetadata{}, err
@@ -451,12 +419,12 @@ func (tx *Txn) RemoveFromPartition(
 	// We ignore key not found for the deleted child.
 
 	// Extract the partition metadata from the results.
-	metadata, err := getMetadataFromKVResult(&b.Results[0])
+	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
-	metadata.Count = len(b.Results[2].Rows) - 1
+	metadata.Count = len(b.Results[2].Rows)
 	return metadata, nil
 }
 
@@ -482,23 +450,14 @@ func (tx *Txn) SearchPartitions(
 	}
 
 	level := cspann.InvalidLevel
-	for i, result := range b.Results {
-		var searchLevel cspann.Level
-		var partitionCount int
-		codec := tx.getCodecForPartitionKey(partitionKeys[i])
-		partition, err := tx.decodePartition(codec, &result, &result, 1 /* partdataOffset */)
+	for i := range b.Results {
+		partition, err := tx.decodePartition(treeKey, partitionKeys[i], &b.Results[i], &b.Results[i])
 		if err != nil {
-			if partitionKeys[i] == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
-				// Root partition has not yet been created, so it must be empty.
-				searchLevel = cspann.LeafLevel
-			} else {
-				return cspann.InvalidLevel, err
-			}
-		} else {
-			searchLevel, partitionCount = partition.Search(
-				&tx.workspace, partitionKeys[i], queryVector, searchSet)
+			return cspann.InvalidLevel, err
 		}
 
+		searchLevel, partitionCount :=
+			partition.Search(&tx.workspace, partitionKeys[i], queryVector, searchSet)
 		if i == 0 {
 			level = searchLevel
 		} else if level != searchLevel {
@@ -610,16 +569,24 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 
 	idx := 0
 	for _, result := range b.Results {
-		if len(result.Rows) == 0 {
-			return 0, cspann.ErrPartitionNotFound
-		}
-		_, centroid, err := DecodePartitionMetadata(result.Rows[0].ValueBytes())
-		if err != nil {
-			return 0, err
-		}
+		// Skip past primary key references.
 		for ; refs[idx].Key.PartitionKey == cspann.InvalidKey; idx++ {
 		}
-		refs[idx].Vector = centroid
+
+		if result.Rows[0].ValueBytes() == nil {
+			// If this is the root partition, then the metadata row is missing;
+			// it is only created when the first split of the root happens.
+			if refs[idx].Key.PartitionKey != cspann.RootKey {
+				return 0, cspann.ErrPartitionNotFound
+			}
+			refs[idx].Vector = tx.store.emptyVec
+		} else {
+			// Get the centroid from the partition metadata.
+			_, refs[idx].Vector, err = DecodePartitionMetadata(result.Rows[0].ValueBytes())
+			if err != nil {
+				return 0, err
+			}
+		}
 		idx++
 	}
 	return numPKLookups, nil
@@ -653,21 +620,6 @@ func (tx *Txn) encodePartitionKey(
 	return keyBuffer
 }
 
-// createRootPartition lazily creates a root partition for the specified K-means
-// tree.
-func (tx *Txn) createRootPartition(
-	ctx context.Context, treeKey cspann.TreeKey,
-) (cspann.PartitionMetadata, error) {
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel)
-	if err := tx.insertPartition(ctx, treeKey, cspann.RootKey, root); err != nil {
-		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating empty root partition")
-	}
-	return cspann.PartitionMetadata{
-		Level:    cspann.LeafLevel,
-		Centroid: make(vector.T, tx.store.rootQuantizer.GetDims()),
-	}, nil
-}
-
 // QuantizeAndEncode quantizes the given vector (which has already been
 // randomized by the caller) with respect to the given centroid. It returns the
 // encoded form of that quantized vector.
@@ -675,29 +627,67 @@ func (tx *Txn) QuantizeAndEncode(
 	partitionKey cspann.PartitionKey, centroid, randomizedVec vector.T,
 ) (quantized []byte, err error) {
 	// Quantize and encode the randomized vector.
-	var codec *storeCodec
-	if partitionKey == cspann.RootKey {
-		codec = &tx.codec
-	} else {
-		codec = &tx.rootCodec
-	}
+	codec := tx.getCodecForPartitionKey(partitionKey)
 	return codec.encodeVector(&tx.workspace, randomizedVec, centroid)
 }
 
-// getMetadataFromKVResult extracts the K-means tree level and centroid from the
-// results of a query of the partition metadata record.
-func getMetadataFromKVResult(result *kv.Result) (cspann.PartitionMetadata, error) {
+// extractMetadataFromKVResult extracts the partition metadata row from the KV
+// result, returning the partition's K-means tree level and centroid.
+//
+// NOTE: As a side effect, extractMetadataFromKVResult updates metaResult.Rows
+// to omit the metadata row, if it was present. This makes it easier for callers
+// to determine where data rows start in the case where the same KV result can
+// contain both metadata and data rows.
+func (tx *Txn) extractMetadataFromKVResult(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey, result *kv.Result,
+) (cspann.PartitionMetadata, error) {
+	if result.Err != nil {
+		return cspann.PartitionMetadata{}, result.Err
+	}
+
+	// If there are no rows in the result, or if the key of the first row is
+	// longer than what's allowed for a metadata row, then this must be a root
+	// partition without a metadata record. The metadata record is only created
+	// for the root partition when it's split for the first time.
+	metaKeyLen := calculateMetaKeyLen(tx.store, treeKey, partitionKey)
+	if len(result.Rows) == 0 || len(result.Rows[0].Key) > metaKeyLen {
+		if partitionKey != cspann.RootKey {
+			return cspann.PartitionMetadata{}, errors.AssertionFailedf(
+				"expected metadata key for partition %d, got %v", partitionKey, result.Rows[0].Key)
+		}
+
+		metadata := cspann.PartitionMetadata{Level: cspann.LeafLevel, Centroid: tx.store.emptyVec}
+		return metadata, nil
+	}
+
+	// If the value of the first result row is nil and this is a root partition,
+	// then it must be a root partition without a metadata record (a nil result
+	// happens when Get is used to fetch the metadata row).
 	value := result.Rows[0].ValueBytes()
 	if value == nil {
-		return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
+		if partitionKey != cspann.RootKey {
+			return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
+		}
+
+		// Advance past the metadata row and return the metadata.
+		result.Rows = result.Rows[1:]
+		metadata := cspann.PartitionMetadata{Level: cspann.LeafLevel, Centroid: tx.store.emptyVec}
+		return metadata, nil
 	}
+
 	level, centroid, err := DecodePartitionMetadata(value)
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
 	}
-	return cspann.PartitionMetadata{
-		Level:    level,
-		Centroid: centroid,
-		Count:    len(result.Rows) - 1,
-	}, nil
+
+	// Advance past the metadata row and return the metadata.
+	result.Rows = result.Rows[1:]
+	return cspann.PartitionMetadata{Level: level, Centroid: centroid}, nil
+}
+
+// calculateMetaKeyLen returns the length of the metadata partition key.
+func calculateMetaKeyLen(
+	store *Store, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) int {
+	return len(store.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
 }
