@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "avro",
-    srcs = ["avro.go"],
+    srcs = [
+        "avro.go",
+        "json_schema.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro",
     visibility = ["//visibility:public"],
     deps = [
@@ -16,6 +19,7 @@ go_library(
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/hlc",
+        "//pkg/util/json",
         "//pkg/util/timeofday",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
@@ -51,6 +55,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/collatedstring",
+        "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

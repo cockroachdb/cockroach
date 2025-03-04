@@ -69,6 +69,7 @@ const (
 	SchemaTypeString  = `string`
 )
 
+// logicalType is a type that has a logical type in addition to a "real" type.
 type logicalType struct {
 	SchemaType  SchemaType `json:"type"`
 	LogicalType string     `json:"logicalType"`
@@ -76,6 +77,7 @@ type logicalType struct {
 	Scale       *int       `json:"scale,omitempty"`
 }
 
+// arrayType is a type that is an array of another type.
 type arrayType struct {
 	SchemaType SchemaType `json:"type"`
 	Items      SchemaType `json:"items"`
