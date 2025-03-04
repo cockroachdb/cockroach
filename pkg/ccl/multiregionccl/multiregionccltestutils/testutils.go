@@ -9,14 +9,20 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 )
 
 type multiRegionTestClusterParams struct {
@@ -148,6 +154,133 @@ func TestingCreateMultiRegionClusterWithRegionList(
 	sqlDB := tc.ServerConn(0)
 
 	return tc, sqlDB, cleanup
+}
+
+// TestingCreateMultiRegionClusterWithDelay is similar to
+// TestingCreateMultiRegionCluster, but it simulates network latency between any
+// pair of regions by using the given latency. The latency does not get applied
+// until the enableLatency callback is called. A lot of the configurations are
+// borrowed from multiregionccl.TestColdStartLatency which tries to achieve a
+// similar goal.
+func TestingCreateMultiRegionClusterWithDelay(
+	t testing.TB,
+	numServers int,
+	knobs base.TestingKnobs,
+	delay time.Duration,
+	opts ...MultiRegionTestClusterParamsOption,
+) (tc *testcluster.TestCluster, sqlDB *gosql.DB, cleanup func(), enableLatency func()) {
+	regionNames := make([]string, numServers)
+	for i := 0; i < numServers; i++ {
+		// "us-east1", "us-east2"...
+		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	}
+
+	result := regionlatency.RoundTripPairs{}
+	for i := 0; i < numServers; i++ {
+		for j := i + 1; j < numServers; j++ {
+			pair := regionlatency.Pair{
+				A: regionNames[i],
+				B: regionNames[j],
+			}
+			result[pair] = delay
+		}
+	}
+
+	regionLatencies := result.ToLatencyMap()
+	serverArgs := make(map[int]base.TestServerArgs)
+	params := &multiRegionTestClusterParams{}
+	for _, opt := range opts {
+		opt(params)
+	}
+
+	pauseAfter := make(chan struct{})
+	signalAfter := make([]chan struct{}, numServers)
+	var latencyEnabled atomic.Bool
+
+	totalServerCount := 0
+
+	// Set up the host cluster with the simulated latencies. Use
+	// regionlatency.Apply with InjectedLatencyOracle,
+	// SignalAfterGettingRPCAddress, and PauseAfterGettingRPCAddresses to inject
+	// the latency pairs.
+	for i, region := range regionNames {
+		signalAfter[i] = make(chan struct{})
+		serverKnobs := &server.TestingKnobs{
+			PauseAfterGettingRPCAddress:  pauseAfter,
+			SignalAfterGettingRPCAddress: signalAfter[i],
+			ContextTestingKnobs: rpc.ContextTestingKnobs{
+				InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
+				InjectedLatencyEnabled: latencyEnabled.Load,
+				UnaryClientInterceptor: func(
+					target string, class rpc.ConnectionClass,
+				) grpc.UnaryClientInterceptor {
+					return func(
+						ctx context.Context, method string, req, reply interface{},
+						cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
+						opts ...grpc.CallOption,
+					) error {
+						return invoker(ctx, method, req, reply, cc, opts...)
+					}
+				},
+			},
+		}
+
+		args := base.TestServerArgs{
+			Settings:      params.settings,
+			Knobs:         knobs,
+			ExternalIODir: params.baseDir,
+			UseDatabase:   params.useDatabase,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "region", Value: region}},
+			},
+			ScanInterval: params.scanInterval,
+		}
+		args.Knobs.Server = serverKnobs
+		serverArgs[totalServerCount] = args
+		totalServerCount++
+	}
+
+	cs := cluster.MakeTestingClusterSettings()
+	tc = testcluster.NewTestCluster(t, totalServerCount, base.TestClusterArgs{
+		ParallelStart:     true, // Too slow withoout ParallelStart.
+		ReplicationMode:   params.replicationMode,
+		ServerArgsPerNode: serverArgs,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+			Settings:          cs,
+		},
+	})
+
+	// Inject the latency pairs after the servers have been created but before
+	// they have been started to allow issue RPCs. Read more in
+	// regionlatency.Apply.
+	go func() {
+		for _, c := range signalAfter {
+			<-c
+		}
+		assert.NoError(t, regionLatencies.Apply(tc))
+		close(pauseAfter)
+	}()
+
+	// Start the cluster with the injected latencies.
+	tc.Start(t)
+
+	ctx := context.Background()
+	cleanup = func() {
+		tc.Stopper().Stop(ctx)
+	}
+
+	sqlDB = tc.ServerConn(0)
+
+	// Returns a callback that will enable the latency simulation.
+	enableLatency = func() {
+		latencyEnabled.Store(true)
+		for i := 0; i < numServers; i++ {
+			tc.Server(i).RPCContext().RemoteClocks.TestingResetLatencyInfos()
+		}
+	}
+
+	return tc, sqlDB, cleanup, enableLatency
 }
 
 // TestingEnsureCorrectPartitioning ensures that the table referenced by the

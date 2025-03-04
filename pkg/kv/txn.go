@@ -913,9 +913,12 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		leadTargetAutoTune := closedts.LeadForGlobalReadsAutoTune.Get(sv)
 		return closedts.TargetForPolicy(now, maxClockOffset,
-			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
-			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+			lagTargetDuration, leadTargetOverride, leadTargetAutoTune, sideTransportCloseInterval,
+			0, /*observedRaftPropLatency*/
+			0, /*observedSideTransportLatency*/
+			roachpb.LEAD_FOR_GLOBAL_READS /*policy*/).Add(int64(time.Second), 0)
 	}
 
 	return !txn.mu.deadline.IsEmpty() &&

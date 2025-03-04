@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -113,12 +114,15 @@ func (r *Replica) BumpSideTransportClosed(
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 	return closedts.TargetForPolicy(
-		r.Clock().NowAsClockTimestamp(),
-		r.Clock().MaxOffset(),
-		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
-		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
-		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		r.Clock().NowAsClockTimestamp(),                                  /*now*/
+		r.Clock().MaxOffset(),                                            /*maxClockOffset*/
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),             /*lagTargetDuration*/
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV), /*leadTargetOverride*/
+		closedts.LeadForGlobalReadsAutoTune.Get(&r.ClusterSettings().SV), /*leadTargetAutoTune*/
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV), /*sideTransportCloseInterval*/
+		time.Duration(r.avgProposalToLocalApplicationLatency.Value()),    /*observedRaftPropLatency*/
+		0,                                /*observedSideTransportLatency*/
+		r.closedTimestampPolicyRLocked(), /*policy*/
 	)
 }
 
