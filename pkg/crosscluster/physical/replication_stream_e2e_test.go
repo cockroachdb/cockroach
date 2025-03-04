@@ -81,6 +81,14 @@ func TestPCRPrivs(t *testing.T) {
 	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
 	c.DestSysSQL.Exec(t, streamReplStmt)
 
+	// Ensure job based auth allows the replication to prceed.
+	var ingestionJobID jobspb.JobID
+	c.DestSysSQL.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'").Scan(&ingestionJobID)
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, ingestionJobID)
+
+	srcTime := c.SrcSysServer.Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, ingestionJobID)
+
 }
 func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()

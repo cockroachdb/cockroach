@@ -920,8 +920,8 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
-	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
+	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
+	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -932,6 +932,9 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		req streampb.ReplicationProducerRequest,
 	) (streampb.ReplicationProducerSpec, error)
+
+	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
+	AuthorizeViaReplicationPriv(ctx context.Context) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports
