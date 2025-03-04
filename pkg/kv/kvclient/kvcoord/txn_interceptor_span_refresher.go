@@ -769,6 +769,9 @@ func (sr *txnSpanRefresher) populateLeafInputState(tis *roachpb.LeafTxnInputStat
 	tis.RefreshInvalid = sr.refreshInvalid
 }
 
+// initializeLeaf is part of the txnInterceptor interface.
+func (*txnSpanRefresher) initializeLeaf(tis *roachpb.LeafTxnInputState) {}
+
 // populateLeafFinalState is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) populateLeafFinalState(tfs *roachpb.LeafTxnFinalState) {
 	tfs.RefreshInvalid = sr.refreshInvalid
