@@ -5488,7 +5488,7 @@ func TestChangefeedErrors(t *testing.T) {
 	longTimeoutSQLDB := sqlutils.MakeSQLRunner(db)
 	longTimeoutSQLDB.SucceedsSoonDuration = 30 * time.Second
 
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, j JSONB)`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
 	// Changefeeds default to rangefeed, but for now, rangefeed defaults to off.
@@ -6056,6 +6056,26 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `this sink is incompatible with option compression`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH compression='gzip'`,
+		`kafka://nope`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `required column idk not present on table foo`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH headers_json_column_name='idk'`,
+		`kafka://nope`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `column b of type string does not match required type json`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH headers_json_column_name='b'`,
+		`kafka://nope`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `this sink is incompatible with option headers_json_column_name`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH headers_json_column_name='j'`,
+		`nodelocal://.`)
+
+	sqlDB.ExpectErrWithTimeout(
+		t, `headers_json_column_name is only usable with format=json/avro`,
+		`CREATE CHANGEFEED FOR foo into $1 WITH headers_json_column_name='j', format=csv, initial_scan='only'`,
 		`kafka://nope`)
 
 	sqlDB.ExpectErrWithTimeout(
@@ -8823,6 +8843,7 @@ func (s *memoryHoggingSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -8872,6 +8893,7 @@ func (s *countEmittedRowsSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	alloc.Release(ctx)
 	atomic.AddInt64(&s.numRows, 1)
@@ -10030,6 +10052,132 @@ func TestParallelIOMetrics(t *testing.T) {
 		require.NoError(t, foo.Close())
 	}
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
+
+type changefeedLogSpy struct {
+	syncutil.Mutex
+	logs []string
+}
+
+// Intercept implements log.Interceptor.
+func (s *changefeedLogSpy) Intercept(entry []byte) {
+	s.Lock()
+	defer s.Unlock()
+	var j map[string]any
+	if err := json.Unmarshal(entry, &j); err != nil {
+		panic(err)
+	}
+	if !strings.Contains(j["file"].(string), "ccl/changefeedccl/") {
+		return
+	}
+
+	s.logs = append(s.logs, j["message"].(string))
+}
+
+var _ log.Interceptor = (*changefeedLogSpy)(nil)
+
+func TestChangefeedHeadersJSONVals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("event_processing=3"))
+
+	// Make it easier to test the logs.
+	jsonHeaderWrongValTypeLogLim = log.Every(0)
+	jsonHeaderWrongTypeLogLim = log.Every(0)
+
+	cases := []struct {
+		name           string
+		headersJSONStr string
+		expected       cdctest.Headers
+		warn           string
+	}{
+		// {
+		// 	name:           "empty",
+		// 	headersJSONStr: `'{}'`,
+		// 	expected:       cdctest.Headers{},
+		// },
+		// {
+		// 	name:           "flat primitives - happy path",
+		// 	headersJSONStr: `'{"a": "b", "c": "d", "e": 42, "f": false}'`,
+		// 	expected: cdctest.Headers{
+		// 		{K: "a", V: []byte("b")},
+		// 		{K: "c", V: []byte("d")},
+		// 		{K: "e", V: []byte("42")},
+		// 		{K: "f", V: []byte("false")},
+		// 	},
+		// },
+		{
+			name:           "some bad some good",
+			headersJSONStr: `'{"a": "b", "c": 1, "d": true, "e": null, "f": [1, 2, 3], "g": {"h": "i"}}'`,
+			expected: cdctest.Headers{
+				{K: "a", V: []byte("b")},
+				{K: "c", V: []byte("1")},
+				{K: "d", V: []byte("true")},
+				// e will be skipped since its value is null. f and g will be skipped since they're non-primitive types.
+			},
+			warn: "must be a JSON object with primitive values",
+		},
+		{
+			name:           "not an object",
+			headersJSONStr: `'[1,2,3]'`,
+			warn:           "must be a JSON object",
+		},
+		// Both types of nulls are ok.
+		{
+			name:           "sql null",
+			headersJSONStr: `null`,
+		},
+		{
+			name:           "json null",
+			headersJSONStr: `'null'`,
+		},
+	}
+
+	for _, format := range []string{"json", "avro"} {
+		t.Run(format, func(t *testing.T) {
+			for _, c := range cases {
+				t.Run(c.name, func(t *testing.T) {
+					testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+						spy := &changefeedLogSpy{}
+						cleanup := log.InterceptWith(context.Background(), spy)
+						defer cleanup()
+
+						sqlDB := sqlutils.MakeSQLRunner(s.DB)
+						sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, headerz JSONB)`)
+						// Using fmt.Sprintf because it's tricky to specify sql null vs json null with params.
+						sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (1, %s::jsonb)`, c.headersJSONStr))
+
+						foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH headers_json_column_name=headerz, format=%s`, format))
+						defer closeFeed(t, foo)
+
+						headersStr := c.expected.String()
+						if c.warn != "" {
+							defer func() {
+								spy.Lock()
+								defer spy.Unlock()
+
+								for _, log := range spy.logs {
+									if strings.Contains(log, c.warn) {
+										return
+									}
+								}
+								t.Errorf("expected warning %q not found in logs: %v", c.warn, spy.logs)
+							}()
+						}
+						key := "[1]"
+						val := `{"after": {"a": 1}}`
+						if format == "avro" {
+							key = `{"a":{"long":1}}`
+							val = `{"after":{"foo":{"a":{"long":1}}}}`
+						}
+						assertPayloads(t, foo, []string{fmt.Sprintf(`foo: %s%s->%s`, key, headersStr, val)})
+					}
+					cdcTest(t, testFn, feedTestForceSink("kafka"))
+				})
+			}
+		})
+	}
 }
 
 // TestPubsubAttributes tests that the "attributes" field in the

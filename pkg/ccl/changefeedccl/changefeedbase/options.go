@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -113,6 +114,9 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
+	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
+	OptHeadersJSONColumnName = `headers_json_column_name`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -403,6 +407,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
+	OptHeadersJSONColumnName:              stringOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -423,7 +428,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -806,6 +811,7 @@ type CanHandle struct {
 	MultipleColumnFamilies bool
 	VirtualColumns         bool
 	RequiredColumns        []string
+	RequiredColumnTypes    map[string]*types.T
 }
 
 // GetCanHandle returns a populated CanHandle.
@@ -818,6 +824,13 @@ func (s StatementOptions) GetCanHandle() CanHandle {
 	}
 	if s.IsSet(OptCustomKeyColumn) {
 		h.RequiredColumns = append(h.RequiredColumns, s.m[OptCustomKeyColumn])
+	}
+	if s.IsSet(OptHeadersJSONColumnName) {
+		h.RequiredColumns = append(h.RequiredColumns, s.m[OptHeadersJSONColumnName])
+		if h.RequiredColumnTypes == nil {
+			h.RequiredColumnTypes = make(map[string]*types.T)
+		}
+		h.RequiredColumnTypes[s.m[OptHeadersJSONColumnName]] = types.Jsonb
 	}
 	return h
 }
@@ -839,6 +852,7 @@ type EncodingOptions struct {
 	Compression                 string
 	CustomKeyColumn             string
 	EnrichedProperties          map[EnrichedProperty]struct{}
+	HeadersJSONColName          string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
@@ -886,6 +900,7 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
 	o.Compression = s.m[OptCompression]
 	o.CustomKeyColumn = s.m[OptCustomKeyColumn]
+	o.HeadersJSONColName = s.m[OptHeadersJSONColumnName]
 
 	enrichedProperties, err := s.getCSVValues(OptEnrichedProperties)
 	if err != nil {
@@ -922,6 +937,10 @@ func (e EncodingOptions) Validate() error {
 		if len(e.EnrichedProperties) > 0 {
 			return errors.Errorf(`%s is only usable with %s=%s`, OptEnrichedProperties, OptEnvelope, OptEnvelopeEnriched)
 		}
+	}
+
+	if e.HeadersJSONColName != `` && (e.Format != OptFormatJSON && e.Format != OptFormatAvro) {
+		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
 	}
 
 	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {

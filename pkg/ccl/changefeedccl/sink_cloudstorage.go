@@ -548,6 +548,7 @@ func (s *cloudStorageSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) (retErr error) {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -570,7 +571,7 @@ func (s *cloudStorageSink) EmitRow(
 		}
 	}()
 
-	s.metrics.recordMessageSize(int64(len(key) + len(value)))
+	s.metrics.recordMessageSize(int64(len(key) + len(value) + headersLen(headers)))
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
