@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,15 +32,16 @@ type Store struct {
 	tableID catid.DescID
 	indexID catid.IndexID
 
-	// The root partition always uses the UnQuantizer while other partitions may use
-	// any quantizer.
+	// The root partition always uses the UnQuantizer while other partitions may
+	// use any quantizer.
 	rootQuantizer quantize.Quantizer
 	quantizer     quantize.Quantizer
 
 	prefix    roachpb.Key            // KV prefix for the vector index.
 	pkPrefix  roachpb.Key            // KV prefix for the primary key.
 	fetchSpec fetchpb.IndexFetchSpec // A pre-built fetch spec for this index.
-	colIdxMap catalog.TableColMap    // A column map for extracting full sized vectors from the PK
+	colIdxMap catalog.TableColMap    // A column map for extracting full sized vectors from the PK.
+	emptyVec  vector.T               // A zero-valued vector, used when root centroid does not exist.
 }
 
 var _ cspann.Store = (*Store)(nil)
@@ -63,6 +65,7 @@ func NewWithColumnID(
 		indexID:       indexID,
 		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
 		quantizer:     quantizer,
+		emptyVec:      make(vector.T, quantizer.GetDims()),
 	}
 
 	pk := tableDesc.GetPrimaryIndex()

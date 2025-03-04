@@ -405,12 +405,8 @@ func (suite *StoreTestSuite) testEmptyOrMissingRoot(
 	suite.Run("try to remove vector from "+desc, func() {
 		metadata, err := tx.RemoveFromPartition(
 			suite.ctx, treeKey, cspann.RootKey, cspann.ChildKey{KeyBytes: cspann.KeyBytes{1, 2, 3}})
-		if isMissing {
-			suite.ErrorIs(err, cspann.ErrPartitionNotFound)
-		} else {
-			suite.NoError(err)
-			CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0}, 0)
-		}
+		suite.NoError(err)
+		CheckPartitionMetadata(suite.T(), metadata, cspann.LeafLevel, vector.T{0, 0}, 0)
 	})
 }
 
