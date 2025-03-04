@@ -550,20 +550,20 @@ type storeState struct {
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
 		replicas map[roachpb.RangeID]ReplicaState
-		// topKRanges along some load dimensions. If the store is closer to
-		// hitting the resource limit on some resource ranges that are higher in
-		// that resource dimension should be over-represented in this map. It
-		// includes ranges whose replicas are being removed via pending changes,
-		// since those pending changes may be reversed, and we don't want to
-		// bother recomputing the top-k.
+		// topKRanges along some load dimensions. If the store is closer to hitting
+		// the resource limit on some resource ranges that are higher in that
+		// resource dimension should be over-represented in this slice. It includes
+		// ranges whose replicas are being removed via pending changes, since those
+		// pending changes may be reversed, and we don't want to bother recomputing
+		// the top-k.
 		//
 		// We need to keep this top-k up-to-date incrementally. Since
-		// StoreLeaseholderMsg is incremental about the ranges it reports, that
-		// may provide a building block for the incremental computation.
+		// StoreLeaseholderMsg is incremental about the ranges it reports, that may
+		// provide a building block for the incremental computation.
 		//
 		// TODO(sumeer): figure out at least one reasonable way to do this, even
 		// if we postpone it to a later code iteration.
-		topKRanges map[roachpb.RangeID]RangeLoad
+		topKRanges []roachpb.RangeID
 		// TODO(kvoli,sumeerbhola): Update enactedHistory when integrating the
 		// storeChangeRateLimiter.
 		enactedHistory storeEnactedHistory
@@ -631,7 +631,7 @@ func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
 	}
 	ss.adjusted.loadPendingChanges = map[changeID]*pendingReplicaChange{}
 	ss.adjusted.replicas = map[roachpb.RangeID]ReplicaState{}
-	ss.adjusted.topKRanges = map[roachpb.RangeID]RangeLoad{}
+	ss.adjusted.topKRanges = []roachpb.RangeID{}
 	return ss
 }
 
