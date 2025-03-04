@@ -62,8 +62,7 @@ func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 // - treat CPU as a special load dimension since that is the only dimension
 //   we can shed by moving the leaseholder.
 //
-// - make gossip should propagate the number of leases along with the load.
-//   And the aggregate non-raft cpu.
+// - gossip should propagate the aggregate non-raft cpu.
 //
 // - remote store: don't start moving ranges for a cpu overloaded remote store
 //   if it still has leases. Give it the opportunity to shed *all* its leases
@@ -108,7 +107,11 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	// will be higher than the mean across all stores in the cluster (since the
 	// cpu util of a node is simply the mean across all its stores). The
 	// following code assumes this has already been done.
-
+	//
+	// TODO(kvoli): Remove sls.fd >= fdDrain from the condition below. The
+	// rebalanceStores call loop doesn't need to be responsible for shedding
+	// leases from a draining (fdDrain) or replacing replicas on a dead (fdDead)
+	// store.
 	for storeID, ss := range a.cs.stores {
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
@@ -143,10 +146,19 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			//
 			// TODO: is this path (for StoreRebalancer) also responsible for
 			// shedding leases for fdDrain and fdDead?
-
+			//
+			// TODO(kvoli): This path doesn't need to be responsible for shedding
+			// leases for when a store is marked as fdDrain, see
+			// `Store.SetDraining`[^*]. For fdDead, assuming liveness information is
+			// sycned with leasing (approx.), we can do nothing and the lease should
+			// have already expired. Likewise for fdDead, we can likely get away
+			// without doing anything here (rebalanceStores), but will need to add
+			// shedding functionality when replacing replicate_queue.go.
+			// [^*]: https://github.com/sumeerbhola/cockroach/blob/4f4139c2e9da8ce99cab640b41ce45b679425db8/pkg/kv/kvserver/store.go#L1868-L1868
+			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
-			for rangeID := range ss.adjusted.topKRanges {
+			for _, rangeID := range ss.adjusted.topKRanges {
 				rstate := a.cs.ranges[rangeID]
 				if len(rstate.pendingChanges) > 0 {
 					// If the range has pending changes, don't make more changes.
@@ -232,10 +244,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			loadSheddingStore = store.StoreID
 		}
 		// Iterate over top-K ranges first and try to move them.
-		//
-		// TODO: Don't include RangeLoad as the value in the topKRanges map -- we
-		// don't need it since we lookup rangeState anyway.
-		for rangeID := range ss.adjusted.topKRanges {
+		for _, rangeID := range ss.adjusted.topKRanges {
 			// TODO(sumeer): the following code belongs in a closure, since we will
 			// repeat it for some random selection of non topKRanges.
 			rstate := a.cs.ranges[rangeID]
@@ -316,7 +325,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				rangeID, rstate.replicas, rstate.load, targetStoreID, ss.StoreID)
 			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
 			changes = append(changes, pendingChanges[:]...)
-			doneShedding := ss.maxFractionPending >= maxFractionPendingThreshold
+			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
 			}
