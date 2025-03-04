@@ -1097,7 +1097,7 @@ func getDefaultSaveFlowsFunc(
 		var explainVecVerbose []string
 		if planner.instrumentation.collectBundle && vectorized {
 			flowCtx := newFlowCtxForExplainPurposes(ctx, planner)
-			flowCtx.Local = !planner.curPlan.flags.IsDistributed()
+			flowCtx.Local = !planner.curPlan.flags.ShouldBeDistributed()
 			getExplain := func(verbose bool) []string {
 				gatewaySQLInstanceID := planner.extendedEvalCtx.DistSQLPlanner.gatewaySQLInstanceID
 				// When we're collecting the bundle, we're always recording the
