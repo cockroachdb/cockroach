@@ -839,11 +839,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RowMetrics:         &rowMetrics,
 		InternalRowMetrics: &internalRowMetrics,
 
-		SQLLivenessReader: cfg.sqlLivenessProvider.CachedReader(),
-		JobRegistry:       jobRegistry,
-		Gossip:            cfg.gossip,
-		SQLInstanceDialer: cfg.sqlInstanceDialer,
-		LeaseManager:      leaseMgr,
+		SQLLivenessReader:         cfg.sqlLivenessProvider.CachedReader(),
+		BlockingSQLLivenessReader: cfg.sqlLivenessProvider.BlockingReader(),
+		JobRegistry:               jobRegistry,
+		Gossip:                    cfg.gossip,
+		SQLInstanceDialer:         cfg.sqlInstanceDialer,
+		LeaseManager:              leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
 		ExternalStorageFromURI: cfg.externalStorageFromURI,
