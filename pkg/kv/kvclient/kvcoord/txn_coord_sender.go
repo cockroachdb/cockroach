@@ -1431,14 +1431,6 @@ func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	//   	return nil, pErr.GoError()
 	//   }
 
-	// For compatibility with pre-20.1 nodes: populate the command
-	// count.
-	// TODO(knz,andrei): Remove this and the command count
-	// field in 20.2.
-	if tc.mu.active {
-		tfs.DeprecatedCommandCount = 1
-	}
-
 	// Copy mutable state so access is safe for the caller.
 	tfs.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
