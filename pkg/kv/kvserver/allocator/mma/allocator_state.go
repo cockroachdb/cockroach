@@ -194,7 +194,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 					continue
 				}
 				targetSS := a.cs.stores[targetStoreID]
-				if !a.cs.canAddLoad(targetSS, rstate.load.load, &means) {
+				if !a.cs.canAddLoad(targetSS, rstate.load.Load, &means) {
 					continue
 				}
 				leaseChanges := makeLeaseTransferChanges(
@@ -233,7 +233,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 		}
 		// Iterate over top-K ranges first and try to move them.
 		//
-		// TODO: Don't include rangeLoad as the value in the topKRanges map -- we
+		// TODO: Don't include RangeLoad as the value in the topKRanges map -- we
 		// don't need it since we lookup rangeState anyway.
 		for rangeID := range ss.adjusted.topKRanges {
 			// TODO(sumeer): the following code belongs in a closure, since we will
@@ -305,9 +305,9 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			}
 			targetSS := a.cs.stores[targetStoreID]
 			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
-			addedLoad := rstate.load.load
+			addedLoad := rstate.load.Load
 			if !isLeaseholder {
-				addedLoad[cpu] = rstate.load.raftCPU
+				addedLoad[CPURate] = rstate.load.RaftCPU
 			}
 			if !a.cs.canAddLoad(targetSS, addedLoad, cands.means) {
 				continue
@@ -431,9 +431,9 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 	buf := rstate.constraints.stateForInit()
 	leaseholder := roachpb.StoreID(-1)
 	for _, replica := range rstate.replicas {
-		buf.tryAddingStore(replica.StoreID, replica.replicaIDAndType.replicaType.replicaType,
+		buf.tryAddingStore(replica.StoreID, replica.ReplicaIDAndType.ReplicaType.ReplicaType,
 			a.cs.stores[replica.StoreID].localityTiers)
-		if replica.isLeaseholder {
+		if replica.IsLeaseholder {
 			leaseholder = replica.StoreID
 		}
 	}

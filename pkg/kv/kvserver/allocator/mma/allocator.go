@@ -46,7 +46,7 @@ type Allocator interface {
 
 	// ProcessStoreLeaseholderMsg provides updates for each local store and the
 	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *storeLeaseholderMsg) error
+	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error
 
 	// TODO(sumeer): only a subset of the fields in pendingReplicaChange are
 	// relevant to the caller. Hide the remaining.
