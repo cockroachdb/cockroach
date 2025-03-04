@@ -46,14 +46,40 @@ enum Unit {
   TIMESTAMP_SEC = 8;
 }
 
+message StaticLabel {
+  required string key = 1 [(gogoproto.nullable) = false];
+  required string value = 2 [(gogoproto.nullable) = false];
+}
+
 // Metadata holds metadata about a metric. It must be embedded in
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
+// Naming in TSDB:
+// - if `legacy_static_name` is set, that will be used.
+// - otherwise, the metric name will be generated based on 
+//   `name` and `static_labels`. if `static_labels` is 
+//   empty, it will just be `name`.
+// Naming in `_status/vars`:
+// - the metric name is always just `name`.
+// - if `static_labels` is not empty, those 
+//   labels will be added to the metric name.
+//
+// Note(davidh): we may eventually remove the legacy_static_name field,
+// but we'll need to migrate all existing TSDB usage on the read 
+// and write side to use static labels when recording the metrics.
 message Metadata {
-  required string name = 1 [(gogoproto.nullable) = false];
+  required string name = 1 [(gogoproto.nullable) = false];  
   required string help = 2 [(gogoproto.nullable) = false];
   required string measurement = 3 [(gogoproto.nullable) = false];
   required Unit unit = 4 [(gogoproto.nullable) = false];
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   repeated LabelPair labels = 6;
+
+  // legacy_static_name is the name of the metric as it will appear in the tsdb.
+  // Use this to set tsdb names when constructing statically labeled metrics.
+  required string legacy_static_name = 7 [(gogoproto.nullable) = false];
+
+  // static_labels is a set of metric label key/value pairs that are set 
+  // at compile-time and are not expected to change.
+  repeated StaticLabel static_labels = 8;
 }

@@ -61,6 +61,9 @@ func NewFunctionalGauge(
 // GetName is part of the metric.Iterable interface.
 func (g *AggGauge) GetName() string { return g.g.GetName() }
 
+// GetPrometheusName is part of the metric.PrometheusExportable interface.
+func (g *AggGauge) GetPrometheusName() string { return g.g.GetPrometheusName() }
+
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGauge) GetHelp() string { return g.g.GetHelp() }
 
@@ -202,6 +205,9 @@ func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeF
 
 // GetName is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) GetName() string { return g.g.GetName() }
+
+// GetPrometheusName is part of the metric.PrometheusExportable interface.
+func (g *AggGaugeFloat64) GetPrometheusName() string { return g.g.GetPrometheusName() }
 
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) GetHelp() string { return g.g.GetHelp() }
