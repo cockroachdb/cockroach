@@ -53,6 +53,20 @@ func BenchmarkTestServerStartup(b *testing.B) {
 				kvserver.RaftLeaderFortificationFractionEnabled.Override(context.Background(), &args.Settings.SV, 0.0)
 
 				s := serverutils.StartServerOnly(b, args)
+
+				// Sanity check: verify that
+				// kv.raft.leader_fortification.fraction_enabled is not set
+				// metamorphically. Its default value is 1, and since we expect metamorphic
+				// settings to be disabled in benchmarks, this should not fail.
+				conn := s.SQLConn(b, serverutils.DBName("defaultdb"))
+				var setting string
+				err := conn.QueryRow("SHOW CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled").Scan(&setting)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if setting != "1" {
+					b.Fatalf("unexpected setting value: %s", setting)
+				}
 				s.Stopper().Stop(context.Background())
 			}
 		})
