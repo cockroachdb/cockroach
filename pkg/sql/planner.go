@@ -237,6 +237,8 @@ type planner struct {
 
 	storedProcTxnState storedProcTxnStateAccessor
 
+	onRoutineStmt func(tree.Statement)
+
 	createdSequences createdSequences
 
 	// autoCommit indicates whether the plan is allowed (but not required) to

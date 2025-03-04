@@ -780,12 +780,6 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	MetaSQLOptFallback = metric.Metadata{
-		Name:        "sql.optimizer.fallback.count",
-		Help:        "Number of statements which the cost-based optimizer was unable to plan",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaSQLOptPlanCacheHits = metric.Metadata{
 		Name:        "sql.optimizer.plan_cache.hits",
 		Help:        "Number of non-prepared statements for which a cached plan was used",
@@ -1012,6 +1006,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaCallStoredProcStarted = metric.Metadata{
+		Name:        "sql.call_stored_proc.started.count",
+		Help:        "Number of invocation of stored procedures via CALL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaMiscStarted = metric.Metadata{
 		Name:        "sql.misc.started.count",
 		Help:        "Number of other SQL statements started",
@@ -1149,6 +1149,12 @@ var (
 	MetaCopyNonAtomicExecuted = metric.Metadata{
 		Name:        "sql.copy.nonatomic.count",
 		Help:        "Number of non-atomic COPY SQL statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCallStoredProcExecuted = metric.Metadata{
+		Name:        "sql.call_stored_proc.count",
+		Help:        "Number of successfully executed stored procedure calls",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
