@@ -416,35 +416,66 @@ $left
 # them down (to prune columns), or else to pull them up (to get them out of the
 # way of other operators).
 #
+# Projections are allowed in the case when they are simple remaps from input to
+# output column IDs, in which case it is simple to replace the column references
+# in the join condition.
+#
 # TODO(andyk): Add other join types.
 [HoistJoinProjectRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
-    $right:(Project $input:* $projections:[])
+    $right:(Project
+        $input:*
+        $projections:* &
+            (AllAreRemappingProjections $projections)
+        $passThrough:*
+    )
     $on:*
     $private:*
 )
 =>
 (Project
-    ((OpName) $left $input $on $private)
+    ((OpName)
+        $left
+        $input
+        (UnbindFiltersFromProjections $projections $on)
+        $private
+    )
     $projections
-    (OutputCols2 $left $right)
+    (UnionCols (OutputCols $left) $passThrough)
 )
 
 # HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
 # input of the join.
 [HoistJoinProjectLeft, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
-    $left:(Project $input:* $projections:[])
-    $right:*
+    $left:(Project
+        $input:*
+        $projections:* &
+            (AllAreRemappingProjections $projections)
+        $passThrough:*
+    )
+    $right:* &
+
+        # For apply-joins, the right input could reference the projected
+        # columns, in which case pulling the Project up would be incorrect.
+        # This isn't an issue for HoistJoinProjectRight because outer column
+        # references cannot be from the left input to the right input.
+        # TODO(drewk): we could remap the right input as well.
+        ^(IsCorrelated $right (ProjectionCols $projections))
     $on:*
     $private:*
 )
 =>
 (Project
-    ((OpName) $input $right $on $private)
+    ((OpName)
+        $input
+        $right
+        (UnbindFiltersFromProjections $projections $on)
+        $private
+    )
     $projections
-    (OutputCols2 $left $right)
+    (UnionCols $passThrough (OutputCols $right))
 )
 
 # SimplifyJoinNotNullEquality simplifies an Is/IsNot equality filter condition

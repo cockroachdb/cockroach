@@ -502,9 +502,8 @@ EXPLAIN (VEC)
 └ Node 1
   └ *colexec.caseOp
     ├ *colexec.bufferOp
-    │ └ *sql.planNodeToRowSource
-    │   └ *colfetcher.ColIndexJoin
-    │     └ *colfetcher.ColBatchScan
+    │ └ *colfetcher.ColIndexJoin
+    │   └ *colfetcher.ColBatchScan
     ├ *colexec.bufferOp
     └ *colexec.bufferOp
 

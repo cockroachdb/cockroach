@@ -2605,39 +2605,21 @@ norm
 SELECT * FROM fk
 INNER JOIN (SELECT xysd.x, a.x AS t FROM xysd INNER JOIN xysd AS a ON xysd.x = a.x) ON r1 = t
 ----
-inner-join (hash)
+project
  ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) t:13(int!null)
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3)==(7,13), (7)==(3,13), (13)==(3,7)
- ├── prune: (1,2,4,7)
- ├── interesting orderings: (+1) (+(7|13))
+ ├── prune: (1-4,7,13)
+ ├── interesting orderings: (+1)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
- │    ├── interesting orderings: (+1)
- │    └── unfiltered-cols: (1-6)
- ├── project
- │    ├── columns: a.x:13(int!null) xysd.x:7(int!null)
- │    ├── key: (7)
- │    ├── fd: (7)==(13), (13)==(7)
- │    ├── prune: (7,13)
- │    ├── interesting orderings: (+(7|13))
- │    ├── unfiltered-cols: (7-12)
- │    ├── scan xysd
- │    │    ├── columns: xysd.x:7(int!null)
- │    │    ├── key: (7)
- │    │    ├── prune: (7)
- │    │    ├── interesting orderings: (+7)
- │    │    └── unfiltered-cols: (7-12)
- │    └── projections
- │         └── variable: xysd.x:7 [as=a.x:13, type=int, outer=(7)]
- └── filters
-      └── eq [type=bool, outer=(3,13), constraints=(/3: (/NULL - ]; /13: (/NULL - ]), fd=(3)==(13), (13)==(3)]
-           ├── variable: r1:3 [type=int]
-           └── variable: a.x:13 [type=int]
+ │    └── interesting orderings: (+1)
+ └── projections
+      ├── variable: r1:3 [as=a.x:13, type=int, outer=(3)]
+      └── variable: r1:3 [as=xysd.x:7, type=int, outer=(3)]
 
 # Case with an equality with a synthesized column.
 norm
@@ -2951,55 +2933,54 @@ WHERE st_id = t_st_id
   AND ex_id = s_ex_id
 LIMIT 50;
 ----
-limit
+project
  ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null) ex_id:18(int!null)
  ├── cardinality: [0 - 50]
- ├── fd: (13)-->(14,15), (15)==(18), (18)==(15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
- ├── prune: (14,15,18)
- ├── interesting orderings: (+7) (+10) (+13)
- ├── inner-join (hash)
- │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null) ex_id:18(int!null)
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    ├── fd: (13)-->(14,15), (15)==(18), (18)==(15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
- │    ├── limit hint: 50.00
- │    ├── prune: (14,15,18)
+ ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3), (15)==(18), (18)==(15)
+ ├── prune: (1-3,7,10,13-15,18)
+ ├── interesting orderings: (+(1|7)) (+(2|10)) (+(3|13))
+ ├── limit
+ │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    ├── cardinality: [0 - 50]
+ │    ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
+ │    ├── prune: (14,15)
  │    ├── interesting orderings: (+7) (+10) (+13)
- │    ├── scan trade
- │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
- │    │    ├── prune: (1-3)
- │    │    └── unfiltered-cols: (1-6)
- │    ├── inner-join (cross)
- │    │    ├── columns: st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null) ex_id:18(int!null)
- │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
- │    │    ├── key: (7,10,13)
- │    │    ├── fd: (13)-->(14,15), (15)==(18), (18)==(15)
- │    │    ├── prune: (7,10,13-15,18)
+ │    ├── inner-join (hash)
+ │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null) st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── fd: (13)-->(14,15), (1)==(7), (7)==(1), (2)==(10), (10)==(2), (3)==(13), (13)==(3)
+ │    │    ├── limit hint: 50.00
+ │    │    ├── prune: (14,15)
  │    │    ├── interesting orderings: (+7) (+10) (+13)
- │    │    ├── scan status_type
- │    │    │    ├── columns: st_id:7(int!null)
- │    │    │    ├── key: (7)
- │    │    │    ├── prune: (7)
- │    │    │    ├── interesting orderings: (+7)
- │    │    │    └── unfiltered-cols: (7-9)
+ │    │    ├── scan trade
+ │    │    │    ├── columns: t_st_id:1(int!null) t_tt_id:2(int!null) t_s_symb:3(int!null)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── unfiltered-cols: (1-6)
  │    │    ├── inner-join (cross)
- │    │    │    ├── columns: tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null) ex_id:18(int!null)
- │    │    │    ├── key: (10,13)
- │    │    │    ├── fd: (13)-->(14,15), (15)==(18), (18)==(15)
- │    │    │    ├── prune: (10,13-15,18)
- │    │    │    ├── interesting orderings: (+10) (+13)
- │    │    │    ├── scan trade_type
- │    │    │    │    ├── columns: tt_id:10(int!null)
- │    │    │    │    ├── key: (10)
- │    │    │    │    ├── prune: (10)
- │    │    │    │    ├── interesting orderings: (+10)
- │    │    │    │    └── unfiltered-cols: (10-12)
- │    │    │    ├── project
- │    │    │    │    ├── columns: ex_id:18(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
- │    │    │    │    ├── key: (13)
- │    │    │    │    ├── fd: (13)-->(14,15), (15)==(18), (18)==(15)
- │    │    │    │    ├── prune: (13-15,18)
- │    │    │    │    ├── interesting orderings: (+13)
- │    │    │    │    ├── unfiltered-cols: (13-17)
+ │    │    │    ├── columns: st_id:7(int!null) tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(one-or-more)
+ │    │    │    ├── key: (7,10,13)
+ │    │    │    ├── fd: (13)-->(14,15)
+ │    │    │    ├── prune: (7,10,13-15)
+ │    │    │    ├── interesting orderings: (+7) (+10) (+13)
+ │    │    │    ├── scan status_type
+ │    │    │    │    ├── columns: st_id:7(int!null)
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    ├── prune: (7)
+ │    │    │    │    ├── interesting orderings: (+7)
+ │    │    │    │    └── unfiltered-cols: (7-9)
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: tt_id:10(int!null) s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
+ │    │    │    │    ├── key: (10,13)
+ │    │    │    │    ├── fd: (13)-->(14,15)
+ │    │    │    │    ├── prune: (10,13-15)
+ │    │    │    │    ├── interesting orderings: (+10) (+13)
+ │    │    │    │    ├── scan trade_type
+ │    │    │    │    │    ├── columns: tt_id:10(int!null)
+ │    │    │    │    │    ├── key: (10)
+ │    │    │    │    │    ├── prune: (10)
+ │    │    │    │    │    ├── interesting orderings: (+10)
+ │    │    │    │    │    └── unfiltered-cols: (10-12)
  │    │    │    │    ├── scan security
  │    │    │    │    │    ├── columns: s_symb:13(int!null) s_st_id:14(int!null) s_ex_id:15(int!null)
  │    │    │    │    │    ├── key: (13)
@@ -3007,21 +2988,21 @@ limit
  │    │    │    │    │    ├── prune: (13-15)
  │    │    │    │    │    ├── interesting orderings: (+13)
  │    │    │    │    │    └── unfiltered-cols: (13-17)
- │    │    │    │    └── projections
- │    │    │    │         └── variable: s_ex_id:15 [as=ex_id:18, type=int, outer=(15)]
+ │    │    │    │    └── filters (true)
  │    │    │    └── filters (true)
- │    │    └── filters (true)
- │    └── filters
- │         ├── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │         │    ├── variable: st_id:7 [type=int]
- │         │    └── variable: t_st_id:1 [type=int]
- │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
- │         │    ├── variable: tt_id:10 [type=int]
- │         │    └── variable: t_tt_id:2 [type=int]
- │         └── eq [type=bool, outer=(3,13), constraints=(/3: (/NULL - ]; /13: (/NULL - ]), fd=(3)==(13), (13)==(3)]
- │              ├── variable: s_symb:13 [type=int]
- │              └── variable: t_s_symb:3 [type=int]
- └── const: 50 [type=int]
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    │         │    ├── variable: st_id:7 [type=int]
+ │    │         │    └── variable: t_st_id:1 [type=int]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    │         │    ├── variable: tt_id:10 [type=int]
+ │    │         │    └── variable: t_tt_id:2 [type=int]
+ │    │         └── eq [type=bool, outer=(3,13), constraints=(/3: (/NULL - ]; /13: (/NULL - ]), fd=(3)==(13), (13)==(3)]
+ │    │              ├── variable: s_symb:13 [type=int]
+ │    │              └── variable: t_s_symb:3 [type=int]
+ │    └── const: 50 [type=int]
+ └── projections
+      └── variable: s_ex_id:15 [as=ex_id:18, type=int, outer=(15)]
 
 # Regression test for #50059.
 exec-ddl
@@ -3371,85 +3352,10 @@ SELECT (
 FROM table3_119441 AS baz;
 ----
 project
- ├── columns: col3_5:28(varchar)
+ ├── columns: col3_5:28(varchar!null)
  ├── prune: (28)
- ├── reject-nulls: (28)
- ├── left-join-apply
- │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char) col3_5:27(varchar)
- │    ├── prune: (27)
- │    ├── reject-nulls: (27)
- │    ├── scan table3_119441 [as=baz]
- │    │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char)
- │    │    ├── prune: (1,2)
- │    │    └── unfiltered-cols: (1-6)
- │    ├── project
- │    │    ├── columns: col3_5:27(varchar)
- │    │    ├── outer: (1,2)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(27)
- │    │    ├── prune: (27)
- │    │    ├── limit
- │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
- │    │    │    ├── outer: (2)
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(8-10,14-16,22), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
- │    │    │    ├── interesting orderings: (+(9|10)) (+22)
- │    │    │    ├── inner-join (hash)
- │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
- │    │    │    │    ├── outer: (2)
- │    │    │    │    ├── fd: ()-->(9,10,15), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
- │    │    │    │    ├── limit hint: 1.00
- │    │    │    │    ├── interesting orderings: (+(9|10)) (+22)
- │    │    │    │    ├── top-k
- │    │    │    │    │    ├── columns: table3_119441.col3_16:22(int)
- │    │    │    │    │    ├── internal-ordering: +22
- │    │    │    │    │    ├── k: 6
- │    │    │    │    │    ├── cardinality: [0 - 6]
- │    │    │    │    │    ├── interesting orderings: (+22)
- │    │    │    │    │    └── scan table3_119441
- │    │    │    │    │         ├── columns: table3_119441.col3_16:22(int)
- │    │    │    │    │         └── prune: (22)
- │    │    │    │    ├── inner-join (hash)
- │    │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4) col2_2:15(string!null) col2_3:16(bytes!null)
- │    │    │    │    │    ├── fd: (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8)
- │    │    │    │    │    ├── prune: (14)
- │    │    │    │    │    ├── interesting orderings: (+(9|10))
- │    │    │    │    │    ├── scan table2_119441
- │    │    │    │    │    │    ├── columns: col2_1:14(int4) col2_2:15(string) col2_3:16(bytes)
- │    │    │    │    │    │    ├── prune: (14-16)
- │    │    │    │    │    │    └── unfiltered-cols: (14-19)
- │    │    │    │    │    ├── select
- │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string!null) col1_12:10(string!null)
- │    │    │    │    │    │    ├── fd: (9)==(10), (10)==(9)
- │    │    │    │    │    │    ├── prune: (8)
- │    │    │    │    │    │    ├── interesting orderings: (+(9|10))
- │    │    │    │    │    │    ├── scan table1_119441
- │    │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string) col1_12:10(string)
- │    │    │    │    │    │    │    ├── prune: (8-10)
- │    │    │    │    │    │    │    └── interesting orderings: (+9)
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
- │    │    │    │    │    │              ├── variable: col1_11:9 [type=string]
- │    │    │    │    │    │              └── variable: col1_12:10 [type=string]
- │    │    │    │    │    └── filters
- │    │    │    │    │         ├── eq [type=bool, outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
- │    │    │    │    │         │    ├── variable: col1_8:8 [type=bytes]
- │    │    │    │    │         │    └── variable: col2_3:16 [type=bytes]
- │    │    │    │    │         └── eq [type=bool, outer=(9,15), constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
- │    │    │    │    │              ├── variable: col1_11:9 [type=string]
- │    │    │    │    │              └── variable: col2_2:15 [type=string]
- │    │    │    │    └── filters
- │    │    │    │         ├── eq [type=bool, outer=(14,22), constraints=(/14: (/NULL - ]; /22: (/NULL - ]), fd=(14)==(22), (22)==(14)]
- │    │    │    │         │    ├── variable: col2_1:14 [type=int4]
- │    │    │    │         │    └── variable: table3_119441.col3_16:22 [type=int]
- │    │    │    │         └── eq [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- │    │    │    │              ├── variable: col1_11:9 [type=string]
- │    │    │    │              └── variable: baz.col3_11:2 [type=char]
- │    │    │    └── const: 1 [type=int]
- │    │    └── projections
- │    │         └── variable: baz.col3_5:1 [as=col3_5:27, type=varchar, outer=(1)]
- │    └── filters (true)
+ ├── scan table3_119441 [as=baz]
+ │    ├── columns: baz.col3_5:1(varchar!null)
+ │    └── prune: (1)
  └── projections
-      └── variable: col3_5:27 [as=col3_5:28, type=varchar, outer=(27)]
+      └── variable: baz.col3_5:1 [as=col3_5:28, type=varchar, outer=(1)]
