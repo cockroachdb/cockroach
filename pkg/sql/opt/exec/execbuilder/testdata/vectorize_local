@@ -129,7 +129,7 @@ execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
-rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -141,16 +141,8 @@ quality of service: regular
 │
 └── • lookup join
     │ sql nodes: <hidden>
-    │ kv nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
-    │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV rows decoded: 1
-    │ KV pairs read: 2
-    │ KV bytes read: 8 B
-    │ KV gRPC calls: 1
-    │ estimated max memory allocated: 0 B
     │ table: d@d_pkey
     │ equality: (b) = (b)
     │
@@ -170,7 +162,7 @@ quality of service: regular
           table: c@sec
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lFFqGzEQht97imGeWlCSXVNKERScOm5xGtthHfJSTJCliaNaK20lLbEJPlYv0JOVXdkhjpPQQqMHw_zze2akb9g7DD8Ncpz0z_q9C5CHgvOi_3V0POxPzo97ffhSjIcg4XQ8GIGC8QjU4Qw-gTycIUPrFI1ESQH5d8xxyrDyTlIIzjfSXWsYqCXyjKG2VR0becpQOk_I7zDqaAg5XoiZoYKEIn-UIUNFUWjTlpXdQBIZ9pypSxs4CAZN70klmugAGX67hKZR4GDzFHqaa9ekI4WYpKhL4pD9_hVSLJ2NZKN2di_l3W0ARdIpUhw6SZytIgXwJBSH_AN8Tuq8OO-BFMaEe2MltN8a3yPD4WWvByFSBdLVNsJbWsYjbeM7Dll72WQgWjxnKMUSSiqdX4EwxkkRm7mydoaZiPKGArg6VnXk0Pjb-bdCB6drhinavH6IYk7I8we4BifIszX7e2KnTtsNsHwXmOqqq2pBK2R45tyiruCH0xac5dDtPATZUCzIKvIcuvnu3uGme8siPW2KQxTG7BF7Rfz5Pv6PT9HP9-l3_gt9WpKs9wd9paXoPFqK_F-WoqBQORtoZyGe65Q96nSQr6cMSc0pfTuCq72kc-9k603huC3UCopCTNk8BQO7TYXoSZT3O_2wUv5ipc5LlaYMr427vdIKOWabc_DEz_Zg8wcxD80TTW7cbVv2YlU1F7wWJhDDoVjQCUXypbY6RC2RR1_Tev3mTwAAAP__KdvF2w==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykU8FqGzEQvfcrhjm1oCS7pvQgKDh13OI0toMdcikmyNLEUb0rbaVZYhP8Wf2BflnZlR3spAkt1WHhvXk7M3pv9wHjjwIlTvsX_d4V6GMl5aT_ZXQ67E8vT3t9-DwZD0HD-XgwAgPjEZjjOXwEfTxHgc4bGqmSIspvmONMYBW8phh9aKiHVjAwK5SZQOuqmht6JlD7QCgfkC0XhBKv1LygCSlD4SRDgYZY2aJtq7uRNArs-aIuXZSgBDSzp5Vq0BEK_HoNzaAoweUJBlpY35SZIieKbUkSsl8_Y8LaOybH1rtnpeDvIxjS3pCR0EnkfM0UIZAyEvIP8Cmxi8llD7QqivgorJQNO-F7FDi87vUgMlWgfe0Y3tKKT6zjdxKy9rJJQLR8SVCqFZRU-rAGVRReK272ytod5or1HUXwNVc1S2j07f47ooOzjcCEtu5HVgtCme_FNThDmW3E3yd27q3bBpYfBma65qZa0hoFXni_rCv47q0D7yR0O_tBNilOyBkKErr54XeH2-ltFsnahCOrojhMjFak6-dB_ocznSfO5P_izIRi5V2kA1dempQ9mXSUb2YCySwo_UDR10HTZfC61SY4bhu1hKHIqZonMHC7UuRAqnwMdr9T_mqnzmudZgJvC39_Yw1KzLbn6A-P3cHmBbWIjUXTO3_ftr1aV80Fb1URSeBQLemMmEJpnY1sNUoONW02b34HAAD__xZ9eDE=
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
