@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -169,6 +170,34 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses querybench
+		PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+
+			// To calculate the total mean of the run, we store the sum of means and count of the means
+			// We can't get the sum of the values since roachtestutil.HistogramSummaryMetric doesn't have
+			// sum of the values.
+			// This is an approximation
+			totalMeanSum := 0.0
+			totalMeanCount := 0.0
+			for _, summary := range histograms.Summaries {
+				var p50Latencies []float64
+				for _, summaryMetric := range summary.Values {
+					totalMeanSum += float64(summaryMetric.Mean)
+				}
+				sort.Float64s(p50Latencies)
+				totalMeanCount++
+			}
+
+			aggregatedMetrics := roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           test + "_mean_latency",
+					Value:          roachtestutil.MetricPoint(totalMeanSum / totalMeanCount),
+					Unit:           "ms",
+					IsHigherBetter: false,
+				},
+			}
+
+			return aggregatedMetrics, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
