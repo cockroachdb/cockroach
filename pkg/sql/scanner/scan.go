@@ -697,6 +697,10 @@ func (s *Scanner) scanIdent(lval ScanSymType) {
 }
 
 func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
+	s.scanNumberImpl(lval, ch, lexbase.ERROR, lexbase.FCONST, lexbase.ICONST)
+}
+
+func (s *Scanner) scanNumberImpl(lval ScanSymType, ch int, errorID, fconstID, iconstID int32) {
 	start := s.pos - 1
 	isHex := false
 	hasDecimal := ch == '.'
@@ -710,7 +714,7 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 		}
 		if ch == 'x' || ch == 'X' {
 			if isHex || s.in[start] != '0' || s.pos != start+1 {
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(errorID)
 				lval.SetStr(errInvalidHexNumeric)
 				return
 			}
@@ -744,10 +748,10 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 			ch = s.peek()
 			if ch == '-' || ch == '+' {
 				s.pos++
+				ch = s.peek()
 			}
-			ch = s.peek()
 			if !lexbase.IsDigit(ch) {
-				lval.SetID(lexbase.ERROR)
+				lval.SetID(errorID)
 				lval.SetStr("invalid floating point literal")
 				return
 			}
@@ -758,17 +762,17 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 
 	// Disallow identifier after numerical constants e.g. "124foo".
 	if lexbase.IsIdentStart(s.peek()) {
-		lval.SetID(lexbase.ERROR)
+		lval.SetID(errorID)
 		lval.SetStr(fmt.Sprintf("trailing junk after numeric literal at or near %q", s.in[start:s.pos+1]))
 		return
 	}
 
 	lval.SetStr(s.in[start:s.pos])
 	if hasDecimal || hasExponent {
-		lval.SetID(lexbase.FCONST)
+		lval.SetID(fconstID)
 		floatConst := constant.MakeFromLiteral(lval.Str(), token.FLOAT, 0)
 		if floatConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(errorID)
 			lval.SetStr(fmt.Sprintf("could not make constant float from literal %q", lval.Str()))
 			return
 		}
@@ -790,10 +794,10 @@ func (s *Scanner) scanNumber(lval ScanSymType, ch int) {
 			}
 		}
 
-		lval.SetID(lexbase.ICONST)
+		lval.SetID(iconstID)
 		intConst := constant.MakeFromLiteral(lval.Str(), token.INT, 0)
 		if intConst.Kind() == constant.Unknown {
-			lval.SetID(lexbase.ERROR)
+			lval.SetID(errorID)
 			lval.SetStr(fmt.Sprintf("could not make constant int from literal %q", lval.Str()))
 			return
 		}
