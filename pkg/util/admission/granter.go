@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -67,7 +68,9 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
-	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
+	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement ||
+		// See https://github.com/cockroachdb/cockroach/issues/142262.
+		!grunning.Supported() {
 		sg.usedSlots++
 		if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 			sg.exhaustedStart = timeutil.Now()
