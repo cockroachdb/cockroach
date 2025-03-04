@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -385,4 +386,76 @@ func checkNoLeakedTraceSpans(t *testing.T, store *Store) {
 		sl := allstacks.Get()
 		return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
 	})
+}
+
+// TestMaybeMarkReplicaUnavailableInLeaderlessWatcher is a basic unit test for
+// the function maybeMarkReplicaUnavailableInLeaderlessWatcher.
+func TestMaybeMarkReplicaUnavailableInLeaderlessWatcher(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	now := time.Now()
+	leaderlessThreshold := ReplicaLeaderlessUnavailableThreshold.Get(
+		&tc.store.ClusterSettings().SV)
+	repl := tc.repl
+
+	testCases := []struct {
+		name string
+		// The initial leaderless timestamp of the replica in the leaderlessWatcher.
+		initLeaderlessTimestamp time.Time
+		leader                  raftpb.PeerID
+		expectedLeaderlessTime  time.Time
+		expectedUnavailable     bool
+	}{
+		{
+			name:                    "leader known",
+			initLeaderlessTimestamp: time.Time{},
+			leader:                  raftpb.PeerID(1),
+			// Since the leader is known, we expect that the replica is considered
+			// available, and the leaderless timestamp is reset.
+			expectedLeaderlessTime: time.Time{},
+			expectedUnavailable:    false,
+		},
+		{
+			name:                    "leader was unknown but is now known",
+			initLeaderlessTimestamp: now.Add(-10 * time.Second),
+			leader:                  raftpb.PeerID(1),
+			// Since the leader is known, we expect that the replica is considered
+			// available, and the leaderless timestamp is reset.
+			expectedLeaderlessTime: time.Time{},
+			expectedUnavailable:    false,
+		},
+		{
+			name:                    "leader unknown less than threshold",
+			initLeaderlessTimestamp: now.Add(-10 * time.Second),
+			leader:                  raft.None,
+			// Since the leader has been unknown for less than the threshold, we
+			// expect that the replica is considered available, and the leaderless
+			// time it is set properly.
+			expectedLeaderlessTime: now.Add(-10 * time.Second),
+			expectedUnavailable:    false,
+		},
+		{
+			name:                    "leader unknown exceeds threshold",
+			initLeaderlessTimestamp: now.Add(-leaderlessThreshold),
+			leader:                  raft.None,
+			// Since the leader has been unknown for the threshold period, we
+			// expect that the replica is considered unavailable, and the leaderless
+			// time it is set properly.
+			expectedLeaderlessTime: now.Add(-leaderlessThreshold),
+			expectedUnavailable:    true,
+		},
+	}
+	for _, tc := range testCases {
+		repl.LeaderlessWatcher.mu.leaderlessTimestamp = tc.initLeaderlessTimestamp
+		repl.maybeMarkReplicaUnavailableInLeaderlessWatcher(ctx, tc.leader, now)
+		require.Equal(t, tc.expectedUnavailable, repl.LeaderlessWatcher.IsUnavailable())
+		require.Equal(t, tc.expectedLeaderlessTime, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
+	}
 }
