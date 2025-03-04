@@ -41,12 +41,12 @@ func stripBrackets(t *testing.T, in string) string {
 	return lrTrim
 }
 
-func parseLoadVector(t *testing.T, in string) loadVector {
-	var vec loadVector
+func parseLoadVector(t *testing.T, in string) LoadVector {
+	var vec LoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(numLoadDimensions))
+	require.Len(t, parts, int(NumLoadDimensions))
 	for dim := range vec {
-		vec[dim] = loadValue(parseInt(t, parts[dim]))
+		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
@@ -56,7 +56,7 @@ func parseSecondaryLoadVector(t *testing.T, in string) secondaryLoadVector {
 	parts := strings.Split(stripBrackets(t, in), ",")
 	require.Len(t, parts, int(numSecondaryLoadDimensions))
 	for dim := range vec {
-		vec[dim] = loadValue(parseInt(t, parts[dim]))
+		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
@@ -97,9 +97,9 @@ func parseNodeLoadMsg(t *testing.T, in string) nodeLoadMsg {
 		case "node-id":
 			msg.nodeID = roachpb.NodeID(parseInt(t, parts[1]))
 		case "cpu-load":
-			msg.reportedCPU = loadValue(parseInt(t, parts[1]))
+			msg.reportedCPU = LoadValue(parseInt(t, parts[1]))
 		case "cpu-capacity":
-			msg.capacityCPU = loadValue(parseInt(t, parts[1]))
+			msg.capacityCPU = LoadValue(parseInt(t, parts[1]))
 		case "load-time":
 			duration, err := time.ParseDuration(parts[1])
 			require.NoError(t, err)
@@ -115,36 +115,36 @@ func parseNodeLoadMsg(t *testing.T, in string) nodeLoadMsg {
 	return msg
 }
 
-func parseStoreLeaseholderMsg(t *testing.T, in string) storeLeaseholderMsg {
-	var msg storeLeaseholderMsg
+func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
+	var msg StoreLeaseholderMsg
 
 	lines := strings.Split(in, "\n")
 	require.True(t, strings.HasPrefix(lines[0], "store-id="))
 	msg.StoreID = roachpb.StoreID(parseInt(t, strings.TrimPrefix(lines[0], "store-id=")))
 
-	var rMsg rangeMsg
+	var rMsg RangeMsg
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "range-id") {
 			if rMsg.RangeID != 0 {
-				msg.ranges = append(msg.ranges, rMsg)
+				msg.Ranges = append(msg.Ranges, rMsg)
 			}
-			rMsg = rangeMsg{RangeID: 0}
+			rMsg = RangeMsg{RangeID: 0}
 			for _, field := range strings.Fields(line) {
 				parts := strings.SplitN(field, "=", 2)
 				switch parts[0] {
 				case "range-id":
 					rMsg.RangeID = roachpb.RangeID(parseInt(t, parts[1]))
 				case "load":
-					rMsg.rangeLoad.load = parseLoadVector(t, parts[1])
+					rMsg.RangeLoad.Load = parseLoadVector(t, parts[1])
 				case "raft-cpu":
-					rMsg.rangeLoad.raftCPU = loadValue(parseInt(t, parts[1]))
+					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
-			rMsg.conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
+			rMsg.Conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
 		} else {
-			var repl storeIDAndReplicaState
+			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
 			require.Greater(t, len(fields), 2)
 			for _, field := range fields {
@@ -156,20 +156,20 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) storeLeaseholderMsg {
 				case "replica-id":
 					repl.ReplicaID = roachpb.ReplicaID(parseInt(t, parts[1]))
 				case "leaseholder":
-					repl.isLeaseholder = parseBool(t, parts[1])
+					repl.IsLeaseholder = parseBool(t, parts[1])
 				case "type":
 					replType, err := parseReplicaType(parts[1])
 					require.NoError(t, err)
-					repl.replicaType.replicaType = replType
+					repl.ReplicaType.ReplicaType = replType
 				default:
 					panic(fmt.Sprintf("unknown argument: %s", parts[0]))
 				}
 			}
-			rMsg.replicas = append(rMsg.replicas, repl)
+			rMsg.Replicas = append(rMsg.Replicas, repl)
 		}
 	}
 	if rMsg.RangeID != 0 {
-		msg.ranges = append(msg.ranges, rMsg)
+		msg.Ranges = append(msg.Ranges, rMsg)
 	}
 
 	return msg
@@ -278,10 +278,10 @@ func TestClusterState(t *testing.T) {
 					var buf strings.Builder
 					for _, rangeID := range rangeIDs {
 						rs := cs.ranges[roachpb.RangeID(rangeID)]
-						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.load, rs.load.raftCPU)
+						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.Load, rs.load.RaftCPU)
 						for _, repl := range rs.replicas {
 							fmt.Fprintf(&buf, "  store-id=%v %v\n",
-								repl.StoreID, repl.replicaIDAndType,
+								repl.StoreID, repl.ReplicaIDAndType,
 							)
 						}
 					}
@@ -379,7 +379,7 @@ func TestClusterState(t *testing.T) {
 							changes = append(changes, makeAddReplicaChange(rangeID, rState.load, add, replType))
 						case "remove-replica":
 							_, remove, _ := parseChangeAddRemove(t, parts[1])
-							var removeRepl storeIDAndReplicaState
+							var removeRepl StoreIDAndReplicaState
 							for _, replica := range rState.replicas {
 								if replica.StoreID == remove {
 									removeRepl = replica
