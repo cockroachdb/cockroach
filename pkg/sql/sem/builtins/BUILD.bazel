@@ -114,6 +114,7 @@ go_library(
         "//pkg/util/intsets",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
+        "//pkg/util/jsonpath/eval",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/pretty",
