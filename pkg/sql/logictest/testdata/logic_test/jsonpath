@@ -8,7 +8,7 @@ jsonpath
 query T
 SELECT '$.a'::JSONPATH
 ----
-$.a
+$."a"
 
 statement error pq: value type jsonpath cannot be used for table columns
 CREATE TABLE a (j JSONPATH)
@@ -34,7 +34,7 @@ $
 query T
 SELECT '$.a1[*]'::JSONPATH
 ----
-$.a1[*]
+$."a1"[*]
 
 query B
 SELECT '$'::JSONPATH IS NULL
@@ -65,18 +65,18 @@ true
 statement error pq: could not parse "" as type jsonpath: at or near "EOF": syntax error
 SELECT ''::JSONPATH
 
-statement error pq: could not parse "\$\.1a\[\*\]" as type jsonpath: at or near "1": syntax error
+statement error pq: could not parse "\$\.1a\[\*\]" as type jsonpath
 SELECT '$.1a[*]'::JSONPATH
 
 query T
 SELECT '$.abc[*].DEF.ghi[*]'::JSONPATH
 ----
-$.abc[*].DEF.ghi[*]
+$."abc"[*]."DEF"."ghi"[*]
 
 query T
 SELECT '$.ABC[*].DEF.GHI[*]'::JSONPATH
 ----
-$.ABC[*].DEF.GHI[*]
+$."ABC"[*]."DEF"."GHI"[*]
 
 ## When we allow table creation
 
@@ -159,3 +159,8 @@ $.ABC[*].DEF.GHI[*]
 # SELECT '$.a.type()'::JSONPATH
 # ----
 # $.a.type()
+
+# query T
+# SELECT '$.a ? ($.b == 1)'::JSONPATH
+# ----
+# $.a ? ($.b == 1)
