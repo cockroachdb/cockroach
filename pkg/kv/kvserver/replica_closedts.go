@@ -7,7 +7,7 @@ package kvserver
 
 import (
 	"context"
-	"github.com/cockroachdb/crlib/crtime"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
@@ -164,8 +165,10 @@ const (
 	maxValidRTT = 400 * time.Millisecond
 
 	// Cache refresh intervals.
-	normalRefreshInterval     = 5 * time.Minute
-	aggressiveRefreshInterval = 10 * time.Second
+	baseAggressiveRefresh = 5 * time.Minute
+	baseNormalRefresh     = 10 * time.Second
+	// Jitter range (±50% of base interval)
+	jitterFraction = 0.5
 )
 
 // getMaxReplicaNetworkRTTRLocked returns the maximum network RTT to any
@@ -180,16 +183,26 @@ func (r *Replica) getMaxReplicaNetworkRTTRLocked() time.Duration {
 		return rtt > minValidRTT && rtt < maxValidRTT
 	}
 
+	// Add jitter to refresh interval to scatter different replicas' refresh
+	// schedules to avoid contention on the rpc context.
+	getRefreshInterval := func(baseInterval time.Duration) time.Duration {
+		// Use the unique storeID and rangeID to generate a unique offset for the
+		// random number generator.
+		uniqueOffset := (int64(r.store.StoreID()) << 32) ^ int64(r.RangeID)
+		rng := rand.New(rand.NewSource(uniqueOffset))
+		jitter := float64(baseInterval) * jitterFraction
+		return baseInterval + time.Duration(rng.Float64()*2*jitter-jitter)
+	}
+
 	shouldRefreshCache := func(hasValidCachedRTT bool) bool {
 		if r.mu.maxReplicaRTT.lastUpdated == 0 {
 			return true
 		}
 		elapsed := r.mu.maxReplicaRTT.lastUpdated.Elapsed()
 		if !hasValidCachedRTT {
-			// Refresh more frequently if current value is invalid.
-			return elapsed > aggressiveRefreshInterval
+			return elapsed > getRefreshInterval(baseAggressiveRefresh)
 		}
-		return elapsed > normalRefreshInterval
+		return elapsed > getRefreshInterval(baseNormalRefresh)
 	}
 
 	hasValidCachedRTT := isValidRTT(r.mu.maxReplicaRTT.value)
