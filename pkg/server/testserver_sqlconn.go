@@ -35,7 +35,7 @@ import (
 // shutdowns does not properly close the resulting *gosql.DB objects.
 //
 // TODO(#107747): re-enable this.
-const useLoopbackListener = false
+const useLoopbackListener = true
 
 func pgURL(
 	dbName string,
