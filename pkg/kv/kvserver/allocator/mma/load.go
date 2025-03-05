@@ -390,24 +390,24 @@ func computeMeansForStoreSet(
 // loadSummary aggregates across all load dimensions for a store, or a node.
 // This could be a score instead of an enum, but eventually we want to decide
 // what scores are roughly equal when deciding on rebalancing priority, and to
-// decide how to order the stores we will try to rebalance to. So we simply
-// use an enum.
+// decide how to order the stores we will try to rebalance to. So we simply use
+// an enum.
 type loadSummary uint8
 
-// TODO(sumeer): it is odd that overload ordering is most overloaded first in
-// the enum, while failureDetectionSummary ordering is most dead as last in
-// the enum. The latter is more natural when writing code like failureSummary
-// > fdDrain or loadSummary > overloadSlow. So change the following enum.
 const (
-	// The two overload states represent the degree of overload.
-	overloadUrgent loadSummary = iota
-	overloadSlow
+	loadLow loadSummary = iota
+	// loadNormal represents that the load is within normal bounds.
+	loadNormal
 	// loadNoChange represents that no load should be added or removed from this
 	// store. This is typically only used when there are enough pending changes
 	// at this store that we want to let them finish.
 	loadNoChange
-	loadNormal
-	loadLow
+	// overloadSlow is a state where the store is overloaded, but not so much
+	// that it is urgent to shed load.
+	overloadSlow
+	// overloadUrgent is a state where the store is overloaded and it is urgent
+	// to shed load.
+	overloadUrgent
 )
 
 // Computes the loadSummary for a particular load dimension.
