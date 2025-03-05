@@ -382,7 +382,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		idx:  idx,
 		done: true,
 	}
-	return mSST, res, err
+	return mSST, res, nil
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(

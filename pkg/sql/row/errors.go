@@ -41,6 +41,12 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		)
 
 	case *kvpb.ConditionFailedError:
+		if !v.OriginTimestampOlderThan.IsEmpty() {
+			// TODO(jeffswenson): should we introduce a pgcode for this? Or should we
+			// just rely on go errors since we never intend to expose this to the
+			// wire protocol.
+			return origPErr.GoError()
+		}
 		if origPErr.Index == nil {
 			break
 		}

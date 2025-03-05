@@ -1926,6 +1926,7 @@ func MVCCPut(
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter MVCCIterator
 	var ltScanner *lockTableKeyScanner
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
 	blind := opts.Stats == nil && timestamp.IsEmpty()
 	if !blind {
 		var err error
@@ -1951,8 +1952,20 @@ func MVCCPut(
 			}
 			defer ltScanner.close()
 		}
+		if !opts.OriginTimestamp.IsEmpty() {
+			valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+				// TODO(jeffswenson): handle ties
+				isWinner, winningTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp, false)
+				if !isWinner {
+					return roachpb.Value{}, &kvpb.ConditionFailedError{
+						OriginTimestampOlderThan: winningTS,
+					}
+				}
+				return value, nil
+			}
+		}
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, opts)
+	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, valueFn, opts)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -2018,9 +2031,21 @@ func MVCCDelete(
 	buf := newPutBuffer()
 	defer buf.release()
 
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	if !opts.OriginTimestamp.IsEmpty() {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			isWinner, winningTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp, false)
+			if !isWinner {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					OriginTimestampOlderThan: winningTS,
+				}
+			}
+			return noValue, nil
+		}
+	}
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
 	return mvccPutInternal(
-		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, valueFn, opts)
 }
 
 var noValue = roachpb.Value{}
@@ -3778,11 +3803,25 @@ func MVCCDeleteRange(
 	buf := newPutBuffer()
 	defer buf.release()
 
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	if !opts.OriginTimestamp.IsEmpty() {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			// TODO(jeffswenson): handle ties
+			isWinner, winningTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp, false)
+			if !isWinner {
+				return roachpb.Value{}, &kvpb.ConditionFailedError{
+					OriginTimestampOlderThan: winningTS,
+				}
+			}
+			return noValue, nil
+		}
+	}
+
 	var keys []roachpb.Key
 	var acqs []roachpb.LockAcquisition
 	for i, kv := range res.KVs {
 		_, acq, err := mvccPutInternal(
-			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, nil, opts,
+			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, valueFn, opts,
 		)
 		if err != nil {
 			return nil, nil, 0, nil, err
