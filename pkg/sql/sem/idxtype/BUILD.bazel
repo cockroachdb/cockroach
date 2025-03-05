@@ -29,13 +29,6 @@ go_proto_library(
     deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
 
-go_library(
-    name = "idxtypepb",
-    srcs = ["idxtype.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtypepb",
-    visibility = ["//visibility:public"],
-)
-
 # idxtype is meant to stay a leaf package. Never add a heavy-weight dependency.
 disallowed_imports_test(
     "idxtype",
