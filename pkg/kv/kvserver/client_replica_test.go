@@ -5722,3 +5722,33 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	txn2Cancel()
 	require.NoError(t, g.Wait())
 }
+
+// BenchmarkLeaderTickWithLeaderLeases benchmarks the performance of the replica
+// tick when the replica is the leader and running leader leases.
+func BenchmarkLeaderTickWithLeaderLeases(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+
+	// Create a cluster with one node to make sure that this is the leader.
+	cluster := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer cluster.Stopper().Stop(ctx)
+
+	// Set up a replica to be ticked, and wait for the lease to get upgraded.
+	keyA := cluster.ScratchRange(b)
+	desc := cluster.LookupRangeOrFatal(b, keyA)
+	cluster.MaybeWaitForLeaseUpgrade(ctx, b, desc)
+	store := cluster.GetFirstStoreFromServer(b, 0)
+	repl := store.LookupReplica(desc.StartKey)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		store.ProcessTick(ctx, repl.RangeID)
+	}
+}
