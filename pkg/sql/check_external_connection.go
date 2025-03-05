@@ -74,6 +74,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		execinfrapb.PostProcessSpec{},
 		cloudCheckFlowTypes,
 		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
 	)
 	plan.PlanToStreamColMap = make([]int, len(cloudCheckFlowTypes))
 	for i := range plan.PlanToStreamColMap {

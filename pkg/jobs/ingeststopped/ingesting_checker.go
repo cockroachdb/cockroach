@@ -87,7 +87,8 @@ func checkAllNodesForIngestingJob(
 	}
 
 	p.AddNoInputStage(
-		corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{},
+		corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{},
+		execinfrapb.Ordering{}, nil, /* finalizeLastStageCb */
 	)
 	sql.FinalizePlan(ctx, planCtx, p)
 

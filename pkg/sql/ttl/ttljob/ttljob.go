@@ -247,6 +247,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			execinfrapb.PostProcessSpec{},
 			[]*types.T{},
 			execinfrapb.Ordering{},
+			nil, /* finalizeLastStageCb */
 		)
 		physicalPlan.PlanToStreamColMap = []int{}
 
