@@ -895,7 +895,7 @@ func asUser(
 }
 
 func expectErrCreatingFeed(
-	t testing.TB, f cdctest.TestFeedFactory, create string, errSubstring string,
+	t testing.TB, f cdctest.TestFeedFactory, create string, errPattern string,
 ) {
 	t.Helper()
 	t.Logf("expecting %s to error", create)
@@ -912,7 +912,7 @@ func expectErrCreatingFeed(
 	if err == nil {
 		t.Errorf("No error from %s", create)
 	} else {
-		require.Contains(t, err.Error(), errSubstring)
+		require.Regexp(t, errPattern, err.Error())
 	}
 }
 
