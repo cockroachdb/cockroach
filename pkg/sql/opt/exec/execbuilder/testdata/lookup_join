@@ -2571,3 +2571,37 @@ vectorized: true
       estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@abc_pkey
       spans: FULL SCAN
+
+# Do not plan a lookup join with reverse scans if the session setting is
+# turned off.
+statement ok
+SET optimizer_plan_lookup_joins_with_reverse_scans = false
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 100
+│ order: +a,+c,-e
+│ already ordered: +a,+c
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, e, f)
+    │ ordering: +a,+c
+    │ estimated row count: 100
+    │ table: def@def_pkey
+    │ equality: (a) = (f)
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a,+c
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+RESET optimizer_plan_lookup_joins_with_reverse_scans
