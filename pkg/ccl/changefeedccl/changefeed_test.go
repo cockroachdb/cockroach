@@ -5625,6 +5625,25 @@ func TestChangefeedDataTTL(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"), feedTestNoTenants)
 }
 
+// TestChangefeedOutdatedCursor ensures that create changefeeds fail with an error in the case
+// where the cursor is older than the GC TTL of the table.
+func TestChangefeedOutdatedCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) { // Create the data table; it will only contain a single row with multiple
+		// versions.
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		outdatedTS := s.Server.Clock().Now().AsOfSystemTime()
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		forceTableGC(t, s.SystemServer, sqlDB, "d", "foo")
+		createChangefeed := "CREATE CHANGEFEED FOR TABLE foo with updated, cursor = '" + outdatedTS + "'"
+		sqlDB.ExpectErrWithHint(t, "could not create changefeed: cursor .* is older than the GC threshold .*", "use a more recent cursor", createChangefeed)
+	}
+	cdcTestWithSystem(t, testFn, feedTestNoTenants)
+}
+
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
 // where the feed has fallen behind the GC TTL of the table's schema.
 func TestChangefeedSchemaTTL(t *testing.T) {

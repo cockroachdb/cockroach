@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -325,10 +326,16 @@ func changefeedPlanHook(
 		}
 	}
 
+	var e *kvpb.BatchTimestampBeforeGCError
 	rowFnLogErrors := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := rowFn(ctx, resultsCh)
 		if err != nil {
 			logChangefeedFailedTelemetryDuringStartup(ctx, description, failureTypeForStartupError(err))
+			if errors.As(err, &e) && opts.HasStartCursor() {
+				err = errors.Newf("could not create changefeed: cursor %s is older than the GC threshold %d", opts.GetCursor(), e.Threshold.WallTime)
+				err = errors.WithHint(err,
+					"use a more recent cursor")
+			}
 		}
 		return err
 	}
