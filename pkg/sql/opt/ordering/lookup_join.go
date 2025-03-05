@@ -6,9 +6,13 @@
 package ordering
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 func indexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
@@ -23,7 +27,11 @@ func indexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoi
 // indicating whether forward or reverse scans are required. The default
 // direction indicates that either forward or reverse scans are acceptable.
 func LookupJoinCanProvideOrdering(
-	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	expr memo.RelExpr,
+	required *props.OrderingChoice,
 ) (canProvide bool, direction ScanDirection) {
 	if required.Any() {
 		// LookupJoin can always provide the empty ordering.
@@ -55,7 +63,7 @@ func LookupJoinCanProvideOrdering(
 			// This case indicates that we didn't do a good job pushing down equalities
 			// (see #36219), but it should be handled correctly here nevertheless.
 			res = trimColumnGroups(&res, &child.Relational().FuncDeps)
-			return CanProvide(mem, child, &res), EitherDirection
+			return CanProvide(ctx, evalCtx, mem, child, &res), EitherDirection
 		}
 		return true, EitherDirection
 	}
@@ -83,14 +91,18 @@ func LookupJoinCanProvideOrdering(
 	// Check whether appending index columns to the input ordering would satisfy
 	// the required ordering.
 	_, direction, ok := getLookupOrdCols(mem, lookupJoin, &remainingRequired, canProjectPrefixCols)
+	if ok && direction == ReverseDirection {
+		// Make sure the cluster is at least at v25.2 before planning a lookup
+		// join with reverse scans.
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+			return false, EitherDirection
+		}
+		// Check the session setting.
+		if !evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans {
+			return false, EitherDirection
+		}
+	}
 	return ok, direction
-}
-
-func lookupJoinCanProvideOrdering(
-	mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice,
-) bool {
-	canProvide, _ := LookupJoinCanProvideOrdering(mem, expr, required)
-	return canProvide
 }
 
 func lookupOrIndexJoinBuildChildReqOrdering(

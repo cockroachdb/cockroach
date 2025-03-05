@@ -554,6 +554,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 0
 	notStale()
 
+	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = true
+	stale()
+	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = false
+	notStale()
+
 	evalCtx.SessionData().Internal = true
 	stale()
 	evalCtx.SessionData().Internal = false

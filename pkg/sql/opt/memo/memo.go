@@ -204,6 +204,7 @@ type Memo struct {
 	preferBoundedCardinality                   bool
 	minRowCount                                float64
 	checkInputMinRowCount                      float64
+	planLookupJoinsWithReverseScans            bool
 	internal                                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -300,6 +301,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		preferBoundedCardinality:                   evalCtx.SessionData().OptimizerPreferBoundedCardinality,
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
+		planLookupJoinsWithReverseScans:            evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans,
 		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -473,6 +475,7 @@ func (m *Memo) IsStale(
 		m.preferBoundedCardinality != evalCtx.SessionData().OptimizerPreferBoundedCardinality ||
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
+		m.planLookupJoinsWithReverseScans != evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
