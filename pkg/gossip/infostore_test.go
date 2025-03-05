@@ -376,7 +376,7 @@ func TestInfoStoreMostDistant(t *testing.T) {
 	scInfo := is.newInfo(nil, time.Second)
 	scInfo.Hops = 100
 	scInfo.NodeID = nodes[0]
-	if err := is.addInfo(KeyDeprecatedSystemConfig, scInfo); err != nil {
+	if err := is.addInfo(KeyDistSQLDrainingPrefix, scInfo); err != nil {
 		t.Fatal(err)
 	}
 
