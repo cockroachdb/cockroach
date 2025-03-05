@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -33,15 +32,12 @@ type vectorSearchProcessor struct {
 	prefixKey   roachpb.Key
 	queryVector vector.T
 
-	idx         *cspann.Index
-	idxCtx      cspann.Context
+	searcher    vecindex.Searcher
 	targetCount uint64
 	searchDone  bool
 
 	row     rowenc.EncDatumRow
 	scratch rowenc.EncDatumRow
-	res     cspann.SearchResults
-	resIdx  int
 }
 
 var _ execinfra.RowSourcedProcessor = &vectorSearchProcessor{}
@@ -58,18 +54,17 @@ func newVectorSearchProcessor(
 		return nil, unimplemented.New("prefix columns",
 			"searching a vector index with prefix columns is not yet supported")
 	}
-	idx, vecTxn, err := getVectorIndexForSearch(ctx, flowCtx, &spec.FetchSpec)
-	if err != nil {
-		return nil, err
-	}
 	v := vectorSearchProcessor{
 		fetchSpec:   &spec.FetchSpec,
 		prefixKey:   spec.PrefixKey,
 		queryVector: spec.QueryVector,
-		idx:         idx,
 		targetCount: spec.TargetNeighborCount,
 	}
-	v.idxCtx.Init(vecTxn)
+	idx, err := getVectorIndexForSearch(ctx, flowCtx, &spec.FetchSpec)
+	if err != nil {
+		return nil, err
+	}
+	v.searcher.Init(idx, flowCtx.Txn)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
@@ -100,17 +95,17 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	var err error
 	if !v.searchDone {
 		v.searchDone = true
-		if err = v.search(); err != nil {
+		err := v.searcher.Search(v.Ctx(), v.prefixKey, v.queryVector, int(v.targetCount))
+		if err != nil {
 			v.MoveToDraining(err)
 		}
 	}
 	for v.State == execinfra.StateRunning {
-		if v.resIdx >= len(v.res) {
+		next := v.searcher.NextResult()
+		if next == nil {
 			v.MoveToDraining(nil /* err */)
 			break
 		}
-		next := v.res[v.resIdx]
-		v.resIdx++
 		if err = v.processSearchResult(next); err != nil {
 			v.MoveToDraining(err)
 			break
@@ -122,23 +117,9 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	return nil, v.DrainHelper()
 }
 
-func (v *vectorSearchProcessor) search() error {
-	// An index-join + top-k operation will handle the re-ranking later, so we
-	// skip doing it in the vector-search operator.
-	searchOptions := cspann.SearchOptions{SkipRerank: true}
-	searchSet := cspann.SearchSet{MaxResults: int(v.targetCount)}
-	err := v.idx.Search(
-		v.Ctx(), &v.idxCtx, cspann.TreeKey(v.prefixKey), v.queryVector, &searchSet, searchOptions)
-	if err != nil {
-		return err
-	}
-	v.res = searchSet.PopUnsortedResults()
-	return nil
-}
-
 // processSearchResult decodes the primary key columns from the search result
 // and stores them in v.vals.
-func (v *vectorSearchProcessor) processSearchResult(res cspann.SearchResult) (err error) {
+func (v *vectorSearchProcessor) processSearchResult(res *cspann.SearchResult) (err error) {
 	if v.row == nil {
 		v.row = make(rowenc.EncDatumRow, len(v.fetchSpec.FetchedColumns))
 	}
@@ -204,9 +185,7 @@ type vectorMutationSearchProcessor struct {
 	suffixKeyCols     []fetchpb.IndexFetchSpec_KeyColumn
 	scratchDatums     tree.Datums
 
-	idx    *cspann.Index
-	idxCtx cspann.Context
-
+	searcher   vecindex.MutationSearcher
 	isIndexPut bool
 }
 
@@ -221,10 +200,6 @@ func newVectorMutationSearchProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	idx, vecTxn, err := getVectorIndexForSearch(ctx, flowCtx, &spec.FetchSpec)
-	if err != nil {
-		return nil, err
-	}
 	v := vectorMutationSearchProcessor{
 		input:             input,
 		prefixKeyColOrds:  spec.PrefixKeyColumnOrdinals,
@@ -233,9 +208,12 @@ func newVectorMutationSearchProcessor(
 		suffixKeyColOrds:  spec.PrefixKeyColumnOrdinals,
 		suffixKeyCols:     spec.SuffixKeyColumns,
 		isIndexPut:        spec.IsIndexPut,
-		idx:               idx,
 	}
-	v.idxCtx.Init(vecTxn)
+	idx, err := getVectorIndexForSearch(ctx, flowCtx, &spec.FetchSpec)
+	if err != nil {
+		return nil, err
+	}
+	v.searcher.Init(idx, flowCtx.Txn)
 
 	// Pass through the input columns, and add the partition column and optional
 	// quantized vector column.
@@ -302,37 +280,27 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 		if row[v.queryVectorColOrd].Datum != tree.DNull {
 			queryVector := tree.MustBeDPGVector(row[v.queryVectorColOrd].Datum).T
 			if v.isIndexPut {
-				searchRes, err := v.idx.SearchForInsert(
-					v.Ctx(), &v.idxCtx, cspann.TreeKey(prefix), queryVector)
+				err = v.searcher.SearchForInsert(v.Ctx(), prefix, queryVector)
 				if err != nil {
 					v.MoveToDraining(err)
 					break
 				}
-				partition := searchRes.ChildKey.PartitionKey
-				partitionKey = tree.NewDInt(tree.DInt(partition))
-				partitionCentroid := searchRes.Vector
-				quantizedVec, err = v.quantize(partition, partitionCentroid, queryVector)
-				if err != nil {
-					v.MoveToDraining(err)
-					break
-				}
+				partitionKey = v.searcher.PartitionKey()
+				quantizedVec = v.searcher.EncodedVector()
 			} else {
 				pk, err := v.encodeSuffixKeyCols(row)
 				if err != nil {
 					v.MoveToDraining(err)
 					break
 				}
-				searchRes, err := v.idx.SearchForDelete(
-					v.Ctx(), &v.idxCtx, cspann.TreeKey(prefix), queryVector, pk)
+				err = v.searcher.SearchForDelete(v.Ctx(), prefix, queryVector, pk)
 				if err != nil {
 					v.MoveToDraining(err)
 					break
 				}
 				// It is possible for the search not to find the target index entry, in
 				// which case the result is nil.
-				if searchRes != nil {
-					partitionKey = tree.NewDInt(tree.DInt(searchRes.ParentPartitionKey))
-				}
+				partitionKey = v.searcher.PartitionKey()
 			}
 		}
 		row = append(row, rowenc.DatumToEncDatum(types.Int, partitionKey))
@@ -344,19 +312,6 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 		}
 	}
 	return nil, v.DrainHelper()
-}
-
-func (v *vectorMutationSearchProcessor) quantize(
-	partition cspann.PartitionKey, centroid, queryVec vector.T,
-) (tree.Datum, error) {
-	randomizedVec := make(vector.T, len(queryVec))
-	randomizedVec = v.idx.RandomizeVector(queryVec, randomizedVec)
-	store := v.idx.Store().(*vecstore.Store)
-	quantizedVec, err := store.QuantizeAndEncode(partition, centroid, randomizedVec)
-	if err != nil {
-		return nil, err
-	}
-	return tree.NewDBytes(tree.DBytes(quantizedVec)), nil
 }
 
 func (v *vectorMutationSearchProcessor) encodePrefixKeyCols(
@@ -429,12 +384,7 @@ func (v *vectorMutationSearchProcessor) Child(nth int, verbose bool) execopnode.
 
 func getVectorIndexForSearch(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, fetchSpec *fetchpb.IndexFetchSpec,
-) (*cspann.Index, cspann.Txn, error) {
+) (*cspann.Index, error) {
 	idxManager := flowCtx.Cfg.VecIndexManager.(*vecindex.Manager)
-	idx, err := idxManager.Get(ctx, fetchSpec.TableID, fetchSpec.IndexID)
-	if err != nil {
-		return nil, nil, err
-	}
-	vecTxn := idx.Store().(*vecstore.Store).WrapTxn(flowCtx.Txn)
-	return idx, vecTxn, nil
+	return idxManager.Get(ctx, fetchSpec.TableID, fetchSpec.IndexID)
 }
