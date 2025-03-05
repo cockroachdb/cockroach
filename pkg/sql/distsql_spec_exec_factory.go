@@ -867,7 +867,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	if err := e.dsp.planIndexJoin(e.ctx, planCtx, planInfo, physPlan); err != nil {
 		return nil, err
 	}
-	physPlan.ResultColumns = fetch.resultColumns
+	physPlan.ResultColumns = fetch.columns
 	return plan, nil
 }
 
@@ -1021,7 +1021,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 		return nil, err
 	}
 	physPlan.ResultColumns = invertedJoinResultCols(
-		joinType, physPlan.ResultColumns, fetch.resultColumns, isFirstJoinInPairedJoiner,
+		joinType, physPlan.ResultColumns, fetch.columns, isFirstJoinInPairedJoiner,
 	)
 	return makePlanMaybePhysical(physPlan, nil), nil
 }

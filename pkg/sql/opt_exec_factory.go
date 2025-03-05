@@ -143,7 +143,7 @@ func (ef *execFactory) ConstructScan(
 	}
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
-		return newZeroNode(scan.resultColumns), nil
+		return newZeroNode(scan.columns), nil
 	}
 
 	scan.index = idx
@@ -703,7 +703,7 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	n := &indexJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		columns:             fetch.resultColumns,
+		columns:             fetch.columns,
 		indexJoinPlanningInfo: indexJoinPlanningInfo{
 			fetch:       fetch,
 			keyCols:     keyCols,
@@ -780,7 +780,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	if onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
-	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.resultColumns)
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.columns)
 	if isFirstJoinInPairedJoiner {
 		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
@@ -912,7 +912,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	}
 	// Build the result columns.
 	n.columns = invertedJoinResultCols(
-		joinType, planColumns(input.(planNode)), fetch.resultColumns, isFirstJoinInPairedJoiner,
+		joinType, planColumns(input.(planNode)), fetch.columns, isFirstJoinInPairedJoiner,
 	)
 	return n, nil
 }
@@ -1027,10 +1027,10 @@ func (ef *execFactory) ConstructZigzagJoin(
 	n.columns = make(
 		colinfo.ResultColumns,
 		0,
-		len(n.sides[0].fetch.resultColumns)+len(n.sides[1].fetch.resultColumns),
+		len(n.sides[0].fetch.columns)+len(n.sides[1].fetch.columns),
 	)
-	n.columns = append(n.columns, n.sides[0].fetch.resultColumns...)
-	n.columns = append(n.columns, n.sides[1].fetch.resultColumns...)
+	n.columns = append(n.columns, n.sides[0].fetch.columns...)
+	n.columns = append(n.columns, n.sides[1].fetch.columns...)
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
 	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.
