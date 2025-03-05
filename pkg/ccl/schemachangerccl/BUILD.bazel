@@ -27,7 +27,7 @@ go_test(
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     embed = [":schemachangerccl"],
-    exec_properties = {"test.Pool": "large"},
+    exec_properties = {"test.Pool": "heavy"},
     shard_count = 48,
     tags = ["cpu:3"],
     deps = [
