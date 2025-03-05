@@ -1082,10 +1082,19 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
-	// The unquiesced or awake subset of replicas.
-	unquiescedOrAwakeReplicas struct {
+	// quiescence stores quiesced/asleep and unquiesced/awake replicas.
+	quiescence struct {
+		// Replica.mu > quiescence; i.e. if acquiring both mutexes, acquire
+		// Replica.mu first.
 		syncutil.Mutex
-		m map[roachpb.RangeID]struct{}
+		// unquiescedOrAwake is the set of unquiesced or awake ranges; the Raft
+		// scheduler iterates over this set to schedule replicas for Raft ticks.
+		unquiescedOrAwake map[roachpb.RangeID]struct{}
+		// asleepByLeaderStore is a map from a store ID to the set of asleep
+		// replicas that have a leader on that store; it is used to easily locate
+		// all replicas that need to be awakened when the local store withdraws
+		// store liveness support for a remote store (the leader's store).
+		asleepByLeaderStore map[roachpb.StoreID]map[*Replica]struct{}
 	}
 
 	// The subset of replicas with active rangefeeds.
@@ -1606,9 +1615,10 @@ func NewStore(
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.unquiescedOrAwakeReplicas.Lock()
-	s.unquiescedOrAwakeReplicas.m = map[roachpb.RangeID]struct{}{}
-	s.unquiescedOrAwakeReplicas.Unlock()
+	s.quiescence.Lock()
+	s.quiescence.unquiescedOrAwake = map[roachpb.RangeID]struct{}{}
+	s.quiescence.asleepByLeaderStore = map[roachpb.StoreID]map[*Replica]struct{}{}
+	s.quiescence.Unlock()
 
 	s.rangefeedReplicas.Lock()
 	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
