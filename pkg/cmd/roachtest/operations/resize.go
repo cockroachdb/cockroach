@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/errors"
 )
@@ -35,8 +36,8 @@ func (cl *cleanupResize) Cleanup(ctx context.Context, o operation.Operation, c c
 		}
 	}()
 	for i := 0; i < cl.growCount; i++ {
-		drainNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
-		decommissionNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
+		helpers.DrainNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
+		helpers.DecommissionNode(ctx, o, c, c.Node(cl.origClusterSize+i+1))
 	}
 }
 
