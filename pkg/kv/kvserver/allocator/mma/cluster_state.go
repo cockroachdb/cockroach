@@ -118,7 +118,7 @@ type replicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
 	loadDelta          LoadVector
-	secondaryLoadDelta secondaryLoadVector
+	secondaryLoadDelta SecondaryLoadVector
 
 	storeID roachpb.StoreID
 	rangeID roachpb.RangeID
@@ -195,8 +195,8 @@ func makeLeaseTransferChanges(
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
-	removeLease.secondaryLoadDelta[leaseCount] = -1
-	addLease.secondaryLoadDelta[leaseCount] = 1
+	removeLease.secondaryLoadDelta[LeaseCount] = -1
+	addLease.secondaryLoadDelta[LeaseCount] = 1
 
 	// Only account for the leaseholder CPU, all other primary load dimensions
 	// are ignored. Byte size and write bytes are not impacted by having a range
@@ -288,8 +288,8 @@ func makeRebalanceReplicaChanges(
 		removeReplicaChange.loadDelta = LoadVector{}
 		addReplicaChange.loadDelta.add(rLoad.Load)
 		removeReplicaChange.loadDelta.subtract(rLoad.Load)
-		addReplicaChange.secondaryLoadDelta[leaseCount] = 1
-		removeReplicaChange.secondaryLoadDelta[leaseCount] = -1
+		addReplicaChange.secondaryLoadDelta[LeaseCount] = 1
+		removeReplicaChange.secondaryLoadDelta[LeaseCount] = -1
 	}
 
 	return [2]replicaChange{addReplicaChange, removeReplicaChange}
@@ -389,7 +389,7 @@ type enactedReplicaChange struct {
 	// The load this change adds to a store. The values are always positive,
 	// even for load subtraction.
 	loadDelta      LoadVector
-	secondaryDelta secondaryLoadVector
+	secondaryDelta SecondaryLoadVector
 }
 
 // storeEnactedHistory is a member of storeState. Users should only call
@@ -397,7 +397,7 @@ type enactedReplicaChange struct {
 type storeEnactedHistory struct {
 	changes        []enactedReplicaChange
 	totalDelta     LoadVector
-	totalSecondary secondaryLoadVector
+	totalSecondary SecondaryLoadVector
 	allowChanges   bool
 }
 
@@ -412,7 +412,7 @@ func (h *storeEnactedHistory) addEnactedChange(change *pendingReplicaChange) {
 		}
 	}
 	if change.prev.IsLeaseholder != change.next.IsLeaseholder {
-		c.secondaryDelta[leaseCount] = 1
+		c.secondaryDelta[LeaseCount] = 1
 	}
 	h.changes = append(h.changes, c)
 	slices.SortFunc(h.changes, func(a, b enactedReplicaChange) int {
@@ -522,7 +522,7 @@ type storeState struct {
 	storeLoad
 	adjusted struct {
 		load          LoadVector
-		secondaryLoad secondaryLoadVector
+		secondaryLoad SecondaryLoadVector
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
 		//
@@ -672,7 +672,7 @@ func (fds failureDetectionSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 
 type nodeState struct {
 	stores []roachpb.StoreID
-	nodeLoad
+	NodeLoad
 	adjustedCPU LoadValue
 
 	// This loadSummary is only based on the cpu. It is incorporated into the
@@ -684,8 +684,8 @@ type nodeState struct {
 func newNodeState(nodeID roachpb.NodeID) *nodeState {
 	return &nodeState{
 		stores: []roachpb.StoreID{},
-		nodeLoad: nodeLoad{
-			nodeID: nodeID,
+		NodeLoad: NodeLoad{
+			NodeID: nodeID,
 		},
 	}
 }
@@ -797,37 +797,37 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 	}
 }
 
-func (cs *clusterState) processNodeLoadMsg(msg *nodeLoadMsg) {
+func (cs *clusterState) processNodeLoadMsg(msg *NodeLoadMsg) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
-	ns := cs.nodes[msg.nodeID]
+	ns := cs.nodes[msg.NodeID]
 	// Handle the node load, updating the reported load and set the adjusted load
 	// to be equal to the reported load initially. Any remaining pending changes
 	// will be re-applied to the reported load.
-	ns.reportedCPU = msg.reportedCPU
-	ns.adjustedCPU = msg.reportedCPU
-	ns.nodeLoad = msg.nodeLoad
-	for _, storeMsg := range msg.stores {
+	ns.ReportedCPU = msg.ReportedCPU
+	ns.adjustedCPU = msg.ReportedCPU
+	ns.NodeLoad = msg.NodeLoad
+	for _, storeMsg := range msg.Stores {
 		ss := cs.stores[storeMsg.StoreID]
 
 		// The store's load seqeunce number is incremented on each load change. The
 		// store's load is updated below.
 		ss.loadSeqNum++
-		ss.storeLoad.reportedLoad = storeMsg.load
-		ss.storeLoad.capacity = storeMsg.capacity
-		ss.storeLoad.reportedSecondaryLoad = storeMsg.secondaryLoad
+		ss.storeLoad.reportedLoad = storeMsg.Load
+		ss.storeLoad.capacity = storeMsg.Capacity
+		ss.storeLoad.reportedSecondaryLoad = storeMsg.SecondaryLoad
 
 		// Reset the adjusted load to be the reported load. We will re-apply any
 		// remaining pending change deltas to the updated adjusted load.
-		ss.adjusted.load = storeMsg.load
-		ss.adjusted.secondaryLoad = storeMsg.secondaryLoad
+		ss.adjusted.load = storeMsg.Load
+		ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 
 		// Find any pending changes for range's which involve this store. These
 		// pending changes can now be removed from the loadPendingChanges. We don't
 		// need to undo the corresponding delta adjustment as the reported load
 		// already contains the effect.
-		for _, change := range ss.computePendingChangesReflectedInLatestLoad(msg.loadTime) {
+		for _, change := range ss.computePendingChangesReflectedInLatestLoad(msg.LoadTime) {
 			delete(ss.adjusted.loadPendingChanges, change.changeID)
 			delete(cs.pendingChanges, change.changeID)
 			cs.ranges[change.rangeID].removePendingChangeTracking(change.changeID)
@@ -1122,9 +1122,9 @@ func (cs *clusterState) getStoreReportedLoad(storeID roachpb.StoreID) *storeLoad
 	return nil
 }
 
-func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *nodeLoad {
+func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	if nodeState, ok := cs.nodes[nodeID]; ok {
-		return &nodeState.nodeLoad
+		return &nodeState.NodeLoad
 	}
 	return nil
 }
@@ -1159,7 +1159,7 @@ func (cs *clusterState) computeLoadSummary(
 		}
 
 	}
-	nls := loadSummaryForDimension(ns.adjustedCPU, ns.capacityCPU, mnl.loadCPU, mnl.utilCPU)
+	nls := loadSummaryForDimension(ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		sls:                      sls,
 		nls:                      nls,
