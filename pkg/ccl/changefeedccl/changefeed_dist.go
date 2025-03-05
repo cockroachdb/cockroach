@@ -548,13 +548,14 @@ func makePlan(
 		}
 
 		p := planCtx.NewPhysicalPlan()
-		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
+		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
 		p.AddSingleGroupStage(
 			ctx,
 			dsp.GatewayID(),
 			execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
 			execinfrapb.PostProcessSpec{},
 			changefeedResultTypes,
+			nil, /* finalizeLastStageCb */
 		)
 
 		p.PlanToStreamColMap = []int{1, 2, 3}

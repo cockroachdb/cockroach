@@ -244,6 +244,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		execinfrapb.PostProcessSpec{},
 		outTypes,
 		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
 	)
 
 	// Set up the final SampleAggregator stage.
@@ -271,6 +272,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},
 		[]*types.T{},
+		nil, /* finalizeLastStageCb */
 	)
 	p.PlanToStreamColMap = []int{}
 	return p
