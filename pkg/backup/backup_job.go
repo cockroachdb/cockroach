@@ -876,6 +876,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
 	}
 
+	if err := maybeCompactBackups(ctx, p, initialDetails, &kmsEnv); err != nil {
+		log.Warningf(ctx, "failed to start compaction job: %v", err)
+	}
+
 	return b.maybeNotifyScheduledJobCompletion(
 		ctx, jobs.StateSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
 	)
@@ -1678,8 +1682,9 @@ func updateBackupDetails(
 			return jobspb.BackupDetails{}, err
 		}
 	}
-
-	details.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
+	dest := details.Destination
+	dest.Subdir = resolvedSubdir
+	details.Destination = dest
 	details.StartTime = startTime
 	details.URI = defaultURI
 	details.URIsByLocalityKV = urisByLocalityKV

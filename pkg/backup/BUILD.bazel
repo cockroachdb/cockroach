@@ -158,6 +158,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
+        "@com_github_lib_pq//:pq",
         "@com_github_robfig_cron_v3//:cron",
         "@org_golang_x_exp//maps",
     ],

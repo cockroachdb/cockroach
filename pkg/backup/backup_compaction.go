@@ -8,6 +8,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -45,7 +48,80 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	"github.com/lib/pq"
 )
+
+var (
+	backupCompactionThreshold = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"backup.compaction.threshold",
+		"the maximum length of a backup chain before compaction occurs (0 to disable)",
+		0,
+		settings.WithVisibility(settings.Reserved),
+	)
+
+	backupCompactionWindow = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"backup.compaction.window",
+		"the number of backups to compact per compaction (must be greater than one and less than threshold)",
+		3,
+		settings.WithVisibility(settings.Reserved),
+	)
+
+	scheduleOnly = true // Test knob to only compact backups on a schedule.
+)
+
+// maybeCompactBackups will conditionally run a compaction job after a backup
+// job if the backup chain exceeds the compaction threshold. It is passed
+// the job details of the backup job that just completed.
+func maybeCompactBackups(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobDetails jobspb.BackupDetails,
+	kmsEnv cloud.KMSEnv,
+) error {
+	threshold := backupCompactionThreshold.Get(&execCtx.ExecCfg().Settings.SV)
+	if threshold == 0 || jobDetails.RevisionHistory || !jobDetails.Destination.Exists ||
+		(scheduleOnly && jobDetails.ScheduleID == 0) {
+		return nil
+	}
+	chain, _, _, _, err := getBackupChain(ctx, execCtx, jobDetails, kmsEnv)
+	if err != nil {
+		return err
+	}
+	if int64(len(chain)) < threshold {
+		return nil
+	}
+	compactStart, compactEnd, err := minimumSizeDeltaHeuristic(ctx, execCtx, chain)
+	if err != nil {
+		return err
+	}
+	startTS, endTS := chain[compactStart].StartTime, chain[compactEnd-1].EndTime
+	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+	return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context,
+		txn isql.Txn) error {
+		var encryptionBytes []byte
+		if jobDetails.EncryptionOptions != nil {
+			encryptionBytes, err = jobDetails.EncryptionOptions.Marshal()
+			if err != nil {
+				return err
+			}
+		}
+		_, err := txn.ExecEx(
+			ctx,
+			"start-compaction-job",
+			txn.KV(),
+			sessiondata.NoSessionDataOverride,
+			`SELECT crdb_internal.backup_compaction($1, $2, $3::BYTES, $4::DECIMAL, $5::DECIMAL)`,
+			pq.StringArray(jobDetails.Destination.To),
+			jobDetails.Destination.Subdir,
+			string(encryptionBytes),
+			startTS.AsOfSystemTime(),
+			endTS.AsOfSystemTime(),
+		)
+		return err
+	})
+}
 
 // StartCompactionJob kicks off an asynchronous job to compact the backups at
 // the collection URI within the start and end timestamps.
@@ -57,7 +133,7 @@ func StartCompactionJob(
 	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	encryptionOpts *jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	planHook, ok := planner.(sql.PlanHookState)
@@ -73,7 +149,7 @@ func StartCompactionJob(
 			Subdir:             fullBackupPath,
 			Exists:             true,
 		},
-		EncryptionOptions: &encryptionOpts,
+		EncryptionOptions: encryptionOpts,
 		Compact:           true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
@@ -101,6 +177,7 @@ func (b *backupResumer) ResumeCompaction(
 	execCtx sql.JobExecContext,
 	kmsEnv cloud.KMSEnv,
 ) error {
+
 	// We interleave the computation of the compaction chain between the destination
 	// resolution and writing of backup lock due to the need to verify that the
 	// compaction chain is a valid chain.
@@ -781,7 +858,7 @@ func createCompactionManifest(
 }
 
 // getBackupChain fetches the current shortest chain of backups (and its
-// associated info) required to restore the to the end time specified in the details.
+// associated info) required to restore to the end time specified in the details.
 func getBackupChain(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -824,11 +901,23 @@ func getBackupChain(
 			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
-	encryption, err := backupencryption.GetEncryptionFromBaseStore(
-		ctx, baseStores[0], details.EncryptionOptions, kmsEnv,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	var encryption *jobspb.BackupEncryptionOptions
+	if details.EncryptionOptions != nil &&
+		details.EncryptionOptions.Mode != jobspb.EncryptionMode_None {
+		encryption = details.EncryptionOptions
+		// If the backup is encrypted, but there is no RawPassphrase/RawKMSUris,
+		// that means that this compaction was triggered by a classic backup
+		// that had been paused and resumed. The encryption keys are already set
+		// in the job details, so we don't need to fetch them as
+		// GetEncryptionFromBaseStore expects those raw fields to be set.
+		if encryption.RawPassphrase != "" || encryption.RawKmsUris != nil {
+			encryption, err = backupencryption.GetEncryptionFromBaseStore(
+				ctx, baseStores[0], details.EncryptionOptions, kmsEnv,
+			)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+		}
 	}
 	mem := execCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
@@ -930,6 +1019,49 @@ func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
 		fmtCtx.WriteString(")")
 	}
 	return fmtCtx.CloseAndGetString(), nil
+}
+
+// compactionHeuristic is a function that given a backup chain, returns the start
+// and end timestamps of compaction based on some heuristic.
+type compactionHeuristic func(
+	ctx context.Context, execCtx sql.JobExecContext, backupChain []backuppb.BackupManifest,
+) (int, int, error)
+
+// minimumSizeDeltaHeuristic is a heuristic that selects a window of backups with the
+// smallest delta in data size between each backup.
+func minimumSizeDeltaHeuristic(
+	ctx context.Context, execCtx sql.JobExecContext, backupChain []backuppb.BackupManifest,
+) (int, int, error) {
+	windowSize := int(backupCompactionWindow.Get(&execCtx.ExecCfg().Settings.SV))
+	threshold := int(backupCompactionThreshold.Get(&execCtx.ExecCfg().Settings.SV))
+	if windowSize >= threshold || windowSize <= 1 {
+		return 0, 0, errors.New("window size must be greater than one and less than the threshold")
+	}
+	currDiff := util.Reduce(
+		backupChain,
+		func(diff int64, m backuppb.BackupManifest, idx int) int64 {
+			if idx == 0 {
+				return 0
+			}
+			return diff + m.EntryCounts.DataSize - backupChain[idx-1].EntryCounts.DataSize
+		},
+		0,
+	)
+	minDiff := currDiff
+	var minIdx int
+	// Move sliding window and adjust total diff size as we go.
+	for i := 1; i <= len(backupChain)-windowSize; i++ {
+		removedDiff := int64(math.Abs(float64(backupChain[i].EntryCounts.DataSize -
+			backupChain[i-1].EntryCounts.DataSize)))
+		addedDiff := int64(math.Abs(float64(backupChain[i+windowSize-1].EntryCounts.DataSize -
+			backupChain[i+windowSize-2].EntryCounts.DataSize)))
+		currDiff = currDiff - removedDiff + addedDiff
+		if currDiff < minDiff {
+			minDiff = currDiff
+			minIdx = i
+		}
+	}
+	return minIdx, minIdx + windowSize, nil
 }
 
 func init() {

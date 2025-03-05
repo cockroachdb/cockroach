@@ -315,6 +315,63 @@ crdb_internal.json_to_pb(
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
+	t.Run("automatic compaction after scheduled backup", func(t *testing.T) {
+		defer testutils.HookGlobal(&scheduleOnly, false)()
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.window = 2")
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 8, getTime(t)))
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 8))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 8))
+		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 8))
+		var jobID jobspb.JobID
+		db.QueryRow(t,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE '%COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+		firstCompactJobID := jobID
+
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/8'").Scan(&backupPath)
+		var numBackups int
+		db.QueryRow(
+			t,
+			"SELECT count(DISTINCT (start_time, end_time)) FROM "+
+				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup/8']",
+			backupPath,
+		).Scan(&numBackups)
+		require.Equal(t, 5, numBackups)
+
+		// Test on resumed scheduled backup.
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		db.QueryRow(t,
+			`BACKUP INTO LATEST IN 'nodelocal://1/backup/8' WITH detached`,
+		).Scan(&jobID)
+		jobutils.WaitForJobToPause(t, db, jobID)
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+		db.Exec(t, "RESUME JOB $1", jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+
+		db.QueryRow(t,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE '%COMPACT%' AND job_type = 'BACKUP'
+		  AND job_id != $1`, firstCompactJobID,
+		).Scan(&jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+		db.QueryRow(
+			t,
+			"SELECT count(DISTINCT (start_time, end_time)) FROM "+
+				"[SHOW BACKUP FROM $1 IN 'nodelocal://1/backup/8']",
+			backupPath,
+		).Scan(&numBackups)
+		require.Equal(t, 7, numBackups)
+	})
 }
 
 func TestBackupCompactionLocalityAware(t *testing.T) {
