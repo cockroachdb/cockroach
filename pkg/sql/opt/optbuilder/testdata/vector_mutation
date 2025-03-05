@@ -133,17 +133,24 @@ update t
  ├── fetch columns: x:7 a:8 v:9 w:10
  ├── update-mapping:
  │    └── a_new:13 => a:2
+ ├── vector index del partition columns: null1:14
+ ├── vector index put partition columns: null1:14
+ ├── vector index put quantized vector columns: null1:14
  └── project
-      ├── columns: a_new:13!null x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      ├── select
-      │    ├── columns: x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    ├── scan t
+      ├── columns: null1:14 x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12 a_new:13!null
+      ├── project
+      │    ├── columns: a_new:13!null x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
       │    │    ├── columns: x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── flags: avoid-full-scan
-      │    └── filters
-      │         └── x:7 = 3
+      │    │    ├── scan t
+      │    │    │    ├── columns: x:7!null a:8 v:9 w:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── x:7 = 3
+      │    └── projections
+      │         └── 1 [as=a_new:13]
       └── projections
-           └── 1 [as=a_new:13]
+           └── NULL::UNKNOWN [as=null1:14]
 
 build
 DELETE FROM t WHERE x = 1;
@@ -826,17 +833,24 @@ update t_multi
  ├── fetch columns: x:9 y:10 a:11 b:12 c:13 v:14
  ├── update-mapping:
  │    └── c_new:17 => c:5
+ ├── vector index del partition columns: null1:18
+ ├── vector index put partition columns: null1:18
+ ├── vector index put quantized vector columns: null1:18
  └── project
-      ├── columns: c_new:17!null x:9!null y:10!null a:11!null b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
-      ├── select
-      │    ├── columns: x:9!null y:10!null a:11!null b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    ├── scan t_multi
-      │    │    ├── columns: x:9!null y:10!null a:11 b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    └── flags: avoid-full-scan
-      │    └── filters
-      │         └── a:11 = 1
+      ├── columns: null1:18 x:9!null y:10!null a:11!null b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16 c_new:17!null
+      ├── project
+      │    ├── columns: c_new:17!null x:9!null y:10!null a:11!null b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    ├── select
+      │    │    ├── columns: x:9!null y:10!null a:11!null b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    ├── scan t_multi
+      │    │    │    ├── columns: x:9!null y:10!null a:11 b:12 c:13 v:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── a:11 = 1
+      │    └── projections
+      │         └── 2 [as=c_new:17]
       └── projections
-           └── 2 [as=c_new:17]
+           └── NULL::UNKNOWN [as=null1:18]
 
 build
 DELETE FROM t_multi WHERE a = 1 AND b = 2;
