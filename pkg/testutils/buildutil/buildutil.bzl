@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "GoLibrary")
+load("@io_bazel_rules_go//go:def.bzl", "GoInfo")
 
 # This file contains a single macro disallowed_imports_test which internally
 # generates a sh_test which ensures that the label provided as the first arg
@@ -56,7 +56,7 @@ def _find_deps_with_disallowed_prefixes(current_pkg, dep_pkgs, prefixes):
 
 def _deps_rule_impl(ctx):
     failed_prefixes = _find_deps_with_disallowed_prefixes(
-        current_pkg = ctx.attr.src[GoLibrary].importpath,
+        current_pkg = ctx.attr.src[GoInfo].importpath,
         dep_pkgs = ctx.attr.src[_DepsInfo].dep_pkgs,
         prefixes = ctx.attr.disallowed_prefixes,
     )
@@ -103,10 +103,10 @@ _deps_rule = rule(
     implementation = _deps_rule_impl,
     executable = True,
     attrs = {
-        "src": attr.label(aspects = [_deps_aspect], providers = [GoLibrary]),
-        "allowlist": attr.label_list(providers = [GoLibrary]),
+        "src": attr.label(aspects = [_deps_aspect], providers = [GoInfo]),
+        "allowlist": attr.label_list(providers = [GoInfo]),
         "disallow_cdeps": attr.bool(mandatory = False, default = False),
-        "disallowed_list": attr.label_list(providers = [GoLibrary]),
+        "disallowed_list": attr.label_list(providers = [GoInfo]),
         "disallowed_prefixes": attr.string_list(mandatory = False, allow_empty = True),
     },
 )

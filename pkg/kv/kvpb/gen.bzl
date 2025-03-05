@@ -1,7 +1,7 @@
-load("@io_bazel_rules_go//go:def.bzl", "GoSource")
+load("@io_bazel_rules_go//go:def.bzl", "GoInfo")
 
 def _batch_gen_impl(ctx):
-    srcs = [src for src in ctx.attr.src[GoSource].srcs]
+    srcs = [src for src in ctx.attr.src[GoInfo].srcs]
     ctx.actions.run(
         outputs = [ctx.outputs.out],
         inputs = srcs,
@@ -14,7 +14,7 @@ batch_gen = rule(
    implementation = _batch_gen_impl,
    attrs = {
        "out": attr.output(mandatory = True),
-       "src": attr.label(providers = [GoSource]),
+       "src": attr.label(providers = [GoInfo]),
        "_tool": attr.label(default = "//pkg/kv/kvpb/gen", executable = True, cfg = "exec"),
    },
 )

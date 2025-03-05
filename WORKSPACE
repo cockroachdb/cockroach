@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "fc43f42615292c9c3ca6dc211b19ce45986562b0efbca3635e83a70eb011e293",
-    strip_prefix = "cockroachdb-rules_go-59db5f5",
+    sha256 = "490e811c644e3cfad4024be91617368a5344515488259c17dfb8ee426662ec25",
+    strip_prefix = "cockroachdb-rules_go-f43cb04",
     urls = [
-        # cockroachdb/rules_go as of 59db5f5a4a65d6671dd62dd4aea42757b09a1fa3
-        # (upstream release-0.50 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-530-g59db5f5.tar.gz",
+        # cockroachdb/rules_go as of f43cb04354fbc25fb99376248ca74ba7aba2634f
+        # (upstream release-0.53 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-646-gf43cb04.tar.gz",
     ],
 )
 
@@ -396,7 +396,7 @@ go_repository(
 # org_golang_x_tools handled in DEPS.bzl.
 # org_golang_x_tools_go_vcs handled in DEPS.bzl.
 
-gazelle_dependencies()
+gazelle_dependencies(go_sdk = "go_sdk")
 
 ############################
 # end gazelle dependencies #
