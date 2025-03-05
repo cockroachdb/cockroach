@@ -489,6 +489,7 @@ func CreateMultiTenantStreamingCluster(
 		DestSysServer: cluster.Server(destNodeIdx).SystemLayer(),
 		Rng:           rng,
 	}
+	// TODO (msbutler): use non root dest sys user sometimes.
 	if args.SrcTenantID.IsSystem() {
 		tsc.SrcTenantServer = tsc.SrcSysServer
 		tsc.SrcTenantConn = tsc.SrcCluster.ServerConn(0)
@@ -552,8 +553,22 @@ func CreateTenantStreamingClusters(
 	tsc.setupSrcTenant()
 	tsc.init(ctx)
 
+	var nonRootCleanup func()
+
+	if rng.Intn(3) == 0 {
+		user := username.TestUser + "src"
+		var nonRootURL url.URL
+		tsc.SrcSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", user))
+		tsc.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", user))
+		nonRootURL, nonRootCleanup = pgurlutils.PGUrl(t, tsc.SrcSysServer.AdvSQLAddr(), t.Name(), url.User(user))
+		tsc.SrcURL = nonRootURL
+	}
+
 	return tsc, func() {
 		require.NoError(t, tsc.SrcTenantConn.Close())
+		if nonRootCleanup != nil {
+			nonRootCleanup()
+		}
 		srcCleanup()
 		destCleanup()
 	}
