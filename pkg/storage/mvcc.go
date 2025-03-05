@@ -409,11 +409,11 @@ func (v *optionalValue) ToPointer() *roachpb.Value {
 	return &cpy
 }
 
-func (v *optionalValue) isOriginTimestampWinner(
-	proposedTS hlc.Timestamp, inclusive bool,
-) (bool, hlc.Timestamp) {
+func (v *optionalValue) checkOriginTimestamp(options *MVCCWriteOptions) error {
+	// TODO(jeffswenson): write a unit test for this.
+	// TODO(jeffswenson): make sure this doesn't cause MVCCWriteOptions to escape.
 	if !v.exists {
-		return true, hlc.Timestamp{}
+		return nil
 	}
 
 	existTS := v.Value.Timestamp
@@ -421,7 +421,17 @@ func (v *optionalValue) isOriginTimestampWinner(
 		existTS = v.MVCCValueHeader.OriginTimestamp
 	}
 
-	return existTS.Less(proposedTS) || (inclusive && existTS.Equal(proposedTS)), existTS
+	cmp := existTS.Compare(options.OriginTimestamp)
+	switch {
+	case cmp < 0:
+		return nil
+	case cmp == 0 && options.ShouldWinOriginTimestampTie:
+		return nil
+	default:
+		return &kvpb.ConditionFailedError{
+			OriginTimestampOlderThan: existTS,
+		}
+	}
 }
 
 // isSysLocal returns whether the key is system-local.
@@ -1926,6 +1936,7 @@ func MVCCPut(
 	// key we can utilize a blind put to avoid reading any existing value.
 	var iter MVCCIterator
 	var ltScanner *lockTableKeyScanner
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
 	blind := opts.Stats == nil && timestamp.IsEmpty()
 	if !blind {
 		var err error
@@ -1951,8 +1962,16 @@ func MVCCPut(
 			}
 			defer ltScanner.close()
 		}
+		if !opts.OriginTimestamp.IsEmpty() {
+			valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+				if err := existVal.checkOriginTimestamp(&opts); err != nil {
+					return roachpb.Value{}, err
+				}
+				return value, nil
+			}
+		}
 	}
-	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, nil, opts)
+	return mvccPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, valueFn, opts)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -2018,9 +2037,18 @@ func MVCCDelete(
 	buf := newPutBuffer()
 	defer buf.release()
 
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	if !opts.OriginTimestamp.IsEmpty() {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			if err := existVal.checkOriginTimestamp(&opts); err != nil {
+				return roachpb.Value{}, err
+			}
+			return noValue, nil
+		}
+	}
 	// TODO(yuzefovich): can we avoid the put if the key does not exist?
 	return mvccPutInternal(
-		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, nil, opts)
+		ctx, rw, iter, ltScanner, key, timestamp, noValue, buf, valueFn, opts)
 }
 
 var noValue = roachpb.Value{}
@@ -2890,19 +2918,6 @@ type ConditionalPutWriteOptions struct {
 	MVCCWriteOptions
 
 	AllowIfDoesNotExist CPutMissingBehavior
-	// OriginTimestamp, if set, indicates that the caller wants to put the
-	// value only if any existing key is older than this timestamp.
-	//
-	// See the comment on the OriginTimestamp field of
-	// kvpb.ConditionalPutRequest for more details.
-	OriginTimestamp hlc.Timestamp
-	// ShouldWinOriginTimestampTie indicates whether the value should be
-	// accepted if the origin timestamp is the same as the
-	// origin_timestamp/mvcc_timestamp of the existing value.
-	//
-	// See the comment on the ShouldWinOriginTimestampTie field of
-	// kvpb.ConditionalPutRequest for more details.
-	ShouldWinOriginTimestampTie bool
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -3032,14 +3047,9 @@ func mvccConditionalPutUsingIter(
 		}
 	} else {
 		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-			originTSWinner, existTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp,
-				opts.ShouldWinOriginTimestampTie)
-			if !originTSWinner {
-				return roachpb.Value{}, &kvpb.ConditionFailedError{
-					OriginTimestampOlderThan: existTS,
-				}
+			if err := existVal.checkOriginTimestamp(&opts.MVCCWriteOptions); err != nil {
+				return roachpb.Value{}, err
 			}
-
 			// We are the OriginTimestamp comparison winner. We
 			// check the expected bytes because a mismatch implies
 			// that the caller may have produced other commands with
@@ -3778,11 +3788,21 @@ func MVCCDeleteRange(
 	buf := newPutBuffer()
 	defer buf.release()
 
+	var valueFn func(existVal optionalValue) (roachpb.Value, error)
+	if !opts.OriginTimestamp.IsEmpty() {
+		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+			if err := existVal.checkOriginTimestamp(&opts); err != nil {
+				return roachpb.Value{}, err
+			}
+			return noValue, nil
+		}
+	}
+
 	var keys []roachpb.Key
 	var acqs []roachpb.LockAcquisition
 	for i, kv := range res.KVs {
 		_, acq, err := mvccPutInternal(
-			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, nil, opts,
+			ctx, rw, iter, ltScanner, kv.Key, timestamp, noValue, buf, valueFn, opts,
 		)
 		if err != nil {
 			return nil, nil, 0, nil, err
@@ -4722,6 +4742,13 @@ type MVCCWriteOptions struct {
 	// OriginTimestamp, when set during Logical Data Replication, will bind to the
 	// putting key's MVCCValueHeader.
 	OriginTimestamp hlc.Timestamp
+	// ShouldWinOriginTimestampTie indicates whether the value should be
+	// accepted if the origin timestamp is the same as the
+	// origin_timestamp/mvcc_timestamp of the existing value.
+	//
+	// See the comment on the ShouldWinOriginTimestampTie field of
+	// kvpb.ConditionalPutRequest for more details.
+	ShouldWinOriginTimestampTie bool
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of
