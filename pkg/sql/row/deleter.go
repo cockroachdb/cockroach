@@ -126,6 +126,7 @@ func (rd *Deleter) DeleteRow(
 			rd.Helper.Indexes[i],
 			rd.FetchColIDtoRowIndex,
 			values,
+			rowenc.EmptyVectorIndexEncodingHelper,
 			true, /* includeEmpty */
 		)
 		if err != nil {
