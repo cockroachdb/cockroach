@@ -2807,7 +2807,7 @@ func (b *Builder) buildLookupJoin(
 		return execPlan{}, colOrdMap{}, err
 	}
 	ok, requiredDirection := ordering.LookupJoinCanProvideOrdering(
-		b.mem, join, &join.RequiredPhysical().Ordering,
+		b.ctx, b.evalCtx, b.mem, join, &join.RequiredPhysical().Ordering,
 	)
 	if !ok {
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")

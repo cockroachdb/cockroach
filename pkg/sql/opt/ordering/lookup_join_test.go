@@ -233,6 +233,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
 	f.Init(context.Background(), evalCtx, tc)
@@ -432,7 +433,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 				},
 			)
 			req := props.ParseOrderingChoice(tc.required)
-			canProvide, _ := LookupJoinCanProvideOrdering(f.Memo(), lookupJoin, &req)
+			canProvide, _ := LookupJoinCanProvideOrdering(ctx, evalCtx, f.Memo(), lookupJoin, &req)
 			if canProvide != tc.canProvide {
 				t.Errorf(errorString(tc.canProvide), req)
 			}
