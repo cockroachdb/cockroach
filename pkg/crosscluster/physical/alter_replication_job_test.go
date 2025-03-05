@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -541,9 +542,21 @@ func TestAlterReplicationJobErrors(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
+	//create test user
+
 	t.Run("alter tenant subqueries", func(t *testing.T) {
 		// Regression test for #136339
 		db.ExpectErr(t, "subqueries are not allowed", "ALTER TENANT (select 't2') START REPLICATION OF t1 ON 'foo'")
+	})
+	t.Run("alter replication privs", func(t *testing.T) {
+		db.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+		testuser := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.User(username.TestUser)))
+		testuser.ExpectErr(t, "user testuser does not have MANAGEVIRTUALCLUSTER system privilege", "ALTER TENANT t1 START REPLICATION OF t1 ON 'foo'")
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
+		testuser.ExpectErr(t, "user testuser does not have REPLICATIONDEST system privilege", "ALTER TENANT t1 START REPLICATION OF t1 ON 'foo'")
+		db.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+		// Implies we got past the priv checks.
+		testuser.ExpectErr(t, `tenant "t1" does not exist`, "ALTER TENANT t1 START REPLICATION OF t1 ON 'foo'")
 	})
 
 }
