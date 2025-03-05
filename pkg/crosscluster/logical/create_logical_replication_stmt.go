@@ -105,7 +105,7 @@ func createLogicalReplicationStreamPlanHook(
 		// TODO(dt): the global priv is a big hammer; should we be checking just on
 		// table(s) or database being replicated from and into?
 		if err := p.CheckPrivilege(
-			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATION,
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
 		); err != nil {
 			return err
 		}
