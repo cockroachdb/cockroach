@@ -168,7 +168,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						}
 						return query
 					}
-					selectQuery := replacePlaceholders(selectBuilder.buildQuery())
+					selectQuery := replacePlaceholders(selectBuilder.BuildQuery())
 					if d.Cmd == "check-query" {
 						return selectQuery
 					}
@@ -191,7 +191,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						query = strings.ReplaceAll(query, "$1", "'"+cutoff.String()+"'")
 						return query
 					}
-					deleteQuery := replacePlaceholders(deleteBuilder.buildQuery(len(deleteIDs)))
+					deleteQuery := replacePlaceholders(deleteBuilder.BuildQuery(len(deleteIDs)))
 					if d.Cmd == "check-query" {
 						return deleteQuery
 					}
