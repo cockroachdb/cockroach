@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
@@ -86,4 +88,21 @@ func (l *lexer) Error(s string) {
 
 func (l *lexer) SetJsonpath(expr jsonpath.Jsonpath) {
 	l.expr = &expr
+}
+
+func (l *lexer) setErr(err error) {
+	err = pgerror.WithCandidateCode(err, pgcode.Syntax)
+	l.lastError = err
+	lastTok := l.lastToken()
+	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+}
+
+func (l *lexer) Unimplemented(feature string) {
+	l.lastError = unimp.New(feature, "this syntax")
+	lastTok := l.lastToken()
+	l.lastError = parser.PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
+	l.lastError = &tree.UnsupportedError{
+		Err:         l.lastError,
+		FeatureName: feature,
+	}
 }

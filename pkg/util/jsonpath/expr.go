@@ -12,81 +12,133 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type Expr interface {
-	fmt.Stringer
-	tree.NodeFormatter
-}
-
-// Identical to Expr for now.
-type Accessor interface {
-	Expr
-}
-
 type Jsonpath struct {
-	Query  Query
 	Strict bool
+	Path   Path
 }
-
-var _ Expr = Jsonpath{}
 
 func (j Jsonpath) String() string {
 	var mode string
 	if j.Strict {
 		mode = "strict "
 	}
-	return mode + j.Query.String()
+	return mode + j.Path.String()
 }
 
 func (j Jsonpath) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(j.String())
 }
 
-type Query struct {
-	Accessors []Accessor
-}
-
-var _ Expr = Query{}
-
-func (q Query) String() string {
-	var sb strings.Builder
-	for _, accessor := range q.Accessors {
-		sb.WriteString(accessor.String())
-	}
-	return sb.String()
-}
-
-func (q Query) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(q.String())
+type Path interface {
+	fmt.Stringer
 }
 
 type Root struct{}
 
-var _ Accessor = Root{}
+var _ Path = &Root{}
 
 func (r Root) String() string { return "$" }
 
-func (r Root) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(r.String())
-}
+type Key string
 
-type Key struct {
-	Key string
-}
+var _ Path = Key("")
 
-var _ Accessor = Key{}
-
-func (k Key) String() string { return "." + k.Key }
-
-func (k Key) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(k.String())
+func (k Key) String() string {
+	return fmt.Sprintf(".%q", string(k))
 }
 
 type Wildcard struct{}
 
-var _ Accessor = Wildcard{}
+var _ Path = &Wildcard{}
 
 func (w Wildcard) String() string { return "[*]" }
 
-func (w Wildcard) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(w.String())
+type Paths []Path
+
+var _ Path = &Paths{}
+
+func (p Paths) String() string {
+	var sb strings.Builder
+	for _, i := range p {
+		sb.WriteString(i.String())
+	}
+	return sb.String()
+}
+
+type Variable string
+
+var _ Path = Variable("")
+
+func (v Variable) String() string {
+	return fmt.Sprintf("$%q", string(v))
+}
+
+type Numeric struct {
+	IsNegative bool
+	IsFloat    bool
+	FloatValue float64
+	IntValue   int64
+}
+
+var _ Path = Numeric{}
+
+func NewNumericFloat(f float64) Numeric {
+	return Numeric{
+		IsFloat:    true,
+		FloatValue: f,
+	}
+}
+
+func NewNumericInt(i int64) Numeric {
+	return Numeric{
+		IsFloat:    false,
+		IntValue:   i,
+		IsNegative: false,
+	}
+}
+
+func (n Numeric) String() string {
+	if n.IsFloat {
+		return fmt.Sprintf("%g", n.FloatValue)
+	}
+	if n.IsNegative {
+		return fmt.Sprintf("-%d", n.IntValue)
+	}
+	return fmt.Sprintf("%d", n.IntValue)
+}
+
+type ArrayIndex Numeric
+
+var _ Path = ArrayIndex{}
+
+func (a ArrayIndex) String() string {
+	return Numeric(a).String()
+}
+
+type ArrayIndexRange struct {
+	Start ArrayIndex
+	End   ArrayIndex
+}
+
+var _ Path = ArrayIndexRange{}
+
+func (a ArrayIndexRange) String() string {
+	return fmt.Sprintf("%s to %s", Numeric(a.Start), Numeric(a.End))
+}
+
+type ArrayList []Path
+
+var _ Path = ArrayList{}
+
+func (a ArrayList) String() string {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i, p := range a {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(p.String())
+	}
+	sb.WriteString("]")
+	return sb.String()
 }

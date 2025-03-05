@@ -23,12 +23,41 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		return
 	}
 
-	// TODO(normanchenn): This check will not work for valid JSONPath expressions
-	// like '$.1key'. We don't support this case yet since expressions like
-	// '$.1e' should fail due to being interpreted as a numeric literal.
-	if sqllexbase.IsIdentStart(ch) {
+	// TODO(normanchenn): We still need to handle $.Xe where X is any digit.
+	switch ch {
+	case '$':
+		// Root path ($.)
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' {
+			return
+		}
+
+		// Handle variables like $var, $1a, $"var", etc.
+		if s.peek() == identQuote {
+			s.pos++
+			if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
+				lval.SetID(lexbase.VARIABLE)
+			}
+			return
+		}
+		s.pos++
 		s.scanIdent(lval)
+		lval.SetID(lexbase.VARIABLE)
 		return
+	case identQuote:
+		// "[^"]"
+		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
+			lval.SetID(lexbase.IDENT)
+		}
+		return
+	default:
+		if sqllexbase.IsDigit(ch) {
+			s.scanNumber(lval, ch)
+			return
+		}
+		if sqllexbase.IsIdentStart(ch) {
+			s.scanIdent(lval)
+			return
+		}
 	}
 	// Everything else is a single character token which we already initialized
 	// lval for above.
@@ -43,4 +72,9 @@ func isIdentMiddle(ch int) bool {
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
 	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
+}
+
+// scanNumber is similar to Scanner.scanNumber, but uses Jsonpath tokens.
+func (s *JSONPathScanner) scanNumber(lval ScanSymType, ch int) {
+	s.scanNumberImpl(lval, ch, lexbase.ERROR, lexbase.FCONST, lexbase.ICONST)
 }
