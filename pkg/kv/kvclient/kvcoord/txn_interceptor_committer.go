@@ -600,6 +600,9 @@ func (tc *txnCommitter) setWrapped(wrapped lockedSender) { tc.wrapped = wrapped 
 // populateLeafInputState is part of the txnInterceptor interface.
 func (*txnCommitter) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
+// initializeLeaf is part of the txnInterceptor interface.
+func (*txnCommitter) initializeLeaf(tis *roachpb.LeafTxnInputState) {}
+
 // populateLeafFinalState is part of the txnInterceptor interface.
 func (*txnCommitter) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 

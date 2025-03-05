@@ -1547,6 +1547,44 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 		keyB := []byte("keyB")
 		keyC := []byte("keyC")
 
+		// doReadTryLeaf is a helper that calls readFn on the given root txn as
+		// well as a fresh leaf txn.
+		doReadTryLeaf := func(txn *kv.Txn, readFn func(*kv.Txn) error) error {
+			tis, err := txn.GetLeafTxnInputState(ctx)
+			if err != nil {
+				return err
+			}
+			for _, txnForRead := range []*kv.Txn{
+				txn,
+				kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, tis),
+			} {
+				if err = readFn(txnForRead); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		// scanAllKeys reads all the keys relevant to the test via a Scan
+		// request and asserts that the expected values are returned. It does so
+		// via the given root txn as well as a fresh leaf txn.
+		scanAllKeys := func(txn *kv.Txn, expectedValues [][]byte) error {
+			return doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				kvs, err := txnForRead.Scan(ctx, []byte("key"), []byte("keyZ"), 0 /* maxRows */)
+				if err != nil {
+					return err
+				}
+				if len(expectedValues) != len(kvs) {
+					return errors.Errorf("expected %d kvs, got %d", len(expectedValues), len(kvs))
+				}
+				for i, expValue := range expectedValues {
+					if !bytes.Equal(kvs[i].ValueBytes(), expValue) {
+						return errors.Errorf("expected value %q; got %q", expValue, kvs[i].Value)
+					}
+				}
+				return nil
+			})
+		}
+
 		// Before the test begins, write a value to keyC. We'll delete it below.
 		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 		require.NoError(t, txn.Put(ctx, keyC, value3))
@@ -1569,11 +1607,16 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 				return errors.Errorf("expected nil value; got %v", gr.Value)
 			}
 
-			// Read within the transaction.
-			if gr, err := txn.Get(ctx, keyA); err != nil {
+			// Read within the transaction (including the leaf variant).
+			if err := doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				if gr, err := txnForRead.Get(ctx, keyA); err != nil {
+					return err
+				} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value1) {
+					return errors.Errorf("expected value %q; got %q", value1, gr.Value)
+				}
+				return nil
+			}); err != nil {
 				return err
-			} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), value1) {
-				return errors.Errorf("expected value %q; got %q", value1, gr.Value)
 			}
 
 			// Write to keyB two times. Only the last write should be visible once the
@@ -1585,14 +1628,28 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 				return err
 			}
 
+			// Scan all keys within the transaction (including the leaf
+			// variant).
+			if err := scanAllKeys(txn, [][]byte{value1, value2, value3}); err != nil {
+				return err
+			}
+
 			// Delete keyC before attempting to read it.
 			if _, err := txn.Del(ctx, keyC); err != nil {
 				return err
 			}
-			if gr, err := txn.Get(ctx, keyC); err != nil {
+			if err := doReadTryLeaf(txn, func(txnForRead *kv.Txn) error {
+				if gr, err := txnForRead.Get(ctx, keyC); err != nil {
+					return err
+				} else if gr.Exists() {
+					return errors.Errorf("expected nil value for the deleted key; got %v", gr.Value)
+				}
+				return nil
+			}); err != nil {
 				return err
-			} else if gr.Exists() {
-				return errors.Errorf("expected nil value for the deleted key; got %v", gr.Value)
+			}
+			if err := scanAllKeys(txn, [][]byte{value1, value2}); err != nil {
+				return err
 			}
 
 			if commit {
