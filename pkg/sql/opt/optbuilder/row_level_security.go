@@ -32,13 +32,18 @@ func (b *Builder) addRowLevelSecurityFilter(
 		return
 	}
 
-	// Admin users are exempt from any RLS filtering.
+	// Check for cases where users are exempt from policies.
 	isAdmin, err := b.catalog.UserHasAdminRole(b.ctx, b.checkPrivilegeUser)
 	if err != nil {
 		panic(err)
 	}
-	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID)
-	if isAdmin {
+	isOwnerAndNotForced, err := b.isTableOwnerAndRLSNotForced(tabMeta)
+	if err != nil {
+		panic(err)
+	}
+	b.factory.Metadata().SetRLSEnabled(b.checkPrivilegeUser, isAdmin, tabMeta.MetaID, isOwnerAndNotForced)
+	// Check if RLS filtering is exempt.
+	if isAdmin || isOwnerAndNotForced {
 		return
 	}
 
@@ -108,6 +113,15 @@ func (b *Builder) policyAppliesToCommandScope(
 	}
 }
 
+// isTableOwnerAndRLSNotForced returns true iff the user is the table owner and
+// the NO FORCE option is set.
+func (b *Builder) isTableOwnerAndRLSNotForced(tabMeta *opt.TableMeta) (bool, error) {
+	if tabMeta.Table.IsRowLevelSecurityForced() {
+		return false, nil
+	}
+	return b.catalog.IsOwner(b.ctx, tabMeta.Table, b.checkPrivilegeUser)
+}
+
 // optRLSConstraintBuilder is used synthesize a check constraint to enforce the
 // RLS policies for new rows.
 type optRLSConstraintBuilder struct {
@@ -143,13 +157,17 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 	// for multiple policies.
 	var colIDs intsets.Fast
 
-	// Admin users are exempt from any RLS policies.
+	// Check for cases where users are exempt from policies.
 	isAdmin, err := r.oc.UserHasAdminRole(ctx, r.user)
 	if err != nil {
 		panic(err)
 	}
-	r.md.SetRLSEnabled(r.user, isAdmin, r.tabMeta.MetaID)
-	if isAdmin {
+	isOwnerAndNotForced, err := r.isTableOwnerAndRLSNotForced(ctx)
+	if err != nil {
+		panic(err)
+	}
+	r.md.SetRLSEnabled(r.user, isAdmin, r.tabMeta.MetaID, isOwnerAndNotForced)
+	if isAdmin || isOwnerAndNotForced {
 		// Return a constraint check that always passes.
 		return "true", nil
 	}
@@ -218,6 +236,15 @@ func (r *optRLSConstraintBuilder) policyAppliesToCommand(policy *cat.Policy, isU
 	default:
 		panic(errors.AssertionFailedf("unknown policy command %v", policy.Command))
 	}
+}
+
+// isTableOwnerAndRLSNotForced returns true iff the user is the table owner and
+// the NO FORCE option is set.
+func (r *optRLSConstraintBuilder) isTableOwnerAndRLSNotForced(ctx context.Context) (bool, error) {
+	if r.tabMeta.Table.IsRowLevelSecurityForced() {
+		return false, nil
+	}
+	return r.oc.IsOwner(ctx, r.tabMeta.Table, r.user)
 }
 
 // rlsCheckConstraint is an implementation of cat.CheckConstraint for the
