@@ -221,7 +221,7 @@ func indexEntryForDatums(
 	}
 	indexEntries, err := rowenc.EncodeSecondaryIndex(
 		context.Background(), keys.SystemSQLCodec, tableDesc, index,
-		colIDtoRowIndex, row, true, /* includeEmpty */
+		colIDtoRowIndex, row, rowenc.EmptyVectorIndexEncodingHelper, true, /* includeEmpty */
 	)
 	if err != nil {
 		return rowenc.IndexEntry{}, err
