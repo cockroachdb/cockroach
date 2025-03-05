@@ -14,10 +14,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -317,6 +319,75 @@ crdb_internal.json_to_pb(
 	// iterator, add tests for dropped tables/indexes.
 }
 
+func TestScheduledBackupCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	st := cluster.MakeTestingClusterSettings()
+	backupinfo.WriteMetadataWithExternalSSTsEnabled.Override(ctx, &st.SV, true)
+	tc, db, cleanupDB := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		},
+	)
+	defer cleanupDB()
+
+	defer testutils.HookGlobal(&scheduleOnly, false)()
+	db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	db.Exec(t, "SET CLUSTER SETTING backup.compaction.window = 2")
+	db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+	db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+	db.Exec(t, "BACKUP INTO 'nodelocal://1/backup'")
+	db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	var jobID jobspb.JobID
+	db.QueryRow(
+		t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+	).Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+	firstCompactJobID := jobID
+
+	var numBackups int
+	db.QueryRow(
+		t,
+		"SELECT COUNT(DISTINCT (start_time, end_time)) FROM "+
+			"[SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
+	).Scan(&numBackups)
+	require.Equal(t, 5, numBackups)
+
+	// Test on resumed scheduled backup.
+	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+	db.QueryRow(t,
+		`BACKUP INTO LATEST IN 'nodelocal://1/backup' WITH detached`,
+	).Scan(&jobID)
+	jobutils.WaitForJobToPause(t, db, jobID)
+	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+	db.Exec(t, "RESUME JOB $1", jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+
+	db.QueryRow(t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'
+    AND job_id != $1`, firstCompactJobID,
+	).Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+	db.QueryRow(
+		t,
+		`SELECT COUNT(DISTINCT (start_time, end_time)) FROM 
+    [SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']`,
+	).Scan(&numBackups)
+	require.Equal(t, 7, numBackups)
+}
+
 func TestBackupCompactionLocalityAware(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -393,6 +464,73 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
 	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end)
+}
+
+func TestBackupCompactionHeuristic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testcases := []struct {
+		name       string
+		sizes      []int64
+		windowSize int
+		expected   [2]int
+	}{
+		{
+			name:       "optimal at the beginning",
+			sizes:      []int64{1, 2, 2, 5, 1, 2},
+			windowSize: 3,
+			expected:   [2]int{0, 3},
+		},
+		{
+			name:       "optimal in the middle",
+			sizes:      []int64{1, 3, 4, 5, 5, 2},
+			windowSize: 3,
+			expected:   [2]int{2, 5},
+		},
+		{
+			name:       "optimal at the end",
+			sizes:      []int64{1, 3, 4, 3, 2, 2},
+			windowSize: 3,
+			expected:   [2]int{3, 6},
+		},
+		{
+			name:       "tied heuristic",
+			sizes:      []int64{2, 3, 4, 1, 2, 3},
+			windowSize: 3,
+			expected:   [2]int{0, 3},
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			start, end := minDeltaWindow(tc.sizes, tc.windowSize)
+			require.Equal(t, tc.expected[0], start)
+			require.Equal(t, tc.expected[1], end)
+		})
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	t.Run("too small window", func(t *testing.T) {
+		var windowSize int64 = 1
+		backupCompactionWindow.Override(ctx, &st.SV, windowSize)
+		execCtx := sql.FakeJobExecContext{
+			ExecutorConfig: &sql.ExecutorConfig{Settings: st},
+		}
+		_, _, err := minSizeDeltaHeuristic(ctx, &execCtx, nil)
+		require.Error(t, err)
+	})
+
+	t.Run("too large window", func(t *testing.T) {
+		var windowSize int64 = 5
+		chain := make([]backuppb.BackupManifest, 5)
+		backupCompactionWindow.Override(ctx, &st.SV, windowSize)
+		execCtx := sql.FakeJobExecContext{
+			ExecutorConfig: &sql.ExecutorConfig{Settings: st},
+		}
+		_, _, err := minSizeDeltaHeuristic(ctx, &execCtx, chain)
+		require.Error(t, err)
+	})
 }
 
 // Start and end are unix epoch in nanoseconds.
