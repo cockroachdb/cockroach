@@ -91,3 +91,10 @@ func TestExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestExecBuild_mixed_version_lookup_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "mixed_version_lookup_join")
+}
