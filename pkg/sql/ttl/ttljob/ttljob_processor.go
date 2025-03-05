@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -400,48 +401,69 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
 
-		numExpiredRows := int64(len(expiredRowsPKs))
-		metrics.RowSelections.Inc(numExpiredRows)
+		numExpiredRows := len(expiredRowsPKs)
+		metrics.RowSelections.Inc(int64(numExpiredRows))
 
 		// Step 2. Delete the rows which have expired.
-		deleteBatchSize := deleteBuilder.DeleteBatchSize
-		for startRowIdx := int64(0); startRowIdx < numExpiredRows; startRowIdx += deleteBatchSize {
-			until := startRowIdx + deleteBatchSize
-			if until > numExpiredRows {
-				until = numExpiredRows
+		deleteBatchSize := deleteBuilder.GetBatchSize()
+		for startRowIdx := 0; startRowIdx < numExpiredRows; startRowIdx += deleteBatchSize {
+			// We are going to attempt a delete of size deleteBatchSize. But we use
+			// retry.Batch to allow retrying with a smaller batch size in case of
+			// an error.
+			rb := retry.Batch{
+				Do: func(ctx context.Context, processed, batchSize int) error {
+					until := startRowIdx + processed + batchSize
+					if until > numExpiredRows {
+						until = numExpiredRows
+					}
+					deleteBatch := expiredRowsPKs[startRowIdx+processed : until]
+					var batchRowCount int64
+					do := func(ctx context.Context, txn isql.Txn) error {
+						txn.KV().SetDebugName("ttljob-delete-batch")
+						if ttlSpec.DisableChangefeedReplication {
+							txn.KV().SetOmitInRangefeeds()
+						}
+						// If we detected a schema change here, the DELETE will not succeed
+						// (the SELECT still will because of the AOST). Early exit here.
+						desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
+						if err != nil {
+							return err
+						}
+						if ttlSpec.PreDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
+							return errors.Newf(
+								"table has had a schema change since the job has started at %s, aborting",
+								desc.GetModificationTime().GoTime().Format(time.RFC3339),
+							)
+						}
+						batchRowCount, err = deleteBuilder.Run(ctx, txn, deleteBatch)
+						if err != nil {
+							return err
+						}
+						return nil
+					}
+					if err := serverCfg.DB.Txn(
+						ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.BulkLowPri),
+					); err != nil {
+						return errors.Wrapf(err, "error during row deletion")
+					}
+					metrics.RowDeletions.Inc(batchRowCount)
+					spanRowCount += batchRowCount
+					return nil
+				},
+				IsRetryableError: kv.IsAutoRetryLimitExhaustedError,
+				OnRetry: func(err error, nextBatchSize int) error {
+					metrics.NumDeleteBatchRetries.Inc(1)
+					log.Infof(ctx,
+						"row-level TTL reached the auto-retry limit, reducing batch size to %d rows. Error: %v",
+						nextBatchSize, err)
+					return nil
+				},
 			}
-			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			var batchRowCount int64
-			do := func(ctx context.Context, txn isql.Txn) error {
-				txn.KV().SetDebugName("ttljob-delete-batch")
-				if ttlSpec.DisableChangefeedReplication {
-					txn.KV().SetOmitInRangefeeds()
-				}
-				// If we detected a schema change here, the DELETE will not succeed
-				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
-				if err != nil {
-					return err
-				}
-				if ttlSpec.PreDeleteChangeTableVersion || desc.GetVersion() != details.TableVersion {
-					return errors.Newf(
-						"table has had a schema change since the job has started at %s, aborting",
-						desc.GetModificationTime().GoTime().Format(time.RFC3339),
-					)
-				}
-				batchRowCount, err = deleteBuilder.Run(ctx, txn, deleteBatch)
-				if err != nil {
-					return err
-				}
-				return nil
+			// Adjust the batch size if we are on the final batch.
+			deleteBatchSize = min(deleteBatchSize, numExpiredRows-startRowIdx)
+			if err := rb.Execute(ctx, deleteBatchSize); err != nil {
+				return spanRowCount, err
 			}
-			if err := serverCfg.DB.Txn(
-				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.BulkLowPri),
-			); err != nil {
-				return spanRowCount, errors.Wrapf(err, "error during row deletion")
-			}
-			metrics.RowDeletions.Inc(batchRowCount)
-			spanRowCount += batchRowCount
 		}
 
 		// Step 3. Early exit if necessary.
