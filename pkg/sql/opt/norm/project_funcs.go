@@ -929,3 +929,36 @@ func (c *CustomFuncs) FoldIsNullProjectionsItems(
 	}
 	return newProjections
 }
+
+// AllAreRemappingProjections returns true if every ProjectionExpr in the given
+// list is a simple remapping from one column to another of an identical type.
+func (c *CustomFuncs) AllAreRemappingProjections(projections memo.ProjectionsExpr) bool {
+	md := c.mem.Metadata()
+	for i := range projections {
+		varExpr, ok := projections[i].Element.(*memo.VariableExpr)
+		if !ok {
+			return false
+		}
+		if !md.ColumnMeta(varExpr.Col).Type.Identical(md.ColumnMeta(projections[i].Col).Type) {
+			return false
+		}
+	}
+	return true
+}
+
+// UnbindFiltersFromProjections remaps column references in the given filters
+// to refer to input columns instead of projected output columns, based on the
+// given projections. It assumes that AllAreRemappingProjections returns true
+// for the given projections.
+func (c *CustomFuncs) UnbindFiltersFromProjections(
+	projections memo.ProjectionsExpr, filters memo.FiltersExpr,
+) memo.FiltersExpr {
+	var colMap opt.ColMap
+	for i := range projections {
+		from := projections[i].Col
+		to := projections[i].Element.(*memo.VariableExpr).Col
+		colMap.Set(int(from), int(to))
+	}
+	newFilters := c.f.RemapCols(&filters, colMap).(*memo.FiltersExpr)
+	return *newFilters
+}

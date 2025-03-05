@@ -1545,7 +1545,7 @@ semi-join-apply
 # --------------------------------------------------
 # TryDecorrelateInnerLeftJoin
 # --------------------------------------------------
-norm expect=TryDecorrelateInnerLeftJoin
+norm expect=TryDecorrelateInnerLeftJoin disable=HoistJoinProjectRight
 SELECT *
 FROM (VALUES (1), (2)) AS v(v1)
 WHERE EXISTS(
