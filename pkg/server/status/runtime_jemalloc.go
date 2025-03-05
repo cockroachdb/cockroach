@@ -217,7 +217,8 @@ func jemallocMaybePurge(
 		return
 	}
 
-	C.jemalloc_stats_print_abbreviated()
+	// TODO(Edward): output to logs, not stderr.
+	// C.jemalloc_stats_print_abbreviated()
 	res, err := C.jemalloc_purge()
 	if err != nil || res != 0 {
 		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
