@@ -87,7 +87,7 @@ go_binary(
 )
 
 disallowed_imports_test(
-    "execgen",
+    "execgen_lib",
     [
         "//pkg/roachpb",
         "//pkg/sql/catalog",
