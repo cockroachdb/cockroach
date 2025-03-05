@@ -4339,6 +4339,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 		Spec: execinfrapb.ProcessorSpec{
 			Core:        execinfrapb.ProcessorCoreUnion{Values: spec},
 			Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+			StageID:     p.NewStage(false /* containsRemoteProcessor */, false /* allowPartialDistribution */),
 			ResultTypes: resultTypes,
 		},
 	})
