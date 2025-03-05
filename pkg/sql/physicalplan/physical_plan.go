@@ -1303,6 +1303,7 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(
 				Post:        post,
 				Core:        execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     p.NewStage(node != p.GatewaySQLInstanceID /* containsRemoteProcessor */, false /* allowPartialDistribution */),
 				ResultTypes: p.GetResultTypes(),
 			},
 		}
