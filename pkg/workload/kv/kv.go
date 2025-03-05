@@ -970,12 +970,13 @@ type writeSequenceSource struct {
 }
 
 func (wss writeSequenceSource) Int63() int64 {
-	return int64(wss.Uint64() & 0x7fffffffffffffff)
+	return int64(wss.Uint64() & 0x7fffffffffffffff) // Masks high bit
 }
 
 func (wss writeSequenceSource) Uint64() uint64 {
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
 	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
+	// only increment the sequence during write calls
 	binary.BigEndian.PutUint64(buf[:8], uint64(wss.write()))
 	_, _ = hasher.Write(buf[:8])
 	return hasher.Sum64()
@@ -991,14 +992,18 @@ type readSequenceSource struct {
 }
 
 func (rss readSequenceSource) Int63() int64 {
-	return int64(rss.Uint64() & 0x7fffffffffffffff)
+	return int64(rss.Uint64() & 0x7fffffffffffffff) // Masks high bit
 }
 
 func (rss readSequenceSource) Uint64() uint64 {
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
 	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
+	// Unlike in the writeSequenceSource, fetch the last value in the sequence
+	// (don't increment the sequence).
 	v := rss.read()
 	if v != 0 {
+		// To prevent an immediate read of a recently written value, find a random
+		// value between [0,v) to read.
 		v = rss.random.Int63n(v)
 	}
 	binary.BigEndian.PutUint64(buf[:8], uint64(v))
@@ -1020,12 +1025,15 @@ type zipfGenerator struct {
 func newZipfianGenerator(
 	seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64,
 ) *zipfGenerator {
-	writeSS := writeSequenceSource{
-		sequence: seq,
-	}
+	// {read,write}SequenceSources share the same sequence.  readSequenceSource
+	// never mutates the sequence, whereas writeSequenceSource does increments the
+	// sequence.
 	readSS := readSequenceSource{
 		sequence: seq,
 		random:   rng,
+	}
+	writeSS := writeSequenceSource{
+		sequence: seq,
 	}
 	return &zipfGenerator{
 		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
