@@ -201,7 +201,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 }
 
 func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch) error {
-	checks := v.desc.EnforcedCheckConstraints()
+	checks := v.desc.EnforcedCheckValidators()
 	colIdx := 0
 	for i, ch := range checks {
 		if !v.checkOrds.Contains(i) {
