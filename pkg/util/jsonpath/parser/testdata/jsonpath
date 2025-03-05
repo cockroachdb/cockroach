@@ -23,27 +23,27 @@ $
 parse
 $.abc
 ----
-$.abc
+$."abc" -- normalized!
 
 parse
 $.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
 ----
-$.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
+$."a"."b"."c"."d"."e"."f"."g"."h"."i"."j"."k"."l"."m"."n"."o"."p"."q"."r"."s"."t"."u"."v"."w"."x"."y"."z" -- normalized!
 
 parse
    $ .a .b . c
 ----
-$.a.b.c -- normalized!
+$."a"."b"."c" -- normalized!
 
 parse
 $.a[*].b.c[*]
 ----
-$.a[*].b.c[*]
+$."a"[*]."b"."c"[*] -- normalized!
 
 parse
   $  .  a  [  *  ] .  bcd
 ----
-$.a[*].bcd -- normalized!
+$."a"[*]."bcd" -- normalized!
 
 error
 $.a[
@@ -74,7 +74,7 @@ $ -- normalized!
 parse
 strict $.strict.lax
 ----
-strict $.strict.lax
+strict $."strict"."lax" -- normalized!
 
 error
 strict lax $.strict.lax
@@ -101,17 +101,22 @@ $.a$
    ^
 
 error
-$.a$a
+$.a$b
 ----
-at or near "$": syntax error
+at or near "b": syntax error
 DETAIL: source SQL:
-$.a$a
+$.a$b
    ^
+
+parse
+$."a$b"
+----
+$."a$b"
 
 parse
 $.a1
 ----
-$.a1
+$."a1" -- normalized!
 
 error
 word $
@@ -124,7 +129,7 @@ word $
 error
 $.1e
 ----
-at or near "1": syntax error
+at or near "invalid floating point literal": syntax error
 DETAIL: source SQL:
 $.1e
   ^
@@ -132,14 +137,128 @@ $.1e
 parse
 $.abc.ABC
 ----
-$.abc.ABC
+$."abc"."ABC" -- normalized!
 
 parse
 $.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
 ----
-$.mLmTGLKZsrNL.ZawfwNmnfbFoRsISbQXD[*].JgTODFNN
+$."mLmTGLKZsrNL"."ZawfwNmnfbFoRsISbQXD"[*]."JgTODFNN" -- normalized!
+
+parse
+$."1a"
+----
+$."1a"
+
+parse
+$."2e"
+----
+$."2e"
+
+error
+$.2e
+----
+at or near "invalid floating point literal": syntax error
+DETAIL: source SQL:
+$.2e
+  ^
+
+parse
+$var
+----
+$"var" -- normalized!
+
+parse
+$1a
+----
+$"1a" -- normalized!
+
+parse
+$2e
+----
+$"2e" -- normalized!
+
+parse
+$"1a"
+----
+$"1a"
+
+parse
+$"2e"
+----
+$"2e"
+
+parse
+$.a[1]
+----
+$."a"[1] -- normalized!
+
+parse
+$.abc[0]
+----
+$."abc"[0] -- normalized!
+
+parse
+$.abc[213].def[23198]
+----
+$."abc"[213]."def"[23198] -- normalized!
+
+parse
+$.abc[1 to 2]
+----
+$."abc"[1 to 2] -- normalized!
+
+parse
+$.abc[4 to 1]
+----
+$."abc"[4 to 1] -- normalized!
+
+parse
+$.abc[5 to 5]
+----
+$."abc"[5 to 5] -- normalized!
+
+parse
+$.abc[1, 2, 3]
+----
+$."abc"[1,2,3] -- normalized!
+
+parse
+$.abc[1 to 3, 4 to 3, 5, 9 to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
+parse
+$.abc[  1    to    3   , 4 to 3, 5  , 9     to 7]
+----
+$."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
+
+# postgres allows floats as array indexes
+# parse
+# $.abc[1.0]
+# ----
+
+# parse
+# $.abc[1.1]
+# ----
+
+# in postgres this becomes $."a"[1000000000]
+# parse
+# $.abc[1e9]
+# ----
+
+# parse
+# $.abc[0.0]
+# ----
+
+# postgres allows negatives as array indexes
+# parse
+# $.abc[-0]
+# ----
+
+# parse
+# $.abc[-1.99]
+# ----
 
 # parse
 # $.1a
 # ----
-# $.1a

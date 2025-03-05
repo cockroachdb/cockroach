@@ -3,12 +3,24 @@ package parser
 
 import (
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
+  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+  "github.com/cockroachdb/errors"
 )
 
 %}
 
 %{
+
+func setErr(jsonpathlex jsonpathLexer, err error) int {
+  jsonpathlex.(*lexer).setErr(err)
+  return 1
+}
+
+func unimplemented(jsonpathlex jsonpathLexer, feature string) int {
+  jsonpathlex.(*lexer).Unimplemented(feature)
+  return 1
+}
 
 var _ scanner.ScanSymType = &jsonpathSymType{}
 
@@ -58,32 +70,40 @@ type jsonpathSymUnion struct {
   val interface{}
 }
 
-func (u *jsonpathSymUnion) expr() jsonpath.Expr {
-  return u.val.(jsonpath.Expr)
+func (u *jsonpathSymUnion) jsonpath() jsonpath.Jsonpath {
+  return u.val.(jsonpath.Jsonpath)
 }
 
-func (u *jsonpathSymUnion) accessor() jsonpath.Accessor {
-  return u.val.(jsonpath.Accessor)
+func (u *jsonpathSymUnion) path() jsonpath.Path {
+  return u.val.(jsonpath.Path)
 }
 
-func (u *jsonpathSymUnion) query() jsonpath.Query {
-  return u.val.(jsonpath.Query)
-}
-
-func (u *jsonpathSymUnion) root() jsonpath.Root {
-  return u.val.(jsonpath.Root)
-}
-
-func (u *jsonpathSymUnion) key() jsonpath.Key {
-  return u.val.(jsonpath.Key)
-}
-
-func (u *jsonpathSymUnion) wildcard() jsonpath.Wildcard {
-  return u.val.(jsonpath.Wildcard)
+func (u *jsonpathSymUnion) paths() []jsonpath.Path {
+  return u.val.([]jsonpath.Path)
 }
 
 func (u *jsonpathSymUnion) bool() bool {
   return u.val.(bool)
+}
+
+func (u *jsonpathSymUnion) numVal() *tree.NumVal {
+  return u.val.(*tree.NumVal)
+}
+
+func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
+  return u.val.(jsonpath.ArrayList)
+}
+
+func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
+  paths := path.(jsonpath.Paths)
+  if len(paths) != 1 {
+    return jsonpath.ArrayIndex{}, errors.New("expected exactly one path")
+  }
+  n, ok := paths[0].(jsonpath.Numeric)
+  if !ok {
+    return jsonpath.ArrayIndex{}, errors.New("expected numeric index")
+  }
+  return jsonpath.ArrayIndex(n), nil
 }
 
 %}
@@ -107,21 +127,26 @@ func (u *jsonpathSymUnion) bool() bool {
 %token <*tree.NumVal> ICONST PARAM
 %token <str> TYPECAST DOT_DOT COLON_EQUALS EQUALS_GREATER
 %token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-
 %token <str> ERROR
 
 %token <str> STRICT
 %token <str> LAX
 
-%type <jsonpath.Expr> jsonpath
-%type <jsonpath.Expr> expr_or_predicate
-%type <jsonpath.Expr> expr
-%type <jsonpath.Expr> accessor_expr
-%type <jsonpath.Accessor> accessor_op
-%type <jsonpath.Accessor> path_primary
-%type <jsonpath.Accessor> key
+%token <str> VARIABLE
+%token <str> TO
+
+%type <jsonpath.Jsonpath> jsonpath
+%type <jsonpath.Path> expr_or_predicate
+%type <jsonpath.Path> expr
+%type <[]jsonpath.Path> accessor_expr
+%type <jsonpath.Path> accessor_op
+%type <jsonpath.Path> path_primary
+%type <jsonpath.Path> key
+%type <jsonpath.Path> array_accessor
+%type <jsonpath.Path> scalar_value
+%type <jsonpath.Path> index_elem
+%type <[]jsonpath.Path> index_list
 %type <str> key_name
-%type <jsonpath.Accessor> array_accessor
 %type <str> any_identifier
 %type <str> unreserved_keyword
 %type <bool> mode
@@ -131,7 +156,7 @@ func (u *jsonpathSymUnion) bool() bool {
 jsonpath:
   mode expr_or_predicate
   {
-    jp := jsonpath.Jsonpath{Query: $2.query(), Strict: $1.bool()}
+    jp := jsonpath.Jsonpath{Strict: $1.bool(), Path: $2.path()}
     jsonpathlex.(*lexer).SetJsonpath(jp)
   }
 ;
@@ -154,27 +179,25 @@ mode:
 expr_or_predicate:
   expr
   {
-    $$.val = $1.query()
+    $$.val = $1.path()
   }
 ;
 
 expr:
   accessor_expr
   {
-    $$.val = $1.query()
+    $$.val = jsonpath.Paths($1.paths())
   }
 ;
 
 accessor_expr:
   path_primary
   {
-    $$.val = jsonpath.Query{Accessors: []jsonpath.Accessor{$1.accessor()}}
+    $$.val = []jsonpath.Path{$1.path()}
   }
 | accessor_expr accessor_op
   {
-    a := $1.query()
-    a.Accessors = append(a.Accessors, $2.accessor())
-    $$.val = a
+    $$.val = append($1.paths(), $2.path())
   }
 ;
 
@@ -183,23 +206,27 @@ path_primary:
   {
     $$.val = jsonpath.Root{}
   }
+| scalar_value
+  {
+    $$.val = $1.path()
+  }
 ;
 
 accessor_op:
   '.' key
   {
-    $$.val = $2.key()
+    $$.val = $2.path()
   }
 | array_accessor
   {
-    $$.val = $1.wildcard()
+    $$.val = $1.path()
   }
 ;
 
 key:
   key_name
   {
-    $$.val = jsonpath.Key{Key: $1}
+    $$.val = jsonpath.Key($1)
   }
 ;
 
@@ -215,6 +242,66 @@ array_accessor:
   {
     $$.val = jsonpath.Wildcard{}
   }
+| '[' index_list ']'
+  {
+    $$.val = $2.path()
+  }
+;
+
+index_list:
+  index_elem
+  {
+    $$.val = jsonpath.ArrayList{$1.path()}
+  }
+| index_list ',' index_elem
+  {
+    $$.val = append($1.arrayList(), $3.path())
+  }
+;
+
+index_elem:
+  expr
+  {
+    index, err := pathToIndex($1.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = index
+  }
+| expr TO expr
+  {
+    firstIndex, err := pathToIndex($1.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+
+    secondIndex, err := pathToIndex($3.path())
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+
+    $$.val = jsonpath.ArrayIndexRange{Start: firstIndex, End: secondIndex}
+  }
+;
+
+
+scalar_value:
+  VARIABLE
+  {
+    $$.val = jsonpath.Variable($1)
+  }
+| ICONST
+  {
+    i, err := $1.numVal().AsInt64()
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = jsonpath.NewNumericInt(i)
+  }
+| FCONST
+  {
+    return unimplemented(jsonpathlex, "float consts")
+  }
 ;
 
 any_identifier:
@@ -223,8 +310,9 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  STRICT
-| LAX
+  LAX
+| STRICT
+| TO
 ;
 
 %%
