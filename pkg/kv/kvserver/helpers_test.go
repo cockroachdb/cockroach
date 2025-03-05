@@ -708,3 +708,8 @@ func (r *Replica) SupportFromEnabled() bool {
 func RaftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
 	return raftFortificationEnabledForRangeID(fracEnabled, rangeID)
 }
+
+// ProcessTick exports processTick for use in tests.
+func (s *Store) ProcessTick(ctx context.Context, rangeID roachpb.RangeID) {
+	s.processTick(ctx, rangeID)
+}
