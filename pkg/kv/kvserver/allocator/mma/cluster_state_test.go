@@ -227,15 +227,37 @@ func testingGetStoreList(cs *clusterState) (member, removed storeIDPostingList) 
 	return member, removed
 }
 
-func testingGetPendingChanges(cs *clusterState) []*pendingReplicaChange {
-	var pendingChangeList []*pendingReplicaChange
+func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaChange {
+	var clusterPendingChangeList []*pendingReplicaChange
+	var storePendingChangeList []*pendingReplicaChange
+	var rangePendingChangeList []*pendingReplicaChange
 	for _, change := range cs.pendingChanges {
-		pendingChangeList = append(pendingChangeList, change)
+		clusterPendingChangeList = append(clusterPendingChangeList, change)
 	}
-	sort.Slice(pendingChangeList, func(i, j int) bool {
-		return pendingChangeList[i].changeID < pendingChangeList[j].changeID
+	for _, store := range cs.stores {
+		for _, change := range store.adjusted.loadPendingChanges {
+			storePendingChangeList = append(storePendingChangeList, change)
+		}
+	}
+	for _, rng := range cs.ranges {
+		for _, change := range rng.pendingChanges {
+			rangePendingChangeList = append(rangePendingChangeList, change)
+		}
+	}
+	// NB: Although redundant, we compare all of the de-normalized pending change
+	// to ensure that they are in sync.
+	sort.Slice(clusterPendingChangeList, func(i, j int) bool {
+		return clusterPendingChangeList[i].changeID < clusterPendingChangeList[j].changeID
 	})
-	return pendingChangeList
+	sort.Slice(storePendingChangeList, func(i, j int) bool {
+		return storePendingChangeList[i].changeID < storePendingChangeList[j].changeID
+	})
+	sort.Slice(rangePendingChangeList, func(i, j int) bool {
+		return rangePendingChangeList[i].changeID < rangePendingChangeList[j].changeID
+	})
+	require.EqualValues(t, clusterPendingChangeList, storePendingChangeList)
+	require.EqualValues(t, rangePendingChangeList, storePendingChangeList)
+	return clusterPendingChangeList
 }
 
 func TestClusterState(t *testing.T) {
@@ -393,11 +415,11 @@ func TestClusterState(t *testing.T) {
 						}
 					}
 					cs.createPendingChanges(rangeID, changes...)
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
 					cs.gcPendingChanges(cs.ts.Now())
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
 					var changeIDsInt []int
@@ -407,10 +429,10 @@ func TestClusterState(t *testing.T) {
 						changeIDs = append(changeIDs, changeID(id))
 					}
 					cs.pendingChangesRejected(changeIDs)
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "get-pending-changes":
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					var seconds int
