@@ -332,6 +332,9 @@ func (mm *meansMemo) getStoreLoadSummary(
 	return summary
 }
 
+// TODO: Exclude stores which are storeMembershipRemoving,
+// storeMembershipRemoved, fdDrain and fdDead. As these are never eligible
+// candidate stores and should therefore not be considered in the means.
 func computeMeansForStoreSet(
 	stores storeIDPostingList,
 	loadProvider loadInfoProvider,
