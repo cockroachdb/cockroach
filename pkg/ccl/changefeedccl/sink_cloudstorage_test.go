@@ -605,7 +605,7 @@ func TestCloudStorageSink(t *testing.T) {
 					timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 
 					sinkURIWithParam := sinkURI(t, targetMaxFileSize)
-					sinkURIWithParam.addParam(changefeedbase.SinkParamPartitionFormat, tc.format)
+					sinkURIWithParam.AddParam(changefeedbase.SinkParamPartitionFormat, tc.format)
 					t.Logf("format=%s sinkgWithParam: %s", tc.format, sinkURIWithParam.String())
 					s, err := makeCloudStorageSink(
 						ctx, sinkURIWithParam, 1, settings, opts,
@@ -944,12 +944,12 @@ func testDir(t *testing.T) string {
 	return strings.ReplaceAll(t.Name(), "/", ";")
 }
 
-func sinkURI(t *testing.T, maxFileSize int64) sinkURL {
+func sinkURI(t *testing.T, maxFileSize int64) *changefeedbase.SinkURL {
 	u, err := url.Parse(fmt.Sprintf("nodelocal://1/%s", testDir(t)))
 	require.NoError(t, err)
-	sink := sinkURL{URL: u}
+	sink := &changefeedbase.SinkURL{URL: u}
 	if maxFileSize != unlimitedFileSize {
-		sink.addParam(changefeedbase.SinkParamFileSize, strconv.FormatInt(maxFileSize, 10))
+		sink.AddParam(changefeedbase.SinkParamFileSize, strconv.FormatInt(maxFileSize, 10))
 	}
 	return sink
 }
