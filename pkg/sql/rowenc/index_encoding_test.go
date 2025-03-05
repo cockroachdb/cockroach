@@ -12,6 +12,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -29,11 +31,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 )
 
@@ -294,9 +301,10 @@ func TestIndexKey(t *testing.T) {
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
+		var vh VectorIndexEncodingHelper
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
 			ctx, codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
-			colMap, testValues, true, /* includeEmpty */
+			colMap, testValues, vh, true, /* includeEmpty */
 		)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
@@ -449,9 +457,10 @@ func TestInvertedIndexKey(t *testing.T) {
 
 		codec := keys.SystemSQLCodec
 
+		var vh VectorIndexEncodingHelper
 		secondaryIndexEntries, err := EncodeSecondaryIndex(
 			context.Background(), codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
-			colMap, testValues, true, /* includeEmpty */
+			colMap, testValues, vh, true, /* includeEmpty */
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1279,4 +1288,76 @@ func TestDecodeKeyVals(t *testing.T) {
 			require.Equal(t, tc.expectedNumVals, actualNumVals)
 		})
 	}
+}
+
+func TestVectorEncoding(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	//internalDB := srv.ApplicationLayer().InternalDB().(descs.DB)
+	codec := srv.ApplicationLayer().Codec()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(2))")
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+	vCol, err := catalog.MustFindColumnByName(tableDesc, "v")
+	require.NoError(t, err)
+
+	indexDesc := descpb.IndexDescriptor{
+		ID: 42, Name: "t_idx1",
+		Type:                idxtype.VECTOR,
+		KeyColumnIDs:        []descpb.ColumnID{vCol.GetID()},
+		KeyColumnNames:      []string{vCol.GetName()},
+		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+		Version:             descpb.LatestIndexDescriptorVersion,
+		EncodingType:        catenumpb.SecondaryIndexEncoding,
+	}
+	index := tabledesc.GetIndexForTesting(&indexDesc, 1)
+
+	var colMap catalog.TableColMap
+	for _, c := range tableDesc.PublicColumns() {
+		colMap.Set(c.GetID(), c.Ordinal())
+	}
+
+	testVec := vector.T{1, 2}
+	encVec, err := vecstore.EncodeUnquantizedVector([]byte{}, 0, testVec)
+	require.NoError(t, err)
+	vh := VectorIndexEncodingHelper{
+		PartitionKeys: map[descpb.IndexID]tree.Datum{42: tree.NewDInt(8311)},
+		QuantizedVecs: map[descpb.IndexID]tree.Datum{42: tree.NewDBytes(tree.DBytes(encVec))},
+	}
+
+	// Encode the secondary index key.
+	secondaryIndexEntry, err := EncodeSecondaryIndex(
+		ctx,
+		codec,
+		tableDesc,
+		index,
+		colMap,
+		[]tree.Datum{
+			tree.NewDInt(1),
+			tree.NewDPGVector(testVec),
+		},
+		vh,
+		true /* includeEmpty */)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(secondaryIndexEntry))
+
+	// Decode the index key to ensure that the partition key is correctly encoded.
+	prefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), index.GetID())
+	require.Equal(t, roachpb.Key(prefix), secondaryIndexEntry[0].Key[:len(prefix)])
+	_, partitionID, err := encoding.DecodeUvarintAscending(secondaryIndexEntry[0].Key[len(prefix):])
+	require.NoError(t, err)
+	require.Equal(t, uint64(8311), partitionID)
+
+	// Decode the value to ensure that the vector bytes are returned correctly. At
+	// this layer, the data here is opaque, so we don't attempt to turn it back into
+	// a vector. We just check that the bytes are correct.
+	val, err := secondaryIndexEntry[0].Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, tree.DBytes(encVec), tree.DBytes(val))
 }
