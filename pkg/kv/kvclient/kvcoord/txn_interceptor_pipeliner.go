@@ -955,7 +955,7 @@ func (tp *txnPipeliner) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
 	tis.InFlightWrites = tp.ifWrites.asSlice()
 }
 
-// initializeLeaf loads the in-flight writes for a leaf transaction.
+// initializeLeaf is part of the txnInterceptor interface.
 func (tp *txnPipeliner) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// Copy all in-flight writes into the inFlightWrite tree.
 	for _, w := range tis.InFlightWrites {
