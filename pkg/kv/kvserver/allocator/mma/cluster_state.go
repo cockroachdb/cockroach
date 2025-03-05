@@ -751,6 +751,17 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) {
 	}
 }
 
+func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
+	n := len(rs.pendingChanges)
+	for i := 0; i < n; i++ {
+		if rs.pendingChanges[i].changeID == changeID {
+			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
+			rs.pendingChanges = rs.pendingChanges[:n-1]
+			break
+		}
+	}
+}
+
 // clusterState is the state of the cluster known to the allocator, including
 // adjustments based on pending changes. It does not include additional
 // indexing needed for constraint matching, or for tracking ranges that may
@@ -819,6 +830,7 @@ func (cs *clusterState) processNodeLoadMsg(msg *nodeLoadMsg) {
 		for _, change := range ss.computePendingChangesReflectedInLatestLoad(msg.loadTime) {
 			delete(ss.adjusted.loadPendingChanges, change.changeID)
 			delete(cs.pendingChanges, change.changeID)
+			cs.ranges[change.rangeID].removePendingChangeTracking(change.changeID)
 		}
 
 		for _, change := range ss.adjusted.loadPendingChanges {
@@ -934,20 +946,12 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 	}
 	// Wipe the analyzed constraints, as the range has changed.
 	rs.constraints = nil
-
-	// Undo the change delta as well as the replica change.
+	// Undo the change delta as well as the replica change and remove the pending
+	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.replicaChange)
-	i := 0
-	n := len(rs.pendingChanges)
-	for ; i < n; i++ {
-		if rs.pendingChanges[i].changeID == cid {
-			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
-			rs.pendingChanges = rs.pendingChanges[:n-1]
-			break
-		}
-	}
-	delete(cs.pendingChanges, change.changeID)
+	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.storeID].adjusted.loadPendingChanges, change.changeID)
+	delete(cs.pendingChanges, change.changeID)
 }
 
 // createPendingChanges takes a set of changes for a range and applies the
