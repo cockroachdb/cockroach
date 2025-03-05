@@ -1144,7 +1144,7 @@ func (cs *clusterState) computeLoadSummary(
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
 		ls := loadSummaryForDimension(ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
-		if ls < sls {
+		if ls > sls {
 			sls = ls
 		}
 		switch LoadDimension(i) {
