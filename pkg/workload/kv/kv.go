@@ -170,7 +170,7 @@ var kvMeta = workload.Meta{
 		g.flags.BoolVar(&g.writesUseSelectForUpdate, `sfu-writes`, false,
 			`Use SFU and transactional writes with a sleep after SFU.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
-			`Pick keys in a zipfian distribution instead of randomly.`)
+			`Allocate keys using a zipfian distribution instead of a uniform distribution of random keys.`)
 		g.flags.Float64Var(&g.zipfianS, `zipfian-s`, 1.1,
 			`Zipf parameter s (must be > 1)`)
 		g.flags.Float64Var(&g.zipfianV, `zipfian-v`, 1.0,
@@ -975,11 +975,10 @@ func (wss writeSequenceSource) Int63() int64 {
 
 func (wss writeSequenceSource) Uint64() uint64 {
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
-	buf := make([]byte, 8)
+	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
 	binary.BigEndian.PutUint64(buf[:8], uint64(wss.write()))
 	_, _ = hasher.Write(buf[:8])
-	hasher.Sum(buf[:0])
-	return binary.BigEndian.Uint64(buf[:8])
+	return hasher.Sum64()
 }
 
 func (wss writeSequenceSource) Seed(seed int64) {
@@ -988,6 +987,7 @@ func (wss writeSequenceSource) Seed(seed int64) {
 
 type readSequenceSource struct {
 	*sequence
+	random *rand.Rand
 }
 
 func (rss readSequenceSource) Int63() int64 {
@@ -996,12 +996,14 @@ func (rss readSequenceSource) Int63() int64 {
 
 func (rss readSequenceSource) Uint64() uint64 {
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf[:8], uint64(rss.read()))
-	hasher.Reset()
+	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
+	v := rss.read()
+	if v != 0 {
+		v = rss.random.Int63n(v)
+	}
+	binary.BigEndian.PutUint64(buf[:8], uint64(v))
 	_, _ = hasher.Write(buf[:8])
-	buf = hasher.Sum(buf[:0])
-	return binary.BigEndian.Uint64(buf[:8])
+	return hasher.Sum64()
 }
 
 func (rss readSequenceSource) Seed(seed int64) {
@@ -1023,6 +1025,7 @@ func newZipfianGenerator(
 	}
 	readSS := readSequenceSource{
 		sequence: seq,
+		random:   rng,
 	}
 	return &zipfGenerator{
 		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
