@@ -31,7 +31,8 @@ type rowSourceToPlanNode struct {
 	// planned for.
 	originalPlanNode planNode
 
-	planCols colinfo.ResultColumns
+	// columns contains the metadata for the results of this node.
+	columns colinfo.ResultColumns
 
 	// Temporary variables
 	row      rowenc.EncDatumRow
@@ -63,7 +64,7 @@ func newRowSourceToPlanNode(
 		source:           s,
 		datumRow:         row,
 		forwarder:        forwarder,
-		planCols:         planCols,
+		columns:          planCols,
 		originalPlanNode: originalPlanNode,
 	}
 }
@@ -92,7 +93,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		}
 
 		types := r.source.OutputTypes()
-		for i := range r.planCols {
+		for i := range r.columns {
 			encDatum := r.row[i]
 			err := encDatum.EnsureDecoded(types[i], &r.da)
 			if err != nil {

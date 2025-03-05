@@ -52,7 +52,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *renderNode:
 		return n.columns
 	case *scanNode:
-		return n.resultColumns
+		return n.columns
 	case *unionNode:
 		return n.columns
 	case *valuesNode:
@@ -173,9 +173,9 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 			{Name: n.name, Typ: types.String},
 		}
 	case *rowSourceToPlanNode:
-		return n.planCols
+		return n.columns
 	case *cdcValuesNode:
-		return n.resultColumns
+		return n.columns
 
 	case *identifySystemNode:
 		return n.getColumns(mut, colinfo.IdentifySystemColumns)

@@ -86,9 +86,9 @@ type fetchPlanningInfo struct {
 	// be gained (e.g. for tables with wide rows) by reading only certain
 	// columns from KV using point lookups instead of a single range lookup for
 	// the entire row.
-	cols []catalog.Column
-	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns colinfo.ResultColumns
+	catalogCols []catalog.Column
+	// There is a 1-1 correspondence between catalogCols and columns.
+	columns colinfo.ResultColumns
 
 	// lockingStrength, lockingWaitPolicy, and lockingDurability represent the
 	// row-level locking mode of the Scan.
@@ -131,7 +131,7 @@ var _ tree.IndexedVarContainer = &scanNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
-	return n.resultColumns[idx].Typ
+	return n.columns[idx].Typ
 }
 
 func (n *scanNode) startExec(params runParams) error {
@@ -160,13 +160,13 @@ func (n *fetchPlanningInfo) initDescDefaults(
 	n.index = n.desc.GetPrimaryIndex()
 
 	var err error
-	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	n.catalogCols, err = initColsForScan(n.desc, n.colCfg)
 	if err != nil {
 		return err
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
 }
 
@@ -227,11 +227,11 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 			prefixCol.GetName())
 	}
 	var err error
-	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	n.catalogCols, err = initColsForScan(n.desc, n.colCfg)
 	if err != nil {
 		return err
 	}
 	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
 }
