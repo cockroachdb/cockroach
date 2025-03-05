@@ -854,6 +854,9 @@ func checkSupportForInvertedFilterNode(
 	if err != nil {
 		return cannotDistribute, err
 	}
+	if err := checkExprForDistSQL(n.preFiltererExpr, distSQLVisitor); err != nil {
+		return cannotDistribute, err
+	}
 	// When filtering is a union of inverted spans, it is distributable: place
 	// an inverted filterer on each node, which produce the primary keys in
 	// arbitrary order, and de-duplicate the PKs at the next stage.
