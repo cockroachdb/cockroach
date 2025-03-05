@@ -3,6 +3,7 @@ echo
 (base.RaftConfig) {
  RaftTickInterval: (time.Duration) 500ms,
  RaftElectionTimeoutTicks: (int64) 4,
+ RaftElectionTimeoutJitterTicks: (int64) 4,
  RaftReproposalTimeoutTicks: (int64) 6,
  RaftHeartbeatIntervalTicks: (int64) 2,
  StoreLivenessHeartbeatInterval: (time.Duration) 1s,
@@ -21,6 +22,7 @@ echo
 }
 RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s
+RaftElectionJitter: 2s
 RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s

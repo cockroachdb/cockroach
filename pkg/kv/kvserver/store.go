@@ -383,6 +383,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	// time in tests.
 	sc.RaftHeartbeatIntervalTicks = 1
 	sc.RaftElectionTimeoutTicks = 3
+	sc.RaftElectionTimeoutJitterTicks = 3
 	sc.RaftReproposalTimeoutTicks = 5
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults(1 /* numStores */)
@@ -406,6 +407,7 @@ func newRaftConfig(
 		Applied:                     uint64(appliedIndex),
 		AsyncStorageWrites:          true,
 		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
+		ElectionJitterTick:          storeCfg.RaftElectionTimeoutJitterTicks,
 		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,
 		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
 		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
@@ -1384,8 +1386,9 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
-		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
-		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
+		sc.RaftElectionTimeoutJitterTicks > 0 && sc.RaftSchedulerConcurrency > 0 &&
+		sc.RaftSchedulerConcurrencyPriority > 0 && sc.RaftSchedulerShardSize > 0 &&
+		sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
 		sc.RangeFeedSchedulerConcurrency > 0 && sc.RangeFeedSchedulerShardSize > 0
 }
 
