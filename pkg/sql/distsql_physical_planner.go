@@ -2170,9 +2170,9 @@ func (dsp *DistSQLPlanner) convertOrdering(
 func initTableReaderSpecTemplate(
 	n *scanNode, codec keys.SQLCodec,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
-	colIDs := make([]descpb.ColumnID, len(n.cols))
-	for i := range n.cols {
-		colIDs[i] = n.cols[i].GetID()
+	colIDs := make([]descpb.ColumnID, len(n.catalogCols))
+	for i := range n.catalogCols {
+		colIDs[i] = n.catalogCols[i].GetID()
 	}
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
@@ -3346,11 +3346,11 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 		LimitHint:         planInfo.limitHint,
 	}
 
-	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.cols))
+	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
 	var fetchOrdinals intsets.Fast
-	for i := range planInfo.fetch.cols {
-		fetchColIDs[i] = planInfo.fetch.cols[i].GetID()
-		fetchOrdinals.Add(planInfo.fetch.cols[i].Ordinal())
+	for i := range planInfo.fetch.catalogCols {
+		fetchColIDs[i] = planInfo.fetch.catalogCols[i].GetID()
+		fetchOrdinals.Add(planInfo.fetch.catalogCols[i].Ordinal())
 	}
 	index := planInfo.fetch.desc.GetPrimaryIndex()
 	if err := rowenc.InitIndexFetchSpec(
@@ -3368,7 +3368,7 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(fetchColIDs))
 
-	resultTypes := getTypesFromResultColumns(planInfo.fetch.resultColumns)
+	resultTypes := getTypesFromResultColumns(planInfo.fetch.columns)
 	if len(p.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		p.AddNoGroupingStage(
@@ -3440,11 +3440,11 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		RemoteOnlyLookups:                 planInfo.remoteOnlyLookups,
 	}
 
-	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.cols))
+	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
 	var fetchOrdinals intsets.Fast
-	for i := range planInfo.fetch.cols {
-		fetchColIDs[i] = planInfo.fetch.cols[i].GetID()
-		fetchOrdinals.Add(planInfo.fetch.cols[i].Ordinal())
+	for i := range planInfo.fetch.catalogCols {
+		fetchColIDs[i] = planInfo.fetch.catalogCols[i].GetID()
+		fetchOrdinals.Add(planInfo.fetch.catalogCols[i].Ordinal())
 	}
 	if err := rowenc.InitIndexFetchSpec(
 		&joinReaderSpec.FetchSpec,
@@ -3576,9 +3576,9 @@ func (dsp *DistSQLPlanner) planInvertedJoin(
 		LockingDurability:                 planInfo.fetch.lockingDurability,
 	}
 
-	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.cols))
-	for i := range planInfo.fetch.cols {
-		fetchColIDs[i] = planInfo.fetch.cols[i].GetID()
+	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
+	for i := range planInfo.fetch.catalogCols {
+		fetchColIDs[i] = planInfo.fetch.catalogCols[i].GetID()
 	}
 	if err := rowenc.InitIndexFetchSpec(
 		&invertedJoinerSpec.FetchSpec,
@@ -3664,7 +3664,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		sides[i] = zigzagPlanningSide{
 			desc:              side.fetch.desc,
 			index:             side.fetch.index,
-			cols:              side.fetch.cols,
+			cols:              side.fetch.catalogCols,
 			eqCols:            side.eqCols,
 			fixedValues:       valuesSpec,
 			lockingStrength:   side.fetch.lockingStrength,
