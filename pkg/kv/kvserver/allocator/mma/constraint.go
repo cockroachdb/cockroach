@@ -1704,6 +1704,13 @@ type storeAndLeasePreference struct {
 //
 // TODO(sumeer): the computation in this method can be performed once, when
 // constructing rangeAnalyzedConstraints.
+//
+// TODO: This should return the set of candidates which satisfy the
+// first lease preference. If none do, the second lease preference, and so on.
+// This implies a tighter condition than the current one for candidate
+// selection. See existing allocator candidate selection:
+//
+//	https://github.com/sumeerbhola/cockroach/blob/c4c1dcdeda2c0f38c38270e28535f2139a077ec7/pkg/kv/kvserver/allocator/allocatorimpl/allocator.go#L2980-L2980
 func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
 	cands []storeAndLeasePreference,
 	curLeasePreferenceIndex int32,
