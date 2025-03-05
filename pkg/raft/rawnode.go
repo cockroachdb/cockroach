@@ -600,6 +600,12 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 	return getSparseStatus(rn.raft)
 }
 
+// ReplicaProgress returns the progress for the replica with the given ID.
+// It returns nil if the replica is not being tracked.
+func (rn *RawNode) ReplicaProgress(id pb.PeerID) *tracker.Progress {
+	return getReplicaProgress(rn.raft, id)
+}
+
 // SupportingFortifiedLeader indicates if this peer supports a fortified leader.
 func (rn *RawNode) SupportingFortifiedLeader() bool {
 	return rn.raft.supportingFortifiedLeader()
