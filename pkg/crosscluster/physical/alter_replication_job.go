@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,9 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -224,9 +228,33 @@ func alterReplicationJobHook(
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
 		if alterTenantStmt.Producer {
+			if err := p.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONSOURCE,
+			); err != nil {
+				return err
+			}
 			return alterTenantSetReplicationSource(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
 		}
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
+		); err != nil {
+			if tenInfo.PhysicalReplicationConsumerJobID == 0 {
+				return err
+			}
 
+			// If the user is attempting to alter an existing ingestion job that was
+			// created on an older version, they do not need the REPLICATIONDEST
+			// privilege, for now.
+			j, jobErr := jobRegistry.LoadJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, p.InternalSQLTxn())
+			if jobErr != nil {
+				return err
+			}
+			if j.Payload().CreationClusterVersion.Less(clusterversion.V25_2.Version()) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("ALTER VIRTUAL CLUSTER REPLICATION cmds will require the REPLICATIONDEST privilege in a future release, even if the replication job was created on an older version"))
+				return nil
+			}
+			return err
+		}
 		// If a source uri is being provided, we're enabling replication into an
 		// existing virtual cluster. It must be inactive, and we'll verify that it
 		// was the cluster from which the one it will replicate was replicated, i.e.
