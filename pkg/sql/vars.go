@@ -3823,6 +3823,23 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 	},
+
+	// CockroachDB extension.
+	`optimizer_plan_lookup_joins_with_reverse_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_plan_lookup_joins_with_reverse_scans`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_plan_lookup_joins_with_reverse_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPlanLookupJoinsWithReverseScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

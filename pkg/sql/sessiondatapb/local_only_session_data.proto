@@ -613,6 +613,10 @@ message LocalOnlySessionData {
   // for the buffer scan of FK and uniqueness checks. A value of zero indicates
   // no lower bound.
   double optimizer_check_input_min_row_count = 157;
+  // OptimizerPlanLookupJoinsWithReverseScans enables planning for lookup joins
+  // that use reverse scans to get results in reverse index order on each
+  // lookup.
+  bool optimizer_plan_lookup_joins_with_reverse_scans = 158;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
