@@ -108,15 +108,15 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	// cpu util of a node is simply the mean across all its stores). The
 	// following code assumes this has already been done.
 	//
-	// TODO(kvoli): Remove sls.fd >= fdDrain from the condition below. The
-	// rebalanceStores call loop doesn't need to be responsible for shedding
-	// leases from a draining (fdDrain) or replacing replicas on a dead (fdDead)
-	// store.
+	// NB: We don't attempt to shed replicas or leases from a store which is
+	// fdDrain or fdDead, nor do we attempt to shed replicas from a store which
+	// is storeMembershipRemoving (decommissioning). These are currently handled
+	// via replicate_queue.go.
 	for storeID, ss := range a.cs.stores {
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
-		if (sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
-			ss.maxFractionPending < maxFractionPendingThreshold) || sls.fd >= fdDrain {
+		if sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
+			ss.maxFractionPending < maxFractionPendingThreshold {
 			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 		}
 	}
@@ -128,7 +128,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	// first shed load from the stores of n1, before we shed load from the store
 	// on n2.
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
-		return cmp.Or(cmp.Compare(b.fd, a.fd), -cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls))
+		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls))
 	})
 	var changes []*pendingReplicaChange
 	var disj [1]constraintsConj
@@ -143,18 +143,6 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 		ss := a.cs.stores[store.StoreID]
 		if ss.NodeID == a.nodeID && store.storeCPUSummary >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
-			//
-			// TODO: is this path (for StoreRebalancer) also responsible for
-			// shedding leases for fdDrain and fdDead?
-			//
-			// TODO(kvoli): This path doesn't need to be responsible for shedding
-			// leases for when a store is marked as fdDrain, see
-			// `Store.SetDraining`[^*]. For fdDead, assuming liveness information is
-			// sycned with leasing (approx.), we can do nothing and the lease should
-			// have already expired. Likewise for fdDead, we can likely get away
-			// without doing anything here (rebalanceStores), but will need to add
-			// shedding functionality when replacing replicate_queue.go.
-			// [^*]: https://github.com/sumeerbhola/cockroach/blob/4f4139c2e9da8ce99cab640b41ce45b679425db8/pkg/kv/kvserver/store.go#L1868-L1868
 			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
@@ -236,13 +224,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			// This store is excluded of course.
 			storesToExclude.insert(store.StoreID)
 		}
-		var loadSheddingStore roachpb.StoreID
-		if store.fd != fdDead {
-			// We only shed replicas (not just leases), for non-overloaded stores,
-			// when they are dead. Since this store is not dead, it must be trying
-			// to shed due to load.
-			loadSheddingStore = store.StoreID
-		}
+
 		// Iterate over top-K ranges first and try to move them.
 		for _, rangeID := range ss.adjusted.topKRanges {
 			// TODO(sumeer): the following code belongs in a closure, since we will
@@ -282,7 +264,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				}
 			}
 			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-			cands := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, loadSheddingStore)
+			cands := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
 			n := len(cands.candidates)
 			for i := 0; i < n; {
 				if cands.candidates[i].fd != fdOK {
@@ -330,12 +312,11 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				break
 			}
 		}
-		// TODO(sumeer): continue with non-top-K iteration for fdDead. For regular
-		// rebalancing, we will wait until those top-K move and then continue with
-		// the rest. There is a risk that the top-K have some constraint that
-		// prevents rebalancing, while the rest can be moved. Running with
-		// underprovisioned clusters and expecting load-based rebalancing to work
-		// well is not in scope.
+		// TODO(sumeer): For regular rebalancing, we will wait until those top-K
+		// move and then continue with the rest. There is a risk that the top-K
+		// have some constraint that prevents rebalancing, while the rest can be
+		// moved. Running with underprovisioned clusters and expecting load-based
+		// rebalancing to work well is not in scope.
 		if doneShedding {
 			continue
 		}
