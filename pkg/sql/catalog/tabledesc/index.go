@@ -38,6 +38,11 @@ type index struct {
 	ordinal int
 }
 
+// GetIndexForTesting wraps an index descriptor in a catalog.Index interface for use in unit tests.
+func GetIndexForTesting(desc *descpb.IndexDescriptor, ordinal int) catalog.Index {
+	return &index{desc: desc, ordinal: ordinal}
+}
+
 // IndexDesc returns the underlying protobuf descriptor.
 // Ideally, this method should be called as rarely as possible.
 func (w index) IndexDesc() *descpb.IndexDescriptor {
