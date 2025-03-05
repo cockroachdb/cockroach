@@ -19,7 +19,7 @@ type testLoadInfoProvider struct {
 	t                  *testing.T
 	b                  strings.Builder
 	sloads             map[roachpb.StoreID]*storeLoad
-	nloads             map[roachpb.NodeID]*nodeLoad
+	nloads             map[roachpb.NodeID]*NodeLoad
 	returnedLoadSeqNum uint64
 }
 
@@ -29,7 +29,7 @@ func (p *testLoadInfoProvider) getStoreReportedLoad(storeID roachpb.StoreID) *st
 	return sl
 }
 
-func (p *testLoadInfoProvider) getNodeReportedLoad(nodeID roachpb.NodeID) *nodeLoad {
+func (p *testLoadInfoProvider) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	nl, ok := p.nloads[nodeID]
 	require.True(p.t, ok)
 	return nl
@@ -51,7 +51,7 @@ func TestMeansMemo(t *testing.T) {
 	loadProvider := &testLoadInfoProvider{
 		t:      t,
 		sloads: map[roachpb.StoreID]*storeLoad{},
-		nloads: map[roachpb.NodeID]*nodeLoad{},
+		nloads: map[roachpb.NodeID]*NodeLoad{},
 	}
 	mm := newMeansMemo(loadProvider, cm)
 	var mss *meansForStoreSet
@@ -84,7 +84,7 @@ func TestMeansMemo(t *testing.T) {
 					reportedLoad:    LoadVector{LoadValue(cpuLoad), LoadValue(wbLoad), LoadValue(bsLoad)},
 					capacity: LoadVector{
 						LoadValue(cpuCapacity), LoadValue(wbCapacity), LoadValue(bsCapacity)},
-					reportedSecondaryLoad: secondaryLoadVector{LoadValue(leaseCountLoad)},
+					reportedSecondaryLoad: SecondaryLoadVector{LoadValue(leaseCountLoad)},
 				}
 				for i := range sLoad.capacity {
 					if sLoad.capacity[i] < 0 {
@@ -101,12 +101,12 @@ func TestMeansMemo(t *testing.T) {
 				var cpuLoad, cpuCapacity int64
 				d.ScanArgs(t, "cpu-load", &cpuLoad)
 				d.ScanArgs(t, "cpu-capacity", &cpuCapacity)
-				nLoad := &nodeLoad{
-					nodeID:      roachpb.NodeID(nodeID),
-					reportedCPU: LoadValue(cpuLoad),
-					capacityCPU: LoadValue(cpuCapacity),
+				nLoad := &NodeLoad{
+					NodeID:      roachpb.NodeID(nodeID),
+					ReportedCPU: LoadValue(cpuLoad),
+					CapacityCPU: LoadValue(cpuCapacity),
 				}
-				loadProvider.nloads[nLoad.nodeID] = nLoad
+				loadProvider.nloads[nLoad.NodeID] = nLoad
 				return ""
 
 			case "get-means":
