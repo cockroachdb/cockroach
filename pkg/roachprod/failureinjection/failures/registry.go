@@ -28,6 +28,7 @@ func NewFailureRegistry() *FailureRegistry {
 
 func (r *FailureRegistry) Register() {
 	registerIPTablesPartitionFailure(r)
+	registerNetworkLatencyFailure(r)
 }
 
 func (r *FailureRegistry) add(
