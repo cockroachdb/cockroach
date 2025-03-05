@@ -180,7 +180,7 @@ func testNonleaderStartElection(t *testing.T, state pb.StateType) {
 		r.becomeCandidate()
 	}
 
-	for i := int64(1); i < 2*et; i++ {
+	for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
 		r.tick()
 	}
 	r.advanceMessagesAfterAppend()
@@ -309,6 +309,7 @@ func TestCandidateElectionTimeoutRandomized(t *testing.T) {
 func testNonleaderElectionTimeoutRandomized(t *testing.T, state pb.StateType) {
 	et := int64(10)
 	r := newTestRaft(1, et, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+	r.electionTimeoutJitter = et
 	timeouts := make(map[int64]bool)
 	for round := int64(0); round < 50*et; round++ {
 		switch state {
@@ -712,7 +713,7 @@ func TestVoteRequest(t *testing.T) {
 		})
 		r.readMessages()
 
-		for i := int64(1); i < r.electionTimeout*2; i++ {
+		for i := int64(1); i <= r.randomizedElectionTimeout; i++ {
 			r.tickElection()
 		}
 

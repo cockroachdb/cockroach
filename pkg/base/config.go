@@ -247,7 +247,9 @@ var (
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
-	// multiplied by a random factor of 1-2, to avoid ties.
+	// selected randomly between the interval:
+	// [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	//
 	// A timeout of 2 seconds with a Raft heartbeat sent every second gives each
 	// heartbeat 1 second to make it across the network. This is only half a
@@ -257,6 +259,14 @@ var (
 	// random factor provides an additional buffer.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
+
+	// defaultRaftElectionTimeoutJitterTicks specifies the maximum number of Raft
+	// ticks after defaultRaftElectionTimeoutTicks before holding an election.
+	// The actual election timeout per replica is selected randomly between the
+	// interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
+	defaultRaftElectionTimeoutJitterTicks = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_JITTER_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
@@ -544,9 +554,13 @@ type RaftConfig struct {
 
 	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
 	// an election. The actual election timeout is randomized by each replica to
-	// between 1-2 election timeouts. This value is inherited by individual stores
-	// unless overridden.
+	// between the interval: [defaultRaftElectionTimeoutTicks,
+	// defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	RaftElectionTimeoutTicks int64
+
+	// RaftElectionTimeoutJitter is the maximum number of ticks after
+	// RaftElectionTimeoutTicks to hold an election.
+	RaftElectionTimeoutJitter int64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
@@ -664,6 +678,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RaftElectionTimeoutJitter == 0 {
+		cfg.RaftElectionTimeoutJitter = defaultRaftElectionTimeoutJitterTicks
 	}
 	if cfg.RaftHeartbeatIntervalTicks == 0 {
 		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
