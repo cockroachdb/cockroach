@@ -115,7 +115,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	for storeID, ss := range a.cs.stores {
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
 		sls := a.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
-		if (sls.sls <= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
+		if (sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
 			ss.maxFractionPending < maxFractionPendingThreshold) || sls.fd >= fdDrain {
 			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 		}
@@ -128,7 +128,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	// first shed load from the stores of n1, before we shed load from the store
 	// on n2.
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
-		return cmp.Or(cmp.Compare(b.fd, a.fd), cmp.Compare(a.nls, b.nls), cmp.Compare(a.sls, b.sls))
+		return cmp.Or(cmp.Compare(b.fd, a.fd), -cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls))
 	})
 	var changes []*pendingReplicaChange
 	var disj [1]constraintsConj
@@ -141,7 +141,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 
 		doneShedding := false
 		ss := a.cs.stores[store.StoreID]
-		if ss.NodeID == a.nodeID && store.storeCPUSummary <= overloadSlow {
+		if ss.NodeID == a.nodeID && store.storeCPUSummary >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
 			// TODO: is this path (for StoreRebalancer) also responsible for
@@ -179,7 +179,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
-					if sls.nls <= loadNoChange || sls.fd != fdOK || sls.sls <= loadNoChange {
+					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK {
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
@@ -225,7 +225,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 		// the other stores on this node from receiving replicas shed by this
 		// store.
-		excludeStoresOnNode := store.nls < overloadSlow || store.fd != fdOK
+		excludeStoresOnNode := store.nls > overloadSlow || store.fd != fdOK
 		storesToExclude = storesToExclude[:0]
 		if excludeStoresOnNode {
 			nodeID := ss.NodeID
@@ -528,13 +528,13 @@ func (a *allocatorState) computeCandidatesForRange(
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
 		sheddingSLS := a.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
-		if sheddingSLS.sls > sheddingThreshold {
+		if sheddingSLS.sls < sheddingThreshold {
 			sheddingThreshold = sheddingSLS.sls
 		}
-		if sheddingSLS.nls > sheddingThreshold {
+		if sheddingSLS.nls < sheddingThreshold {
 			sheddingThreshold = sheddingSLS.nls
 		}
-		if sheddingSLS.sls >= loadNoChange && sheddingSLS.nls >= loadNoChange {
+		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
 			return candidateSet{}
 		}
@@ -554,7 +554,7 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
-		if csls.sls <= sheddingThreshold || csls.nls <= sheddingThreshold || csls.fd != fdOK {
+		if csls.sls >= sheddingThreshold || csls.nls >= sheddingThreshold || csls.fd != fdOK {
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
