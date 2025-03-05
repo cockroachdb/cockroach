@@ -46,32 +46,68 @@ func (t *failureSmokeTest) run(
 	}
 	// Make sure to cleanup the failure mode even if the test fails.
 	defer func() {
-		err = errors.CombineErrors(err, failureMode.Cleanup(ctx, l, t.args))
+		quietLogger, file, logErr := roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "cleanup")
+		if logErr != nil {
+			l.Printf("failed to create logger for cleanup: %v", logErr)
+			quietLogger = l
+		}
+		l.Printf("%s: Running Cleanup(); details in %s.log", t.failureName, file)
+		err = errors.CombineErrors(err, failureMode.Cleanup(ctx, quietLogger, t.args))
 	}()
-	if err = failureMode.Setup(ctx, l, t.args); err != nil {
+
+	quietLogger, file, err := roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "setup")
+	if err != nil {
 		return err
 	}
-	if err = failureMode.Inject(ctx, l, t.args); err != nil {
+	l.Printf("%s: Running Setup(); details in %s.log", t.failureName, file)
+	if err = failureMode.Setup(ctx, quietLogger, t.args); err != nil {
+		return err
+	}
+
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "inject")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running Inject(); details in %s.log", t.failureName, file)
+	if err = failureMode.Inject(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
 	// Allow the failure to take effect.
-	if err = failureMode.WaitForFailureToPropagate(ctx, l, t.args); err != nil {
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for propagate")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running WaitForFailureToPropagate(); details in %s.log", t.failureName, file)
+	if err = failureMode.WaitForFailureToPropagate(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
+	l.Printf("validating failure was properly injected")
 	if err = t.validateFailure(ctx, l, c); err != nil {
 		return err
 	}
-	if err = failureMode.Restore(ctx, l, t.args); err != nil {
+
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "restore")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running Restore(); details in %s.log", t.failureName, file)
+	if err = failureMode.Restore(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
 	// Allow the cluster to return to normal.
-	if err = failureMode.WaitForFailureToRestore(ctx, l, t.args); err != nil {
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for restore")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running WaitForFailureToRestore(); details in %s.log", t.failureName, file)
+	if err = failureMode.WaitForFailureToRestore(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
+	l.Printf("validating failure was properly restored")
 	return t.validateRestore(ctx, l, c)
 }
 
