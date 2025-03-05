@@ -49,7 +49,7 @@ type SupportManager struct {
 	receiveQueue          receiveQueue
 	storesToAdd           storesToAdd
 	minWithdrawalTS       hlc.Timestamp
-	withdrawalCallback    func(map[roachpb.StoreID]struct{})
+	withdrawalCallback    func([]roachpb.StoreID)
 	supporterStateHandler *supporterStateHandler
 	requesterStateHandler *requesterStateHandler
 	metrics               *SupportManagerMetrics
@@ -155,7 +155,7 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 
 // RegisterSupportWithdrawalCallback implements the Fabric interface and
 // registers a callback to be invoked on each support withdrawal.
-func (sm *SupportManager) RegisterSupportWithdrawalCallback(cb func(map[roachpb.StoreID]struct{})) {
+func (sm *SupportManager) RegisterSupportWithdrawalCallback(cb func([]roachpb.StoreID)) {
 	sm.withdrawalCallback = cb
 }
 
