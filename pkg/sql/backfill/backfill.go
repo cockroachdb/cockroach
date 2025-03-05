@@ -985,6 +985,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 		}
 
+		// TODO(drewk, mw5h): perform a vector search for each affected vector index, and
+		// fill out the helper.
+		var vh rowenc.VectorIndexEncodingHelper
+
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
 		// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
@@ -1005,6 +1009,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
+				vh,
 				buffer,
 				false, /* includeEmpty */
 				&ib.muBoundAccount.boundAccount,
