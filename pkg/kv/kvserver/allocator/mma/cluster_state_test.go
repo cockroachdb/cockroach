@@ -51,18 +51,18 @@ func parseLoadVector(t *testing.T, in string) LoadVector {
 	return vec
 }
 
-func parseSecondaryLoadVector(t *testing.T, in string) secondaryLoadVector {
-	var vec secondaryLoadVector
+func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
+	var vec SecondaryLoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(numSecondaryLoadDimensions))
+	require.Len(t, parts, int(NumSecondaryLoadDimensions))
 	for dim := range vec {
 		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
 
-func parseStoreLoadMsg(t *testing.T, in string) storeLoadMsg {
-	var msg storeLoadMsg
+func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
+	var msg StoreLoadMsg
 	for _, v := range strings.Fields(in) {
 		parts := strings.Split(v, "=")
 		require.Len(t, parts, 2)
@@ -70,16 +70,16 @@ func parseStoreLoadMsg(t *testing.T, in string) storeLoadMsg {
 		case "store-id":
 			msg.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
 		case "load":
-			msg.load = parseLoadVector(t, parts[1])
+			msg.Load = parseLoadVector(t, parts[1])
 		case "capacity":
-			msg.capacity = parseLoadVector(t, parts[1])
-			for i := range msg.capacity {
-				if msg.capacity[i] < 0 {
-					msg.capacity[i] = parentCapacity
+			msg.Capacity = parseLoadVector(t, parts[1])
+			for i := range msg.Capacity {
+				if msg.Capacity[i] < 0 {
+					msg.Capacity[i] = parentCapacity
 				}
 			}
 		case "secondary-load":
-			msg.secondaryLoad = parseSecondaryLoadVector(t, parts[1])
+			msg.SecondaryLoad = parseSecondaryLoadVector(t, parts[1])
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
@@ -87,30 +87,30 @@ func parseStoreLoadMsg(t *testing.T, in string) storeLoadMsg {
 	return msg
 }
 
-func parseNodeLoadMsg(t *testing.T, in string) nodeLoadMsg {
-	var msg nodeLoadMsg
+func parseNodeLoadMsg(t *testing.T, in string) NodeLoadMsg {
+	var msg NodeLoadMsg
 	lines := strings.Split(in, "\n")
 	for _, part := range strings.Fields(lines[0]) {
 		parts := strings.Split(part, "=")
 		require.Len(t, parts, 2)
 		switch parts[0] {
 		case "node-id":
-			msg.nodeID = roachpb.NodeID(parseInt(t, parts[1]))
+			msg.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
 		case "cpu-load":
-			msg.reportedCPU = LoadValue(parseInt(t, parts[1]))
+			msg.ReportedCPU = LoadValue(parseInt(t, parts[1]))
 		case "cpu-capacity":
-			msg.capacityCPU = LoadValue(parseInt(t, parts[1]))
+			msg.CapacityCPU = LoadValue(parseInt(t, parts[1]))
 		case "load-time":
 			duration, err := time.ParseDuration(parts[1])
 			require.NoError(t, err)
-			msg.loadTime = testingBaseTime.Add(duration)
+			msg.LoadTime = testingBaseTime.Add(duration)
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
 	}
-	msg.stores = make([]storeLoadMsg, 0, len(lines)-1)
+	msg.Stores = make([]StoreLoadMsg, 0, len(lines)-1)
 	for _, line := range lines[1:] {
-		msg.stores = append(msg.stores, parseStoreLoadMsg(t, line))
+		msg.Stores = append(msg.Stores, parseStoreLoadMsg(t, line))
 	}
 	return msg
 }
@@ -277,7 +277,7 @@ func TestClusterState(t *testing.T) {
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
 					fmt.Fprintf(&buf, "node-id=%s failure-summary=%s locality-tiers=%s\n",
-						ns.nodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreDescriptor.Locality())
+						ns.NodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreDescriptor.Locality())
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
 						fmt.Fprintf(&buf, "  store-id=%v membership=%v attrs=%s locality-code=%s\n",
@@ -320,7 +320,7 @@ func TestClusterState(t *testing.T) {
 						ns := cs.nodes[ss.NodeID]
 						fmt.Fprintf(&buf,
 							"store-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
-							ss.StoreID, ss.reportedLoad, ss.adjusted.load, ns.reportedCPU, ns.adjustedCPU, ss.loadSeqNum,
+							ss.StoreID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
 						)
 					}
 					return buf.String()

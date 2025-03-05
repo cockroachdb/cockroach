@@ -134,7 +134,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	var disj [1]constraintsConj
 	var storesToExclude storeIDPostingList
 	var storesToExcludeForRange storeIDPostingList
-	scratchNodes := map[roachpb.NodeID]*nodeLoad{}
+	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	for _, store := range sheddingStores {
 		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
 		// to shed leases first. See earlier longer to do.

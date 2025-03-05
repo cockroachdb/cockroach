@@ -85,22 +85,22 @@ const (
 // the latter -- confirmed by kvoli. Also look at
 // https://github.com/cockroachdb/cockroach/pull/98893 regarding load means
 // and lease means.
-type secondaryLoadDimension uint8
+type SecondaryLoadDimension uint8
 
 const (
-	leaseCount secondaryLoadDimension = iota
-	numSecondaryLoadDimensions
+	LeaseCount SecondaryLoadDimension = iota
+	NumSecondaryLoadDimensions
 )
 
-type secondaryLoadVector [numSecondaryLoadDimensions]LoadValue
+type SecondaryLoadVector [NumSecondaryLoadDimensions]LoadValue
 
-func (lv *secondaryLoadVector) add(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) add(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] += other[i]
 	}
 }
 
-func (lv *secondaryLoadVector) subtract(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) subtract(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
@@ -121,7 +121,7 @@ type RangeLoad struct {
 
 // storeLoad is the load information for a store. Roughly, this is the
 // information we need each store to provide us periodically, i.e.,
-// storeLoadMsg is the input used to compute this.
+// StoreLoadMsg is the input used to compute this.
 type storeLoad struct {
 	roachpb.StoreID
 	roachpb.StoreDescriptor
@@ -150,15 +150,15 @@ type storeLoad struct {
 	// capacity[ByteSize] is the actual capacity.
 	capacity LoadVector
 
-	reportedSecondaryLoad secondaryLoadVector
+	reportedSecondaryLoad SecondaryLoadVector
 }
 
-// nodeLoad is the load information for a node. Roughly, this is the
+// NodeLoad is the load information for a node. Roughly, this is the
 // information we need each node to provide us periodically.
-type nodeLoad struct {
-	nodeID      roachpb.NodeID
-	reportedCPU LoadValue
-	capacityCPU LoadValue
+type NodeLoad struct {
+	NodeID      roachpb.NodeID
+	ReportedCPU LoadValue
+	CapacityCPU LoadValue
 }
 
 // The mean store load for a set of stores.
@@ -168,10 +168,10 @@ type meanStoreLoad struct {
 	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
 	util [NumLoadDimensions]float64
 
-	secondaryLoad secondaryLoadVector
+	secondaryLoad SecondaryLoadVector
 }
 
-// The mean node load for a set of nodeLoad.
+// The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
 	loadCPU     LoadValue
 	capacityCPU LoadValue
@@ -251,7 +251,7 @@ type meansMemo struct {
 	constraintMatcher *constraintMatcher
 	meansMap          *clearableMemoMap[constraintsDisj, *meansForStoreSet]
 
-	scratchNodes map[roachpb.NodeID]*nodeLoad
+	scratchNodes map[roachpb.NodeID]*NodeLoad
 }
 
 var meansForStoreSetSlicePool = sync.Pool{
@@ -291,7 +291,7 @@ func newMeansMemo(
 		constraintMatcher: constraintMatcher,
 		meansMap: newClearableMapMemo[constraintsDisj, *meansForStoreSet](
 			meansForStoreSetAllocator{}, meansForStoreSetSlicePoolImpl{}),
-		scratchNodes: map[roachpb.NodeID]*nodeLoad{},
+		scratchNodes: map[roachpb.NodeID]*NodeLoad{},
 	}
 }
 
@@ -301,7 +301,7 @@ func (mm *meansMemo) clear() {
 
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) *storeLoad
-	getNodeReportedLoad(roachpb.NodeID) *nodeLoad
+	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
 	computeLoadSummary(roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
 }
 
@@ -339,7 +339,7 @@ func computeMeansForStoreSet(
 	stores storeIDPostingList,
 	loadProvider loadInfoProvider,
 	means *meansForStoreSet,
-	scratchNodes map[roachpb.NodeID]*nodeLoad,
+	scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
 	n := len(means.stores)
 	clear(scratchNodes)
@@ -378,8 +378,8 @@ func computeMeansForStoreSet(
 
 	n = len(scratchNodes)
 	for _, nl := range scratchNodes {
-		means.nodeLoad.loadCPU += nl.reportedCPU
-		means.nodeLoad.capacityCPU += nl.capacityCPU
+		means.nodeLoad.loadCPU += nl.ReportedCPU
+		means.nodeLoad.capacityCPU += nl.CapacityCPU
 	}
 	means.nodeLoad.utilCPU =
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
@@ -491,9 +491,9 @@ var _ = storeLoad{}.NodeID
 var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
-var _ = nodeLoad{}.nodeID
-var _ = nodeLoad{}.reportedCPU
-var _ = nodeLoad{}.capacityCPU
+var _ = NodeLoad{}.NodeID
+var _ = NodeLoad{}.ReportedCPU
+var _ = NodeLoad{}.CapacityCPU
 var _ = CPURate
 var _ = WriteBandwidth
 var _ = ByteSize

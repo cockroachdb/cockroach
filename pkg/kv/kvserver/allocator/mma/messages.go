@@ -17,21 +17,21 @@ import (
 //
 // TODO(sumeer): add corresponding protos.
 
-// storeLoadMsg is periodically sent by each store.
-type storeLoadMsg struct {
+// StoreLoadMsg is periodically sent by each store.
+type StoreLoadMsg struct {
 	roachpb.StoreID
 
-	load          LoadVector
-	capacity      LoadVector
-	secondaryLoad secondaryLoadVector
+	Load          LoadVector
+	Capacity      LoadVector
+	SecondaryLoad SecondaryLoadVector
 }
 
-// nodeLoadMsg provides all the load information for a node and its
+// NodeLoadMsg provides all the load information for a node and its
 // constituent stores.
-type nodeLoadMsg struct {
-	nodeLoad
-	stores   []storeLoadMsg
-	loadTime time.Time
+type NodeLoadMsg struct {
+	NodeLoad
+	Stores   []StoreLoadMsg
+	LoadTime time.Time
 }
 
 // StoreLeaseholderMsg is sent by a local store and includes information about
@@ -72,16 +72,16 @@ func (rm *RangeMsg) isDeletedRange() bool {
 // Avoid unused lint errors.
 
 var _ = (&RangeMsg{}).isDeletedRange
-var _ = storeLoadMsg{}.StoreID
-var _ = storeLoadMsg{}.load
-var _ = storeLoadMsg{}.capacity
-var _ = storeLoadMsg{}.secondaryLoad
+var _ = StoreLoadMsg{}.StoreID
+var _ = StoreLoadMsg{}.Load
+var _ = StoreLoadMsg{}.Capacity
+var _ = StoreLoadMsg{}.SecondaryLoad
 var _ = StoreLeaseholderMsg{}.StoreID
 var _ = StoreLeaseholderMsg{}.Ranges
 var _ = RangeMsg{}.RangeID
 var _ = RangeMsg{}.Replicas
 var _ = RangeMsg{}.Conf
 var _ = RangeMsg{}.RangeLoad
-var _ = nodeLoadMsg{}.nodeLoad
-var _ = nodeLoadMsg{}.stores
-var _ = nodeLoadMsg{}.loadTime
+var _ = NodeLoadMsg{}.NodeLoad
+var _ = NodeLoadMsg{}.Stores
+var _ = NodeLoadMsg{}.LoadTime
