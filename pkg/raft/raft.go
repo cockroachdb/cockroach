@@ -105,6 +105,10 @@ type Config struct {
 	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
 	// unnecessary leader switching.
 	ElectionTick int64
+	// ElectionJitter is the maximum number of ticks that a follower will wait
+	// after ElectionTick before starting an election. It is used to prevent hung
+	// elections in the case where multiple followers campaign at the same time.
+	ElectionJitterTick int64
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
 	// leadership every HeartbeatTick ticks.
@@ -277,6 +281,10 @@ func (c *Config) validate() error {
 		return errors.New("election tick must be greater than heartbeat tick")
 	}
 
+	if c.ElectionJitterTick <= 0 {
+		return errors.New("election jitter tick must be greater than 0")
+	}
+
 	if c.Storage == nil {
 		return errors.New("storage cannot be nil")
 	}
@@ -427,8 +435,9 @@ type raft struct {
 	checkQuorum      bool
 	preVote          bool
 
-	heartbeatTimeout int64
-	electionTimeout  int64
+	heartbeatTimeout      int64
+	electionTimeout       int64
+	electionTimeoutJitter int64
 	// randomizedElectionTimeout is a random number between
 	// [electiontimeout, 2 * electiontimeout - 1]. It gets reset
 	// when raft changes its state to follower or candidate.
@@ -463,6 +472,7 @@ func newRaft(c *Config) *raft {
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
+		electionTimeoutJitter:       c.ElectionJitterTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
 		maxInflight:                 c.MaxInflightMsgs,
@@ -2849,7 +2859,7 @@ func (r *raft) atRandomizedElectionTimeout() bool {
 }
 
 func (r *raft) resetRandomizedElectionTimeout() {
-	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Int63n(r.electionTimeout)
+	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Int63n(r.electionTimeoutJitter)
 }
 
 func (r *raft) transferLeader(to pb.PeerID) {

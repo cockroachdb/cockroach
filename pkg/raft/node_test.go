@@ -292,15 +292,16 @@ func TestNodeStart(t *testing.T) {
 	}
 	storage := NewMemoryStorage()
 	c := &Config{
-		ID:              1,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 1,
+		ElectionTick:       10,
+		ElectionJitterTick: 10,
+		HeartbeatTick:      1,
+		Storage:            storage,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      raftstoreliveness.AlwaysLive{},
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 
 	rn, err := NewRawNode(c)
@@ -357,15 +358,16 @@ func TestNodeRestart(t *testing.T) {
 	require.NoError(t, storage.SetHardState(st))
 	require.NoError(t, storage.Append(entries))
 	c := &Config{
-		ID:              1,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 1,
+		ElectionTick:       10,
+		ElectionJitterTick: 10,
+		HeartbeatTick:      1,
+		Storage:            storage,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      raftstoreliveness.AlwaysLive{},
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
@@ -406,15 +408,16 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	require.NoError(t, s.ApplySnapshot(snap))
 	require.NoError(t, s.Append(entries))
 	c := &Config{
-		ID:              1,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         s,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 1,
+		ElectionTick:       10,
+		ElectionJitterTick: 10,
+		HeartbeatTick:      1,
+		Storage:            s,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      raftstoreliveness.AlwaysLive{},
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
@@ -429,15 +432,16 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 func TestNodeAdvance(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1))
 	c := &Config{
-		ID:              1,
-		ElectionTick:    10,
-		HeartbeatTick:   1,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   raftstoreliveness.AlwaysLive{},
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 1,
+		ElectionTick:       10,
+		ElectionJitterTick: 10,
+		HeartbeatTick:      1,
+		Storage:            storage,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      raftstoreliveness.AlwaysLive{},
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)

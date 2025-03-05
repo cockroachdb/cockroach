@@ -1311,36 +1311,40 @@ func TestAtRandomizedElectionTimeout(t *testing.T) {
 		wprobability float64
 		round        bool
 	}{
-		// randomizedElectionTimeout = [10,20).
+		// randomizedElectionTimeout = [10,15) since we are setting the
+		// electionTimeoutJitter field to 5 below.
 		// electionElapsed less than the electionTimeout should never campaign.
 		{0, 0, false},
 		{5, 0, false},
 		{9, 0, false},
 
-		// Since there are 10 possible values for randomizedElectionTimeout, we
-		// expect the probability to be 1/10 for each value.
-		{10, 0.1, true},
-		{13, 0.1, true},
-		{15, 0.1, true},
-		{18, 0.1, true},
-		{20, 0.1, true},
-
-		// No possible value of randomizedElectionTimeout [10,20) would cause an
-		// election at electionElapsed = 21.
-		{21, 0, false},
-
-		// Only one out of ten values of randomizedElectionTimeout (11) leads to
-		// election at electionElapsed = 22.
-		{22, 0.1, true},
-
+		// Since there are 5 possible values for randomizedElectionTimeout, we
+		// expect the probability to be 1/5 for each value.
+		{10, 0.2, true},
+		{11, 0.2, true},
+		{14, 0.2, true},
+		//
+		// No possible value of randomizedElectionTimeout [10,15) would cause an
+		// election at electionElapsed = [15,19].
+		{15, 0, false},
+		{16, 0, false},
+		{17, 0, false},
+		{18, 0, false},
+		{19, 0, false},
+		//
+		// Only one out of ten values of randomizedElectionTimeout (10) leads to
+		// election at electionElapsed = 20.
+		{22, 0.2, true},
+		//
 		// Two out of ten values of randomizedElectionTimeout (10, 11) would lead
 		// to election at electionElapsed = 120.
-		{110, 0.2, true},
+		{110, 0.4, true},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 		sm.electionElapsed = tt.electionElapsed
+		sm.electionTimeoutJitter = 5
 		c := 0
 		for j := 0; j < 10000; j++ {
 			sm.resetRandomizedElectionTimeout()
@@ -1865,7 +1869,6 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnable
 	assert.Equal(t, pb.StateFollower, c.state)
 	// follower c term is reset with leader's
 	assert.Equal(t, a.Term, c.Term)
-
 }
 
 // The following three tests exercise the behavior of a (pre-)candidate when its
@@ -5384,16 +5387,17 @@ func newTestConfig(
 	}
 
 	return &Config{
-		ID:              id,
-		ElectionTick:    election,
-		HeartbeatTick:   heartbeat,
-		Storage:         storage,
-		MaxSizePerMsg:   noLimit,
-		MaxInflightMsgs: 256,
-		StoreLiveness:   storeLiveness,
-		Logger:          logger,
-		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
-		Metrics:         NewMetrics(),
+		ID:                 id,
+		ElectionTick:       election,
+		ElectionJitterTick: election,
+		HeartbeatTick:      heartbeat,
+		Storage:            storage,
+		MaxSizePerMsg:      noLimit,
+		MaxInflightMsgs:    256,
+		StoreLiveness:      storeLiveness,
+		Logger:             logger,
+		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
+		Metrics:            NewMetrics(),
 	}
 }
 
