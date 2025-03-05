@@ -3,12 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package operations
+package helpers
 
 import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,14 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-// systemDBs lists dbs created by default on a new cockroachdb cluster. These
+// SystemDBs lists dbs created by default on a new cockroachdb cluster. These
 // may not be mutable and should be excluded by most operations.
-var systemDBs = []string{"system", "information_schema", "crdb_internal", "defaultdb", "postgres"}
+var SystemDBs = []string{"system", "information_schema", "crdb_internal", "defaultdb", "postgres"}
 
-// pickRandomDB returns roachtestflags.DBName if not empty.
+// rowEvaluator evaluates and extracts the values from each row passed as rowValues
+type rowEvaluator func(rowValues []string) error
+
+// PickRandomDB returns roachtestflags.DBName if not empty.
 // Otherwise, picks a random DB that isn't one of `excludeDBs` on the
 // target cluster connected to by `conn`.
-func pickRandomDB(
+func PickRandomDB(
 	ctx context.Context, o operation.Operation, conn *gosql.DB, excludeDBs []string,
 ) string {
 	if roachtestflags.DBName != "" {
@@ -66,9 +71,9 @@ func pickRandomDB(
 	return dbNames[rng.Intn(len(dbNames))]
 }
 
-// pickRandomTable returns roachtestflags.TableName if not empty.
+// PickRandomTable returns roachtestflags.TableName if not empty.
 // Otherwise, picks a random table from given database.
-func pickRandomTable(
+func PickRandomTable(
 	ctx context.Context, o operation.Operation, conn *gosql.DB, dbName string,
 ) string {
 	if roachtestflags.TableName != "" {
@@ -100,7 +105,7 @@ func pickRandomTable(
 	return tableNames[rng.Intn(len(tableNames))]
 }
 
-func pickRandomRole(ctx context.Context, o operation.Operation, conn *gosql.DB) string {
+func PickRandomRole(ctx context.Context, o operation.Operation, conn *gosql.DB) string {
 	rng, _ := randutil.NewPseudoRand()
 
 	roles, err := conn.QueryContext(ctx, "SELECT username FROM [SHOW ROLES]")
@@ -121,7 +126,7 @@ func pickRandomRole(ctx context.Context, o operation.Operation, conn *gosql.DB) 
 	return roleNames[rng.Intn(len(roleNames))]
 }
 
-func drainNode(
+func DrainNode(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, node option.NodeListOption,
 ) {
 	o.Status(fmt.Sprintf("draining node %s", node.NodeIDsString()))
@@ -158,7 +163,7 @@ func drainNode(
 	o.Fatalf("drain failed: %v", err)
 }
 
-func decommissionNode(
+func DecommissionNode(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, node option.NodeListOption,
 ) {
 	o.Status(fmt.Sprintf("decommissioning node %s", node.NodeIDsString()))
@@ -179,8 +184,8 @@ func decommissionNode(
 	c.Run(ctx, option.WithNodes(node), cmd.String())
 }
 
-// Pick a random store in the node.
-func pickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB, nodeId int) int {
+// PickRandomStore picks a random store in the node.
+func PickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB, nodeId int) int {
 	rng, _ := randutil.NewPseudoRand()
 	storeIds, err := conn.QueryContext(ctx,
 		fmt.Sprintf("SELECT store_id FROM crdb_internal.kv_store_status where node_id=%d", nodeId))
@@ -201,8 +206,8 @@ func pickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB,
 	return stores[rng.Intn(len(stores))]
 }
 
-// Returns true if the schema_locked parameter is set on this table.
-func isSchemaLocked(o operation.Operation, conn *gosql.DB, db, tbl string) bool {
+// IsSchemaLocked returns true if the schema_locked parameter is set on this table.
+func IsSchemaLocked(o operation.Operation, conn *gosql.DB, db, tbl string) bool {
 	showTblStmt := fmt.Sprintf("SHOW CREATE %s.%s", db, tbl)
 	var tblName, createStmt string
 	err := conn.QueryRow(showTblStmt).Scan(&tblName, &createStmt)
@@ -212,8 +217,8 @@ func isSchemaLocked(o operation.Operation, conn *gosql.DB, db, tbl string) bool 
 	return strings.Contains(createStmt, "schema_locked = true")
 }
 
-// Set the schema_locked storage parameter.
-func setSchemaLocked(
+// SetSchemaLocked sets the schema_locked storage parameter.
+func SetSchemaLocked(
 	ctx context.Context, o operation.Operation, conn *gosql.DB, db, tbl string, lock bool,
 ) {
 	stmt := fmt.Sprintf("ALTER TABLE %s.%s SET (schema_locked=%v)", db, tbl, lock)
@@ -222,4 +227,48 @@ func setSchemaLocked(
 	if err != nil {
 		o.Fatal(err)
 	}
+}
+
+// ExecuteQuery executes the query and invokes the rowEvaluator for processing each row
+func ExecuteQuery(ctx context.Context, cb rowEvaluator, conn *gosql.DB, query string) error {
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	colHeaders, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	// Will be used to read data while iterating rows.
+	colPointers := make([]interface{}, len(colHeaders))
+	colContainer := make([]string, len(colHeaders))
+	for i := range colPointers {
+		colPointers[i] = &colContainer[i]
+	}
+	for rows.Next() {
+		err = rows.Scan(colPointers...)
+		if err != nil {
+			return err
+		}
+		rowValues := make([]string, len(colContainer))
+		copy(rowValues, colContainer)
+		err = cb(rowValues)
+		if err != nil {
+			break
+		}
+	}
+	return err
+}
+
+// EnvOrDefaultInt returns the value set by the specified environment
+// variable, if any, otherwise the specified default value.
+func EnvOrDefaultInt(name string, value int) (int, error) {
+	if str, present := os.LookupEnv(name); present {
+		v, err := strconv.ParseInt(str, 0, 0)
+		if err != nil {
+			return 0, err
+		}
+		return int(v), nil
+	}
+	return value, nil
 }

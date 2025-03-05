@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -54,8 +55,8 @@ func runGrant(
 	defer func() { _ = conn.Close() }()
 
 	rng, _ := randutil.NewTestRand()
-	dbName := pickRandomDB(ctx, o, conn, systemDBs)
-	tableName := pickRandomTable(ctx, o, conn, dbName)
+	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
+	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
 	// the dbUser cannot have a number in the beginning. So, adding an "a" to ensure that the first letter will not be a number
 	dbUser := fmt.Sprintf("roachprod_ops_add_role_%s", randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
 
