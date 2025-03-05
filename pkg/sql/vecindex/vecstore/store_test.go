@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -61,6 +62,7 @@ func (ts *testStore) InsertVector(t *testing.T, treeID int, vec vector.T) cspann
 
 func TestStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -140,4 +142,53 @@ func TestStore(t *testing.T) {
 	// Re-run the tests with a prefixed index.
 	usePrefix = true
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
+}
+
+func TestQuantizeAndEncode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dims := 4
+	seed := int64(42)
+
+	// Create test vectors.
+	vec1 := vector.T{1.0, 2.0, 3.0, 4.0}
+	vec2 := vector.T{-1.0, -2.0, -3.0, -4.0}
+	centroid := vector.T{0.0, 0.0, 0.0, 0.0}
+
+	// Create a RaBitQuantizer.
+	quantizer := quantize.NewRaBitQuantizer(dims, seed)
+
+	// Create a transaction.
+	tx := &Txn{
+		codec:     makeStoreCodec(quantizer),
+		rootCodec: makeStoreCodec(quantize.NewUnQuantizer(dims)),
+	}
+
+	// Test encoding with non-root partition key (uses RaBitQuantizer).
+	partitionKey := cspann.PartitionKey(123)
+	encoded1, err := tx.QuantizeAndEncode(partitionKey, centroid, vec1)
+	require.NoError(t, err)
+	require.NotEmpty(t, encoded1)
+
+	// Verify we can decode the encoded vector.
+	codec := tx.getCodecForPartitionKey(partitionKey)
+	codec.clear(1, centroid)
+	_, err = codec.decodeVector(encoded1)
+	require.NoError(t, err)
+	vs := codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
+	require.Equal(t, 1, vs.GetCount())
+
+	// Encode a different vector with root partition key (uses UnQuantizer).
+	encoded2, err := tx.QuantizeAndEncode(cspann.RootKey, centroid, vec2)
+	require.NoError(t, err)
+	require.NotEmpty(t, encoded2)
+
+	// Verify we can decode the encoded vector.
+	codec = tx.getCodecForPartitionKey(partitionKey)
+	codec.clear(1, centroid)
+	_, err = codec.decodeVector(encoded1)
+	require.NoError(t, err)
+	vs = codec.getVectorSet().(*quantize.RaBitQuantizedVectorSet)
+	require.Equal(t, 1, vs.GetCount())
 }
