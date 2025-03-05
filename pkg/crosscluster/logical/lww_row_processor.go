@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -78,6 +79,15 @@ type querier interface {
 	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
 	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
 	RequiresParsedBeforeRow(catid.DescID) bool
+}
+
+// isLwwLoser returns true if the error is a ConditionFailedError with an
+// OriginTimestampOlderThan set.
+func isLwwLoser(err error) bool {
+	if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
+		return condErr.OriginTimestampOlderThan.IsSet()
+	}
+	return false
 }
 
 type queryBuilder struct {
@@ -592,6 +602,9 @@ func (lww *lwwQuerier) InsertRow(
 			sess.QualityOfService = nil
 		}
 		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
+			if isLwwLoser(err) {
+				return batchStats{}, nil
+			}
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -615,7 +628,11 @@ func (lww *lwwQuerier) InsertRow(
 		sess.QualityOfService = nil
 	}
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
-	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
+	_, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...)
+	if isLwwLoser(err) {
+		return batchStats{}, nil
+	}
+	if err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}

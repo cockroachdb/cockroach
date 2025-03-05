@@ -41,6 +41,11 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		)
 
 	case *kvpb.ConditionFailedError:
+		if !v.OriginTimestampOlderThan.IsEmpty() {
+			// NOTE: we return the go error here because this error should never be
+			// communicated to pgwire. It's exposed for the LDR writer.
+			return origPErr.GoError()
+		}
 		if origPErr.Index == nil {
 			break
 		}
