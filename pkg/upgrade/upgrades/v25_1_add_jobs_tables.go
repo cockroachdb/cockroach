@@ -170,7 +170,7 @@ func backfillJobsTablesAndColumns(
 				// owner to an empty string) and continuing so that the upgrade
 				// completes.
 				if row == nil {
-					return errors.Newf("job %d missing from crdb_internal.jobs", id)
+					return jobs.MarkAsPermanentJobError(errors.Newf("job %d missing from crdb_internal.jobs", id))
 				}
 
 				// Update the job row.
