@@ -9,10 +9,10 @@ package status
 
 import (
 	"context"
-	"math"
 	"reflect"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/crlib/crtime"
@@ -92,27 +92,64 @@ import (
 //
 //  typedef struct {
 //     bool seen_per_arenas_stats;
-// } stats_context_t;
+//     char* buffer;
+//     int buffer_capacity;
+//     int buffer_size;
+//     bool outputted_all_stats;
+// } StatsContext;
 // static void truncate_before_arenas_cb(void *opaque, const char *msg) {
-//     stats_context_t *ctx = (stats_context_t *)opaque;
+//     StatsContext *ctx = (StatsContext *)opaque;
 //     if (ctx->seen_per_arenas_stats) {
 //         return;
 //     }
 //     const char *arena_pos = strstr(msg, "arenas[");
 //     if (arena_pos != NULL) {
-//         size_t len_to_print = (size_t)(arena_pos - msg);
-//         fwrite(msg, 1, len_to_print, stderr);
+//         size_t pre_arenas_length = (size_t)(arena_pos - msg);
+//         size_t remaining_space = ctx->buffer_capacity - ctx->buffer_size - 1;
+//         size_t copy_length = (remaining_space > pre_arenas_length) ? pre_arenas_length : remaining_space;
+//         strncat(ctx->buffer, msg, copy_length);
+//         ctx->buffer_size += copy_length;
 //         ctx->seen_per_arenas_stats = true;
 //     } else {
-//         fputs(msg, stderr);
+//         size_t msg_length = strlen(msg);
+//         size_t remaining_space = ctx->buffer_capacity - ctx->buffer_size - 1;
+//         int copy_length = (remaining_space > msg_length) ? msg_length : remaining_space;
+//         ctx->buffer_size += copy_length;
+//         strncat(ctx->buffer, msg, copy_length);
 //     }
 // }
-// void jemalloc_stats_print_abbreviated(void) {
-//     stats_context_t ctx = {.seen_per_arenas_stats = false};
-//     fputs("jemalloc stats (abbreviated):\n", stderr);
+// void jemalloc_stats_print_abbreviated(char* buffer, int buffer_capacity) {
+//     StatsContext ctx = {.seen_per_arenas_stats = false,
+//	                       .buffer_capacity=buffer_capacity,
+//	                       .buffer=buffer,
+//	                       .buffer_size=0};
 //     je_malloc_stats_print(truncate_before_arenas_cb, &ctx, NULL);
 // }
+//
+// static void verbose_cb(void *opaque, const char *msg) {
+//     StatsContext *ctx = (StatsContext *)opaque;
+//     size_t msg_length = strlen(msg);
+//     size_t remaining_space = ctx->buffer_capacity - ctx->buffer_size - 1;
+//     if (remaining_space < msg_length) {
+//         ctx->outputted_all_stats = false;
+//         return;
+//     }
+//     ctx->buffer_size += msg_length;
+//     strncat(ctx->buffer, msg, msg_length);
+// }
+//
+// bool jemalloc_stats_print_verbose(char* buffer, int buffer_capacity) {
+//     StatsContext ctx = {.buffer=buffer,
+//	                       .buffer_capacity=buffer_capacity,
+//	                       .buffer_size=0,
+//	                       .outputted_all_stats=true};
+//     je_malloc_stats_print(verbose_cb, &ctx, NULL);
+//     return ctx.outputted_all_stats;
+// }
 import "C"
+
+const jemallocStatsAbbreviatedBufferCapacity = 8000
+const jemallocStatsVerboseBufferCapacity = 64000
 
 func init() {
 	if getCgoMemStats != nil {
@@ -143,20 +180,25 @@ func getJemallocStats(ctx context.Context) (cgoAlloc uint, cgoTotal uint, _ erro
 		log.Infof(ctx, "jemalloc stats: %s", redact.Safe(strings.Join(stats, " ")))
 	}
 
-	// NB: the `!V(MaxInt32)` condition is a workaround to not spew this to the
-	// logs whenever log interception (log spy) is active. If we refactored
-	// je_malloc_stats_print to return a string that we can `log.Infof` instead,
-	// we wouldn't need this.
-	if log.V(1) && !log.V(math.MaxInt32) {
+	if log.V(1) {
 		if log.V(3) {
 			// Detailed jemalloc stats (very verbose, includes per-arena stats).
-			C.je_malloc_stats_print(nil, nil, nil)
+			buffer := [jemallocStatsVerboseBufferCapacity]byte{}
+			outputtedAllStats := C.jemalloc_stats_print_verbose((*C.char)(unsafe.Pointer(&buffer[0])), C.int(jemallocStatsVerboseBufferCapacity))
+			statsStr := C.GoString((*C.char)(unsafe.Pointer(&buffer[0])))
+			if !outputtedAllStats {
+				log.Infof(ctx, "jemalloc stats (verbose):\n%s...", statsStr)
+			} else {
+				log.Infof(ctx, "jemalloc stats (verbose):\n%s", statsStr)
+			}
 		} else {
 			// Abbreviated jemalloc stats (does not include per-arena stats).
-			C.jemalloc_stats_print_abbreviated()
+			buffer := [jemallocStatsAbbreviatedBufferCapacity]byte{}
+			C.jemalloc_stats_print_abbreviated((*C.char)(unsafe.Pointer(&buffer[0])), C.int(jemallocStatsAbbreviatedBufferCapacity))
+			statsStr := C.GoString((*C.char)(unsafe.Pointer(&buffer[0])))
+			log.Infof(ctx, "jemalloc stats (abbreviated):\n%s", statsStr)
 		}
 	}
-
 	// js.Allocated corresponds to stats.allocated, which is effectively the sum
 	// of outstanding allocations times the size class; thus it includes internal
 	// fragmentation.
@@ -217,7 +259,11 @@ func jemallocMaybePurge(
 		return
 	}
 
-	C.jemalloc_stats_print_abbreviated()
+	buffer := [jemallocStatsAbbreviatedBufferCapacity]byte{}
+	C.jemalloc_stats_print_abbreviated((*C.char)(unsafe.Pointer(&buffer[0])), C.int(jemallocStatsAbbreviatedBufferCapacity))
+	statsStr := C.GoString((*C.char)(unsafe.Pointer(&buffer[0])))
+	log.Infof(ctx, "jemalloc stats (abbreviated):\n%s", statsStr)
+
 	res, err := C.jemalloc_purge()
 	if err != nil || res != 0 {
 		log.Warningf(ctx, "jemalloc purging failed: %v (res=%d)", err, int(res))
