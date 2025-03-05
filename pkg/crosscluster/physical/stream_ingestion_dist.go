@@ -631,13 +631,15 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 			execinfrapb.PostProcessSpec{},
 			streamIngestionResultTypes,
 			execinfrapb.Ordering{},
+			nil, /* finalizeLastStageCb */
 		)
 
 		// The ResultRouters from the previous stage will feed in to the
 		// StreamIngestionFrontier processor.
-		p.AddSingleGroupStage(ctx, gatewayID,
-			execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
-			execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
+		p.AddSingleGroupStage(
+			ctx, gatewayID, execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
+			execinfrapb.PostProcessSpec{}, streamIngestionResultTypes, nil, /* finalizeLastStageCb */
+		)
 
 		p.PlanToStreamColMap = []int{0}
 		sql.FinalizePlan(ctx, planCtx, p)

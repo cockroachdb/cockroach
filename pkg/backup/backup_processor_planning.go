@@ -187,7 +187,7 @@ func distBackup(
 	p := planCtx.NewPhysicalPlan()
 	// All of the progress information is sent through the metadata stream, so we
 	// have an empty result stream.
-	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{})
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, []*types.T{}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
 	p.PlanToStreamColMap = []int{}
 
 	sql.FinalizePlan(ctx, planCtx, p)

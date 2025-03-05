@@ -623,6 +623,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		execinfrapb.PostProcessSpec{},
 		logicalReplicationWriterResultType,
 		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
 	)
 	physicalPlan.PlanToStreamColMap = []int{0}
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
@@ -715,6 +716,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 		execinfrapb.PostProcessSpec{},
 		logicalReplicationWriterResultType,
 		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
 	)
 
 	physPlan.PlanToStreamColMap = []int{0}

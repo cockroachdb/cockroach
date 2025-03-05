@@ -104,6 +104,7 @@ func distImport(
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 			[]*types.T{types.Bytes, types.Bytes},
 			execinfrapb.Ordering{},
+			nil, /* finalizeLastStageCb */
 		)
 
 		p.PlanToStreamColMap = []int{0, 1}

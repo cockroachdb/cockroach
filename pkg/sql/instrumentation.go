@@ -936,14 +936,19 @@ func (ih *instrumentationHelper) getAssociateNodeWithComponentsFn() func(exec.No
 
 // execNodeTraceMetadata associates exec.Nodes with metadata for corresponding
 // execution components.
-// Currently, we only store info about processors. A node can correspond to
-// multiple processors if the plan is distributed.
+//
+// A single exec.Node might result in multiple stages in the physical plan, and
+// each stage will be represented by a separate execComponents object. The
+// stages are accumulated in the order of creation, meaning that later stages
+// appear later in the slice.
 //
 // TODO(radu): we perform similar processing of execution traces in various
 // parts of the code. Come up with some common infrastructure that makes this
 // easier.
-type execNodeTraceMetadata map[exec.Node]execComponents
+type execNodeTraceMetadata map[exec.Node][]execComponents
 
+// execComponents contains all components that correspond to a single stage of
+// a physical plan.
 type execComponents []execinfrapb.ComponentID
 
 // associateNodeWithComponents is called during planning, as processors are
@@ -951,7 +956,11 @@ type execComponents []execinfrapb.ComponentID
 func (m execNodeTraceMetadata) associateNodeWithComponents(
 	node exec.Node, components execComponents,
 ) {
-	m[node] = components
+	if prevComponents, ok := m[node]; ok {
+		m[node] = append(prevComponents, components)
+	} else {
+		m[node] = []execComponents{components}
+	}
 }
 
 // annotateExplain aggregates the statistics in the trace and annotates
@@ -978,60 +987,72 @@ func (m execNodeTraceMetadata) annotateExplain(
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
 		wrapped := n.WrappedNode()
-		if components, ok := m[wrapped]; ok {
+		if componentsMultipleStages, ok := m[wrapped]; ok {
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
 			var sqlInstanceIDs, kvNodeIDs intsets.Fast
 			var regions []string
-			for _, c := range components {
-				if c.Type == execinfrapb.ComponentID_PROCESSOR {
-					sqlInstanceIDs.Add(int(c.SQLInstanceID))
-					if region := sqlInstanceIDToRegion[int64(c.SQLInstanceID)]; region != "" {
-						// Add only if the region is not an empty string (it
-						// will be an empty string if the region is not setup).
-						regions = util.InsertUnique(regions, region)
+			lastStageIdx := len(componentsMultipleStages) - 1
+		OUTER:
+			for stageIdx, components := range componentsMultipleStages {
+				for _, c := range components {
+					if c.Type == execinfrapb.ComponentID_PROCESSOR {
+						sqlInstanceIDs.Add(int(c.SQLInstanceID))
+						if region := sqlInstanceIDToRegion[int64(c.SQLInstanceID)]; region != "" {
+							// Add only if the region is not an empty string (it
+							// will be an empty string if the region is not
+							// setup).
+							regions = util.InsertUnique(regions, region)
+						}
 					}
+					stats := statsMap[c]
+					if stats == nil {
+						incomplete = true
+						break OUTER
+					}
+					for _, kvNodeID := range stats.KV.NodeIDs {
+						kvNodeIDs.Add(int(kvNodeID))
+					}
+					regions = util.CombineUnique(regions, stats.KV.Regions)
+					if stageIdx == lastStageIdx {
+						// Row count and batch count are special statistics that
+						// we need to populate based only on the last stage of
+						// processors.
+						nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
+						nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
+					}
+					nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
+					nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
+					nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
+					nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
+					nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
+					nodeStats.KVBatchRequestsIssued.MaybeAdd(stats.KV.BatchRequestsIssued)
+					nodeStats.UsedStreamer = nodeStats.UsedStreamer || stats.KV.UsedStreamer
+					nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
+					nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
+					nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
+					nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
+					nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
+					nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
+					if noMutations && !makeDeterministic {
+						// Currently we cannot separate SQL CPU time from local
+						// KV CPU time for mutations, since they do not collect
+						// statistics. Additionally, some platforms do not
+						// support usage of the grunning library, so we can't
+						// show this field when a deterministic output is
+						// required.
+						// TODO(drewk): once the grunning library is fully
+						// supported we can unconditionally display the CPU time
+						// here and in output.go and component_stats.go.
+						nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
+					}
+					nodeStats.UsedFollowerRead = nodeStats.UsedFollowerRead || stats.KV.UsedFollowerRead
 				}
-				stats := statsMap[c]
-				if stats == nil {
-					incomplete = true
-					break
-				}
-				for _, kvNodeID := range stats.KV.NodeIDs {
-					kvNodeIDs.Add(int(kvNodeID))
-				}
-				regions = util.CombineUnique(regions, stats.KV.Regions)
-				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
-				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
-				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
-				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
-				nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
-				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
-				nodeStats.KVBatchRequestsIssued.MaybeAdd(stats.KV.BatchRequestsIssued)
-				nodeStats.UsedStreamer = stats.KV.UsedStreamer
-				nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
-				nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
-				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
-				nodeStats.InternalSeekCount.MaybeAdd(stats.KV.NumInternalSeeks)
-				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
-				nodeStats.MaxAllocatedMem.MaybeAdd(stats.Exec.MaxAllocatedMem)
-				nodeStats.MaxAllocatedDisk.MaybeAdd(stats.Exec.MaxAllocatedDisk)
-				if noMutations && !makeDeterministic {
-					// Currently we cannot separate SQL CPU time from local KV CPU time
-					// for mutations, since they do not collect statistics. Additionally,
-					// some platforms do not support usage of the grunning library, so we
-					// can't show this field when a deterministic output is required.
-					// TODO(drewk): once the grunning library is fully supported we can
-					// unconditionally display the CPU time here and in output.go and
-					// component_stats.go.
-					nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
-				}
-				nodeStats.UsedFollowerRead = nodeStats.UsedFollowerRead || stats.KV.UsedFollowerRead
 			}
 			// If we didn't get statistics for all processors, we don't show the
-			// incomplete results. In the future, we may consider an incomplete flag
-			// if we want to show them with a warning.
+			// incomplete results. In the future, we may consider an incomplete
+			// flag if we want to show them with a warning.
 			if !incomplete {
 				for i, ok := sqlInstanceIDs.Next(0); ok; i, ok = sqlInstanceIDs.Next(i + 1) {
 					nodeStats.SQLNodes = append(nodeStats.SQLNodes, fmt.Sprintf("n%d", i))

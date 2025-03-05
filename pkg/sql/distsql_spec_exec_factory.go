@@ -102,7 +102,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		planCtx := e.getPlanCtx(canDistribute)
 		colTypes := getTypesFromResultColumns(cols)
 		spec := e.dsp.createValuesSpec(planCtx, colTypes, len(rows), nil /* rawBytes */)
-		physPlan, _, err := e.dsp.createValuesPlan(planCtx, spec, colTypes)
+		physPlan, _, err := e.dsp.createValuesPlan(planCtx, spec, colTypes, nil /* finalizeLastStageCb */)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +145,7 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 		if err != nil {
 			return nil, err
 		}
-		physPlan, _, err = e.dsp.createValuesPlan(planCtx, spec, colTypes)
+		physPlan, _, err = e.dsp.createValuesPlan(planCtx, spec, colTypes, nil /* finalizeLastStageCb */)
 	}
 	if err != nil {
 		return nil, err
@@ -319,7 +319,7 @@ func (e *distSQLSpecExecFactory) checkExprsAndMaybeMergeLastStage(
 				// make sure that there is a single stream on a node. We could
 				// do so on one of the nodes that streams originate from, but
 				// for now we choose the gateway.
-				physPlan.EnsureSingleStreamOnGateway(e.ctx)
+				physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 			}
 			break
 		}
@@ -334,7 +334,7 @@ func (e *distSQLSpecExecFactory) ConstructFilter(
 	recommendation := e.checkExprsAndMaybeMergeLastStage([]tree.TypedExpr{filter}, physPlan)
 	// AddFilter will attempt to push the filter into the last stage of
 	// processors.
-	if err := physPlan.AddFilter(e.ctx, filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap); err != nil {
+	if err := physPlan.AddFilter(e.ctx, filter, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, nil /* finalizeLastStageCb */); err != nil {
 		return nil, err
 	}
 	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
@@ -365,6 +365,7 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	physPlan.AddProjection(
 		projection,
 		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+		nil, /* finalizeLastStageCb */
 	)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(
 		cols, nil /* colNames */, physPlan.GetResultTypes(), physPlan.ResultColumns,
@@ -377,12 +378,12 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
-	physPlan.EnsureSingleStreamOnGateway(e.ctx)
+	physPlan.EnsureSingleStreamOnGateway(e.ctx, nil /* finalizeLastStageCb */)
 	projection := make([]uint32, len(cols))
 	for i, col := range cols {
 		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
 	}
-	physPlan.AddProjection(projection, execinfrapb.Ordering{})
+	physPlan.AddProjection(projection, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	return plan, nil
@@ -400,7 +401,7 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
 		e.ctx, exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
-		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap), nil, /* finalizeLastStageCb */
 	); err != nil {
 		return nil, err
 	}
@@ -619,7 +620,7 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 		errorOnDup,
 		e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap),
 	)
-	e.dsp.addDistinctProcessors(e.ctx, physPlan, spec)
+	e.dsp.addDistinctProcessors(e.ctx, physPlan, spec, nil /* finalizeLastStageCb */)
 	// Since addition of distinct processors doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
@@ -659,7 +660,7 @@ func (e *distSQLSpecExecFactory) ConstructSort(
 	physPlan, plan := getPhysPlan(input)
 	// TODO(yuzefovich): add better heuristics here so that we always distribute
 	// "large" sorts, as controlled by a session variable.
-	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)
+	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */, nil /* finalizeLastStageCb */)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -825,7 +826,7 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 	if err != nil {
 		return nil, err
 	}
-	if err = physPlan.AddLimit(e.ctx, count, offset, e.getPlanCtx(recommendation)); err != nil {
+	if err = physPlan.AddLimit(e.ctx, count, offset, e.getPlanCtx(recommendation), nil /* finalizeLastStageCb */); err != nil {
 		return nil, err
 	}
 	// Since addition of limit and/or offset doesn't change any properties of
@@ -847,7 +848,7 @@ func (e *distSQLSpecExecFactory) ConstructTopK(
 	}
 	// TODO(yuzefovich): add better heuristics here so that we always distribute
 	// "large" sorts, as controlled by a session variable.
-	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k)
+	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, k, nil /* finalizeLastStageCb */)
 	// Since addition of topk doesn't change any properties of
 	// the physical plan, we don't need to update any of those.
 	return plan, nil
@@ -877,6 +878,7 @@ func (e *distSQLSpecExecFactory) ConstructProjectSet(
 			exprs:           exprs,
 			numColsPerGen:   numColsPerGen,
 		},
+		nil, /* finalizeLastStageCb */
 	)
 	if err != nil {
 		return nil, err
