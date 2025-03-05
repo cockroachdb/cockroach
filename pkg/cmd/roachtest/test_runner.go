@@ -1697,6 +1697,11 @@ func (r *testRunner) collectArtifacts(
 		// NB: fetch the logs *first* in case one of the other steps
 		// below has problems.
 		t.L().PrintfCtx(ctx, "collecting cluster logs")
+		// Do this before collecting any other logs to make sure we _always_ have roachprod state;
+		// i.e., we don't want an uncaught panic to preempt us.
+		if err := c.CopyRoachprodState(ctx); err != nil {
+			t.L().Printf("failed to copy roachprod state: %s", err)
+		}
 		// Do this before collecting logs to make sure the file gets
 		// downloaded below.
 		if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
@@ -1713,9 +1718,6 @@ func (r *testRunner) collectArtifacts(
 		}
 		if err := c.FetchCores(ctx, t.L()); err != nil {
 			t.L().Printf("failed to fetch cores: %s", err)
-		}
-		if err := c.CopyRoachprodState(ctx); err != nil {
-			t.L().Printf("failed to copy roachprod state: %s", err)
 		}
 		if err := c.FetchPebbleCheckpoints(ctx, t.L()); err != nil {
 			t.L().Printf("failed to fetch Pebble checkpoints: %s", err)
