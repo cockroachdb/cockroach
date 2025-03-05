@@ -1678,8 +1678,9 @@ func updateBackupDetails(
 			return jobspb.BackupDetails{}, err
 		}
 	}
-
-	details.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
+	dest := details.Destination
+	dest.Subdir = resolvedSubdir
+	details.Destination = dest
 	details.StartTime = startTime
 	details.URI = defaultURI
 	details.URIsByLocalityKV = urisByLocalityKV
