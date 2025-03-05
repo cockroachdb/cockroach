@@ -12,6 +12,7 @@ package slinstance
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -48,11 +49,7 @@ type Writer interface {
 type session struct {
 	id    sqlliveness.SessionID
 	start hlc.Timestamp
-
-	mu struct {
-		syncutil.Mutex
-		exp hlc.Timestamp
-	}
+	exp   atomic.Pointer[hlc.Timestamp]
 }
 
 // ID implements the sqlliveness.Session interface.
@@ -60,9 +57,7 @@ func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.exp
+	return *s.exp.Load()
 }
 
 // Start implements the sqlliveness.Session interface.
@@ -71,9 +66,7 @@ func (s *session) Start() hlc.Timestamp {
 }
 
 func (s *session) setExpiration(exp hlc.Timestamp) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.exp = exp
+	s.exp.Swap(&exp)
 }
 
 // SessionEventListener is an interface used by the Instance to notify
@@ -221,7 +214,8 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		// Note: Concurrent access is not possible at this point because
 		// the session has not been returned, so we have no need to acquire
 		// the lock.
-		s.mu.exp = s.start.Add(l.ttl().Nanoseconds(), 0)
+		newExp := s.start.Add(l.ttl().Nanoseconds(), 0)
+		s.exp.Swap(&newExp)
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
 			if ctx.Err() != nil {
