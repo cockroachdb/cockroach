@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -412,7 +413,8 @@ func createChangefeedJobRecord(
 		}
 		return asOf.Timestamp, nil
 	}
-	if opts.HasStartCursor() {
+	userSuppliedCursor := opts.HasStartCursor()
+	if userSuppliedCursor {
 		var err error
 		initialHighWater, err = evalTimestamp(opts.GetCursor())
 		if err != nil {
@@ -464,7 +466,7 @@ func createChangefeedJobRecord(
 	}
 
 	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater)
+	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater, userSuppliedCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -817,6 +819,7 @@ func getTableDescriptors(
 	targets *tree.BackupTargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
+	userSuppliedCursor bool,
 ) (map[tree.TablePattern]catalog.Descriptor, error) {
 	// For now, disallow targeting a database or wildcard table selection.
 	// Getting it right as tables enter and leave the set over time is
@@ -838,6 +841,7 @@ func getTableDescriptors(
 	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
+		var e *kvpb.BatchTimestampBeforeGCError
 		if errors.As(err, &m) {
 			err = errors.Wrapf(m.Unwrap(), "table %q does not exist", m.GetTableName())
 		}
@@ -845,8 +849,14 @@ func getTableDescriptors(
 		if !initialHighWater.IsEmpty() {
 			// We specified cursor -- it is possible the targets do not exist at that time.
 			// Give a bit more context in the error message.
-			err = errors.WithHintf(err,
-				"do the targets exist at the specified cursor time %s?", initialHighWater)
+			if userSuppliedCursor && errors.As(err, &e) {
+				gcThreshold := e.Threshold.WallTime
+				err = errors.Newf("Could not create changefeed: cursor is older than the GC threshold %d", gcThreshold)
+				err = errors.WithHint(err, "Use a more recent cursor")
+			} else {
+				err = errors.WithHintf(err,
+					"do the targets exist at the specified cursor time %s?", initialHighWater)
+			}
 		}
 	}
 	return targetDescs, err
