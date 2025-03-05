@@ -57,7 +57,7 @@ func StartCompactionJob(
 	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	encryptionOpts *jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	planHook, ok := planner.(sql.PlanHookState)
@@ -73,7 +73,7 @@ func StartCompactionJob(
 			Subdir:             fullBackupPath,
 			Exists:             true,
 		},
-		EncryptionOptions: &encryptionOpts,
+		EncryptionOptions: encryptionOpts,
 		Compact:           true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
@@ -583,8 +583,7 @@ func openSSTs(
 ) (mergedSST, error) {
 	var dirs []cloud.ExternalStorage
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
-	for idx := 0; idx < len(entry.Files); idx++ {
-		file := entry.Files[idx]
+	for _, file := range entry.Files {
 		dir, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
@@ -781,7 +780,7 @@ func createCompactionManifest(
 }
 
 // getBackupChain fetches the current shortest chain of backups (and its
-// associated info) required to restore the to the end time specified in the details.
+// associated info) required to restore to the end time specified in the details.
 func getBackupChain(
 	ctx context.Context,
 	execCtx sql.JobExecContext,

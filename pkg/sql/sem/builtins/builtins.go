@@ -204,7 +204,7 @@ var StartCompactionJob func(
 	planner interface{},
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	encryptionOpts *jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error)
 
@@ -9082,10 +9082,8 @@ WHERE object_id = table_descriptor_id
 				if err != nil {
 					return nil, err
 				}
-				evalCtx.Planner.ExecutorConfig()
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, collectionURI, nil, fullPath,
-					encryption, startTs, endTs,
+					ctx, evalCtx.Planner, collectionURI, nil, fullPath, &encryption, startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
