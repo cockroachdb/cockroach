@@ -189,6 +189,8 @@ func parseChoice[T any](s string) (any, error) {
 		return strconv.ParseFloat(s, 32)
 	case float64:
 		return strconv.ParseFloat(s, 64)
+	case bool:
+		return strconv.ParseBool(s)
 	default:
 		panic(fmt.Sprintf("unable to parse %T", zero))
 	}
