@@ -1086,14 +1086,75 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 	}
 }
 
-// projectVectorIndexCols builds VectorMutationSearch operators that project
+// projectVectorIndexColsForInsert builds VectorMutationSearch operators for the input
+// of an INSERT mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexColsForInsert() {
+	mb.projectVectorIndexColsImpl(opt.InsertOp /* op */)
+
+	// Execution expects each list to have one entry for each vector index. Ensure
+	// this is the case by projecting NULL values as necessary.
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutPartitionColIDs)
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutQuantizedVecColIDs)
+}
+
+// projectVectorIndexColsForUpsert builds VectorMutationSearch operators for the input
+// of an UPSERT mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexColsForUpsert() {
+	mb.projectVectorIndexColsImpl(opt.UpsertOp /* op */)
+
+	// Execution expects each list to have one entry for each vector index. Ensure
+	// this is the case by projecting NULL values as necessary.
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutPartitionColIDs)
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutQuantizedVecColIDs)
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexDelPartitionColIDs)
+}
+
+// projectVectorIndexColsForUpdate builds VectorMutationSearch operators for the input
+// of an UPDATE mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexColsForUpdate() {
+	mb.projectVectorIndexColsImpl(opt.UpdateOp /* op */)
+
+	// Execution expects each list to have one entry for each vector index. Ensure
+	// this is the case by projecting NULL values as necessary.
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutPartitionColIDs)
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexPutQuantizedVecColIDs)
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexDelPartitionColIDs)
+}
+
+// projectVectorIndexColsForDelete builds VectorMutationSearch operators for the
+// input of a DELETE mutation. See projectVectorIndexColsImpl for details.
+func (mb *mutationBuilder) projectVectorIndexColsForDelete() {
+	mb.projectVectorIndexColsImpl(opt.DeleteOp /* op */)
+
+	// Execution expects each list to have one entry for each vector index. Ensure
+	// this is the case by projecting NULL values as necessary.
+	mb.replaceUnsetColsWithNulls(mb.vectorIndexDelPartitionColIDs)
+}
+
+// replaceUnsetColsWithNulls checks the given OptionalColList for unset column
+// IDs, and replaces any found with a new column that projects a NULL value.
+func (mb *mutationBuilder) replaceUnsetColsWithNulls(cols opt.OptionalColList) {
+	// We will construct a new Project operator that will contain the newly
+	// synthesized column(s).
+	pb := makeProjectionBuilder(mb.b, mb.outScope)
+
+	for i, colID := range cols {
+		if colID == 0 {
+			// Add synthesized column that projects a NULL value. Update the cols list
+			// to include the new column ID.
+			colName := scopeColName("").WithMetadataName(fmt.Sprintf("null%d", i+1))
+			cols[i], _ = pb.Add(colName, tree.DNull, types.Unknown)
+		}
+	}
+
+	mb.outScope = pb.Finish()
+}
+
+// projectVectorIndexColsImpl builds VectorMutationSearch operators that project
 // partitions to be the target of index insertions and deletions for each vector
 // index defined on the target table. This is needed because vector indexes must
 // perform a search to determine which partition a given vector belongs to.
-//
-// See the vectorIndexPutPartitionColIDs, vectorIndexPutQuantizedVecColIDs, and
-// vectorIndexDelPartitionColIDs fields for more information.
-func (mb *mutationBuilder) projectVectorIndexCols(op opt.Operator) {
+func (mb *mutationBuilder) projectVectorIndexColsImpl(op opt.Operator) {
 	if vectorIndexCount(mb.tab) > 0 {
 		addCol := func(name string, typ *types.T) opt.ColumnID {
 			colName := scopeColName("").WithMetadataName(name)
