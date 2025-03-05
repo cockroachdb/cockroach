@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	task "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	test "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	version "github.com/cockroachdb/cockroach/pkg/util/version"
 	gomock "github.com/golang/mock/gomock"
@@ -327,6 +328,20 @@ func (m *MockTest) L() *logger.Logger {
 func (mr *MockTestMockRecorder) L() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "L", reflect.TypeOf((*MockTest)(nil).L))
+}
+
+// Monitor mocks base method.
+func (m *MockTest) Monitor() test.Monitor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Monitor")
+	ret0, _ := ret[0].(test.Monitor)
+	return ret0
+}
+
+// Monitor indicates an expected call of Monitor.
+func (mr *MockTestMockRecorder) Monitor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Monitor", reflect.TypeOf((*MockTest)(nil).Monitor))
 }
 
 // Name mocks base method.

@@ -1305,6 +1305,9 @@ func (r *testRunner) runTest(
 	defer cancel()
 
 	t.taskManager = task.NewManager(runCtx, t.L())
+	testMonitor := newTestMonitor(runCtx, t, c)
+	t.monitor = testMonitor
+
 	t.mu.Lock()
 	// t.Fatal() will cancel this context.
 	t.mu.cancel = cancel
@@ -1332,28 +1335,13 @@ func (r *testRunner) runTest(
 		// Actively poll for VM preemptions, so we can bail out of tests early and
 		// avoid situations where a test times out and the flake assignment logic fails.
 		monitorForPreemptedVMs(runCtx, t, c, l)
+
+		monitorTasks(runCtx, t.taskManager, t, l)
+		if t.spec.Monitor {
+			testMonitor.start()
+		}
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
-	}()
-
-	// Monitor the task manager for completed events, or failure events and log
-	// them. A failure will call t.Errorf which cancels the test's context.
-	go func() {
-		for {
-			select {
-			case event := <-t.taskManager.CompletedEvents():
-				if event.Err == nil {
-					t.L().Printf("task finished: %s", event.Name)
-					continue
-				} else if event.TriggeredByTest {
-					t.L().Printf("task canceled by test: %s", event.Name)
-					continue
-				}
-				t.Errorf("task `%s` returned error: %v", event.Name, event.Err)
-			case <-runCtx.Done():
-				return
-			}
-		}
 	}()
 
 	var timedOut bool
@@ -2169,6 +2157,28 @@ var getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger
 var pollPreemptionInterval struct {
 	syncutil.Mutex
 	interval time.Duration
+}
+
+func monitorTasks(ctx context.Context, taskManager task.Manager, t test.Test, l *logger.Logger) {
+	// Monitor the task manager for completed events, or failure events and log
+	// them. A failure will call t.Errorf which cancels the test's context.
+	go func() {
+		for {
+			select {
+			case event := <-taskManager.CompletedEvents():
+				if event.Err == nil {
+					l.Printf("task finished: %s", event.Name)
+					continue
+				} else if event.TriggeredByTest {
+					t.L().Printf("task canceled by test: %s", event.Name)
+					continue
+				}
+				t.Errorf("task `%s` returned error: %v", event.Name, event.Err)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger) {

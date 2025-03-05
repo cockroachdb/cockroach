@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -156,7 +156,11 @@ func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
 	panic("implement me")
 }
 
-var _ test2.Test = testWrapper{}
+func (t testWrapper) Monitor() test.Monitor {
+	panic("implement me")
+}
+
+var _ test.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
