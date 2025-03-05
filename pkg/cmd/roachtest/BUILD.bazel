@@ -15,6 +15,7 @@ go_library(
         "slack.go",
         "test_filter.go",
         "test_impl.go",
+        "test_monitor.go",
         "test_registry.go",
         "test_runner.go",
         "work_pool.go",

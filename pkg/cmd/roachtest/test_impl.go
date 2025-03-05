@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -86,6 +87,9 @@ type testImpl struct {
 
 	// taskManager manages tasks (goroutines) for tests.
 	taskManager task.Manager
+
+	// monitor monitors for process death in the cluster.
+	monitor test.Monitor
 
 	runner string
 	// runnerID is the test's main goroutine ID.
@@ -722,6 +726,11 @@ func (t *testImpl) NewGroup(opts ...task.Option) task.Group {
 // NewErrorGroup starts a new task error group.
 func (t *testImpl) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
 	return t.taskManager.NewErrorGroup(task.OptionList(defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// Monitor returns the test's monitor.
+func (t *testImpl) Monitor() test.Monitor {
+	return t.monitor
 }
 
 // TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
