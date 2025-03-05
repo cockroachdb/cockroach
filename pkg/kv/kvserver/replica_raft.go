@@ -2703,12 +2703,21 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	raftStatus := r.mu.internalRaftGroup.SparseStatus()
+	raftStatus := r.mu.internalRaftGroup.BasicStatus()
+
+	// Return early if we are not the leader, or if we are already the
+	// leaseholder.
+	if raftStatus.RaftState != raftpb.StateLeader ||
+		leaseStatus.OwnedBy(r.store.StoreID()) {
+		return
+	}
+
+	lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
 	leaseAcquisitionPending := r.mu.pendingLeaseRequest.AcquisitionInProgress()
 	ok := shouldTransferRaftLeadershipToLeaseholderLocked(
-		raftStatus, leaseStatus, leaseAcquisitionPending, r.StoreID(), r.store.IsDraining())
+		raftStatus, r.mu.internalRaftGroup.ReplicaProgress(lhReplicaID), leaseStatus,
+		leaseAcquisitionPending, r.StoreID(), r.store.IsDraining())
 	if ok {
-		lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
@@ -2716,7 +2725,8 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 }
 
 func shouldTransferRaftLeadershipToLeaseholderLocked(
-	raftStatus raft.SparseStatus,
+	raftStatus raft.BasicStatus,
+	lhProgress *tracker.Progress,
 	leaseStatus kvserverpb.LeaseStatus,
 	leaseAcquisitionPending bool,
 	storeID roachpb.StoreID,
@@ -2768,9 +2778,7 @@ func shouldTransferRaftLeadershipToLeaseholderLocked(
 	}
 
 	// Otherwise, only transfer if the leaseholder is caught up on the raft log.
-	lhReplicaID := raftpb.PeerID(leaseStatus.Lease.Replica.ReplicaID)
-	lhProgress, ok := raftStatus.Progress[lhReplicaID]
-	lhCaughtUp := ok && lhProgress.Match >= raftStatus.Commit
+	lhCaughtUp := lhProgress != nil && lhProgress.Match >= raftStatus.Commit
 	return lhCaughtUp
 }
 
