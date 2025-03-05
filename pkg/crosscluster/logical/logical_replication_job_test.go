@@ -1974,7 +1974,7 @@ func TestUserPrivileges(t *testing.T) {
 	// Create user with no privileges
 	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
 	dbA.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser+"2"))
-	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
+	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"2"))
 	testuser := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
 	testuser2 := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser+"2"), serverutils.DBName("a")))
 
@@ -2021,8 +2021,8 @@ func TestUserPrivileges(t *testing.T) {
 	})
 
 	t.Run("replication-dest", func(t *testing.T) {
-		testuser.ExpectErr(t, "user testuser does not have REPLICATION system privilege", createStmt, dbBURL.String())
-		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser))
+		testuser.ExpectErr(t, "user testuser does not have REPLICATIONDEST system privilege", createStmt, dbBURL.String())
+		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
 	})
 	t.Run("replication-src", func(t *testing.T) {
