@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"fmt"
 	"slices"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -999,6 +1002,8 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		mmaRangeMessageNeeded mmaRangeMessageNeeded
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1164,6 +1169,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.conf = conf
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
+	r.mu.mmaRangeMessageNeeded.set()
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
 	return oldConf.HasConfigurationChange(conf)
 }
@@ -2821,6 +2827,17 @@ func (r *Replica) RangeUsageInfo() allocator.RangeUsageInfo {
 	}
 }
 
+func (r *Replica) RangeLoad() mma.RangeLoad {
+	loadStats := r.LoadStats()
+	var rl mma.RangeLoad
+	rl.Load[mma.CPURate] =
+		mma.LoadValue(loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
+	rl.RaftCPU = mma.LoadValue(loadStats.RaftCPUNanosPerSecond)
+	rl.Load[mma.WriteBandwidth] = mma.LoadValue(loadStats.WriteBytesPerSecond)
+	rl.Load[mma.ByteSize] = mma.LoadValue(r.GetMVCCStats().Total())
+	return rl
+}
+
 // measureNanosRunning measures the difference in cpu time from when this
 // method is called, to when the returned function is called. This difference
 // is recorded against the replica's cpu time attribution.
@@ -2951,4 +2968,179 @@ func (r *Replica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 	if r.flowControlV2 != nil {
 		r.flowControlV2.SendStreamStats(stats)
 	}
+}
+
+// mmaRangeMessageNeeded tracks state that is used to decide whether we need
+// to construct a mma.RangeMessage for this Replica to feed to the
+// multi-metric allocator.
+//
+// The decision is partially based on notifying something has changed (via
+// calls to set), when periodic diffing is too costly, and doing periodic
+// diffing for the rest of the state.
+//
+// Other than the set method, all other methods are internal helpers for
+// Replica.TryConstructMMARangeMsg
+type mmaRangeMessageNeeded struct {
+	needed                 bool
+	lastRangeLoad          mma.RangeLoad
+	lastLaggingState       map[roachpb.ReplicaID]laggingState
+	lastIsLeaseholder      bool
+	sendStreamStatsScratch rac2.RangeSendStreamStats
+}
+
+// set must be called if any of the following changes: SpaConfig; set of
+// replicas; lease acquisition or loss.
+//
+// REQUIRES: Replica.mu is exclusively held.
+func (m *mmaRangeMessageNeeded) set() {
+	m.needed = true
+}
+
+func (m *mmaRangeMessageNeeded) clearLastStateWhenNotLeaseholder() {
+	clear(m.lastLaggingState)
+	m.lastRangeLoad = mma.RangeLoad{}
+	m.lastIsLeaseholder = false
+}
+
+func (m *mmaRangeMessageNeeded) getSendStreamStatsScratch() *rac2.RangeSendStreamStats {
+	m.sendStreamStatsScratch.Clear()
+	return &m.sendStreamStatsScratch
+}
+
+func (m *mmaRangeMessageNeeded) getNeededAndReset(
+	rangeLoad mma.RangeLoad,
+	raftStatus *raft.Status,
+	// TODO: use RangeSendStreamStats.
+	sendStreamStats *rac2.RangeSendStreamStats,
+) bool {
+	needed := m.needed
+	m.needed = false
+	if !needed {
+		needed = significantRangeLoadDelta(m.lastRangeLoad, rangeLoad)
+	}
+	if !needed {
+		for replicaID, ls := range m.lastLaggingState {
+			// TODO: Unsure whether using ReplicaIsBehind is what we want here, since
+			// it is stronger than the lack of a send-queue. And we needed the
+			// send-queue state for something in the allocator.
+			if ls.isLagging != raftutil.ReplicaIsBehind(raftStatus, replicaID) {
+				needed = true
+				break
+			}
+		}
+	}
+	if needed {
+		m.lastRangeLoad = rangeLoad
+		clear(m.lastLaggingState)
+		for repl := range raftStatus.Progress {
+			rid := roachpb.ReplicaID(repl)
+			m.lastLaggingState[rid] = laggingState{isLagging: raftutil.ReplicaIsBehind(raftStatus, rid)}
+		}
+	}
+	return needed
+}
+
+func significantRangeLoadDelta(prev, next mma.RangeLoad) bool {
+	const delta = 0.1
+	isSignificant := func(prev, next mma.LoadValue) bool {
+		if prev == 0 {
+			if next != 0 {
+				return true
+			}
+			return false
+		}
+		// prev != 0.
+		return math.Abs(float64(prev-next))/float64(prev) > delta
+	}
+	for i := range prev.Load {
+		if isSignificant(prev.Load[i], next.Load[i]) {
+			return true
+		}
+	}
+	if isSignificant(prev.RaftCPU, next.RaftCPU) {
+		return true
+	}
+	return false
+}
+
+type laggingState struct {
+	isLagging bool
+	// hasSendQueue bool
+}
+
+// TryConstructMMARangeMsg ...
+//
+// Called periodically by the same entity (and must not be called
+// concurrently). If this method returned true the last time, that message
+// must have been fed to the allocator.
+func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
+	var isLeaseholder bool
+	var wasLeaseholder bool
+	func() {
+		r.mu.RUnlock()
+		defer r.mu.RLock()
+		lease := r.shMu.state.Lease
+		isLeaseholder = lease != nil && lease.OwnedBy(r.store.StoreID())
+		wasLeaseholder = r.mu.mmaRangeMessageNeeded.lastIsLeaseholder
+		if wasLeaseholder && !isLeaseholder {
+			r.mu.mmaRangeMessageNeeded.clearLastStateWhenNotLeaseholder()
+		}
+		r.mu.mmaRangeMessageNeeded.lastIsLeaseholder = isLeaseholder
+	}()
+	// Fast path.
+	if !isLeaseholder && !wasLeaseholder {
+		return mma.RangeMsg{}, false
+	}
+	if !isLeaseholder {
+		// wasLeaseholder is true.
+		return mma.RangeMsg{RangeID: r.RangeID}, true
+	}
+	// isLeaseholder is true. wasLeaseholder may be true or false.
+	rload := r.RangeLoad()
+	sendStreamStats := r.mu.mmaRangeMessageNeeded.getSendStreamStatsScratch()
+	r.flowControlV2.SendStreamStats(sendStreamStats)
+	var raftStatus *raft.Status
+	var needed bool
+	var desc *roachpb.RangeDescriptor
+	var conf roachpb.SpanConfig
+	func() {
+		r.mu.RLock()
+		r.mu.RUnlock()
+		raftStatus = r.raftStatusRLocked()
+		needed = r.mu.mmaRangeMessageNeeded.getNeededAndReset(
+			rload, raftStatus, sendStreamStats)
+		if needed {
+			desc = r.descRLocked()
+			conf = r.mu.conf
+		}
+	}()
+	if !needed {
+		return mma.RangeMsg{}, false
+	}
+	var replicas []mma.StoreIDAndReplicaState
+	for _, repl := range desc.InternalReplicas {
+		replica := mma.StoreIDAndReplicaState{
+			StoreID: repl.StoreID,
+			ReplicaState: mma.ReplicaState{
+				ReplicaIDAndType: mma.ReplicaIDAndType{
+					ReplicaID: repl.ReplicaID,
+					ReplicaType: mma.ReplicaType{
+						ReplicaType:   repl.Type,
+						IsLeaseholder: repl.StoreID == r.store.StoreID(),
+					},
+				},
+			},
+		}
+		// We already have the latest state in
+		// mmaRangeMessageNeeded.lastLaggingState.
+		replica.VoterIsLagging =
+			repl.IsAnyVoter() && r.mu.mmaRangeMessageNeeded.lastLaggingState[repl.ReplicaID].isLagging
+		replicas = append(replicas, replica)
+	}
+	return mma.RangeMsg{
+		RangeID:   r.RangeID,
+		Replicas:  replicas,
+		Conf:      conf,
+		RangeLoad: rload,
+	}, true
 }

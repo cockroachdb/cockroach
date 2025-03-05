@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -4200,6 +4201,21 @@ func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
 // is cached and updated every few seconds by Node.computeMetricsPeriodically.
 func (s *Store) getNodeRangeCount() int64 {
 	return s.cfg.RangeCount.Load()
+}
+
+func (s *Store) MakeStoreLeaseholderMsg() mma.StoreLeaseholderMsg {
+	var msgs []mma.RangeMsg
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		msg, ok := r.TryConstructMMARangeMsg()
+		if ok {
+			msgs = append(msgs, msg)
+		}
+		return true
+	})
+	return mma.StoreLeaseholderMsg{
+		StoreID: s.StoreID(),
+		Ranges:  msgs,
+	}
 }
 
 // Implementation of the storeForTruncator interface.
