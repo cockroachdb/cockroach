@@ -27,7 +27,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	switch ch {
 	case '$':
 		// Root path ($.)
-		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' {
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' {
 			return
 		}
 
