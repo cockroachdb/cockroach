@@ -1051,7 +1051,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 
 	// Write a new status summary after all stores have been initialized; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */); err != nil {
+	if err := n.writeNodeStatus(ctx, false /* mustExist */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 
@@ -1487,7 +1487,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 	if err := startup.RunIdempotentWithRetry(ctx,
 		n.stopper.ShouldQuiesce(),
 		"kv write node status", func(ctx context.Context) error {
-			return n.writeNodeStatus(ctx, 0 /* alertTTL */, false /* mustExist */)
+			return n.writeNodeStatus(ctx, false /* mustExist */)
 		}); err != nil {
 		return errors.Wrap(err, "error recording initial status summaries")
 	}
@@ -1510,7 +1510,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 					// carried out by a different node, so this avoids resurrecting
 					// the status entry after the decommissioner has removed it.
 					// See Server.Decommission().
-					if err := n.writeNodeStatus(ctx, 2*frequency, true /* mustExist */); err != nil {
+					if err := n.writeNodeStatus(ctx, true /* mustExist */); err != nil {
 						log.Warningf(ctx, "error recording status summaries: %s", err)
 					}
 				case <-n.stopper.ShouldQuiesce():
@@ -1524,7 +1524,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // NodeStatusRecorder and persists them to the cockroach data store.
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
-func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
+func (n *Node) writeNodeStatus(ctx context.Context, mustExist bool) error {
 	if n.suppressNodeStatus.Load() {
 		return nil
 	}
@@ -1548,7 +1548,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, must
 				log.Warningf(ctx, "health alerts detected: %+v", result)
 			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
-				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, alertTTL,
+				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, 2*base.DefaultMetricsSampleInterval, /* ttl */
 			); err != nil {
 				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
 			}

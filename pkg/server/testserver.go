@@ -1936,7 +1936,7 @@ func (ts *testServer) SetReadyFn(fn func(bool)) {
 
 // WriteSummaries implements the serverutils.StorageLayerInterface.
 func (ts *testServer) WriteSummaries() error {
-	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
+	return ts.node.writeNodeStatus(context.TODO(), false)
 }
 
 // UpdateChecker implements the serverutils.StorageLayerInterface.
