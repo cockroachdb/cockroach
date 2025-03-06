@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -18,21 +19,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 type prepareSnapshotInput struct {
-	st           *cluster.Settings
-	replicaID    storage.FullReplicaID
-	ts           kvserverpb.RaftTruncatedState
-	hs           raftpb.HardState
-	logSL        *logstore.StateLoader
-	clearedSpans []roachpb.Span
+	st            *cluster.Settings
+	todoEng       storage.Engine
+	replicaID     storage.FullReplicaID
+	desc          *roachpb.RangeDescriptor
+	subsumedDescs []*roachpb.RangeDescriptor
+	ts            kvserverpb.RaftTruncatedState
+	hs            raftpb.HardState
+	logSL         *logstore.StateLoader
+	clearedSpans  []roachpb.Span
+
+	writeSST func(context.Context, []byte) error
 }
 
 type preparedSnapshot struct {
 	unreplicatedSSTFile *storage.MemObject
 	clearedSpans        []roachpb.Span
+
+	subsumedReplicas time.Time
 }
 
 func prepareSnapshot(ctx context.Context, in prepareSnapshotInput) (*preparedSnapshot, error) {
@@ -45,9 +54,28 @@ func prepareSnapshot(ctx context.Context, in prepareSnapshotInput) (*preparedSna
 	}
 	clearedSpans = append(clearedSpans, clearedSpan)
 
+	// If we're subsuming a replica below, we don't have its last NextReplicaID,
+	// nor can we obtain it. That's OK: we can just be conservative and use the
+	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
+	// tombstone using this maximum possible replica ID, which would normally be
+	// problematic, as it would prevent this store from ever having a new replica
+	// of the removed range. In this case, however, it's copacetic, as subsumed
+	// ranges _can't_ have new replicas.
+	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
+		// TODO(sep-raft-log): needs access to both engines.
+		ctx, in.st, in.todoEng, in.writeSST,
+		in.desc, in.subsumedDescs, mergedTombstoneReplicaID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
+	tSubsumedReplicas := timeutil.Now()
+
 	return &preparedSnapshot{
 		unreplicatedSSTFile: unreplicatedSSTFile,
 		clearedSpans:        clearedSpans,
+		subsumedReplicas:    tSubsumedReplicas,
 	}, nil
 }
 

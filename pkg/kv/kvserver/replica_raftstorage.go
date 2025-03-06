@@ -548,13 +548,19 @@ func (r *Replica) applySnapshot(
 	}
 
 	preppedSnap, err := prepareSnapshot(ctx, prepareSnapshotInput{
-		st:           r.ClusterSettings(),
-		replicaID:    r.ID(),
-		ts:           truncState,
-		hs:           hs,
-		logSL:        &r.raftMu.stateLoader.StateLoader,
-		clearedSpans: inSnap.clearedSpans,
+		st:            r.ClusterSettings(),
+		todoEng:       r.store.TODOEngine(),
+		replicaID:     r.ID(),
+		desc:          desc,
+		subsumedDescs: subsumedDescs,
+		ts:            truncState,
+		hs:            hs,
+		logSL:         &r.raftMu.stateLoader.StateLoader,
+		clearedSpans:  inSnap.clearedSpans,
+		writeSST:      inSnap.SSTStorageScratch.WriteSST,
 	})
+
+	stats.subsumedReplicas = preppedSnap.subsumedReplicas
 
 	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
 	// buffering in a MemObject first.
@@ -563,24 +569,6 @@ func (r *Replica) applySnapshot(
 	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
-
-	// If we're subsuming a replica below, we don't have its last NextReplicaID,
-	// nor can we obtain it. That's OK: we can just be conservative and use the
-	// maximum possible replica ID. preDestroyRaftMuLocked will write a replica
-	// tombstone using this maximum possible replica ID, which would normally be
-	// problematic, as it would prevent this store from ever having a new replica
-	// of the removed range. In this case, however, it's copacetic, as subsumed
-	// ranges _can't_ have new replicas.
-	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
-		// TODO(sep-raft-log): needs access to both engines.
-		ctx, r.store.ClusterSettings(), r.store.TODOEngine(), inSnap.SSTStorageScratch.WriteSST,
-		desc, subsumedDescs, mergedTombstoneReplicaID,
-	)
-	if err != nil {
-		return err
-	}
-	preppedSnap.clearedSpans = append(preppedSnap.clearedSpans, clearedSubsumedSpans...)
-	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
