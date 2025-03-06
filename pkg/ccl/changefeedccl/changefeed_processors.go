@@ -610,7 +610,7 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	// can ignore it from this point on.
 	if !ca.spec.Checkpoint.IsEmpty() {
 		if ca.spec.SpanLevelCheckpoint != nil {
-			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
+			return nil, errors.AssertionFailedf("both legacy and current checkpoint set on change aggregator spec")
 		}
 
 		// This conversion undoes an unnecessary conversion when the spec
