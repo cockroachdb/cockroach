@@ -92,6 +92,10 @@ const (
 
 	graphiteIntervalKey = "external.graphite.interval"
 	maxGraphiteInterval = 15 * time.Minute
+
+	// defaultAlertTTL is the default TTL for node health alerts when none is specified.
+	// This ensures that alerts don't persist indefinitely.
+	defaultAlertTTL = 10 * time.Minute
 )
 
 // Metric names.
@@ -1547,8 +1551,13 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, must
 				// Avoid this warning on single-node clusters, which require special UX.
 				log.Warningf(ctx, "health alerts detected: %+v", result)
 			}
+			// Use the default TTL if none is specified (0)
+			ttl := alertTTL
+			if ttl == 0 {
+				ttl = defaultAlertTTL
+			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
-				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, alertTTL,
+				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, ttl,
 			); err != nil {
 				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
 			}

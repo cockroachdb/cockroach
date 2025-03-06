@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -38,12 +39,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
+
+// Function to force summaries to be written synchronously, including all
+// data currently in the event pipeline. Only one of the stores has
+// replicas, so there are no concerns related to quorum writes; if there
+// were multiple replicas, more care would need to be taken in the initial
+// syncFeed().
+func forceWriteStatus(ctx context.Context, t *testing.T, ts serverutils.TestServerInterface) {
+	if err := ts.Node().(*Node).computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
+		t.Fatalf("error publishing store statuses: %s", err)
+	}
+
+	if err := ts.WriteSummaries(); err != nil {
+		t.Fatalf("error writing summaries: %s", err)
+	}
+}
 
 func formatKeys(keys []roachpb.Key) string {
 	var buf bytes.Buffer
@@ -691,23 +708,8 @@ func TestNodeStatusWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Function to force summaries to be written synchronously, including all
-	// data currently in the event pipeline. Only one of the stores has
-	// replicas, so there are no concerns related to quorum writes; if there
-	// were multiple replicas, more care would need to be taken in the initial
-	// syncFeed().
-	forceWriteStatus := func() {
-		if err := ts.Node().(*Node).computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
-			t.Fatalf("error publishing store statuses: %s", err)
-		}
-
-		if err := ts.WriteSummaries(); err != nil {
-			t.Fatalf("error writing summaries: %s", err)
-		}
-	}
-
 	// Verify initial status.
-	forceWriteStatus()
+	forceWriteStatus(ctx, t, ts)
 	expectedNodeStatus = compareNodeStatus(t, ts, expectedNodeStatus, 1)
 	for _, s := range expectedNodeStatus.StoreStatuses {
 		expectedStoreStatuses[s.Desc.StoreID] = s
@@ -740,7 +742,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	store1["keybytes"]++
 	store1["valbytes"]++
 
-	forceWriteStatus()
+	forceWriteStatus(ctx, t, ts)
 	expectedNodeStatus = compareNodeStatus(t, ts, expectedNodeStatus, 2)
 	for _, s := range expectedNodeStatus.StoreStatuses {
 		expectedStoreStatuses[s.Desc.StoreID] = s
@@ -778,7 +780,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	store1["replicas.leaseholders"]++
 	store1["ranges"]++
 
-	forceWriteStatus()
+	forceWriteStatus(ctx, t, ts)
 	expectedNodeStatus = compareNodeStatus(t, ts, expectedNodeStatus, 3)
 	for _, s := range expectedNodeStatus.StoreStatuses {
 		expectedStoreStatuses[s.Desc.StoreID] = s
@@ -1289,5 +1291,31 @@ func TestRevertToEpochOrLeaderIfTooManyRanges(t *testing.T) {
 			}
 			return nil
 		})
+	})
+}
+
+func TestHealthStatusDefaultTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+
+	forceWriteStatus(ctx, t, ts)
+
+	// Verify the gossipped info has the default TTL
+	testutils.SucceedsSoon(t, func() error {
+		key := gossip.MakeNodeHealthAlertKey(ts.NodeID())
+		info := ts.GossipI().(*gossip.Gossip).GetInfoStatus().Infos[key]
+		// The TTLStamp should be set to now + defaultAlertTTL (10 minutes)
+		expectedTTL := timeutil.Now().Add(defaultAlertTTL)
+		if delta := time.Duration(info.TTLStamp - expectedTTL.UnixNano()); delta > time.Second {
+			return errors.Errorf("expected TTL around %v, got %v, delta %v",
+				expectedTTL, timeutil.Unix(0, info.TTLStamp), delta)
+		}
+
+		return nil
 	})
 }
