@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -684,17 +685,25 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		inCol := &mb.outScope.cols[i]
 		ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
 
-		// Raise an error if the target column is a `GENERATED ALWAYS AS
-		// IDENTITY` column. Such a column is not allowed to be explicitly
-		// written to.
-		//
-		// TODO(janexing): Implement the OVERRIDING SYSTEM VALUE syntax for
-		// INSERT which allows a GENERATED ALWAYS AS IDENTITY column to be
-		// overwritten.
-		// See https://github.com/cockroachdb/cockroach/issues/68201.
-		if col := mb.tab.Column(ord); col.IsGeneratedAlwaysAsIdentity() {
-			colName := string(col.ColName())
-			panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName))
+		col := mb.tab.Column(ord)
+		if col.IsGeneratedAlwaysAsIdentity() {
+			overridingAlwaysAsIdentityColumn := false
+			insertStmt := mb.b.stmt.(*tree.Insert)
+			activeVersion := mb.b.evalCtx.Settings.Version.ActiveVersion(mb.b.ctx)
+			if activeVersion.IsActive(clusterversion.V24_2) {
+				switch insertStmt.OverridingType {
+				case tree.OverridingUserValue:
+					// Skip the identity columns.
+					continue
+				case tree.OverridingSystemValue:
+					overridingAlwaysAsIdentityColumn = true
+				default:
+				}
+			}
+
+			if !overridingAlwaysAsIdentityColumn {
+				panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(string(col.ColName())))
+			}
 		}
 
 		// Assign name of input column.

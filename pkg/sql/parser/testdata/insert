@@ -176,3 +176,35 @@ DETAIL: source SQL:
 INSERT INTO kv (k[0]) VALUES ('hello')
                  ^
 HINT: try \h <SELECTCLAUSE>
+
+parse
+INSERT INTO generated_as_identity (a, b, c) OVERRIDING USER VALUE VALUES (10, 100, 100)
+----
+INSERT INTO generated_as_identity(a, b, c) VALUES (10, 100, 100) -- normalized!
+INSERT INTO generated_as_identity(a, b, c) VALUES ((10), (100), (100)) -- fully parenthesized
+INSERT INTO generated_as_identity(a, b, c) VALUES (_, _, __more1_10__) -- literals removed
+INSERT INTO _(_, _, _) VALUES (10, 100, 100) -- identifiers removed
+
+parse
+INSERT INTO generated_as_identity (a, b, c) OVERRIDING SYSTEM VALUE VALUES (10, 100, 100)
+----
+INSERT INTO generated_as_identity(a, b, c) VALUES (10, 100, 100) -- normalized!
+INSERT INTO generated_as_identity(a, b, c) VALUES ((10), (100), (100)) -- fully parenthesized
+INSERT INTO generated_as_identity(a, b, c) VALUES (_, _, __more1_10__) -- literals removed
+INSERT INTO _(_, _, _) VALUES (10, 100, 100) -- identifiers removed
+
+parse
+INSERT INTO generated_as_identity OVERRIDING USER VALUE VALUES (10, 100, 100)
+----
+INSERT INTO generated_as_identity VALUES (10, 100, 100) -- normalized!
+INSERT INTO generated_as_identity VALUES ((10), (100), (100)) -- fully parenthesized
+INSERT INTO generated_as_identity VALUES (_, _, __more1_10__) -- literals removed
+INSERT INTO _ VALUES (10, 100, 100) -- identifiers removed
+
+parse
+INSERT INTO generated_as_identity OVERRIDING SYSTEM VALUE VALUES (10, 100, 100)
+----
+INSERT INTO generated_as_identity VALUES (10, 100, 100) -- normalized!
+INSERT INTO generated_as_identity VALUES ((10), (100), (100)) -- fully parenthesized
+INSERT INTO generated_as_identity VALUES (_, _, __more1_10__) -- literals removed
+INSERT INTO _ VALUES (10, 100, 100) -- identifiers removed

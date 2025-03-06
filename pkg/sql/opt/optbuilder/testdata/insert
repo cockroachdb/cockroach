@@ -1735,6 +1735,82 @@ insert generated_as_identity
            ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:9]
            └── unique_rowid() [as=rowid_default:10]
 
+build
+INSERT INTO generated_as_identity (a, b, c) OVERRIDING SYSTEM VALUE VALUES (10, 100, 100)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    └── rowid_default:10 => rowid:4
+ └── project
+      ├── columns: rowid_default:10 column1:7!null column2:8!null column3:9!null
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    └── (10, 100, 100)
+      └── projections
+           └── unique_rowid() [as=rowid_default:10]
+
+build
+INSERT INTO generated_as_identity (a, b, c) OVERRIDING USER VALUE VALUES (11, 100, 100)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    └── rowid_default:12 => rowid:4
+ └── project
+      ├── columns: b_default:10 c_default:11 rowid_default:12 column1:7!null column2:8!null column3:9!null
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    └── (11, 100, 100)
+      └── projections
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:10]
+           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:11]
+           └── unique_rowid() [as=rowid_default:12]
+
+build
+INSERT INTO generated_as_identity OVERRIDING SYSTEM VALUE VALUES (12, 100, 100)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    └── rowid_default:10 => rowid:4
+ └── project
+      ├── columns: rowid_default:10 column1:7!null column2:8!null column3:9!null
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    └── (12, 100, 100)
+      └── projections
+           └── unique_rowid() [as=rowid_default:10]
+
+build
+INSERT INTO generated_as_identity OVERRIDING USER VALUE VALUES (13, 100, 100)
+----
+insert generated_as_identity
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    └── rowid_default:12 => rowid:4
+ └── project
+      ├── columns: b_default:10 c_default:11 rowid_default:12 column1:7!null column2:8!null column3:9!null
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    └── (13, 100, 100)
+      └── projections
+           ├── nextval('t.public.generated_as_identity_b_seq') [as=b_default:10]
+           ├── nextval('t.public.generated_as_identity_c_seq') [as=c_default:11]
+           └── unique_rowid() [as=rowid_default:12]
+
 # With SERIAL syntax
 exec-ddl
 CREATE TABLE serial_t (
