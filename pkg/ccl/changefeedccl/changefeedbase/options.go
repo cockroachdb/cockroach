@@ -1012,10 +1012,15 @@ type Filters struct {
 
 // GetFilters returns a populated Filters.
 func (s StatementOptions) GetFilters() Filters {
+	envelopeType := s.m[OptEnvelope]
 	_, withDiff := s.m[OptDiff]
 	_, withIgnoreDisableChangefeedReplication := s.m[OptIgnoreDisableChangefeedReplication]
 	return Filters{
-		WithDiff:      withDiff,
+		// Feeds using the enriched envelope need their kvfeed to send the previous
+		// version of a row even when the `diff` changefeed option is not set
+		// in order to populate the `op` field. The use this data to differentiate
+		// between inserts and updates.
+		WithDiff:      withDiff || envelopeType == string(OptEnvelopeEnriched),
 		WithFiltering: !withIgnoreDisableChangefeedReplication,
 	}
 }
