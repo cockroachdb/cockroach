@@ -3322,7 +3322,7 @@ func (ex *connExecutor) makeExecPlan(
 					pgerror.Newf(pgcode.TooManyRows,
 						"query `%s` contains a full table/index scan which is explicitly disallowed",
 						planner.stmt.SQL),
-					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
+					"to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold",
 				)
 			}
 		}

@@ -669,9 +669,15 @@ func (b *Builder) scanParams(
 					b.flags.IsSet(exec.PlanFlagContainsLargeFullIndexScan)) {
 				// TODO(#123783): this code might need an adjustment for virtual
 				// tables.
-				err = errors.WithHint(err,
-					"try overriding the `disallow_full_table_scans` or increasing the `large_full_scan_rows` cluster/session settings",
-				)
+				var hint strings.Builder
+				hint.WriteString("to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold")
+				// If statistics are available, we can determine the appropriate
+				// `large_full_scan_rows` threshold to allow this scan.
+				stats := relProps.Statistics()
+				if stats.Available {
+					hint.WriteString(fmt.Sprintf(" to at least %0.0f", stats.RowCount+1))
+				}
+				err = errors.WithHint(err, hint.String())
 			}
 		}
 
