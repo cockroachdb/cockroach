@@ -149,10 +149,11 @@ type storeLoad struct {
 	reportedSecondaryLoad SecondaryLoadVector
 }
 
-// NodeLoad is the load information for a node. Roughly, this is the
-// information we need each node to provide us periodically.
+// NodeLoad is the load information for a node.
 type NodeLoad struct {
-	NodeID      roachpb.NodeID
+	NodeID roachpb.NodeID
+	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
+	// stores on this node.
 	ReportedCPU LoadValue
 	CapacityCPU LoadValue
 }
