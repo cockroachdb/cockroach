@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/linkedin/goavro/v2"
 )
@@ -40,6 +41,7 @@ func newEnrichedSourceProvider(
 }
 
 func (p *enrichedSourceProvider) avroSourceFunction(row cdcevent.Row) (map[string]any, error) {
+	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
 	return map[string]any{
 		"job_id": goavro.Union(avro.SchemaTypeString, p.sourceData.jobId),
 	}, nil
@@ -51,15 +53,24 @@ func (p *enrichedSourceProvider) getAvroFields() []*avro.SchemaField {
 	}
 }
 
-func (p *enrichedSourceProvider) Schema() (*avro.FunctionalRecord, error) {
-	rec, err := avro.NewFunctionalRecord("source", "" /* namespace */, p.getAvroFields(), p.avroSourceFunction)
-	if err != nil {
-		return nil, err
-	}
-	return rec, nil
+// TODO: unify with the above two methods.
+func (p *enrichedSourceProvider) Schema() (kcjsonschema.Schema, error) {
+	return kcjsonschema.Schema{
+		Name:     "cockroachdb.source",
+		TypeName: kcjsonschema.SchemaTypeStruct,
+		Fields: []kcjsonschema.Schema{
+			{
+				TypeName: kcjsonschema.SchemaTypeString,
+				Field:    "job_id",
+				Optional: true,
+			},
+		},
+		Optional: true,
+	}, nil
 }
 
 func (p *enrichedSourceProvider) GetJSON(row cdcevent.Row) (json.JSON, error) {
+	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
 	// TODO(various): Add fields here.
 	keys := []string{"job_id"}
 	b, err := json.NewFixedKeysObjectBuilder(keys)
@@ -71,7 +82,12 @@ func (p *enrichedSourceProvider) GetJSON(row cdcevent.Row) (json.JSON, error) {
 		return nil, err
 	}
 
-	return b.Build()
+	j, err := b.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	return j, nil
 }
 
 func (p *enrichedSourceProvider) GetAvro(
