@@ -526,6 +526,19 @@ func TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
 //
 // It should link to a github issue with label C-investigation.
 func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestDoesNotWorkWithExternalProcessMode disables selecting the external
+// process virtual cluster for tests that are not functional in that mode and
+// require further investigation. Any test using this function should reference
+// a GitHub issue tagged with "C-investigation" describing the underlying
+// problem.
+func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
 	return DefaultTestTenantOptions{
 		testBehavior:           ttSharedProcess,
 		allowAdditionalTenants: true,
