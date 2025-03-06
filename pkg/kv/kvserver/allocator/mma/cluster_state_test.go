@@ -75,7 +75,7 @@ func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 			msg.Capacity = parseLoadVector(t, parts[1])
 			for i := range msg.Capacity {
 				if msg.Capacity[i] < 0 {
-					msg.Capacity[i] = parentCapacity
+					msg.Capacity[i] = unknownCapacity
 				}
 			}
 		case "secondary-load":
