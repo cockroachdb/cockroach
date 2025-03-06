@@ -1007,10 +1007,11 @@ type Filters struct {
 
 // GetFilters returns a populated Filters.
 func (s StatementOptions) GetFilters() Filters {
+	envelopeType, _ := s.m[OptEnvelope]
 	_, withDiff := s.m[OptDiff]
 	_, withIgnoreDisableChangefeedReplication := s.m[OptIgnoreDisableChangefeedReplication]
 	return Filters{
-		WithDiff:      withDiff,
+		WithDiff:      withDiff || envelopeType == string(OptEnvelopeEnriched),
 		WithFiltering: !withIgnoreDisableChangefeedReplication,
 	}
 }

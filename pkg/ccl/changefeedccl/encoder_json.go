@@ -547,6 +547,9 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 	}
 
 	payloadKeys := []string{"after", "op", "ts_ns"}
+	if e.beforeField {
+		payloadKeys = append(payloadKeys, "before")
+	}
 	if e.keyInValue {
 		payloadKeys = append(payloadKeys, "key")
 	}
@@ -576,6 +579,21 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 			return nil, err
 		}
 
+		if e.beforeField {
+			var before json.JSON
+			if prev.IsInitialized() && !prev.IsDeleted() {
+				before, err = e.versionEncoder(prev.EventDescriptor, true).rowAsGoNative(ctx, prev, emitDeletedRowAsNull, nil)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				before = json.NullJSONValue
+			}
+
+			if err := payloadBuilder.Set("before", before); err != nil {
+				return nil, err
+			}
+		}
 		if e.keyInValue {
 			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder); err != nil {
 				return nil, err
