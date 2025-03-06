@@ -616,8 +616,8 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 			}
 		})
 
-		creds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
-		cfg.Credentials = creds
+		finalCreds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
+		cfg.Credentials = aws.NewCredentialsCache(finalCreds)
 	}
 
 	region := s.opts.region
