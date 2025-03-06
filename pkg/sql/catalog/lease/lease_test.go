@@ -3584,3 +3584,45 @@ func TestWaitForInitialVersionConcurrent(t *testing.T) {
 	}
 	require.NoError(t, ctxgroup.GroupWorkers(ctx, numThreads, tableCreator))
 }
+
+// BenchmarkAcquireLeaseConcurrent measures how quickly we can concurrently
+// acquire / release leases on a single table.
+func BenchmarkAcquireLeaseConcurrent(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	runner.Exec(b, "CREATE TABLE t1(n int)")
+
+	var tableID descpb.ID
+	runner.QueryRow(b, "SELECT 't1'::REGCLASS::OID").Scan(&tableID)
+
+	for numThreads := 1; numThreads <= 128; numThreads *= 2 {
+		b.Run(fmt.Sprintf("threads=%d", numThreads), func(b *testing.B) {
+			grp := ctxgroup.WithContext(ctx)
+			startThreads := make(chan struct{})
+			grp.GoCtx(func(ctx context.Context) error {
+				<-startThreads
+				for i := 0; i < b.N; i++ {
+					lease, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, s.Clock().Now(), tableID)
+					if err != nil {
+						return err
+					}
+					lease.Release(ctx)
+				}
+				return nil
+			})
+			b.ResetTimer()
+			b.StartTimer()
+			close(startThreads)
+			require.NoError(b, grp.Wait())
+			b.StopTimer()
+		})
+	}
+
+}
