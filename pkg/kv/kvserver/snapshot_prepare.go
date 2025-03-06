@@ -21,6 +21,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type prepareSnapshotInput struct {
+	st           *cluster.Settings
+	replicaID    storage.FullReplicaID
+	ts           kvserverpb.RaftTruncatedState
+	hs           raftpb.HardState
+	logSL        *logstore.StateLoader
+	clearedSpans []roachpb.Span
+}
+
+type preparedSnapshot struct {
+	unreplicatedSSTFile *storage.MemObject
+	clearedSpans        []roachpb.Span
+}
+
+func prepareSnapshot(ctx context.Context, in prepareSnapshotInput) (*preparedSnapshot, error) {
+	clearedSpans := in.clearedSpans[:len(in.clearedSpans):len(in.clearedSpans)]
+	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
+		ctx, in.replicaID, in.st, in.ts, in.hs, in.logSL,
+	)
+	if err != nil {
+		return nil, err
+	}
+	clearedSpans = append(clearedSpans, clearedSpan)
+
+	return &preparedSnapshot{
+		unreplicatedSSTFile: unreplicatedSSTFile,
+		clearedSpans:        clearedSpans,
+	}, nil
+}
+
 // writeUnreplicatedSST creates an SST for snapshot application that
 // covers the RangeID-unreplicated keyspace. A range tombstone is
 // laid down and the Raft state provided by the arguments is overlaid

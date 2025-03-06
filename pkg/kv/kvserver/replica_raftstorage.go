@@ -546,17 +546,19 @@ func (r *Replica) applySnapshot(
 		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
-	clearedSpans := inSnap.clearedSpans
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, r.ID(), r.ClusterSettings(), truncState, hs, &r.raftMu.stateLoader.StateLoader,
-	)
-	if err != nil {
-		return err
-	}
-	clearedSpans = append(clearedSpans, clearedSpan)
+
+	preppedSnap, err := prepareSnapshot(ctx, prepareSnapshotInput{
+		st:           r.ClusterSettings(),
+		replicaID:    r.ID(),
+		ts:           truncState,
+		hs:           hs,
+		logSL:        &r.raftMu.stateLoader.StateLoader,
+		clearedSpans: inSnap.clearedSpans,
+	})
+
 	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
 	// buffering in a MemObject first.
-	if err := inSnap.SSTStorageScratch.WriteSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+	if err := inSnap.SSTStorageScratch.WriteSST(ctx, preppedSnap.unreplicatedSSTFile.Data()); err != nil {
 		return err
 	}
 	// Update Raft entries.
@@ -577,7 +579,7 @@ func (r *Replica) applySnapshot(
 	if err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
+	preppedSnap.clearedSpans = append(preppedSnap.clearedSpans, clearedSubsumedSpans...)
 	stats.subsumedReplicas = timeutil.Now()
 
 	// Ingest all SSTs atomically.
@@ -631,7 +633,7 @@ func (r *Replica) applySnapshot(
 		} else {
 			appliedAsWrite = true
 			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-				ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+				ctx, inSnap.SSTStorageScratch.SSTs(), preppedSnap.clearedSpans)
 			if err != nil {
 				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 			}
