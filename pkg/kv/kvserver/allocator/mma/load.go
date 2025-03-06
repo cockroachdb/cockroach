@@ -64,8 +64,6 @@ func (lv *LoadVector) subtract(other LoadVector) {
 const (
 	// unknownCapacity is currenly only used for WriteBandwidth.
 	unknownCapacity LoadValue = math.MaxInt64
-	// parentCapacity is currently only used for CPURate at the store level.
-	parentCapacity LoadValue = math.MaxInt64 - 1
 )
 
 // Secondary load dimensions should be considered after we are done
@@ -133,8 +131,6 @@ type storeLoad struct {
 	reportedLoad LoadVector
 
 	// Capacity information for this store.
-	//
-	// capacity[cpu] is parentCapacity.
 	//
 	// capacity[WriteBandwidth] is unknownCapacity.
 	//
@@ -347,9 +343,9 @@ func computeMeansForStoreSet(
 		sload := loadProvider.getStoreReportedLoad(storeID)
 		for j := range sload.reportedLoad {
 			means.storeLoad.load[j] += sload.reportedLoad[j]
-			if sload.capacity[j] == parentCapacity || sload.capacity[j] == unknownCapacity {
-				means.storeLoad.capacity[j] = parentCapacity
-			} else if means.storeLoad.capacity[j] != parentCapacity {
+			if sload.capacity[j] == unknownCapacity {
+				means.storeLoad.capacity[j] = unknownCapacity
+			} else if means.storeLoad.capacity[j] != unknownCapacity {
 				means.storeLoad.capacity[j] += sload.capacity[j]
 			}
 		}
@@ -363,7 +359,7 @@ func computeMeansForStoreSet(
 		}
 	}
 	for i := range means.storeLoad.load {
-		if means.storeLoad.capacity[i] != parentCapacity {
+		if means.storeLoad.capacity[i] != unknownCapacity {
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
 			means.storeLoad.capacity[i] /= LoadValue(n)
@@ -414,9 +410,6 @@ const (
 func loadSummaryForDimension(
 	load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
 ) loadSummary {
-	if capacity == parentCapacity {
-		return loadLow
-	}
 	loadSummary := loadLow
 	// Heuristics: this is all very rough and subject to revision. There are two
 	// uses for this loadSummary: to find source stores to shed load and to
