@@ -192,10 +192,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so create empty metadata.
-			return cspann.PartitionMetadata{
-				Level:    cspann.LeafLevel,
-				Centroid: make(vector.T, tx.store.rootQuantizer.GetDims()),
-			}, nil
+			return tx.store.makeEmptyRootPartitionMetadata(), nil
 		}
 		return cspann.PartitionMetadata{}, err
 	}
@@ -248,6 +245,10 @@ func (tx *memTxn) RemoveFromPartition(
 	// Acquire exclusive lock on the partition in order to remove a vector.
 	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
 	if err != nil {
+		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
+			// Root partition did not exist, so removal is no-op.
+			return tx.store.makeEmptyRootPartitionMetadata(), nil
+		}
 		return cspann.PartitionMetadata{}, err
 	}
 	defer memPart.lock.Release()
