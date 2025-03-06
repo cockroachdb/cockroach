@@ -33,6 +33,11 @@ import (
 const (
 	utc int64 = iota
 	americaNewYork
+	cspHeader = "default-src 'self'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"font-src 'self' data:; " +
+		"img-src 'self' data:; " +
+		"connect-src 'self' https://register.cockroachdb.com;"
 )
 
 var _ = settings.RegisterEnumSetting(
@@ -67,10 +72,9 @@ var Assets fs.FS
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
 
-// indexTemplate takes arguments about the current session and returns HTML
-// which includes the UI JavaScript bundles, plus a script tag which sets the
-// currently logged in user so that the UI JavaScript can decide whether to show
-// a login page.
+// indexHTML contains HTML which includes the UI JavaScript bundles for
+// DB console. It contains a template variable for the nonce attribute to
+// provide with the "Content-Security-Policy" header.
 var indexHTML = []byte(`<!DOCTYPE html>
 <html>
 	<head>
@@ -151,7 +155,6 @@ func Handler(cfg Config) http.Handler {
 	// etags is used to provide a unique per-file checksum for each served file,
 	// which enables client-side caching using Cache-Control and ETag headers.
 	etags := make(map[string]string)
-
 	if HaveUI && Assets != nil {
 		// Only compute hashes for UI-enabled builds
 		err := httputil.ComputeEtags(Assets, etags)
@@ -214,6 +217,7 @@ func Handler(cfg Config) http.Handler {
 		}
 
 		if r.Header.Get("Crdb-Development") != "" {
+			w.Header().Set("Content-Security-Policy", cspHeader)
 			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(indexHTML))
 			return
 		}
@@ -228,6 +232,7 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 
+		w.Header().Set("Content-Security-Policy", cspHeader)
 		http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(indexHTML))
 	})
 }
