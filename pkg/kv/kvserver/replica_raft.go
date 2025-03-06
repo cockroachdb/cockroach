@@ -1525,7 +1525,7 @@ func (r *Replica) tick(
 		r.mu.lastUpdateTimes.update(r.replicaID, r.Clock().PhysicalTime())
 		// We also update lastUpdateTimes for replicas that provide store liveness
 		// support to the leader.
-		r.updateLastUpdateTimesUsingStoreLivenessRLocked(storeClockTimestamp)
+		r.updateLastUpdateTimesUsingStoreLivenessLocked(storeClockTimestamp)
 	}
 
 	r.mu.ticks++
@@ -2774,16 +2774,36 @@ func shouldTransferRaftLeadershipToLeaseholderLocked(
 	return lhCaughtUp
 }
 
+type lastReplicaUpdateTime struct {
+	update      time.Time
+	unreachable bool
+}
+
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
 // last communication received from followers, which in turn informs the quota
 // pool and log truncations.
-type lastUpdateTimesMap map[roachpb.ReplicaID]time.Time
+type lastUpdateTimesMap map[roachpb.ReplicaID]lastReplicaUpdateTime
 
 func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 	if m == nil {
 		return
 	}
-	m[replicaID] = now
+	m[replicaID] = lastReplicaUpdateTime{update: now, unreachable: false}
+}
+
+// updateUnreachable marks the given replica ID as unreachable. Returns false
+// iff it is already marked as unreachable.
+func (m lastUpdateTimesMap) updateUnreachable(replicaID roachpb.ReplicaID) bool {
+	if m == nil {
+		return false
+	}
+	last := m[replicaID]
+	if last.unreachable {
+		return false
+	}
+	last.unreachable = true
+	m[replicaID] = last
+	return true
 }
 
 // updateOnUnquiesce is called when the leader unquiesces. In that case, we
@@ -2828,7 +2848,7 @@ func (m lastUpdateTimesMap) isFollowerActiveSince(
 		// replicas were updated).
 		return false
 	}
-	return now.Sub(lastUpdateTime) <= threshold
+	return now.Sub(lastUpdateTime.update) <= threshold
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
@@ -3098,8 +3118,8 @@ func (r *Replica) printRaftTail(
 // under the raft fortification protocol, where failure detection is subsumed by
 // store liveness.
 //
-// This method assume that Replica.mu is held in read mode.
-func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
+// This method assumes that Replica.mu is locked for writes.
+func (r *Replica) updateLastUpdateTimesUsingStoreLivenessLocked(
 	storeClockTimestamp hlc.ClockTimestamp,
 ) {
 	// If store liveness is not enabled, there is nothing to do. The
@@ -3112,9 +3132,19 @@ func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
 	for _, desc := range r.descRLocked().Replicas().Descriptors() {
 		// If the replica's store if providing store liveness support, update
 		// lastUpdateTimes to indicate that it is alive.
+		//
+		// Otherwise, mark the replica as unreachable, so that eventually raft is
+		// notified by ReportUnreachable, and the flow transfers to StateProbe. Do
+		// this only the first time, so that addUnreachableRemoteReplica is called
+		// only once per disconnect.
+		//
+		// TODO(pav-kv): there is an overlap between r.mu.lastUpdateTimes and
+		// r.unreachablesMu. Unify them into one mechanism.
 		_, curExp := (*replicaRLockedStoreLiveness)(r).SupportFrom(raftpb.PeerID(desc.ReplicaID))
 		if storeClockTimestamp.ToTimestamp().LessEq(curExp) {
 			r.mu.lastUpdateTimes.update(desc.ReplicaID, r.Clock().PhysicalTime())
+		} else if r.mu.lastUpdateTimes.updateUnreachable(desc.ReplicaID) {
+			r.addUnreachableRemoteReplica(desc.ReplicaID)
 		}
 	}
 }

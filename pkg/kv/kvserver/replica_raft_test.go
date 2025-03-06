@@ -51,12 +51,24 @@ func TestLastUpdateTimesMap(t *testing.T) {
 	t2 := t1.Add(time.Second)
 	m.update(3, t1)
 	m.update(1, t2)
-	assert.EqualValues(t, map[roachpb.ReplicaID]time.Time{1: t2, 3: t1}, m)
-	descs := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}, {ReplicaID: 4}}
 
+	upd := func(t time.Time, unreachable bool) lastReplicaUpdateTime {
+		return lastReplicaUpdateTime{update: t, unreachable: unreachable}
+	}
+	assert.EqualValues(t, map[roachpb.ReplicaID]lastReplicaUpdateTime{
+		1: upd(t2, false),
+		3: upd(t1, false),
+	}, m)
+
+	descs := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}, {ReplicaID: 4}}
 	t3 := t2.Add(time.Second)
 	m.updateOnBecomeLeader(descs, t3)
-	assert.EqualValues(t, map[roachpb.ReplicaID]time.Time{1: t3, 2: t3, 3: t3, 4: t3}, m)
+	assert.EqualValues(t, map[roachpb.ReplicaID]lastReplicaUpdateTime{
+		1: upd(t3, false),
+		2: upd(t3, false),
+		3: upd(t3, false),
+		4: upd(t3, false),
+	}, m)
 
 	t4 := t3.Add(time.Second)
 	descs = append(descs, []roachpb.ReplicaDescriptor{{ReplicaID: 5}, {ReplicaID: 6}}...)
@@ -70,13 +82,20 @@ func TestLastUpdateTimesMap(t *testing.T) {
 		7: {State: tracker.StateReplicate}, // ignored, not in descs
 	}
 	m.updateOnUnquiesce(descs, prs, t4)
-	assert.EqualValues(t, map[roachpb.ReplicaID]time.Time{
-		1: t4,
-		2: t3,
-		3: t3,
-		4: t3,
-		6: t4,
+	assert.EqualValues(t, map[roachpb.ReplicaID]lastReplicaUpdateTime{
+		1: upd(t4, false),
+		2: upd(t3, false),
+		3: upd(t3, false),
+		4: upd(t3, false),
+		6: upd(t4, false),
 	}, m)
+
+	assert.True(t, m.updateUnreachable(4))
+	assert.False(t, m.updateUnreachable(4))
+	assert.Equal(t, upd(t3, true), m[4])
+	m.update(4, t4)
+	assert.Equal(t, upd(t4, false), m[4])
+	assert.True(t, m.updateUnreachable(4))
 }
 
 func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
