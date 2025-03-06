@@ -12,6 +12,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -269,7 +270,8 @@ func TestUnsplitRanges(t *testing.T) {
 
 	ctx := context.Background()
 	run := func(t *testing.T, tc testCase) {
-		params, _ := createTestServerParams()
+		params, _ := createTestServerParamsAllowTenants()
+		params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(142388)
 		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,
