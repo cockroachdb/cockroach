@@ -16,7 +16,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/storeliveness",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",

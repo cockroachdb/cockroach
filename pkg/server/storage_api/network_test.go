@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,7 +36,7 @@ func TestNetworkConnectivity(t *testing.T) {
 	if s0.DeploymentMode().IsExternal() {
 		testCluster.GrantTenantCapabilities(
 			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanDebugProcess: "true"})
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"})
 	}
 
 	ts := s0.ApplicationLayer()

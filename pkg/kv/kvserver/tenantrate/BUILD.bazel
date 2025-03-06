@@ -38,7 +38,7 @@ go_test(
         ":tenantrate",
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

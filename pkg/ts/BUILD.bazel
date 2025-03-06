@@ -74,7 +74,7 @@ go_test(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
-        "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

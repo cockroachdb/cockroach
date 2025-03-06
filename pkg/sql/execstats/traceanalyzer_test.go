@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -81,7 +81,7 @@ func TestTraceAnalyzer(t *testing.T) {
 	if srv.DeploymentMode().IsExternal() {
 		require.NoError(t, srv.GrantTenantCapabilities(
 			ctx, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"}))
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"}))
 	}
 	db := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(db)

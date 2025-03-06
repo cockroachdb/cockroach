@@ -3,14 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tenantcapabilities
+package tenantcapabilitiespb
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/redact"
 
 // ID represents a handle to a tenant capability.
 type ID uint8
@@ -99,56 +94,10 @@ const (
 	MaxCapabilityID ID = iota - 1
 )
 
-// FromName looks up a capability by name.
-func FromName(s string) (Capability, bool) {
+// FromName looks up a capability ID by name.
+func FromName(s string) (ID, bool) {
 	if id, ok := stringToCapabilityIDMap[s]; ok {
-		return FromID(id)
+		return id, true
 	}
-	return nil, false
-}
-
-// FromID looks up a capability by ID.
-func FromID(id ID) (Capability, bool) {
-	if id.IsValid() {
-		return capabilities[id], true
-	}
-	return nil, false
-}
-
-var capabilities = [MaxCapabilityID + 1]Capability{
-	CanAdminRelocateRange:  boolCapability(CanAdminRelocateRange),
-	CanAdminScatter:        boolCapability(CanAdminScatter),
-	CanAdminSplit:          boolCapability(CanAdminSplit),
-	CanAdminUnsplit:        boolCapability(CanAdminUnsplit),
-	CanCheckConsistency:    boolCapability(CanCheckConsistency),
-	CanUseNodelocalStorage: boolCapability(CanUseNodelocalStorage),
-	CanViewNodeInfo:        boolCapability(CanViewNodeInfo),
-	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
-	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
-	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
-	CanDebugProcess:        boolCapability(CanDebugProcess),
-	CanViewAllMetrics:      boolCapability(CanViewAllMetrics),
-	CanPrepareTxns:         boolCapability(CanPrepareTxns),
-}
-
-// EnableAll enables maximum access to services.
-func EnableAll(t *tenantcapabilitiespb.TenantCapabilities) {
-	for i := ID(1); i <= MaxCapabilityID; i++ {
-		val, err := GetValueByID(t, i)
-		if err != nil {
-			panic(err)
-		}
-		switch v := val.(type) {
-		case TypedValue[bool]:
-			// Access to the service is enabled.
-			v.Set(true)
-
-		case TypedValue[*spanconfigbounds.Bounds]:
-			// No bound.
-			v.Set(nil)
-
-		default:
-			panic(errors.AssertionFailedf("unhandled type: %T", val))
-		}
-	}
+	return ID(0), false
 }

@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -225,7 +225,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 		// Enable access to the nodes endpoint for the test tenant.
 		require.NoError(t, srv.GrantTenantCapabilities(
 			ctx, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanViewNodeInfo: "true"}))
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}))
 	}
 
 	var request serverpb.NodesRequest

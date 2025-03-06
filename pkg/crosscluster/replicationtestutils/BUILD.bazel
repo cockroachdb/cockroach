@@ -26,6 +26,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

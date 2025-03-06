@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -277,14 +277,14 @@ type TestClusterInterface interface {
 		context.Context,
 		TestFataler,
 		roachpb.TenantID,
-		map[tenantcapabilities.ID]string,
+		map[tenantcapabilitiespb.ID]string,
 	)
 
 	// WaitForTenantCapabilities waits until all servers have the specified
 	// tenant capabilities for the specified tenant ID.
 	// Only boolean capabilities are currently supported as we wait for the
 	// specified capabilities to have a "true" value.
-	WaitForTenantCapabilities(TestFataler, roachpb.TenantID, map[tenantcapabilities.ID]string)
+	WaitForTenantCapabilities(TestFataler, roachpb.TenantID, map[tenantcapabilitiespb.ID]string)
 
 	// ToggleReplicateQueues activates or deactivates the replication queues on all
 	// the stores on all the nodes.

@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -139,7 +139,7 @@ func (n *alterTenantCapabilityNode) startExec(params runParams) error {
 	dst := &tenantInfo.Capabilities
 
 	if n.n.AllCapabilities {
-		for capID := tenantcapabilities.ID(1); capID <= tenantcapabilities.MaxCapabilityID; capID++ {
+		for capID := tenantcapabilitiespb.ID(1); capID <= tenantcapabilitiespb.MaxCapabilityID; capID++ {
 			cap, _ := tenantcapabilities.FromID(capID)
 			switch c := cap.(type) {
 			case tenantcapabilities.BoolCapability:

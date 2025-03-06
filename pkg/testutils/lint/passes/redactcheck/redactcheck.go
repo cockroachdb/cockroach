@@ -135,7 +135,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb": {
 						"Epoch": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
+					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb": {
 						"ID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
