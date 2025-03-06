@@ -77,6 +77,7 @@ go_library(
         "replica_send.go",
         "replica_split_load.go",
         "replica_sst_snapshot_storage.go",
+        "replica_storage_snapshot.go",
         "replica_store_liveness.go",
         "replica_store_liveness_sleep.go",
         "replica_tscache.go",
