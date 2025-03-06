@@ -2068,6 +2068,14 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 	for i, col := range private.OutCols {
 		outputCols.Set(col, i)
 	}
+	leftOrdering, err := sqlOrdering(leftExpr.ProvidedPhysical().Ordering, leftCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	rightOrdering, err := sqlOrdering(rightExpr.ProvidedPhysical().Ordering, rightCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
 	streamingOrdering, err := sqlOrdering(
 		ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering), outputCols,
 	)
@@ -2082,12 +2090,18 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 
 	var ep execPlan
 	if typ == tree.UnionOp && all {
-		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
+		ep.root, err = b.factory.ConstructUnionAll(
+			left.root, right.root, leftOrdering, rightOrdering, reqOrdering,
+			hardLimit, enforceHomeRegion,
+		)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.MergeJoin)
 		}
-		ep.root, err = b.factory.ConstructStreamingSetOp(typ, all, left.root, right.root, streamingOrdering, reqOrdering)
+		ep.root, err = b.factory.ConstructStreamingSetOp(
+			typ, all, left.root, right.root,
+			leftOrdering, rightOrdering, streamingOrdering, reqOrdering,
+		)
 	} else {
 		if len(reqOrdering) > 0 {
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")

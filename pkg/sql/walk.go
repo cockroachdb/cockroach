@@ -308,10 +308,6 @@ func nodeName(plan planNode) string {
 		if n.reverse {
 			return "revscan"
 		}
-	case *unionNode:
-		if n.emitAll {
-			return "append"
-		}
 
 	case *joinNode:
 		if len(n.mergeJoinOrdering) > 0 {

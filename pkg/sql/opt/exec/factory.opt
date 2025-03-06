@@ -202,6 +202,9 @@ define HashSetOp {
 # or the DISTINCT version). The left and right nodes must have the same number
 # of columns. Note that UNION ALL is special and is implemented by UnionAll.
 #
+# LeftOrdering and RightOrdering specify the output orderings for the left and
+# right inputs respectively. They are only set if StreamingOrdering is also set.
+#
 # ReqOrdering specifies the required output ordering, and it is guaranteed to be
 # a prefix of StreamingOrdering. Both inputs are already ordered according to
 # StreamingOrdering. StreamingOrdering is guaranteed to include all columns
@@ -215,12 +218,17 @@ define StreamingSetOp {
     All bool
     Left exec.Node
     Right exec.Node
+    LeftOrdering colinfo.ColumnOrdering
+    RightOrdering colinfo.ColumnOrdering
     StreamingOrdering colinfo.ColumnOrdering
     ReqOrdering exec.OutputOrdering
 }
 
 # UnionAll performs a UNION ALL. The left and right nodes must have the same
 # number of columns.
+#
+# LeftOrdering and RightOrdering specify the output orderings for the left and
+# right inputs respectively. They are only set if ReqOrdering is also set.
 #
 # ReqOrdering specifies the required output ordering, and if not empty, both
 # inputs are already ordered according to it. If ReqOrdering is set, the
@@ -239,6 +247,8 @@ define StreamingSetOp {
 define UnionAll {
     Left exec.Node
     Right exec.Node
+    LeftOrdering colinfo.ColumnOrdering
+    RightOrdering colinfo.ColumnOrdering
     ReqOrdering exec.OutputOrdering
     HardLimit uint64
     EnforceHomeRegion bool
@@ -479,6 +489,11 @@ define Insert {
     # multiple mutations in a statement, or the output of the mutation is
     # processed through side-effecting expressions.
     AutoCommit bool
+
+    # If set, the operator will use a specialized vectorized implementation.
+    # This is currently only used for inserts performed on behalf of COPY
+    # statements.
+    VectorInsert bool
 }
 
 # InsertFastPath implements a special (but very common) case of insert,

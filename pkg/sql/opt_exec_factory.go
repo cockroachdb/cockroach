@@ -138,12 +138,12 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	if err := scan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := scan.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
-		return newZeroNode(scan.resultColumns), nil
+		return newZeroNode(scan.columns), nil
 	}
 
 	scan.index = idx
@@ -241,11 +241,13 @@ func (ef *execFactory) ConstructInvertedFilter(
 	copy(columns, inputCols)
 	n = &invertedFilterNode{
 		singleInputPlanNode: singleInputPlanNode{n.(planNode)},
-		expression:          invFilter,
-		preFiltererExpr:     preFiltererExpr,
-		preFiltererType:     preFiltererType,
-		invColumn:           int(invColumn),
-		resultColumns:       columns,
+		columns:             columns,
+		invertedFilterPlanningInfo: invertedFilterPlanningInfo{
+			expression:      invFilter,
+			preFiltererExpr: preFiltererExpr,
+			preFiltererType: preFiltererType,
+			invColumn:       int(invColumn),
+		},
 	}
 	return n, nil
 }
@@ -595,8 +597,10 @@ func (ef *execFactory) ConstructHashSetOp(
 	typ tree.UnionType, all bool, left, right exec.Node,
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
-		typ, all, left.(planNode), right.(planNode), nil, nil, 0, /* hardLimit */
-		false, /* enforceHomeRegion */
+		typ, all, left.(planNode), right.(planNode),
+		nil /* leftOrdering */, nil, /* rightOrdering */
+		nil /* streamingOrdering */, nil, /* reqOrdering */
+		0 /* hardLimit */, false, /* enforceHomeRegion */
 	)
 }
 
@@ -605,7 +609,7 @@ func (ef *execFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
-	streamingOrdering colinfo.ColumnOrdering,
+	leftOrdering, rightOrdering, streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
@@ -613,6 +617,8 @@ func (ef *execFactory) ConstructStreamingSetOp(
 		all,
 		left.(planNode),
 		right.(planNode),
+		leftOrdering,
+		rightOrdering,
 		streamingOrdering,
 		ReqOrdering(reqOrdering),
 		0,     /* hardLimit */
@@ -622,13 +628,19 @@ func (ef *execFactory) ConstructStreamingSetOp(
 
 // ConstructUnionAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructUnionAll(
-	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64, enforceHomeRegion bool,
+	left, right exec.Node,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
+	enforceHomeRegion bool,
 ) (exec.Node, error) {
 	return ef.planner.newUnionNode(
 		tree.UnionOp,
 		true, /* all */
 		left.(planNode),
 		right.(planNode),
+		leftOrdering,
+		rightOrdering,
 		colinfo.ColumnOrdering(reqOrdering),
 		ReqOrdering(reqOrdering),
 		hardLimit,
@@ -679,20 +691,17 @@ func (ef *execFactory) ConstructIndexJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
-	cols := makeColList(table, tableCols)
 
-	tableScan := ef.planner.Scan()
-
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
 	idx := tabDesc.GetPrimaryIndex()
-	tableScan.index = idx
-	tableScan.disableBatchLimit()
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -704,16 +713,13 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	n := &indexJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		table:               tableScan,
-		cols:                cols,
-		resultColumns:       colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
-		reqOrdering:         ReqOrdering(reqOrdering),
-		limitHint:           limitHint,
-	}
-
-	n.keyCols = make([]int, len(keyCols))
-	for i, c := range keyCols {
-		n.keyCols[i] = int(c)
+		columns:             fetch.columns,
+		indexJoinPlanningInfo: indexJoinPlanningInfo{
+			fetch:       fetch,
+			keyCols:     keyCols,
+			reqOrdering: ReqOrdering(reqOrdering),
+			limitHint:   limitHint,
+		},
 	}
 
 	return n, nil
@@ -739,21 +745,23 @@ func (ef *execFactory) ConstructLookupJoin(
 	remoteOnlyLookups bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
-		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
+		return constructVirtualTableLookupJoin(
+			ef.planner, joinType, input, table, index, eqCols, lookupCols, onCond,
+		)
 	}
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
-	tableScan.index = idx
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -764,26 +772,25 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	n := &lookupJoinNode{
-		singleInputPlanNode:        singleInputPlanNode{input.(planNode)},
-		table:                      tableScan,
-		joinType:                   joinType,
-		eqColsAreKey:               eqColsAreKey,
-		isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
-		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
-		reqOrdering:                ReqOrdering(reqOrdering),
-		limitHint:                  limitHint,
-		remoteOnlyLookups:          remoteOnlyLookups,
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		lookupJoinPlanningInfo: lookupJoinPlanningInfo{
+			fetch:                      fetch,
+			joinType:                   joinType,
+			eqCols:                     eqCols,
+			eqColsAreKey:               eqColsAreKey,
+			lookupExpr:                 lookupExpr,
+			remoteLookupExpr:           remoteLookupExpr,
+			isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
+			isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
+			reqOrdering:                ReqOrdering(reqOrdering),
+			limitHint:                  limitHint,
+			remoteOnlyLookups:          remoteOnlyLookups,
+		},
 	}
-	n.eqCols = make([]int, len(eqCols))
-	for i, c := range eqCols {
-		n.eqCols[i] = int(c)
-	}
-	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), planColumns(tableScan))
-	n.lookupExpr = lookupExpr
-	n.remoteLookupExpr = remoteLookupExpr
 	if onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
+	n.columns = getJoinResultColumns(joinType, planColumns(input.(planNode)), fetch.columns)
 	if isFirstJoinInPairedJoiner {
 		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
@@ -791,7 +798,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	return n, nil
 }
 
-func (ef *execFactory) constructVirtualTableLookupJoin(
+func constructVirtualTableLookupJoin(
+	p *planner,
 	joinType descpb.JoinType,
 	input exec.Node,
 	table cat.Table,
@@ -799,13 +807,13 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	eqCols []exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
-) (exec.Node, error) {
+) (planNode, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn, ef.planner)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn, p)
 	if err != nil {
 		return nil, err
 	}
-	if !canQueryVirtualTable(ef.planner.EvalContext(), virtual) {
+	if !canQueryVirtualTable(p.EvalContext(), virtual) {
 		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
 	}
 	if len(eqCols) > 1 {
@@ -828,7 +836,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// Set up a scanNode that we won't actually use, just to get the needed
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	if err := tableScan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
+	if err := tableScan.initDescDefaults(tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -880,15 +888,15 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	tableScan := ef.planner.Scan()
 
-	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
-	tableScan.index = idx
-	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idx
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -899,63 +907,70 @@ func (ef *execFactory) ConstructInvertedJoin(
 	}
 
 	n := &invertedJoinNode{
-		singleInputPlanNode:       singleInputPlanNode{input.(planNode)},
-		table:                     tableScan,
-		joinType:                  joinType,
-		invertedExpr:              invertedExpr,
-		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
-		reqOrdering:               ReqOrdering(reqOrdering),
-	}
-	if len(prefixEqCols) > 0 {
-		n.prefixEqCols = make([]int, len(prefixEqCols))
-		for i, c := range prefixEqCols {
-			n.prefixEqCols[i] = int(c)
-		}
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		invertedJoinPlanningInfo: invertedJoinPlanningInfo{
+			fetch:                     fetch,
+			joinType:                  joinType,
+			prefixEqCols:              prefixEqCols,
+			invertedExpr:              invertedExpr,
+			isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
+			reqOrdering:               ReqOrdering(reqOrdering),
+		},
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
 	}
 	// Build the result columns.
-	inputCols := planColumns(input.(planNode))
+	n.columns = invertedJoinResultCols(
+		joinType, planColumns(input.(planNode)), fetch.columns, isFirstJoinInPairedJoiner,
+	)
+	return n, nil
+}
+
+func invertedJoinResultCols(
+	joinType descpb.JoinType,
+	inputCols, fetchCols colinfo.ResultColumns,
+	isFirstJoinInPairedJoiner bool,
+) colinfo.ResultColumns {
 	var scanCols colinfo.ResultColumns
 	if joinType.ShouldIncludeRightColsInOutput() {
-		scanCols = planColumns(tableScan)
+		scanCols = fetchCols
 	}
 	numCols := len(inputCols) + len(scanCols)
 	if isFirstJoinInPairedJoiner {
 		numCols++
 	}
-	n.columns = make(colinfo.ResultColumns, 0, numCols)
-	n.columns = append(n.columns, inputCols...)
-	n.columns = append(n.columns, scanCols...)
+	columns := make(colinfo.ResultColumns, 0, numCols)
+	columns = append(columns, inputCols...)
+	columns = append(columns, scanCols...)
 	if isFirstJoinInPairedJoiner {
-		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		columns = append(columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
 	}
-	return n, nil
+	return columns
 }
 
-// Helper function to create a scanNode from just a table / index descriptor
-// and requested cols.
-func (ef *execFactory) constructScanForZigzag(
+// Helper function to create a fetchPlanningInfo struct from just a
+// table / index descriptor and requested cols.
+func (ef *execFactory) constructFetchForZigzag(
 	table cat.Table,
 	index cat.Index,
 	cols exec.TableColumnOrdinalSet,
 	eqCols []exec.TableColumnOrdinal,
 	locking opt.Locking,
-) (_ *scanNode, eqColOrdinals []int, _ error) {
+) (_ fetchPlanningInfo, eqColOrdinals []int, _ error) {
 	colCfg := makeScanColumnsConfig(table, cols)
 
 	var err error
 	eqColOrdinals, err = tableToScanOrdinals(cols, eqCols)
 	if err != nil {
-		return nil, nil, err
+		return fetchPlanningInfo{}, nil, err
 	}
 
 	tableDesc := table.(*optTable).desc
 	idxDesc := index.(*optIndex).idx
-	scan := ef.planner.Scan()
-	if err := scan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
-		return nil, nil, err
+	var fetch fetchPlanningInfo
+	if err := fetch.initDescDefaults(tableDesc, colCfg); err != nil {
+		return fetchPlanningInfo{}, nil, err
 	}
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
@@ -966,12 +981,12 @@ func (ef *execFactory) constructScanForZigzag(
 		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
 	}
 
-	scan.index = idxDesc
-	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
-	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
-	scan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
+	fetch.index = idxDesc
+	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
+	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	return scan, eqColOrdinals, nil
+	return fetch, eqColOrdinals, nil
 }
 
 // ConstructZigzagJoin is part of the exec.Factory interface.
@@ -1000,11 +1015,15 @@ func (ef *execFactory) ConstructZigzagJoin(
 		reqOrdering: ReqOrdering(reqOrdering),
 	}
 	var err error
-	n.sides[0].scan, n.sides[0].eqCols, err = ef.constructScanForZigzag(leftTable, leftIndex, leftCols, leftEqCols, leftLocking)
+	n.sides[0].fetch, n.sides[0].eqCols, err = ef.constructFetchForZigzag(
+		leftTable, leftIndex, leftCols, leftEqCols, leftLocking,
+	)
 	if err != nil {
 		return nil, err
 	}
-	n.sides[1].scan, n.sides[1].eqCols, err = ef.constructScanForZigzag(rightTable, rightIndex, rightCols, rightEqCols, rightLocking)
+	n.sides[1].fetch, n.sides[1].eqCols, err = ef.constructFetchForZigzag(
+		rightTable, rightIndex, rightCols, rightEqCols, rightLocking,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1018,10 +1037,10 @@ func (ef *execFactory) ConstructZigzagJoin(
 	n.columns = make(
 		colinfo.ResultColumns,
 		0,
-		len(n.sides[0].scan.resultColumns)+len(n.sides[1].scan.resultColumns),
+		len(n.sides[0].fetch.columns)+len(n.sides[1].fetch.columns),
 	)
-	n.columns = append(n.columns, n.sides[0].scan.resultColumns...)
-	n.columns = append(n.columns, n.sides[1].scan.resultColumns...)
+	n.columns = append(n.columns, n.sides[0].fetch.columns...)
+	n.columns = append(n.columns, n.sides[1].fetch.columns...)
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
 	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.
@@ -1151,14 +1170,17 @@ func (ef *execFactory) ConstructProjectSet(
 
 // ConstructWindow is part of the exec.Factory interface.
 func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec.Node, error) {
+	partitionIdxs := make([]uint32, len(wi.Partition))
+	for i, idx := range wi.Partition {
+		partitionIdxs[i] = uint32(idx)
+	}
 	p := &windowNode{
 		singleInputPlanNode: singleInputPlanNode{root.(planNode)},
 		columns:             wi.Cols,
-	}
-
-	partitionIdxs := make([]int, len(wi.Partition))
-	for i, idx := range wi.Partition {
-		partitionIdxs[i] = int(idx)
+		windowPlanningInfo: windowPlanningInfo{
+			partitionIdxs:  partitionIdxs,
+			columnOrdering: wi.Ordering,
+		},
 	}
 
 	p.funcs = make([]*windowFuncHolder, len(wi.Exprs))
@@ -1169,14 +1191,12 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		}
 
 		p.funcs[i] = &windowFuncHolder{
-			expr:           wi.Exprs[i],
-			args:           wi.Exprs[i].Exprs,
-			argsIdxs:       argsIdxs,
-			filterColIdx:   wi.FilterIdxs[i],
-			outputColIdx:   wi.OutputIdxs[i],
-			partitionIdxs:  partitionIdxs,
-			columnOrdering: wi.Ordering,
-			frame:          wi.Exprs[i].WindowDef.Frame,
+			expr:         wi.Exprs[i],
+			args:         wi.Exprs[i].Exprs,
+			argsIdxs:     argsIdxs,
+			filterColIdx: wi.FilterIdxs[i],
+			outputColIdx: wi.OutputIdxs[i],
+			frame:        wi.Exprs[i].WindowDef.Frame,
 		}
 		if len(wi.Ordering) == 0 {
 			frame := p.funcs[i].frame
@@ -1391,6 +1411,7 @@ func (ef *execFactory) ConstructInsert(
 	checkOrdSet exec.CheckOrdinalSet,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
+	vectorInsert bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
@@ -1419,6 +1440,7 @@ func (ef *execFactory) ConstructInsert(
 	ins := insertNodePool.Get().(*insertNode)
 	*ins = insertNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		vectorInsert:        vectorInsert,
 		run: insertRun{
 			ti:         tableInserter{ri: ri},
 			checkOrds:  checkOrdSet,
@@ -1867,13 +1889,15 @@ func (ef *execFactory) ConstructVectorSearch(
 		return nil, err
 	}
 	return &vectorSearchNode{
-		table:               tabDesc,
-		index:               indexDesc,
-		prefixKey:           encPrefixKey,
-		queryVector:         queryVector,
-		targetNeighborCount: targetNeighborCount,
-		cols:                cols,
-		resultCols:          resultCols,
+		vectorSearchPlanningInfo: vectorSearchPlanningInfo{
+			table:               tabDesc,
+			index:               indexDesc,
+			prefixKey:           encPrefixKey,
+			queryVector:         queryVector,
+			targetNeighborCount: targetNeighborCount,
+			cols:                cols,
+			columns:             resultCols,
+		},
 	}, nil
 }
 
@@ -1900,13 +1924,15 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 
 	return &vectorMutationSearchNode{
 		singleInputPlanNode: singleInputPlanNode{input: inputPlan},
-		table:               table.(*optTable).desc,
-		index:               index.(*optIndex).idx,
-		prefixKeyCols:       prefixKeyCols,
-		queryVectorCol:      queryVectorCol,
-		suffixKeyCols:       suffixKeyCols,
-		isIndexPut:          isIndexPut,
-		columns:             cols,
+		vectorMutationSearchPlanningInfo: vectorMutationSearchPlanningInfo{
+			table:          table.(*optTable).desc,
+			index:          index.(*optIndex).idx,
+			prefixKeyCols:  prefixKeyCols,
+			queryVectorCol: queryVectorCol,
+			suffixKeyCols:  suffixKeyCols,
+			isIndexPut:     isIndexPut,
+		},
+		columns: cols,
 	}, nil
 }
 

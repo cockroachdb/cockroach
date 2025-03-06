@@ -327,7 +327,8 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	colCfg.wantedColumns = append(colCfg.wantedColumns, column.GetID())
 
 	// Initialize a dummy scanNode for the requested statistic.
-	scan := scanNode{desc: desc}
+	var scan scanNode
+	scan.desc = desc
 	err = scan.initDescSpecificCol(colCfg, column)
 	if err != nil {
 		return nil, err
@@ -337,7 +338,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// handle single column partial statistics.
 	// TODO(faizaanmadhani): Add support for multi-column partial stats next
 	var colIdxMap catalog.TableColMap
-	for i, c := range scan.cols {
+	for i, c := range scan.catalogCols {
 		colIdxMap.Set(c.GetID(), i)
 	}
 
@@ -406,7 +407,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		}
 	}
 
-	sampledColumnIDs := make([]descpb.ColumnID, len(scan.cols))
+	sampledColumnIDs := make([]descpb.ColumnID, len(scan.catalogCols))
 	spec := execinfrapb.SketchSpec{
 		SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 		GenerateHistogram:   reqStat.histogram,
@@ -537,14 +538,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Create the table readers; for this we initialize a dummy scanNode.
-	scan := scanNode{desc: desc}
+	var scan scanNode
 	if colCfg.wantedColumns == nil {
 		// wantedColumns cannot be left nil, and if it is nil at this point,
 		// then we only have virtual computed columns, so we'll allocate an
 		// empty slice.
 		colCfg.wantedColumns = []tree.ColumnID{}
 	}
-	err := scan.initDescDefaults(colCfg)
+	err := scan.initDescDefaults(desc, colCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +579,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			virtComputedCols,
-			scan.cols,
+			scan.catalogCols,
 			desc,
 			tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
 			planCtx.EvalContext(),
@@ -592,7 +593,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		exprs := make(tree.TypedExprs, len(requestedCols))
 		resultCols := colinfo.ResultColumnsFromColumns(desc.GetID(), requestedCols)
 
-		ivh := tree.MakeIndexedVarHelper(nil /* container */, len(scan.cols))
+		ivh := tree.MakeIndexedVarHelper(nil /* container */, len(scan.catalogCols))
 		var scanIdx, virtIdx int
 		var distSQLVisitor distSQLExprCheckVisitor
 		for i, col := range requestedCols {
@@ -614,12 +615,12 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			} else {
 				// Confirm that the scan columns contain the requested column in the
 				// expected order.
-				if scanIdx >= len(scan.cols) || scan.cols[scanIdx].GetID() != col.GetID() {
+				if scanIdx >= len(scan.catalogCols) || scan.catalogCols[scanIdx].GetID() != col.GetID() {
 					return nil, errors.AssertionFailedf(
-						"scan columns do not match requested columns: %v vs %v", scan.cols, requestedCols,
+						"scan columns do not match requested columns: %v vs %v", scan.catalogCols, requestedCols,
 					)
 				}
-				exprs[i] = ivh.IndexedVarWithType(scanIdx, scan.cols[scanIdx].GetType())
+				exprs[i] = ivh.IndexedVarWithType(scanIdx, scan.catalogCols[scanIdx].GetType())
 				scanIdx++
 			}
 		}
@@ -636,9 +637,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		// No virtual computed columns. Confirm that the scan columns match the
 		// requested columns.
 		for i, col := range requestedCols {
-			if i >= len(scan.cols) || scan.cols[i].GetID() != col.GetID() {
+			if i >= len(scan.catalogCols) || scan.catalogCols[i].GetID() != col.GetID() {
 				return nil, errors.AssertionFailedf(
-					"scan columns do not match requested columns: %v vs %v", scan.cols, requestedCols,
+					"scan columns do not match requested columns: %v vs %v", scan.catalogCols, requestedCols,
 				)
 			}
 		}

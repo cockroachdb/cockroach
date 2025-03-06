@@ -10,12 +10,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type invertedJoinNode struct {
 	singleInputPlanNode
-	table *scanNode
+	invertedJoinPlanningInfo
+
+	// columns are the produced columns, namely the input columns and (unless the
+	// join type is semi or anti join) the columns fetched from the table.
+	// It includes an additional continuation column when IsFirstJoinInPairedJoin
+	// is true.
+	columns colinfo.ResultColumns
+}
+
+type invertedJoinPlanningInfo struct {
+	fetch fetchPlanningInfo
 
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.
 	joinType descpb.JoinType
@@ -24,15 +36,10 @@ type invertedJoinNode struct {
 	// lookup if the index is a multi-column inverted index. These correspond to
 	// the non-inverted prefix columns of the index we are looking up. This is
 	// empty if the index is not a multi-column inverted index.
-	prefixEqCols []int
+	prefixEqCols []exec.NodeColumnOrdinal
 
 	// The inverted expression to evaluate.
 	invertedExpr tree.TypedExpr
-
-	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns in the table scanNode. It can
-	// include an additional continuation column for paired joins.
-	columns colinfo.ResultColumns
 
 	// onExpr is any ON condition to be used in conjunction with the inverted
 	// expression.
@@ -41,6 +48,9 @@ type invertedJoinNode struct {
 	isFirstJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
+
+	// finalizeLastStageCb will be nil in the spec factory.
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
 func (ij *invertedJoinNode) startExec(params runParams) error {
@@ -57,5 +67,4 @@ func (ij *invertedJoinNode) Values() tree.Datums {
 
 func (ij *invertedJoinNode) Close(ctx context.Context) {
 	ij.input.Close(ctx)
-	ij.table.Close(ctx)
 }
