@@ -2022,6 +2022,15 @@ func (p *Pebble) NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) Eventua
 	}
 }
 
+// Excise implements the Engine interface.
+func (p *Pebble) Excise(ctx context.Context, span roachpb.Span) error {
+	rawSpan := pebble.KeyRange{
+		Start: EngineKey{Key: span.Key}.Encode(),
+		End:   EngineKey{Key: span.EndKey}.Encode(),
+	}
+	return p.db.Excise(ctx, rawSpan)
+}
+
 // IngestLocalFiles implements the Engine interface.
 func (p *Pebble) IngestLocalFiles(ctx context.Context, paths []string) error {
 	return p.db.Ingest(ctx, paths)
