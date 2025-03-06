@@ -10,6 +10,18 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+)
+
+type ScalarType int
+
+const (
+	ScalarInt ScalarType = iota
+	ScalarFloat
+	ScalarString
+	ScalarBool
+	ScalarNull
+	ScalarVariable
 )
 
 type Jsonpath struct {
@@ -65,54 +77,27 @@ func (p Paths) String() string {
 	return sb.String()
 }
 
-type Variable string
-
-var _ Path = Variable("")
-
-func (v Variable) String() string {
-	return fmt.Sprintf("$%q", string(v))
+type Scalar struct {
+	Type     ScalarType
+	Value    json.JSON
+	Variable string
 }
 
-type Numeric struct {
-	IsNegative bool
-	IsFloat    bool
-	FloatValue float64
-	IntValue   int64
-}
+var _ Path = Scalar{}
 
-var _ Path = Numeric{}
-
-func NewNumericFloat(f float64) Numeric {
-	return Numeric{
-		IsFloat:    true,
-		FloatValue: f,
+func (s Scalar) String() string {
+	if s.Type == ScalarVariable {
+		return fmt.Sprintf("$%q", s.Variable)
 	}
+	return s.Value.String()
 }
 
-func NewNumericInt(i int64) Numeric {
-	return Numeric{
-		IsFloat:    false,
-		IntValue:   i,
-		IsNegative: false,
-	}
-}
-
-func (n Numeric) String() string {
-	if n.IsFloat {
-		return fmt.Sprintf("%g", n.FloatValue)
-	}
-	if n.IsNegative {
-		return fmt.Sprintf("-%d", n.IntValue)
-	}
-	return fmt.Sprintf("%d", n.IntValue)
-}
-
-type ArrayIndex Numeric
+type ArrayIndex Scalar
 
 var _ Path = ArrayIndex{}
 
 func (a ArrayIndex) String() string {
-	return Numeric(a).String()
+	return Scalar(a).String()
 }
 
 type ArrayIndexRange struct {
@@ -123,7 +108,7 @@ type ArrayIndexRange struct {
 var _ Path = ArrayIndexRange{}
 
 func (a ArrayIndexRange) String() string {
-	return fmt.Sprintf("%s to %s", Numeric(a.Start), Numeric(a.End))
+	return fmt.Sprintf("%s to %s", a.Start.Value, a.End.Value)
 }
 
 type ArrayList []Path

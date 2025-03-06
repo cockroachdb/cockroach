@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/scanner",
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/json",  # keep
         "//pkg/util/jsonpath",
         "@com_github_cockroachdb_errors//:errors",
     ],

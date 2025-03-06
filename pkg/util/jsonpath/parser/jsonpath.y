@@ -4,6 +4,7 @@ package parser
 import (
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+  "github.com/cockroachdb/cockroach/pkg/util/json"
   "github.com/cockroachdb/cockroach/pkg/util/jsonpath"
   "github.com/cockroachdb/errors"
 )
@@ -99,11 +100,11 @@ func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
   if len(paths) != 1 {
     return jsonpath.ArrayIndex{}, errors.New("expected exactly one path")
   }
-  n, ok := paths[0].(jsonpath.Numeric)
+  s, ok := paths[0].(jsonpath.Scalar)
   if !ok {
-    return jsonpath.ArrayIndex{}, errors.New("expected numeric index")
+    return jsonpath.ArrayIndex{}, errors.New("expected scalar value")
   }
-  return jsonpath.ArrayIndex(n), nil
+  return jsonpath.ArrayIndex(s), nil
 }
 
 %}
@@ -288,7 +289,7 @@ index_elem:
 scalar_value:
   VARIABLE
   {
-    $$.val = jsonpath.Variable($1)
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarVariable, Variable: $1}
   }
 | ICONST
   {
@@ -296,12 +297,13 @@ scalar_value:
     if err != nil {
       return setErr(jsonpathlex, err)
     }
-    $$.val = jsonpath.NewNumericInt(i)
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarInt, Value: json.FromInt64(i)}
   }
 | FCONST
   {
     return unimplemented(jsonpathlex, "float consts")
   }
+// TODO(normanchenn): support strings, bools, null.
 ;
 
 any_identifier:

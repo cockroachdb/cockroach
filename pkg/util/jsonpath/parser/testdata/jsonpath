@@ -26,6 +26,11 @@ $.abc
 $."abc" -- normalized!
 
 parse
+$."abc-def"."abc_def"
+----
+$."abc-def"."abc_def"
+
+parse
 $.a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.u.v.w.x.y.z
 ----
 $."a"."b"."c"."d"."e"."f"."g"."h"."i"."j"."k"."l"."m"."n"."o"."p"."q"."r"."s"."t"."u"."v"."w"."x"."y"."z" -- normalized!
@@ -232,6 +237,16 @@ $.abc[  1    to    3   , 4 to 3, 5  , 9     to 7]
 ----
 $."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
 
+parse
+$[1]
+----
+$[1]
+
+parse
+$[$var]
+----
+$[$"var"] -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
@@ -260,5 +275,21 @@ $."abc"[1 to 3,4 to 3,5,9 to 7] -- normalized!
 # ----
 
 # parse
+# $[1.999999999999999]
+# ----
+
+# parse
 # $.1a
+# ----
+
+# parse
+# $[true]
+# ----
+
+# parse
+# $[false]
+# ----
+
+# parse
+# $[null]
 # ----
