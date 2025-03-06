@@ -65,7 +65,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 
 // isIdentMiddle returns true if the character is valid inside an identifier.
 func isIdentMiddle(ch int) bool {
-	return sqllexbase.IsIdentStart(ch) || sqllexbase.IsDigit(ch)
+	return sqllexbase.IsIdentStart(ch) || sqllexbase.IsDigit(ch) || ch == '_' || ch == '-'
 }
 
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
