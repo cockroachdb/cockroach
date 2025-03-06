@@ -63,6 +63,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",

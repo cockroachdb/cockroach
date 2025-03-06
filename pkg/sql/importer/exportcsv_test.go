@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -665,7 +665,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 
 	if tc.DefaultTenantDeploymentMode().IsExternal() {
 		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminRelocateRange: "true"})
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
 
 	origDB0 := tc.ServerConn(0)

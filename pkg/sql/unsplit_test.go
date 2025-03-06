@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,9 +46,9 @@ func TestUnsplitAt(t *testing.T) {
 	if s.DeploymentMode().IsExternal() {
 		require.NoError(t, s.GrantTenantCapabilities(
 			context.Background(), serverutils.TestTenantID(),
-			map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanAdminSplit:   "true",
-				tenantcapabilities.CanAdminUnsplit: "true",
+			map[tenantcapabilitiespb.ID]string{
+				tenantcapabilitiespb.CanAdminSplit:   "true",
+				tenantcapabilitiespb.CanAdminUnsplit: "true",
 			}))
 	}
 

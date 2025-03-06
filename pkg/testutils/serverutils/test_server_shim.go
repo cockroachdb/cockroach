@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -511,7 +511,7 @@ func WaitForTenantCapabilities(
 	t TestFataler,
 	s TestServerInterface,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilities.ID]string,
+	targetCaps map[tenantcapabilitiespb.ID]string,
 	errPrefix string,
 ) {
 	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)
