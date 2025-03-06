@@ -34,25 +34,32 @@ type prepareSnapshotInput struct {
 	logSL         *logstore.StateLoader
 	clearedSpans  []roachpb.Span
 
+	// TODO(itsbilal): Write to SST files directly in rather than
+	// forcing buffering in a MemObject first.
 	writeSST func(context.Context, []byte) error
 }
 
 type preparedSnapshot struct {
-	unreplicatedSSTFile *storage.MemObject
-	clearedSpans        []roachpb.Span
+	clearedSpans []roachpb.Span
 
 	subsumedReplicas time.Time
 }
 
 func prepareSnapshot(ctx context.Context, in prepareSnapshotInput) (*preparedSnapshot, error) {
 	clearedSpans := in.clearedSpans[:len(in.clearedSpans):len(in.clearedSpans)]
-	unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
-		ctx, in.replicaID, in.st, in.ts, in.hs, in.logSL,
-	)
-	if err != nil {
-		return nil, err
+
+	{
+		unreplicatedSSTFile, clearedSpan, err := writeUnreplicatedSST(
+			ctx, in.replicaID, in.st, in.ts, in.hs, in.logSL,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := in.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+			return nil, err
+		}
+		clearedSpans = append(clearedSpans, clearedSpan)
 	}
-	clearedSpans = append(clearedSpans, clearedSpan)
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the
@@ -73,9 +80,8 @@ func prepareSnapshot(ctx context.Context, in prepareSnapshotInput) (*preparedSna
 	tSubsumedReplicas := timeutil.Now()
 
 	return &preparedSnapshot{
-		unreplicatedSSTFile: unreplicatedSSTFile,
-		clearedSpans:        clearedSpans,
-		subsumedReplicas:    tSubsumedReplicas,
+		clearedSpans:     clearedSpans,
+		subsumedReplicas: tSubsumedReplicas,
 	}, nil
 }
 

@@ -562,11 +562,6 @@ func (r *Replica) applySnapshot(
 
 	stats.subsumedReplicas = preppedSnap.subsumedReplicas
 
-	// TODO(itsbilal): Write to SST directly in unreplicatedSST rather than
-	// buffering in a MemObject first.
-	if err := inSnap.SSTStorageScratch.WriteSST(ctx, preppedSnap.unreplicatedSSTFile.Data()); err != nil {
-		return err
-	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
 
