@@ -520,6 +520,26 @@ func (r *Replica) applySnapshot(
 		log.Infof(ctx, "applied %s %s(%s)", inSnap, appliedAsWriteStr, logDetails)
 	}(timeutil.Now())
 
+	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
+	for _, sr := range subsumedRepls {
+		// We mark the replica as destroyed so that new commands are not
+		// accepted. This destroy status will be detected after the batch
+		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		//
+		// We need to mark the replicas as being destroyed *before* we ingest the
+		// SSTs, so that, e.g., concurrent reads served by the replica don't
+		// erroneously return empty data.
+		sr.readOnlyCmdMu.Lock()
+		sr.mu.Lock()
+		sr.mu.destroyStatus.Set(
+			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
+			destroyReasonRemoved)
+		sr.mu.Unlock()
+		sr.readOnlyCmdMu.Unlock()
+
+		subsumedDescs = append(subsumedDescs, sr.Desc())
+	}
+
 	// Clear the raft state and reset it. The log starts from the applied entry ID
 	// of the snapshot.
 	truncState := kvserverpb.RaftTruncatedState{
@@ -541,26 +561,6 @@ func (r *Replica) applySnapshot(
 	}
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
-
-	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
-	for _, sr := range subsumedRepls {
-		// We mark the replica as destroyed so that new commands are not
-		// accepted. This destroy status will be detected after the batch
-		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
-		//
-		// We need to mark the replicas as being destroyed *before* we ingest the
-		// SSTs, so that, e.g., concurrent reads served by the replica don't
-		// erroneously return empty data.
-		sr.readOnlyCmdMu.Lock()
-		sr.mu.Lock()
-		sr.mu.destroyStatus.Set(
-			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
-			destroyReasonRemoved)
-		sr.mu.Unlock()
-		sr.readOnlyCmdMu.Unlock()
-
-		subsumedDescs = append(subsumedDescs, sr.Desc())
-	}
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the
