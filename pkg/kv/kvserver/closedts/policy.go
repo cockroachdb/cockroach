@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+const DefaultMaxNetworkRTT = 150 * time.Millisecond
+
 // TargetForPolicy returns the target closed timestamp for a range with the
 // given policy.
 func TargetForPolicy(
@@ -20,6 +22,7 @@ func TargetForPolicy(
 	lagTargetDuration time.Duration,
 	leadTargetOverride time.Duration,
 	sideTransportCloseInterval time.Duration,
+	maxNetworkRTT time.Duration,
 	policy roachpb.RangeClosedTimestampPolicy,
 ) hlc.Timestamp {
 	var res hlc.Timestamp
@@ -85,12 +88,6 @@ func TargetForPolicy(
 		// when two nodes have skewed physical clocks, the "stability" property
 		// of HLC propagation when nodes are communicating should reduce the
 		// effective HLC clock skew.
-
-		// TODO(nvanbenschoten): make this dynamic, based on the measured
-		// network latencies recorded by the RPC context. This isn't trivial and
-		// brings up a number of questions. For instance, how far into the tail
-		// do we care about? Do we place upper and lower bounds on this value?
-		const maxNetworkRTT = 150 * time.Millisecond
 
 		// See raft_propagation_time.
 		const raftTransportOverhead = 20 * time.Millisecond

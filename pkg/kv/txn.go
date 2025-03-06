@@ -914,7 +914,7 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
 		return closedts.TargetForPolicy(now, maxClockOffset,
-			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
+			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval, closedts.DefaultMaxNetworkRTT,
 			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
 	}
 
