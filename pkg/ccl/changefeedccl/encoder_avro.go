@@ -8,12 +8,10 @@ package changefeedccl
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -126,25 +124,6 @@ func newConfluentAvroEncoder(
 	return e, nil
 }
 
-// Get the raw SQL-formatted string for a table name
-// and apply full_table_name and avro_schema_prefix options
-func (e *confluentAvroEncoder) rawTableName(eventMeta cdcevent.Metadata) (string, error) {
-	target, found := e.targets.FindByTableIDAndFamilyName(eventMeta.TableID, eventMeta.FamilyName)
-	if !found {
-		return eventMeta.TableName, errors.Newf("Could not find Target for %s", eventMeta)
-	}
-	switch target.Type {
-	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-		return e.schemaPrefix + string(target.StatementTimeName), nil
-	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, eventMeta.FamilyName), nil
-	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
-	default:
-		return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
-	}
-}
-
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) ([]byte, error) {
 	// No familyID in the cache key for keys because it's the same schema for all families
@@ -159,7 +138,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) 
 		}
 	} else {
 		var err error
-		tableName, err := e.rawTableName(row.Metadata)
+		tableName, err := getTableName(e.targets, e.schemaPrefix, row.Metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +264,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 			return nil, errors.AssertionFailedf(`unknown envelope type: %s`, e.envelopeType)
 		}
 
-		name, err := e.rawTableName(updatedRow.Metadata)
+		name, err := getTableName(e.targets, e.schemaPrefix, updatedRow.Metadata)
 		if err != nil {
 			return nil, err
 		}

@@ -9,8 +9,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
-	"encoding/json"
+	gojson "encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"net/http"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
@@ -87,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -3882,18 +3885,139 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func toJSON(t *testing.T, x any) string {
+	t.Helper()
+	// Our json library formats differently than the stdlib, and json.MakeJSON()
+	// chokes on some inputs, so marshal it twice.
+	bs, err := gojson.Marshal(x)
+	require.NoError(t, err)
+	j, err := json.ParseJSON(string(bs))
+	require.NoError(t, err)
+	return j.String()
+}
+
 func TestChangefeedEnriched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	key := map[string]any{"a": 0}
+	keySchema := map[string]any{
+		"name": "foo.key",
+		"fields": []map[string]any{
+			{"field": "a", "optional": false, "type": "int64"},
+		},
+		"optional": false,
+		"type":     "struct",
+	}
+
+	afterVal := map[string]any{"a": 0, "b": "dog"}
+	afterSchema := map[string]any{
+		"name":  "foo.after.value",
+		"field": "after",
+		"fields": []map[string]any{
+			{"field": "a", "optional": false, "type": "int64"},
+			{"field": "b", "optional": true, "type": "string"},
+		},
+		"optional": false,
+		"type":     "struct",
+	}
+	// TODO(#139662): add `before`
+
+	// Create an enriched source provider with no data. The contents of source
+	// will be tested in another test, we just want to make sure the structure &
+	// schema is right here.
+	esp := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	source, err := esp.GetJSON(cdcevent.Row{})
+	require.NoError(t, err)
+
+	var sourceMap map[string]any
+	require.NoError(t, gojson.Unmarshal([]byte(source.String()), &sourceMap))
+
+	sourceSchema := esp.KafkaConnectJSONSchema().AsJSON()
+	var sourceSchemaMap map[string]any
+	require.NoError(t, gojson.Unmarshal([]byte(sourceSchema.String()), &sourceSchemaMap))
+	sourceSchemaMap["field"] = "source"
+
+	tsNsSchema := map[string]any{"field": "ts_ns", "optional": false, "type": "int64"}
+	opSchema := map[string]any{"field": "op", "optional": false, "type": "string"}
+
 	cases := []struct {
-		name               string
-		enrichedProperties []string
+		name                 string
+		enrichedProperties   []string
+		messageWithoutSource map[string]any
+		withSource           bool
+		expectedKey          map[string]any
 	}{
-		{name: "solo"},
-		{name: "with schema", enrichedProperties: []string{"schema"}},
-		{name: "with source", enrichedProperties: []string{"source"}},
-		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}},
+		{
+			name: "with nothing",
+			messageWithoutSource: map[string]any{
+				// TODO: this is always the same now, so we can simplify these cases.
+				"after": afterVal,
+				"op":    "c",
+				// NOTE: here and in all these cases, ts_ns is stripped by the test framework, and source is specified separately
+			},
+			expectedKey: key,
+		},
+		{
+			name:               "with schema",
+			enrichedProperties: []string{"schema"},
+			messageWithoutSource: map[string]any{
+				"payload": map[string]any{
+					"after": afterVal,
+					"op":    "c",
+				},
+				"schema": map[string]any{
+					"name":     "cockroachdb.envelope",
+					"optional": false,
+					"fields": []map[string]any{
+						afterSchema,
+						tsNsSchema,
+						opSchema,
+					},
+					"type": "struct",
+				},
+			},
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
+		{
+			name:               "with source",
+			enrichedProperties: []string{"source"},
+			messageWithoutSource: map[string]any{
+				"after": afterVal,
+				"op":    "c",
+			},
+			withSource:  true,
+			expectedKey: key,
+		},
+		{
+			name:               "with schema and source",
+			enrichedProperties: []string{"schema", "source"},
+			messageWithoutSource: map[string]any{
+				"payload": map[string]any{
+					"after": afterVal,
+					"op":    "c",
+				},
+				"schema": map[string]any{
+					"name":     "cockroachdb.envelope",
+					"optional": false,
+					"fields": []map[string]any{
+						afterSchema,
+						sourceSchemaMap,
+						tsNsSchema,
+						opSchema,
+					},
+					"type": "struct",
+				},
+			},
+			withSource: true,
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -3915,22 +4039,23 @@ func TestChangefeedEnriched(t *testing.T) {
 					topic = ""
 				}
 
-				msg := fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic)
-				if slices.Contains(tc.enrichedProperties, "schema") {
-					// TODO(#139658): add the schema to the key and the value here
-					msg = fmt.Sprintf(`%s: {"payload": {"a": 0}}->{"payload": {"after": {"a": 0, "b": "dog"}, "op": "c"}}`, topic)
+				var jobID int64
+				// Fetching the jobId this way is not supported by the sinkless sink.
+				// In that case we will assert the job_id is 0, so we don't need this query.
+				if _, ok := foo.(*sinklessFeed); !ok {
+					sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
 				}
 
-				sourceIsNotNilWhenSpecified := func(actualSource map[string]any) {
-					if slices.Contains(tc.enrichedProperties, "source") {
-						require.NotNil(t, actualSource)
-						return
+				assertion := fmt.Sprintf("%s: %s->%s", topic, toJSON(t, tc.expectedKey), toJSON(t, tc.messageWithoutSource))
+				sourceAssertion := func(actualSource map[string]any) {
+					if tc.withSource {
+						// Just check the source's structure.
+						require.ElementsMatch(t, slices.Collect(maps.Keys(sourceMap)), slices.Collect(maps.Keys(actualSource)))
+					} else {
+						require.Empty(t, actualSource)
 					}
-
-					require.Nil(t, actualSource)
 				}
-
-				assertPayloadsEnriched(t, foo, []string{msg}, sourceIsNotNilWhenSpecified)
+				assertPayloadsEnriched(t, foo, []string{assertion}, sourceAssertion)
 			}
 			supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
 			for _, sink := range supportedSinks {
@@ -5475,7 +5600,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 						B int
 					}
 				}
-				err = json.Unmarshal(msg.Value, &decodedMessage)
+				err = gojson.Unmarshal(msg.Value, &decodedMessage)
 				require.NoError(t, err)
 				delete(upsertedValues, decodedMessage.After.B)
 				if len(upsertedValues) == 0 {
@@ -10178,7 +10303,7 @@ func (s *changefeedLogSpy) Intercept(entry []byte) {
 	s.Lock()
 	defer s.Unlock()
 	var j map[string]any
-	if err := json.Unmarshal(entry, &j); err != nil {
+	if err := gojson.Unmarshal(entry, &j); err != nil {
 		panic(err)
 	}
 	if !strings.Contains(j["file"].(string), "ccl/changefeedccl/") {
