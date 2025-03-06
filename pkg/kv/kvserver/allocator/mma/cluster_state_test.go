@@ -69,6 +69,8 @@ func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 		switch parts[0] {
 		case "store-id":
 			msg.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
+		case "node-id":
+			msg.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
 		case "load":
 			msg.Load = parseLoadVector(t, parts[1])
 		case "capacity":
@@ -78,39 +80,15 @@ func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 					msg.Capacity[i] = unknownCapacity
 				}
 			}
+		case "load-time":
+			duration, err := time.ParseDuration(parts[1])
+			require.NoError(t, err)
+			msg.LoadTime = testingBaseTime.Add(duration)
 		case "secondary-load":
 			msg.SecondaryLoad = parseSecondaryLoadVector(t, parts[1])
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
-	}
-	return msg
-}
-
-func parseNodeLoadMsg(t *testing.T, in string) NodeLoadMsg {
-	var msg NodeLoadMsg
-	lines := strings.Split(in, "\n")
-	for _, part := range strings.Fields(lines[0]) {
-		parts := strings.Split(part, "=")
-		require.Len(t, parts, 2)
-		switch parts[0] {
-		case "node-id":
-			msg.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
-		case "cpu-load":
-			msg.ReportedCPU = LoadValue(parseInt(t, parts[1]))
-		case "cpu-capacity":
-			msg.CapacityCPU = LoadValue(parseInt(t, parts[1]))
-		case "load-time":
-			duration, err := time.ParseDuration(parts[1])
-			require.NoError(t, err)
-			msg.LoadTime = testingBaseTime.Add(duration)
-		default:
-			t.Fatalf("Unknown argument: %s", parts[0])
-		}
-	}
-	msg.Stores = make([]StoreLoadMsg, 0, len(lines)-1)
-	for _, line := range lines[1:] {
-		msg.Stores = append(msg.Stores, parseStoreLoadMsg(t, line))
 	}
 	return msg
 }
@@ -311,16 +289,13 @@ func TestClusterState(t *testing.T) {
 
 				case "get-load-info":
 					var buf strings.Builder
-					storeList, _ := testingGetStoreList(cs)
-					for _, storeID := range storeList {
+					memberStores, _ := testingGetStoreList(cs)
+					for _, storeID := range memberStores {
 						ss := cs.stores[storeID]
-						if ss.storeMembership == storeMembershipRemoved {
-							continue
-						}
 						ns := cs.nodes[ss.NodeID]
 						fmt.Fprintf(&buf,
-							"store-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
-							ss.StoreID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
+							"store-id=%v node-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
+							ss.StoreID, ss.NodeID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
 						)
 					}
 					return buf.String()
@@ -371,9 +346,9 @@ func TestClusterState(t *testing.T) {
 					cs.updateFailureDetectionSummary(roachpb.NodeID(nodeID), fd)
 					return printNodeListMeta()
 
-				case "node-load-msg":
-					msg := parseNodeLoadMsg(t, d.Input)
-					cs.processNodeLoadMsg(&msg)
+				case "store-load-msg":
+					msg := parseStoreLoadMsg(t, d.Input)
+					cs.processStoreLoadMsg(&msg)
 					return ""
 
 				case "store-leaseholder-msg":

@@ -794,52 +794,6 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 	}
 }
 
-// TODO(kvoli): delete and update unit test to call processStoreLoadMsg.
-func (cs *clusterState) processNodeLoadMsg(msg *NodeLoadMsg) {
-	now := cs.ts.Now()
-	cs.gcPendingChanges(now)
-
-	ns := cs.nodes[msg.NodeID]
-	// Handle the node load, updating the reported load and set the adjusted load
-	// to be equal to the reported load initially. Any remaining pending changes
-	// will be re-applied to the reported load.
-	ns.ReportedCPU = msg.ReportedCPU
-	ns.adjustedCPU = msg.ReportedCPU
-	ns.NodeLoad = msg.NodeLoad
-	for _, storeMsg := range msg.Stores {
-		ss := cs.stores[storeMsg.StoreID]
-
-		// The store's load seqeunce number is incremented on each load change. The
-		// store's load is updated below.
-		ss.loadSeqNum++
-		ss.storeLoad.reportedLoad = storeMsg.Load
-		ss.storeLoad.capacity = storeMsg.Capacity
-		ss.storeLoad.reportedSecondaryLoad = storeMsg.SecondaryLoad
-
-		// Reset the adjusted load to be the reported load. We will re-apply any
-		// remaining pending change deltas to the updated adjusted load.
-		ss.adjusted.load = storeMsg.Load
-		ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
-
-		// Find any pending changes for range's which involve this store. These
-		// pending changes can now be removed from the loadPendingChanges. We don't
-		// need to undo the corresponding delta adjustment as the reported load
-		// already contains the effect.
-		for _, change := range ss.computePendingChangesReflectedInLatestLoad(msg.LoadTime) {
-			delete(ss.adjusted.loadPendingChanges, change.changeID)
-			delete(cs.pendingChanges, change.changeID)
-			cs.ranges[change.rangeID].removePendingChangeTracking(change.changeID)
-		}
-
-		for _, change := range ss.adjusted.loadPendingChanges {
-			// The pending change hasn't been reported as done, re-apply the load
-			// delta to the adjusted load and include it in the new adjusted load
-			// replicas.
-			cs.applyChangeLoadDelta(change.replicaChange)
-		}
-	}
-}
-
 func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
@@ -849,7 +803,6 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	// Handle the node load, updating the reported load and set the adjusted load
 	// to be equal to the reported load initially. Any remaining pending changes
 	// will be re-applied to the reported load.
-
 	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
 	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
 	// Undo the adjustment for the store. We will apply the adjustment again
