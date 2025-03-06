@@ -155,10 +155,10 @@ func configureSlimTestServer(params base.TestServerArgs) base.TestServerArgs {
 
 // makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
-	st := params.Settings
 	if params.Settings == nil {
-		st = cluster.MakeClusterSettings()
+		params.Settings = cluster.MakeClusterSettings()
 	}
+	st := params.Settings
 	if params.SlimTestSeverConfig != nil {
 		params = configureSlimTestServer(params)
 	}

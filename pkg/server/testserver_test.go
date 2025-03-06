@@ -10,8 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,24 +31,22 @@ func BenchmarkTestServerStartup(b *testing.B) {
 	}
 
 	for _, tc := range testCases {
+		args := base.TestServerArgs{
+			DefaultTestTenant: tc.tenantOpt,
+		}
 		b.Run(tc.name, func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-
-				args := base.TestServerArgs{
-					DefaultTestTenant: tc.tenantOpt,
-					Settings:          cluster.MakeTestingClusterSettings(),
-					Knobs: base.TestingKnobs{
-						SQLEvalContext: &eval.TestingKnobs{
-							// We disable the randomization of some batch sizes to get consistent
-							// results.
-							ForceProductionValues: true,
-						},
-					},
+			testutils.RunTrueAndFalse(b, "slim", func(b *testing.B, useSlimServer bool) {
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					var s serverutils.TestServerInterface
+					if useSlimServer {
+						s = serverutils.StartSlimServerOnly(b, args)
+					} else {
+						s = serverutils.StartServerOnly(b, args)
+					}
+					s.Stopper().Stop(context.Background())
 				}
-				s := serverutils.StartServerOnly(b, args)
-				s.Stopper().Stop(context.Background())
-			}
+			})
 		})
 	}
 }
@@ -71,9 +67,7 @@ func TestServerStartup(t *testing.T) {
 	for _, tc := range testCases {
 		args := base.TestServerArgs{
 			DefaultTestTenant: tc.tenantOpt,
-			Settings:          cluster.MakeTestingClusterSettings(),
 		}
-
 		t.Run(tc.name, func(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "slim", func(t *testing.T, useSlimServer bool) {
 				var s serverutils.TestServerInterface
@@ -81,7 +75,6 @@ func TestServerStartup(t *testing.T) {
 					s = serverutils.StartSlimServerOnly(t, args)
 				} else {
 					s = serverutils.StartServerOnly(t, args)
-
 				}
 				s.Stopper().Stop(context.Background())
 			})
