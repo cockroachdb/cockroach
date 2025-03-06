@@ -4204,6 +4204,89 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 	}
 }
 
+func TestChangefeedEnrichedWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name      string
+		options   []string
+		sinks     []string
+		assertion func(topic string) []string
+	}{
+		{
+			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "before": null, "op": "c"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "before": {"a": 0, "b": "dog"}, "op": "u"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": null, "before": {"a": 0, "b": "cat"}, "op": "d"}`, topic),
+				}
+			},
+		},
+		{
+			name: "json without diff", options: []string{"format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "op": "u"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": null, "op": "d"}`, topic),
+				}
+			},
+		},
+		{
+			name: "avro with diff", options: []string{"diff", "format=avro"}, sinks: []string{"kafka"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "before": null, "op": {"string": "c"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "cat"}}}, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "u"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": null, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "cat"}}}, "op": {"string": "d"}}`, topic),
+				}
+			},
+		},
+		{
+			name: "avro without diff", options: []string{"format=avro"}, sinks: []string{"kafka"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "c"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "cat"}}}, "op": {"string": "u"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": null, "op": {"string": "d"}}`, topic),
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, %s`, strings.Join(tc.options, ", ")))
+				defer closeFeed(t, foo)
+
+				sqlDB.Exec(t, `UPDATE foo SET b = 'cat'`)
+				sqlDB.Exec(t, `DELETE FROM foo WHERE b = 'cat'`)
+
+				// TODO(#139660): the webhook sink forces topic_in_value, but
+				// this is not supported by the enriched envelope type. We should adapt
+				// the test framework to account for this.
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				assertPayloadsEnriched(t, foo, tc.assertion(topic), nil)
+			}
+			for _, sink := range tc.sinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
+		})
+	}
+}
+
 func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
