@@ -943,6 +943,8 @@ type Engine interface {
 	Compact() error
 	// Env returns the filesystem environment used by the Engine.
 	Env() *fs.Env
+	// Excise removes all data for the given span from the engine.
+	Excise(ctx context.Context, span roachpb.Span) error
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
