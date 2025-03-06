@@ -19,11 +19,18 @@ import (
 
 // StoreLoadMsg is periodically sent by each store.
 type StoreLoadMsg struct {
+	roachpb.NodeID
 	roachpb.StoreID
 
-	Load          LoadVector
+	Load LoadVector
+	// Capacity[CPURate] is derived based on considering the aggregate usage
+	// across all stores, and using the utilization observed at the node, to
+	// derive a node level capacity, and then dividing that by the number of
+	// stores.
 	Capacity      LoadVector
 	SecondaryLoad SecondaryLoadVector
+
+	LoadTime time.Time
 }
 
 // NodeLoadMsg provides all the load information for a node and its
