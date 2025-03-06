@@ -1339,6 +1339,8 @@ type StoreConfig struct {
 	// RangeCount is populated by the node and represents the total number of
 	// ranges this node has.
 	RangeCount *atomic.Int64
+
+	NodeCapacityProvider NodeCapacityProvider
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1728,7 +1730,8 @@ func NewStore(
 
 	if s.cfg.Gossip != nil {
 		s.storeGossip = NewStoreGossip(cfg.Gossip,
-			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{})
+			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{},
+			cfg.NodeCapacityProvider)
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
