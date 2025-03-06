@@ -167,6 +167,9 @@ type Store struct {
 		// used to ensure that a deleted partition is not garbage collected until
 		// there are no longer any active transactions that might reference it.
 		pending list.List[pendingItem]
+		// emptyVec is a zero-valued vector, used when root centroid does not
+		// exist.
+		emptyVec vector.T
 	}
 }
 
@@ -543,4 +546,19 @@ func (s *Store) getPartitionLocked(
 ) (memPart *memPartition, ok bool) {
 	memPart, ok = s.mu.partitions[makeQualifiedPartitionKey(treeKey, partitionKey)]
 	return memPart, ok
+}
+
+// makeEmptyRootPartitionMetadata returns the partition metadata for an empty
+// root partition.
+func (s *Store) makeEmptyRootPartitionMetadata() cspann.PartitionMetadata {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.mu.emptyVec == nil {
+		s.mu.emptyVec = make(vector.T, s.dims)
+	}
+	return cspann.PartitionMetadata{
+		Level:    cspann.LeafLevel,
+		Centroid: s.mu.emptyVec,
+	}
 }
