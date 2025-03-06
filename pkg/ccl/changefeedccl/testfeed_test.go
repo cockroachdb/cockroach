@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1847,11 +1848,21 @@ func (s *fakeKafkaSinkV2) Dial() error {
 			if m.Key != nil {
 				key = sarama.ByteEncoder(m.Key)
 			}
+
+			var headers []sarama.RecordHeader
+			for _, h := range m.Headers {
+				headers = append(headers, sarama.RecordHeader{
+					Key:   []byte(h.Key),
+					Value: h.Value,
+				})
+			}
+
 			s.feedCh <- &sarama.ProducerMessage{
 				Topic:     m.Topic,
 				Key:       key,
 				Value:     sarama.ByteEncoder(m.Value),
 				Partition: m.Partition,
+				Headers:   headers,
 			}
 		}
 		return nil
@@ -2090,6 +2101,11 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 		if err := decode(msg.Value, &fm.Value); err != nil {
 			return nil, err
 		}
+
+		for _, h := range msg.Headers {
+			fm.Headers = append(fm.Headers, cdctest.Header{K: string(h.Key), V: h.Value})
+		}
+		slices.SortFunc(fm.Headers, func(a, b cdctest.Header) int { return strings.Compare(a.K, b.K) })
 
 		if isNew := k.markSeen(fm); isNew {
 			return fm, nil

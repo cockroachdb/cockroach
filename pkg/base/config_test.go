@@ -34,14 +34,15 @@ func TestDefaultRaftConfig(t *testing.T) {
 	nodeActive, nodeRenewal := cfg.NodeLivenessDurations()
 	storeActive, storeRenewal := cfg.StoreLivenessDurations()
 	raftElectionTimeout := cfg.RaftElectionTimeout()
+	raftElectionJitter := cfg.RaftTickInterval * time.Duration(cfg.RaftElectionTimeoutJitterTicks)
 	raftReproposalTimeout := cfg.RaftTickInterval * time.Duration(cfg.RaftReproposalTimeoutTicks)
 	raftHeartbeatInterval := cfg.RaftTickInterval * time.Duration(cfg.RaftHeartbeatIntervalTicks)
-
 	{
 		var s string
 		s += spew.Sdump(cfg)
 		s += fmt.Sprintf("RaftHeartbeatInterval: %s\n", raftHeartbeatInterval)
 		s += fmt.Sprintf("RaftElectionTimeout: %s\n", raftElectionTimeout)
+		s += fmt.Sprintf("RaftElectionJitter: %s\n", raftElectionJitter)
 		s += fmt.Sprintf("RaftReproposalTimeout: %s\n", raftReproposalTimeout)
 		s += fmt.Sprintf("RangeLeaseDurations: active=%s renewal=%s\n", leaseActive, leaseRenewal)
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
@@ -53,9 +54,8 @@ func TestDefaultRaftConfig(t *testing.T) {
 
 	// Generate and assert the derived recovery intervals.
 	const (
-		minRTT                = 10 * time.Millisecond
-		maxRTT                = 400 * time.Millisecond // max GCP inter-region RTT is ~350ms
-		maxElectionMultiplier = 2
+		minRTT = 10 * time.Millisecond
+		maxRTT = 400 * time.Millisecond // max GCP inter-region RTT is ~350ms
 		// TODO(nvanbenschoten): don't hardcode this values, separate from the
 		// hardcoded value in storeliveness/config.go.
 		storeLivenessWithdrawalInterval = 100 * time.Millisecond
@@ -94,9 +94,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 			0,
 		},
 		{
-			fmt.Sprintf("Election timeout (random 1x-%dx timeout)", maxElectionMultiplier),
+			"Election timeout (timeout + random election jitter)",
 			raftElectionTimeout,
-			maxElectionMultiplier * raftElectionTimeout,
+			raftElectionTimeout + raftElectionJitter,
 		},
 		{
 			"Election (3x RTT: prevote, vote, append)",
@@ -165,9 +165,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 			storeLivenessWithdrawalInterval,
 		},
 		{
-			fmt.Sprintf("Raft election timeout jitter (random 0x-%dx timeout)", maxElectionMultiplier-1),
+			"Raft election timeout jitter (random election jitter)",
 			0,
-			(maxElectionMultiplier - 1) * raftElectionTimeout,
+			raftElectionJitter,
 		},
 		{
 			"Election (3x RTT: prevote, vote, append)",

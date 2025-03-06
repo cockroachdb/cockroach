@@ -100,10 +100,11 @@ type Storage interface {
 // must be set for each node using the stub as a template.
 func raftConfigStub() raft.Config {
 	return raft.Config{
-		ElectionTick:    3,
-		HeartbeatTick:   1,
-		MaxSizePerMsg:   math.MaxUint64,
-		MaxInflightMsgs: math.MaxInt32,
+		ElectionTick:       3,
+		ElectionJitterTick: 3,
+		HeartbeatTick:      1,
+		MaxSizePerMsg:      math.MaxUint64,
+		MaxInflightMsgs:    math.MaxInt32,
 	}
 }
 

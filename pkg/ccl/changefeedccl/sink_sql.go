@@ -132,6 +132,7 @@ func (s *sqlSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	defer alloc.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)

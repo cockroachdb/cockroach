@@ -50,6 +50,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	c := &raft.Config{
 		ID:                        id,
 		ElectionTick:              50,
+		ElectionJitterTick:        50,
 		HeartbeatTick:             1,
 		Storage:                   st,
 		MaxSizePerMsg:             1024 * 1024,
@@ -211,6 +212,7 @@ func (n *node) restart() {
 	c := &raft.Config{
 		ID:                        n.id,
 		ElectionTick:              10,
+		ElectionJitterTick:        10,
 		HeartbeatTick:             1,
 		Storage:                   n.storage,
 		MaxSizePerMsg:             1024 * 1024,

@@ -165,7 +165,7 @@ var (
 	//
 	// Raft election (fortification disabled):
 	// - Heartbeat offset (0-1 heartbeat interval)                [-1.00s - 0.00s]
-	// - Election timeout (random 1x-2x timeout)                  [ 2.00s - 4.00s]
+	// - Election timeout (timeout + random election jitter)      [ 2.00s - 4.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// Total latency                                              [ 1.03s - 5.20s]
 	//
@@ -186,7 +186,7 @@ var (
 	// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-1.00s - 0.00s]
 	// - Store Liveness expiration (constant)                     [ 3.00s - 3.00s]
 	// - Store Liveness withdrawal (0-1 withdrawal interval)      [ 0.00s - 0.10s]
-	// - Raft election timeout jitter (random 0x-1x timeout)      [ 0.00s - 2.00s]
+	// - Raft election timeout jitter (random election jitter)    [ 0.00s - 2.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// - Lease acquisition (1x RTT: append)                       [ 0.01s - 0.40s]
 	// Total latency                                              [ 2.04s - 6.70s]
@@ -247,7 +247,9 @@ var (
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
-	// multiplied by a random factor of 1-2, to avoid ties.
+	// selected randomly between the interval:
+	// [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	//
 	// A timeout of 2 seconds with a Raft heartbeat sent every second gives each
 	// heartbeat 1 second to make it across the network. This is only half a
@@ -257,6 +259,14 @@ var (
 	// random factor provides an additional buffer.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
+
+	// defaultRaftElectionTimeoutJitterTicks specifies the maximum number of Raft
+	// ticks after defaultRaftElectionTimeoutTicks before holding an election.
+	// The actual election timeout per replica is selected randomly between the
+	// interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
+	defaultRaftElectionTimeoutJitterTicks = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_JITTER_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
@@ -544,9 +554,13 @@ type RaftConfig struct {
 
 	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
 	// an election. The actual election timeout is randomized by each replica to
-	// between 1-2 election timeouts. This value is inherited by individual stores
-	// unless overridden.
+	// between the interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	RaftElectionTimeoutTicks int64
+
+	// RaftElectionTimeoutJitterTicks is the maximum number of ticks after
+	// RaftElectionTimeoutTicks to hold an election.
+	RaftElectionTimeoutJitterTicks int64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
@@ -664,6 +678,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RaftElectionTimeoutJitterTicks == 0 {
+		cfg.RaftElectionTimeoutJitterTicks = defaultRaftElectionTimeoutJitterTicks
 	}
 	if cfg.RaftHeartbeatIntervalTicks == 0 {
 		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks

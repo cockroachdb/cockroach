@@ -362,6 +362,7 @@ func (s *kafkaSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) error {
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
@@ -378,11 +379,20 @@ func (s *kafkaSink) EmitRow(
 		downstreamClientSendCb()
 	}
 
+	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))
+	for key, value := range headers {
+		recordHeaders = append(recordHeaders, sarama.RecordHeader{
+			Key:   []byte(key),
+			Value: value,
+		})
+	}
+
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
 		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: updateMetrics},
+		Headers:  recordHeaders,
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
