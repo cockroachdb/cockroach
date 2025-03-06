@@ -7,20 +7,18 @@ node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,nod
 node-id=2 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=2
   store-id=2 membership=full attrs=yellow locality-code=4:5:6:
 
-node-load-msg 
-node-id=1 cpu-load=80 cpu-capacity=100 load-time=0s
-  store-id=1 load=[80,80,80] capacity=[-1,100,100] secondary-load=1
+store-load-msg
+  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s
 ----
 
-node-load-msg 
-node-id=2 cpu-load=20 cpu-capacity=100 load-time=0s
-  store-id=2 load=[20,80,80] capacity=[-1,100,100] secondary-load=1
+store-load-msg
+  store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s
 ----
 
 get-load-info
 ----
-store-id=1 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
-store-id=2 reported=[20,80,80] adjusted=[20,80,80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
+store-id=1 node-id=1 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[20,80,80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
 
 store-leaseholder-msg 
 store-id=1
