@@ -121,9 +121,10 @@ func readNextMessages(
 		if len(m.Key) > 0 || len(m.Value) > 0 {
 			actual = append(actual,
 				cdctest.TestFeedMessage{
-					Topic: m.Topic,
-					Key:   m.Key,
-					Value: m.Value,
+					Topic:   m.Topic,
+					Key:     m.Key,
+					Value:   m.Value,
+					Headers: m.Headers,
 				},
 			)
 		}
@@ -240,7 +241,7 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
-		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+		actualFormatted = append(actualFormatted, m.String())
 	}
 
 	if perKeyOrdered {

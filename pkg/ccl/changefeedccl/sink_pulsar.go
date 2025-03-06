@@ -135,6 +135,7 @@ func (p *pulsarSink) EmitRow(
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	// TODO(jayant): cache the encoded topics to save an alloc
 	// TODO(#118863): support updated, mvcc, topic_prefix etc.
