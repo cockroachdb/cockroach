@@ -78,7 +78,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	// Write kA = v1.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job1.InfoStorage(txn)
-		return infoStorage.Write(ctx, kA, v1)
+		return infoStorage.WriteFirstKey(ctx, kA, v1)
 	}))
 	// Write kD = v2.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -603,4 +603,22 @@ func TestJobProgressAndStatusAccessors(t *testing.T) {
 		require.Equal(t, []jobs.JobMessage{{Kind: "k2", Message: "boo"}, {Kind: "k1", Message: "bar"}}, j3Messages)
 	})
 
+	t.Run("unique-key-violation-defense", func(t *testing.T) {
+		job4 := createJob(4)
+		sql.Exec(t, "INSERT INTO system.job_progress VALUES ($1, now(), 0.2)", job4.ID())
+		sql.Exec(t, "INSERT INTO system.job_progress VALUES ($1, now(), 0.5)", job4.ID())
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			// Ensure the progress is updated and the duplicate job_id record is removed.
+			return job4.ProgressStorage().Set(ctx, txn, 0.8, hlc.Timestamp{})
+		}))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT fraction from system.job_progress where job_id = %d", job4.ID()), [][]string{{"0.8"}})
+
+		sql.Exec(t, "INSERT INTO system.job_status VALUES ($1, now(), 'a')", job4.ID())
+		sql.Exec(t, "INSERT INTO system.job_status VALUES ($1, now(), 'b')", job4.ID())
+		require.NoError(t, idb.Txn(ctx, func(ct context.Context, txn isql.Txn) error {
+			// Ensure the status is updated and the duplicate job_id record is removed.
+			return job4.StatusStorage().Set(ctx, txn, "c")
+		}))
+		sql.CheckQueryResults(t, fmt.Sprintf("SELECT status from system.job_status where job_id = %d", job4.ID()), [][]string{{"c"}})
+	})
 }
