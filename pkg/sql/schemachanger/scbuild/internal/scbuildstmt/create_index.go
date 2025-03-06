@@ -160,10 +160,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if n.Unique {
 			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
 		}
-		b.IncrementSchemaChangeIndexCounter("inverted")
-		if len(n.Columns) > 1 {
-			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
-		}
 	}
 
 	// Assign the ID here, since we may have added columns
@@ -180,6 +176,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// Picks up any geoconfig parameters, hash sharded one are
 	// picked independently.
 	maybeApplyStorageParameters(b, n, &idxSpec)
+
+	if n.Inverted {
+		b.IncrementSchemaChangeIndexCounter("inverted")
+		if len(n.Columns) > 1 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted")
+		}
+	}
+
 	// Assign the secondary constraint ID now, since we may have added a check
 	// constraint earlier.
 	if idxSpec.secondary.IsUnique {

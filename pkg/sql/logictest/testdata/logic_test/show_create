@@ -76,10 +76,19 @@ c  CREATE TABLE public.c (
 statement ok
 ALTER TABLE c VALIDATE CONSTRAINT check_b;
 ALTER TABLE c VALIDATE CONSTRAINT fk_a;
-ALTER TABLE c VALIDATE CONSTRAINT unique_a;
 ALTER TABLE c VALIDATE CONSTRAINT unique_b;
 ALTER TABLE c VALIDATE CONSTRAINT unique_a_b;
 ALTER TABLE c VALIDATE CONSTRAINT unique_b_partial;
+
+skipif config local-legacy-schema-changer
+statement error constraint "unique_a" of relation "test.public.c" is not a foreign key, check, or unique without index constraint
+ALTER TABLE c VALIDATE CONSTRAINT unique_a;
+
+# The legacy schema changer is more permissive and allows this VALIDATE
+# statement even though it doesn't do anything.
+onlyif config local-legacy-schema-changer
+statement ok
+ALTER TABLE c VALIDATE CONSTRAINT unique_a;
 
 query TT
 SHOW CREATE c

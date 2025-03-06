@@ -303,17 +303,17 @@ func TestDropJobCancelable(t *testing.T) {
 	}{
 		{
 			"simple drop sequence",
-			"BEGIN;DROP SEQUENCE db.sq1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP SEQUENCE db.sq1; END;",
 			false,
 		},
 		{
 			"simple drop view",
-			"BEGIN;DROP VIEW db.v1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP VIEW db.v1; END;",
 			false,
 		},
 		{
 			"simple drop table",
-			"BEGIN;DROP TABLE db.t1 CASCADE; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP TABLE db.t1 CASCADE; END;",
 			false,
 		},
 	}

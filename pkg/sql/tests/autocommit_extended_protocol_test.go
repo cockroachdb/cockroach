@@ -124,7 +124,7 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, c, "expected 1 row, got %d", c)
 	// Verify that a job was created for the create index.
-	err = db.QueryRow("SELECT count(*) FROM  [SHOW JOBS] WHERE job_type ='SCHEMA CHANGE' AND description LIKE 'CREATE INDEX idx%' LIMIT 1").Scan(&c)
+	err = db.QueryRow("SELECT count(*) FROM  [SHOW JOBS] WHERE job_type ='NEW SCHEMA CHANGE' AND description LIKE 'CREATE INDEX idx%' LIMIT 1").Scan(&c)
 	require.NoError(t, err)
 	require.Equal(t, 1, c, "expected 1 row, got %d", c)
 }
