@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -2885,6 +2886,73 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	if status.Term != initialTerm {
 		t.Errorf("while sleeping, term changed from %d to %d", initialTerm, status.Term)
 	}
+}
+
+// TestReportUnreachableStoreLiveness tests that if a follower's store liveness
+// is expired, ReportUnreachable is called and the corresponding raft flow is
+// transferred to StateProbe.
+func TestReportUnreachableStoreLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Enable leader fortification, store liveness, and leader leases.
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock, // use manual clock to expedite expiry
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	desc := tc.LookupRangeOrFatal(t, key)
+
+	// Send a write, to get things going.
+	s1 := tc.GetFirstStoreFromServer(t, 0)
+	incArgs := incrementArgs(key, 5)
+	if _, err := kv.SendWrapped(ctx, s1.TestSender(), incArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Partition n3 from other nodes (including the leader on n1).
+	partRange, err := setupPartitionedRange(tc, desc.RangeID, 0, 2,
+		true /* activated */, unreliableRaftHandlerFuncs{})
+	require.NoError(t, err)
+
+	leaderRepl := s1.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, leaderRepl)
+	s3Repl := tc.GetFirstStoreFromServer(t, 2).LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, s3Repl)
+
+	waitForFlowState := func(state tracker.StateType) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			pr, ok := leaderRepl.RaftStatus().Progress[raftpb.PeerID(s3Repl.ReplicaID())]
+			require.True(t, ok)
+			if pr.State != state {
+				return errors.Newf("raft flow in %v, want %v", pr.State, state)
+			}
+			return nil
+		})
+	}
+
+	// Eventually, the s3 store liveness expires, and the flow transfers to StateProbe.
+	manualClock.Increment((10 * time.Second).Nanoseconds())
+	waitForFlowState(tracker.StateProbe)
+	// After healing the partition, the flow returns back to StateReplicate.
+	partRange.deactivate()
+	waitForFlowState(tracker.StateReplicate)
 }
 
 // TestReportUnreachableRemoveRace adds and removes the raft leader replica
