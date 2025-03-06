@@ -88,7 +88,7 @@ func TestMeansMemo(t *testing.T) {
 				}
 				for i := range sLoad.capacity {
 					if sLoad.capacity[i] < 0 {
-						sLoad.capacity[i] = parentCapacity
+						sLoad.capacity[i] = unknownCapacity
 					}
 				}
 				loadProvider.sloads[roachpb.StoreID(storeID)] = sLoad
@@ -135,8 +135,8 @@ func TestMeansMemo(t *testing.T) {
 					}
 					capacity := mss.storeLoad.capacity[i]
 					var capStr string
-					if capacity == parentCapacity {
-						capStr = "parent"
+					if capacity == unknownCapacity {
+						capStr = "unknown"
 					} else {
 						capStr = fmt.Sprintf("%d", capacity)
 					}
