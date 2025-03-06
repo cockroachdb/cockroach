@@ -335,3 +335,17 @@ func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Regist
 	}
 	return nil
 }
+
+func (ls *Stores) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
+	var nc roachpb.NodeCapacity
+	ls.VisitStores(func(s *Store) error {
+		c, err := s.Capacity(context.Background(), useCached)
+		if err != nil {
+			panic(err)
+		}
+		nc.StoresCPURate += int64(c.CPUPerSecond)
+		return nil
+	})
+	// TODO: fill in the rest of the fields.
+	return nc
+}

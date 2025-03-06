@@ -284,6 +284,21 @@ message Percentiles {
   optional double pMax = 6 [(gogoproto.nullable) = false];
 }
 
+// NodeCapacity provides node level usage and capacity.
+message NodeCapacity {
+  // StoresCPURate tracks the aggregate averaged cpu use (nanos per second)
+  // across all stores. This is the sum of all the replica's cpu time on this
+  // node, which is tracked in replica stats.
+  optional int64 stores_cpu_rate = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoresCPURate"];
+  // NodeCPURateUsage is the averaged cpu rate (nanos per second) observed at
+  // the node. This will often be higher than storesCPURate because of gaps in
+  // the fine-grained instrumentation used to compute storesCPURate.
+  optional int64 node_cpu_rate_usage = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateUsage"];
+  // NodeCPURateCapacity is the cpu rate (nanos per second) capacity of the
+  // node.
+  optional int64 node_cpu_rate_capacity = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
+}
+
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
   option (gogoproto.goproto_stringer) = false;
@@ -405,6 +420,7 @@ message StoreDescriptor {
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
   optional StoreProperties properties = 5 [(gogoproto.nullable) = false];
+  optional NodeCapacity node_capacity = 6 [(gogoproto.nullable) = false];
 }
 
 // Locality is an ordered set of key value Tiers that describe a node's
