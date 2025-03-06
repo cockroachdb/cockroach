@@ -1117,6 +1117,10 @@ type Manager struct {
 	// waitForInit used when the lease manager is starting up prevent leases from
 	// being acquired before the range feed.
 	waitForInit chan struct{}
+
+	// initComplete fast check to confirm that initialization is complete, since
+	// performance testing showed select can be expected.
+	initComplete atomic.Bool
 }
 
 const leaseConcurrencyLimit = 5
@@ -1552,6 +1556,9 @@ func (m *Manager) isDescriptorStateEmpty(id descpb.ID) bool {
 
 // maybeWaitForInit waits for the lease manager to startup.
 func (m *Manager) maybeWaitForInit() {
+	if m.initComplete.Load() {
+		return
+	}
 	select {
 	case <-m.waitForInit:
 	case <-m.stopper.ShouldQuiesce():
@@ -1579,6 +1586,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer close(m.waitForInit)
+	defer m.initComplete.Swap(true)
 	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
@@ -2286,6 +2294,7 @@ func (m *Manager) TestingMarkInit() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	close(m.waitForInit)
+	m.initComplete.Swap(true)
 }
 
 // deleteOrphanedLeasesFromStaleSession deletes leases from sessions that are
