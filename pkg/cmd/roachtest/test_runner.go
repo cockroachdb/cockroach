@@ -931,15 +931,20 @@ func (r *testRunner) runWorker(
 					t.Fatalf("unknown lease type %s", leases)
 				}
 
-				// 50% chance of enabling the rangefeed buffered sender. Disabled by
-				// default. Disabled for mixed-version tests since this cluster setting
-				// is only supported in >= v25.2.
-				useBufferedSender := prng.Intn(2) == 0
-				if !t.spec.Suites.Contains(registry.MixedVersion) && useBufferedSender {
-					c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+				// Apply metamorphic settings not explicitly defined by the test.
+				// These settings should only be applied to non-benchmark tests.
+				if !testSpec.Benchmark {
+					// 50% chance of enabling the rangefeed buffered sender. Disabled by
+					// default. Disabled for mixed-version tests since this cluster setting
+					// is only supported in >= v25.2.
+					useBufferedSender := prng.Intn(2) == 0
+					if !t.spec.Suites.Contains(registry.MixedVersion) && useBufferedSender {
+						c.clusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+					}
+					c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
+					t.AddParam("metamorphicBufferedSender", fmt.Sprint(useBufferedSender))
 				}
-				c.status(fmt.Sprintf("metamorphically using buffered sender: %t", useBufferedSender))
-				t.AddParam("metamorphicBufferedSender", fmt.Sprint(useBufferedSender))
+
 				c.goCoverDir = t.GoCoverArtifactsDir()
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
