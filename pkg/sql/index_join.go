@@ -8,8 +8,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -19,20 +20,25 @@ import (
 // filtering, sorting, limiting).
 type indexJoinNode struct {
 	singleInputPlanNode
+	indexJoinPlanningInfo
+
+	// columns are the produced columns, namely the columns fetched from the table
+	// by primary key.
+	columns colinfo.ResultColumns
+}
+
+type indexJoinPlanningInfo struct {
+	fetch fetchPlanningInfo
 
 	// Indices of the PK columns in the input plan.
-	keyCols []int
-
-	table *scanNode
-
-	// The columns returned by this node.
-	cols []catalog.Column
-	// There is a 1-1 correspondence between cols and resultColumns.
-	resultColumns colinfo.ResultColumns
+	keyCols []exec.NodeColumnOrdinal
 
 	reqOrdering ReqOrdering
 
 	limitHint int64
+
+	// finalizeLastStageCb will be nil in the spec factory.
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
 func (n *indexJoinNode) startExec(params runParams) error {
@@ -49,5 +55,4 @@ func (n *indexJoinNode) Values() tree.Datums {
 
 func (n *indexJoinNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
-	n.table.Close(ctx)
 }

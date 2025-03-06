@@ -134,6 +134,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 		ins.UniqueWithTombstoneIndexes,
 		b.allowAutoCommit && len(ins.UniqueChecks) == 0 &&
 			len(ins.FKChecks) == 0 && len(ins.FKCascades) == 0 && ins.AfterTriggers == nil,
+		ins.VectorInsert,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -181,6 +182,10 @@ func (b *Builder) tryBuildFastPathInsert(
 	}
 	// Do not attempt the fast path if there are any triggers.
 	if ins.AfterTriggers != nil {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+	// Do not attempt the fast path for a vectorized insert.
+	if ins.VectorInsert {
 		return execPlan{}, colOrdMap{}, false, nil
 	}
 

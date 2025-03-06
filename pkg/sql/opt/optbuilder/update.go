@@ -355,7 +355,7 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 
 	mb.buildRowLevelAfterTriggers(opt.UpdateOp)
 
-	private := mb.makeMutationPrivate(returning != nil)
+	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)
 	for _, col := range mb.extraAccessibleCols {
 		if col.id != 0 {
 			private.PassthroughCols = append(private.PassthroughCols, col.id)

@@ -10,17 +10,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type invertedFilterNode struct {
 	singleInputPlanNode
-	expression      *inverted.SpanExpression
-	preFiltererExpr tree.TypedExpr
-	preFiltererType *types.T
-	invColumn       int
-	resultColumns   colinfo.ResultColumns
+	invertedFilterPlanningInfo
+	columns colinfo.ResultColumns
+}
+
+type invertedFilterPlanningInfo struct {
+	expression          *inverted.SpanExpression
+	preFiltererExpr     tree.TypedExpr
+	preFiltererType     *types.T
+	invColumn           int
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
 func (n *invertedFilterNode) startExec(params runParams) error {

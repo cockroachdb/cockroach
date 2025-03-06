@@ -207,6 +207,10 @@ define MutationPrivate {
 
     # AfterTriggers stores metadata necessary for building AFTER triggers.
     AfterTriggers AfterTriggers
+
+    # VectorInsert indicates that the mutation is an insert with a specialized
+    # vectorized implementation used for Copy statements.
+    VectorInsert bool
 }
 
 # Update evaluates a relational input expression that fetches existing rows from
