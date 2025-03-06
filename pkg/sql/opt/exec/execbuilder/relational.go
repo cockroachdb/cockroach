@@ -493,6 +493,25 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			annotateNodeForTable(e.Table)
 		case *memo.VectorSearchExpr:
 			annotateNodeForTable(e.Table)
+		case *memo.InsertExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.UpdateExpr:
+			if scan, ok := e.Input.(*memo.ScanExpr); ok {
+				annotateNodeForTable(scan.Table)
+			}
+			annotateNodeForTable(e.Table)
+		case *memo.DeleteExpr:
+			// NB: this is needed in case the Table in the current node isn't the RLS
+			// table itself (as is the case for a delete range).
+			if scan, ok := e.Input.(*memo.ScanExpr); ok {
+				annotateNodeForTable(scan.Table)
+			}
+			annotateNodeForTable(e.Table)
+		case *memo.UpsertExpr:
+			if scan, ok := e.Input.(*memo.ScanExpr); ok {
+				annotateNodeForTable(scan.Table)
+			}
+			annotateNodeForTable(e.Table)
 		}
 	}
 }
