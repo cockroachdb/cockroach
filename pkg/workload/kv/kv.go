@@ -778,6 +778,7 @@ type sequence struct {
 	max int64
 }
 
+// write increments the sequence
 func (s *sequence) write() int64 {
 	return (s.val.Add(1) - 1) % s.max
 }
@@ -976,7 +977,7 @@ func (wss writeSequenceSource) Int63() int64 {
 func (wss writeSequenceSource) Uint64() uint64 {
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
 	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
-	// only increment the sequence during write calls
+	// NOTE: the sequence is incremented by wss.write() call
 	binary.BigEndian.PutUint64(buf[:8], uint64(wss.write()))
 	_, _ = hasher.Write(buf[:8])
 	return hasher.Sum64()
