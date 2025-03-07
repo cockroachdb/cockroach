@@ -378,6 +378,9 @@ func (tx *Txn) AddToPartition(
 	b.Put(entryKey, encodedValue)
 
 	// This scan is purely for returning partition cardinality.
+	// NOTE: If stepping mode is enabled, this scan will not see the new entry.
+	// Currently, AddToPartition is only called by the fixup processor, which
+	// does not enable stepping.
 	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 
 	// Run the batch and set the metadata Count field from the results.
@@ -408,6 +411,9 @@ func (tx *Txn) RemoveFromPartition(
 	b.Del(entryKey)
 
 	// Scan to get current cardinality.
+	// NOTE: If stepping mode is enabled, this scan will not see the deletion.
+	// Currently, RemoveToPartition is only called by the fixup processor, which
+	// does not enable stepping.
 	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 
 	if err := tx.kv.Run(ctx, b); err != nil {
