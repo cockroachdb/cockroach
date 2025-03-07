@@ -57,20 +57,6 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-// UseEFOS controls whether uses of pebble Snapshots should use
-// EventuallyFileOnlySnapshots instead. This reduces write-amp with the main
-// tradeoff being higher space-amp. Note that UseExciseForSnapshot, if true,
-// effectively causes EventuallyFileOnlySnapshots to be used as well.
-//
-// Note: Do NOT read this setting directly. Use ShouldUseEFOS() instead.
-var UseEFOS = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"storage.experimental.eventually_file_only_snapshots.enabled",
-	"set to false to disable eventually-file-only-snapshots (kv.snapshot_receiver.excise.enabled must also be false)",
-	metamorphic.ConstantWithTestBool(
-		"storage.experimental.eventually_file_only_snapshots.enabled", true), /* defaultValue */
-	settings.WithPublic)
-
 // UseExciseForSnapshots controls whether virtual-sstable-based excises should
 // be used instead of range deletions for clearing out replica contents as part
 // of a rebalance/recovery snapshot application. Applied on the receiver side.
@@ -321,13 +307,6 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 	8,
 	settings.IntWithMinimum(1),
 )
-
-// ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
-// cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
-// to guarantee snapshot-like semantics.
-func ShouldUseEFOS(settings *settings.Values) bool {
-	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
-}
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
@@ -1999,26 +1978,43 @@ func (p *Pebble) NewWriteBatch() WriteBatch {
 	return newWriteBatch(p.db, p.db.NewBatch(), p.cfg.settings, p, p)
 }
 
-// NewSnapshot implements the Engine interface.
-func (p *Pebble) NewSnapshot() Reader {
-	return &pebbleSnapshot{
-		snapshot: p.db.NewSnapshot(),
-		parent:   p,
+var (
+	// universalKeyRanges holds the widest expressible roachpb.Span. It is used
+	// by NewSnapshot when no key ranges are provided, snapshotting the entirety
+	// of the Engine space. See universalEngineKeyRanges for this value mapped
+	// into the encoded EngineKey keyspace.
+	universalKeyRanges = []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
+	// universalEngineKeyRanges is universalKeyRanges, encoded into the engine
+	// keyspace.
+	universalEngineKeyRanges = makeEngineKeyRanges(universalKeyRanges)
+)
+
+func makeEngineKeyRanges(spans []roachpb.Span) []pebble.KeyRange {
+	engineKeyRanges := make([]pebble.KeyRange, len(spans))
+	for i := range spans {
+		engineKeyRanges[i].Start = EngineKey{Key: spans[i].Key}.Encode()
+		engineKeyRanges[i].End = EngineKey{Key: spans[i].EndKey}.Encode()
 	}
+	return engineKeyRanges
 }
 
-// NewEventuallyFileOnlySnapshot implements the Engine interface.
-func (p *Pebble) NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) EventuallyFileOnlyReader {
-	engineKeyRanges := make([]pebble.KeyRange, len(keyRanges))
-	for i := range keyRanges {
-		engineKeyRanges[i].Start = EngineKey{Key: keyRanges[i].Key}.Encode()
-		engineKeyRanges[i].End = EngineKey{Key: keyRanges[i].EndKey}.Encode()
+// NewSnapshot implements the Engine interface.
+func (p *Pebble) NewSnapshot(keyRanges ...roachpb.Span) Reader {
+	var engineKeyRanges []pebble.KeyRange
+	var universalSpan bool
+	if len(keyRanges) == 0 {
+		keyRanges = universalKeyRanges
+		engineKeyRanges = universalEngineKeyRanges
+		universalSpan = true
+	} else {
+		engineKeyRanges = makeEngineKeyRanges(keyRanges)
 	}
 	efos := p.db.NewEventuallyFileOnlySnapshot(engineKeyRanges)
-	return &pebbleEFOS{
-		efos:      efos,
-		parent:    p,
-		keyRanges: keyRanges,
+	return &pebbleSnapshot{
+		efos:          efos,
+		parent:        p,
+		keyRanges:     keyRanges,
+		universalSpan: universalSpan,
 	}
 }
 
@@ -2750,18 +2746,23 @@ func (p *pebbleReadOnly) BufferedSize() int {
 	panic("not implemented")
 }
 
-// pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
+// pebbleSnapshot implements Reader, backed by a Pebble eventually file-only
+// snapshot created using NewEventuallyFileOnlySnapshot.
 type pebbleSnapshot struct {
-	snapshot *pebble.Snapshot
-	parent   *Pebble
-	closed   bool
+	efos      *pebble.EventuallyFileOnlySnapshot
+	parent    *Pebble
+	keyRanges []roachpb.Span
+	closed    bool
+	// universalSpan is true if the snapshot covers the entire keyspace.
+	universalSpan bool
 }
 
-var _ Reader = &pebbleSnapshot{}
+// Assert that *pebbleSnapshot implements the Reader interface.
+var _ Reader = (*pebbleSnapshot)(nil)
 
 // Close implements the Reader interface.
 func (p *pebbleSnapshot) Close() {
-	_ = p.snapshot.Close()
+	_ = p.efos.Close()
 	p.closed = true
 }
 
@@ -2793,128 +2794,30 @@ func (p *pebbleSnapshot) MVCCIterate(
 func (p *pebbleSnapshot) NewMVCCIterator(
 	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
-	if iterKind == MVCCKeyAndIntentsIterKind {
-		r := wrapReader(p)
-		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
-		r.Free()
-		if err != nil {
-			return nil, err
+	// The snapshot only provides a consistent view of the snapshotted keyspace.
+	// If any bounds are provided, we require that they fall within the
+	// snapshot's keyRanges. Additionally, if the snapshot does not cover the
+	// entirety of the keyspace (!p.universalSpan), we require that the iterator
+	// specifies bounds. Prefix iterators don't have bounds and are exempt.
+	if !p.universalSpan {
+		// TODO(jackson): Enforce the snapshotted bounds on prefix iterators.
+		if !opts.Prefix && (opts.LowerBound == nil || opts.UpperBound == nil) {
+			return nil, errors.AssertionFailedf("cannot create iterators on snapshot without bounds")
 		}
-		return maybeWrapInUnsafeIter(iter), nil
-	}
-
-	iter, err := newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
-	if err != nil {
-		return nil, err
-	}
-	return maybeWrapInUnsafeIter(MVCCIterator(iter)), nil
-}
-
-// NewEngineIterator implements the Reader interface.
-func (p pebbleSnapshot) NewEngineIterator(
-	ctx context.Context, opts IterOptions,
-) (EngineIterator, error) {
-	return newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
-}
-
-// ConsistentIterators implements the Reader interface.
-func (p pebbleSnapshot) ConsistentIterators() bool {
-	return true
-}
-
-// PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleSnapshot) PinEngineStateForIterators(fs.ReadCategory) error {
-	// Snapshot already pins state, so nothing to do.
-	return nil
-}
-
-// ScanInternal implements the Reader interface.
-func (p *pebbleSnapshot) ScanInternal(
-	ctx context.Context,
-	lower, upper roachpb.Key,
-	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
-	visitRangeDel func(start []byte, end []byte, seqNum pebble.SeqNum) error,
-	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
-	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
-	visitExternalFile func(sst *pebble.ExternalFile) error,
-) error {
-	rawLower := EngineKey{Key: lower}.Encode()
-	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set category.
-	return p.snapshot.ScanInternal(ctx, block.CategoryUnknown, rawLower, rawUpper, visitPointKey,
-		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
-}
-
-// pebbleEFOS represents an eventually file-only snapshot created using
-// NewEventuallyFileOnlySnapshot.
-type pebbleEFOS struct {
-	efos      *pebble.EventuallyFileOnlySnapshot
-	parent    *Pebble
-	keyRanges []roachpb.Span
-	closed    bool
-}
-
-var _ EventuallyFileOnlyReader = &pebbleEFOS{}
-
-// Close implements the Reader interface.
-func (p *pebbleEFOS) Close() {
-	_ = p.efos.Close()
-	p.closed = true
-}
-
-// Closed implements the Reader interface.
-func (p *pebbleEFOS) Closed() bool {
-	return p.closed
-}
-
-// MVCCIterate implements the Reader interface.
-func (p *pebbleEFOS) MVCCIterate(
-	ctx context.Context,
-	start, end roachpb.Key,
-	iterKind MVCCIterKind,
-	keyTypes IterKeyType,
-	readCategory fs.ReadCategory,
-	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
-) error {
-	if iterKind == MVCCKeyAndIntentsIterKind {
-		r := wrapReader(p)
-		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
-		r.Free()
-		return err
-	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
-}
-
-// WaitForFileOnly implements the EventuallyFileOnlyReader interface.
-func (p *pebbleEFOS) WaitForFileOnly(
-	ctx context.Context, gracePeriodBeforeFlush time.Duration,
-) error {
-	return p.efos.WaitForFileOnlySnapshot(ctx, gracePeriodBeforeFlush)
-}
-
-// NewMVCCIterator implements the Reader interface.
-func (p *pebbleEFOS) NewMVCCIterator(
-	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
-) (MVCCIterator, error) {
-	// Check if the bounds fall within the EFOS' keyRanges. We can only do this
-	// check for non-prefix iterators as prefix iterators often don't specify
-	// any bounds.
-	if !opts.Prefix {
-		if opts.LowerBound == nil || opts.UpperBound == nil {
-			return nil, errors.AssertionFailedf("cannot create iterators on EFOS without bounds")
-		}
-		var found bool
-		boundSpan := roachpb.Span{Key: opts.LowerBound, EndKey: opts.UpperBound}
-		for i := range p.keyRanges {
-			if p.keyRanges[i].Contains(boundSpan) {
-				found = true
-				break
+		// If the iterator specifies bounds, ensure they fall within the snapshot's
+		// keyRanges.
+		if opts.LowerBound != nil && opts.UpperBound != nil {
+			var found bool
+			boundSpan := roachpb.Span{Key: opts.LowerBound, EndKey: opts.UpperBound}
+			for i := range p.keyRanges {
+				if p.keyRanges[i].Contains(boundSpan) {
+					found = true
+					break
+				}
 			}
-		}
-		if !found {
-			return nil, errors.AssertionFailedf("iterator bounds exceed eventually-file-only-snapshot key ranges: %s", boundSpan.String())
+			if !found {
+				return nil, errors.AssertionFailedf("iterator bounds exceed snapshot key ranges: %s", boundSpan.String())
+			}
 		}
 	}
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -2936,25 +2839,25 @@ func (p *pebbleEFOS) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Reader interface.
-func (p *pebbleEFOS) NewEngineIterator(
+func (p *pebbleSnapshot) NewEngineIterator(
 	ctx context.Context, opts IterOptions,
 ) (EngineIterator, error) {
 	return newPebbleIterator(ctx, p.efos, opts, StandardDurability, p.parent)
 }
 
 // ConsistentIterators implements the Reader interface.
-func (p *pebbleEFOS) ConsistentIterators() bool {
+func (p *pebbleSnapshot) ConsistentIterators() bool {
 	return true
 }
 
 // PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleEFOS) PinEngineStateForIterators(fs.ReadCategory) error {
+func (p *pebbleSnapshot) PinEngineStateForIterators(fs.ReadCategory) error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
 }
 
 // ScanInternal implements the Reader interface.
-func (p *pebbleEFOS) ScanInternal(
+func (p *pebbleSnapshot) ScanInternal(
 	ctx context.Context,
 	lower, upper roachpb.Key,
 	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,

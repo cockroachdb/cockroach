@@ -613,19 +613,6 @@ type Reader interface {
 	PinEngineStateForIterators(readCategory fs.ReadCategory) error
 }
 
-// EventuallyFileOnlyReader is a specialized Reader that supports a method to
-// wait on a transition to being a file-only reader that does not pin any
-// keys in-memory.
-type EventuallyFileOnlyReader interface {
-	Reader
-	// WaitForFileOnly blocks the calling goroutine until this reader has
-	// transitioned to a file-only reader that does not pin any in-memory state.
-	// If an error is returned, this transition did not succeed. The Duration
-	// argument specifies how long to wait for before attempting a flush to
-	// force a transition to a file-only snapshot.
-	WaitForFileOnly(ctx context.Context, gracePeriodBeforeFlush time.Duration) error
-}
-
 // Writer is the write interface to an engine's data.
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -1004,34 +991,37 @@ type Engine interface {
 	// underlying Engine. The batch accumulates all mutations and applies them
 	// atomically on a call to Commit().
 	NewWriteBatch() WriteBatch
-	// NewSnapshot returns a new instance of a read-only snapshot engine. A
-	// snapshot provides a consistent view of the database across multiple
-	// iterators. If a caller only needs a single consistent iterator, they
-	// should create an iterator directly off the engine instead.
+	// NewSnapshot returns a read-only, point-in-time snapshot of selected key
+	// spans of the engine.
 	//
-	// Acquiring a snapshot is instantaneous and is inexpensive if quickly
-	// released. Snapshots are released by invoking Close(). Open snapshots
-	// prevent compactions from reclaiming space or removing tombstones for any
-	// keys written after the snapshot is acquired. This can be problematic
-	// during rebalancing or large ingestions, so they should be used sparingly
-	// and briefly.
+	// A snapshot provides a consistent view of the provided key spans of the
+	// database across multiple iterators. If a caller only needs a consistent
+	// iterator for a short duration, they should create an iterator directly
+	// off the engine instead. The provided key ranges must be non-overlapping.
+	// If no key ranges are provided, the snapshot will cover the entire key
+	// space.
 	//
-	// Note that snapshots must not be used after the original engine has been
-	// stopped.
-	NewSnapshot() Reader
-	// NewEventuallyFileOnlySnapshot returns a new instance of a read-only
-	// eventually file-only snapshot. This type of snapshot incurs lower write-amp
-	// than a regular Snapshot opened with NewSnapshot, however it incurs a greater
-	// space-amp on disk for the duration of this snapshot's lifetime. There's
-	// also a chance that its conversion to a file-only snapshot could get
-	// errored out if an excise operation were to conflict with one of the passed
-	// in KeyRanges. Note that if no keyRanges are passed in, a file-only snapshot
-	// is created from the start; this is usually not desirable as it makes no
-	// deterministic guarantees about what will be readable (anything in memtables
-	// will not be visible). Snapshot guarantees are only provided for keys
-	// in the passed-in keyRanges; reads are not guaranteed to be consistent
-	// outside of these bounds.
-	NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) EventuallyFileOnlyReader
+	// Snapshots that don't cover the entirety of the key space will require
+	// that their non-prefix iterators specify lower and upper bounds and that
+	// those bounds fall within the snapshotted ranges. Reading outside of the
+	// snapshotted ranges must be avoided because the data visible outside the
+	// snapshotted key ranges is not guaranteed to be consistent between
+	// iterators created from the same snapshot. Callers should take care to
+	// constrain their reads to the snapshotted key ranges, setting appropriate
+	// iterator bounds and seek keys.
+	//
+	// Acquiring a snapshot is inexpensive if quickly released. Snapshots are
+	// released by invoking Close(). Like open iterators, open snapshots may
+	// prevent the deletion of sstables that have already been compacted. This
+	// can result in increased space amplification for the duration of the
+	// snapshot's lifetime. Unlike an open iterator, an open snapshot will NOT
+	// pin memtables at the time of its creation. However, flushes of memtables
+	// that existed at the time of snapshot creation may retain more keys than
+	// otherwise necessary, increasing space and write amplification from the
+	// flush.
+	//
+	// Note that snapshots must be closed before the Engine is closed.
+	NewSnapshot(keyRanges ...roachpb.Span) Reader
 	// IngestLocalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
 	IngestLocalFiles(ctx context.Context, paths []string) error
