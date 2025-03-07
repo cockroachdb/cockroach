@@ -4,7 +4,9 @@
 // included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
-import d3 from "d3";
+import { axisBottom, Axis } from "d3-axis";
+import { scaleLinear, ScaleLinear, NumberValue } from "d3-scale";
+import { select, Selection, BaseType } from "d3-selection";
 
 const LOW_DISK_SPACE_RATIO = 0.15;
 
@@ -33,9 +35,9 @@ function capacityChart() {
   const TICK_SIZE = 6;
   const AXIS_MARGIN = 4;
 
-  const scale = d3.scale.linear().range([0, size.width]);
+  const scale: ScaleLinear<number, number> = scaleLinear().range([0, size.width]);
 
-  const axis = d3.svg.axis().scale(scale).tickSize(TICK_SIZE).ticks(5);
+  const axis: Axis<NumberValue> = axisBottom(scale).tickSize(TICK_SIZE).ticks(5);
 
   function recomputeScale(capacity: CapacityChartProps) {
     // Compute the appropriate scale factor for a value slightly smaller than the
@@ -56,7 +58,7 @@ function capacityChart() {
     return scaled;
   }
 
-  return function chart(svg: d3.Selection<CapacityChartProps>) {
+  return function chart(svg: Selection<SVGElement, CapacityChartProps, null, undefined>) {
     const rect = (svg.node().parentNode as HTMLElement).getBoundingClientRect();
     size.width = rect.width;
 
@@ -83,7 +85,7 @@ function capacityChart() {
       .attr("class", "axis")
       .attr("transform", `translate(0,${size.height + AXIS_MARGIN})`);
 
-    axisGroup.call(axis);
+    axisGroup.call(axis as any);
     axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
     const lowDiskSpaceWidth = size.width * LOW_DISK_SPACE_RATIO;
