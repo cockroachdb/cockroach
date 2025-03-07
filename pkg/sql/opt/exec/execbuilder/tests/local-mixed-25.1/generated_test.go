@@ -98,3 +98,10 @@ func TestExecBuild_mixed_version_lookup_join(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "mixed_version_lookup_join")
 }
+
+func TestExecBuild_vector_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "vector_mutation")
+}

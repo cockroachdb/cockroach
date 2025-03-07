@@ -2910,3 +2910,10 @@ func TestReadCommittedExecBuild_upsert_read_committed(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "upsert_read_committed")
 }
+
+func TestReadCommittedExecBuild_vector_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "vector_mutation")
+}

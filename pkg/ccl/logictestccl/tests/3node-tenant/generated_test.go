@@ -2968,3 +2968,10 @@ func TestTenantExecBuild_distsql_tenant(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
 }
+
+func TestTenantExecBuild_vector_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "vector_mutation")
+}

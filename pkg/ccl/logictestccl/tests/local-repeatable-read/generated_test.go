@@ -2861,3 +2861,10 @@ func TestRepeatableReadExecBuild_geospatial(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "geospatial")
 }
+
+func TestRepeatableReadExecBuild_vector_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "vector_mutation")
+}
