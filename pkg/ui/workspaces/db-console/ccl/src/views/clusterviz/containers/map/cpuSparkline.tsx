@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import d3 from "d3";
+import { format } from "d3-format";
 import React from "react";
 
 import { SparklineMetricsDataComponent } from "src/views/clusterviz/containers/map/sparkline";
@@ -19,7 +19,7 @@ export function CpuSparkline(props: CpuSparklineProps) {
 
   return (
     <MetricsDataProvider id={key}>
-      <SparklineMetricsDataComponent formatCurrentValue={d3.format(".1%")}>
+      <SparklineMetricsDataComponent formatCurrentValue={format(".1%")}>
         <Metric
           name="cr.node.sys.cpu.combined.percent-normalized"
           sources={props.nodes}

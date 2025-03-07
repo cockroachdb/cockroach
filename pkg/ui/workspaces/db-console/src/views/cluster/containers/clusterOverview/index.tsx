@@ -6,7 +6,7 @@
 import { util } from "@cockroachlabs/cluster-ui";
 import { Skeleton } from "antd";
 import classNames from "classnames";
-import d3 from "d3";
+import { format } from "d3-format";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -41,7 +41,7 @@ interface CapacityUsageProps {
   usableCapacity: number;
 }
 
-const formatPercentage = d3.format("0.1%");
+const formatPercentage = format("0.1%");
 
 function renderCapacityUsage(props: CapacityUsageProps) {
   const { Bytes } = util;

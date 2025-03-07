@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import * as d3 from "d3";
+import { arc } from "d3-shape";
 
 import * as vector from "src/util/vector";
 
@@ -16,8 +16,7 @@ export function createArcPath(
   endAngle: number,
   cornerRadius: number,
 ) {
-  return d3.svg
-    .arc()
+  return arc()
     .innerRadius(innerR)
     .outerRadius(outerR)
     .cornerRadius(cornerRadius)
