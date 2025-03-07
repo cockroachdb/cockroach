@@ -158,11 +158,16 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return noSnap, sendSnapshotError(snapshotCtx, s, stream, err)
 		}
 		if req.TransitionFromSharedToRegularReplicate {
-			doExcise = false
 			sharedSSTs = nil
 			externalSSTs = nil
-			if err := msstw.addClearForMVCCSpan(); err != nil {
-				return noSnap, errors.Wrap(err, "adding tombstone for last span")
+			if !doExcise {
+				// TODO(tbg): this is dead code. We always excise if there is
+				// initially any chance of shared/external SSTs, and never
+				// opt out of that.
+				if err := msstw.addClearForMVCCSpan(); err != nil {
+					return noSnap, errors.Wrap(err, "adding tombstone for last span")
+				}
+				return noSnap, errors.AssertionFailedf("unexpected TransitionFromSharedToRegularReplicate without excising")
 			}
 		}
 
