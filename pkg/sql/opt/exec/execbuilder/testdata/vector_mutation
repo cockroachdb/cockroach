@@ -1,0 +1,83 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE exec_test (
+  id INT PRIMARY KEY,
+  user_id INT,
+  data STRING COLLATE en_US_u_ks_level2,
+  encoding VECTOR(3),
+  VECTOR INDEX simple (encoding),
+  VECTOR INDEX prefix (user_id, encoding),
+  VECTOR INDEX composite_prefix (data, encoding),
+  FAMILY fam_id_uid_d_enc (id, user_id, data, encoding)
+)
+
+statement ok
+CREATE INDEX ON exec_test (user_id) WHERE user_id >= 10 AND user_id <= 20
+
+query T kvtrace(redactbytes)
+INSERT INTO exec_test VALUES (1, 1, 'foo', '[1, 2, 3]'), (2, 10, 'bar', '[4, 5, 6]'), (3, 15, 'baz', '[7, 8, 9]')
+----
+CPut /Table/106/1/1/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo/
+CPut /Table/106/2/1/1/0 -> /BYTES/:redacted:
+CPut /Table/106/3/1/1/1/0 -> /BYTES/:redacted:
+CPut /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0 -> /BYTES/:redacted:
+CPut /Table/106/1/2/0 -> /TUPLE/2:2:Int/10/1:3:Bytes/bar/
+CPut /Table/106/2/1/2/0 -> /BYTES/:redacted:
+CPut /Table/106/3/10/1/2/0 -> /BYTES/:redacted:
+CPut /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0 -> /BYTES/:redacted:
+CPut /Table/106/5/10/2/0 -> /BYTES/
+CPut /Table/106/1/3/0 -> /TUPLE/2:2:Int/15/1:3:Bytes/baz/
+CPut /Table/106/2/1/3/0 -> /BYTES/:redacted:
+CPut /Table/106/3/15/1/3/0 -> /BYTES/:redacted:
+CPut /Table/106/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/3/0 -> /BYTES/:redacted:
+CPut /Table/106/5/15/3/0 -> /BYTES/
+
+query T kvtrace(redactbytes)
+UPSERT INTO exec_test VALUES (2, 10, 'bar', '[6, 5, 4]'), (4, 20, 'qux', '[10, 11, 12]')
+----
+Scan /Table/106/1/2/0, /Table/106/1/4/0
+Put /Table/106/1/2/0 -> /TUPLE/2:2:Int/10/1:3:Bytes/bar/
+Del (locking) /Table/106/2/1/2/0
+CPut /Table/106/2/1/2/0 -> /BYTES/:redacted:
+Del (locking) /Table/106/3/10/1/2/0
+CPut /Table/106/3/10/1/2/0 -> /BYTES/:redacted:
+Del (locking) /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0
+CPut /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0 -> /BYTES/:redacted:
+CPut /Table/106/1/4/0 -> /TUPLE/2:2:Int/20/1:3:Bytes/qux/
+CPut /Table/106/2/1/4/0 -> /BYTES/:redacted:
+CPut /Table/106/3/20/1/4/0 -> /BYTES/:redacted:
+CPut /Table/106/4/"\x17\xab\x186\x18{\x00\x00\x00 \x00 \x00 "/1/4/0 -> /BYTES/:redacted:
+CPut /Table/106/5/20/4/0 -> /BYTES/
+
+query T kvtrace(redactbytes)
+UPDATE exec_test SET encoding = '[3, 2, 1]' WHERE id = 1
+----
+Scan /Table/106/1/1/0
+Put /Table/106/1/1/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo/
+Del (locking) /Table/106/2/1/1/0
+CPut /Table/106/2/1/1/0 -> /BYTES/:redacted:
+Del (locking) /Table/106/3/1/1/1/0
+CPut /Table/106/3/1/1/1/0 -> /BYTES/:redacted:
+Del (locking) /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0
+CPut /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0 -> /BYTES/:redacted:
+
+query T kvtrace(redactbytes)
+UPDATE exec_test SET data = 'fooo' WHERE user_id = 15;
+----
+Scan /Table/106/5/1{5-6}
+Scan /Table/106/1/3/0
+Put /Table/106/1/3/0 -> /TUPLE/2:2:Int/15/1:3:Bytes/fooo/
+Del (locking) /Table/106/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/3/0
+CPut /Table/106/4/"\x16\x84\x17q\x17q\x17q\x00\x00\x00 \x00 \x00 \x00 "/1/3/0 -> /BYTES/:redacted:
+
+query T kvtrace
+DELETE FROM exec_test WHERE user_id = 10
+----
+Scan /Table/106/5/1{0-1}
+Scan /Table/106/1/2/0
+Del /Table/106/2/1/2/0
+Del /Table/106/3/10/1/2/0
+Del /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0
+Del /Table/106/5/10/2/0
+Del (locking) /Table/106/1/2/0
