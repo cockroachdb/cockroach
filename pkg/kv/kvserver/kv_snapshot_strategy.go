@@ -578,6 +578,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return nil
 			}
 		}
+		kvsBefore := kvs
 		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
@@ -623,6 +624,17 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return maybeFlushBatch()
 		}, sharedVisitor, externalVisitor)
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
+			// IterateReplicaKeySpansShared will return ErrInvalidSkipSharedIteration
+			// before visiting user keys. This is a subtle contract.
+			// See also:
+			//
+			// https://cockroachlabs.slack.com/archives/CAC6K3SLU/p1741360036808799?thread_ts=1741356670.269679&cid=CAC6K3S
+			if kvsBefore != kvs {
+				return 0, errors.AssertionFailedf(
+					"unable to transition from shared to regular replicate: %d user keys were already sent",
+					kvs-kvsBefore,
+				)
+			}
 			transitionFromSharedToRegularReplicate = true
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
