@@ -120,7 +120,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	// TODO(aaditya): Remove once we support flushableIngests for shared and
 	// external files in the engine.
-	skipClearForMVCCSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	skipClearForMVCCSpan := doExcise
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
