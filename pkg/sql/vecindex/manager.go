@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -176,6 +177,11 @@ func (m *Manager) getVecConfig(
 	config := idxDesc.GetVecConfig()
 	if config.Dims <= 0 {
 		return vecpb.Config{}, errInvalidVecConfig
+	}
+	if buildutil.CrdbTestBuild {
+		// This is a test build, so let's use a fixed seed for the random projection to
+		// avoid test flakes.
+		config.Seed = 0xdeadcafe
 	}
 	return config, nil
 }

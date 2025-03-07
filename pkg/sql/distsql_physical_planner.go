@@ -4622,7 +4622,7 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 		suffixKeyColumnOrdinals[i] = uint32(p.PlanToStreamColMap[col])
 	}
 	keyAndSuffixCols := planInfo.table.IndexFetchSpecKeyAndSuffixColumns(planInfo.index)
-	prefixKeyCols := keyAndSuffixCols[planInfo.index.NumKeyColumns()-1:]
+	prefixKeyCols := keyAndSuffixCols[:planInfo.index.NumKeyColumns()-1]
 	suffixKeyCols := keyAndSuffixCols[planInfo.index.NumKeyColumns():]
 	spec := &execinfrapb.VectorMutationSearchSpec{
 		PrefixKeyColumnOrdinals:  prefixKeyColumnOrdinals,
