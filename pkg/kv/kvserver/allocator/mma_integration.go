@@ -1,0 +1,49 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package allocator
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+func makeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mma.StoreLoadMsg {
+	var load, capacity mma.LoadVector
+	load[mma.CPURate] = mma.LoadValue(desc.Capacity.CPUPerSecond)
+	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
+		cpuUtil :=
+			float64(desc.NodeCapacity.NodeCPURateUsage) / float64(desc.NodeCapacity.NodeCPURateCapacity)
+		nodeCapacity := float64(desc.NodeCapacity.StoresCPURate) / cpuUtil
+		storeCapacity := nodeCapacity / float64(desc.NodeCapacity.NumStores)
+		capacity[mma.CPURate] = mma.LoadValue(storeCapacity)
+	} else {
+		// TODO(sumeer): remove this hack of defaulting to 50% utilization.
+		capacity[mma.CPURate] = load[mma.CPURate] * 2
+	}
+	// TODO: Write bytes/s
+	load[mma.WriteBandwidth] = 0
+	capacity[mma.WriteBandwidth] = mma.UnknownCapacity
+	// ByteSize is based on LogicalBytes since that is how we measure the size
+	// of each range
+	load[mma.ByteSize] = mma.LoadValue(desc.Capacity.LogicalBytes)
+	// Available does not compensate for the ballast, so utilization will look
+	// higher than actual. This is fine since the ballast is small (default is
+	// 1% of capacity) and is for use in an emergency.
+	byteSizeUtil :=
+		float64(desc.Capacity.Capacity-desc.Capacity.Available) / float64(desc.Capacity.Capacity)
+	capacity[mma.ByteSize] = mma.LoadValue(float64(load[mma.ByteSize]) / byteSizeUtil)
+	var secondaryLoad mma.SecondaryLoadVector
+	secondaryLoad[mma.LeaseCount] = mma.LoadValue(desc.Capacity.LeaseCount)
+	return mma.StoreLoadMsg{
+		NodeID:        desc.Node.NodeID,
+		StoreID:       desc.StoreID,
+		Load:          load,
+		Capacity:      capacity,
+		SecondaryLoad: secondaryLoad,
+		LoadTime:      timeutil.FromUnixNanos(origTimestampNanos),
+	}
+}
