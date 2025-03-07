@@ -134,7 +134,6 @@ tree
 /abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /abcdef123/artifacts/mutex_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /abcdef123/artifacts/raw_Sysbench_SQL_3node_oltp_read_write.log
-/github-summary.md
 /qwerty456
 /qwerty456/artifacts
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
