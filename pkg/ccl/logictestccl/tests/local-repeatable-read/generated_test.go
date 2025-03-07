@@ -2505,13 +2505,6 @@ func TestRepeatableReadLogic_values(
 	runLogicTest(t, "values")
 }
 
-func TestRepeatableReadLogic_vector_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vector_index")
-}
-
 func TestRepeatableReadLogic_vectorize_agg(
 	t *testing.T,
 ) {
