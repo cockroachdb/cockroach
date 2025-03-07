@@ -4061,3 +4061,20 @@ statement ok
 DROP TYPE e1;
 
 subtest end
+
+
+# Regression test for #141352, which would previously happen
+# when adding a column with an invalid geometry expression.
+subtest alter_table_add_column_with_invalid_geometry_expression
+
+
+statement ok
+CREATE TABLE alter_table_add_column_with_invalid_geometry_expression (
+  id INT PRIMARY KEY
+);
+INSERT INTO alter_table_add_column_with_invalid_geometry_expression VALUES (1);
+
+statement error pgcode 22023 pq: failed to construct index entries during backfill: error parsing EWKB: unexpected EOF
+ALTER TABLE alter_table_add_column_with_invalid_geometry_expression ADD COLUMN geom GEOMETRY NULL DEFAULT x'001a'
+
+subtest end

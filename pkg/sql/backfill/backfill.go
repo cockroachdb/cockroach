@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -893,6 +894,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 					// Cannot use expressions that depend on the transaction of the
 					// evaluation context as the default value for backfill.
 					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
+				}
+				// Explicitly mark with user errors for codes that we know
+				// cannot be retried.
+				if code := pgerror.GetPGCode(err); code == pgcode.FeatureNotSupported ||
+					code == pgcode.InvalidParameterValue {
+					return scerrors.SchemaChangerUserError(err)
 				}
 				return err
 			}

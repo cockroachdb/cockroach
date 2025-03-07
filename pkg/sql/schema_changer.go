@@ -215,6 +215,12 @@ func IsPermanentSchemaChangeError(err error) bool {
 		return true
 	}
 
+	// Any error with a schema changer user error wrapper on it should not be
+	// retried.
+	if scerrors.HasSchemaChangerUserError(err) {
+		return true
+	}
+
 	if grpcutil.IsClosedConnection(err) {
 		return false
 	}
