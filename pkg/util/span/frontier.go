@@ -8,6 +8,7 @@ package span
 import (
 	"container/heap"
 	"fmt"
+	"iter"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -52,6 +53,7 @@ type Frontier interface {
 	// Entries invokes the given callback with the current timestamp for each
 	// component span in the tracked span set.
 	// The fn may not mutate this frontier while iterating.
+	// TODO(yang): Delete this function and replace usages with All.
 	Entries(fn Operation)
 
 	// SpanEntries invokes op for each sub-span of the specified span with the
@@ -80,6 +82,10 @@ type Frontier interface {
 
 	// String returns string representation of this fFrontier.
 	String() string
+
+	// All returns an iterator over the entries in the frontier.
+	// Updates to the frontier are restricted until iteration is stopped.
+	All() iter.Seq2[roachpb.Span, hlc.Timestamp]
 }
 
 // OpResult is the result of the Operation callback.
@@ -630,6 +636,20 @@ func (f *btreeFrontier) String() string {
 	return buf.String()
 }
 
+// All implements Frontier.
+func (f *btreeFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.disallowMutations()()
+
+		it := f.tree.MakeIter()
+		for it.First(); it.Valid(); it.Next() {
+			if !yield(it.Cur().span(), it.Cur().ts) {
+				return
+			}
+		}
+	}
+}
+
 // Len implements Frontier.
 func (f *btreeFrontier) Len() int {
 	return f.tree.Len()
@@ -889,4 +909,11 @@ func (f *concurrentFrontier) String() string {
 	f.Lock()
 	defer f.Unlock()
 	return f.f.String()
+}
+
+// All implements Frontier.
+func (f *concurrentFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	f.Lock()
+	defer f.Unlock()
+	return f.f.All()
 }
