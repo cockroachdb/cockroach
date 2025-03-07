@@ -8,6 +8,7 @@ package kv
 import (
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
 	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	"hash/crc64"
 	"math"
 	"math/big"
-	"math/rand"
+	"math/rand/v2"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,17 +106,19 @@ func init() {
 
 var (
 	randSeed struct {
-		once sync.Once
-		v    int64
+		once       sync.Once
+		chaChaSeed [32]byte
 	}
 )
 
-func randSeedGet() int64 {
+func randSeedGet() [32]byte {
 	randSeed.once.Do(func() {
-		randSeed.v = RandomSeed.Seed()
+		var seedBytes [8]byte
+		binary.LittleEndian.PutUint64(seedBytes[:], uint64(RandomSeed.Seed()))
+		randSeed.chaChaSeed = sha256.Sum256(seedBytes[:])
 	})
 
-	return randSeed.v
+	return randSeed.chaChaSeed
 }
 
 var kvMeta = workload.Meta{
@@ -339,7 +342,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	switch {
 	case w.zipfian:
 		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewSource(randSeedGet())), w.zipfianS, w.zipfianV)
+			return newZipfianGenerator(seq, rand.New(rand.NewChaCha8(randSeedGet())), w.zipfianS, w.zipfianV)
 		}
 		kr = keyRange{
 			min: 0,
@@ -347,7 +350,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	case w.sequential:
 		gen = func() keyGenerator {
-			return newSequentialGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
+			return newSequentialGenerator(seq, rand.New(rand.NewChaCha8(randSeedGet())))
 		}
 		kr = keyRange{
 			min: 0,
@@ -355,7 +358,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 		}
 	default:
 		gen = func() keyGenerator {
-			return newHashGenerator(seq, rand.New(rand.NewSource(randSeedGet())))
+			return newHashGenerator(seq, rand.New(rand.NewChaCha8(randSeedGet())))
 		}
 		kr = keyRange{
 			min: math.MinInt64,
@@ -452,7 +455,7 @@ func (w *kv) Tables() []workload.Table {
 				valCol := cb.ColVec(1).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it.
 				valCol.Reset()
-				rndBlock := rand.New(rand.NewSource(randSeedGet()))
+				rndBlock := rand.New(rand.NewChaCha8(randSeedGet()))
 
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
@@ -624,7 +627,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			return err
 		}
 	}
-	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
+	statementProbability := o.g.rand().IntN(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
@@ -634,7 +637,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		readStmt := o.readStmt
 		opName := `read`
 
-		if o.g.rand().Intn(100) < o.config.followerReadPercent {
+		if o.g.rand().IntN(100) < o.config.followerReadPercent {
 			readStmt = o.followerReadStmt
 			opName = `follower-read`
 		}
@@ -907,7 +910,7 @@ func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
 
 func (g *hashGenerator) hash(v int64) int64 {
 	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(randSeedGet()))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
 	g.hasher.Reset()
 	_, _ = g.hasher.Write(g.buf[:16])
 	g.hasher.Sum(g.buf[:0])
@@ -923,7 +926,7 @@ func (g *hashGenerator) readKey() int64 {
 	if v == 0 {
 		return 0
 	}
-	return g.hash(g.random.Int63n(v))
+	return g.hash(g.random.Int64N(v))
 }
 
 func (g *hashGenerator) rand() *rand.Rand {
@@ -955,7 +958,7 @@ func (g *sequentialGenerator) readKey() int64 {
 	if v == 0 {
 		return 0
 	}
-	return g.random.Int63n(v)
+	return g.random.Int64N(v)
 }
 
 func (g *sequentialGenerator) rand() *rand.Rand {
@@ -1005,7 +1008,7 @@ func (rss readSequenceSource) Uint64() uint64 {
 	if v != 0 {
 		// To prevent an immediate read of a recently written value, find a random
 		// value between [0,v) to read.
-		v = rss.random.Int63n(v)
+		v = rss.random.Int64N(v)
 	}
 	binary.BigEndian.PutUint64(buf[:8], uint64(v))
 	_, _ = hasher.Write(buf[:8])
@@ -1073,7 +1076,7 @@ func (w *kv) randBlock(r *rand.Rand) []byte {
 // according to min/max block bytes and the unique bytes given the
 // targetCompressionRatio.
 func (w *kv) randBlockSize(r *rand.Rand) (block int, unique int) {
-	block = r.Intn(w.maxBlockSizeBytes-w.minBlockSizeBytes+1) + w.minBlockSizeBytes
+	block = r.IntN(w.maxBlockSizeBytes-w.minBlockSizeBytes+1) + w.minBlockSizeBytes
 	unique = int(float64(block) / w.targetCompressionRatio)
 	if unique < 1 {
 		unique = 1
