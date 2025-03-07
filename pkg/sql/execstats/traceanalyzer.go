@@ -119,6 +119,8 @@ type QueryLevelStats struct {
 	MvccRangeKeySkippedPoints          int64
 	NetworkMessages                    int64
 	ContentionTime                     time.Duration
+	LockWaitTime                       time.Duration
+	LatchWaitTime                      time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
 	CPUTime                            time.Duration
@@ -182,6 +184,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.MvccRangeKeySkippedPoints += other.MvccRangeKeySkippedPoints
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
+	s.LockWaitTime += other.LockWaitTime
+	s.LatchWaitTime += other.LatchWaitTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
@@ -281,6 +285,8 @@ func (a *TraceAnalyzer) ProcessStats() {
 		s.MvccRangeKeyContainedPoints += int64(stats.KV.RangeKeyContainedPoints.Value())
 		s.MvccRangeKeySkippedPoints += int64(stats.KV.RangeKeySkippedPoints.Value())
 		s.ContentionTime += stats.KV.ContentionTime.Value()
+		s.LockWaitTime += stats.KV.LockWaitTime.Value()
+		s.LatchWaitTime += stats.KV.LatchWaitTime.Value()
 		s.RUEstimate += float64(stats.Exec.ConsumedRU.Value())
 		s.CPUTime += stats.Exec.CPUTime.Value()
 	}
