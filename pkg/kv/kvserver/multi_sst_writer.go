@@ -85,12 +85,8 @@ func newMultiSSTWriter(
 		sstChunkSize:         sstChunkSize,
 		skipClearForMVCCSpan: skipClearForMVCCSpan,
 	}
-	if !skipClearForMVCCSpan && rangeKeysInOrder {
-		// If skipClearForMVCCSpan is true, we don't split the MVCC span across
-		// multiple sstables, as addClearForMVCCSpan could be called by the caller
-		// at any time.
-		//
-		// We also disable snapshot sstable splitting unless the sender has
+	if rangeKeysInOrder {
+		// We disable snapshot sstable splitting unless the sender has
 		// specified in its snapshot header that it is sending range keys in
 		// key order alongside point keys, as opposed to sending them at the end
 		// of the snapshot. This is necessary to efficiently produce fragmented
@@ -397,15 +393,6 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	}
 	if err := msstw.rolloverSST(ctx, storage.EngineKey{Key: start}, storage.EngineKey{Key: end}); err != nil {
 		return err
-	}
-	if msstw.currSpanIsMVCCSpan() && msstw.skipClearForMVCCSpan {
-		prevWriteBytes := msstw.currSST.EstimatedSize()
-		// Skip the fragmenter. See the comment in skipClearForMVCCSpan.
-		if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
-			return errors.Wrap(err, "failed to put range key in sst")
-		}
-		msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
-		return nil
 	}
 
 	startKey, endKey := storage.EngineKey{Key: start}.Encode(), storage.EngineKey{Key: end}.Encode()
