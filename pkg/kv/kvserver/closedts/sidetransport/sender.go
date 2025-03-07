@@ -116,7 +116,7 @@ type connTestingKnobs struct {
 // about a particular range.
 type trackedRange struct {
 	lai    kvpb.LeaseAppliedIndex
-	policy roachpb.RangeClosedTimestampPolicy
+	policy ctpb.RangeClosedTimestampPolicy
 }
 
 // leaseholder represents a leaseholder replicas that has been registered with
@@ -170,7 +170,7 @@ type BumpSideTransportClosedResult struct {
 	// The range's current LAI, to be associated with the closed timestamp.
 	LAI kvpb.LeaseAppliedIndex
 	// The range's current policy.
-	Policy roachpb.RangeClosedTimestampPolicy
+	Policy ctpb.RangeClosedTimestampPolicy
 }
 
 // CantCloseReason enumerates the reasons why BunpSideTransportClosed might fail
@@ -327,7 +327,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
 	for i := range s.trackedMu.lastClosed {
-		pol := roachpb.RangeClosedTimestampPolicy(i)
+		pol := ctpb.RangeClosedTimestampPolicy(i)
 		target := closedts.TargetForPolicy(
 			now,
 			maxClockOffset,
@@ -487,7 +487,7 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 	}
 	for pol, ts := range s.trackedMu.lastClosed {
 		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
-			Policy:          roachpb.RangeClosedTimestampPolicy(pol),
+			Policy:          ctpb.RangeClosedTimestampPolicy(pol),
 			ClosedTimestamp: ts,
 		}
 	}
@@ -895,7 +895,7 @@ func (s streamState) String() string {
 		id roachpb.RangeID
 		trackedRange
 	}
-	rangesByPolicy := make(map[roachpb.RangeClosedTimestampPolicy][]rangeInfo)
+	rangesByPolicy := make(map[ctpb.RangeClosedTimestampPolicy][]rangeInfo)
 	for rid, info := range s.tracked {
 		rangesByPolicy[info.policy] = append(rangesByPolicy[info.policy], rangeInfo{id: rid, trackedRange: info})
 	}
