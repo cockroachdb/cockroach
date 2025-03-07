@@ -1936,8 +1936,8 @@ $$ LANGUAGE PLpgSQL;
 
 subtest hold_setting
 
-# Test the open_plpgsql_cursor_with_hold setting, which causes PL/pgSQL cursors
-# to remain open after their transaction closes.
+# Test the close_cursors_at_commit setting, which determines whether PL/pgSQL
+# cursors remain open after their transaction closes.
 statement ok
 CREATE PROCEDURE make_curs(curs REFCURSOR) AS $$
   BEGIN
@@ -1954,7 +1954,7 @@ query T
 SELECT name FROM pg_cursors;
 ----
 
-# The cursors should be visible within the explicit transcation.
+# The cursors should be visible within the explicit transaction.
 statement ok
 BEGIN;
 CALL make_curs('foo');
@@ -2054,6 +2054,44 @@ FETCH FROM foo;
 # The preexisting cursor should still be closed by CLOSE ALL.
 statement ok
 CLOSE ALL;
+
+query T
+SELECT name FROM pg_cursors;
+----
+
+# Test a holdable cursor opened in a DO block.
+statement ok
+DO $$
+DECLARE
+  curs REFCURSOR := 'foo';
+BEGIN
+  OPEN curs FOR SELECT * FROM xy ORDER BY x;
+END
+$$;
+
+query II
+FETCH FROM foo;
+----
+1  2
+
+query T
+SELECT name FROM pg_cursors;
+----
+foo
+
+statement ok
+CLOSE foo;
+
+# If the query contains locking, the cursor is not holdable, and should be
+# closed when the transaction ends.
+statement ok
+DO $$
+DECLARE
+  curs REFCURSOR := 'foo';
+BEGIN
+  OPEN curs FOR SELECT * FROM xy FOR UPDATE;
+END
+$$;
 
 query T
 SELECT name FROM pg_cursors;

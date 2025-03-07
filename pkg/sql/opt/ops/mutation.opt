@@ -403,7 +403,7 @@ define UniqueChecksItemPrivate {
 # The Lock operator does not necessarily have to be at the top of a plan. It
 # could appear within a subtree of the plan, and in this case acts as an
 # optimization barrier to ensure the correct rows are locked.
-[Relational, Mutation]
+[Relational]
 define Lock {
     Input RelExpr
     _ LockPrivate

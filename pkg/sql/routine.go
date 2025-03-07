@@ -573,9 +573,10 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 		// "unnamed" portal, which always exists.
 		return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor \"\" already in use")
 	}
-	// The CloseCursorsAtCommit setting provides oracle-compatible behavior, where
-	// cursors are holdable by default.
-	withHold := !g.p.SessionData().CloseCursorsAtCommit
+	// Disabling the CloseCursorsAtCommit setting provides oracle-compatible
+	// behavior, where cursors are holdable by default unless they contain
+	// locking.
+	withHold := !g.p.SessionData().CloseCursorsAtCommit && !plan.flags.IsSet(planFlagContainsLocking)
 	planCols := plan.main.planColumns()
 	cursorHelper := &plpgsqlCursorHelper{
 		cursorName: cursorName,
