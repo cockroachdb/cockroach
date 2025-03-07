@@ -146,29 +146,32 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
 func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
+	// Remove extra columns for partial index predicate values and AFTER triggers.
+	deleteVals := sourceVals[:len(d.run.td.rd.FetchCols)+d.run.numPassthrough]
+	sourceVals = sourceVals[len(deleteVals):]
+
 	// Create a set of partial index IDs to not delete from. Indexes should not
 	// be deleted from when they are partial indexes and the row does not
 	// satisfy the predicate and therefore do not exist in the partial index.
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
-	deleteCols := len(d.run.td.rd.FetchCols) + d.run.numPassthrough
 	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
-		partialIndexDelVals := sourceVals[deleteCols : deleteCols+n]
-
-		err := pm.Init(nil /* partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
+		err := pm.Init(nil /* partialIndexPutVals */, sourceVals[:n], d.run.td.tableDesc())
 		if err != nil {
 			return err
 		}
+		sourceVals = sourceVals[n:]
 	}
 
-	if len(sourceVals) > deleteCols {
-		// Remove extra columns for partial index predicate values and AFTER
-		// triggers.
-		sourceVals = sourceVals[:deleteCols]
+	// Keep track of the vector index partitions to update. This information is
+	// passed to tableInserter.row below.
+	var vh row.VectorIndexUpdateHelper
+	if n := len(d.run.td.tableDesc().VectorIndexes()); n > 0 {
+		vh.InitForDel(sourceVals[:n], d.run.td.tableDesc())
 	}
 
 	// Queue the deletion in the KV batch.
-	if err := d.run.td.row(params.ctx, sourceVals, pm, d.run.traceKV); err != nil {
+	if err := d.run.td.row(params.ctx, deleteVals, pm, vh, d.run.traceKV); err != nil {
 		return err
 	}
 
@@ -188,7 +191,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				if retIdx >= largestRetIdx {
 					largestRetIdx = retIdx
 				}
-				resultValues[retIdx] = sourceVals[i]
+				resultValues[retIdx] = deleteVals[i]
 			}
 		}
 
@@ -198,7 +201,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		if d.run.numPassthrough > 0 {
 			passthroughBegin := len(d.run.td.rd.FetchCols)
 			passthroughEnd := passthroughBegin + d.run.numPassthrough
-			passthroughValues := sourceVals[passthroughBegin:passthroughEnd]
+			passthroughValues := deleteVals[passthroughBegin:passthroughEnd]
 
 			for i := 0; i < d.run.numPassthrough; i++ {
 				largestRetIdx++

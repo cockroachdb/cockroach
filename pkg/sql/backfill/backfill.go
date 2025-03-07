@@ -398,12 +398,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		}
 		copy(oldValues, fetchedValues)
 
-		// No existing secondary indexes will be updated by adding or dropping a
-		// column. It is safe to use an empty PartialIndexUpdateHelper in this
-		// case.
+		// No existing secondary indexes will be updated by adding or dropping a column.
+		// It is safe to use an empty PartialIndexUpdateHelper and
+		// VectorIndexUpdateHelper in this case.
 		var pm row.PartialIndexUpdateHelper
+		var vh row.VectorIndexUpdateHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, nil, traceKV,
+			ctx, b, oldValues, updateValues, pm, vh, nil, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}

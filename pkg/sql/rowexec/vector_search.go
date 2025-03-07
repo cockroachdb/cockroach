@@ -205,7 +205,7 @@ func newVectorMutationSearchProcessor(
 		prefixKeyColOrds:  spec.PrefixKeyColumnOrdinals,
 		prefixKeyCols:     spec.PrefixKeyColumns,
 		queryVectorColOrd: int(spec.QueryVectorColumnOrdinal),
-		suffixKeyColOrds:  spec.PrefixKeyColumnOrdinals,
+		suffixKeyColOrds:  spec.SuffixKeyColumnOrdinals,
 		suffixKeyCols:     spec.SuffixKeyColumns,
 		isIndexPut:        spec.IsIndexPut,
 	}

@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
