@@ -1077,12 +1077,17 @@ func (r *raft) reset(term uint64) {
 
 	r.abortLeaderTransfer()
 
-	r.electionTracker.ResetVotes()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		conflictIndex := r.raftLog.lastIndex() + 1
+		hintEntry, ok := r.electionTracker.GetHintEntry(id)
+		if ok {
+			conflictIndex, _ = r.raftLog.findConflictByTerm(hintEntry.Index, hintEntry.Term)
+		}
+
 		*pr = tracker.Progress{
 			Match:       0,
 			MatchCommit: 0,
-			Next:        r.raftLog.lastIndex() + 1,
+			Next:        conflictIndex,
 			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner:   pr.IsLearner,
 		}
@@ -1090,6 +1095,8 @@ func (r *raft) reset(term uint64) {
 			pr.Match = r.raftLog.lastIndex()
 		}
 	})
+
+	r.electionTracker.ResetVotes()
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -1550,14 +1557,14 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id pb.PeerID, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool, hintEntry pb.Entry,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
 	} else {
 		r.logger.Infof("%x received %s rejection from %x at term %d", r.id, t, id, r.Term)
 	}
-	r.electionTracker.RecordVote(id, v)
+	r.electionTracker.RecordVote(id, v, hintEntry)
 	return r.electionTracker.TallyVotes()
 }
 
@@ -1784,7 +1791,13 @@ func (r *raft) Step(m pb.Message) error {
 			// the message (it ignores all out of date messages).
 			// The term in the original message and current local term are the
 			// same in the case of regular votes, but different for pre-votes.
-			r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+			r.send(pb.Message{
+				To:         m.From,
+				Term:       m.Term,
+				RejectHint: r.raftLog.lastEntryID().index,
+				LogTerm:    r.raftLog.lastEntryID().term,
+				Type:       voteRespMsgType(m.Type),
+			})
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
@@ -1793,7 +1806,14 @@ func (r *raft) Step(m pb.Message) error {
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, lastID.term, lastID.index, r.Vote, m.Type, m.From, candLastID.term, candLastID.index, r.Term)
-			r.send(pb.Message{To: m.From, Term: r.Term, Type: voteRespMsgType(m.Type), Reject: true})
+			r.send(pb.Message{
+				To:         m.From,
+				Term:       r.Term,
+				RejectHint: r.raftLog.lastEntryID().index,
+				LogTerm:    r.raftLog.lastEntryID().term,
+				Type:       voteRespMsgType(m.Type),
+				Reject:     true,
+			})
 		}
 
 	default:
@@ -2235,7 +2255,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
 	case myVoteRespType:
-		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
+		gr, rj, res := r.poll(m.From, m.Type, !m.Reject, pb.Entry{Term: m.LogTerm, Index: m.RejectHint})
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 		switch res {
 		case quorum.VoteWon:
