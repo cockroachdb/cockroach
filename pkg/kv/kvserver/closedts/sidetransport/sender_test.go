@@ -187,7 +187,7 @@ func TestSenderBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(nil, connFactory)
 	defer stopper.Stop(ctx)
 
 	// No leaseholders.
@@ -293,7 +293,7 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(nil, connFactory)
 	defer stopper.Stop(ctx)
 
 	rt := func(node, store int) roachpb.ReplicationTarget {
@@ -504,7 +504,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	defer dialer.Close()
 
 	ch := make(chan struct{})
-	s, stopper := newMockSender(newRPCConnFactory(dialer,
+	s, stopper := newMockSender(nil, newRPCConnFactory(dialer,
 		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
 			// Try to send an update to ch, if anyone is still listening.
 			ch <- struct{}{}
@@ -614,7 +614,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s, senderStopper := newMockSender(newRPCConnFactory(dialer, connTestingKnobs{}))
+	s, senderStopper := newMockSender(nil, newRPCConnFactory(dialer, connTestingKnobs{}))
 	defer senderStopper.Stop(ctx)
 	s.Run(ctx, roachpb.NodeID(1))
 
@@ -690,7 +690,7 @@ func TestSenderWithLatencyTrackingAndUpdates(t *testing.T) {
 
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(nil, connFactory)
 	defer stopper.Stop(ctx)
 
 	rt := func(node, store int) roachpb.ReplicationTarget {
@@ -768,7 +768,7 @@ func TestSenderRefreshLatency(t *testing.T) {
 
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(nil, connFactory)
 	defer stopper.Stop(ctx)
 
 	rt := func(node, store int) roachpb.ReplicationTarget {
