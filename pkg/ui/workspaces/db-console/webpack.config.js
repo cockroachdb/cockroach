@@ -66,13 +66,13 @@ module.exports = (env, argv) => {
   ];
 
   const config = {
+    devtool: "cheap-source-map",
     context: __dirname,
     entry: [ "./src/index.tsx"],
     output: {
       filename: "bundle.js",
       path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
     },
-
     mode: argv.mode || "production",
 
     resolve: {
