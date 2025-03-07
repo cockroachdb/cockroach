@@ -86,13 +86,13 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		SeqNum:   1,
 		Snapshot: true,
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
-			{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts10},
-			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: ts20},
+			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts10},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: ts20},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
-			{RangeID: 1, LAI: lai100, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
-			{RangeID: 2, LAI: lai101, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
-			{RangeID: 3, LAI: lai102, Policy: roachpb.LEAD_FOR_GLOBAL_READS},
+			{RangeID: 1, LAI: lai100, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
+			{RangeID: 2, LAI: lai101, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
+			{RangeID: 3, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO},
 		},
 		Removed: nil,
 	}
@@ -114,11 +114,11 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		SeqNum:   2,
 		Snapshot: false,
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
-			{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts11},
-			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: ts21},
+			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts11},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: ts21},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
-			{RangeID: 3, LAI: lai103, Policy: roachpb.LEAD_FOR_GLOBAL_READS},
+			{RangeID: 3, LAI: lai103, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO},
 		},
 		Removed: []roachpb.RangeID{1},
 	}
@@ -140,12 +140,12 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		SeqNum:   3,
 		Snapshot: true,
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
-			{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts12},
-			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: ts22},
+			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts12},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: ts22},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
-			{RangeID: 3, LAI: lai102, Policy: roachpb.LEAD_FOR_GLOBAL_READS},
-			{RangeID: 4, LAI: lai100, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+			{RangeID: 3, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO},
+			{RangeID: 4, LAI: lai100, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
 		},
 		Removed: nil,
 	}
@@ -186,10 +186,10 @@ func TestIncomingStreamCallsIntoStoresDontHoldLock(t *testing.T) {
 	msg := &ctpb.Update{
 		NodeID: 1, SeqNum: 1, Snapshot: true,
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
-			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: ts10},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: ts10},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
-			{RangeID: 1, LAI: lai100, Policy: roachpb.LEAD_FOR_GLOBAL_READS},
+			{RangeID: 1, LAI: lai100, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO},
 		},
 		Removed: nil,
 	}
