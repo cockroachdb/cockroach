@@ -202,6 +202,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}
 				}
+				// TODO(tbg): document why many key kinds are only possible in the
+				// excise case.
 				switch batchReader.KeyKind() {
 				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
 					if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
