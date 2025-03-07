@@ -1385,106 +1385,6 @@ message HotRangesRequest {
   ];
 }
 
-// HotRangesResponse is the payload produced in response
-// to a HotRangesRequest.
-// API: PUBLIC ALPHA
-message HotRangesResponse {
-  // NodeID is the node that received the HotRangesRequest and
-  // forwarded requests to the selected target node(s).
-  // API: PUBLIC ALPHA
-  int32 node_id = 1 [
-    (gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) =
-        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-  ];
-
-  // HotRange is a hot range report for a single store on one of the
-  // target node(s) selected in a HotRangesRequest.
-  // API: PUBLIC ALPHA
-  message HotRange {
-    // Desc is the descriptor of the range for which the report
-    // was produced.
-    //
-    // TODO(knz): This field should be removed.
-    // See: https://github.com/cockroachdb/cockroach/issues/53212
-    cockroach.roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-
-    // QueriesPerSecond is the recent number of queries per second
-    // on this range.
-    // API: PUBLIC ALPHA
-    double queries_per_second = 2;
-    // LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range.
-    int32 leaseholder_node_id = 3 [
-      (gogoproto.customname) = "LeaseholderNodeID",
-      (gogoproto.casttype) =
-        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-    ];
-
-    // Requests per second is the recent number of requests received  per
-    // second on this range.
-    double requests_per_second = 4;
-    // Writes per second is the recent number of keys written per second on
-    // this range.
-    double writes_per_second = 5;
-    // Reads per second is the recent number of keys read per second on
-    // this range.
-    double reads_per_second = 6;
-    // Write bytes per second is the recent number of bytes written per second on
-    // this range.
-    double write_bytes_per_second = 7;
-    // Read bytes per second is the recent number of bytes read per second on
-    // this range.
-    double read_bytes_per_second = 8;
-    // CPU time per second is the recent cpu usage in nanoseconds of this range.
-    double cpu_time_per_second = 9 [(gogoproto.customname) = "CPUTimePerSecond"];
-  }
-
-  // StoreResponse contains the part of a hot ranges report that
-  // pertains to a single store on a target node.
-  // API: PUBLIC ALPHA
-  message StoreResponse {
-    // StoreID identifies the store for which the report was
-    // produced.
-    // API: PUBLIC ALPHA
-    int32 store_id = 1 [
-      (gogoproto.customname) = "StoreID",
-      (gogoproto.casttype) =
-          "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
-    ];
-
-    // HotRanges is the hot ranges report for this store
-    // on the target node.
-    // API: PUBLIC ALPHA
-    repeated HotRange hot_ranges = 2 [(gogoproto.nullable) = false];
-  }
-
-  // NodeResponse is a hot range report for a single target node.
-  // API: PUBLIC ALPHA
-  message NodeResponse {
-    // ErrorMessage is set to a non-empty string if this target
-    // node was unable to produce a hot range report.
-    //
-    // The contents of this string indicates the cause of the failure.
-    // API: PUBLIC ALPHA
-    string error_message = 1;
-
-    // Stores contains the hot ranges report if no error was encountered.
-    // There is one part to the report for each store in the
-    // target node.
-    // API: PUBLIC ALPHA
-    repeated StoreResponse stores = 2;
-  }
-
-  // HotRangesByNodeID contains a hot range report for each selected
-  // target node ID in the HotRangesRequest.
-  // API: PUBLIC ALPHA
-  map<int32, NodeResponse> hot_ranges_by_node_id = 2 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
-    (gogoproto.customname) = "HotRangesByNodeID",
-    (gogoproto.nullable) = false
-  ];
-}
-
 // HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 message HotRangesResponseV2 {
   // HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
@@ -2577,12 +2477,6 @@ service Status {
   rpc DownloadSpan(DownloadSpanRequest) returns (DownloadSpanResponse) {
     option (google.api.http) = {
       get : "/_status/downloadspans"
-    };
-  }
-
-  rpc HotRanges(HotRangesRequest) returns (HotRangesResponse) {
-    option (google.api.http) = {
-      get : "/_status/hotranges"
     };
   }
 
