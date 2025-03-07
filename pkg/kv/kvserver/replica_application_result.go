@@ -273,6 +273,15 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		}
 	}
 
+	// Repopulate SubsumeResponse if requested.
+	if pErr == nil && cmd.proposal.Local.DetachRepopulateSubsumeResponse() {
+		if resp := cmd.response.Reply.Responses[0].GetSubsume(); resp != nil {
+			resp.LeaseAppliedIndex = cmd.LeaseIndex
+		} else {
+			log.Fatalf(ctx, "RepopulateSubsumeResponse for %T", cmd.response.Reply.Responses[0].GetInner())
+		}
+	}
+
 	if pErr == nil {
 		cmd.localResult = cmd.proposal.Local
 	} else if cmd.localResult != nil {

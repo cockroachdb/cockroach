@@ -5722,3 +5722,108 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	txn2Cancel()
 	require.NoError(t, g.Wait())
 }
+
+func TestMergeReplicatesLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Test Setup:
+	//
+	// txn1: holding lock on key k1
+	// txn2: waiting on lock on key k1
+	//
+	// Test Mutation:
+	//
+	// Merge range holding k1.
+	//
+	// Test Assertion:
+	//
+	// txn2 is never unblocked (from the perspective of the client).
+	//
+	var (
+		lhsKey     = "a"
+		splitPoint = "b"
+		rhsKey     = "c"
+
+		ctx = context.Background()
+		st  = cluster.MakeClusterSettings()
+	)
+	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+
+	for _, b := range []bool{true, false} {
+		name := "lhs-lock"
+		lockKey := lhsKey
+		if b {
+			name = "rhs-lock"
+			lockKey = rhsKey
+		}
+		t.Run(name, func(t *testing.T) {
+			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+			scratch := tc.ScratchRange(t)
+			splitKey := append(scratch[:len(scratch):len(scratch)], splitPoint...)
+			tc.SplitRangeOrFatal(t, splitKey)
+			// Write a value for the key because at the moment we don't create locks for
+			// non-existent keys.
+			require.NoError(t, tc.Server(1).DB().Put(ctx, lockKey, "value"))
+			// Txn 1:
+			// - Acquire lock and block until we are are sure txn2 has returned.
+			txn2Started := make(chan struct{})
+			txn2StartedOnce := sync.OnceFunc(func() { close(txn2Started) })
+			txn2Done := make(chan struct{})
+			txn1HasLock := make(chan struct{})
+			g := ctxgroup.WithContext(ctx)
+			g.Go(func() error {
+				return tc.Server(1).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					_, err := txn.GetForUpdate(ctx, lockKey, kvpb.BestEffort)
+					if err != nil {
+						return err
+					}
+					close(txn1HasLock)
+					t.Log("txn1: lock acquired, waiting for txn2 cancellation")
+					<-txn2Done
+					t.Log("txn1: done")
+					return nil
+				})
+			})
+			// Txn 2:
+			// - Block on txn 1. If it ever unblocks. We lost the lock.
+			txn2Context, txn2Cancel := context.WithCancel(context.Background())
+			g.Go(func() error {
+				defer close(txn2Done)
+				<-txn1HasLock
+				t.Log("txn2: tnx1 lock acquisition observed, starting txn")
+				err := tc.Server(1).DB().Txn(txn2Context, func(ctx context.Context, txn *kv.Txn) error {
+					txn2StartedOnce()
+					_, err := txn.GetForUpdate(ctx, lockKey, kvpb.BestEffort)
+					if err != nil {
+						return err
+					}
+					// We should never get here.
+					t.Error("txn2: unexpectedly unblocked!")
+					return nil
+				})
+				if errors.Is(err, context.Canceled) {
+					return nil
+				} else if err != nil {
+					t.Logf("txn2: unexpected err: %s", err)
+					return err
+				} else {
+					return nil
+				}
+			})
+			<-txn2Started
+			t.Log("merging ranges")
+			_, err := tc.MergeRanges(scratch)
+			require.NoError(t, err)
+			time.Sleep(250 * time.Millisecond)
+			t.Log("cancelling txn2")
+			txn2Cancel()
+			require.NoError(t, g.Wait())
+		})
+	}
+}
