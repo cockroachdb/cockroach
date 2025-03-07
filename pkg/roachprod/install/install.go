@@ -114,6 +114,11 @@ sudo apt-get install -y bzip2;
 sudo apt-get update;
 sudo apt-get install -y nmap;
 `,
+
+	"vmtouch": `
+sudo apt-get update;
+sudo apt-get install -y vmtouch;
+`,
 }
 
 // installLocalCmds is a map from software name to a map of strings that

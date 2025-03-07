@@ -138,13 +138,13 @@ func (f *IPTablesPartitionFailure) Inject(
 			switch partition.Type {
 			case Bidirectional:
 				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets between nodes %d and node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Dropping packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
 				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from node %d to nodes %d with cmd: %s", destinationNode, partition.Source, cmd)
+				l.Printf("Dropping packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
 				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, true /* addRule */)
-				l.Printf("Dropping packets from nodes %d to node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Dropping packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")
 			}
@@ -166,13 +166,13 @@ func (f *IPTablesPartitionFailure) Restore(
 			switch partition.Type {
 			case Bidirectional:
 				cmd = constructIPTablesRule(bidirectionalPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets between nodes %d and node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Resuming packets between nodes %d and node %d", partition.Source, destinationNode)
 			case Incoming:
 				cmd = constructIPTablesRule(asymmetricInputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from node %d to nodes %d with cmd: %s", destinationNode, partition.Source, cmd)
+				l.Printf("Resuming packets from node %d to nodes %d", destinationNode, partition.Source)
 			case Outgoing:
 				cmd = constructIPTablesRule(asymmetricOutputPartitionCmd, destinationNode, false /* addRule */)
-				l.Printf("Resuming packets from nodes %d to node %d with cmd: %s", partition.Source, destinationNode, cmd)
+				l.Printf("Resuming packets from nodes %d to node %d", partition.Source, destinationNode)
 			default:
 				panic("unhandled default case")
 			}
