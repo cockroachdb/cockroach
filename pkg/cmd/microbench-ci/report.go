@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -176,15 +177,9 @@ func (c CompareResults) writeJSONSummary(path string) error {
 	return os.WriteFile(path, formattedData, 0644)
 }
 
-// writeGitHubSummary writes a markdown summary of the comparison results to the
-// given path.
-func (c CompareResults) writeGitHubSummary(path string) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
+// githubSummary creates a markdown summary of the comparison results.
+func (c CompareResults) githubSummary() (string, error) {
+	buf := bytes.NewBuffer(nil)
 	regressionDetected := false
 	summaries := make([]GitHubData, 0, len(c))
 	for _, cr := range c {
@@ -210,13 +205,14 @@ func (c CompareResults) writeGitHubSummary(path string) error {
 
 	tmpl, err := template.New("github").Parse(githubSummary)
 	if err != nil {
-		return err
+		return "", err
 	}
 	description := "No regressions detected!"
 	if regressionDetected {
 		description = "A regression has been detected, please investigate further!"
 	}
-	return tmpl.Execute(file, struct {
+
+	err = tmpl.Execute(buf, struct {
 		GitHubSummaryData []GitHubData
 		Artifacts         map[Revision]string
 		Description       string
@@ -230,6 +226,10 @@ func (c CompareResults) writeGitHubSummary(path string) error {
 		},
 		Commit: suite.revisionSHA(New),
 	})
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func statusToDot(status Status) string {
