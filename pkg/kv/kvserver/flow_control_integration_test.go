@@ -1789,6 +1789,9 @@ func TestFlowControlV1ToV2Transition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(pav-kv): remove when flakes are fixed.
+	defer setRACv2DebugVModule(t)()
+
 	ctx := context.Background()
 	const numNodes = 3
 	var disableWorkQueueGranting atomic.Bool
@@ -1815,6 +1818,9 @@ func TestFlowControlV1ToV2Transition(t *testing.T) {
 					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true // pretend there are no disconnects
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverridePullPushMode: func() bool {
