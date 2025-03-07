@@ -344,6 +344,7 @@ func (ls *Stores) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
 			panic(err)
 		}
 		nc.StoresCPURate += int64(c.CPUPerSecond)
+		nc.NumStores++
 		return nil
 	})
 	// TODO: fill in the rest of the fields.
