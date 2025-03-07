@@ -70,6 +70,18 @@ func (c *CompareResult) regressed() bool {
 	return false
 }
 
+// top returns the top status of all metrics in the comparison.
+func (c *CompareResult) top() Status {
+	topStatus := NoChange
+	for metric := range c.MetricMap {
+		status := c.status(metric)
+		if status > topStatus {
+			topStatus = status
+		}
+	}
+	return topStatus
+}
+
 // compare compares the metrics of a benchmark between two revisions.
 func (b *Benchmark) compare() (*CompareResult, error) {
 	builder := model.NewBuilder()
@@ -106,7 +118,19 @@ func (b *Benchmark) compare() (*CompareResult, error) {
 	return &compareResult, nil
 }
 
-// compareBenchmarks compares the metrics of all benchmarks between two revisions.
+// changed returns true if any benchmark in the comparison has significant
+// changes.
+func (c CompareResults) changed() bool {
+	for _, result := range c {
+		if result.top() != NoChange {
+			return true
+		}
+	}
+	return false
+}
+
+// compareBenchmarks compares the metrics of all benchmarks between two
+// revisions.
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
