@@ -290,13 +290,15 @@ message NodeCapacity {
   // across all stores. This is the sum of all the replica's cpu time on this
   // node, which is tracked in replica stats.
   optional int64 stores_cpu_rate = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoresCPURate"];
+  // NumStores is the number of stores over which StoresCPURate is aggregated.
+  optional int32 num_stores = 2 [(gogoproto.nullable) = false];
   // NodeCPURateUsage is the averaged cpu rate (nanos per second) observed at
   // the node. This will often be higher than storesCPURate because of gaps in
   // the fine-grained instrumentation used to compute storesCPURate.
-  optional int64 node_cpu_rate_usage = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateUsage"];
+  optional int64 node_cpu_rate_usage = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateUsage"];
   // NodeCPURateCapacity is the cpu rate (nanos per second) capacity of the
   // node.
-  optional int64 node_cpu_rate_capacity = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
+  optional int64 node_cpu_rate_capacity = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
 }
 
 // StoreCapacity contains capacity information for a storage device.

@@ -4,17 +4,20 @@ go_library(
     name = "allocator",
     srcs = [
         "base.go",
+        "mma_integration.go",
         "range_usage_info.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/allocator/load",
+        "//pkg/kv/kvserver/allocator/mma",
         "//pkg/kv/kvserver/constraint",
         "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/humanizeutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )
