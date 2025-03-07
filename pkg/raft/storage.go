@@ -340,9 +340,10 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 // log from the MemoryStorage snapshot. Only for testing.
 func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
 	return LogSnapshot{
-		first:    ms.FirstIndex(),
-		storage:  ms.LogSnapshot(),
-		unstable: ms.ls.forward(ms.ls.lastIndex()),
-		logger:   raftlogger.DiscardLogger,
+		first:     ms.FirstIndex(),
+		storage:   ms.LogSnapshot(),
+		unstable:  ms.ls.forward(ms.ls.lastIndex()),
+		termCache: NewTermCache(termCacheSize, ms.ls.lastEntryID()),
+		logger:    raftlogger.DiscardLogger,
 	}
 }
