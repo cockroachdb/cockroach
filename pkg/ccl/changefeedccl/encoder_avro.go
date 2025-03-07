@@ -28,15 +28,15 @@ const (
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	schemaRegistry            schemaRegistry
-	schemaPrefix              string
-	updatedField, beforeField bool
-	mvccTimestampField        bool
-	virtualColumnVisibility   changefeedbase.VirtualColumnVisibility
-	targets                   changefeedbase.Targets
-	envelopeType              changefeedbase.EnvelopeType
-	customKeyColumn           string
-	headersJSONColumnName     string
+	schemaRegistry                         schemaRegistry
+	schemaPrefix                           string
+	updatedField, beforeField, sourceField bool
+	mvccTimestampField                     bool
+	virtualColumnVisibility                changefeedbase.VirtualColumnVisibility
+	targets                                changefeedbase.Targets
+	envelopeType                           changefeedbase.EnvelopeType
+	customKeyColumn                        string
+	headersJSONColumnName                  string
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -91,6 +91,7 @@ func newConfluentAvroEncoder(
 
 	e.updatedField = opts.UpdatedTimestamps
 	e.beforeField = opts.Diff
+	e.sourceField = inSet(changefeedbase.EnrichedPropertySource, opts.EnrichedProperties)
 	e.customKeyColumn = opts.CustomKeyColumn
 	e.headersJSONColumnName = opts.HeadersJSONColName
 	e.mvccTimestampField = opts.MVCCTimestamps
@@ -252,12 +253,13 @@ func (e *confluentAvroEncoder) EncodeValue(
 			opts = avro.EnvelopeOpts{RecordField: true, UpdatedField: e.updatedField, MVCCTimestampField: e.mvccTimestampField}
 			recordDataSchema = currentSchema
 		case changefeedbase.OptEnvelopeEnriched:
-			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, MVCCTimestampField: e.mvccTimestampField, UpdatedField: e.updatedField,
-				OpField: true, TsField: true, SourceField: true}
 			afterDataSchema = currentSchema
-
-			if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix); err != nil {
-				return nil, err
+			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, MVCCTimestampField: e.mvccTimestampField, UpdatedField: e.updatedField,
+				OpField: true, TsField: true, SourceField: e.sourceField}
+			if e.sourceField {
+				if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix); err != nil {
+					return nil, err
+				}
 			}
 		// key_only handled above, and row is not supported in avro
 		default:
