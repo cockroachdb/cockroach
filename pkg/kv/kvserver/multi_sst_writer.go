@@ -85,12 +85,8 @@ func newMultiSSTWriter(
 		sstChunkSize:         sstChunkSize,
 		skipClearForMVCCSpan: skipClearForMVCCSpan,
 	}
-	if !skipClearForMVCCSpan && rangeKeysInOrder {
-		// If skipClearForMVCCSpan is true, we don't split the MVCC span across
-		// multiple sstables, as addClearForMVCCSpan could be called by the caller
-		// at any time.
-		//
-		// We also disable snapshot sstable splitting unless the sender has
+	if rangeKeysInOrder {
+		// We disable snapshot sstable splitting unless the sender has
 		// specified in its snapshot header that it is sending range keys in
 		// key order alongside point keys, as opposed to sending them at the end
 		// of the snapshot. This is necessary to efficiently produce fragmented
