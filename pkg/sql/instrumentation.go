@@ -830,6 +830,12 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if queryStats.ContentionTime != 0 {
 			ob.AddContentionTime(queryStats.ContentionTime)
 		}
+		if queryStats.LockWaitTime != 0 {
+			ob.AddLockWaitTime(queryStats.LockWaitTime)
+		}
+		if queryStats.LatchWaitTime != 0 {
+			ob.AddLatchWaitTime(queryStats.LatchWaitTime)
+		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
@@ -1031,6 +1037,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 					}
 					nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
 					nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
+					nodeStats.KVLockWaitTime.MaybeAdd(stats.KV.LockWaitTime)
+					nodeStats.KVLatchWaitTime.MaybeAdd(stats.KV.LatchWaitTime)
 					nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 					nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
 					nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
