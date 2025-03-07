@@ -420,6 +420,13 @@ func (r *Replica) applySnapshot(
 	hs raftpb.HardState,
 	subsumedRepls []*Replica,
 ) (err error) {
+
+	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
+		if !inSnap.doExcise {
+			return errors.AssertionFailedf("expected snapshot with remote files to have excise=true")
+		}
+	}
+
 	desc := inSnap.Desc
 	if desc.RangeID != r.RangeID {
 		log.Fatalf(ctx, "unexpected range ID %d", desc.RangeID)
@@ -571,15 +578,28 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+
+	const (
+		ingestExcise   = iota // excise is external/shared SSTs and excise is set
+		ingestRangeDel        // SST has range deletions built in - legacy, see #142459
+		ingestAsWrite         // small SSTs applied as WriteBatch
+	)
+
+	ingestType := func() int {
+		if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 || inSnap.doExcise {
+			return ingestExcise
+		}
+		if inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
+			return ingestAsWrite
+		}
+		return ingestRangeDel
+	}()
+
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
-	// TODO: separate ingestions for log and statemachine engine. See:
-	//
-	// https://github.com/cockroachdb/cockroach/issues/93251
-	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
-		if !inSnap.doExcise {
-			return errors.AssertionFailedf("expected snapshot with remote files to have excise=true")
-		}
+
+	switch ingestType {
+	case ingestExcise:
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
 		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
 			ctx,
@@ -592,43 +612,29 @@ func (r *Replica) applySnapshot(
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
-	} else {
-		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
-			if inSnap.doExcise {
-				exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-				if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-					ctx,
-					inSnap.SSTStorageScratch.SSTs(),
-					nil, /* sharedSSTs */
-					nil, /* externalSSTs */
-					exciseSpan,
-					inSnap.includesRangeDelForLastSpan,
-				); err != nil {
-					return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
-						inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
-				}
-			} else {
-				if ingestStats, err =
-					r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
-					return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
-				}
-			}
-		} else {
-			appliedAsWrite = true
-			err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-				ctx, inSnap.SSTStorageScratch.SSTs(), preppedSnap.clearedSpans)
-			if err != nil {
-				return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
-			}
-			// Admission control wants the writeBytes to be roughly equivalent to
-			// the bytes in the SST when these writes are eventually flushed. We use
-			// the SST size of the incoming snapshot as that approximation. We've
-			// written additional SSTs to clear some data earlier in this method,
-			// but we ignore those since the bulk of the data is in the incoming
-			// snapshot.
-			writeBytes = uint64(inSnap.SSTSize)
+	case ingestRangeDel:
+		if ingestStats, err =
+			r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+			return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 		}
+	case ingestAsWrite:
+		appliedAsWrite = true
+		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
+			ctx, inSnap.SSTStorageScratch.SSTs(), preppedSnap.clearedSpans)
+		if err != nil {
+			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
+		}
+		// Admission control wants the writeBytes to be roughly equivalent to
+		// the bytes in the SST when these writes are eventually flushed. We use
+		// the SST size of the incoming snapshot as that approximation. We've
+		// written additional SSTs to clear some data earlier in this method,
+		// but we ignore those since the bulk of the data is in the incoming
+		// snapshot.
+		writeBytes = uint64(inSnap.SSTSize)
+	default:
+		return errors.AssertionFailedf("unexpected ingest type %d", ingestType)
 	}
+
 	// The "ignored" here is to ignore the writes to create the AC linear models
 	// for LSM writes. Since these writes typically correspond to actual writes
 	// onto the disk, we account for them separately in
