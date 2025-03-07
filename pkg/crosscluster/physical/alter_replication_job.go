@@ -352,10 +352,6 @@ func alterTenantRestartReplication(
 		)
 	}
 
-	if alterTenantStmt.Options.ExpirationWindowSet() {
-		return CannotSetExpirationWindowErr
-	}
-
 	configUri, err := streamclient.ParseConfigUri(srcUri)
 	if err != nil {
 		return errors.Wrap(err, "url")

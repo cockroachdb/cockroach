@@ -32,11 +32,6 @@ import (
 // replicated data will be retained.
 const defaultRetentionTTLSeconds = int32(4 * 60 * 60)
 
-// CannotSetExpirationWindowErr get returned if the user attempts to specify the
-// EXPIRATION WINDOW option to create a replication stream, as this job setting
-// should only be set from the producer cluster.
-var CannotSetExpirationWindowErr = errors.New("cannot specify EXPIRATION WINDOW option while starting a physical replication stream")
-
 func streamIngestionJobDescription(
 	p sql.PlanHookState,
 	source streamclient.ConfigUri,
@@ -112,9 +107,6 @@ func ingestionPlanHook(
 	retentionTTLSeconds := defaultRetentionTTLSeconds
 	if ret, ok := options.GetRetention(); ok {
 		retentionTTLSeconds = ret
-	}
-	if _, ok := options.GetExpirationWindow(); ok {
-		return nil, nil, false, CannotSetExpirationWindowErr
 	}
 
 	fn := func(ctx context.Context, _ chan<- tree.Datums) (err error) {
