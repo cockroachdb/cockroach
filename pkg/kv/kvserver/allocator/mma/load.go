@@ -62,8 +62,8 @@ func (lv *LoadVector) subtract(other LoadVector) {
 // A resource can have a capacity, which is also expressed using LoadValue.
 // There are some special case capacity values, enumerated here.
 const (
-	// unknownCapacity is currenly only used for WriteBandwidth.
-	unknownCapacity LoadValue = math.MaxInt64
+	// UnknownCapacity is currenly only used for WriteBandwidth.
+	UnknownCapacity LoadValue = math.MaxInt64
 )
 
 // Secondary load dimensions should be considered after we are done
@@ -132,7 +132,7 @@ type storeLoad struct {
 
 	// Capacity information for this store.
 	//
-	// capacity[WriteBandwidth] is unknownCapacity.
+	// capacity[WriteBandwidth] is UnknownCapacity.
 	//
 	// TODO(sumeer): add diskBandwidth, since we will become more aware of
 	// provisioned disk bandwidth in the near future.
@@ -344,9 +344,9 @@ func computeMeansForStoreSet(
 		sload := loadProvider.getStoreReportedLoad(storeID)
 		for j := range sload.reportedLoad {
 			means.storeLoad.load[j] += sload.reportedLoad[j]
-			if sload.capacity[j] == unknownCapacity {
-				means.storeLoad.capacity[j] = unknownCapacity
-			} else if means.storeLoad.capacity[j] != unknownCapacity {
+			if sload.capacity[j] == UnknownCapacity {
+				means.storeLoad.capacity[j] = UnknownCapacity
+			} else if means.storeLoad.capacity[j] != UnknownCapacity {
 				means.storeLoad.capacity[j] += sload.capacity[j]
 			}
 		}
@@ -360,7 +360,7 @@ func computeMeansForStoreSet(
 		}
 	}
 	for i := range means.storeLoad.load {
-		if means.storeLoad.capacity[i] != unknownCapacity {
+		if means.storeLoad.capacity[i] != UnknownCapacity {
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
 			means.storeLoad.capacity[i] /= LoadValue(n)
@@ -426,7 +426,7 @@ func loadSummaryForDimension(
 	// cpu and ByteSize since the consequence of running out-of-disk is much
 	// more severe.
 	//
-	// The capacity may be unknownCapacity. Even if we have a known capacity, we
+	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
 	// consider how far we are from the mean. The mean isn't very useful when
 	// there are heterogeneous nodes/stores.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
@@ -437,7 +437,7 @@ func loadSummaryForDimension(
 	} else {
 		loadSummary = loadNormal
 	}
-	if capacity != unknownCapacity {
+	if capacity != UnknownCapacity {
 		// Further tune the summary based on utilization.
 		fractionUsed := float64(load) / float64(capacity)
 		if fractionUsed > 0.9 {
@@ -463,7 +463,7 @@ func loadSummaryForDimension(
 }
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
-	if capacity == unknownCapacity {
+	if capacity == UnknownCapacity {
 		// TODO(sumeer): log an error.
 		return false
 	}
