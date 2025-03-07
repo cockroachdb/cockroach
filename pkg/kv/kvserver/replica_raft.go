@@ -128,6 +128,10 @@ func (r *Replica) evalAndPropose(
 		}
 		intents := proposal.Local.DetachEncounteredIntents()
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
+
+		// If we had no proposal, then the existing LeaseAppliedIndex is sufficient.
+		proposal.Local.DetachRepopulateSubsumeResponse()
+
 		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
 		// NB: it is intentional that this returns both an error and results.
