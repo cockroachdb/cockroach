@@ -2227,16 +2227,6 @@ func TestFlowControlRepeatedlySwitchMode(t *testing.T) {
 	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */)
 }
 
-// TODO(kvoli): Add the following tests which exercise interesting events while
-// send tokens are exhausted on a partial number, or on all streams:
-// - TestFlowControlSendQueueRangeSplitMerge
-// - TestFlowControlSendQueueTransferLease
-// - TestFlowControlSendQueueRaftMembershipRemoveSelf
-// - TestFlowControlSendQueueRaftMembership
-// - TestFlowControlSendQueueRaftSnapshot
-// - TestFlowControlSendQueueLeaderNotLeaseholder
-// - TestFlowControlSendQueueGranterAdmitOneByOne
-
 // TestFlowControlSendQueueManyInflight exercises send queue formation,
 // prevention and quickly draining 1k+ entries tracked in the send queue, in
 // order to exercise a raft inflight tracking with a large number of inflight
