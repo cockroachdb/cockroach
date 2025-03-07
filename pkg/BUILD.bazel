@@ -213,7 +213,6 @@ ALL_TESTS = [
     "//pkg/kv/bulk/bulkpb:bulkpb_test",
     "//pkg/kv/bulk:bulk_test",
     "//pkg/kv/kvclient/kvcoord/txncorrectnesstest:txncorrectnesstest_test",
-    "//pkg/kv/kvclient/kvcoord:kvcoord_disallowed_imports_test",
     "//pkg/kv/kvclient/kvcoord:kvcoord_test",
     "//pkg/kv/kvclient/kvstreamer:kvstreamer_test",
     "//pkg/kv/kvclient/kvtenant:kvtenant_test",
