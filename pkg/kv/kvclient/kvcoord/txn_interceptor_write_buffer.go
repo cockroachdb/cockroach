@@ -529,10 +529,10 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 	return rm.toScanResp(), nil
 }
 
-// mergeWithScanResp takes a ReverseScanRequest, that was sent to the KV layer,
-// and the response returned by the KV layer, and merges it with any writes that
-// were buffered by the transaction to correctly uphold read-your-own-write
-// semantics.
+// mergeWithReverseScanResp takes a ReverseScanRequest, that was sent to the KV
+// layer, and the response returned by the KV layer, and merges it with any
+// writes that were buffered by the transaction to correctly uphold
+// read-your-own-write semantics.
 func (twb *txnWriteBuffer) mergeWithReverseScanResp(
 	req *kvpb.ReverseScanRequest, resp *kvpb.ReverseScanResponse,
 ) (*kvpb.ReverseScanResponse, error) {
@@ -967,16 +967,23 @@ type respIter struct {
 	scanResp        *kvpb.ScanResponse
 	reverseScanReq  *kvpb.ReverseScanRequest
 	reverseScanResp *kvpb.ReverseScanResponse
-	index           int
+	// scanFormat indicates the ScanFormat of the request. Only KEY_VALUES is
+	// supported right now.
+	scanFormat kvpb.ScanFormat
+
+	rowsIndex int
 }
 
 // newScanRespIter constructs and returns a new iterator to iterate over a
 // ScanRequest/Response.
 func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
+	if req.ScanFormat != kvpb.KEY_VALUES {
+		panic("unexpected")
+	}
 	return &respIter{
-		scanReq:  req,
-		scanResp: resp,
-		index:    0,
+		scanReq:    req,
+		scanResp:   resp,
+		scanFormat: req.ScanFormat,
 	}
 }
 
@@ -985,128 +992,73 @@ func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
 func newReverseScanRespIter(
 	req *kvpb.ReverseScanRequest, resp *kvpb.ReverseScanResponse,
 ) *respIter {
+	if req.ScanFormat != kvpb.KEY_VALUES {
+		panic("unexpected")
+	}
 	return &respIter{
 		reverseScanReq:  req,
 		reverseScanResp: resp,
-		index:           0,
+		scanFormat:      req.ScanFormat,
 	}
 }
 
 // peekKey returns the key at the current iterator position.
 func (s *respIter) peekKey() roachpb.Key {
-	switch s.method() {
-	case kvpb.Scan:
-		switch s.scanFormat() {
-		case kvpb.KEY_VALUES:
-			return s.scanResp.Rows[s.index].Key
-		default:
-			panic("unexpected")
+	if s.scanFormat == kvpb.KEY_VALUES {
+		if s.scanReq != nil {
+			return s.scanResp.Rows[s.rowsIndex].Key
 		}
-
-	case kvpb.ReverseScan:
-		switch s.scanFormat() {
-		case kvpb.KEY_VALUES:
-			return s.reverseScanResp.Rows[s.index].Key
-		default:
-			panic("unexpected")
-		}
-	default:
-		panic("unexpected")
+		return s.reverseScanResp.Rows[s.rowsIndex].Key
 	}
+	panic("unexpected")
 }
 
 // next moves the iterator forward.
 func (s *respIter) next() {
-	s.index++
+	s.rowsIndex++
 }
 
 // valid returns whether the iterator is (still) positioned to a valid index.
 func (s *respIter) valid() bool {
-	switch s.method() {
-	case kvpb.Scan:
-		switch s.scanFormat() {
-		case kvpb.KEY_VALUES:
-			return s.index < len(s.scanResp.Rows)
-		default:
-			panic("unexpected")
+	if s.scanFormat == kvpb.KEY_VALUES {
+		if s.scanReq != nil {
+			return s.rowsIndex < len(s.scanResp.Rows)
 		}
-	case kvpb.ReverseScan:
-		switch s.scanFormat() {
-		case kvpb.KEY_VALUES:
-			return s.index < len(s.reverseScanResp.Rows)
-		default:
-			panic("unexpected")
-		}
-	default:
-		panic("unexpected")
+		return s.rowsIndex < len(s.reverseScanResp.Rows)
 	}
+	panic("unexpected")
 }
 
 // reset re-positions the iterator to the beginning of the response.
 func (s *respIter) reset() {
-	s.index = 0
-}
-
-// scanFormat returns the scan format of the request/response.
-func (s *respIter) scanFormat() kvpb.ScanFormat {
-	switch s.method() {
-	case kvpb.Scan:
-		return s.scanReq.ScanFormat
-	case kvpb.ReverseScan:
-		return s.reverseScanReq.ScanFormat
-	default:
-		panic("unexpected")
-	}
+	s.rowsIndex = 0
 }
 
 // startKey returns the start key of the request in response to which the
 // iterator was created.
 func (s *respIter) startKey() roachpb.Key {
-	switch s.method() {
-	case kvpb.Scan:
+	if s.scanReq != nil {
 		return s.scanReq.Key
-	case kvpb.ReverseScan:
-		return s.reverseScanReq.Key
-	default:
-		panic("unexpected")
 	}
+	return s.reverseScanReq.Key
 }
 
 // endKey returns the end key of the request in response to which the iterator
 // was created.
 func (s *respIter) endKey() roachpb.Key {
-	switch s.method() {
-	case kvpb.Scan:
+	if s.scanReq != nil {
 		return s.scanReq.EndKey
-	case kvpb.ReverseScan:
-		return s.reverseScanReq.EndKey
-	default:
-		panic("unexpected")
 	}
+	return s.reverseScanReq.EndKey
 }
 
 // seq returns the sequence number of the request in response to which the
 // iterator was created.
 func (s *respIter) seq() enginepb.TxnSeq {
-	switch s.method() {
-	case kvpb.Scan:
+	if s.scanReq != nil {
 		return s.scanReq.Sequence
-	case kvpb.ReverseScan:
-		return s.reverseScanReq.Sequence
-	default:
-		panic("unexpected")
 	}
-}
-
-func (s *respIter) method() kvpb.Method {
-	switch {
-	case s.scanReq != nil:
-		return kvpb.Scan
-	case s.reverseScanReq != nil:
-		return kvpb.ReverseScan
-	default:
-		panic("unexpected")
-	}
+	return s.reverseScanReq.Sequence
 }
 
 // respMerger encapsulates state to combine a {,Reverse}ScanResponse, returned
@@ -1119,66 +1071,56 @@ type respMerger struct {
 	// reverseScanResp; the other field should be nil.
 	scanResp        *kvpb.ScanResponse
 	reverseScanResp *kvpb.ReverseScanResponse
-	respIdx         int
+
+	// rowsIdx tracks the position within Rows slice of the response to be
+	// populated next.
+	rowsIdx int
 }
 
 // makeRespMerger constructs and returns a new respMerger.
 func makeRespMerger(serverSideRespIter *respIter, size int) respMerger {
 	m := respMerger{
 		serverRespIter: serverSideRespIter,
-		respIdx:        0,
 	}
-	switch serverSideRespIter.method() {
-	case kvpb.Scan:
+	if serverSideRespIter.scanReq != nil {
 		resp := serverSideRespIter.scanResp.ShallowCopy().(*kvpb.ScanResponse)
-		switch serverSideRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
+		if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
 			resp.Rows = make([]roachpb.KeyValue, size)
-		default:
+		} else {
 			panic("unexpected")
 		}
 		m.scanResp = resp
-	case kvpb.ReverseScan:
-		resp := serverSideRespIter.reverseScanResp.ShallowCopy().(*kvpb.ReverseScanResponse)
-		switch serverSideRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
-			resp.Rows = make([]roachpb.KeyValue, size)
-		default:
-			panic("unexpected")
-		}
-		m.reverseScanResp = resp
-	default:
+		return m
+	}
+	resp := serverSideRespIter.reverseScanResp.ShallowCopy().(*kvpb.ReverseScanResponse)
+	if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
+		resp.Rows = make([]roachpb.KeyValue, size)
+	} else {
 		panic("unexpected")
 	}
+	m.reverseScanResp = resp
 	return m
 }
 
 // acceptKV takes a key and a value (presumably from the write buffer) and adds
 // it to the result set.
 func (m *respMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
-	switch m.serverRespIter.method() {
-	case kvpb.Scan:
-		switch m.serverRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
-			m.scanResp.Rows[m.respIdx] = roachpb.KeyValue{
+	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		if m.serverRespIter.scanReq != nil {
+			m.scanResp.Rows[m.rowsIdx] = roachpb.KeyValue{
 				Key:   key,
 				Value: *value,
 			}
-		default:
-			panic("unexpected")
-		}
-	case kvpb.ReverseScan:
-		switch m.serverRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
-			m.reverseScanResp.Rows[m.respIdx] = roachpb.KeyValue{
+		} else {
+			m.reverseScanResp.Rows[m.rowsIdx] = roachpb.KeyValue{
 				Key:   key,
 				Value: *value,
 			}
-		default:
-			panic("unexpected")
 		}
+		m.rowsIdx++
+		return
 	}
-	m.respIdx++
+	panic("unexpected")
 }
 
 // acceptServerResp accepts the current server response and adds it to the
@@ -1187,52 +1129,39 @@ func (m *respMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
 // Note that the iterator is not moved forward after accepting the response; the
 // responsibility of doing so, if desired, is the caller's.
 func (m *respMerger) acceptServerResp() {
-	switch m.serverRespIter.method() {
-	case kvpb.Scan:
-		switch m.serverRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
-			m.scanResp.Rows[m.respIdx] = m.serverRespIter.scanResp.Rows[m.serverRespIter.index]
-		default:
-			panic("unexpected")
+	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		if m.serverRespIter.scanReq != nil {
+			m.scanResp.Rows[m.rowsIdx] = m.serverRespIter.scanResp.Rows[m.serverRespIter.rowsIndex]
+		} else {
+			m.reverseScanResp.Rows[m.rowsIdx] = m.serverRespIter.reverseScanResp.Rows[m.serverRespIter.rowsIndex]
 		}
-	case kvpb.ReverseScan:
-		switch m.serverRespIter.scanFormat() {
-		case kvpb.KEY_VALUES:
-			m.reverseScanResp.Rows[m.respIdx] = m.serverRespIter.reverseScanResp.Rows[m.serverRespIter.index]
-		default:
-			panic("unexpected")
-		}
-	default:
-		panic("unexpected")
+		m.rowsIdx++
+		return
 	}
-	m.respIdx++
+	panic("unexpected")
 }
 
 // toScanResp returns the final merged ScanResponse.
 func (m *respMerger) toScanResp() *kvpb.ScanResponse {
-	assertTrue(m.serverRespIter.method() == kvpb.Scan, "weren't accumulating a scan resp")
+	assertTrue(m.serverRespIter.scanReq != nil, "weren't accumulating a scan resp")
 	// If we've done everything correctly, resIdx == len(response rows).
-	switch m.serverRespIter.scanFormat() {
-	case kvpb.KEY_VALUES:
-		assertTrue(m.respIdx == len(m.scanResp.Rows), "did not fill in all rows; did we miscount?")
-	default:
-		panic("unexpected")
+	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		assertTrue(m.rowsIdx == len(m.scanResp.Rows), "did not fill in all rows; did we miscount?")
+		return m.scanResp
 	}
-	return m.scanResp
+	panic("unexpected")
 }
 
 // toReverseScanResp returns the final merged ReverseScanResponse.
 func (m *respMerger) toReverseScanResp() *kvpb.ReverseScanResponse {
-	assertTrue(m.serverRespIter.method() == kvpb.ReverseScan,
-		"weren't accumulating a reverse scan resp")
+	assertTrue(m.serverRespIter.scanReq == nil, "weren't accumulating a reverse scan resp")
 	// If we've done everything correctly, resIdx == len(response rows).
-	switch m.serverRespIter.scanFormat() {
-	case kvpb.KEY_VALUES:
-		assertTrue(m.respIdx == len(m.reverseScanResp.Rows), "did not fill in all rows; did we miscount?")
-	default:
-		panic("unexpected")
+	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		assertTrue(m.rowsIdx == len(m.reverseScanResp.Rows), "did not fill in all rows; did we miscount?")
+		return m.reverseScanResp
 	}
-	return m.reverseScanResp
+	panic("unexpected")
+
 }
 
 // assertTrue panics with a message if the supplied condition isn't true.
