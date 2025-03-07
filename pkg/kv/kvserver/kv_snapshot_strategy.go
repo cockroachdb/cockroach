@@ -300,42 +300,39 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 			timingTag.stop("sst")
 		}
-		if len(req.SharedTables) > 0 && doExcise {
-			for i := range req.SharedTables {
-				sst := req.SharedTables[i]
-				pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
-					return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
-				}
-				sharedSSTs = append(sharedSSTs, pebble.SharedSSTMeta{
-					Backing:          stubBackingHandle{sst.Backing},
-					Smallest:         pbToInternalKey(sst.Smallest),
-					Largest:          pbToInternalKey(sst.Largest),
-					SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
-					LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
-					SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
-					LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
-					Level:            uint8(sst.Level),
-					Size:             sst.Size_,
-				})
+
+		for i := range req.SharedTables {
+			sst := req.SharedTables[i]
+			pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
+				return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
 			}
+			sharedSSTs = append(sharedSSTs, pebble.SharedSSTMeta{
+				Backing:          stubBackingHandle{sst.Backing},
+				Smallest:         pbToInternalKey(sst.Smallest),
+				Largest:          pbToInternalKey(sst.Largest),
+				SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
+				LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
+				SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
+				LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
+				Level:            uint8(sst.Level),
+				Size:             sst.Size_,
+			})
 		}
-		if len(req.ExternalTables) > 0 && doExcise {
-			for i := range req.ExternalTables {
-				sst := req.ExternalTables[i]
-				externalSSTs = append(externalSSTs, pebble.ExternalFile{
-					Locator:           remote.Locator(sst.Locator),
-					ObjName:           sst.ObjectName,
-					StartKey:          sst.StartKey,
-					EndKey:            sst.EndKey,
-					EndKeyIsInclusive: sst.EndKeyIsInclusive,
-					HasPointKey:       sst.HasPointKey,
-					HasRangeKey:       sst.HasRangeKey,
-					SyntheticPrefix:   sst.SyntheticPrefix,
-					SyntheticSuffix:   sst.SyntheticSuffix,
-					Level:             uint8(sst.Level),
-					Size:              sst.Size_,
-				})
-			}
+		for i := range req.ExternalTables {
+			sst := req.ExternalTables[i]
+			externalSSTs = append(externalSSTs, pebble.ExternalFile{
+				Locator:           remote.Locator(sst.Locator),
+				ObjName:           sst.ObjectName,
+				StartKey:          sst.StartKey,
+				EndKey:            sst.EndKey,
+				EndKeyIsInclusive: sst.EndKeyIsInclusive,
+				HasPointKey:       sst.HasPointKey,
+				HasRangeKey:       sst.HasRangeKey,
+				SyntheticPrefix:   sst.SyntheticPrefix,
+				SyntheticSuffix:   sst.SyntheticSuffix,
+				Level:             uint8(sst.Level),
+				Size:              sst.Size_,
+			})
 		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
