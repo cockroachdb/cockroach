@@ -522,6 +522,12 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.KVContentionTime.HasValue() {
 			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
+		if s.KVLockWaitTime.HasValue() {
+			e.ob.AddField("KV lock wait time", string(humanizeutil.Duration(s.KVLockWaitTime.Value())))
+		}
+		if s.KVLatchWaitTime.HasValue() {
+			e.ob.AddField("KV latch wait time", string(humanizeutil.Duration(s.KVLatchWaitTime.Value())))
+		}
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}

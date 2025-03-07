@@ -389,6 +389,26 @@ func (ob *OutputBuilder) AddRetryTime(delta time.Duration) {
 	}
 }
 
+// AddLockWaitTime adds a top-level field for the cumulative time spent waiting
+// in the lock table.
+func (ob *OutputBuilder) AddLockWaitTime(lockWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent in the lock table",
+		string(humanizeutil.Duration(lockWaitTime)),
+	)
+}
+
+// AddLatchWaitTime adds a top-level field for the cumulative time spent waiting
+// to acquire latches.
+func (ob *OutputBuilder) AddLatchWaitTime(latchWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent waiting to acquire latches",
+		string(humanizeutil.Duration(latchWaitTime)),
+	)
+}
+
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	ob.AddFlakyTopLevelField(

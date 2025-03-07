@@ -33,6 +33,14 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 type ContentionEventsListener struct {
 	cumulativeContentionTime int64 // atomic
 
+	// lockWaitTime is the cumulative time spent waiting in the lock table. It
+	// accounts for a portion of the time in cumulativeContentionTime.
+	lockWaitTime int64 // atomic
+
+	// latchWaitTime is the cumulative time spent waiting to acquire latches. It
+	// accounts for a portion of the time in cumulativeContentionTime.
+	latchWaitTime int64 // atomic
+
 	// txnID is the ID of the transaction that this listener is associated with.
 	// This is used to distinguish self-induced latch wait time
 	// (e.g. for QueryIntent) from contention-induced latch wait time.
@@ -59,6 +67,11 @@ func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.Even
 	// waits for a pipelined write to finish replication.
 	if c.txnID == uuid.Nil || c.txnID != ce.TxnMeta.ID {
 		atomic.AddInt64(&c.cumulativeContentionTime, int64(ce.Duration))
+		if ce.IsLatch {
+			atomic.AddInt64(&c.latchWaitTime, int64(ce.Duration))
+		} else {
+			atomic.AddInt64(&c.lockWaitTime, int64(ce.Duration))
+		}
 	}
 	return tracing.EventConsumed
 }
@@ -67,6 +80,18 @@ func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.Even
 // seen so far.
 func (c *ContentionEventsListener) GetContentionTime() time.Duration {
 	return time.Duration(atomic.LoadInt64(&c.cumulativeContentionTime))
+}
+
+// GetLockWaitTime returns the cumulative lock wait time this listener has seen
+// so far.
+func (c *ContentionEventsListener) GetLockWaitTime() time.Duration {
+	return time.Duration(atomic.LoadInt64(&c.lockWaitTime))
+}
+
+// GetLatchWaitTime returns the cumulative latch wait time this listener has
+// seen so far.
+func (c *ContentionEventsListener) GetLatchWaitTime() time.Duration {
+	return time.Duration(atomic.LoadInt64(&c.latchWaitTime))
 }
 
 // ScanStatsListener aggregates all kvpb.ScanStats objects into a single
