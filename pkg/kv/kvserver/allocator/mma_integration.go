@@ -24,8 +24,7 @@ func makeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 		// TODO(sumeer): remove this hack of defaulting to 50% utilization.
 		capacity[mma.CPURate] = load[mma.CPURate] * 2
 	}
-	// TODO: Write bytes/s
-	load[mma.WriteBandwidth] = 0
+	load[mma.WriteBandwidth] = mma.LoadValue(desc.Capacity.WriteBytesPerSecond)
 	capacity[mma.WriteBandwidth] = mma.UnknownCapacity
 	// ByteSize is based on LogicalBytes since that is how we measure the size
 	// of each range
