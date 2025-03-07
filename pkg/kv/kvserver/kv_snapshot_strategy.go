@@ -236,14 +236,14 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 					}
 				case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
-					if !doExcise {
+					if !header.SharedReplicate {
 						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 					}
 					if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
 						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 					}
 				case pebble.InternalKeyKindRangeDelete:
-					if !doExcise {
+					if !header.SharedReplicate {
 						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 					}
 					start := batchReader.Key()
@@ -256,7 +256,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 
 				case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
-					if !doExcise {
+					if !header.SharedReplicate {
 						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 					}
 					start := batchReader.Key()
