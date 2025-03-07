@@ -184,7 +184,6 @@ tree
 /abcdef123/artifacts/memory_Sysbench_KV_3node_oltp_write_only_merged.prof
 /abcdef123/artifacts/mutex_Sysbench_KV_3node_oltp_write_only_merged.prof
 /abcdef123/artifacts/raw_Sysbench_KV_3node_oltp_write_only.log
-/github-summary.md
 /qwerty456
 /qwerty456/artifacts
 /qwerty456/artifacts/cleaned_Sysbench_KV_3node_oltp_write_only.log
