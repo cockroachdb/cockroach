@@ -128,9 +128,15 @@ func GetOpenmetricsLabelMap(
 ) map[string]string {
 	defaultMap := map[string]string{
 		"test-run-id": t.GetRunId(),
-		"cloud":       c.Cloud().String(),
 		"owner":       t.Owner(),
 		"test":        t.Name(),
+	}
+
+	// With --debug flag, the cloud field in cluster spec is not populated.
+	// To avoid panic, we check and only then add the cloud label
+	// Since --debug is not used in nightlies, this is not an issue.
+	if cloud := c.Cloud(); cloud.IsSet() {
+		defaultMap["cloud"] = cloud.String()
 	}
 
 	if roachtestflags.OpenmetricsLabels != "" {
