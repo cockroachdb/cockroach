@@ -319,16 +319,17 @@ import (
 //            asynchronously, subsequent queries that depend on the state of
 //            the query should be run with the "retry" option to ensure
 //            deterministic test results.
-//      - kvtrace: runs the query and compares against the results of the
-//            kv operations trace of the query. kvtrace optionally accepts
-//            arguments of the form kvtrace(op,op,...). Op is one of
-//            the accepted k/v arguments such as 'CPut', 'Scan' etc. It
-//            also accepts arguments of the form 'prefix=...'. For example,
-//            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
-//            results will be filtered to contain messages starting with
-//            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
-//            Tenant IDs do not need to be included in prefixes and will be
-//            removed from results. Cannot be combined with noticetrace.
+//      - kvtrace: runs the query and compares against the results of the kv
+//            operations trace of the query. kvtrace optionally accepts arguments of the
+//            form kvtrace(op,op,...). Op is one of the accepted k/v arguments such as
+//            'CPut', 'Scan' etc. It also accepts arguments of the form 'prefix=...'. For
+//            example, if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the results
+//            will be filtered to contain messages starting with CPut /Table/54, CPut
+//            /Table/55, Del /Table/54, Del /Table/55. The 'redactbytes' will redact the
+//            contents of /BYTES/ values to prevent test flakiness in the presence of
+//            nondeterminism and/or processor architecture differences. Tenant IDs do not
+//            need to be included in prefixes and will be removed from results. Cannot be
+//            combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
@@ -944,6 +945,10 @@ type logicQuery struct {
 	// the particular operation types to filter on, such as CPut or Del.
 	kvOpTypes        []string
 	keyPrefixFilters []string
+	// kvtraceRedactBytes can only be used when kvtrace is true. When active, BYTES
+	// values in keys are expunged from output (to prevent test failures where the
+	// BYTES value is nondeterministic or architecture dependent).
+	kvtraceRedactBytes bool
 
 	// nodeIdx determines which node on the cluster to execute a query on for the given query.
 	nodeIdx int
@@ -2835,6 +2840,8 @@ func (t *logicTest) processSubtest(
 										matched = "/Tenant/%" + matched
 									}
 									query.keyPrefixFilters = append(query.keyPrefixFilters, matched)
+								} else if c == "redactbytes" {
+									query.kvtraceRedactBytes = true
 								} else if isAllowedKVOp(c) {
 									query.kvOpTypes = append(query.kvOpTypes, c)
 								} else {
@@ -2872,6 +2879,7 @@ func (t *logicTest) processSubtest(
 							query.kvtrace = true
 							query.kvOpTypes = nil
 							query.keyPrefixFilters = nil
+							query.kvtraceRedactBytes = false
 
 						case "noticetrace":
 							query.noticetrace = true
@@ -3017,7 +3025,13 @@ func (t *logicTest) processSubtest(
 
 					projection := `message`
 					if len(t.tenantApps) != 0 || t.cluster.StartedDefaultTestTenant() {
-						projection = `regexp_replace(message, '/Tenant/\d+', '')`
+						projection = `regexp_replace(message, '/Tenant/\d+', '', 'g')`
+					}
+					if query.kvtraceRedactBytes {
+						projection = fmt.Sprintf(
+							`regexp_replace(%s, '/BYTES/0x[abcdef\d]+', '/BYTES/:redacted:', 'g')`,
+							projection,
+						)
 					}
 					queryPrefix := fmt.Sprintf(`SELECT %s FROM [SHOW KV TRACE FOR SESSION] `, projection)
 					buildQuery := func(ops []string, keyFilters []string) string {
