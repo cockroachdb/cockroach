@@ -113,14 +113,15 @@ func (fw *fixupWorker) splitOrMergePartition(
 	defer func() {
 		if err == nil {
 			err = fw.index.store.CommitTransaction(ctx, fw.txn)
-		} else {
+		}
+		if err != nil {
 			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
 		}
 	}()
 
 	// Get the partition to be split or merged from the store.
 	partition, err := fw.txn.GetPartition(ctx, fw.treeKey, partitionKey)
-	if errors.Is(err, ErrPartitionNotFound) {
+	if errors.Is(err, ErrPartitionNotFound) || errors.Is(err, ErrRestartOperation) {
 		log.VEventf(ctx, 2, "partition %d no longer exists, do not split or merge", partitionKey)
 		return nil
 	} else if err != nil {
@@ -139,7 +140,7 @@ func (fw *fixupWorker) splitOrMergePartition(
 	var parentPartition *Partition
 	if parentPartitionKey != InvalidKey {
 		parentPartition, err = fw.txn.GetPartition(ctx, fw.treeKey, parentPartitionKey)
-		if errors.Is(err, ErrPartitionNotFound) {
+		if errors.Is(err, ErrPartitionNotFound) || errors.Is(err, ErrRestartOperation) {
 			log.VEventf(ctx, 2,
 				"parent partition %d of partition %d no longer exists, do not split or merge",
 				parentPartitionKey, partitionKey)
@@ -659,7 +660,8 @@ func (fw *fixupWorker) deleteVector(
 	defer func() {
 		if err == nil {
 			err = fw.index.store.CommitTransaction(ctx, fw.txn)
-		} else {
+		}
+		if err != nil {
 			err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
 		}
 	}()
