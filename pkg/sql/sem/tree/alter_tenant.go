@@ -16,6 +16,7 @@ type AlterTenantReplication struct {
 	TenantSpec                  *TenantSpec
 	Command                     JobCommand
 	Cutover                     *ReplicationCutoverTime
+	Producer                    bool
 	ReplicationSourceTenantName *TenantSpec
 	// ReplicationSourceConnUri is a connection uri of the source cluster that we
 	// are replicating data from.
@@ -58,6 +59,9 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 		}
 	} else if !n.Options.IsDefault() {
 		ctx.WriteString("SET REPLICATION ")
+		if n.Producer {
+			ctx.WriteString("SOURCE ")
+		}
 		ctx.FormatNode(&n.Options)
 	} else if n.Command == PauseJob || n.Command == ResumeJob {
 		ctx.WriteString(JobCommandToStatement[n.Command])
