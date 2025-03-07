@@ -3998,8 +3998,16 @@ func TestChangefeedEnrichedWithDiff(t *testing.T) {
 				}
 			},
 		},
-		// The avro format is not compatible with the diff option except in the wrapped envelope.
-		// We assert this when we test options validation.
+		{
+			name: "avro with diff", options: []string{"diff", "format=avro"}, sinks: []string{"kafka"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": null, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "cat"}}}, "op": {"string": "d"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "cat"}}}, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "u"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "before": null, "op": {"string": "c"}}`, topic),
+				}
+			},
+		},
 		{
 			name: "avro without diff", options: []string{"format=avro"}, sinks: []string{"kafka"},
 			assertion: func(topic string) []string {

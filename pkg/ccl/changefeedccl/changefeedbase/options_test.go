@@ -66,7 +66,6 @@ func TestEncodingOptionsValidations(t *testing.T) {
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, UpdatedTimestamps: true}, "is only usable with envelope=wrapped"},
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, MVCCTimestamps: true}, "is only usable with envelope=wrapped"},
 		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeBare, Diff: true}, "is only usable with envelope=wrapped"},
-		{EncodingOptions{Format: OptFormatAvro, Envelope: OptEnvelopeEnriched, Diff: true}, "is only usable with envelope=wrapped"},
 	}
 
 	for _, c := range cases {

@@ -943,7 +943,7 @@ func (e EncodingOptions) Validate() error {
 		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
 	}
 
-	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
+	if e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool
