@@ -271,7 +271,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 	for _, rng := range msg.AddedOrUpdated {
 		r.mu.tracked[rng.RangeID] = trackedRange{
 			lai:    rng.LAI,
-			policy: rng.Policy,
+			policy: roachpb.RangeClosedTimestampPolicy(rng.Policy),
 		}
 	}
 	for _, rangeID := range msg.Removed {

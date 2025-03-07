@@ -12,6 +12,25 @@ import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 
+// RangeClosedTimestampByPolicyLocality defines policies for closed timestamps 
+// based on locality.
+enum RangeClosedTimestampByPolicyLocality {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Uses lag specified in cluster settings
+  LAG_BY_CLUSTER_SETTING = 0;
+  // Lead policy for global reads with no locality information. 
+  LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY = 1;
+  // Lead policy for cross-region ranges with global reads policy.
+  LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION = 2;
+  // Lead policy for cross-zone ranges with global reads policy. 
+  LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE = 3;
+  // Lead policy for same-region, same-zone ranges with global reads policy. 
+  LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE = 4;
+  // Keep this sentinel value higher than the rest. It is used to determine the
+  // fixed length of the slice needed to store all policies.
+  MAX_CLOSED_TIMESTAMP_POLICY = 5;
+}
+
 // Update contains information about (the advancement of) closed timestamps for
 // ranges with leases on the sender node. Updates are of two types: snapshots
 // and incrementals. Snapshots are stand-alone messages, explicitly containing
@@ -57,7 +76,7 @@ message Update {
   // and the regular Raft transport are possible, as are races between two
   // side-transport streams for an outgoing and incoming leaseholder.
   message GroupUpdate {
-    roachpb.RangeClosedTimestampPolicy policy = 1;
+    RangeClosedTimestampByPolicyLocality policy = 1;
     util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
@@ -80,7 +99,7 @@ message Update {
   message RangeUpdate {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
-    roachpb.RangeClosedTimestampPolicy policy = 3;
+    RangeClosedTimestampByPolicyLocality policy = 3;
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
 }
