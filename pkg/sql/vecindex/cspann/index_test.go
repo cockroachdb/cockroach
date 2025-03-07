@@ -842,20 +842,25 @@ func buildIndex(
 		end := min(i+countPerProc, vectors.Count)
 		wait.Add(1)
 		go func(start, end int) {
+			defer wait.Done()
+
 			// Break vector group into individual transactions that each insert a
 			// block of vectors. Run any pending fixups after each block.
 			var idxCtx cspann.Context
 			for j := start; j < end; j += blockSize {
 				insertBlock(&idxCtx, j, min(j+blockSize, end))
 			}
-
-			wait.Done()
 		}(i, end)
 	}
 	wait.Wait()
 
 	// Process any remaining fixups.
 	index.ProcessFixups()
+
+	// Fail on foreground goroutine if any background goroutines failed.
+	if t.Failed() {
+		t.FailNow()
+	}
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
