@@ -40,6 +40,7 @@ func (allMatcher) MatchString(string) bool {
 type callback struct {
 	matcher   stringMatcher
 	method    Callback
+	methodWOT CallbackWithOrigTimestamp
 	redundant bool
 }
 
@@ -261,7 +262,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	ratchetHighWaterStamp(is.highWaterStamps, i.NodeID, i.OrigStamp)
 	changed := existingInfo == nil ||
 		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
-	is.processCallbacks(key, i.Value, changed)
+	is.processCallbacks(key, i.Value, i.OrigStamp, changed)
 	return nil
 }
 
@@ -301,13 +302,27 @@ func (is *infoStore) getHighWaterStampsWithDiff(
 func (is *infoStore) registerCallback(
 	pattern string, method Callback, opts ...CallbackOption,
 ) func() {
+	cb := &callback{method: method}
+	return is.registerCallbackHelper(pattern, cb, opts...)
+}
+
+func (is *infoStore) registerCallbackWithOrigTimestamp(
+	pattern string, method CallbackWithOrigTimestamp, opts ...CallbackOption,
+) func() {
+	cb := &callback{methodWOT: method}
+	return is.registerCallbackHelper(pattern, cb, opts...)
+}
+
+func (is *infoStore) registerCallbackHelper(
+	pattern string, cb *callback, opts ...CallbackOption,
+) func() {
 	var matcher stringMatcher
 	if pattern == ".*" {
 		matcher = allMatcher{}
 	} else {
 		matcher = regexp.MustCompile(pattern)
 	}
-	cb := &callback{matcher: matcher, method: method}
+	cb.matcher = matcher
 	for _, opt := range opts {
 		opt.apply(cb)
 	}
@@ -315,7 +330,7 @@ func (is *infoStore) registerCallback(
 	is.callbacks = append(is.callbacks, cb)
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if matcher.MatchString(key) {
-			is.runCallbacks(key, i.Value, method)
+			is.runCallbacks(key, i.Value, i.OrigStamp, cb)
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
@@ -338,30 +353,39 @@ func (is *infoStore) registerCallback(
 // processCallbacks processes callbacks for the specified key by
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed bool) {
-	var matches []Callback
+func (is *infoStore) processCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, changed bool,
+) {
+	var matches []*callback
 	for _, cb := range is.callbacks {
 		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
-			matches = append(matches, cb.method)
+			matches = append(matches, cb)
 		}
 	}
-	is.runCallbacks(key, content, matches...)
+	is.runCallbacks(key, content, origTimestamp, matches...)
 }
 
-func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...Callback) {
+func (is *infoStore) runCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, callbacks ...*callback,
+) {
 	// Add the callbacks to the callback work list.
 	beforeQueue := timeutil.Now()
 	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
 	f := func() {
 		afterQueue := timeutil.Now()
-		for _, method := range callbacks {
+		for _, cb := range callbacks {
 			queueDur := afterQueue.Sub(beforeQueue)
 			is.metrics.CallbacksPending.Dec(1)
 			if queueDur >= minCallbackDurationToRecord {
 				is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
 			}
-
-			method(key, content)
+			if cb.method != nil {
+				cb.method(key, content)
+			} else if cb.methodWOT != nil {
+				cb.methodWOT(key, content, origTimestamp)
+			} else {
+				panic("nil callback")
+			}
 
 			afterProcess := timeutil.Now()
 			processDur := afterProcess.Sub(afterQueue)
