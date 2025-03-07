@@ -172,12 +172,12 @@ var kvMeta = workload.Meta{
 			`LIMIT count for each spanning query, or 0 for no limit`)
 		g.flags.BoolVar(&g.writesUseSelectForUpdate, `sfu-writes`, false,
 			`Use SFU and transactional writes with a sleep after SFU.`)
-		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
-			`Allocate keys using a zipfian distribution instead of a uniform distribution of random keys.`)
-		g.flags.Float64Var(&g.zipfianS, `zipfian-s`, 1.1,
-			`Zipf parameter s (must be > 1)`)
-		g.flags.Float64Var(&g.zipfianV, `zipfian-v`, 1.0,
-			`Zipf parameter v (must be >= 1)`)
+		g.flags.BoolVar(&g.zipfian, "zipfian", false,
+			"Allocate keys using a Zipfian distribution (non-uniform random keys).")
+		g.flags.Float64Var(&g.zipfianS, "zipfian-s", 1.1,
+			"Zipf exponent s (>1): controls decay rate (higher → steeper drop-off).")
+		g.flags.Float64Var(&g.zipfianV, "zipfian-v", 1.0,
+			"Zipf offset v (>=1): shifts the distribution (higher → flatter lower end).")
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
@@ -1039,6 +1039,44 @@ func newZipfianGenerator(
 	writeSS := writeSequenceSource{
 		sequence: seq,
 	}
+
+	// rand.NewZipf returns a Zipf variate generator.
+	// The generator produces integer values k in the range [0, imax] according to a Zipf-like distribution,
+	// where the probability mass function is proportional to:
+	//
+	//      P(k) ∝ (v + k)^(-s)
+	//
+	// Parameters:
+	//   - r: a pointer to a Rand source, used for generating underlying random numbers.
+	//   - s: the exponent parameter (must be > 1). This parameter controls the decay of the probability
+	//        distribution. A higher value of s produces a steeper decay, meaning that larger k values are
+	//        much less likely compared to smaller ones. Essentially, s tunes how "heavy-tailed" the distribution is.
+	//   - v: the shift parameter (must be >= 1). This parameter offsets the index k in the probability function.
+	//        When v is 1, the distribution aligns with the classical Zipf law. Increasing v effectively flattens
+	//        the distribution near k = 0 by reducing the relative weight of lower indices, thereby making the
+	//        probabilities more uniform over the range. It “shifts” the starting point of the decay.
+	//   - imax: the maximum value for k. The distribution is defined over the discrete interval [0, imax].
+	//
+	// Requirements:
+	//   - s > 1: ensures that the sum of the probabilities converges.
+	//   - v >= 1: guarantees that the formula (v + k)^(-s) behaves as expected.
+	//
+	// Example usage:
+	//
+	//   r := rand.New(source)
+	//   zipfGen := NewZipf(r, 1.5, 1.0, 100)
+	//   k := zipfGen.Uint64()  // k is distributed according to the Zipf law.
+	//
+	// The parameters s and v allow you to shape the Zipf distribution:
+	//   - **s (exponent):** Adjusts the "tail" of the distribution. Lower values (just above 1) yield a
+	//     less steep drop-off, allowing larger values of k to occur with higher probability. Higher values
+	//     of s cause a rapid decline, concentrating probability on the smallest k values.
+	//   - **v (shift):** Modifies the starting point of the decay. With v = 1, you get the classical behavior,
+	//     but setting v > 1 can reduce the impact of the k = 0 term and spread the probability mass more evenly
+	//     across the range.
+	//
+	// This design gives you control over both the skewness (via s) and the starting offset (via v) of the distribution.
+
 	return &zipfGenerator{
 		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
 		readZipf:  rand.NewZipf(rand.New(readSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
