@@ -330,6 +330,10 @@ message StoreCapacity {
   // by ranges in the store. The stat is tracked over the time period defined
   // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
+  // writes_bytes_per_second tracks the average number of bytes written per
+  // second by ranges in the store. The stat is tracked over the time period
+  // defined in storage/replica_stats.go, which as of July 2018 is 30 minutes.
+  optional double write_bytes_per_second = 16 [(gogoproto.nullable) = false];
   // cpu_per_second tracks the average store cpu use (ns) per second.
   // This is the sum of all the replica's cpu time on this store, which is
   // tracked in replica stats.

@@ -123,15 +123,16 @@ type CapacityOverride roachpb.StoreCapacity
 // NewCapacityOverride returns a capacity override where no overrides are set.
 func NewCapacityOverride() CapacityOverride {
 	return CapacityOverride{
-		Capacity:         capacityOverrideSentinel,
-		Available:        capacityOverrideSentinel,
-		Used:             capacityOverrideSentinel,
-		LogicalBytes:     capacityOverrideSentinel,
-		RangeCount:       capacityOverrideSentinel,
-		LeaseCount:       capacityOverrideSentinel,
-		QueriesPerSecond: capacityOverrideSentinel,
-		WritesPerSecond:  capacityOverrideSentinel,
-		CPUPerSecond:     capacityOverrideSentinel,
+		Capacity:            capacityOverrideSentinel,
+		Available:           capacityOverrideSentinel,
+		Used:                capacityOverrideSentinel,
+		LogicalBytes:        capacityOverrideSentinel,
+		RangeCount:          capacityOverrideSentinel,
+		LeaseCount:          capacityOverrideSentinel,
+		QueriesPerSecond:    capacityOverrideSentinel,
+		WritesPerSecond:     capacityOverrideSentinel,
+		WriteBytesPerSecond: capacityOverrideSentinel,
+		CPUPerSecond:        capacityOverrideSentinel,
 		IOThresholdMax: admissionpb.IOThreshold{
 			L0NumSubLevels:           capacityOverrideSentinel,
 			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
@@ -187,6 +188,9 @@ func mergeOverride(
 	}
 	if override.WritesPerSecond != capacityOverrideSentinel {
 		ret.WritesPerSecond = override.WritesPerSecond
+	}
+	if override.WriteBytesPerSecond != capacityOverrideSentinel {
+		ret.WriteBytesPerSecond = override.WriteBytesPerSecond
 	}
 	if override.CPUPerSecond != capacityOverrideSentinel {
 		ret.CPUPerSecond = override.CPUPerSecond
