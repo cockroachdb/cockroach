@@ -509,16 +509,11 @@ func (twb *txnWriteBuffer) mergeWithReverseScanResp(
 	// First, calculate the size of the merged response. This then allows us to
 	// exactly pre-allocate the response slice when constructing the
 	// scanRespMerger.
-	respSize := 0
-	twb.mergeBufferAndResp(
-		respIter,
-		func(roachpb.Key, *roachpb.Value) { respSize++ },
-		func() { respSize++ },
-		true, /* reverse */
-	)
+	h := makeRespSizeHelper(respIter)
+	twb.mergeBufferAndResp(respIter, h.acceptBuffer, h.acceptResp, true /* reverse */)
 
 	respIter.reset()
-	rm := makeRespMerger(respIter, respSize)
+	rm := makeRespMerger(respIter, h)
 	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, true /* reverse */)
 	return rm.toReverseScanResp(), nil
 }
@@ -543,16 +538,11 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 	// First, calculate the size of the merged response. This then allows us to
 	// exactly pre-allocate the response slice when constructing the
 	// scanRespMerger.
-	respSize := 0
-	twb.mergeBufferAndResp(
-		respIter,
-		func(roachpb.Key, *roachpb.Value) { respSize++ },
-		func() { respSize++ },
-		false, /* reverse */
-	)
+	h := makeRespSizeHelper(respIter)
+	twb.mergeBufferAndResp(respIter, h.acceptBuffer, h.acceptResp, false /* reverse */)
 
 	respIter.reset()
-	rm := makeRespMerger(respIter, respSize)
+	rm := makeRespMerger(respIter, h)
 	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, false /* reverse */)
 	return rm.toScanResp(), nil
 }
@@ -1071,6 +1061,27 @@ func (s *respIter) seq() enginepb.TxnSeq {
 	return s.reverseScanReq.Sequence
 }
 
+type respSizeHelper struct {
+	it *respIter
+
+	// rowsSize tracks the total number of KVs that we'll include in the Rows
+	// field of the merged {,Reverse}ScanResponse when KEY_VALUES scan format is
+	// used.
+	rowsSize int
+}
+
+func makeRespSizeHelper(it *respIter) respSizeHelper {
+	return respSizeHelper{it: it}
+}
+
+func (h *respSizeHelper) acceptBuffer(roachpb.Key, *roachpb.Value) {
+	h.rowsSize++
+}
+
+func (h *respSizeHelper) acceptResp() {
+	h.rowsSize++
+}
+
 // respMerger encapsulates state to combine a {,Reverse}ScanResponse, returned
 // by the KV layer, with any overlapping buffered writes to correctly uphold
 // read-your-own-write semantics. It can be used to accumulate a response when
@@ -1088,14 +1099,14 @@ type respMerger struct {
 }
 
 // makeRespMerger constructs and returns a new respMerger.
-func makeRespMerger(serverSideRespIter *respIter, size int) respMerger {
+func makeRespMerger(serverSideRespIter *respIter, h respSizeHelper) respMerger {
 	m := respMerger{
 		serverRespIter: serverSideRespIter,
 	}
 	if serverSideRespIter.scanReq != nil {
 		resp := serverSideRespIter.scanResp.ShallowCopy().(*kvpb.ScanResponse)
 		if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
-			resp.Rows = make([]roachpb.KeyValue, size)
+			resp.Rows = make([]roachpb.KeyValue, h.rowsSize)
 		} else {
 			panic("unexpected")
 		}
@@ -1104,7 +1115,7 @@ func makeRespMerger(serverSideRespIter *respIter, size int) respMerger {
 	}
 	resp := serverSideRespIter.reverseScanResp.ShallowCopy().(*kvpb.ReverseScanResponse)
 	if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
-		resp.Rows = make([]roachpb.KeyValue, size)
+		resp.Rows = make([]roachpb.KeyValue, h.rowsSize)
 	} else {
 		panic("unexpected")
 	}
