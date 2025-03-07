@@ -244,6 +244,13 @@ message SnapshotRequest {
     // keys in key order, as opposed to iterating over point keys first
     // and range keys second. The receiver can take advantage of this
     // to split points/range keys into multiple sstables for ingestion.
+    //
+    // MIGRATION: this was added in [1], which is new in 24.3 (though
+    // it was backported to 24.2 and 24.1). We can remove this field
+    // and hard-code it as `true` once direct upgrades from <= 24.2 to
+    // the current version are no longer possible.
+    //
+    // [1]: https://github.com/cockroachdb/cockroach/pull/129088
     bool range_keys_in_order = 14;
 
     reserved 1, 4, 6, 7, 8, 9;
