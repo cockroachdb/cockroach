@@ -85,7 +85,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
-					"--max-block-bytes=512 --min-block-bytes=512"+foregroundDB+url)
+					"--max-block-bytes=256 --min-block-bytes=256"+foregroundDB+url)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
@@ -104,7 +104,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				}
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
 				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=2 "+
-					"--splits=1000 --read-percent=50 --min-block-bytes=512 --max-block-bytes=512 "+
+					"--splits=1000 --read-percent=50 --min-block-bytes=256 --max-block-bytes=256 "+
 					"--txn-qos='regular' --tolerate-errors %s %s %s",
 					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
