@@ -132,6 +132,38 @@ func readNextMessages(
 	return actual, nil
 }
 
+func applySourceAssertion(
+	payloads []cdctest.TestFeedMessage, sourceAssertion func(source map[string]any),
+) error {
+	if sourceAssertion == nil {
+		sourceAssertion = func(source map[string]any) {}
+	}
+	for _, m := range payloads {
+		var message map[string]any
+		if err := gojson.Unmarshal(m.Value, &message); err != nil {
+			return errors.Wrapf(err, `unmarshal: %s`, m.Value)
+		}
+
+		// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
+		if message["payload"] == nil {
+			if message["source"] != nil {
+				sourceAssertion(message["source"].(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		} else {
+			payload := message["payload"].(map[string]any)
+			source := payload["source"]
+			if source != nil {
+				sourceAssertion(source.(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		}
+	}
+	return nil
+}
+
 func stripTsFromPayloads(
 	envelopeType changefeedbase.EnvelopeType, payloads []cdctest.TestFeedMessage,
 ) ([]string, error) {
@@ -148,8 +180,11 @@ func stripTsFromPayloads(
 			// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
 			if message["payload"] == nil {
 				delete(message, "ts_ns")
+				delete(message, "source")
 			} else {
-				delete(message["payload"].(map[string]any), "ts_ns")
+				payload := message["payload"].(map[string]any)
+				delete(payload, "ts_ns")
+				delete(payload, "source")
 			}
 		case changefeedbase.OptEnvelopeWrapped:
 			delete(message, "updated")
@@ -221,7 +256,7 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, envelopeType)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
 			},
 		))
 }
@@ -232,6 +267,7 @@ func assertPayloadsBaseErr(
 	expected []string,
 	stripTs bool,
 	perKeyOrdered bool,
+	sourceAssertion func(map[string]any),
 	envelopeType changefeedbase.EnvelopeType,
 ) error {
 	actual, err := readNextMessages(ctx, f, len(expected))
@@ -252,6 +288,13 @@ func assertPayloadsBaseErr(
 		if !ordered {
 			return errors.Newf("payloads violate CDC per-key ordering guarantees:\n  %s",
 				strings.Join(actualFormatted, "\n  "))
+		}
+	}
+
+	if sourceAssertion != nil {
+		err := applySourceAssertion(actual, sourceAssertion)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -301,11 +344,26 @@ func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	assertPayloadsBase(t, f, expected, false, false, changefeedbase.OptEnvelopeWrapped)
 }
 
-func assertPayloadsEnvelopeStripTs(
-	t testing.TB, f cdctest.TestFeed, envelopeType changefeedbase.EnvelopeType, expected []string,
+// assertPayloadsEnriched is used to assert payloads for the enriched envelope.
+// When the source is included with includeSource, we dynamically make assertions
+// about the "source" fields but when it's false we remove the source fields entirely.
+// In either case we strip the timestamps.
+func assertPayloadsEnriched(
+	t testing.TB, f cdctest.TestFeed, expected []string, sourceAssertion func(map[string]any),
 ) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, false, envelopeType)
+	timeout := assertPayloadsTimeout()
+	if len(expected) > 100 {
+		// Webhook sink is very slow; We have few tests that read 1000 messages.
+		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
+	}
+
+	require.NoError(t,
+		withTimeout(f, timeout,
+			func(ctx context.Context) (err error) {
+				return assertPayloadsBaseErr(ctx, f, expected, true, false, sourceAssertion, changefeedbase.OptEnvelopeEnriched)
+			},
+		))
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -444,6 +502,8 @@ func startTestFullServer(
 		UseDatabase:       `d`,
 		ExternalIODir:     options.externalIODir,
 		Settings:          options.settings,
+		ClusterName:       options.clusterName,
+		Locality:          options.locality,
 	}
 
 	if options.debugUseAfterFinish {
@@ -558,6 +618,7 @@ func startTestTenant(
 		TestingKnobs:  knobs,
 		ExternalIODir: options.externalIODir,
 		Settings:      options.settings,
+		Locality:      options.locality,
 	}
 
 	if options.debugUseAfterFinish {
@@ -594,6 +655,8 @@ type feedTestOptions struct {
 	settings                     *cluster.Settings
 	additionalSystemPrivs        []string
 	debugUseAfterFinish          bool
+	clusterName                  string
+	locality                     roachpb.Locality
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -632,6 +695,18 @@ var feedTestOmitSinks = func(sinkTypes ...string) feedTestOption {
 var feedTestAdditionalSystemPrivs = func(privs ...string) feedTestOption {
 	return func(opts *feedTestOptions) {
 		opts.additionalSystemPrivs = append(opts.additionalSystemPrivs, privs...)
+	}
+}
+
+var feedTestUseClusterName = func(clusterName string) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.clusterName = clusterName
+	}
+}
+
+var feedTestUseLocality = func(locality roachpb.Locality) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.locality = locality
 	}
 }
 
@@ -1485,7 +1560,15 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 // getTestingEnrichedSourceData creates an enrichedSourceData
 // for use in tests.
 func getTestingEnrichedSourceData() enrichedSourceData {
-	return enrichedSourceData{jobId: "test_id"}
+	return enrichedSourceData{
+		jobID:              "test_id",
+		dbVersion:          "test_db_version",
+		clusterName:        "test_cluster_name",
+		clusterID:          "test_cluster_id",
+		sourceNodeLocality: "test_source_node_locality",
+		nodeName:           "test_node_name",
+		nodeID:             "test_node_id",
+	}
 }
 
 // getTestingEnrichedSourceProvider creates an enrichedSourceProvider

@@ -102,12 +102,16 @@ func newEventConsumer(
 	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
-		var err error
+		sourceData := enrichedSourceData{}
+		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
+			sourceData, err = newEnrichedSourceData(ctx, cfg, spec)
+			if err != nil {
+				return nil, err
+			}
+		}
 		encoder, err := getEncoder(ctx, encodingOpts, feed.Targets, spec.Select.Expr != "",
 			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics, newEnrichedSourceProvider(
-				encodingOpts, enrichedSourceData{
-					jobId: spec.JobID.String(),
-				}),
+				encodingOpts, sourceData),
 		)
 		if err != nil {
 			return nil, err
