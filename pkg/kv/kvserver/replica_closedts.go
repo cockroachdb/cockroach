@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -17,6 +18,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// GetLocalityProximity fetches locality info on the replica and its peers and
+// return locality comparison type for them. Cross region > same region cross
+// zone > same region same zone > undefined. Note that the result may be
+// LocalityComparisonType_UNDEFINED.
+func (r *Replica) GetLocalityProximity() roachpb.LocalityComparisonType {
+	r.mu.AssertRHeld()
+	desc := r.descRLocked()
+	result := roachpb.LocalityComparisonType_UNDEFINED
+	fromLocality := r.store.GetStoreConfig().StorePool.GetNodeLocality(r.NodeID())
+	for _, sp := range desc.InternalReplicas {
+		toLocality := r.store.GetStoreConfig().StorePool.GetNodeLocality(sp.NodeID)
+		comparisonResult, _, _ := fromLocality.CompareWithLocality(toLocality)
+		switch comparisonResult {
+		case roachpb.LocalityComparisonType_CROSS_REGION:
+			return roachpb.LocalityComparisonType_CROSS_REGION
+		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+			result = roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE
+		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+			if result != roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE {
+				result = roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE
+			}
+		}
+	}
+	r.mu.cachedLocalityProximity = result
+	return result
+}
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
@@ -32,7 +60,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicyLocality multiregion.PolicyLocalityToTimestampMap,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -51,7 +79,9 @@ func (r *Replica) BumpSideTransportClosed(
 
 	lai := r.shMu.state.LeaseAppliedIndex
 	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	locality := r.GetLocalityProximity()
+	policyLocalityKey := multiregion.PolicyLocalityKey{Policy: policy, Locality: locality}
+	target := targetByPolicyLocality.Get(policyLocalityKey)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
@@ -104,7 +134,7 @@ func (r *Replica) BumpSideTransportClosed(
 	r.sideTransportClosedTimestamp.forward(ctx, target, lai, knownApplied)
 	res.OK = true
 	res.LAI = lai
-	res.Policy = policy
+	res.PolicyLocality = multiregion.PolicyLocalityKey{Policy: policy, Locality: locality}
 	return res
 }
 
@@ -112,13 +142,18 @@ func (r *Replica) BumpSideTransportClosed(
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
+	override := closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV)
+	networkLatency := closedts.DefaultMaxNetworkRTT
+	if autoTuning := override == 0 && closedts.LeadForGlobalReadsAutoTuneInterval.Get(&r.ClusterSettings().SV) != 0; autoTuning {
+		networkLatency = r.store.latencyTracker.GetLatencyByLocalityProximity(r.mu.cachedLocalityProximity)
+	}
 	return closedts.TargetForPolicy(
 		r.Clock().NowAsClockTimestamp(),
 		r.Clock().MaxOffset(),
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
-		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
+		override,
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedts.DefaultMaxNetworkRTT,
+		networkLatency,
 		r.closedTimestampPolicyRLocked(),
 	)
 }

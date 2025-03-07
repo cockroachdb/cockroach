@@ -7,6 +7,7 @@ package multiregion
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,6 +40,10 @@ func (k PolicyLocalityKey) ToIndex() int {
 	// - Start after all policy indices
 	// - Subtract 1 from locality value to skip UNDEFINED in the enum
 	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY) + int(k.Locality) - 1
+}
+
+func (k PolicyLocalityKey) String() string {
+	return fmt.Sprintf("(%s,%s)", k.Policy, k.Locality)
 }
 
 // Constants for array sizes and index boundaries

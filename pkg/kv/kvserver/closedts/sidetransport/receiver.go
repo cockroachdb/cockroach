@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -212,7 +213,7 @@ func (r *incomingStream) GetClosedTimestamp(
 	if !ok {
 		return hlc.Timestamp{}, 0
 	}
-	return r.mu.lastClosed[info.policy], info.lai
+	return r.mu.lastClosed.Get(info.policyLocality), info.lai
 }
 
 // processUpdate processes one update received on the stream, updating the local
@@ -247,7 +248,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
 			r.stores.ForwardSideTransportClosedTimestampForRange(
-				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
+				ctx, rangeID, r.mu.lastClosed.Get(info.policyLocality), info.lai)
 		}
 		r.mu.RUnlock()
 	}
@@ -258,9 +259,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
-		for i := range r.mu.lastClosed {
-			r.mu.lastClosed[i] = hlc.Timestamp{}
-		}
+		r.mu.lastClosed.Reset()
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
 		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
@@ -270,15 +269,16 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	for _, rng := range msg.AddedOrUpdated {
 		r.mu.tracked[rng.RangeID] = trackedRange{
-			lai:    rng.LAI,
-			policy: rng.Policy,
+			lai:            rng.LAI,
+			policyLocality: multiregion.PolicyLocalityKey{Policy: rng.Policy, Locality: rng.Locality.ComparisonType},
 		}
 	}
 	for _, rangeID := range msg.Removed {
 		delete(r.mu.tracked, rangeID)
 	}
 	for _, update := range msg.ClosedTimestamps {
-		r.mu.lastClosed[update.Policy] = update.ClosedTimestamp
+		r.mu.lastClosed.Set(multiregion.PolicyLocalityKey{Policy: update.Policy, Locality: update.Locality.ComparisonType},
+			update.ClosedTimestamp)
 	}
 }
 

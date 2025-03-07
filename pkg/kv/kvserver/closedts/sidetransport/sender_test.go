@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -44,6 +45,11 @@ type mockReplica struct {
 	cantBumpReason CantCloseReason
 	lai            kvpb.LeaseAppliedIndex
 	policy         roachpb.RangeClosedTimestampPolicy
+	locality       roachpb.LocalityComparisonType
+}
+
+func (m *mockReplica) GetLocalityProximity() roachpb.LocalityComparisonType {
+	return m.locality
 }
 
 var _ Replica = &mockReplica{}
@@ -51,7 +57,8 @@ var _ Replica = &mockReplica{}
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
 func (m *mockReplica) BumpSideTransportClosed(
-	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	_ context.Context, _ hlc.ClockTimestamp, _ multiregion.PolicyLocalityToTimestampMap,
+
 ) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -60,11 +67,11 @@ func (m *mockReplica) BumpSideTransportClosed(
 		reason = m.cantBumpReason
 	}
 	return BumpSideTransportClosedResult{
-		OK:         m.canBump,
-		FailReason: reason,
-		Desc:       &m.mu.desc,
-		LAI:        m.lai,
-		Policy:     m.policy,
+		OK:             m.canBump,
+		FailReason:     reason,
+		Desc:           &m.mu.desc,
+		LAI:            m.lai,
+		PolicyLocality: multiregion.PolicyLocalityKey{Policy: m.policy, Locality: m.locality},
 	}
 }
 
@@ -100,11 +107,11 @@ func (c *mockConn) run(context.Context, *stop.Stopper) { c.running = true }
 func (c *mockConn) close()                             { c.closed = true }
 func (c *mockConn) getState() connState                { return connState{} }
 
-func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
+func newMockSender(latencyTracker *multiregion.LatencyTracker, connFactory connFactory) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(nil)
-	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
+	s := newSenderWithConnFactory(stopper, st, clock, connFactory, latencyTracker)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
 }
@@ -144,20 +151,35 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
+	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy, locality roachpb.LocalityComparisonType) hlc.Timestamp {
 		return closedts.TargetForPolicy(
 			now,
 			s.clock.MaxOffset(),
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			s.latencyTracker.GetLatencyByLocalityProximity(locality),
 			pol,
 		)
 	}
-	return []ctpb.Update_GroupUpdate{
-		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
-		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
+
+	policyLocalityKeys := []multiregion.PolicyLocalityKey{
+		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, Locality: roachpb.LocalityComparisonType_UNDEFINED},
+		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, Locality: roachpb.LocalityComparisonType_UNDEFINED},
+		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, Locality: roachpb.LocalityComparisonType_CROSS_REGION},
+		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, Locality: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE},
+		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, Locality: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE},
 	}
+
+	groupUpdates := make([]ctpb.Update_GroupUpdate, len(policyLocalityKeys))
+	for i, key := range policyLocalityKeys {
+		groupUpdates[i] = ctpb.Update_GroupUpdate{
+			Policy:          key.Policy,
+			Locality:        roachpb.LocalityComparisonWrapper{ComparisonType: key.Locality},
+			ClosedTimestamp: targetForPolicy(key.Policy, key.Locality),
+		}
+	}
+	return groupUpdates
 }
 
 func TestSenderBasic(t *testing.T) {
@@ -190,7 +212,7 @@ func TestSenderBasic(t *testing.T) {
 	now = s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policyLocality: multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	require.Len(t, s.connsMu.conns, 2)
@@ -287,7 +309,7 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	now := s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policyLocality: multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	// Ensure that we have two connections, one for remote node and one for local.
@@ -660,4 +682,182 @@ func TestRPCConnStopOnClose(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestSenderWithLatencyTrackingAndUpdates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	s, stopper := newMockSender(connFactory)
+	defer stopper.Stop(ctx)
+
+	rt := func(node, store int) roachpb.ReplicationTarget {
+		return roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(node),
+			StoreID: roachpb.StoreID(store),
+		}
+	}
+
+	// Create mock replicas with different localities
+	r1 := newMockReplicaEx(15, rt(1, 1), rt(2, 2), rt(3, 3))
+	r1.locality = roachpb.LocalityComparisonType_CROSS_REGION
+	r1.canBump = true
+	r1.lai = 5
+	r1.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	r2 := newMockReplicaEx(16, rt(1, 1), rt(2, 2), rt(3, 3))
+	r2.locality = roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE
+	r2.canBump = true
+	r2.lai = 6
+	r2.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	r3 := newMockReplicaEx(17, rt(1, 1), rt(2, 2), rt(3, 3))
+	r3.locality = roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE
+	r3.canBump = true
+	r3.lai = 7
+	r3.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	// Register replicas
+	s.RegisterLeaseholder(ctx, r1, 1)
+	s.RegisterLeaseholder(ctx, r2, 2)
+	s.RegisterLeaseholder(ctx, r3, 3)
+
+	// Publish updates and verify
+	now := s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 3)
+	require.Equal(t, map[roachpb.RangeID]trackedRange{
+		15: {lai: 5, policyLocality: multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}},
+		16: {lai: 6, policyLocality: multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}},
+		17: {lai: 7, policyLocality: multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}},
+	}, s.trackedMu.tracked)
+
+	// Verify buffer contains updates
+	require.Equal(t, ctpb.SeqNum(1), s.trackedMu.lastSeqNum)
+	up, ok := s.buf.GetBySeq(ctx, 1)
+	require.True(t, ok)
+	require.Equal(t, roachpb.NodeID(1), up.NodeID)
+	require.Equal(t, ctpb.SeqNum(1), up.SeqNum)
+	require.Equal(t, true, up.Snapshot)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Nil(t, up.Removed)
+	require.Equal(t, []ctpb.Update_RangeUpdate{
+		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 16, LAI: 6, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 17, LAI: 7, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+	}, up.AddedOrUpdated)
+
+	// Verify locality comparisons
+	require.Equal(t, roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE, r1.locality) // Same region
+	require.Equal(t, roachpb.LocalityComparisonType_CROSS_REGION, r3.locality)           // Different regions
+
+	// Unregister replicas
+	s.UnregisterLeaseholder(ctx, 1, 15)
+	s.UnregisterLeaseholder(ctx, 2, 16)
+	s.UnregisterLeaseholder(ctx, 3, 17)
+
+	now = s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 0)
+	require.Len(t, s.leaseholdersMu.leaseholders, 0)
+}
+
+func TestSenderRefreshLatency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	s, stopper := newMockSender(connFactory)
+	defer stopper.Stop(ctx)
+
+	rt := func(node, store int) roachpb.ReplicationTarget {
+		return roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(node),
+			StoreID: roachpb.StoreID(store),
+		}
+	}
+
+	// Create replicas with different localities
+	r1 := newMockReplicaEx(15, rt(1, 1), rt(2, 2))
+	r1.locality = roachpb.LocalityComparisonType_CROSS_REGION
+	r1.canBump = true
+	r1.lai = 5
+	r1.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	r2 := newMockReplicaEx(16, rt(1, 1), rt(2, 2))
+	r2.locality = roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE
+	r2.canBump = true
+	r2.lai = 6
+	r2.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	r3 := newMockReplicaEx(17, rt(1, 1), rt(2, 2))
+	r3.locality = roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE
+	r3.canBump = true
+	r3.lai = 7
+	r3.policy = roachpb.LAG_BY_CLUSTER_SETTING
+
+	// Register replicas
+	s.RegisterLeaseholder(ctx, r1, 1)
+	s.RegisterLeaseholder(ctx, r2, 1)
+	s.RegisterLeaseholder(ctx, r3, 1)
+
+	// Test different locality comparison types
+	testCases := []struct {
+		name string
+		comp roachpb.LocalityComparisonType
+	}{
+		{"CrossRegion", roachpb.LocalityComparisonType_CROSS_REGION},
+		{"SameRegionCrossZone", roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE},
+		{"SameRegionSameZone", roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Initial publish and get initial latency
+			s.publish(ctx)
+			initialLatency := s.latencyTracker.GetLatencyByLocalityProximity(tc.comp)
+
+			// Simulate latency change and refresh
+			nodeIDs := []roachpb.NodeID{1, 2}
+			s.latencyTracker.RefreshLatency(nodeIDs)
+			newLatency := s.latencyTracker.GetLatencyByLocalityProximity(tc.comp)
+
+			// Verify latency was refreshed and is different
+			require.NotEqual(t, initialLatency, newLatency)
+
+			// Change locality of r2 to be in same region as r1 but different zone
+			oldLocality := r2.locality
+			r2.locality = roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE
+
+			// Refresh and verify latency changes appropriately
+			s.latencyTracker.RefreshLatency(nodeIDs)
+			updatedLatency := func(locality roachpb.LocalityComparisonType) time.Duration {
+				return s.latencyTracker.GetLatencyByLocalityProximity(locality)
+			}
+
+			switch tc.comp {
+			case roachpb.LocalityComparisonType_CROSS_REGION:
+				// Should be same since now in same region
+				require.Equal(t, updatedLatency(r1.locality), updatedLatency(r2.locality))
+			case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+				// Should be different since in different zones
+				require.NotEqual(t, updatedLatency(r1.locality), updatedLatency(r2.locality))
+			case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+				// Should be same since now in same region and zone
+				require.Equal(t, updatedLatency(r1.locality), updatedLatency(r2.locality))
+			}
+
+			// Restore r2's original locality
+			r2.locality = oldLocality
+		})
+	}
+
+	// Cleanup
+	s.UnregisterLeaseholder(ctx, 1, 15)
+	s.UnregisterLeaseholder(ctx, 1, 16)
+	s.UnregisterLeaseholder(ctx, 1, 17)
+	s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 0)
+	require.Len(t, s.leaseholdersMu.leaseholders, 0)
 }
