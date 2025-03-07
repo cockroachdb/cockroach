@@ -288,6 +288,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				oldValues,
+				rowenc.EmptyVectorIndexEncodingHelper,
 				false, /* includeEmpty */
 			)
 			if err != nil {
@@ -304,6 +305,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				ru.newValues,
+				rowenc.EmptyVectorIndexEncodingHelper,
 				false, /* includeEmpty */
 			)
 			if err != nil {
