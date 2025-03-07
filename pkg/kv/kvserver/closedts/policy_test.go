@@ -24,7 +24,9 @@ func TestTargetForPolicy(t *testing.T) {
 	secs := func(i int) time.Duration { return cast(i, time.Second) }
 	millis := func(i int) time.Duration { return cast(i, time.Millisecond) }
 
-	computeExpectedClosedTSTarget := func(now hlc.Timestamp, maxClockOffset time.Duration, sideTransportCloseInterval time.Duration, networkRTT time.Duration) hlc.Timestamp {
+	computeExpectedClosedTSTarget := func(
+		now hlc.Timestamp, maxClockOffset time.Duration, sideTransportCloseInterval time.Duration, networkRTT time.Duration,
+	) hlc.Timestamp {
 		const raftTransportOverhead = 20 * time.Millisecond
 		raftTransportPropTime := (networkRTT*3)/2 + raftTransportOverhead
 		sideTransportPropTime := networkRTT/2 + sideTransportCloseInterval
@@ -111,6 +113,22 @@ func TestTargetForPolicy(t *testing.T) {
 			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
 			observedMaxNetworkRTT:      millis(200),
 			expClosedTSTarget:          computeExpectedClosedTSTarget(now, maxClockOffset, millis(200), millis(200)),
+		},
+		{
+			name:                       "kv.closed_timestamp.lead_for_global_reads_auto_tune with too low RTT",
+			sideTransportCloseInterval: millis(100),
+			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			observedMaxNetworkRTT:      millis(0),
+			// The observed max network RTT should be clamped to the lowerBoundMaxNetworkRTT.
+			expClosedTSTarget: computeExpectedClosedTSTarget(now, maxClockOffset, millis(100), millis(1)),
+		},
+		{
+			name:                       "kv.closed_timestamp.lead_for_global_reads_auto_tune with too high RTT",
+			sideTransportCloseInterval: millis(100),
+			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			observedMaxNetworkRTT:      millis(500),
+			// The observed max network RTT should be clamped to the upperBoundMaxNetworkRTT.
+			expClosedTSTarget: computeExpectedClosedTSTarget(now, maxClockOffset, millis(100), millis(400)),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
