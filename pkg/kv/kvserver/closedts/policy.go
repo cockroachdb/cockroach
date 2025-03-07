@@ -12,7 +12,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-const DefaultMaxNetworkRTT = 150 * time.Millisecond
+const (
+	DefaultMaxNetworkRTT    = 150 * time.Millisecond
+	minAcceptableNetworkRTT = 1 * time.Millisecond
+	maxAcceptableNetworkRTT = 400 * time.Millisecond
+)
+
+// clampLatency clamps the given latency to the acceptable range.
+func clampLatency(latency time.Duration) time.Duration {
+	if latency < minAcceptableNetworkRTT {
+		return minAcceptableNetworkRTT
+	}
+	if latency > maxAcceptableNetworkRTT {
+		return maxAcceptableNetworkRTT
+	}
+	return latency
+}
 
 // TargetForPolicy returns the target closed timestamp for a range with the
 // given policy.
@@ -31,6 +46,7 @@ func TargetForPolicy(
 		// Simple calculation: lag now by desired duration.
 		res = now.ToTimestamp().Add(-lagTargetDuration.Nanoseconds(), 0)
 	case roachpb.LEAD_FOR_GLOBAL_READS:
+		maxNetworkRTT = clampLatency(maxNetworkRTT)
 		// The LEAD_FOR_GLOBAL_READS calculation is more complex. Instead of the
 		// policy defining an offset from the publisher's perspective, the
 		// policy defines a goal from the consumer's perspective - the goal
