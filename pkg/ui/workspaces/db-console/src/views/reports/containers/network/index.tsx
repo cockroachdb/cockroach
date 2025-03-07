@@ -6,7 +6,7 @@
 import { util, Loading } from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { deviation as d3Deviation, mean as d3Mean } from "d3";
+import { deviation, mean } from "d3-array";
 import capitalize from "lodash/capitalize";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
@@ -256,17 +256,17 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     const { match } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
     const { collapsed, filter } = this.state;
-    const mean = d3Mean(latencies);
+    const meanValue = mean(latencies);
     const sortParams = this.getSortParams(displayIdentities);
-    let stddev = d3Deviation(latencies);
+    let stddev = deviation(latencies);
     if (isUndefined(stddev)) {
       stddev = 0;
     }
     // If there is no stddev, we should not display a legend. So there is no
     // need to set these values.
-    const stddevPlus1 = stddev > 0 ? mean + stddev : 0;
+    const stddevPlus1 = stddev > 0 ? meanValue + stddev : 0;
     const stddevPlus2 = stddev > 0 ? stddevPlus1 + stddev : 0;
-    const stddevMinus1 = stddev > 0 ? max([mean - stddev, 0]) : 0;
+    const stddevMinus1 = stddev > 0 ? max([meanValue - stddev, 0]) : 0;
     const stddevMinus2 = stddev > 0 ? max([stddevMinus1 - stddev, 0]) : 0;
     const latencyTable = (
       <Latency
@@ -303,7 +303,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
           <Legend
             stddevMinus2={stddevMinus2}
             stddevMinus1={stddevMinus1}
-            mean={mean}
+            mean={meanValue}
             stddevPlus1={stddevPlus1}
             stddevPlus2={stddevPlus2}
           />
