@@ -12,6 +12,20 @@ import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 
+// LatencyBasedRangeClosedTimestampPolicy defines closed timestamp policies that
+// are dynamically adjusted based on the network latency between a range's
+// leaseholder and its furthest follower replica. Each range is assigned a policy
+// based on observed network latencies between nodes.
+enum LatencyBasedRangeClosedTimestampPolicy {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // Uses default lag from cluster settings
+  LAG_BY_CLUSTER_SETTING = 0;
+  // Lead policy for global reads with no locality information.
+  LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO = 1;
+  // Sentinel value for slice sizing.
+  MAX_CLOSED_TIMESTAMP_POLICY = 18;
+}
+
 // Update contains information about (the advancement of) closed timestamps for
 // ranges with leases on the sender node. Updates are of two types: snapshots
 // and incrementals. Snapshots are stand-alone messages, explicitly containing
@@ -57,7 +71,7 @@ message Update {
   // and the regular Raft transport are possible, as are races between two
   // side-transport streams for an outgoing and incoming leaseholder.
   message GroupUpdate {
-    roachpb.RangeClosedTimestampPolicy policy = 1;
+    LatencyBasedRangeClosedTimestampPolicy policy = 1;
     util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
@@ -80,7 +94,7 @@ message Update {
   message RangeUpdate {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
-    roachpb.RangeClosedTimestampPolicy policy = 3;
+    LatencyBasedRangeClosedTimestampPolicy policy = 3;
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
 }
