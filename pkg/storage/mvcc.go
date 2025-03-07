@@ -394,6 +394,7 @@ func makeOptionalValue(v MVCCValue) optionalValue {
 
 func (v *optionalValue) IsPresent() bool {
 	return v.exists && v.Value.IsPresent()
+
 }
 
 func (v *optionalValue) IsTombstone() bool {
@@ -1166,7 +1167,7 @@ func MVCCBlindPutInlineWithPrev(
 		iter, err := newMVCCIterator(
 			ctx, rw, hlc.Timestamp{}, false /* rangeKeyMasking */, false, /* noInterleavedIntents */
 			IterOptions{
-				KeyTypes: IterKeyTypePointsAndRanges,
+				KeyTypes: IterKeyTypePointsOnly,
 				Prefix:   true,
 				// Don't bother with ReadCategory.
 			},
@@ -1482,7 +1483,7 @@ func MVCCGetWithValueHeader(
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents,
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.ReadCategory,
 		},
@@ -1932,7 +1933,7 @@ func MVCCPut(
 		iter, err = newMVCCIterator(
 			ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 			IterOptions{
-				KeyTypes:     IterKeyTypePointsAndRanges,
+				KeyTypes:     IterKeyTypePointsOnly,
 				Prefix:       true,
 				ReadCategory: opts.Category,
 			},
@@ -1995,7 +1996,7 @@ func MVCCDelete(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -2819,7 +2820,7 @@ func MVCCIncrement(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -2932,7 +2933,7 @@ func MVCCConditionalPut(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -3083,7 +3084,7 @@ func MVCCInitPut(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -3754,7 +3755,7 @@ func MVCCDeleteRange(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -4923,7 +4924,7 @@ func MVCCScan(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			LowerBound:   key,
 			UpperBound:   endKey,
 			ReadCategory: opts.ReadCategory,
@@ -4946,7 +4947,7 @@ func MVCCScanToBytes(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			LowerBound:   key,
 			UpperBound:   endKey,
 			ReadCategory: opts.ReadCategory,
