@@ -1180,10 +1180,6 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	defer snapshot.Close()
 	require.NoError(t, snapshot.PinEngineStateForIterators(fs.UnknownReadCategory))
 
-	efos := eng.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
-	defer efos.Close()
-	require.NoError(t, efos.PinEngineStateForIterators(fs.UnknownReadCategory))
-
 	batch := eng.NewBatch()
 	defer batch.Close()
 	require.NoError(t, batch.PinEngineStateForIterators(fs.UnknownReadCategory))
@@ -1197,7 +1193,6 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 		"Engine":   eng,
 		"ReadOnly": readOnly,
 		"Snapshot": snapshot,
-		"EFOS":     efos,
 		"Batch":    batch,
 	}
 	for name, r := range testcases {

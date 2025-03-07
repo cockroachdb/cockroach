@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -924,29 +923,4 @@ func addLockTableSpans(spans *SpanSet) *SpanSet {
 		withLocks.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
 	})
 	return withLocks
-}
-
-type spanSetEFOS struct {
-	spanSetReader
-	efos storage.EventuallyFileOnlyReader
-}
-
-// NewEventuallyFileOnlySnapshot returns a storage.EventuallyFileOnlyReader that
-// asserts access of the underlying EFOS against the given SpanSet. We only
-// consider span boundaries, associated timestamps are not considered.
-func NewEventuallyFileOnlySnapshot(
-	e storage.EventuallyFileOnlyReader, spans *SpanSet,
-) storage.EventuallyFileOnlyReader {
-	spans = addLockTableSpans(spans)
-	return &spanSetEFOS{
-		spanSetReader: spanSetReader{r: e, spans: spans, spansOnly: true},
-		efos:          e,
-	}
-}
-
-// WaitForFileOnly implements the storage.EventuallyFileOnlyReader interface.
-func (e *spanSetEFOS) WaitForFileOnly(
-	ctx context.Context, gracePeriodBeforeFlush time.Duration,
-) error {
-	return e.efos.WaitForFileOnly(ctx, gracePeriodBeforeFlush)
 }

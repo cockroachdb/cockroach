@@ -194,24 +194,14 @@ func (r *Replica) GetSnapshot(
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
-	var snap storage.Reader
 	r.raftMu.Lock()
 	startKey := r.shMu.state.Desc.StartKey
-	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
-		var ss *spanset.SpanSet
-		spans := rditer.MakeAllKeySpans(r.shMu.state.Desc) // needs unreplicated to access Raft state
-		if util.RaceEnabled {
-			ss = rditer.MakeAllKeySpanSet(r.shMu.state.Desc)
-			defer ss.Release()
-		}
-		efos := r.store.TODOEngine().NewEventuallyFileOnlySnapshot(spans)
-		if util.RaceEnabled {
-			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
-		} else {
-			snap = efos
-		}
-	} else {
-		snap = r.store.TODOEngine().NewSnapshot()
+	spans := rditer.MakeAllKeySpans(r.shMu.state.Desc) // needs unreplicated to access Raft state
+	snap := r.store.TODOEngine().NewSnapshot(spans...)
+	if util.RaceEnabled {
+		ss := rditer.MakeAllKeySpanSet(r.shMu.state.Desc)
+		defer ss.Release()
+		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	r.raftMu.Unlock()
 
