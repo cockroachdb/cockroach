@@ -617,7 +617,10 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		})
 
 		creds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
-		cfg.Credentials = creds
+		// NOTE: It's critical to wrap all credentials in a CredentialCache to
+		// prevent DDoS'ing STS API endpoints:
+		// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws#CredentialsCache
+		cfg.Credentials = aws.NewCredentialsCache(creds)
 	}
 
 	region := s.opts.region
