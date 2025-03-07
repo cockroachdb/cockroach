@@ -886,6 +886,7 @@ func expectResultColumns(
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
 			Computed:  col.IsComputed(),
+			Nullable:  col.IsNullable(),
 			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
@@ -945,6 +946,7 @@ func expectResultColumnsWithFamily(
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
 			Computed:  col.IsComputed(),
+			Nullable:  col.IsNullable(),
 			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})

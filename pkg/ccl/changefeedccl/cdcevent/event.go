@@ -234,6 +234,7 @@ func (r Row) forEachColumn(fn ColumnFn, colIndexes []int) error {
 type ResultColumn struct {
 	colinfo.ResultColumn
 	Computed  bool
+	Nullable  bool
 	ord       int
 	sqlString string
 }
@@ -300,6 +301,7 @@ func NewEventDescriptor(
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
 			Computed:  col.IsComputed(),
+			Nullable:  col.IsNullable(),
 			ord:       ord,
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		}
