@@ -137,15 +137,13 @@ exec-ddl
 CREATE POLICY r2 on t1 AS RESTRICTIVE USING (true);
 ----
 
-# TODO(136742): We currently only support at most one permissive policy. Update
-# this when we support multiple and restrictive policies.
 plan
 select * from t1
 ----
 • scan
   table: t1@t1_pkey
   spans: FULL SCAN
-  policies: policy 1
+  policies: policy 1, p2, p3, r1, r2
 
 # Show policy information where an index scan is used for one table
 # ----------------------------------------------------------------------
@@ -162,7 +160,7 @@ select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c1 = 1;
 ├── • scan
 │     table: t1@t1_idx
 │     spans: 1+ spans
-│     policies: policy 1
+│     policies: policy 1, p2, p3, r1, r2
 │
 └── • filter
     │ filter: c1 = _

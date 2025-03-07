@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -54,32 +55,51 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
 ) opt.ScalarExpr {
 	var policiesUsed opt.PolicyIDSet
+	var combinedExpr tree.TypedExpr
 	policies := tabMeta.Table.Policies()
-	for _, policy := range policies.Permissive {
-		if !policy.AppliesToRole(b.checkPrivilegeUser) || !b.policyAppliesToCommandScope(policy, cmdScope) {
-			continue
+	for i, group := range [][]cat.Policy{policies.Permissive, policies.Restrictive} {
+		restrictive := i != 0
+		if restrictive {
+			if combinedExpr == nil {
+				// If no permissive policies apply, filter out all rows by adding a "false" expression.
+				b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
+				return memo.FalseSingleton
+			}
 		}
-		strExpr := policy.UsingExpr
-		if strExpr == "" {
-			continue
+		for _, policy := range group {
+			if !policy.AppliesToRole(b.checkPrivilegeUser) || !b.policyAppliesToCommandScope(policy, cmdScope) {
+				continue
+			}
+			strExpr := policy.UsingExpr
+			if strExpr == "" {
+				continue
+			}
+			policiesUsed.Add(policy.ID)
+			parsedExpr, err := parser.ParseExpr(strExpr)
+			if err != nil {
+				panic(err)
+			}
+			typedExpr := tableScope.resolveType(parsedExpr, types.AnyElement)
+			if combinedExpr != nil {
+				// Restrictive policies are combined using AND, while permissive
+				// policies are combined using OR.
+				if restrictive {
+					combinedExpr = tree.NewTypedAndExpr(combinedExpr, typedExpr)
+				} else {
+					combinedExpr = tree.NewTypedOrExpr(combinedExpr, typedExpr)
+				}
+			} else {
+				combinedExpr = typedExpr
+			}
 		}
-		policiesUsed.Add(policy.ID)
-		parsedExpr, err := parser.ParseExpr(strExpr)
-		if err != nil {
-			panic(err)
-		}
-		typedExpr := tableScope.resolveType(parsedExpr, types.AnyElement)
-		scalar := b.buildScalar(typedExpr, tableScope, nil, nil, nil)
-		// TODO(136742): Apply multiple RLS policies.
-		b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed)
-		return scalar
 	}
 
-	// TODO(136742): Add support for restrictive policies.
-
-	// If no permissive policies apply, filter out all rows by adding a "false" expression.
-	b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
-	return memo.FalseSingleton
+	// We should have already exited early if there were no permissive policies.
+	if combinedExpr == nil {
+		panic(errors.AssertionFailedf("at least one applicable policy should have been found"))
+	}
+	b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed)
+	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
 }
 
 // policyAppliesToCommandScope checks whether a given PolicyCommandScope applies
@@ -155,51 +175,61 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 	}
 
 	var policiesUsed opt.PolicyIDSet
-	for i := range r.tab.Policies().Permissive {
-		p := &r.tab.Policies().Permissive[i]
-
-		if !p.AppliesToRole(r.user) || !r.policyAppliesToCommand(p, r.isUpdate) {
-			continue
+	policies := r.tabMeta.Table.Policies()
+	for i, group := range [][]cat.Policy{policies.Permissive, policies.Restrictive} {
+		restrictive := i != 0
+		if restrictive {
+			// If no permissive policies apply, then we will add a false check as
+			// nothing is allowed to be written.
+			if sb.Len() == 0 {
+				r.md.GetRLSMeta().NoPoliciesApplied = true
+				return "false", nil
+			}
+			sb.WriteString(")") // Close the outer parenthesis that surrounds all permissive policies
 		}
-		policiesUsed.Add(p.ID)
-		var expr string
-		// If the WITH CHECK expression is missing, we default to the USING
-		// expression. If both are missing, then this policy doesn't apply and can
-		// be skipped.
-		if p.WithCheckExpr == "" {
-			if p.UsingExpr == "" {
+		for _, p := range group {
+			if !p.AppliesToRole(r.user) || !r.policyAppliesToCommand(&p, r.isUpdate) {
 				continue
 			}
-			expr = p.UsingExpr
-			for _, id := range p.UsingColumnIDs {
-				colIDs.Add(int(id))
+			policiesUsed.Add(p.ID)
+
+			var expr string
+			// If the WITH CHECK expression is missing, we default to the USING
+			// expression. If both are missing, then this policy doesn't apply and can
+			// be skipped.
+			if p.WithCheckExpr == "" {
+				if p.UsingExpr == "" {
+					continue
+				}
+				expr = p.UsingExpr
+				for _, id := range p.UsingColumnIDs {
+					colIDs.Add(int(id))
+				}
+			} else {
+				expr = p.WithCheckExpr
+				for _, id := range p.WithCheckColumnIDs {
+					colIDs.Add(int(id))
+				}
 			}
-		} else {
-			expr = p.WithCheckExpr
-			for _, id := range p.WithCheckColumnIDs {
-				colIDs.Add(int(id))
+			if sb.Len() != 0 {
+				if restrictive {
+					sb.WriteString(" AND ")
+				} else {
+					sb.WriteString(" OR ")
+				}
+			} else {
+				sb.WriteString("(") // Add the outer parenthesis that surrounds all permissive policies
 			}
+			sb.WriteString("(")
+			sb.WriteString(expr)
+			sb.WriteString(")")
 		}
-		if sb.Len() != 0 {
-			sb.WriteString(" OR ")
-		}
-		sb.WriteString("(")
-		sb.WriteString(expr)
-		sb.WriteString(")")
-		// TODO(136742): Add support for multiple policies.
-		r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed)
-		break
 	}
 
-	// TODO(136742): Add support for restrictive policies.
-
-	// If no policies apply, then we will add a false check as nothing is allowed
-	// to be written.
 	if sb.Len() == 0 {
-		r.md.GetRLSMeta().NoPoliciesApplied = true
-		return "false", nil
+		panic(errors.AssertionFailedf("at least one applicable policy should have been included"))
 	}
-
+	r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed)
 	return sb.String(), colIDs.Ordered()
 }
 
