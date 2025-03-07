@@ -153,12 +153,21 @@ func (tu *tableUpserter) makeResultFromRow(
 // to avoid updating when performing row modification. This is necessary
 // because not all rows are indexed by partial indexes.
 //
+// The VectorIndexUpdateHelper is used to determine which partitions to update
+// in each vector index and supply the quantized vectors to add to the
+// partitions. This is necessary because these values are not part of the table,
+// and are materialized only for the purpose of updating vector indexes.
+//
 // The traceKV parameter determines whether the individual K/V operations
 // should be logged to the context. We use a separate argument here instead
 // of a Value field on the context because Value access in context.Context
 // is rather expensive.
 func (tu *tableUpserter) row(
-	ctx context.Context, datums tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
+	ctx context.Context,
+	datums tree.Datums,
+	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
+	traceKV bool,
 ) error {
 	tu.currentBatchSize++
 
@@ -179,11 +188,11 @@ func (tu *tableUpserter) row(
 		// TODO(yuzefovich): add a tracing test to ensure that the lock is
 		// acquired here once the interceptor is updated.
 		kvOp := row.PutMustAcquireExclusiveLockOp
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, kvOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, kvOp, traceKV)
 	}
 	if datums[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, row.CPutOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, row.CPutOp, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -204,6 +213,7 @@ func (tu *tableUpserter) row(
 		datums[insertEnd:fetchEnd],
 		datums[fetchEnd:updateEnd],
 		pm,
+		vh,
 		traceKV,
 	)
 }
@@ -211,15 +221,21 @@ func (tu *tableUpserter) row(
 // insertNonConflictingRow inserts the given source row into the table when
 // there was no conflict. If the RETURNING clause was specified, then the
 // inserted row is stored in the rowsUpserted collection.
+//
+// TODO(drewk,mw5h): consider whether there is a nicer way to pass the
+// information needed for partial and vector indexes. Should these structs live
+// on tableUpserter? Alternatively, should we combine them into a single helper
+// struct that contains extra information needed to insert the row?
 func (tu *tableUpserter) insertNonConflictingRow(
 	ctx context.Context,
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
 	kvOp row.KVInsertOp,
 	traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, nil /* oth */, kvOp, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, nil /* oth */, kvOp, traceKV); err != nil {
 		return err
 	}
 
@@ -265,12 +281,13 @@ func (tu *tableUpserter) updateConflictingRow(
 	fetchRow tree.Datums,
 	updateValues tree.Datums,
 	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
 	traceKV bool,
 ) error {
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, nil, traceKV)
+	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, vh, nil, traceKV)
 	if err != nil {
 		return err
 	}

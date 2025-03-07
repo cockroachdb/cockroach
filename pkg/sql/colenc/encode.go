@@ -432,6 +432,11 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 		// Since the inverted indexes generate multiple keys per row just handle them
 		// separately.
 		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
+	} else if ind.GetType() == idxtype.VECTOR {
+		// TODO(mw5h, drewk): Implement encoding for vector indexes. This is complicated
+		// by vector indexes needing output from the mutation search operator, which will
+		// need to be plumbed through to the encoder.
+		return errors.AssertionFailedf("vector indexes not supported")
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
