@@ -272,7 +272,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 			timingTag.stop("sst")
 		}
-		if len(req.SharedTables) > 0 && doExcise {
+
+		if len(req.SharedTables) > 0 {
 			for i := range req.SharedTables {
 				sst := req.SharedTables[i]
 				pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
@@ -291,7 +292,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				})
 			}
 		}
-		if len(req.ExternalTables) > 0 && doExcise {
+		if len(req.ExternalTables) > 0 {
 			for i := range req.ExternalTables {
 				sst := req.ExternalTables[i]
 				externalSSTs = append(externalSSTs, pebble.ExternalFile{
