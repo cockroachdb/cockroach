@@ -7,11 +7,13 @@ package kvcoord
 
 import (
 	"context"
+	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -500,10 +502,6 @@ func (twb *txnWriteBuffer) mergeWithReverseScanResp(
 		return nil, errors.AssertionFailedf("unexpectedly called mergeWithScanResp on a ScanRequest " +
 			"with COL_BATCH_RESPONSE scan format")
 	}
-	if req.ScanFormat == kvpb.BATCH_RESPONSE {
-		// TODO(arul): See pebbleResults.put for how this should be done.
-		return nil, errors.AssertionFailedf("unimplemented")
-	}
 
 	respIter := newReverseScanRespIter(req, resp)
 	// First, calculate the size of the merged response. This then allows us to
@@ -529,10 +527,6 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 		return nil, errors.AssertionFailedf("unexpectedly called mergeWithScanResp on a ScanRequest " +
 			"with COL_BATCH_RESPONSE scan format")
 	}
-	if req.ScanFormat == kvpb.BATCH_RESPONSE {
-		// TODO(arul): See pebbleResults.put for how this should be done.
-		return nil, errors.AssertionFailedf("unimplemented")
-	}
 
 	respIter := newScanRespIter(req, resp)
 	// First, calculate the size of the merged response. This then allows us to
@@ -552,6 +546,9 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 // by iterating over both, in-order[1], and calling the appropriate accept
 // function, based on which KV pair should be preferred[2] by the combined
 // response.
+//
+// Note that acceptBuffer and acceptResp functions should not advance the
+// iterator. acceptResp will only be called when respIter is in valid state.
 //
 // [1] Forward or reverse order, depending on the direction of the scan.
 // [2] See inline comments for more details on what "preferred" means.
@@ -958,6 +955,57 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 	return ru
 }
 
+// getKey reads the key for the next KV from a slice of BatchResponses field of
+// {,Reverse}ScanResponse. The KV is encoded in the following format:
+//
+//	<lenValue:Uint32><lenKey:Uint32><Key><Value>
+//
+// Furthermore, MVCC timestamp might be included in the suffix of <Key> part, so
+// we need to split it away.
+//
+// The method assumes that the encoding is valid.
+func getKey(br []byte) []byte {
+	lenKey := int(binary.LittleEndian.Uint32(br[4:8]))
+	key, _, _ := enginepb.SplitMVCCKey(br[8 : 8+lenKey])
+	return key
+}
+
+// getFirstKVLength returns the number of bytes used to encode the first KV from
+// the given slice (which is assumed to have come from BatchResponses field of
+// {,Reverse}ScanResponse).
+func getFirstKVLength(br []byte) int {
+	// See comment on getKey for more details.
+	lenValue := int(binary.LittleEndian.Uint32(br[0:4]))
+	lenKey := int(binary.LittleEndian.Uint32(br[4:8]))
+	return 8 + lenKey + lenValue
+}
+
+// encKVLength returns the number of bytes that will be required to encode the
+// given key/value pair as well as just encoding length of the key (including
+// the timestamp).
+func encKVLength(key roachpb.Key, value *roachpb.Value) (lenKV, lenKey int) {
+	// See comment on getKey for more details.
+	// TODO(yuzefovich): check whether MVCCKey escapes.
+	lenKey = storage.EncodedMVCCKeyLength(storage.MVCCKey{Key: key, Timestamp: value.Timestamp})
+	lenKV = 8 + lenKey + len(value.RawBytes)
+	return lenKV, lenKey
+}
+
+// appendKV appends the given key/value pair to the provided slice. It is
+// assumed that the slice already has enough capacity. The updated slice is
+// returned.
+func appendKV(toAppend []byte, key roachpb.Key, value *roachpb.Value) []byte {
+	lenKV, lenKey := encKVLength(key, value)
+	buf := toAppend[len(toAppend) : len(toAppend)+lenKV]
+	binary.LittleEndian.PutUint32(buf[0:4], uint32(len(value.RawBytes)))
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(lenKey))
+	// We assume that buf has enough capacity, so we ignore the returned value.
+	// TODO(yuzefovich): check whether MVCCKey escapes.
+	_ = storage.EncodeMVCCKeyToBuf(buf[8:8+lenKey], storage.MVCCKey{Key: key, Timestamp: value.Timestamp})
+	copy(buf[8+lenKey:], value.RawBytes)
+	return toAppend[:len(toAppend)+lenKV]
+}
+
 // respIter is an iterator over a scan or reverse scan response returned by
 // the KV layer.
 type respIter struct {
@@ -967,23 +1015,41 @@ type respIter struct {
 	scanResp        *kvpb.ScanResponse
 	reverseScanReq  *kvpb.ReverseScanRequest
 	reverseScanResp *kvpb.ReverseScanResponse
-	// scanFormat indicates the ScanFormat of the request. Only KEY_VALUES is
-	// supported right now.
+	// scanFormat indicates the ScanFormat of the request. Only KEY_VALUES and
+	// BATCH_RESPONSE are supported right now.
 	scanFormat kvpb.ScanFormat
+	// respEmpty indicates whether the response is empty.
+	respEmpty bool
 
+	// Fields below will be modified when advancing the iterator.
+
+	// rowsIndex is the current index into Rows field of the response.
+	//
+	// Used in the KEY_VALUES scan format.
 	rowsIndex int
+	// brIndex and brOffset describe the current position within BatchResponses
+	// field of the response. The next KV starts at
+	// BatchResponses[brIndex][brOffset]. When the end of the slice is reached,
+	// brIndex is incremented and brOffset is reset to 0.
+	//
+	// In the special case when respEmpty is set, brIndex is set to 1.
+	//
+	// Used in the BATCH_RESPONSE scan format.
+	brIndex  int
+	brOffset int
 }
 
 // newScanRespIter constructs and returns a new iterator to iterate over a
 // ScanRequest/Response.
 func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
-	if req.ScanFormat != kvpb.KEY_VALUES {
+	if req.ScanFormat != kvpb.KEY_VALUES && req.ScanFormat != kvpb.BATCH_RESPONSE {
 		panic("unexpected")
 	}
 	return &respIter{
 		scanReq:    req,
 		scanResp:   resp,
 		scanFormat: req.ScanFormat,
+		respEmpty:  len(resp.Rows) == 0 && len(resp.BatchResponses) == 0,
 	}
 }
 
@@ -992,17 +1058,21 @@ func newScanRespIter(req *kvpb.ScanRequest, resp *kvpb.ScanResponse) *respIter {
 func newReverseScanRespIter(
 	req *kvpb.ReverseScanRequest, resp *kvpb.ReverseScanResponse,
 ) *respIter {
-	if req.ScanFormat != kvpb.KEY_VALUES {
+	if req.ScanFormat != kvpb.KEY_VALUES && req.ScanFormat != kvpb.BATCH_RESPONSE {
 		panic("unexpected")
 	}
 	return &respIter{
 		reverseScanReq:  req,
 		reverseScanResp: resp,
 		scanFormat:      req.ScanFormat,
+		respEmpty:       len(resp.Rows) == 0 && len(resp.BatchResponses) == 0,
 	}
 }
 
 // peekKey returns the key at the current iterator position.
+//
+// peekKey will only be called if the iteration is in valid state (i.e. valid()
+// returned true).
 func (s *respIter) peekKey() roachpb.Key {
 	if s.scanFormat == kvpb.KEY_VALUES {
 		if s.scanReq != nil {
@@ -1010,15 +1080,39 @@ func (s *respIter) peekKey() roachpb.Key {
 		}
 		return s.reverseScanResp.Rows[s.rowsIndex].Key
 	}
-	panic("unexpected")
+	var br []byte
+	if s.scanReq != nil {
+		br = s.scanResp.BatchResponses[s.brIndex][s.brOffset:]
+	} else {
+		br = s.reverseScanResp.BatchResponses[s.brIndex][s.brOffset:]
+	}
+	return getKey(br)
 }
 
 // next moves the iterator forward.
+//
+// next will only be called if the iteration is in valid state (i.e. valid()
+// returned true).
 func (s *respIter) next() {
-	s.rowsIndex++
+	if s.scanFormat == kvpb.KEY_VALUES {
+		s.rowsIndex++
+		return
+	}
+	var brs [][]byte
+	if s.scanReq != nil {
+		brs = s.scanResp.BatchResponses
+	} else {
+		brs = s.reverseScanResp.BatchResponses
+	}
+	br := brs[s.brIndex][s.brOffset:]
+	s.brOffset += getFirstKVLength(br)
+	if s.brOffset >= len(brs[s.brIndex]) {
+		s.brIndex++
+		s.brOffset = 0
+	}
 }
 
-// valid returns whether the iterator is (still) positioned to a valid  index.
+// valid returns whether the iterator is (still) positioned to a valid index.
 func (s *respIter) valid() bool {
 	if s.scanFormat == kvpb.KEY_VALUES {
 		if s.scanReq != nil {
@@ -1026,12 +1120,24 @@ func (s *respIter) valid() bool {
 		}
 		return s.rowsIndex < len(s.reverseScanResp.Rows)
 	}
-	panic("unexpected")
+
+	if s.scanReq != nil {
+		// TODO: add a test with empty server response.
+		return s.brIndex < len(s.scanResp.BatchResponses)
+	}
+	return s.brIndex < len(s.reverseScanResp.BatchResponses)
 }
 
 // reset re-positions the iterator to the beginning of the response.
 func (s *respIter) reset() {
 	s.rowsIndex = 0
+	s.brIndex = 0
+	if s.respEmpty {
+		// Special initialization so that acceptBuffer() functions write into
+		// the zeroth index.
+		s.brIndex = 1
+	}
+	s.brOffset = 0
 }
 
 // startKey returns the start key of the request in response to which the
@@ -1068,18 +1174,73 @@ type respSizeHelper struct {
 	// field of the merged {,Reverse}ScanResponse when KEY_VALUES scan format is
 	// used.
 	rowsSize int
+	// batchResponseSize tracks the lengths of each []byte that we'll include in
+	// the BatchResponses field of the merged {,Reverse}ScanResponse when
+	// BATCH_RESPONSE scan format is used.
+	//
+	// At the moment, we'll rely on the "structure" produced by the server
+	// meaning that we'll "inject" the buffered KVs into responses from the
+	// server while maintaining the "layering" of slices. In the extreme case
+	// when the server produced an empty response this means that we'll include
+	// all buffered KVs in a single slice.
+	// TODO(yuzefovich): add better sizing heuristic which will allow for faster
+	// garbage collection of already processed KVs by the SQL layer.
+	batchResponseSize []int
 }
 
 func makeRespSizeHelper(it *respIter) respSizeHelper {
-	return respSizeHelper{it: it}
+	h := respSizeHelper{it: it}
+	if it.scanFormat == kvpb.BATCH_RESPONSE {
+		var numSlices int
+		if it.scanReq != nil {
+			numSlices = len(it.scanResp.BatchResponses)
+		} else {
+			numSlices = len(it.reverseScanResp.BatchResponses)
+		}
+		if numSlices == 0 {
+			if !it.respEmpty {
+				panic("expected respEmpty to be set")
+			}
+			// The server response is empty, so we'll include all relevant
+			// buffered KVs in a single slice.
+			numSlices = 1
+			// Special initialization so that acceptBuffer() functions write
+			// into the zeroth index.
+			it.brIndex = 1
+		}
+		h.batchResponseSize = make([]int, numSlices)
+	}
+	return h
 }
 
-func (h *respSizeHelper) acceptBuffer(roachpb.Key, *roachpb.Value) {
-	h.rowsSize++
+func (h *respSizeHelper) acceptBuffer(key roachpb.Key, value *roachpb.Value) {
+	if h.it.scanFormat == kvpb.KEY_VALUES {
+		h.rowsSize++
+		return
+	}
+	brIndex := h.it.brIndex
+	if !h.it.valid() {
+		// If respIter is exhausted, all the remaining buffered KVs go into the
+		// very last slice.
+		// TODO: add a test case for this.
+		brIndex--
+	}
+	lenKV, _ := encKVLength(key, value)
+	h.batchResponseSize[brIndex] += lenKV
 }
 
 func (h *respSizeHelper) acceptResp() {
-	h.rowsSize++
+	if h.it.scanFormat == kvpb.KEY_VALUES {
+		h.rowsSize++
+		return
+	}
+	var br []byte
+	if h.it.scanReq != nil {
+		br = h.it.scanResp.BatchResponses[h.it.brIndex][h.it.brOffset:]
+	} else {
+		br = h.it.reverseScanResp.BatchResponses[h.it.brIndex][h.it.brOffset:]
+	}
+	h.batchResponseSize[h.it.brIndex] += getFirstKVLength(br)
 }
 
 // respMerger encapsulates state to combine a {,Reverse}ScanResponse, returned
@@ -1108,7 +1269,10 @@ func makeRespMerger(serverSideRespIter *respIter, h respSizeHelper) respMerger {
 		if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
 			resp.Rows = make([]roachpb.KeyValue, h.rowsSize)
 		} else {
-			panic("unexpected")
+			resp.BatchResponses = make([][]byte, len(h.batchResponseSize))
+			for i, size := range h.batchResponseSize {
+				resp.BatchResponses[i] = make([]byte, 0, size)
+			}
 		}
 		m.scanResp = resp
 		return m
@@ -1117,7 +1281,10 @@ func makeRespMerger(serverSideRespIter *respIter, h respSizeHelper) respMerger {
 	if serverSideRespIter.scanFormat == kvpb.KEY_VALUES {
 		resp.Rows = make([]roachpb.KeyValue, h.rowsSize)
 	} else {
-		panic("unexpected")
+		resp.BatchResponses = make([][]byte, len(h.batchResponseSize))
+		for i, size := range h.batchResponseSize {
+			resp.BatchResponses[i] = make([]byte, 0, size)
+		}
 	}
 	m.reverseScanResp = resp
 	return m
@@ -1126,8 +1293,9 @@ func makeRespMerger(serverSideRespIter *respIter, h respSizeHelper) respMerger {
 // acceptKV takes a key and a value (presumably from the write buffer) and adds
 // it to the result set.
 func (m *respMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
-	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
-		if m.serverRespIter.scanReq != nil {
+	it := m.serverRespIter
+	if it.scanFormat == kvpb.KEY_VALUES {
+		if it.scanReq != nil {
 			m.scanResp.Rows[m.respRowsIdx] = roachpb.KeyValue{
 				Key:   key,
 				Value: *value,
@@ -1141,48 +1309,75 @@ func (m *respMerger) acceptKV(key roachpb.Key, value *roachpb.Value) {
 		m.respRowsIdx++
 		return
 	}
-	panic("unexpected")
+	brIndex := it.brIndex
+	if !it.valid() {
+		// If respIter is exhausted, all the remaining buffered KVs go into the
+		// very last slice.
+		brIndex--
+	}
+	if it.scanReq != nil {
+		toAppend := m.scanResp.BatchResponses[brIndex]
+		m.scanResp.BatchResponses[brIndex] = appendKV(toAppend, key, value)
+		return
+	}
+	toAppend := m.reverseScanResp.BatchResponses[brIndex]
+	m.reverseScanResp.BatchResponses[brIndex] = appendKV(toAppend, key, value)
 }
 
 // acceptServerResp accepts the current server response and adds it to the
 // result set.
-//
-// Note that the iterator is not moved forward after accepting the response; the
-// responsibility of doing so, if desired, is the caller's.
 func (m *respMerger) acceptServerResp() {
-	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
-		if m.serverRespIter.scanReq != nil {
-			m.scanResp.Rows[m.respRowsIdx] = m.serverRespIter.scanResp.Rows[m.serverRespIter.rowsIndex]
+	it := m.serverRespIter
+	if it.scanFormat == kvpb.KEY_VALUES {
+		if it.scanReq != nil {
+			m.scanResp.Rows[m.respRowsIdx] = it.scanResp.Rows[it.rowsIndex]
 		} else {
-			m.reverseScanResp.Rows[m.respRowsIdx] = m.serverRespIter.reverseScanResp.Rows[m.serverRespIter.rowsIndex]
+			m.reverseScanResp.Rows[m.respRowsIdx] = it.reverseScanResp.Rows[it.rowsIndex]
 		}
 		m.respRowsIdx++
 		return
 	}
-	panic("unexpected")
+	if it.scanReq != nil {
+		br := it.scanResp.BatchResponses[it.brIndex][it.brOffset:]
+		toAppend := br[:getFirstKVLength(br)]
+		m.scanResp.BatchResponses[it.brIndex] = append(m.scanResp.BatchResponses[it.brIndex], toAppend...)
+		return
+	}
+	br := it.reverseScanResp.BatchResponses[it.brIndex][it.brOffset:]
+	toAppend := br[:getFirstKVLength(br)]
+	m.reverseScanResp.BatchResponses[it.brIndex] = append(m.reverseScanResp.BatchResponses[it.brIndex], toAppend...)
 }
 
 // toScanResp returns the final merged ScanResponse.
 func (m *respMerger) toScanResp() *kvpb.ScanResponse {
 	assertTrue(m.serverRespIter.scanReq != nil, "weren't accumulating a scan resp")
-	// If we've done everything correctly, resIdx == len(response rows).
 	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		// If we've done everything correctly, resIdx == len(response rows).
 		assertTrue(m.respRowsIdx == len(m.scanResp.Rows), "did not fill in all rows; did we miscount?")
-		return m.scanResp
+	} else {
+		// If we've done everything correctly, then each BatchResponses[i] slice
+		// should've been filled up to capacity.
+		for _, br := range m.scanResp.BatchResponses {
+			assertTrue(len(br) == cap(br), "incorrect calculation of BatchResponses[i] slice capacity")
+		}
 	}
-	panic("unexpected")
+	return m.scanResp
 }
 
 // toReverseScanResp returns the final merged ScanResponse.
 func (m *respMerger) toReverseScanResp() *kvpb.ReverseScanResponse {
 	assertTrue(m.serverRespIter.scanReq == nil, "weren't accumulating a reverse scan resp")
-	// If we've done everything correctly, resIdx == len(response rows).
 	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
+		// If we've done everything correctly, resIdx == len(response rows).
 		assertTrue(m.respRowsIdx == len(m.reverseScanResp.Rows), "did not fill in all rows; did we miscount?")
-		return m.reverseScanResp
+	} else {
+		// If we've done everything correctly, then each BatchResponses[i] slice
+		// should've been filled up to capacity.
+		for _, br := range m.reverseScanResp.BatchResponses {
+			assertTrue(len(br) == cap(br), "incorrect calculation of BatchResponses[i] slice capacity")
+		}
 	}
-	panic("unexpected")
-
+	return m.reverseScanResp
 }
 
 // assertTrue panics with a message if the supplied condition isn't true.
