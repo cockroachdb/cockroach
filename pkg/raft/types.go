@@ -61,11 +61,52 @@ func (l LogMark) After(other LogMark) bool {
 	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
 }
 
-// LeadSlice describes a correct slice of a raft log.
+// LogSlice describes a correct slice of a raft log.
 //
-// Every log slice is considered in a context of a specific leader term. This
-// term does not necessarily match entryID.term of the entries, since a leader
-// log contains both entries from its own term, and some earlier terms.
+// A well-formed LogSlice conforms to raft safety properties. It provides the
+// following guarantees:
+//
+//  1. entries[i].Index == prev.index + 1 + i,
+//  2. prev.term <= entries[0].Term,
+//  3. entries[i-1].Term <= entries[i].Term
+//
+// Property (1) means the slice is contiguous. Properties (2) and (3) mean that
+// the terms of the entries in a log never regress.
+//
+// Users of this struct can assume the invariants hold true. Exception is the
+// "gateway" code that initially constructs LogSlice, such as when its content
+// is sourced from a message that was received via transport, or from Storage,
+// or in a test code that manually hard-codes this struct. In these cases, the
+// invariants should be validated using the valid() method.
+//
+// The LogSlice is immutable. The entries slice must not be mutated, but it can
+// be appended to in some cases, when the callee protects its underlying slice
+// by capping the returned entries slice with a full slice expression.
+type LogSlice struct {
+	// prev is the ID of the entry immediately preceding the entries.
+	prev entryID
+	// entries contains the consecutive entries representing this slice.
+	entries []pb.Entry
+}
+
+// valid returns nil iff the LogSlice is a well-formed log slice. See LogSlice
+// comment for details on what constitutes a valid raft log slice.
+func (s LogSlice) valid() error {
+	prev := s.prev
+	for i := range s.entries {
+		id := pbEntryID(&s.entries[i])
+		if id.term < prev.term || id.index != prev.index+1 {
+			return fmt.Errorf("entries %+v and %+v not consistent", prev, id)
+		}
+		prev = id
+	}
+	return nil
+}
+
+// LeadSlice describes a correct slice of a raft log, tied to a leader term.
+//
+// The leader term does not necessarily match entryID.term of the entries, since
+// a leader log contains both entries from its own term, and some earlier terms.
 //
 // Two slices with a matching LeadSlice.term are guaranteed to be consistent,
 // i.e. they never contain two different entries at the same index. The reverse
@@ -73,17 +114,10 @@ func (l LogMark) After(other LogMark) bool {
 // matching and mismatching entries. Specifically, logs at two different leader
 // terms share a common prefix, after which they *permanently* diverge.
 //
-// A well-formed LeadSlice conforms to raft safety properties. It provides the
-// following guarantees:
+// A well-formed LeadSlice conforms to LogSlice invariants (1)-(3), and gives an
+// additional guarantee that the leader log never has entries from higher terms:
 //
-//  1. entries[i].Index == prev.index + 1 + i,
-//  2. prev.term <= entries[0].Term,
-//  3. entries[i-1].Term <= entries[i].Term,
-//  4. entries[len-1].Term <= term.
-//
-// Property (1) means the slice is contiguous. Properties (2) and (3) mean that
-// the terms of the entries in a log never regress. Property (4) means that a
-// leader log at a specific term never has entries from higher terms.
+//  4. lastEntryID().Term <= term.
 //
 // Users of this struct can assume the invariants hold true. Exception is the
 // "gateway" code that initially constructs LeadSlice, such as when its content
@@ -95,29 +129,27 @@ func (l LogMark) After(other LogMark) bool {
 // be appended to in some cases, when the callee protects its underlying slice
 // by capping the returned entries slice with a full slice expression.
 type LeadSlice struct {
-	// term is the leader term containing the given entries in its log.
+	// term is the leader term containing the given slice in its log.
 	term uint64
-	// prev is the ID of the entry immediately preceding the entries.
-	prev entryID
-	// entries contains the consecutive entries representing this slice.
-	entries []pb.Entry
+	// LogSlice is the slice of the log.
+	LogSlice
 }
 
 // Entries returns the log entries covered by this slice. The returned slice
 // must not be mutated.
-func (s LeadSlice) Entries() []pb.Entry {
+func (s LogSlice) Entries() []pb.Entry {
 	return s.entries
 }
 
 // lastIndex returns the index of the last entry in this log slice. Returns
 // prev.index if there are no entries.
-func (s LeadSlice) lastIndex() uint64 {
+func (s LogSlice) lastIndex() uint64 {
 	return s.prev.index + uint64(len(s.entries))
 }
 
 // lastEntryID returns the ID of the last entry in this log slice, or prev if
 // there are no entries.
-func (s LeadSlice) lastEntryID() entryID {
+func (s LogSlice) lastEntryID() entryID {
 	if ln := len(s.entries); ln != 0 {
 		return pbEntryID(&s.entries[ln-1])
 	}
@@ -131,40 +163,34 @@ func (s LeadSlice) mark() LogMark {
 
 // termAt returns the term of the entry at the given index.
 // Requires: prev.index <= index <= lastIndex().
-func (s LeadSlice) termAt(index uint64) uint64 {
+func (s LogSlice) termAt(index uint64) uint64 {
 	if index == s.prev.index {
 		return s.prev.term
 	}
 	return s.entries[index-s.prev.index-1].Term
 }
 
-// forward returns a LeadSlice with prev forwarded to the given index.
+// forward returns a LogSlice with prev forwarded to the given index.
 // Requires: prev.index <= index <= lastIndex().
-func (s LeadSlice) forward(index uint64) LeadSlice {
-	return LeadSlice{
-		term:    s.term,
+func (s LogSlice) forward(index uint64) LogSlice {
+	return LogSlice{
 		prev:    entryID{term: s.termAt(index), index: index},
 		entries: s.entries[index-s.prev.index:],
 	}
 }
 
-// sub returns the entries of this LeadSlice with indices in (after, to].
-func (s LeadSlice) sub(after, to uint64) []pb.Entry {
+// sub returns the entries of this slice at indices in (after, to].
+// Requires: prev.index <= after <= to <= lastIndex().
+func (s LogSlice) sub(after, to uint64) []pb.Entry {
 	return s.entries[after-s.prev.index : to-s.prev.index]
 }
 
-// valid returns nil iff the LeadSlice is a well-formed log slice. See LeadSlice
-// comment for details on what constitutes a valid raft log slice.
+// valid returns nil iff the LeadSlice is a well-formed leader log slice. See
+// LeadSlice comment for details on what constitutes a valid slice.
 func (s LeadSlice) valid() error {
-	prev := s.prev
-	for i := range s.entries {
-		id := pbEntryID(&s.entries[i])
-		if id.term < prev.term || id.index != prev.index+1 {
-			return fmt.Errorf("leader term %d: entries %+v and %+v not consistent", s.term, prev, id)
-		}
-		prev = id
-	}
-	if s.term < prev.term {
+	if err := s.LogSlice.valid(); err != nil {
+		return err
+	} else if prev := s.lastEntryID(); s.term < prev.term {
 		return fmt.Errorf("leader term %d: entry %+v has a newer term", s.term, prev)
 	}
 	return nil

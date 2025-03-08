@@ -1065,8 +1065,7 @@ func TestCandidateConcede(t *testing.T) {
 	assert.Equal(t, pb.StateFollower, a.state)
 	assert.Equal(t, uint64(1), a.Term)
 
-	wantLog := ltoa(newLog(&MemoryStorage{ls: LeadSlice{
-		term:    1,
+	wantLog := ltoa(newLog(&MemoryStorage{ls: LogSlice{
 		entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 	}}, nil))
 	for i, p := range tt.peers {
@@ -1134,10 +1133,7 @@ func testOldMessages(t *testing.T, storeLivenessEnabled bool) {
 
 	ents := index(1).terms(1, 2, 3, 3)
 	ents[3].Data = []byte("somedata")
-	ilog := newLog(&MemoryStorage{ls: LeadSlice{
-		term:    3,
-		entries: ents,
-	}}, nil)
+	ilog := newLog(&MemoryStorage{ls: LogSlice{entries: ents}}, nil)
 	base := ltoa(ilog)
 	for i, p := range tt.peers {
 		if sm, ok := p.(*raft); ok {
@@ -1186,8 +1182,7 @@ func TestProposal(t *testing.T) {
 
 		wantLog := newLog(NewMemoryStorage(), raftlogger.RaftLogger)
 		if tt.success {
-			wantLog = newLog(&MemoryStorage{ls: LeadSlice{
-				term:    2,
+			wantLog = newLog(&MemoryStorage{ls: LogSlice{
 				entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 			}}, nil)
 		}
@@ -1218,8 +1213,7 @@ func TestProposalByProxy(t *testing.T) {
 		// propose via follower
 		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
-		wantLog := newLog(&MemoryStorage{ls: LeadSlice{
-			term:    1,
+		wantLog := newLog(&MemoryStorage{ls: LogSlice{
 			entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 		}}, nil)
 		base := ltoa(wantLog)
@@ -1649,8 +1643,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 			sm.step = stepLeader
 		}
 		sm.Vote = tt.voteFor
-		sm.raftLog = newLog(&MemoryStorage{ls: LeadSlice{
-			term:    2,
+		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
 			entries: index(1).terms(2, 2),
 		}}, nil)
 
@@ -2754,8 +2747,7 @@ func TestRecvMsgBeat(t *testing.T) {
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
-		sm.raftLog = newLog(&MemoryStorage{ls: LeadSlice{
-			term:    1,
+		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
 			entries: index(1).terms(1, 1),
 		}}, nil)
 		sm.Term = 1

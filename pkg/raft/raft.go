@@ -738,9 +738,11 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	}
 
 	r.send(r.prepareMsgApp(to, pr, LeadSlice{
-		term:    r.Term,
-		prev:    entryID{index: prevIndex, term: prevTerm},
-		entries: entries,
+		term: r.Term,
+		LogSlice: LogSlice{
+			prev:    entryID{index: prevIndex, term: prevTerm},
+			entries: entries,
+		},
 	}))
 	return true
 }
@@ -762,8 +764,8 @@ func (r *raft) sendPing(to pb.PeerID) bool {
 	}
 	// NB: this sets MsgAppProbesPaused to true again.
 	r.send(r.prepareMsgApp(to, pr, LeadSlice{
-		term: r.Term,
-		prev: entryID{index: prevIndex, term: prevTerm},
+		term:     r.Term,
+		LogSlice: LogSlice{prev: entryID{index: prevIndex, term: prevTerm}},
 	}))
 	return true
 }
@@ -1154,7 +1156,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	app := LeadSlice{term: r.Term, prev: last, entries: es}
+	app := LeadSlice{term: r.Term, LogSlice: LogSlice{prev: last, entries: es}}
 	if err := app.valid(); err != nil {
 		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
 	} else if !r.raftLog.append(app) {
@@ -2371,9 +2373,11 @@ func (r *raft) checkQuorumActive() {
 func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
 	// TODO(pav-kv): consider also validating the LeadSlice here.
 	return LeadSlice{
-		term:    m.Term,
-		prev:    entryID{term: m.LogTerm, index: m.Index},
-		entries: m.Entries,
+		term: m.Term,
+		LogSlice: LogSlice{
+			prev:    entryID{term: m.LogTerm, index: m.Index},
+			entries: m.Entries,
+		},
 	}
 }
 

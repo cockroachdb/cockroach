@@ -162,7 +162,7 @@ func (l *raftLog) maybeAppend(a LeadSlice) bool {
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	a = a.forward(match)
+	a.LogSlice = a.forward(match)
 
 	if len(a.entries) == 0 {
 		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
@@ -568,12 +568,15 @@ func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error)
 		return LeadSlice{}, err
 	}
 	return LeadSlice{
-		term:    l.unstable.term,
-		prev:    entryID{term: prevTerm, index: lo},
-		entries: ents,
+		term: l.unstable.term,
+		LogSlice: LogSlice{
+			prev:    entryID{term: prevTerm, index: lo},
+			entries: ents,
+		},
 	}, nil
 }
 
+// TODO(pav-kv): return LogSlice.
 func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err

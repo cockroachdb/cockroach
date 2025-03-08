@@ -955,9 +955,11 @@ func (id entryID) append(terms ...uint64) LeadSlice {
 		term = terms[ln-1]
 	}
 	ls := LeadSlice{
-		term:    term,
-		prev:    id,
-		entries: index(id.index + 1).terms(terms...),
+		term: term,
+		LogSlice: LogSlice{
+			prev:    id,
+			entries: index(id.index + 1).terms(terms...),
+		},
 	}
 	if err := ls.valid(); err != nil {
 		panic(err)

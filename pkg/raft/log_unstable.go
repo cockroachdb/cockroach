@@ -119,7 +119,7 @@ func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	// leader Term) gives us more information about the log, and then allows
 	// bumping its commit index sooner than when the next MsgApp arrives.
 	return unstable{
-		LeadSlice:       LeadSlice{term: last.term, prev: last},
+		LeadSlice:       LeadSlice{term: last.term, LogSlice: LogSlice{prev: last}},
 		entryInProgress: last.index,
 		logger:          logger,
 	}
@@ -190,7 +190,7 @@ func (u *unstable) stableTo(mark LogMark) {
 		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
 			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
-	u.LeadSlice = u.forward(mark.Index)
+	u.LogSlice = u.forward(mark.Index)
 	// TODO(pav-kv): why can mark.index overtake u.entryInProgress? Probably bugs
 	// in tests using the log writes incorrectly, e.g. TestLeaderStartReplication
 	// takes nextUnstableEnts() without acceptInProgress().
@@ -246,7 +246,7 @@ func (u *unstable) restore(s snapshot) bool {
 	term := max(u.term, s.term)
 
 	u.snapshot = &s.snap
-	u.LeadSlice = LeadSlice{term: term, prev: s.lastEntryID()}
+	u.LeadSlice = LeadSlice{term: term, LogSlice: LogSlice{prev: s.lastEntryID()}}
 	u.snapshotInProgress = false
 	u.entryInProgress = u.prev.index
 	return true
