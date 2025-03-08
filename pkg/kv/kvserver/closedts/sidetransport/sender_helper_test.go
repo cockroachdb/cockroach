@@ -28,9 +28,11 @@ import (
 
 // mockReplica is a mock implementation of the Replica interface.
 type mockReplica struct {
-	storeID roachpb.StoreID
-	rangeID roachpb.RangeID
-	mu      struct {
+	locality        roachpb.Locality
+	getNodeLocality func(nodeID roachpb.NodeID) roachpb.Locality
+	storeID         roachpb.StoreID
+	rangeID         roachpb.RangeID
+	mu              struct {
 		syncutil.Mutex
 		desc roachpb.RangeDescriptor
 	}
@@ -41,12 +43,34 @@ type mockReplica struct {
 	policy         roachpb.RangeClosedTimestampPolicy
 }
 
+func (m *mockReplica) GetLocalityProximity() roachpb.LocalityComparisonType {
+	result := roachpb.LocalityComparisonType_UNDEFINED
+	for _, peer := range m.mu.desc.InternalReplicas {
+		peerLocality := m.getNodeLocality(peer.NodeID)
+		distance, _, _ := m.locality.CompareWithLocality(peerLocality)
+		if distance == roachpb.LocalityComparisonType_UNDEFINED {
+			continue
+		}
+		// Return immediately if we find cross-region, since it has the highest precedence.
+		if distance == roachpb.LocalityComparisonType_CROSS_REGION {
+			return distance
+		}
+		// Update result if we find a higher precedence (lower value), but skip UNDEFINED.
+		if result == roachpb.LocalityComparisonType_UNDEFINED || distance < result {
+			result = distance
+		}
+	}
+	return result
+}
+
 var _ Replica = &mockReplica{}
 
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
 func (m *mockReplica) BumpSideTransportClosed(
-	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	_ context.Context,
+	_ hlc.ClockTimestamp,
+	targetByPolicy map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp,
 ) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -54,12 +78,14 @@ func (m *mockReplica) BumpSideTransportClosed(
 	if !m.canBump {
 		reason = m.cantBumpReason
 	}
+	_, policyLocality := GetTargetAndPolicyLocality(
+		m.policy, m.GetLocalityProximity(), targetByPolicy)
 	return BumpSideTransportClosedResult{
 		OK:         m.canBump,
 		FailReason: reason,
 		Desc:       &m.mu.desc,
 		LAI:        m.lai,
-		Policy:     m.policy,
+		Policy:     policyLocality,
 	}
 }
 
@@ -138,6 +164,27 @@ func newMockSender(
 	return s, stopper
 }
 
+var getNodeLocality = func(nodeID roachpb.NodeID) roachpb.Locality { return nodeDescs[nodeID] }
+
+func newMockReplicaWithLocality(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
+	var desc roachpb.RangeDescriptor
+	desc.RangeID = id
+	for _, nodeID := range nodes {
+		desc.AddReplica(nodeID, roachpb.StoreID(nodeID), roachpb.VOTER_FULL)
+	}
+	r := &mockReplica{
+		locality:        sameZoneLocality,
+		getNodeLocality: getNodeLocality,
+		storeID:         1,
+		rangeID:         id,
+		canBump:         true,
+		lai:             5,
+		policy:          roachpb.LEAD_FOR_GLOBAL_READS,
+	}
+	r.mu.desc = desc
+	return r
+}
+
 func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 	var desc roachpb.RangeDescriptor
 	desc.RangeID = id
@@ -145,6 +192,10 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 		desc.AddReplica(nodeID, roachpb.StoreID(nodeID), roachpb.VOTER_FULL)
 	}
 	r := &mockReplica{
+		locality: roachpb.Locality{},
+		getNodeLocality: func(nodeID roachpb.NodeID) roachpb.Locality {
+			return roachpb.Locality{}
+		},
 		storeID: 1,
 		rangeID: id,
 		canBump: true,
@@ -162,6 +213,10 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 		desc.AddReplica(r.NodeID, r.StoreID, roachpb.VOTER_FULL)
 	}
 	r := &mockReplica{
+		locality: roachpb.Locality{},
+		getNodeLocality: func(nodeID roachpb.NodeID) roachpb.Locality {
+			return roachpb.Locality{}
+		},
 		storeID: 1,
 		rangeID: id,
 		canBump: true,
@@ -173,20 +228,29 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
+	targetForPolicy := func(pol ctpb.RangeClosedTimestampByPolicyLocality) hlc.Timestamp {
 		return closedts.TargetForPolicy(
 			now,
 			s.clock.MaxOffset(),
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
-			closedts.DefaultMaxNetworkRTT,
-			pol,
+			s.getNetworkRTTByPolicyLocality(pol),
+			closedTimestampPolicy(pol),
 		)
 	}
+	if s.latencyTracker.Enabled() {
+		return []ctpb.Update_GroupUpdate{
+			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(ctpb.LAG_BY_CLUSTER_SETTING)},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY)},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION)},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE)},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE)},
+		}
+	}
 	return []ctpb.Update_GroupUpdate{
-		{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
+		{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(ctpb.LAG_BY_CLUSTER_SETTING)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY)},
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +18,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// getLocalityProximityRLocked returns the locality comparison type between this
+// replica and its peers. The comparison type indicates the relative locality
+// distance between replicas, with the following hierarchy (most distant to
+// closest):
+// 1. CROSS_REGION(1): replicas are in different regions
+// 2. SAME_REGION_CROSS_ZONE(2): replicas are in the same region but different zones
+// 3. SAME_REGION_SAME_ZONE(3): replicas are in the same region and zone
+// 4. UNDEFINED(0): locality information is not available
+// The function returns the most distant locality relationship found among all peers.
+func (r *Replica) getLocalityProximityRLocked() roachpb.LocalityComparisonType {
+	desc := r.descRLocked()
+	result := roachpb.LocalityComparisonType_UNDEFINED
+	sourceLocality := r.store.GetStoreConfig().StorePool.GetNodeLocality(r.NodeID())
+
+	for _, peer := range desc.InternalReplicas {
+		peerLocality := r.store.GetStoreConfig().StorePool.GetNodeLocality(peer.NodeID)
+		distance, _, _ := sourceLocality.CompareWithLocality(peerLocality)
+		if distance == roachpb.LocalityComparisonType_UNDEFINED {
+			continue
+		}
+		// Return immediately if we find cross-region, since it has the highest precedence.
+		if distance == roachpb.LocalityComparisonType_CROSS_REGION {
+			return distance
+		}
+		// Update result if we find a higher precedence (lower value), but skip UNDEFINED.
+		if result == roachpb.LocalityComparisonType_UNDEFINED || distance < result {
+			result = distance
+		}
+	}
+
+	r.mu.cachedLocalityProximity = result
+	return result
+}
+
+// GetLocalityProximity returns the locality comparison type between this
+// replica and its peers.
+func (r *Replica) GetLocalityProximity() roachpb.LocalityComparisonType {
+	r.mu.AssertRHeld()
+	return r.getLocalityProximityRLocked()
+}
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
@@ -32,7 +74,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicy map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -50,10 +92,11 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	target, policyLocality := sidetransport.GetTargetAndPolicyLocality(
+		r.closedTimestampPolicyRLocked(), r.GetLocalityProximity(), targetByPolicy)
+
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
-	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
+	// We need to own the lease but note that stass (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
 	if !valid || !st.OwnedBy(r.StoreID()) {
@@ -104,7 +147,7 @@ func (r *Replica) BumpSideTransportClosed(
 	r.sideTransportClosedTimestamp.forward(ctx, target, lai, knownApplied)
 	res.OK = true
 	res.LAI = lai
-	res.Policy = policy
+	res.Policy = policyLocality
 	return res
 }
 
@@ -118,7 +161,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedts.DefaultMaxNetworkRTT,
+		r.store.latencyTracker.GetLatencyByLocalityProximity(r.mu.cachedLocalityProximity),
 		r.closedTimestampPolicyRLocked(),
 	)
 }
