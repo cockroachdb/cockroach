@@ -116,10 +116,10 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	logging.allLoggers.mu.Unlock()
 
 	sc.previous.stderrSinkInfoTemplate = logging.stderrSinkInfoTemplate
-	logging.rmu.RLock()
+	logging.rmu.Lock()
 	sc.previous.stderrSinkInfo = logging.rmu.currentStderrSinkInfo
 	sc.previous.channels = logging.rmu.channels
-	logging.rmu.RUnlock()
+	logging.rmu.Unlock()
 	sc.previous.debugLog = debugLog
 	sc.previous.testingFd2CaptureLogger = logging.testingFd2CaptureLogger
 	if cl := logging.testingFd2CaptureLogger; cl != nil {

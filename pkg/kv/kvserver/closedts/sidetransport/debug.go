@@ -27,12 +27,12 @@ func (s *Receiver) HTML() string {
 	}
 
 	header("Incoming streams")
-	s.mu.RLock()
+	s.mu.Lock()
 	conns := make([]*incomingStream, 0, len(s.mu.conns))
 	for _, c := range s.mu.conns {
 		conns = append(conns, c)
 	}
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	// Sort by node id.
 	slices.SortFunc(conns, func(a, b *incomingStream) int {
 		return cmp.Compare(a.nodeID, b.nodeID)

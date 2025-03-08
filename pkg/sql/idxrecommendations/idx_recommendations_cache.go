@@ -34,7 +34,7 @@ type IndexRecCache struct {
 	st *cluster.Settings
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// idxRecommendations stores index recommendations per indexRecKey.
 		idxRecommendations map[indexRecKey]indexRecInfo
@@ -172,8 +172,8 @@ func (idxRec *IndexRecCache) statementCanHaveRecommendation(
 func (idxRec *IndexRecCache) getIndexRecommendationAndInfo(
 	key indexRecKey,
 ) (indexRecInfo, bool, int, time.Time) {
-	idxRec.mu.RLock()
-	defer idxRec.mu.RUnlock()
+	idxRec.mu.Lock()
+	defer idxRec.mu.Unlock()
 	recInfo, found := idxRec.mu.idxRecommendations[key]
 	return recInfo, found, len(idxRec.mu.idxRecommendations), idxRec.mu.lastCleanupTs
 }

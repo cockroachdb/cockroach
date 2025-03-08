@@ -316,8 +316,8 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		return nil, nil, false
 	}
 
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	// Determine overlapping types.
 	available, ok := getAvailablePairedColsForJoinPreds(s, leftRefs, rightRefs)
 	if !ok {
@@ -358,8 +358,8 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one.
 	rightTableName, cols, ok := func() (*tree.TableIndexName, [][2]colRef, bool) {
-		s.lock.RLock()
-		defer s.lock.RUnlock()
+		s.lock.Lock()
+		defer s.lock.Unlock()
 		if len(s.tables) == 0 {
 			return nil, nil, false
 		}

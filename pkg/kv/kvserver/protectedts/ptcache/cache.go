@@ -33,7 +33,7 @@ type Cache struct {
 	settings *cluster.Settings
 	sf       *singleflight.Group
 	mu       struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		started bool
 
@@ -75,9 +75,9 @@ var _ protectedts.Cache = (*Cache)(nil)
 func (c *Cache) Iterate(
 	_ context.Context, from, to roachpb.Key, it protectedts.Iterator,
 ) (asOf hlc.Timestamp) {
-	c.mu.RLock()
+	c.mu.Lock()
 	state, lastUpdate := c.mu.state, c.mu.lastUpdate
-	c.mu.RUnlock()
+	c.mu.Unlock()
 
 	sp := roachpb.Span{
 		Key:    from,
@@ -97,8 +97,8 @@ func (c *Cache) Iterate(
 
 // QueryRecord is part of the protectedts.Cache interface.
 func (c *Cache) QueryRecord(_ context.Context, id uuid.UUID) (exists bool, asOf hlc.Timestamp) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	_, exists = c.mu.recordsByID[id]
 	return exists, c.mu.lastUpdate
@@ -211,8 +211,8 @@ func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 }
 
 func (c *Cache) getMetadata() ptpb.Metadata {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.mu.state.Metadata
 }
 
@@ -270,8 +270,8 @@ func (c *Cache) doSingleFlightUpdate(ctx context.Context) (interface{}, error) {
 
 // upToDate returns true if the lastUpdate for the cache is at least asOf.
 func (c *Cache) upToDate(asOf hlc.Timestamp) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return asOf.LessEq(c.mu.lastUpdate)
 }
 

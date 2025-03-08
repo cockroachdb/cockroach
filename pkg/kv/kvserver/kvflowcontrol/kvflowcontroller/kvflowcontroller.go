@@ -223,14 +223,14 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 	// being concurrently added to the map.
 	var streams []kvflowinspectpb.Stream
 	c.mu.buckets.Range(func(stream kvflowcontrol.Stream, b *bucket) bool {
-		b.mu.RLock()
+		b.mu.Lock()
 		streams = append(streams, kvflowinspectpb.Stream{
 			TenantID:                   stream.TenantID,
 			StoreID:                    stream.StoreID,
 			AvailableEvalRegularTokens: int64(b.tokensLocked(regular)),
 			AvailableEvalElasticTokens: int64(b.tokensLocked(elastic)),
 		})
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		return true
 	})
 	slices.SortFunc(streams, func(a, b kvflowinspectpb.Stream) int { // for determinism
@@ -276,10 +276,10 @@ func (c *Controller) adjustTokens(
 	}
 
 	if log.V(2) {
-		b.mu.RLock()
+		b.mu.Lock()
 		log.Infof(ctx, "adjusted flow tokens (pri=%s stream=%s delta=%s): regular=%s elastic=%s",
 			pri, stream, delta, b.tokensLocked(regular), b.tokensLocked(elastic))
-		b.mu.RUnlock()
+		b.mu.Unlock()
 	}
 }
 
@@ -447,7 +447,7 @@ func (bwc *bucketPerWorkClass) getAndResetStats(now time.Time) deltaStats {
 // returning and waiting for flow tokens.
 type bucket struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		buckets [admissionpb.NumWorkClasses]bucketPerWorkClass
 	}
 }
@@ -462,8 +462,8 @@ func newBucket(tokensPerWorkClass tokensPerWorkClass, now time.Time) *bucket {
 }
 
 func (b *bucket) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.tokensLocked(wc)
 }
 
@@ -488,9 +488,9 @@ func (b *bucket) wait(
 ) (state waitEndState, waited bool) {
 	waitedWithWaitSuccess := false
 	for {
-		b.mu.RLock()
+		b.mu.Lock()
 		tokens := b.tokensLocked(wc)
-		b.mu.RUnlock()
+		b.mu.Unlock()
 		if tokens > 0 {
 			// No need to wait.
 			if waitedWithWaitSuccess {
@@ -604,10 +604,10 @@ func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWo
 	ret := tokensPerWorkClass{}
 	b := c.getBucket(stream)
 
-	b.mu.RLock()
+	b.mu.Lock()
 	ret.regular = b.tokensLocked(regular)
 	ret.elastic = b.tokensLocked(elastic)
-	b.mu.RUnlock()
+	b.mu.Unlock()
 	return ret
 }
 

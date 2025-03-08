@@ -19,8 +19,8 @@ var _ raftTransportForFlowControl = &RaftTransport{}
 
 // isConnectedTo implements the raftTransportForFlowControl interface.
 func (r *RaftTransport) isConnectedTo(storeID roachpb.StoreID) bool {
-	r.kvflowControl.mu.RLock()
-	defer r.kvflowControl.mu.RUnlock()
+	r.kvflowControl.mu.Lock()
+	defer r.kvflowControl.mu.Unlock()
 	return r.kvflowControl.mu.connectionTracker.isStoreConnected(storeID)
 }
 

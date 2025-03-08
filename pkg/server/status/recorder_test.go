@@ -716,7 +716,7 @@ func TestMetricsRecorder(t *testing.T) {
 
 	// Make sure that all methods other than GenerateNodeStatus can operate in
 	// parallel with each other (i.e. even if recorder.mu is RLocked).
-	recorder.mu.RLock()
+	recorder.mu.Lock()
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
@@ -730,7 +730,7 @@ func TestMetricsRecorder(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	recorder.mu.RUnlock()
+	recorder.mu.Unlock()
 }
 
 func BenchmarkExtractValueAllocs(b *testing.B) {

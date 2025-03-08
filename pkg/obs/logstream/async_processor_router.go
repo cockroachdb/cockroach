@@ -55,7 +55,7 @@ type asyncProcessorRouter struct {
 	}
 
 	rwmu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// routes maps each log.EventType to the Processors registered for that type.
 		routes map[log.EventType][]Processor
 	}
@@ -198,8 +198,8 @@ func (bs *asyncProcessorRouter) runFlusher(ctx context.Context, stopC <-chan str
 }
 
 func (bs *asyncProcessorRouter) routeAndProcess(ctx context.Context, events *list.List) {
-	bs.rwmu.RLock()
-	defer bs.rwmu.RUnlock()
+	bs.rwmu.Lock()
+	defer bs.rwmu.Unlock()
 	for events.Len() > 0 {
 		e := events.Front()
 		events.Remove(e)

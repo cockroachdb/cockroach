@@ -97,7 +97,7 @@ type eventStore struct {
 	resolver resolverQueue
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// store is the main in-memory FIFO contention event store.
 		store *cache.UnorderedCache
@@ -260,12 +260,12 @@ func (s *eventStore) ForEachEvent(
 	// the read lock. This is to minimize the time we need to hold the lock. This
 	// is important since the op() callback can take arbitrary long to execute,
 	// we should not be holding the lock while op() is executing.
-	s.mu.RLock()
+	s.mu.Lock()
 	keys := make([]uint64, 0, s.mu.store.Len())
 	s.mu.store.Do(func(entry *cache.Entry) {
 		keys = append(keys, entry.Key.(uint64))
 	})
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	for i := range keys {
 		event, ok := s.getEventByEventHash(keys[i])
@@ -284,8 +284,8 @@ func (s *eventStore) ForEachEvent(
 func (s *eventStore) getEventByEventHash(
 	hash uint64,
 ) (_ *contentionpb.ExtendedContentionEvent, ok bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var contentionEvent contentionpb.ExtendedContentionEvent
 	var event interface{}
 	if event, ok = s.mu.store.Get(hash); ok {

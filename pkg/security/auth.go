@@ -23,12 +23,12 @@ import (
 )
 
 var certPrincipalMap struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	m map[string]string
 }
 
 type userCertDistinguishedNameMu struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	dn *ldap.DN
 }
 
@@ -180,9 +180,9 @@ func SetCertPrincipalMap(mappings []string) error {
 }
 
 func transformPrincipal(commonName string) string {
-	certPrincipalMap.RLock()
+	certPrincipalMap.Lock()
 	mappedName, ok := certPrincipalMap.m[commonName]
-	certPrincipalMap.RUnlock()
+	certPrincipalMap.Unlock()
 	if !ok {
 		return commonName
 	}

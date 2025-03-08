@@ -6936,7 +6936,7 @@ SELECT
 				rangeID := roachpb.RangeID(*args[0].(*tree.DInt))
 				lock := *args[1].(*tree.DBool)
 
-				var replicaMu *syncutil.RWMutex
+				var replicaMu *syncutil.Mutex
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					if replicaMu == nil {
 						replicaMu = store.GetReplicaMutexForTesting(rangeID)

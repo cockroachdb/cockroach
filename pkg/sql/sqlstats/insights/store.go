@@ -20,7 +20,7 @@ type LockingStore struct {
 	stmtCount atomic.Int64
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		insights *cache.UnorderedCache
 	}
 }
@@ -35,8 +35,8 @@ func (s *LockingStore) addInsight(insight *Insight) {
 func (s *LockingStore) IterateInsights(
 	ctx context.Context, visitor func(context.Context, *Insight),
 ) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mu.insights.Do(func(e *cache.Entry) {
 		visitor(ctx, e.Value.(*Insight))
 	})

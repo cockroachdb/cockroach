@@ -34,7 +34,7 @@ type TxnFingerprintIDCache struct {
 	st *cluster.Settings
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		acc   *mon.BoundAccount
 		cache *cache.UnorderedCache
 	}
@@ -123,8 +123,8 @@ func (b *TxnFingerprintIDCache) GetAllTxnFingerprintIDs() []appstatspb.Transacti
 }
 
 func (b *TxnFingerprintIDCache) size() int {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	return b.mu.cache.Len()
 }

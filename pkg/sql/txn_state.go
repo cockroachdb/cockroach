@@ -46,7 +46,7 @@ type txnState struct {
 	// mu.txn. Writes to mu.txn do require a write lock to guarantee safety with
 	// reads by other goroutines.
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		txn *kv.Txn
 
@@ -356,8 +356,8 @@ func (ts *txnState) setHistoricalTimestamp(
 
 // getReadTimestamp returns the transaction's current read timestamp.
 func (ts *txnState) getReadTimestamp() hlc.Timestamp {
-	ts.mu.RLock()
-	defer ts.mu.RUnlock()
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	return ts.mu.txn.ReadTimestamp()
 }
 

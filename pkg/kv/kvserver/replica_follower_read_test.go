@@ -92,8 +92,8 @@ func TestCanServeFollowerRead(t *testing.T) {
 			ba.Header = kvpb.Header{Txn: &txn}
 			ba.Add(&gArgs)
 			r := tc.repl
-			r.mu.RLock()
-			defer r.mu.RUnlock()
+			r.mu.Lock()
+			defer r.mu.Unlock()
 			require.Equal(t, test.expCanServeFollowerRead, r.canServeFollowerReadRLocked(ctx, ba))
 		})
 	}

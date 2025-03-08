@@ -117,14 +117,14 @@ func TestLockfreeTrackerRandomStress(t *testing.T) {
 	// This mutex is protecting the Tracker. Producers will lock it in read mode
 	// and consumers in write mode. This matches how the ProposalBuffer
 	// synchronizes access to the Tracker.
-	var mu syncutil.RWMutex
+	var mu syncutil.Mutex
 	var rs requestsCollection
 
 	g := ctxgroup.WithContext(ctx)
 
 	for i := 0; i < numProducers; i++ {
 		p := makeRequestProducer(
-			stop, mu.RLocker(),
+			stop, &mu,
 			maxReqDurationMillis, maxReqTrailingMillis, maxConcurrentRequestsPerProducer,
 			tr, &rs)
 		g.GoCtx(func(ctx context.Context) error {
@@ -491,7 +491,7 @@ func benchmarkTracker(ctx context.Context, b *testing.B, t Tracker) {
 	// is fully thread-safe or not, we need locking to synchronize
 	// access to toks above. Insertions can be done under a read lock,
 	// consumption is done under a write lock.
-	var mu syncutil.RWMutex
+	var mu syncutil.Mutex
 
 	// Run a consumer goroutine that periodically consumes everything.
 	stop := make(chan struct{})
@@ -528,10 +528,10 @@ func benchmarkTracker(ctx context.Context, b *testing.B, t Tracker) {
 		i := hlc.Timestamp{}
 		for b.Next() {
 			i.WallTime++
-			mu.RLock()
+			mu.Lock()
 			tok := t.Track(ctx, i)
 			toks[myid] = append(toks[myid], tok)
-			mu.RUnlock()
+			mu.Unlock()
 		}
 	})
 	close(stop)

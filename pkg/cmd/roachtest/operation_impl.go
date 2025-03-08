@@ -32,7 +32,7 @@ type operationImpl struct {
 	l *logger.Logger
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		done bool
 
 		// cancel, if set, is called from the o.Fatal() family of functions when the
@@ -139,8 +139,8 @@ func (o *operationImpl) addFailure(depth int, format string, args ...interface{}
 }
 
 func (o *operationImpl) Failed() bool {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
+	o.mu.Lock()
+	defer o.mu.Unlock()
 
 	return len(o.mu.failures) > 0
 }

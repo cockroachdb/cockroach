@@ -35,7 +35,7 @@ import (
 // mixed-version cluster, which presently are notably under-tested.
 type SystemDatabaseCache struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		m map[roachpb.Version]*nstree.MutableCatalog
 	}
 }
@@ -100,8 +100,8 @@ func (c *SystemDatabaseCache) lookupDescriptorID(
 	if c == nil {
 		return descpb.InvalidID, hlc.Timestamp{}
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if cached := c.mu.m[version.Version]; cached != nil {
 		if e := cached.LookupNamespaceEntry(key); e != nil {
 			return e.GetID(), e.GetMVCCTimestamp()
@@ -164,8 +164,8 @@ func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	}
 	// Return the difference of the set of system names in the input with the set
 	// of names presently in the cache.
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	cached := c.mu.m[version.Version]
 	if cached == nil {
 		return systemNames

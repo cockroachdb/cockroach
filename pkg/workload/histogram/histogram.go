@@ -311,7 +311,7 @@ func (w *Registry) swapAll() map[string]*hdrhistogram.Histogram {
 type Histograms struct {
 	reg *Registry
 	mu  struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		hists map[string]*NamedHistogram
 	}
 }
@@ -321,8 +321,8 @@ type Histograms struct {
 func (w *Histograms) Get(name string) *NamedHistogram {
 	// Fast path for existing histograms, which is the common case by far.
 	hist, ok := func() (*NamedHistogram, bool) {
-		w.mu.RLock()
-		defer w.mu.RUnlock()
+		w.mu.Lock()
+		defer w.mu.Unlock()
 		h, ok := w.mu.hists[name]
 		return h, ok
 	}()

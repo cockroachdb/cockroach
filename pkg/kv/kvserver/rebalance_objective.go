@@ -166,7 +166,7 @@ type RebalanceObjectiveManager struct {
 	storeDescProvider gossipStoreDescriptorProvider
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		obj LBRebalancingObjective
 		// onChange callback registered will execute synchronously on the
 		// cluster settings thread that triggers an objective check. This is
@@ -225,8 +225,8 @@ func newRebalanceObjectiveManager(
 
 // Objective returns the current rebalance objective.
 func (rom *RebalanceObjectiveManager) Objective() LBRebalancingObjective {
-	rom.mu.RLock()
-	defer rom.mu.RUnlock()
+	rom.mu.Lock()
+	defer rom.mu.Unlock()
 
 	return rom.mu.obj
 }

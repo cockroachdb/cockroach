@@ -53,7 +53,7 @@ type supporterStateHandler struct {
 	// from a single goroutine; these require Locking mu when writing the updates.
 	// These updates also read from supporterState but there is no need to RLock
 	// mu during these reads (since there are no concurrent writes).
-	mu syncutil.RWMutex
+	mu syncutil.Mutex
 	// update is a reference to an in-progress change in supporterStateForUpdate.
 	// A non-nil update implies there is no ongoing update; i.e. the referenced
 	// requesterStateForUpdate is available to be checked out.
@@ -99,23 +99,23 @@ type supporterStateForUpdate struct {
 // getSupportFor returns the SupportState corresponding to the given store in
 // supporterState.supportFor.
 func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.SupportState {
-	ssh.mu.RLock()
-	defer ssh.mu.RUnlock()
+	ssh.mu.Lock()
+	defer ssh.mu.Unlock()
 	return ssh.supporterState.supportFor[id]
 }
 
 // getNumSupportFor returns the size of the supporterState.supportFor map.
 func (ssh *supporterStateHandler) getNumSupportFor() int {
-	ssh.mu.RLock()
-	defer ssh.mu.RUnlock()
+	ssh.mu.Lock()
+	defer ssh.mu.Unlock()
 	return len(ssh.supporterState.supportFor)
 }
 
 // exportAllSupportFor exports a copy of all SupportStates from the
 // supporterState.supportFor map.
 func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.SupportState {
-	ssh.mu.RLock()
-	defer ssh.mu.RUnlock()
+	ssh.mu.Lock()
+	defer ssh.mu.Unlock()
 	supportStates := make([]slpb.SupportState, len(ssh.supporterState.supportFor))
 	for _, ss := range ssh.supporterState.supportFor {
 		supportStates = append(supportStates, ss)

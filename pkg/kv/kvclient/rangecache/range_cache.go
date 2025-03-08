@@ -140,7 +140,7 @@ type RangeCache struct {
 	// filled while servicing read and write requests to the key value
 	// store.
 	rangeCache struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		cache *cache.OrderedCache
 	}
 	// lookupRequests stores all inflight requests retrieving range
@@ -247,8 +247,8 @@ func NewRangeCache(
 }
 
 func (rc *RangeCache) String() string {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
 	return rc.stringLocked()
 }
 
@@ -624,8 +624,8 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (roachpb.Ran
 func (rc *RangeCache) GetCachedOverlapping(
 	ctx context.Context, span roachpb.RSpan,
 ) []roachpb.RangeInfo {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
 	rawEntries := rc.getCachedOverlappingRLocked(ctx, span)
 	entries := make([]roachpb.RangeInfo, len(rawEntries))
 	for i, e := range rawEntries {
@@ -709,9 +709,9 @@ func newLookupCoalescingError(key roachpb.RKey, wrongDesc *roachpb.RangeDescript
 func (rc *RangeCache) tryLookup(
 	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
 ) (EvictionToken, error) {
-	rc.rangeCache.RLock()
+	rc.rangeCache.Lock()
 	if entry, _ := rc.getCachedRLocked(ctx, key, useReverseScan); entry != nil {
-		rc.rangeCache.RUnlock()
+		rc.rangeCache.Unlock()
 		returnToken := EvictionToken{rdc: rc, entry: entry}
 		return returnToken, nil
 	}
@@ -790,7 +790,7 @@ func (rc *RangeCache) tryLookup(
 	// We must use DoChan above so that we can always unlock this mutex. This must
 	// be done *after* the request has been added to the lookupRequests group, or
 	// we risk it racing with an inflight request.
-	rc.rangeCache.RUnlock()
+	rc.rangeCache.Unlock()
 
 	if !leader {
 		log.VEvent(ctx, 2, "coalesced range lookup request onto in-flight one")
@@ -1036,8 +1036,8 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 func (rc *RangeCache) TestingGetCached(
 	ctx context.Context, key roachpb.RKey, inverted bool, _default roachpb.RangeClosedTimestampPolicy,
 ) (roachpb.RangeInfo, error) {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
 	entry, _ := rc.getCachedRLocked(ctx, key, inverted)
 	if entry == nil {
 		return roachpb.RangeInfo{}, errors.Newf("no entry found for %s in cache", key)

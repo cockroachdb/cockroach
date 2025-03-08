@@ -50,7 +50,7 @@ var (
 // validated and if this feature is enabled.
 type jwtAuthenticator struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// conf contains all the values that come from cluster settings.
 		conf jwtAuthenticatorConf
 		// enabled represents the present state of if this feature is enabled. When combined with the enabled value

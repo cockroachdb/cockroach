@@ -62,7 +62,7 @@ func cacheEntrySize(start, end interval.Comparable) uint64 {
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
 type treeImpl struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 
 	cache            *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
@@ -98,8 +98,8 @@ func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 
 // len returns the total number of read and write intervals in the cache.
 func (tc *treeImpl) len() int {
-	tc.RLock()
-	defer tc.RUnlock()
+	tc.Lock()
+	defer tc.Unlock()
 	return tc.cache.Len()
 }
 
@@ -448,8 +448,8 @@ func (tc *treeImpl) Add(
 
 // getLowWater implements the Cache interface.
 func (tc *treeImpl) getLowWater() hlc.Timestamp {
-	tc.RLock()
-	defer tc.RUnlock()
+	tc.Lock()
+	defer tc.Unlock()
 	return tc.lowWater
 }
 

@@ -314,8 +314,8 @@ func (r *Replica) Breaker() *circuit.Breaker {
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
 }
 
@@ -336,8 +336,8 @@ func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
 func (r *Replica) LastAssignedLeaseIndex() kvpb.LeaseAppliedIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 }
 
@@ -410,22 +410,22 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 }
 
 func (r *Replica) NumPendingProposals() int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.numPendingProposalsRLocked()
 }
 
 func (r *Replica) LastUpdateTimes() map[roachpb.ReplicaID]lastReplicaUpdateTime {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return maps.Clone(r.mu.lastUpdateTimes)
 }
 
 func (r *Replica) IsFollowerActiveSince(
 	followerID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, now, threshold)
 }
 
@@ -447,16 +447,16 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 // GetRaftLogSize returns the approximate raft log size and whether it is
 // trustworthy.. See r.mu.raftLogSize for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.shMu.raftLogSize, r.shMu.raftLogSizeTrusted
 }
 
 // GetCachedLastTerm returns the cached last term value. May return
 // invalidLastTerm if the cache is not set.
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.shMu.lastTermNotDurable
 }
 
@@ -469,8 +469,8 @@ func (r *Replica) SideloadedRaftMuLocked() logstore.SideloadStorage {
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
 // backpressure when the zone.RangeMaxBytes is decreased.
 func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.largestPreviousMaxRangeSizeBytes
 }
 
@@ -589,16 +589,16 @@ func (r *Replica) MaybeUnquiesceAndPropose() (bool, error) {
 }
 
 func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.cachedProtectedTS.readAt, r.mu.cachedProtectedTS.earliestProtectionTimestamp
 }
 
 // ClosedTimestampPolicy returns the closed timestamp policy of the range, which
 // is updated asynchronously through gossip of zone configurations.
 func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.closedTimestampPolicyRLocked()
 }
 

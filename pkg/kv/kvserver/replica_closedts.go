@@ -152,7 +152,7 @@ type sidetransportAccess struct {
 	rangeID  roachpb.RangeID
 	receiver sidetransportReceiver
 	mu       struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// cur is the largest closed timestamp communicated by the side transport
 		// whose corresponding lai has definitely been applied by the local replica.
@@ -280,9 +280,9 @@ func (st *sidetransportAccess) get(
 	appliedLAI kvpb.LeaseAppliedIndex,
 	sufficient hlc.Timestamp,
 ) hlc.Timestamp {
-	st.mu.RLock()
+	st.mu.Lock()
 	cur, next := st.mu.cur, st.mu.next
-	st.mu.RUnlock()
+	st.mu.Unlock()
 
 	// If the current info is enough to satisfy sufficient, we're done.
 	if !sufficient.IsEmpty() && sufficient.LessEq(cur.ts) {

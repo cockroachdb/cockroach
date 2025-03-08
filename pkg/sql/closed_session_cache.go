@@ -58,7 +58,7 @@ type ClosedSessionCache struct {
 	timeSrc timeSource
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		acc  mon.BoundAccount
 		data *cache.UnorderedCache
 	}

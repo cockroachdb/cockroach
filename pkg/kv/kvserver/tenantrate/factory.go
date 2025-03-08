@@ -33,7 +33,7 @@ type LimiterFactory struct {
 	authorizer    tenantcapabilities.Authorizer
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		config  Config
 		tenants map[roachpb.TenantID]*refCountedLimiter
 	}

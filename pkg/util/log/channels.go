@@ -119,8 +119,8 @@ func (l *loggingT) setChannelLoggers(m map[Channel]*loggerT, stderrSinkInfo *sin
 }
 
 func (l *loggingT) getLogger(ch Channel) *loggerT {
-	l.rmu.RLock()
-	defer l.rmu.RUnlock()
+	l.rmu.Lock()
+	defer l.rmu.Unlock()
 	if l := l.rmu.channels[ch]; l != nil {
 		return l
 	}

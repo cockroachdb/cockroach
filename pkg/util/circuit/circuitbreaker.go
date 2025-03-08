@@ -29,7 +29,7 @@ import (
 // possible.
 type Breaker struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		*Options // always replaced wholesale
 		// errAndCh stores a channel and the error that should be returned when that
 		// channel is closed. When an error is first reported, the error is set and
@@ -83,8 +83,8 @@ type Signal interface {
 // Signal is allocation-free and suitable for use in performance-sensitive code
 // paths. See ExampleBreaker_Signal for a usage example.
 func (b *Breaker) Signal() Signal {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if fn := b.mu.signalInterceptor; fn != nil {
 		return fn(b.mu.errAndCh)
 	}
@@ -198,8 +198,8 @@ func (b *Breaker) SafeFormat(s interfaces.SafePrinter, _ rune) {
 
 // Opts returns the active options.
 func (b *Breaker) Opts() Options {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return *b.mu.Options
 }
 

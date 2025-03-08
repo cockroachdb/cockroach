@@ -555,8 +555,8 @@ func DescribeAppliedConfig() string {
 	// Describe the connections to the stderr sink.
 
 	chans, stderrSinkInfo := func() (map[logpb.Channel]*loggerT, *sinkInfo) {
-		logging.rmu.RLock()
-		defer logging.rmu.RUnlock()
+		logging.rmu.Lock()
+		defer logging.rmu.Unlock()
 		return logging.rmu.channels, logging.rmu.currentStderrSinkInfo
 	}()
 	for ch, logger := range chans {

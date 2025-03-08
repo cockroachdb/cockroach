@@ -1798,7 +1798,7 @@ type connExecutor struct {
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[clusterunique.ID]*queryMeta
@@ -4285,8 +4285,8 @@ func (ex *connExecutor) initStatementResult(
 
 // hasQuery is part of the RegistrySession interface.
 func (ex *connExecutor) hasQuery(queryID clusterunique.ID) bool {
-	ex.mu.RLock()
-	defer ex.mu.RUnlock()
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	_, exists := ex.mu.ActiveQueries[queryID]
 	return exists
 }
@@ -4295,8 +4295,8 @@ func (ex *connExecutor) hasQuery(queryID clusterunique.ID) bool {
 func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
 	// RLock can be used because map deletion happens in
 	// connExecutor.removeActiveQuery.
-	ex.mu.RLock()
-	defer ex.mu.RUnlock()
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {
 		queryMeta.cancelQuery()
 		return true
@@ -4308,8 +4308,8 @@ func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
 func (ex *connExecutor) CancelActiveQueries() bool {
 	// RLock can be used because map deletion happens in
 	// connExecutor.removeActiveQuery.
-	ex.mu.RLock()
-	defer ex.mu.RUnlock()
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	canceled := false
 	for _, queryMeta := range ex.mu.ActiveQueries {
 		queryMeta.cancelQuery()
@@ -4336,10 +4336,10 @@ func (ex *connExecutor) SessionUser() username.SQLUsername {
 
 // serialize is part of the RegistrySession interface.
 func (ex *connExecutor) serialize() serverpb.Session {
-	ex.mu.RLock()
-	defer ex.mu.RUnlock()
-	ex.state.mu.RLock()
-	defer ex.state.mu.RUnlock()
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	ex.state.mu.Lock()
+	defer ex.state.mu.Unlock()
 
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn

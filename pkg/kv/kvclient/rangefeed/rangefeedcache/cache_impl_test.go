@@ -25,7 +25,7 @@ type Cache struct {
 	w *Watcher[*kvpb.RangeFeedValue]
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		data      []roachpb.KeyValue
 		timestamp hlc.Timestamp
@@ -62,8 +62,8 @@ func (c *Cache) Start(ctx context.Context, stopper *stop.Stopper) error {
 // GetSnapshot returns the set of cached KVs over the spans and the timestamp
 // from which it applies. If no snapshot is available, false will be returned.
 func (c *Cache) GetSnapshot() ([]roachpb.KeyValue, hlc.Timestamp, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.mu.timestamp.IsEmpty() {
 		return nil, hlc.Timestamp{}, false
 	}

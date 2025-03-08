@@ -80,7 +80,7 @@ type Cache struct {
 type partition struct {
 	id roachpb.RangeID
 
-	mu      syncutil.RWMutex
+	mu      syncutil.Mutex
 	ringBuf // implements rangeCache, embedded to avoid interface and allocation
 
 	size cacheSize // accessed with atomics
@@ -218,8 +218,8 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 	if p == nil {
 		return e, false
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	e, ok = p.get(idx)
 	if ok {
 		c.metrics.Hits.Inc(1)
@@ -244,8 +244,8 @@ func (c *Cache) Scan(
 	if p == nil {
 		return ents, 0, lo, false
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	ents, bytes, nextIdx, exceededMaxBytes = p.scan(ents, lo, hi, maxBytes)
 	// Track all bytes that are returned to caller, but only consider an access a

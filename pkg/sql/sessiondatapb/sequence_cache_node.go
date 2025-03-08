@@ -24,7 +24,7 @@ type SequenceCacheNodeEntry struct {
 // uint32 to prevent an import cycle with the descpb package.
 type SequenceCacheNode struct {
 	cache map[catid.DescID]*SequenceCacheNodeEntry
-	mu    syncutil.RWMutex
+	mu    syncutil.Mutex
 }
 
 // NewSequenceCacheNode initializes a new SequenceCacheNode.
@@ -39,9 +39,9 @@ func NewSequenceCacheNode() *SequenceCacheNode {
 func (sc *SequenceCacheNode) NextValue(
 	seqID catid.DescID, clientVersion uint32, fetchNextValues func() (int64, int64, int64, error),
 ) (int64, error) {
-	sc.mu.RLock()
+	sc.mu.Lock()
 	cacheEntry, found := sc.cache[seqID]
-	sc.mu.RUnlock()
+	sc.mu.Unlock()
 
 	createSequenceCacheNodeEntry := func() {
 		sc.mu.Lock()

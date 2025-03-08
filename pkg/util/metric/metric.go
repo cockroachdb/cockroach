@@ -576,7 +576,7 @@ type ManualWindowHistogram struct {
 		// prometheus.Histogram is thread safe, so we only need an RLock to
 		// RecordValue. When calling Update or Rotate, we require a WLock since we
 		// swap out fields.
-		syncutil.RWMutex
+		syncutil.Mutex
 		*tick.Ticker
 		disableTick bool
 		cum         prometheus.Histogram
@@ -602,8 +602,8 @@ func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *promethe
 // RecordValue records a value to the cumulative histogram. The value is only
 // added to the current window histogram once Rotate is called.
 func (mwh *ManualWindowHistogram) RecordValue(val float64) {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
+	mwh.mu.Lock()
+	defer mwh.mu.Unlock()
 
 	if !mwh.mu.disableTick {
 		panic("Unexpected call to RecordValue with manual rotate disabled")
@@ -682,8 +682,8 @@ func (mwh *ManualWindowHistogram) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
+	mwh.mu.Lock()
+	defer mwh.mu.Unlock()
 
 	m := &prometheusgo.Metric{}
 	if err := mwh.mu.cum.Write(m); err != nil {
@@ -697,8 +697,8 @@ func (mwh *ManualWindowHistogram) CumulativeSnapshot() HistogramSnapshot {
 }
 
 func (mwh *ManualWindowHistogram) WindowedSnapshot() HistogramSnapshot {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
+	mwh.mu.Lock()
+	defer mwh.mu.Unlock()
 	// Take a copy of the mwh.mu.cur.
 	cur := deepCopy(*mwh.mu.cur)
 	if mwh.mu.prev != nil {
@@ -1215,7 +1215,7 @@ var HistogramMetricComputers = []HistogramMetricComputer{
 // by metric types that require a variable set of labels. Implements
 // PrometheusVector.
 type vector struct {
-	*syncutil.RWMutex
+	*syncutil.Mutex
 	encounteredLabelsLookup map[string]struct{}
 	encounteredLabelValues  [][]string
 	orderedLabelNames       []string
@@ -1225,7 +1225,7 @@ func newVector(labelNames []string) vector {
 	sort.Strings(labelNames)
 
 	return vector{
-		RWMutex:                 &syncutil.RWMutex{},
+		Mutex:                   &syncutil.Mutex{},
 		encounteredLabelsLookup: make(map[string]struct{}),
 		encounteredLabelValues:  [][]string{},
 		orderedLabelNames:       labelNames,
@@ -1246,17 +1246,17 @@ func (v *vector) getOrderedValues(labels map[string]string) []string {
 // based on unique label combinations. recordLabels will return an error if the
 // labelValues are novel, and the cardinality limit has been reached.
 func (v *vector) recordLabels(labelValues []string) error {
-	v.RLock()
+	v.Lock()
 	lookupKey := strings.Join(labelValues, "_")
 	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
-		v.RUnlock()
+		v.Unlock()
 		return nil
 	}
 	if len(v.encounteredLabelsLookup) >= CardinalityLimit {
-		v.RUnlock()
+		v.Unlock()
 		return fmt.Errorf("metric cardinality limit reached")
 	}
-	v.RUnlock()
+	v.Unlock()
 
 	v.Lock()
 	defer v.Unlock()
@@ -1346,8 +1346,8 @@ func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
-	gv.RLock()
-	defer gv.RUnlock()
+	gv.Lock()
+	defer gv.Unlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(gv.encounteredLabelValues))
 
 	for _, labels := range gv.encounteredLabelValues {
@@ -1446,8 +1446,8 @@ func (cv *CounterVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
-	cv.RLock()
-	defer cv.RUnlock()
+	cv.Lock()
+	defer cv.Unlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(cv.encounteredLabelValues))
 
 	for _, labels := range cv.encounteredLabelValues {
@@ -1525,8 +1525,8 @@ func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
-	hv.RLock()
-	defer hv.RUnlock()
+	hv.Lock()
+	defer hv.Unlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(hv.encounteredLabelValues))
 
 	for _, labels := range hv.encounteredLabelValues {

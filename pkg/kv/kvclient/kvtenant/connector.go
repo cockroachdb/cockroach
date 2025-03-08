@@ -173,7 +173,7 @@ type connector struct {
 	startErr error
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		client     *client
 		nodeDescs  map[roachpb.NodeID]*roachpb.NodeDescriptor
 		storeDescs map[roachpb.StoreID]*roachpb.StoreDescriptor
@@ -503,8 +503,8 @@ func (c *connector) updateStoreMap(ctx context.Context, key string, content roac
 
 // GetNodeDescriptor implements the kvclient.NodeDescStore interface.
 func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
 		return nil, kvpb.NewNodeDescNotFoundError(nodeID)
@@ -514,15 +514,15 @@ func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 
 // GetNodeDescriptorCount implements the kvclient.NodeDescStore interface.
 func (c *connector) GetNodeDescriptorCount() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.mu.nodeDescs)
 }
 
 // GetStoreDescriptor implements the kvclient.NodeDescStore interface.
 func (c *connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	desc, ok := c.mu.storeDescs[storeID]
 	if !ok {
 		return nil, kvpb.NewStoreDescNotFoundError(storeID)
@@ -922,9 +922,9 @@ func (c *connector) withClient(
 // context is canceled.
 func (c *connector) getClient(ctx context.Context) (*client, error) {
 	ctx = c.AnnotateCtx(ctx)
-	c.mu.RLock()
+	c.mu.Lock()
 	if client := c.mu.client; client != nil {
-		c.mu.RUnlock()
+		c.mu.Unlock()
 		return client, nil
 	}
 	future, _ := c.rpcDial.DoChan(ctx,
@@ -949,7 +949,7 @@ func (c *connector) getClient(ctx context.Context) (*client, error) {
 			c.mu.client = client
 			return client, nil
 		})
-	c.mu.RUnlock()
+	c.mu.Unlock()
 
 	res := future.WaitForResult(ctx)
 	if res.Err != nil {

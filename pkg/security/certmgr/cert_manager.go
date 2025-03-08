@@ -19,7 +19,7 @@ import (
 // CertManager is a collection of certificates that will be reloaded on
 // SIGHUP signal or explicit Reload call.
 type CertManager struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	ctx           context.Context
 	monitorCancel context.CancelFunc
 	certs         map[string]Cert
@@ -64,8 +64,8 @@ func (cm *CertManager) RemoveCert(id string) {
 // Cert will retrieve the managed cert with the give id if it exists.
 // nil otherwise.
 func (cm *CertManager) Cert(id string) Cert {
-	cm.RLock()
-	defer cm.RUnlock()
+	cm.Lock()
+	defer cm.Unlock()
 	return cm.certs[id]
 }
 
@@ -97,8 +97,8 @@ func (cm *CertManager) stopMonitorLocked() {
 
 // Reload will verify and load/reload the managed certificates.
 func (cm *CertManager) Reload(ctx context.Context) {
-	cm.RLock()
-	defer cm.RUnlock()
+	cm.Lock()
+	defer cm.Unlock()
 
 	errCount := 0
 	for _, cert := range cm.certs {

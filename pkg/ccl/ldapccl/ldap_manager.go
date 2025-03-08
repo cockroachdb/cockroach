@@ -55,7 +55,7 @@ var (
 // parameter configurations.
 type ldapAuthManager struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// conf contains all the values that come from cluster settings.
 		conf ldapConfig
 		// util contains connection object required for interfacing with ldap server.

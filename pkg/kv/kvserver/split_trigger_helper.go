@@ -22,10 +22,10 @@ type replicaMsgAppDropper Replica
 
 func (rd *replicaMsgAppDropper) Args() (initialized bool, age time.Duration) {
 	r := (*Replica)(rd)
-	r.mu.RLock()
+	r.mu.Lock()
 	initialized = r.IsInitialized()
 	creationTime := r.creationTime
-	r.mu.RUnlock()
+	r.mu.Unlock()
 	age = timeutil.Since(creationTime)
 	return initialized, age
 }

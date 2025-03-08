@@ -25,7 +25,7 @@ var controller = newStreamController()
 // RegisterProcessor. This is done using tenant separation.
 type streamController struct {
 	rmu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		tenantRouters map[roachpb.TenantID]*asyncProcessorRouter
 	}
 }
@@ -103,8 +103,8 @@ func (l *streamController) Process(ctx context.Context, eventType log.EventType,
 	if !ok {
 		tID = roachpb.SystemTenantID
 	}
-	l.rmu.RLock()
-	defer l.rmu.RUnlock()
+	l.rmu.Lock()
+	defer l.rmu.Unlock()
 	processor, ok := l.rmu.tenantRouters[tID]
 	if !ok {
 		// We don't mandate that a processor has been registered.

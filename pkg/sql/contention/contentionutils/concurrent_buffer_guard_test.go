@@ -40,7 +40,7 @@ type testAsyncBuffer struct {
 	// testAsyncBuffer for testing purposes. Alternatively, this can be
 	// implemented using Golang's channel.
 	validation struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		readMap map[uuid.UUID]int
 	}
 }
@@ -88,8 +88,8 @@ func (ta *testAsyncBuffer) sync() {
 func (ta *testAsyncBuffer) assert(t *testing.T, expectedMap map[uuid.UUID]int) {
 	t.Helper()
 
-	ta.validation.RLock()
-	defer ta.validation.RUnlock()
+	ta.validation.Lock()
+	defer ta.validation.Unlock()
 
 	for k, v := range expectedMap {
 		actual, ok := ta.validation.readMap[k]

@@ -122,7 +122,7 @@ var (
 //     manner, bypassing any password validation requirements, and redirect them to `/` so they can
 //     enjoy a logged-in experience in the Admin UI.
 type oidcAuthenticationServer struct {
-	mutex   syncutil.RWMutex
+	mutex   syncutil.Mutex
 	conf    oidcAuthenticationConf
 	manager IOIDCManager
 	// enabled is used to store whether the user has flipped the enabled flag in the cluster settings

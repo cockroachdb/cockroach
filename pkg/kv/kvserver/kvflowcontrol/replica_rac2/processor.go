@@ -512,7 +512,7 @@ type processorImpl struct {
 		// rcReferenceUpdateMu is a narrow mutex held when rc reference is updated.
 		// To access rc, the code must hold raftMu or rcReferenceUpdateMu.
 		// Locking order: raftMu < rcReferenceUpdateMu.
-		rcReferenceUpdateMu syncutil.RWMutex
+		rcReferenceUpdateMu syncutil.Mutex
 		// rc is not nil iff this replica is a leader of the term, and uses RACv2.
 		// rc is always updated while holding raftMu and rcReferenceUpdateMu. To
 		// access rc, the code must hold at least one of these mutexes.
@@ -1201,8 +1201,8 @@ func (p *processorImpl) AdmitForEval(
 ) (admitted bool, err error) {
 	var rc rac2.RangeController
 	func() {
-		p.leader.rcReferenceUpdateMu.RLock()
-		defer p.leader.rcReferenceUpdateMu.RUnlock()
+		p.leader.rcReferenceUpdateMu.Lock()
+		defer p.leader.rcReferenceUpdateMu.Unlock()
 		rc = p.leader.rc
 	}()
 	if rc == nil {
@@ -1234,8 +1234,8 @@ func (p *processorImpl) ProcessSchedulerEventRaftMuLocked(
 // InspectRaftMuLocked implements Processor.
 func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool) {
 	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	p.leader.rcReferenceUpdateMu.RLock()
-	defer p.leader.rcReferenceUpdateMu.RUnlock()
+	p.leader.rcReferenceUpdateMu.Lock()
+	defer p.leader.rcReferenceUpdateMu.Unlock()
 	if p.leader.rc == nil {
 		return kvflowinspectpb.Handle{}, false
 	}
@@ -1253,8 +1253,8 @@ func (p *processorImpl) StatusRaftMuLocked() serverpb.RACStatus {
 
 // SendStreamStats implements Processor.
 func (p *processorImpl) SendStreamStats(stats *rac2.RangeSendStreamStats) {
-	p.leader.rcReferenceUpdateMu.RLock()
-	defer p.leader.rcReferenceUpdateMu.RUnlock()
+	p.leader.rcReferenceUpdateMu.Lock()
+	defer p.leader.rcReferenceUpdateMu.Unlock()
 	if p.leader.rc != nil {
 		p.leader.rc.SendStreamStats(stats)
 	}

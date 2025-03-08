@@ -1242,9 +1242,9 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	batch := tc.engine.NewSnapshot()
 	defer batch.Close()
 	tc.repl.raftMu.Lock()
-	tc.repl.mu.RLock()
+	tc.repl.mu.Lock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, batch) // check that in-mem and on-disk state were updated
-	tc.repl.mu.RUnlock()
+	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 }
 

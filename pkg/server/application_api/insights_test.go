@@ -24,45 +24,45 @@ import (
 )
 
 type stubUnusedIndexTime struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	current   time.Time
 	lastRead  time.Time
 	createdAt *time.Time
 }
 
 func (s *stubUnusedIndexTime) setCurrent(t time.Time) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	s.current = t
 }
 
 func (s *stubUnusedIndexTime) setLastRead(t time.Time) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	s.lastRead = t
 }
 
 func (s *stubUnusedIndexTime) setCreatedAt(t *time.Time) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	s.createdAt = t
 }
 
 func (s *stubUnusedIndexTime) getCurrent() time.Time {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	return s.current
 }
 
 func (s *stubUnusedIndexTime) getLastRead() time.Time {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	return s.lastRead
 }
 
 func (s *stubUnusedIndexTime) getCreatedAt() *time.Time {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	return s.createdAt
 }
 

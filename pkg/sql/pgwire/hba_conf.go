@@ -329,10 +329,10 @@ local    all all     password      # built-in CockroachDB default
 // The data returned by this method is also observable via the debug
 // endpoint /debug/hba_conf.
 func (s *Server) GetAuthenticationConfiguration() (*hba.Conf, *identmap.Conf) {
-	s.auth.RLock()
+	s.auth.Lock()
 	auth := s.auth.conf
 	idMap := s.auth.identityMap
-	s.auth.RUnlock()
+	s.auth.Unlock()
 
 	if auth == nil {
 		// This can happen when using the value for the first time before

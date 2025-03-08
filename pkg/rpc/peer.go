@@ -827,8 +827,8 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 }
 
 func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration {
-	peers.mu.RLock()
-	defer peers.mu.RUnlock()
+	peers.mu.Lock()
+	defer peers.mu.Unlock()
 
 	sibHealthy, ok := hasSiblingConn(peers.mu.m, myKey)
 
@@ -864,8 +864,8 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 
 func touchOldPeers(peers *peerMap, now time.Time) {
 	sigs := func() (sigs []circuit.Signal) {
-		peers.mu.RLock()
-		defer peers.mu.RUnlock()
+		peers.mu.Lock()
+		defer peers.mu.Unlock()
 		for _, p := range peers.mu.m {
 			if p.snap().deletable(now) {
 				sigs = append(sigs, p.b.Signal())

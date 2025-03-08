@@ -157,13 +157,13 @@ func resetCookie(w http.ResponseWriter, req *http.Request) {
 // instances keyed by their addresses so that we can effectively
 // re-use proxies when routing multiple requests to the same node.
 type reverseProxyCache struct {
-	mu            syncutil.RWMutex
+	mu            syncutil.Mutex
 	proxiesByAddr map[util.UnresolvedAddr]*httputil.ReverseProxy
 }
 
 func (c *reverseProxyCache) get(addr util.UnresolvedAddr) (*httputil.ReverseProxy, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	p, ok := c.proxiesByAddr[addr]
 	return p, ok
 }

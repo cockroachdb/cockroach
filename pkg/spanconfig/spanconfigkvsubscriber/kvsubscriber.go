@@ -121,7 +121,7 @@ type KVSubscriber struct {
 	rfc *rangefeedcache.Watcher[*BufferEvent]
 
 	mu struct { // serializes between Start and external threads
-		syncutil.RWMutex
+		syncutil.Mutex
 		lastUpdated hlc.Timestamp
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
@@ -325,16 +325,16 @@ func (s *KVSubscriber) Subscribe(fn func(context.Context, roachpb.Span)) {
 
 // LastUpdated is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) LastUpdated() hlc.Timestamp {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.lastUpdated
 }
 
 // NeedsSplit is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.internal.NeedsSplit(ctx, start, end)
 }
@@ -343,8 +343,8 @@ func (s *KVSubscriber) NeedsSplit(ctx context.Context, start, end roachpb.RKey) 
 func (s *KVSubscriber) ComputeSplitKey(
 	ctx context.Context, start, end roachpb.RKey,
 ) (roachpb.RKey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.internal.ComputeSplitKey(ctx, start, end)
 }
@@ -353,8 +353,8 @@ func (s *KVSubscriber) ComputeSplitKey(
 func (s *KVSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
 }
@@ -363,8 +363,8 @@ func (s *KVSubscriber) GetSpanConfigForKey(
 func (s *KVSubscriber) GetProtectionTimestamps(
 	ctx context.Context, sp roachpb.Span,
 ) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, _ error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
 		func(sp roachpb.Span, config roachpb.SpanConfig) error {

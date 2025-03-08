@@ -1899,7 +1899,7 @@ type StoreWorkQueue struct {
 	granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted
 	coordMu  *syncutil.Mutex
 	mu       struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// estimates is used to determine how many tokens are deducted at-admit
 		// time for each request. It's not used for replication admission
 		// control (below-raft) where we do know the size of the write being
@@ -1965,8 +1965,8 @@ func (q *StoreWorkQueue) Admit(
 		// [1]: This happens asynchronously -- i.e. we may have already returned
 		//      from StoreWorkQueue.Admit().
 		info.RequestedCount = func() int64 {
-			q.mu.RLock()
-			defer q.mu.RUnlock()
+			q.mu.Lock()
+			defer q.mu.Unlock()
 			return q.mu.estimates.writeTokens
 		}()
 	}
@@ -2230,8 +2230,8 @@ func (q *StoreWorkQueue) close() {
 }
 
 func (q *StoreWorkQueue) getStoreAdmissionStats() storeAdmissionStats {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	return q.mu.stats
 }
 

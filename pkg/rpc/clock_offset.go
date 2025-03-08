@@ -121,7 +121,7 @@ type RemoteClockMonitor struct {
 	offsetTTL       time.Duration
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		offsets      map[roachpb.NodeID]RemoteOffset
 		latencyInfos map[roachpb.NodeID]*latencyInfo
 		connCount    map[roachpb.NodeID]uint
@@ -189,8 +189,8 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 // given node id. Returns true if the measurement is valid, or false if
 // we don't have enough samples to compute a reliable average.
 func (r *RemoteClockMonitor) Latency(id roachpb.NodeID) (time.Duration, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if info, ok := r.mu.latencyInfos[id]; ok && info.avgNanos.Value() != 0.0 {
 		return time.Duration(int64(info.avgNanos.Value())), true
 	}
@@ -199,8 +199,8 @@ func (r *RemoteClockMonitor) Latency(id roachpb.NodeID) (time.Duration, bool) {
 
 // AllLatencies returns a map of all currently valid latency measurements.
 func (r *RemoteClockMonitor) AllLatencies() map[roachpb.NodeID]time.Duration {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	result := make(map[roachpb.NodeID]time.Duration)
 	for id, info := range r.mu.latencyInfos {
 		if info.avgNanos.Value() != 0.0 {

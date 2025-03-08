@@ -255,7 +255,7 @@ type RaftTransport struct {
 		//   dispatches bound for nodes we're simply not connected to, across
 		//   all RPC classes. See uses of connectedNodes below.
 		mu struct {
-			syncutil.RWMutex
+			syncutil.Mutex
 			localStoreIDs     []roachpb.StoreID // sent to servers to track client-side stores
 			connectionTracker *connectionTrackerForFlowControl
 		}
@@ -725,10 +725,10 @@ func (t *RaftTransport) processQueue(
 	maybeAnnotateWithStoreIDs := func(batch *kvserverpb.RaftMessageRequestBatch) {
 		shouldSendAdditionalStoreIDs := t.kvflowControl.setAdditionalStoreIDs.Load() && !sentAdditionalStoreIDs
 		if !sentInitialStoreIDs || shouldSendAdditionalStoreIDs {
-			t.kvflowControl.mu.RLock()
+			t.kvflowControl.mu.Lock()
 			batch.StoreIDs = nil
 			batch.StoreIDs = append(batch.StoreIDs, t.kvflowControl.mu.localStoreIDs...)
-			t.kvflowControl.mu.RUnlock()
+			t.kvflowControl.mu.Unlock()
 			// Unconditionally set sentInitialStoreIDs, since we always have
 			// the initial store IDs before the additional ones.
 			sentInitialStoreIDs = true
@@ -1143,14 +1143,14 @@ func (t *RaftTransport) TestingDropFlowTokensForDisconnectedNodes() {
 // TestingPrintFlowControlConnectionTracker renders the state of the underlying
 // connection tracker.
 func (t *RaftTransport) TestingPrintFlowControlConnectionTracker() string {
-	t.kvflowControl.mu.RLock()
-	defer t.kvflowControl.mu.RUnlock()
+	t.kvflowControl.mu.Lock()
+	defer t.kvflowControl.mu.Unlock()
 	return t.kvflowControl.mu.connectionTracker.testingPrint()
 }
 
 func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
-	t.kvflowControl.mu.RLock()
-	defer t.kvflowControl.mu.RUnlock()
+	t.kvflowControl.mu.Lock()
+	defer t.kvflowControl.mu.Unlock()
 	for _, nodeID := range t.kvflowControl.dispatchReader.PendingDispatch() {
 		if t.kvflowControl.mu.connectionTracker.isNodeConnected(nodeID) {
 			// If there's already a queue active, there's nothing to do. We rely

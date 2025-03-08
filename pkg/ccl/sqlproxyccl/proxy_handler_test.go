@@ -1742,9 +1742,9 @@ func TestCancelQuery(t *testing.T) {
 			}
 			return errors.New("expected DRAINING pod")
 		})
-		origCancelInfo.mu.RLock()
+		origCancelInfo.mu.Lock()
 		origKey := origCancelInfo.mu.origBackendKeyData.SecretKey
-		origCancelInfo.mu.RUnlock()
+		origCancelInfo.mu.Unlock()
 		// Advance the time so that rebalancing will occur.
 		timeSource.Advance(2 * time.Minute)
 		proxy.handler.balancer.RebalanceTenant(ctx, tenantID)
@@ -1753,9 +1753,9 @@ func TestCancelQuery(t *testing.T) {
 			if !found {
 				return errors.New("expected to find cancel info")
 			}
-			newCancelInfo.mu.RLock()
+			newCancelInfo.mu.Lock()
 			newKey := newCancelInfo.mu.origBackendKeyData.SecretKey
-			newCancelInfo.mu.RUnlock()
+			newCancelInfo.mu.Unlock()
 			if origKey == newKey {
 				return errors.Newf("expected %d to differ", origKey)
 			}

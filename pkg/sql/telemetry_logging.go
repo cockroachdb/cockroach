@@ -151,7 +151,7 @@ type telemetryLoggingMetrics struct {
 	st *cluster.Settings
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// The last time at which an event was sampled to the telemetry channel.
 		lastSampledTime time.Time
 	}
@@ -240,8 +240,8 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(
 	var enoughTimeElapsed bool
 	func() {
 		// Avoid taking the full lock if we don't have to.
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
@@ -337,8 +337,8 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 	var enoughTimeElapsed bool
 	func() {
 		// Avoid taking the full lock if we don't have to.
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		enoughTimeElapsed = newTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 

@@ -72,9 +72,9 @@ func Read(c Counter) int32 {
 // GetCounterOnce returns a counter from the global registry,
 // and asserts it didn't exist previously.
 func GetCounterOnce(feature string) Counter {
-	counters.RLock()
+	counters.Lock()
 	_, ok := counters.m[feature]
-	counters.RUnlock()
+	counters.Unlock()
 	if ok {
 		panic("counter already exists: " + feature)
 	}
@@ -83,9 +83,9 @@ func GetCounterOnce(feature string) Counter {
 
 // GetCounter returns a counter from the global registry.
 func GetCounter(feature string) Counter {
-	counters.RLock()
+	counters.Lock()
 	i, ok := counters.m[feature]
-	counters.RUnlock()
+	counters.Unlock()
 	if ok {
 		return i
 	}
@@ -173,7 +173,7 @@ var approxFeatureCount = 1500
 // counters stores the registry of feature-usage counts.
 // TODO(dt): consider a lock-free map.
 var counters struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	m map[string]Counter
 }
 
@@ -205,7 +205,7 @@ func GetRawFeatureCounts() map[string]int32 {
 // magnitude using the `Bucket10` helper, and optionally resets the counters to
 // zero i.e. if flushing accumulated counts during a report.
 func GetFeatureCounts(quantize QuantizeCounts, reset ResetCounters) map[string]int32 {
-	counters.RLock()
+	counters.Lock()
 	m := make(map[string]int32, len(counters.m))
 	for k, cnt := range counters.m {
 		var val int32
@@ -218,7 +218,7 @@ func GetFeatureCounts(quantize QuantizeCounts, reset ResetCounters) map[string]i
 			m[k] = val
 		}
 	}
-	counters.RUnlock()
+	counters.Unlock()
 	if quantize {
 		for k := range m {
 			m[k] = int32(Bucket10(int64(m[k])))

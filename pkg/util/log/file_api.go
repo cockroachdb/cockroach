@@ -208,8 +208,8 @@ func GetLogReader(filename string) (io.ReadCloser, error) {
 		return nil, errors.Newf("no log directory found for %s", filename)
 	}
 	dir := func() string {
-		fs.mu.RLock()
-		defer fs.mu.RUnlock()
+		fs.mu.Lock()
+		defer fs.mu.Unlock()
 		return fs.mu.logDir
 	}()
 	if dir == "" {
@@ -248,7 +248,7 @@ func GetLogReader(filename string) (io.ReadCloser, error) {
 		// If the file being read is also the file being written to, then we
 		// want mutual exclusion between the reader and the runFlusher.
 		lr := &lockedReader{}
-		lr.mu.RWMutex = &fs.mu.RWMutex
+		lr.mu.Mutex = &fs.mu.Mutex
 		lr.mu.wrappedFile = file
 		return lr, nil
 	}
@@ -376,16 +376,16 @@ type lockedReader struct {
 		// fileSink.
 		// This mutex is only defined if the file being read from
 		// can also be written to concurrently.
-		*syncutil.RWMutex
+		*syncutil.Mutex
 
 		wrappedFile io.ReadCloser
 	}
 }
 
 func (r *lockedReader) Read(b []byte) (int, error) {
-	if r.mu.RWMutex != nil {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
+	if r.mu.Mutex != nil {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 	}
 	return r.mu.wrappedFile.Read(b)
 }

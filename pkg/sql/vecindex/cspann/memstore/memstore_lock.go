@@ -15,13 +15,13 @@ import (
 // NOTE: This is only used in testing and benchmarking code.
 type memLock struct {
 	mu struct {
-		// NOTE: Do not use syncutil.RWMutex here, because deadlock detection
+		// NOTE: Do not use syncutil.Mutex here, because deadlock detection
 		// reports spurious failures. Different partitions in the vector index
 		// can be locked in different orders by merge, split, format and other
 		// operations. In all these cases, we first acquire the in-memory store's
 		// structure lock to prevent deadlocks. But the deadlock detection package
 		// is not smart enough to realize this and reports false positives.
-		sync.RWMutex
+		sync.Mutex
 
 		// reentrancy counts how many times the same owner has acquired the same
 		// lock.
@@ -65,7 +65,7 @@ func (pl *memLock) AcquireShared(owner uint64) {
 	}
 
 	// Block until shared lock is acquired.
-	pl.mu.RLock()
+	pl.mu.Lock()
 }
 
 // Release unlocks exclusive write access to the protected resource obtained by
@@ -93,5 +93,5 @@ func (pl *memLock) ReleaseShared() {
 	}
 
 	// No remaining reentrancy, so release lock.
-	pl.mu.RUnlock()
+	pl.mu.Unlock()
 }

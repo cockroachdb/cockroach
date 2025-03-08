@@ -737,7 +737,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 }
 
 type timeMutex struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	stubTime time.Time
 }
 
@@ -758,8 +758,8 @@ func TestFlushToActivityWithDifferentAggTs(t *testing.T) {
 
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 	sqlStatsKnobs.StubTimeNow = func() time.Time {
-		muStubTime.RLock()
-		defer muStubTime.RUnlock()
+		muStubTime.Lock()
+		defer muStubTime.Unlock()
 		return muStubTime.stubTime
 	}
 

@@ -337,7 +337,7 @@ func (s *testingRCState) maybeSetInitialTokens(r testingRange) {
 
 func makeTestMutexAsserter() ReplicaMutexAsserter {
 	var raftMu syncutil.Mutex
-	var replicaMu syncutil.RWMutex
+	var replicaMu syncutil.Mutex
 	return MakeReplicaMutexAsserter(&raftMu, &replicaMu)
 }
 

@@ -25,7 +25,7 @@ func makeNameCache() nameCache {
 // from the store. The cache maintains the latest version for each name.
 // All methods are thread-safe.
 type nameCache struct {
-	mu          syncutil.RWMutex
+	mu          syncutil.Mutex
 	descriptors nstree.NameMap
 }
 
@@ -44,12 +44,12 @@ func (c *nameCache) get(
 	name string,
 	timestamp hlc.Timestamp,
 ) (desc *descriptorVersionState, expiration hlc.Timestamp) {
-	c.mu.RLock()
+	c.mu.Lock()
 	var ok bool
 	desc, ok = c.descriptors.GetByName(
 		parentID, parentSchemaID, name,
 	).(*descriptorVersionState)
-	c.mu.RUnlock()
+	c.mu.Unlock()
 	if !ok {
 		return nil, expiration
 	}

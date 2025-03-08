@@ -60,13 +60,13 @@ const allUserRole = "all"
 // AuditConfigLock is a mutex wrapper around AuditConfig, to provide safety
 // with concurrent usage.
 type AuditConfigLock struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	Config *AuditConfig
 }
 
 // ReducedAuditConfig is a computed audit configuration initialized at the first SQL event emit by the user.
 type ReducedAuditConfig struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	Initialized  bool
 	AuditSetting *AuditSetting
 }
@@ -77,8 +77,8 @@ type ReducedAuditConfig struct {
 func (cl *AuditConfigLock) GetMatchingAuditSetting(
 	userRoles map[username.SQLUsername]bool, name username.SQLUsername,
 ) *AuditSetting {
-	cl.RLock()
-	defer cl.RUnlock()
+	cl.Lock()
+	defer cl.Unlock()
 
 	// Get matching audit setting.
 	return cl.Config.getMatchingAuditSetting(userRoles, name)

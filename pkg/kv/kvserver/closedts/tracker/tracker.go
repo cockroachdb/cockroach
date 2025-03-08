@@ -30,9 +30,9 @@ import (
 //
 // Start of request evaluation:
 //
-// externalLock.RLock()
+// externalLock.Lock()
 // tok := Tracker.Track(request.writeTimestamp)
-// externalLock.RUnlock()
+// externalLock.Unlock()
 //
 // Proposal buffer flush:
 //

@@ -87,7 +87,7 @@ var startupRetryOpts = retry.Options{
 var runningStartup atomic.Int32
 
 type goroutineIDs struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	ids map[int64]bool
 }
 
@@ -196,8 +196,8 @@ func AssertStartupRetry(ctx context.Context) {
 // inStartup returns true if currently running go routine called Begin before.
 func inStartup() bool {
 	currentID := goid.Get()
-	startupGoroutineIDs.RLock()
-	defer startupGoroutineIDs.RUnlock()
+	startupGoroutineIDs.Lock()
+	defer startupGoroutineIDs.Unlock()
 	return startupGoroutineIDs.ids[currentID]
 }
 

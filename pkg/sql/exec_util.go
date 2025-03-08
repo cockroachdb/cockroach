@@ -2432,7 +2432,7 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		sessionsByID        map[clusterunique.ID]RegistrySession
 		sessionsByCancelKey map[pgwirecancel.BackendKeyData]RegistrySession
 	}
@@ -2448,8 +2448,8 @@ func NewSessionRegistry() *SessionRegistry {
 }
 
 func (r *SessionRegistry) GetSessionByID(sessionID clusterunique.ID) (RegistrySession, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	session, ok := r.mu.sessionsByID[sessionID]
 	return session, ok
 }
@@ -2466,15 +2466,15 @@ func (r *SessionRegistry) GetSessionByQueryID(queryID clusterunique.ID) (Registr
 func (r *SessionRegistry) GetSessionByCancelKey(
 	cancelKey pgwirecancel.BackendKeyData,
 ) (RegistrySession, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	session, ok := r.mu.sessionsByCancelKey[cancelKey]
 	return session, ok
 }
 
 func (r *SessionRegistry) getSessions() []RegistrySession {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	sessions := make([]RegistrySession, 0, len(r.mu.sessionsByID))
 	for _, session := range r.mu.sessionsByID {
 		sessions = append(sessions, session)

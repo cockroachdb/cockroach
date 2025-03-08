@@ -34,7 +34,7 @@ type Receiver struct {
 	testingKnobs receiverTestingKnobs
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// conns maintains the list of currently-open connections.
 		conns map[roachpb.NodeID]*incomingStream
 	}
@@ -95,9 +95,9 @@ func (s *Receiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) erro
 func (s *Receiver) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
 ) (hlc.Timestamp, kvpb.LeaseAppliedIndex) {
-	s.mu.RLock()
+	s.mu.Lock()
 	conn, ok := s.mu.conns[leaseholderNode]
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	if !ok {
 		return hlc.Timestamp{}, 0
 	}
@@ -170,7 +170,7 @@ type incomingStream struct {
 	nodeID roachpb.NodeID
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		streamState
 		lastReceived time.Time
 	}
@@ -206,8 +206,8 @@ func newIncomingStream(s *Receiver, stores Stores) *incomingStream {
 func (r *incomingStream) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID,
 ) (hlc.Timestamp, kvpb.LeaseAppliedIndex) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	info, ok := r.mu.tracked[rangeID]
 	if !ok {
 		return hlc.Timestamp{}, 0
@@ -240,7 +240,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		// remove from the stream. We can't do this with the mutex write-locked
 		// because replicas call GetClosedTimestamp() independently, with r.mu held
 		// (=> deadlock).
-		r.mu.RLock()
+		r.mu.Lock()
 		for _, rangeID := range msg.Removed {
 			info, ok := r.mu.tracked[rangeID]
 			if !ok {
@@ -249,7 +249,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			r.stores.ForwardSideTransportClosedTimestampForRange(
 				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
 		}
-		r.mu.RUnlock()
+		r.mu.Unlock()
 	}
 
 	r.mu.Lock()

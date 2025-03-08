@@ -18,7 +18,7 @@ import (
 // CommandFilters is thread-safe.
 // CommandFilters also optionally does replay protection if filters need it.
 type CommandFilters struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	filters []struct {
 		id         int
 		idempotent bool
@@ -33,8 +33,8 @@ type CommandFilters struct {
 // RunFilters executes the registered filters, stopping at the first one
 // that returns an error.
 func (c *CommandFilters) RunFilters(args kvserverbase.FilterArgs) *kvpb.Error {
-	c.RLock()
-	defer c.RUnlock()
+	c.Lock()
+	defer c.Unlock()
 
 	if c.replayProtection != nil {
 		return c.replayProtection(args)

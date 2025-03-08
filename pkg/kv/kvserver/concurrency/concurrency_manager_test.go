@@ -1390,8 +1390,8 @@ var goroutineStalledStates = map[string]bool{
 	// Similar to "semaquire" above, we mark the following three mutex states as
 	// non-stalled, assuming that they are transient states.
 	"sync.Mutex.Lock":        false,
-	"sync.RWMutex.RLock":     false,
-	"sync.RWMutex.Lock":      false,
+	"sync.Mutex.RLock":     false,
+	"sync.Mutex.Lock":      false,
 	"trace reader (blocked)": false,
 	"wait for GC cycle":      false,
 	"GC worker (idle)":       false,

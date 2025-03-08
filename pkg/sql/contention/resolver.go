@@ -92,7 +92,7 @@ type ResolverEndpoint func(context.Context, *serverpb.TxnIDResolutionRequest) (*
 
 type resolverQueueImpl struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		unresolvedEvents []contentionpb.ExtendedContentionEvent
 		resolvedEvents   []contentionpb.ExtendedContentionEvent

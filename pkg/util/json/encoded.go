@@ -30,7 +30,7 @@ type jsonEncoded struct {
 	// TODO(justin): for simplicity right now we use a mutex, we could be using
 	// an atomic CAS though.
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		cachedDecoded JSON
 	}
@@ -42,8 +42,8 @@ const jsonEncodedSize = unsafe.Sizeof(jsonEncoded{})
 // been decoded, otherwise it returns nil. This allows us to fast-path certain
 // operations if we've already done the work of decoding an object.
 func (j *jsonEncoded) alreadyDecoded() JSON {
-	j.mu.RLock()
-	defer j.mu.RUnlock()
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	if j.mu.cachedDecoded != nil {
 		return j.mu.cachedDecoded
 	}

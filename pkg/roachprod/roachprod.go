@@ -818,7 +818,7 @@ func updatePrometheusTargets(
 
 	cl := promhelperclient.NewPromClient()
 	nodeIPPorts := make(map[int][]*promhelperclient.NodeInfo)
-	nodeIPPortsMutex := syncutil.RWMutex{}
+	nodeIPPortsMutex := syncutil.Mutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
 

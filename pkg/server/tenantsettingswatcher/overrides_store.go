@@ -31,7 +31,7 @@ import (
 // overrides) as any other tenant.
 type overridesStore struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// The tenants map stores the current overrides for each tenant that either
 		// has had an override set in the tenant_settings table, or whose overrides
@@ -165,9 +165,9 @@ func checkSortedByKey(a []kvpb.TenantSetting) {
 func (s *overridesStore) getTenantOverrides(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) *tenantOverrides {
-	s.mu.RLock()
+	s.mu.Lock()
 	res, ok := s.mu.tenants[tenantID]
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	if ok {
 		return res
 	}

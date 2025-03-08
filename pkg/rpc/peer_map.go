@@ -39,14 +39,14 @@ func (c peerKey) SafeFormat(p redact.SafePrinter, _ rune) {
 
 type peerMap struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		m map[peerKey]*peer
 	}
 }
 
 func (peers *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit.Breaker, bool) {
-	peers.mu.RLock()
-	defer peers.mu.RUnlock()
+	peers.mu.Lock()
+	defer peers.mu.Unlock()
 	p := peers.mu.m[k]
 	if p == nil {
 		return PeerSnap{}, peerMetrics{}, nil, false
@@ -57,8 +57,8 @@ func (peers *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit
 // Conn returns a read-only version of the peer and a boolean indicating
 // whether the peer exists.
 func (peers *peerMap) get(k peerKey) (PeerSnap, bool) {
-	peers.mu.RLock()
-	defer peers.mu.RUnlock()
+	peers.mu.Lock()
+	defer peers.mu.Unlock()
 	return peers.getRLocked(k)
 }
 

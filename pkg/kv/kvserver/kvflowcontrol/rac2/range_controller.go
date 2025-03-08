@@ -537,11 +537,11 @@ type ProbeToCloseTimerScheduler interface {
 // production code.
 type ReplicaMutexAsserter struct {
 	RaftMu    *syncutil.Mutex
-	ReplicaMu *syncutil.RWMutex
+	ReplicaMu *syncutil.Mutex
 }
 
 func MakeReplicaMutexAsserter(
-	raftMu *syncutil.Mutex, replicaMu *syncutil.RWMutex,
+	raftMu *syncutil.Mutex, replicaMu *syncutil.Mutex,
 ) ReplicaMutexAsserter {
 	return ReplicaMutexAsserter{
 		RaftMu:    raftMu,
@@ -632,7 +632,7 @@ type rangeController struct {
 		// this mutex. So readers can hold either mutex. This mutex must be
 		// released quickly, since it is needed by rangeController.WaitForEval
 		// which can have high concurrency.
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// State for waiters. When anything in voterSets or nonVoterSets changes,
 		// waiterSetRefreshCh is closed, and replaced with a new channel. The
@@ -768,11 +768,11 @@ func (rc *rangeController) WaitForEval(
 	start := rc.opts.Clock.PhysicalTime()
 retry:
 	// Snapshot the waiter sets and the refresh channel.
-	rc.mu.RLock()
+	rc.mu.Lock()
 	vss := rc.mu.voterSets
 	nvs := rc.mu.nonVoterSet
 	refreshCh := rc.mu.waiterSetRefreshCh
-	rc.mu.RUnlock()
+	rc.mu.Unlock()
 
 	if refreshCh == nil {
 		// RangeControllerImpl is closed.
@@ -1709,8 +1709,8 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	if len(statsToSet.internal) != 0 {
 		panic(errors.AssertionFailedf("statsToSet is non-empty %v", statsToSet.internal))
 	}
-	rc.mu.RLock()
-	defer rc.mu.RUnlock()
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
 
 	statsToSet.internal = slices.Grow(statsToSet.internal, len(rc.mu.lastSendQueueStats))
 	// We will update the cheaper stats to ensure they are up-to-date. For the
@@ -1919,8 +1919,8 @@ func (rc *rangeController) checkConsistencyRaftMuLocked(ctx context.Context) {
 	clear(replicas)
 	func() {
 		var leaderID, leaseholderID roachpb.ReplicaID
-		rc.mu.RLock()
-		defer rc.mu.RUnlock()
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
 		for _, vs := range rc.mu.voterSets {
 			for _, v := range vs {
 				if v.isLeader {

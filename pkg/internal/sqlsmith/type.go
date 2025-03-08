@@ -83,8 +83,8 @@ func isSimpleSeedType(typ *types.T) bool {
 }
 
 func (s *Smither) randScalarType() *types.T {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	scalarTypes := types.Scalar
 	if s.simpleScalarTypes {
 		scalarTypes = simpleScalarTypes
@@ -108,7 +108,7 @@ func (s *Smither) randScalarType() *types.T {
 // enum.
 // Requires s.lock to be held.
 func (s *Smither) isScalarType(t *types.T) bool {
-	s.lock.AssertRHeld()
+	s.lock.AssertHeld()
 	scalarTypes := types.Scalar
 	if s.simpleScalarTypes {
 		scalarTypes = simpleScalarTypes
@@ -134,8 +134,8 @@ func (s *Smither) makeRandTupleType() *types.T {
 }
 
 func (s *Smither) randType() (*types.T, tree.ResolvableTypeReference) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	seedTypes := randgen.SeedTypes
 	if s.types != nil {
 		if !s.simpleScalarTypes && len(s.types.tableImplicitRecordTypes) > 0 {

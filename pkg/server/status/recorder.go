@@ -125,7 +125,7 @@ type MetricsRecorder struct {
 	// nodes/stores. Consequently, almost all uses of it only need to take an
 	// RLock on it.
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		sync.Once
 		// nodeRegistry holds metrics that are specific to the storage and KV layer.
 		// Do not use this for metrics that could possibly be reported by secondary
@@ -300,8 +300,8 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 // MarshalJSON returns an appropriate JSON representation of the current values
 // of the metrics being tracked by this recorder.
 func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
@@ -327,8 +327,8 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 // ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
 func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
@@ -376,8 +376,8 @@ func (mr *MetricsRecorder) ExportToGraphite(
 // CockroachDB's time series system. GetTimeSeriesData implements the DataSource
 // interface of the ts package.
 func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
@@ -561,8 +561,8 @@ func (mr *MetricsRecorder) getNetworkActivity(
 func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus {
 	activity := mr.getNetworkActivity(ctx)
 
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.

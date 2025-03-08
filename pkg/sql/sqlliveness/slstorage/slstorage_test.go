@@ -341,7 +341,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	}
 	var (
 		state = struct {
-			syncutil.RWMutex
+			syncutil.Mutex
 			liveSessions map[int]struct{}
 			sessions     []session
 		}{
@@ -404,8 +404,8 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			}
 		}
 		pickSession = func() (int, sqlliveness.SessionID) {
-			state.RLock()
-			defer state.RUnlock()
+			state.Lock()
+			defer state.Unlock()
 			i := rand.Intn(len(state.sessions))
 			return i, state.sessions[i].id
 		}
@@ -413,8 +413,8 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		// no longer is alive.
 		checkIsAlive = func(t *testing.T, i int, isAlive bool) {
 			t.Helper()
-			state.RLock()
-			defer state.RUnlock()
+			state.Lock()
+			defer state.Unlock()
 			now := clock.Now()
 			if exp := state.sessions[i].expiration; !isAlive && !exp.Less(now) {
 				t.Errorf("expiration for %v (%v) is not less than %v %v", i, exp, now, isAlive)

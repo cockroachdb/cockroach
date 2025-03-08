@@ -849,8 +849,8 @@ func TestGossipPropagation(t *testing.T) {
 	mustAdd(remote, "remote", nil, time.Minute)
 
 	getInfo := func(g *Gossip, key string) *Info {
-		g.mu.RLock()
-		defer g.mu.RUnlock()
+		g.mu.Lock()
+		defer g.mu.Unlock()
 		return g.mu.is.getInfo(key)
 	}
 
@@ -965,8 +965,8 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	local.mu.Unlock()
 
 	getInfo := func(g *Gossip, key string) *Info {
-		g.mu.RLock()
-		defer g.mu.RUnlock()
+		g.mu.Lock()
+		defer g.mu.Unlock()
 		return g.mu.is.Infos[key]
 	}
 

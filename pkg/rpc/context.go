@@ -1438,8 +1438,8 @@ func (rpcCtx *Context) GetBreakerForAddr(
 	nodeID roachpb.NodeID, class ConnectionClass, addr net.Addr,
 ) (*circuitbreaker.Breaker, bool) {
 	sAddr := addr.String()
-	rpcCtx.peers.mu.RLock()
-	defer rpcCtx.peers.mu.RUnlock()
+	rpcCtx.peers.mu.Lock()
+	defer rpcCtx.peers.mu.Unlock()
 	p, ok := rpcCtx.peers.mu.m[peerKey{
 		TargetAddr: sAddr,
 		NodeID:     nodeID,

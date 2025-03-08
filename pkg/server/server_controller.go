@@ -101,7 +101,7 @@ type serverController struct {
 	disableTLSForHTTP bool
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// servers maps tenant names to the server for that tenant.
 		//
@@ -442,8 +442,8 @@ func (c *serverController) drain(ctx context.Context) (stillRunning int) {
 }
 
 func (c *serverController) getAllEntries() (res map[roachpb.TenantName]*serverState) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	res = make(map[roachpb.TenantName]*serverState, len(c.mu.servers))
 	for name, e := range c.mu.servers {
 		res[name] = e
@@ -504,8 +504,8 @@ func (c *serverController) logStopEvent(
 func (c *serverController) getServer(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, <-chan struct{}, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if e, ok := c.mu.servers[tenantName]; ok {
 		if so, isReady := e.getServer(); isReady {
 			return so.(onDemandServer), c.mu.newServerCh, nil
@@ -528,8 +528,8 @@ var errNoTenantServerRunning error = noTenantServerRunning{}
 // getServers retrieves all the currently instantiated and running
 // in-memory servers.
 func (c *serverController) getServers() (res []onDemandServer) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, e := range c.mu.servers {
 		so, isReady := e.getServer()
 		if !isReady {
@@ -544,8 +544,8 @@ func (c *serverController) getServers() (res []onDemandServer) {
 // already have a tenant server running.
 func (c *serverController) getCurrentTenantNames() []roachpb.TenantName {
 	var serverNames []roachpb.TenantName
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for name, e := range c.mu.servers {
 		if _, isReady := e.getServer(); !isReady {
 			continue

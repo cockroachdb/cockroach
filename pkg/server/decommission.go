@@ -37,7 +37,7 @@ import (
 // decommissioning. This map is used to inform whether we need to proactively
 // enqueue some decommissioning node's ranges for rebalancing.
 type decommissioningNodeMap struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	nodes map[roachpb.NodeID]interface{}
 }
 
@@ -393,8 +393,8 @@ func (s *topLevelServer) Decommission(
 // DecommissioningNodeMap returns the set of node IDs that are decommissioning
 // from the perspective of the server.
 func (s *topLevelServer) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
-	s.decomNodeMap.RLock()
-	defer s.decomNodeMap.RUnlock()
+	s.decomNodeMap.Lock()
+	defer s.decomNodeMap.Unlock()
 	nodes := make(map[roachpb.NodeID]interface{})
 	for key, val := range s.decomNodeMap.nodes {
 		nodes[key] = val

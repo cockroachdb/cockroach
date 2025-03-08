@@ -81,7 +81,7 @@ type SystemConfig struct {
 	SystemConfigEntries
 	DefaultZoneConfig *zonepb.ZoneConfig
 	mu                struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		zoneCache        map[ObjectID]zoneEntry
 		shouldSplitCache map[ObjectID]bool
 	}
@@ -423,9 +423,9 @@ func (s *SystemConfig) PurgeZoneConfigCache() {
 // zonepb.ZoneConfig(s) from the SystemConfig and install them as an
 // entry in the cache.
 func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry, error) {
-	s.mu.RLock()
+	s.mu.Lock()
 	entry, ok := s.mu.zoneCache[id]
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	if ok {
 		return entry, nil
 	}
@@ -716,9 +716,9 @@ func (s *SystemConfig) NeedsSplit(
 func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 	// Check the cache.
 	{
-		s.mu.RLock()
+		s.mu.Lock()
 		shouldSplit, ok := s.mu.shouldSplitCache[id]
-		s.mu.RUnlock()
+		s.mu.Unlock()
 		if ok {
 			return shouldSplit
 		}

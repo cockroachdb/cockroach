@@ -90,7 +90,7 @@ type requesterStateHandler struct {
 	// from a single goroutine; this requires Locking mu when writing the updates.
 	// These updates also read from requesterState but there is no need to RLock
 	// mu during these reads (since there are no concurrent writes).
-	mu syncutil.RWMutex
+	mu syncutil.Mutex
 	// update is a reference to an in-progress change in requesterStateForUpdate.
 	// A non-nil update implies there is no ongoing update; i.e. the referenced
 	// requesterStateForUpdate is available to be checked out.
@@ -140,8 +140,8 @@ type requesterStateForUpdate struct {
 func (rsh *requesterStateHandler) getSupportFrom(
 	id slpb.StoreIdent,
 ) (supportState slpb.SupportState, exists bool, wasIdle bool) {
-	rsh.mu.RLock()
-	defer rsh.mu.RUnlock()
+	rsh.mu.Lock()
+	defer rsh.mu.Unlock()
 	rs, exists := rsh.requesterState.supportFrom[id]
 	if exists {
 		// If a store is present, set recentlyQueried to true. Otherwise, if
@@ -155,8 +155,8 @@ func (rsh *requesterStateHandler) getSupportFrom(
 // exportAllSupportFrom exports a copy of all SupportStates from the
 // requesterState.supportFrom map.
 func (rsh *requesterStateHandler) exportAllSupportFrom() []slpb.SupportState {
-	rsh.mu.RLock()
-	defer rsh.mu.RUnlock()
+	rsh.mu.Lock()
+	defer rsh.mu.Unlock()
 	supportStates := make([]slpb.SupportState, len(rsh.requesterState.supportFrom))
 	for _, ss := range rsh.requesterState.supportFrom {
 		supportStates = append(supportStates, ss.state)
@@ -196,8 +196,8 @@ func (rsh *requesterStateHandler) markIdleStores(ctx context.Context) {
 	// check out the update to ensure that there are no concurrent updates.
 	defer rsh.finishUpdate(rsh.checkOutUpdate())
 
-	rsh.mu.RLock()
-	defer rsh.mu.RUnlock()
+	rsh.mu.Lock()
+	defer rsh.mu.Unlock()
 	for _, rs := range rsh.requesterState.supportFrom {
 		if !rs.recentlyQueried.CompareAndSwap(active, inactive) {
 			if rs.recentlyQueried.CompareAndSwap(inactive, idle) {

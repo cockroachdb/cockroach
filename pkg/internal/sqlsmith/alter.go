@@ -643,8 +643,8 @@ func makeCreateSequence(s *Smither) (tree.Statement, bool) {
 }
 
 func makeDropSequence(s *Smither) (tree.Statement, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if len(s.sequences) == 0 {
 		return nil, false
 	}

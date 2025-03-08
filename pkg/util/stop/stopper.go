@@ -156,7 +156,7 @@ type Stopper struct {
 	tracer   *tracing.Tracer // tracer used to create spans for tasks
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// _numTasks is the number of active tasks. It is incremented atomically via
 		// addTask() under the read lock for task acquisition. We need the read lock
 		// to ensure task creation is prohibited atomically with the quiescing or
@@ -277,8 +277,8 @@ func (s *Stopper) AddCloser(c Closer) {
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.refuseRLocked() {
 		cancel()
 		return ctx, func() {}
@@ -503,8 +503,8 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 }
 
 func (s *Stopper) runPrelude() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.refuseRLocked() {
 		return false
 	}

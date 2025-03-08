@@ -227,7 +227,7 @@ type DataKeyManager struct {
 			// to a disk stall -- we want getters (which may be doing read IO) to
 			// not get stuck due to setters being stuck, since the read IO may
 			// succeed due to the (page) cache.
-			syncutil.RWMutex
+			syncutil.Mutex
 			// Non-nil after Load(). The StoreKeys and DataKeys maps contain non-nil
 			// values.
 			keyRegistry *enginepb.DataKeysRegistry
@@ -347,8 +347,8 @@ func (m *DataKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepb.Secr
 
 // ActiveKeyInfoForStats implements PebbleKeyManager.
 func (m *DataKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
-	m.writeMu.mu.RLock()
-	defer m.writeMu.mu.RUnlock()
+	m.writeMu.mu.Lock()
+	defer m.writeMu.mu.Unlock()
 	if m.writeMu.mu.activeKey != nil {
 		return m.writeMu.mu.activeKey.Info
 	}
@@ -357,8 +357,8 @@ func (m *DataKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
 
 // GetKey implements PebbleKeyManager.GetKey.
 func (m *DataKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
-	m.writeMu.mu.RLock()
-	defer m.writeMu.mu.RUnlock()
+	m.writeMu.mu.Lock()
+	defer m.writeMu.mu.Unlock()
 	key, found := m.writeMu.mu.keyRegistry.DataKeys[id]
 	if !found {
 		return nil, fmt.Errorf("key %s is not found", id)
@@ -419,8 +419,8 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 
 // For stats.
 func (m *DataKeyManager) getScrubbedRegistry() *enginepb.DataKeysRegistry {
-	m.writeMu.mu.RLock()
-	defer m.writeMu.mu.RUnlock()
+	m.writeMu.mu.Lock()
+	defer m.writeMu.mu.Unlock()
 	r := makeRegistryProto()
 	proto.Merge(r, m.writeMu.mu.keyRegistry)
 	for _, v := range r.DataKeys {

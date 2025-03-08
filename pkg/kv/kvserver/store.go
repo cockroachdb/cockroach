@@ -564,10 +564,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// destroyed once we return errors from mutexes (#9190). After all, it
 		// can still happen with this code.
 		rs.visited++
-		repl.mu.RLock()
+		repl.mu.Lock()
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.IsInitialized()
-		repl.mu.RUnlock()
+		repl.mu.Unlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
 			break
 		}
@@ -1058,7 +1058,7 @@ type Store struct {
 	// modified by a concurrent HandleRaftRequest. (#4476)
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica).
 		// May be read without holding Store.mu.
 		replicasByRangeID syncutil.Map[roachpb.RangeID, Replica]
@@ -2712,8 +2712,8 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := s.mu.replicasByKey.VisitKeyRange(ctx, sp.Key, sp.EndKey, AscendingKeyOrder,
 		func(ctx context.Context, it replicaOrPlaceholder) error {
 			repl := it.repl
@@ -2916,8 +2916,8 @@ func (s *Store) visitReplicasByKey(
 	order IterationOrder,
 	visitor func(context.Context, *Replica) error, // can return iterutil.StopIteration()
 ) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.replicasByKey.VisitKeyRange(ctx, startKey, endKey, order, func(ctx context.Context, it replicaOrPlaceholder) error {
 		if it.repl != nil {
 			return visitor(ctx, it.repl)
@@ -3037,8 +3037,8 @@ func (s *Store) GetReplicaIfExists(rangeID roachpb.RangeID) *Replica {
 // LookupReplica looks up the replica that contains the specified key. It
 // returns nil if no such replica exists.
 func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.replicasByKey.LookupReplica(context.Background(), key)
 }
 
@@ -3050,8 +3050,8 @@ func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 // lookupPrecedingReplica returns the replica that immediately precedes R in
 // replicasByKey.
 func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), key)
 }
 
@@ -3393,9 +3393,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	goNow := now.ToTimestamp().GoTime()
 	clusterNodes := s.ClusterNodeCount()
 
-	s.mu.RLock()
+	s.mu.Lock()
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	// TODO(kaisun314,kvoli): move this to a per-store admission control metrics
 	// struct when available. See pkg/util/admission/granter.go.
@@ -3614,10 +3614,10 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 	}
 
 	// Find immediate left and right neighbours by user key.
-	s.mu.RLock()
+	s.mu.Lock()
 	left := s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), desc.StartKey)
 	right := s.mu.replicasByKey.LookupNextReplica(context.Background(), desc.EndKey)
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	// Cover all range IDs (prevID, desc.RangeID, nextID) using a continuous span.
 	spanRangeIDs := func(first, last roachpb.RangeID) roachpb.Span {

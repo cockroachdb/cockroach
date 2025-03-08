@@ -89,7 +89,7 @@ type FileRegistry struct {
 			// to a disk stall -- we want getters (which may be doing read IO) to
 			// not get stuck due to setters being stuck, since the read IO may
 			// succeed due to the (page) cache.
-			syncutil.RWMutex
+			syncutil.Mutex
 			// entries stores the current state of the file registry. All values are
 			// non-nil.
 			entries map[string]*enginepb.FileEntry
@@ -347,8 +347,8 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 // GetFileEntry gets the file entry corresponding to filename, if there is one, else returns nil.
 func (r *FileRegistry) GetFileEntry(filename string) *enginepb.FileEntry {
 	filename = r.tryMakeRelativePath(filename)
-	r.writeMu.mu.RLock()
-	defer r.writeMu.mu.RUnlock()
+	r.writeMu.mu.Lock()
+	defer r.writeMu.mu.Unlock()
 	return r.writeMu.mu.entries[filename]
 }
 
@@ -618,8 +618,8 @@ func (r *FileRegistry) createNewRegistryFileLocked() error {
 // GetRegistrySnapshot constructs an enginepb.FileRegistry representing a
 // snapshot of the file registry state.
 func (r *FileRegistry) GetRegistrySnapshot() *enginepb.FileRegistry {
-	r.writeMu.mu.RLock()
-	defer r.writeMu.mu.RUnlock()
+	r.writeMu.mu.Lock()
+	defer r.writeMu.mu.Unlock()
 	rv := &enginepb.FileRegistry{
 		Version: enginepb.RegistryVersion_Records,
 		Files:   make(map[string]*enginepb.FileEntry, len(r.writeMu.mu.entries)),
@@ -634,8 +634,8 @@ func (r *FileRegistry) GetRegistrySnapshot() *enginepb.FileRegistry {
 
 // List returns a mapping of file in the registry to their enginepb.FileEntry.
 func (r *FileRegistry) List() map[string]*enginepb.FileEntry {
-	r.writeMu.mu.RLock()
-	defer r.writeMu.mu.RUnlock()
+	r.writeMu.mu.Lock()
+	defer r.writeMu.mu.Unlock()
 	// Perform a defensive deep-copy of the internal map here, as there may be
 	// modifications to it after it has been returned to the caller.
 	m := make(map[string]*enginepb.FileEntry, len(r.writeMu.mu.entries))

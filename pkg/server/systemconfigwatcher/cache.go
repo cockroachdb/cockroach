@@ -29,7 +29,7 @@ type Cache struct {
 	w                 *rangefeedcache.Watcher[*kvpb.RangeFeedValue]
 	defaultZoneConfig *zonepb.ZoneConfig
 	mu                struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		cfg *config.SystemConfig
 
@@ -77,8 +77,8 @@ func (c *Cache) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // GetSystemConfig is part of the config.SystemConfigProvider interface.
 func (c *Cache) GetSystemConfig() *config.SystemConfig {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.mu.cfg
 }
 

@@ -45,7 +45,7 @@ type LocalIndexUsageStats struct {
 	st *cluster.Settings
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// usageStats stores index usage statistics per unique roachpb.TableID.
 		usageStats map[roachpb.TableID]*tableIndexStats
@@ -61,7 +61,7 @@ type LocalIndexUsageStats struct {
 
 // tableIndexStats tracks index usage statistics per table.
 type tableIndexStats struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 
 	tableID roachpb.TableID
 
@@ -71,7 +71,7 @@ type tableIndexStats struct {
 
 // indexStats track index usage statistics per index.
 type indexStats struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	roachpb.IndexUsageStatistics
 }
 
@@ -135,8 +135,8 @@ func (s *LocalIndexUsageStats) RecordRead(key roachpb.IndexUsageKey) {
 func (s *LocalIndexUsageStats) Get(
 	tableID roachpb.TableID, indexID roachpb.IndexID,
 ) roachpb.IndexUsageStatistics {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	table, ok := s.mu.usageStats[tableID]
 	if !ok {
@@ -145,8 +145,8 @@ func (s *LocalIndexUsageStats) Get(
 		return emptyStats
 	}
 
-	table.RLock()
-	defer table.RUnlock()
+	table.Lock()
+	defer table.Unlock()
 
 	indexStats, ok := table.stats[indexID]
 	if !ok {
@@ -155,8 +155,8 @@ func (s *LocalIndexUsageStats) Get(
 	}
 
 	// Take the read lock while returning the internal data.
-	indexStats.RLock()
-	defer indexStats.RUnlock()
+	indexStats.Lock()
+	defer indexStats.Unlock()
 	return indexStats.IndexUsageStatistics
 }
 
@@ -169,12 +169,12 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 		maxIterationLimit = *options.Max
 	}
 
-	s.mu.RLock()
+	s.mu.Lock()
 	tableIDLists := make([]roachpb.TableID, 0, len(s.mu.usageStats))
 	for tableID := range s.mu.usageStats {
 		tableIDLists = append(tableIDLists, tableID)
 	}
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	if options.SortedTableID {
 		sort.Slice(tableIDLists, func(i, j int) bool {
@@ -269,14 +269,14 @@ func (s *LocalIndexUsageStats) getStatsForTableID(
 ) *tableIndexStats {
 	// We take the read lock first, and immediately return the stats object
 	// if we have already created it.
-	s.mu.RLock()
+	s.mu.Lock()
 
 	// We are handling two cases here:
 	// 1. if we have already created the stats object, we can simply return
 	// 2. if we are only doing a simple lookup, we can return regardless
 	//    the stats object has been found.
 	if tableIndexStats, ok := s.mu.usageStats[id]; ok || !createIfNotExists {
-		defer s.mu.RUnlock()
+		defer s.mu.Unlock()
 		return tableIndexStats
 	}
 
@@ -284,7 +284,7 @@ func (s *LocalIndexUsageStats) getStatsForTableID(
 	// call s.getStatsForTableIDLocked(). That function will check again whether
 	// the given roachpb.TableID exists in our map. This is necessary to prevent
 	// race condition.
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -315,14 +315,14 @@ func (s *LocalIndexUsageStats) getStatsForTableIDLocked(
 func (t *tableIndexStats) getStatsForIndexID(
 	id roachpb.IndexID, createIfNotExists bool,
 ) *indexStats {
-	t.RLock()
+	t.Lock()
 
 	if stats, ok := t.stats[id]; ok || !createIfNotExists {
-		t.RUnlock()
+		t.Unlock()
 		return stats
 	}
 
-	t.RUnlock()
+	t.Unlock()
 	t.Lock()
 	defer t.Unlock()
 
@@ -361,7 +361,7 @@ func (s *LocalIndexUsageStats) GetClusterLastReset() time.Time {
 func (t *tableIndexStats) iterateIndexStats(
 	orderedIndexID bool, iterLimit uint64, visitor StatsVisitor,
 ) (newIterLimit uint64, err error) {
-	t.RLock()
+	t.Lock()
 	indexIDs := make([]roachpb.IndexID, 0, len(t.stats))
 	for indexID := range t.stats {
 		if iterLimit == 0 {
@@ -370,7 +370,7 @@ func (t *tableIndexStats) iterateIndexStats(
 		indexIDs = append(indexIDs, indexID)
 		iterLimit--
 	}
-	t.RUnlock()
+	t.Unlock()
 
 	if orderedIndexID {
 		sort.Slice(indexIDs, func(i, j int) bool {
@@ -387,10 +387,10 @@ func (t *tableIndexStats) iterateIndexStats(
 			continue
 		}
 
-		indexStats.RLock()
+		indexStats.Lock()
 		// Copy out the stats while holding read lock.
 		statsCopy := indexStats.IndexUsageStatistics
-		indexStats.RUnlock()
+		indexStats.Unlock()
 
 		if err := visitor(&roachpb.IndexUsageKey{
 			TableID: t.tableID,

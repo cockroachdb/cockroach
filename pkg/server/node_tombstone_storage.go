@@ -24,7 +24,7 @@ import (
 type nodeTombstoneStorage struct {
 	engs []storage.Engine
 	mu   struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// cache contains both positive and negative hits. Positive hits
 		// unconditionally override negative hits.
 		cache map[roachpb.NodeID]time.Time
@@ -43,9 +43,9 @@ func (s *nodeTombstoneStorage) key(nodeID roachpb.NodeID) roachpb.Key {
 func (s *nodeTombstoneStorage) IsDecommissioned(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (time.Time, error) {
-	s.mu.RLock()
+	s.mu.Lock()
 	ts, ok := s.mu.cache[nodeID]
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	if ok {
 		// Cache hit.
 		return ts, nil

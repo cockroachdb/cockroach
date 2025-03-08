@@ -27,7 +27,7 @@ type MultiConnPool struct {
 	counter atomic.Uint32
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// preparedStatements is a map from name to SQL. The statements in the map
 		// are prepared whenever a new connection is acquired from the pool.
 		preparedStatements map[string]string
@@ -225,8 +225,8 @@ func NewMultiConnPool(
 			}
 			poolCfg.MinConns = int32(minConns)
 			poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
-				m.mu.RLock()
-				defer m.mu.RUnlock()
+				m.mu.Lock()
+				defer m.mu.Unlock()
 				for name, sql := range m.mu.preparedStatements {
 					// Note that calling `Prepare` with a name that has already been
 					// prepared is idempotent and short-circuits before doing any

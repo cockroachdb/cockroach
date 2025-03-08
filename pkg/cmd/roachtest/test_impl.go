@@ -106,7 +106,7 @@ type testImpl struct {
 	artifactsSpec string
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		done bool
 
 		// cancel, if set, is called from the t.Fatal() family of functions when the
@@ -535,8 +535,8 @@ func (t *testImpl) duration() time.Duration {
 }
 
 func (t *testImpl) Failed() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.failedRLocked()
 }
 
@@ -545,14 +545,14 @@ func (t *testImpl) failedRLocked() bool {
 }
 
 func (t *testImpl) failures() []failure {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.mu.failures
 }
 
 func (t *testImpl) failureMsg() string {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	var b strings.Builder
 	formatFailure(&b, t.mu.failures...)
 	return b.String()

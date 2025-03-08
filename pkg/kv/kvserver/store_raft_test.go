@@ -241,7 +241,7 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 	qs := raftReceiveQueues{mon: m}
 	// checkingMu is locked in write mode when checking that the values of
 	// enforceMaxLen across all the queues is the expected value.
-	var checkingMu syncutil.RWMutex
+	var checkingMu syncutil.Mutex
 	// doneCh is used to tell the goroutines to stop, and wg is used to wait
 	// until they are done.
 	doneCh := make(chan struct{})
@@ -254,12 +254,12 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 			defer wg.Done()
 			// Loop until the doneCh is closed.
 			for {
-				checkingMu.RLock()
+				checkingMu.Lock()
 				// Most queues will be newly created due to lack of collision in the
 				// random numbers. Newly created queues have their enforceMaxLen set
 				// in LoadOrCreate.
 				qs.LoadOrCreate(roachpb.RangeID(rng.Int63()), 10)
-				checkingMu.RUnlock()
+				checkingMu.Unlock()
 				select {
 				case <-doneCh:
 					return

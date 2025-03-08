@@ -370,13 +370,13 @@ func (il *interceptingListener) popConn() net.Conn {
 }
 
 type errContainer struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	err error
 }
 
 func (ec *errContainer) getErr() error {
-	ec.RLock()
-	defer ec.RUnlock()
+	ec.Lock()
+	defer ec.Unlock()
 	return ec.err
 }
 

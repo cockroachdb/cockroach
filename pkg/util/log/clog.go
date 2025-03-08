@@ -60,7 +60,7 @@ type loggingT struct {
 	// asynchronously with TestLogScope.Close() calls. If/when that
 	// misdesign is corrected, this lock can be dropped.
 	rmu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		channels map[Channel]*loggerT
 		// currentStderrSinkInfo is the currently active copy of
 		// stderrSinkInfoTemplate. This is used in tests and

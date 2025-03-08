@@ -1340,9 +1340,9 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			cache.rangeCache.RLock()
+			cache.rangeCache.Lock()
 			targetRange, _ := cache.getCachedRLocked(ctx, test.queryKey, true /* inverted */)
-			cache.rangeCache.RUnlock()
+			cache.rangeCache.Unlock()
 
 			if !test.rng.IsInitialized() {
 				require.Nil(t, targetRange)

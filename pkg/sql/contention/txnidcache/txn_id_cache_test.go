@@ -304,7 +304,7 @@ func TestInvalidTxnID(t *testing.T) {
 // runtimeHookInjector provides a way to dynamically inject a testing knobs
 // into a running cluster.
 type runtimeHookInjector struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	op func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
@@ -318,8 +318,8 @@ func (s *runtimeHookInjector) hook(
 	txnFingerprintID appstatspb.TransactionFingerprintID,
 	_ error,
 ) {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	s.op(sessionData, txnID, txnFingerprintID)
 }
 

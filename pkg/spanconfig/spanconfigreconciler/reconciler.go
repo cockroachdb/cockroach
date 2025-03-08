@@ -44,7 +44,7 @@ type Reconciler struct {
 	knobs    *spanconfig.TestingKnobs
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		lastCheckpoint hlc.Timestamp
 	}
 }
@@ -191,8 +191,8 @@ func (r *Reconciler) Reconcile(
 
 // Checkpoint is part of the spanconfig.Reconciler interface.
 func (r *Reconciler) Checkpoint() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	return r.mu.lastCheckpoint
 }

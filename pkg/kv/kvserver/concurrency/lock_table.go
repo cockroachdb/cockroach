@@ -160,7 +160,7 @@ func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // The btree for keys that have locks on them.
 type treeMu struct {
-	mu syncutil.RWMutex // Protects everything in this struct.
+	mu syncutil.Mutex // Protects everything in this struct.
 
 	// For assigning sequence numbers to the keyLocks objects as required by
 	// the util/interval/generic type contract.
@@ -215,7 +215,7 @@ type lockTableImpl struct {
 	// under. Discovered locks from prior lease sequences are ignored, as they
 	// may no longer be accurate.
 	enabled    bool
-	enabledMu  syncutil.RWMutex
+	enabledMu  syncutil.Mutex
 	enabledSeq roachpb.LeaseSequence
 
 	// A sequence number is assigned to each request seen by the lockTable. This
@@ -4162,10 +4162,10 @@ func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 		// one.
 		return
 	}
-	t.locks.mu.RLock()
+	t.locks.mu.Lock()
 	g.tableSnapshot.Reset()
 	g.tableSnapshot = t.locks.Clone()
-	t.locks.mu.RUnlock()
+	t.locks.mu.Unlock()
 }
 
 // Dequeue implements the lockTable interface.
@@ -4225,8 +4225,8 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	consultTxnStatusCache bool,
 	guard lockTableGuard,
 ) (added bool, _ error) {
-	t.enabledMu.RLock()
-	defer t.enabledMu.RUnlock()
+	t.enabledMu.Lock()
+	defer t.enabledMu.Unlock()
 	if !t.enabled {
 		// If not enabled, don't track any locks.
 		return false, nil
@@ -4310,8 +4310,8 @@ func (t *lockTableImpl) AddDiscoveredLock(
 
 // AcquireLock implements the lockTable interface.
 func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
-	t.enabledMu.RLock()
-	defer t.enabledMu.RUnlock()
+	t.enabledMu.Lock()
+	defer t.enabledMu.Unlock()
 	if !t.enabled {
 		// If not enabled, don't track any locks.
 		return nil
@@ -4333,7 +4333,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	// Can't release tree.mu until call kl.acquireLock() since someone may find
 	// an empty lock and remove it from the tree. If we expect that keyLocks
 	// will already be in tree we can optimize this by first trying with a
-	// tree.mu.RLock().
+	// tree.mu.Lock().
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: acq.Key})
 	checkMaxLocks := false
@@ -4564,7 +4564,7 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 			locksToGC = append(locksToGC, l)
 		}
 	}
-	t.locks.mu.RLock()
+	t.locks.mu.Lock()
 	iter := t.locks.MakeIter()
 	ltRange := &keyLocks{key: span.Key, endKey: span.EndKey}
 	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
@@ -4574,7 +4574,7 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 			break
 		}
 	}
-	t.locks.mu.RUnlock()
+	t.locks.mu.Unlock()
 
 	t.tryGCLocks(&t.locks, locksToGC)
 	return heldByTxn
@@ -4620,9 +4620,9 @@ func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
 func (t *lockTableImpl) Enable(seq roachpb.LeaseSequence) {
 	// Avoid disrupting other requests if the lockTable is already enabled.
 	// NOTE: This may be a premature optimization, but it can't hurt.
-	t.enabledMu.RLock()
+	t.enabledMu.Lock()
 	enabled, enabledSeq := t.enabled, t.enabledSeq
-	t.enabledMu.RUnlock()
+	t.enabledMu.Unlock()
 	if enabled && enabledSeq == seq {
 		return
 	}
@@ -4661,14 +4661,14 @@ func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 func (t *lockTableImpl) ExportUnreplicatedLocks(
 	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
 ) {
-	t.enabledMu.RLock()
-	defer t.enabledMu.RUnlock()
+	t.enabledMu.Lock()
+	defer t.enabledMu.Unlock()
 	if !t.enabled {
 		return
 	}
 
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 
 	iter := t.locks.MakeIter()
 	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
@@ -4704,17 +4704,17 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 func (t *lockTableImpl) QueryLockTableState(
 	span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
-	t.enabledMu.RLock()
-	defer t.enabledMu.RUnlock()
+	t.enabledMu.Lock()
+	defer t.enabledMu.Unlock()
 	if !t.enabled {
 		// If not enabled, don't return any locks from the query.
 		return []roachpb.LockStateInfo{}, QueryLockTableResumeState{}
 	}
 
 	// Grab tree snapshot to avoid holding read lock during iteration.
-	t.locks.mu.RLock()
+	t.locks.mu.Lock()
 	snap := t.locks.Clone()
-	t.locks.mu.RUnlock()
+	t.locks.mu.Unlock()
 	// Reset snapshot to free resources.
 	defer snap.Reset()
 
@@ -4777,9 +4777,9 @@ func (t *lockTableImpl) QueryLockTableState(
 func (t *lockTableImpl) Metrics() LockTableMetrics {
 	var m LockTableMetrics
 	// Grab tree snapshot to avoid holding read lock during iteration.
-	t.locks.mu.RLock()
+	t.locks.mu.Lock()
 	snap := t.locks.Clone()
-	t.locks.mu.RUnlock()
+	t.locks.mu.Unlock()
 	// Reset snapshot to free resources.
 	defer snap.Reset()
 
@@ -4794,8 +4794,8 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 
 // String implements the lockTable interface.
 func (t *lockTableImpl) String() string {
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	return t.stringRLocked()
 }
 
@@ -4825,8 +4825,8 @@ func (t *lockTableImpl) TestingSetMaxLocks(maxKeysLocked int64) {
 //
 // ACQUIRES: t.mu
 func (t *lockTableImpl) verify() {
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
 		l := iter.Cur()
@@ -4845,8 +4845,8 @@ func (t *lockTableImpl) verify() {
 //
 // ACQUIRES: t.mu
 func (t *lockTableImpl) verifyKey(key roachpb.Key) {
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: key})
 	if !iter.Valid() {

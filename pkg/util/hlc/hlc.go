@@ -132,7 +132,7 @@ func (*panicLogger) Fatalf(_ context.Context, format string, args ...interface{}
 // HybridManualClock is thread safe.
 type HybridManualClock struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// nanos, if not 0, is the amount of time the clock was manually incremented
 		// by; it is added to physicalClock.
 		nanos int64
@@ -157,10 +157,10 @@ func (m *HybridManualClock) Now() time.Time {
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
 func (m *HybridManualClock) UnixNano() int64 {
-	m.mu.RLock()
+	m.mu.Lock()
 	nanosAtPause := m.mu.nanosAtPause
 	nanos := m.mu.nanos
-	m.mu.RUnlock()
+	m.mu.Unlock()
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
 	}

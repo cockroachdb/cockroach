@@ -45,7 +45,7 @@ var boundsEnabled = settings.RegisterBoolSetting(
 // target keyspans. It's safe for concurrent use.
 type Store struct {
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		spanConfigStore       *spanConfigStore
 		systemSpanConfigStore *systemSpanConfigStore
 	}
@@ -109,8 +109,8 @@ func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, 
 func (s *Store) ComputeSplitKey(
 	ctx context.Context, start, end roachpb.RKey,
 ) (roachpb.RKey, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.spanConfigStore.computeSplitKey(ctx, start, end)
 }
@@ -119,8 +119,8 @@ func (s *Store) ComputeSplitKey(
 func (s *Store) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, roachpb.Span, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.getSpanConfigForKeyRLocked(ctx, key)
 }
 
@@ -201,8 +201,8 @@ func (s *Store) Apply(
 func (s *Store) ForEachOverlappingSpanConfig(
 	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
 ) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var foundOverlapping bool
 	err := s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
 		foundOverlapping = true
@@ -304,8 +304,8 @@ func (s *Store) applyInternal(
 
 // Iterate iterates through all the entries in the Store in sorted order.
 func (s *Store) Iterate(f func(spanconfig.Record) error) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// System targets are considered to be less than span targets.
 	if err := s.mu.systemSpanConfigStore.iterate(f); err != nil {
 		return err
@@ -343,8 +343,8 @@ func (s *Store) maybeLogUpdate(ctx context.Context, update *spanconfig.Update) e
 	var curSpan roachpb.Span
 	var found bool
 	func() {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		curSpanConfig, curSpan, found = s.mu.spanConfigStore.getSpanConfigForKey(ctx, rKey)
 	}()
 

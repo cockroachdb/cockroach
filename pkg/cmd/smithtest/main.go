@@ -119,7 +119,7 @@ var (
 	// executed will pause the other testing queries and prevent 2 reducers
 	// from running at the same time. This should greatly speed up the time
 	// it takes for a single reduction run.
-	lock syncutil.RWMutex
+	lock syncutil.Mutex
 	// seenIssues tracks the seen github issues.
 	seenIssues = map[string]bool{}
 
@@ -219,7 +219,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 
 		// If lock is locked for writing (due to a found bug in another
 		// go routine), block here until it has finished reducing.
-		lock.RLock()
+		lock.Lock()
 		stmt := smither.Generate()
 		done := make(chan struct{}, 1)
 		go func() {
@@ -231,11 +231,11 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 		select {
 		case <-time.After(10 * time.Second):
 			fmt.Printf("TIMEOUT:\n%s\n", stmt)
-			lock.RUnlock()
+			lock.Unlock()
 			return nil
 		case <-done:
 		}
-		lock.RUnlock()
+		lock.Unlock()
 		if err != nil {
 			if strings.Contains(err.Error(), "internal error") {
 				// Return from this function on internal

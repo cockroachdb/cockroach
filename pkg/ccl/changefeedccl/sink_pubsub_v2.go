@@ -64,7 +64,7 @@ type pubsubSinkClient struct {
 	batchCfg               sinkBatchConfig
 	withTableNameAttribute bool
 	mu                     struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// Topic creation errors may not be an actual issue unless the Publish call
 		// itself fails, so creation errors are stored for future use in the event of
@@ -169,13 +169,13 @@ func (sc *pubsubSinkClient) CheckConnection(ctx context.Context) error {
 }
 
 func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {
-	sc.mu.RLock()
+	sc.mu.Lock()
 	_, ok := sc.mu.topicCache[topic]
 	if ok {
-		sc.mu.RUnlock()
+		sc.mu.Unlock()
 		return nil
 	}
-	sc.mu.RUnlock()
+	sc.mu.Unlock()
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	_, ok = sc.mu.topicCache[topic]
@@ -210,8 +210,8 @@ func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) erro
 	_, err = sc.client.Publish(sc.ctx, publishRequest)
 
 	if status.Code(err) == codes.NotFound {
-		sc.mu.RLock()
-		defer sc.mu.RUnlock()
+		sc.mu.Lock()
+		defer sc.mu.Unlock()
 		if sc.mu.topicCreateErr != nil {
 			return errors.WithHint(
 				errors.Wrap(sc.mu.topicCreateErr,

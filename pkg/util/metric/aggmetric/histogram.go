@@ -51,7 +51,7 @@ type AggHistogram struct {
 		// recording values, unless we're rotating histograms for the parent & children.
 		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
 		// are all the child histograms recording their values.
-		syncutil.RWMutex
+		syncutil.Mutex
 		*tick.Ticker
 	}
 }
@@ -183,8 +183,8 @@ func (g *Histogram) Unlink() {
 // excess of the configured maximum value for that histogram results in
 // recording the maximum value instead.
 func (g *Histogram) RecordValue(v int64) {
-	g.parent.ticker.RLock()
-	defer g.parent.ticker.RUnlock()
+	g.parent.ticker.Lock()
+	defer g.parent.ticker.Unlock()
 	g.h.RecordValue(v)
 	g.parent.h.RecordValue(v)
 }

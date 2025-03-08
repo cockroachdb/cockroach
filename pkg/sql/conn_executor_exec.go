@@ -4240,9 +4240,9 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
 
-	ex.state.mu.RLock()
+	ex.state.mu.Lock()
 	txnStart := ex.state.mu.txnStart
-	ex.state.mu.RUnlock()
+	ex.state.mu.Unlock()
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionStarted, txnStart)
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction, crtime.NowMono())

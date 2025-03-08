@@ -25,7 +25,7 @@ type fifoCache struct {
 	capacity contentionutils.CapacityLimiter
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		data map[uuid.UUID]appstatspb.TransactionFingerprintID
 
@@ -75,16 +75,16 @@ func (c *fifoCache) add(b *block) {
 }
 
 func (c *fifoCache) get(txnID uuid.UUID) (appstatspb.TransactionFingerprintID, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	fingerprintID, found := c.mu.data[txnID]
 	return fingerprintID, found
 }
 
 func (c *fifoCache) size() int64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.sizeLocked()
 }
 

@@ -49,7 +49,7 @@ func TestStopNonEmpty(t *testing.T) {
 type schedulerConsumer struct {
 	c  chan processorEventType
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		wait    chan interface{}
 		waiting chan interface{}
 	}
@@ -76,9 +76,9 @@ func createAndRegisterConsumerOrFail(
 
 func (c *schedulerConsumer) process(ev processorEventType) processorEventType {
 	c.c <- ev
-	c.mu.RLock()
+	c.mu.Lock()
 	w, ww := c.mu.wait, c.mu.waiting
-	c.mu.RUnlock()
+	c.mu.Unlock()
 	if w != nil {
 		close(ww)
 		<-w

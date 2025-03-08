@@ -289,7 +289,7 @@ type Queue struct {
 	cfg   Config
 	every log.EveryN // dictates logging for transaction aborts resulting from deadlock detection
 	mu    struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		txns    map[uuid.UUID]*pendingTxn
 		queries map[uuid.UUID]*waitingQueries
 	}
@@ -430,8 +430,8 @@ func (q *Queue) notifyingWaitingPushesAndQueries(
 
 // IsEnabled is true if the queue is enabled.
 func (q *Queue) IsEnabled() bool {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	return q.mu.txns != nil
 }
 
@@ -515,8 +515,8 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 // GetDependents returns a slice of transactions waiting on the specified
 // txn either directly or indirectly.
 func (q *Queue) GetDependents(txnID uuid.UUID) []uuid.UUID {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.mu.txns == nil {
 		// Not enabled; do nothing.
 		return nil
@@ -1115,10 +1115,10 @@ func (q *Queue) forcePushAbort(
 // For testing purposes only.
 func (q *Queue) TrackedTxns() map[uuid.UUID]struct{} {
 	m := make(map[uuid.UUID]struct{})
-	q.mu.RLock()
+	q.mu.Lock()
 	for k := range q.mu.txns {
 		m[k] = struct{}{}
 	}
-	q.mu.RUnlock()
+	q.mu.Unlock()
 	return m
 }

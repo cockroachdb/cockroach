@@ -289,7 +289,7 @@ type Server struct {
 	}
 
 	auth struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		conf        *hba.Conf
 		identityMap *identmap.Conf
 	}

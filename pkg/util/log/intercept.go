@@ -90,7 +90,7 @@ type interceptorSink struct {
 	// it out to avoid locking the mutex in the active() method.
 	activeCount uint32
 	mu          struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		// fns is the list of interceptor functions.
 		fns []Interceptor
@@ -121,8 +121,8 @@ func (i *interceptorSink) active() bool {
 }
 
 func (i *interceptorSink) output(b []byte, _ sinkOutputOptions) error {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	for _, fn := range i.mu.fns {
 		fn.Intercept(b)
 	}

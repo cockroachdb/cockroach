@@ -45,7 +45,7 @@ import (
 
 // testProposer is a testing implementation of proposer.
 type testProposer struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	clock      *hlc.Clock
 	ds         destroyStatus
 	fi         kvpb.RaftIndex
@@ -136,11 +136,11 @@ func (t *testProposerRaft) Campaign() error {
 }
 
 func (t *testProposer) locker() sync.Locker {
-	return &t.RWMutex
+	return &t.Mutex
 }
 
 func (t *testProposer) rlocker() sync.Locker {
-	return t.RWMutex.RLocker()
+	return &t.Mutex
 }
 func (t *testProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
 	return &testFlowTokenHandle{}

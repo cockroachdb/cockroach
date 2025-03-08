@@ -57,7 +57,7 @@ type CertificateManager struct {
 	clientCertExpirationCache *ClientCertExpirationCache
 
 	// mu protects all remaining fields.
-	mu syncutil.RWMutex
+	mu syncutil.Mutex
 
 	// If false, this is the first load. Needed to ensure we do not drop certain certs.
 	initialized bool
@@ -219,32 +219,32 @@ func (cm *CertificateManager) MaybeUpsertClientExpiration(
 // CACert returns the CA cert. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) CACert() *CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.caCert
 }
 
 // ClientCACert returns the CA cert used to verify client certificates. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) ClientCACert() *CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.clientCACert
 }
 
 // UICACert returns the CA cert used to verify the Admin UI certificate. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) UICACert() *CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.uiCACert
 }
 
 // UICert returns the certificate used by the Admin UI. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) UICert() *CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.uiCert
 }
 
@@ -259,16 +259,16 @@ func checkCertIsValid(cert *CertInfo) error {
 // NodeCert returns the Node cert. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) NodeCert() *CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.nodeCert
 }
 
 // ClientCerts returns the Client certs.
 // Callers should check for internal Error fields.
 func (cm *CertificateManager) ClientCerts() map[username.SQLUsername]*CertInfo {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	return cm.clientCerts
 }
 
@@ -830,8 +830,8 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 
 // ListCertificates returns all loaded certificates, or an error if not yet initialized.
 func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 
 	if !cm.initialized {
 		return nil, errors.AssertionFailedf("certificate manager has not been initialized")

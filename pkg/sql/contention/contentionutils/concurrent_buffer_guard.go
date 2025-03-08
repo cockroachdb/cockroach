@@ -39,7 +39,7 @@ type CapacityLimiter func() int64
 // be embedded into higher-level structs that implements the buffer read/write
 // operations, where the buffer's access is done in the higher-level structs.
 type ConcurrentBufferGuard struct {
-	flushSyncLock syncutil.RWMutex
+	flushSyncLock syncutil.Mutex
 	flushDone     sync.Cond
 
 	limiter          CapacityLimiter
@@ -71,7 +71,7 @@ func NewConcurrentBufferGuard(
 		limiter:          limiter,
 		onBufferFullSync: fullHandler,
 	}
-	writeBuffer.flushDone.L = writeBuffer.flushSyncLock.RLocker()
+	writeBuffer.flushDone.L = &writeBuffer.flushSyncLock
 	return writeBuffer
 }
 
@@ -94,8 +94,8 @@ func NewConcurrentBufferGuard(
 //     the flush is completed, the writer is unblocked and allowed to retry.
 func (c *ConcurrentBufferGuard) AtomicWrite(op bufferWriteOp) {
 	size := c.limiter()
-	c.flushSyncLock.RLock()
-	defer c.flushSyncLock.RUnlock()
+	c.flushSyncLock.Lock()
+	defer c.flushSyncLock.Unlock()
 	for {
 		reservedIdx := c.reserveMsgBlockIndex()
 		if reservedIdx < size {
@@ -142,8 +142,8 @@ func (c *ConcurrentBufferGuard) syncRLocked() {
 	// write into the buffer and release their locks (if they reserved an index
 	// within the buffer's length) or release their locks and wait on the
 	// flushDone condition to try again.
-	c.flushSyncLock.RUnlock()
-	defer c.flushSyncLock.RLock()
+	c.flushSyncLock.Unlock()
+	defer c.flushSyncLock.Lock()
 	c.flushSyncLock.Lock()
 	defer c.flushSyncLock.Unlock()
 	c.syncLocked()

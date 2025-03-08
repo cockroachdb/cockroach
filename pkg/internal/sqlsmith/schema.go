@@ -159,7 +159,7 @@ var _ sort.Interface = &indexesWithNames{}
 // getAllIndexesForTableRLocked returns information about all indexes of the
 // given table in the deterministic order. s.lock is assumed to be read-locked.
 func (s *Smither) getAllIndexesForTableRLocked(tableName tree.TableName) []*tree.CreateIndex {
-	s.lock.AssertRHeld()
+	s.lock.AssertHeld()
 	indexes, ok := s.indexes[tableName]
 	if !ok {
 		return nil
@@ -175,8 +175,8 @@ func (s *Smither) getAllIndexesForTableRLocked(tableName tree.TableName) []*tree
 }
 
 func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if len(s.tables) == 0 {
 		return nil, false
 	}
@@ -207,8 +207,8 @@ func (s *Smither) getRandTableIndex(
 ) (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
 	var indexes []*tree.CreateIndex
 	func() {
-		s.lock.RLock()
-		defer s.lock.RUnlock()
+		s.lock.Lock()
+		defer s.lock.Unlock()
 		indexes = s.getAllIndexesForTableRLocked(table)
 	}()
 	if len(indexes) == 0 {
@@ -216,8 +216,8 @@ func (s *Smither) getRandTableIndex(
 	}
 	idx := indexes[s.rnd.Intn(len(indexes))]
 	var refs colRefs
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	for _, col := range idx.Columns {
 		ref := s.columns[table][col.Column]
 		if ref == nil {
@@ -250,8 +250,8 @@ func (s *Smither) getRandUserDefinedTypeLabel() (*tree.EnumValue, *tree.TypeName
 	if !ok {
 		return nil, nil, false
 	}
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	logicalRepresentations := udt.TypeMeta.EnumData.LogicalRepresentations
 	// There are no values in this enum.
 	if len(logicalRepresentations) == 0 {
@@ -262,8 +262,8 @@ func (s *Smither) getRandUserDefinedTypeLabel() (*tree.EnumValue, *tree.TypeName
 }
 
 func (s *Smither) getRandUserDefinedType() (*types.T, *tree.TypeName, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if s.types == nil || len(s.types.udts) == 0 {
 		return nil, nil, false
 	}

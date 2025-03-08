@@ -353,7 +353,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 		require.NoError(t, err)
 
-		var mu syncutil.RWMutex
+		var mu syncutil.Mutex
 		var afterWriteTS hlc.Timestamp
 		checkpoints := make(chan *kvpb.RangeFeedCheckpoint)
 
@@ -369,9 +369,9 @@ func TestWithOnCheckpoint(t *testing.T) {
 				for {
 					select {
 					case c := <-checkpoints:
-						mu.RLock()
+						mu.Lock()
 						writeTSUnset := afterWriteTS.IsEmpty()
-						mu.RUnlock()
+						mu.Unlock()
 						if writeTSUnset {
 							return errors.New("write to key hasn't gone through yet")
 						}

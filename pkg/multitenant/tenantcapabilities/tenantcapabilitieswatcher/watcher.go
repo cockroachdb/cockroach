@@ -40,7 +40,7 @@ type Watcher struct {
 	knobs          TestingKnobs
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		store      map[roachpb.TenantID]*watcherEntry
 		byName     map[roachpb.TenantName]roachpb.TenantID
@@ -116,9 +116,9 @@ func New(
 
 // getInternal returns the internal entry for the given tenant ID.
 func (w *Watcher) getInternal(tenantID roachpb.TenantID) *watcherEntry {
-	w.mu.RLock()
+	w.mu.Lock()
 	cp, found := w.mu.store[tenantID]
-	w.mu.RUnlock()
+	w.mu.Unlock()
 	if found {
 		return cp
 	}
@@ -175,16 +175,16 @@ func (w *Watcher) GetCapabilities(
 // caller of this function so this isn't particularly problematic, but
 // it could be if we add more callers.
 func (w *Watcher) GetAllTenants() ([]tenantcapabilities.Entry, <-chan struct{}) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	return w.mu.allTenants, w.mu.anyChangeCh
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
 func (w *Watcher) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	result := make(map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities, len(w.mu.store))
 	for tenID, cp := range w.mu.store {

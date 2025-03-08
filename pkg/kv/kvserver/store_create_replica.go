@@ -103,18 +103,18 @@ func (s *Store) tryGetReplica(
 	}
 
 	repl.raftMu.Lock() // not unlocked on success
-	repl.mu.RLock()
+	repl.mu.Lock()
 
 	// The current replica is removed, go back around.
 	if repl.mu.destroyStatus.Removed() {
-		repl.mu.RUnlock()
+		repl.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
 
 	// Drop messages from replicas we know to be too old.
 	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-		repl.mu.RUnlock()
+		repl.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
@@ -126,7 +126,7 @@ func (s *Store) tryGetReplica(
 				replicaID, repl)
 		}
 
-		repl.mu.RUnlock()
+		repl.mu.Unlock()
 		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
@@ -135,7 +135,7 @@ func (s *Store) tryGetReplica(
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
-	defer repl.mu.RUnlock()
+	defer repl.mu.Unlock()
 
 	if repl.replicaID > replicaID {
 		// The sender is behind and is sending to an old replica.
@@ -241,7 +241,7 @@ func (s *Store) tryGetOrCreateReplica(
 // be a member of the range which has been removed.
 // Assumes toReplica.mu is locked for (at least) reading.
 func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
-	toReplica.mu.AssertRHeld()
+	toReplica.mu.AssertHeld()
 	if fromReplica == nil {
 		return false
 	}

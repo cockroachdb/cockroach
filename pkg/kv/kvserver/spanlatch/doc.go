@@ -19,14 +19,14 @@ following progression:
   - Concurrent read-only access to keys and key ranges was permitted. Read and
     writes were serialized with each other, writes were serialized with each other,
     but no ordering was enforced between reads. Conceptually, the structure became
-    a sync.RWMutex.
+    a sync.Mutex.
   - The structure became key range-aware and concurrent access to non-overlapping
     key ranges was permitted. Conceptually, the structure became an interval
-    tree of sync.RWMutexes.
+    tree of sync.Mutexes.
   - The structure became timestamp-aware and concurrent access of non-causal
     read and write pairs was permitted. The effect of this was that reads no
     longer waited for writes at higher timestamps and writes no longer waited
     for reads at lower timestamps. Conceptually, the structure became an interval
-    tree of timestamp-aware sync.RWMutexes.
+    tree of timestamp-aware sync.Mutexes.
 */
 package spanlatch

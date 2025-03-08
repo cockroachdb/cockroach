@@ -347,11 +347,11 @@ func (s *Store) canAcceptSnapshotLocked(
 	// commits, and cannot have been replicaGC'ed yet (see replicaGCQueue.process).
 	existingRepl.raftMu.AssertHeld()
 
-	existingRepl.mu.RLock()
+	existingRepl.mu.Lock()
 	existingDesc := existingRepl.shMu.state.Desc
 	existingIsInitialized := existingDesc.IsInitialized()
 	existingDestroyStatus := existingRepl.mu.destroyStatus
-	existingRepl.mu.RUnlock()
+	existingRepl.mu.Unlock()
 
 	if existingIsInitialized {
 		// Regular Raft snapshots can't be refused at this point,

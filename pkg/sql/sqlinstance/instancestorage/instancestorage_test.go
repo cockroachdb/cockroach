@@ -418,7 +418,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	var (
 		region = enum.One
 		state  = struct {
-			syncutil.RWMutex
+			syncutil.Mutex
 			liveInstances map[base.SQLInstanceID]struct{}
 			freeInstances map[base.SQLInstanceID]struct{}
 			maxInstanceID base.SQLInstanceID
@@ -475,8 +475,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 		}
 
 		pickInstance = func() base.SQLInstanceID {
-			state.RLock()
-			defer state.RUnlock()
+			state.Lock()
+			defer state.Unlock()
 			i := rand.Intn(int(state.maxInstanceID)) + 1
 			return base.SQLInstanceID(i)
 		}
@@ -485,8 +485,8 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 		// details irrespective of whether the instance is live or not.
 		checkGetInstance = func(t *testing.T, i base.SQLInstanceID) {
 			t.Helper()
-			state.RLock()
-			defer state.RUnlock()
+			state.Lock()
+			defer state.Unlock()
 			instanceInfo, err := storage.GetInstanceDataForTest(ctx, region, i)
 			require.NoError(t, err)
 			if _, free := state.freeInstances[i]; free {

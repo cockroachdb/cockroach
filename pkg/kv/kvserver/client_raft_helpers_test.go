@@ -235,7 +235,7 @@ func (h *testClusterStoreRaftMessageHandler) HandleDelegatedSnapshot(
 type testClusterPartitionedRange struct {
 	rangeID roachpb.RangeID
 	mu      struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		partitionedNodeIdx  int
 		partitioned         bool
 		partitionedReplicas map[roachpb.ReplicaID]bool
@@ -331,8 +331,8 @@ func setupPartitionedRangeWithHandlers(
 		// two stores.
 		if h.dropReq == nil {
 			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
-				pr.mu.RLock()
-				defer pr.mu.RUnlock()
+				pr.mu.Lock()
+				defer pr.mu.Unlock()
 				return pr.mu.partitioned &&
 					(s == pr.mu.partitionedNodeIdx ||
 						req.FromReplica.StoreID == roachpb.StoreID(pr.mu.partitionedNodeIdx)+1)
@@ -340,8 +340,8 @@ func setupPartitionedRangeWithHandlers(
 		}
 		if h.dropHB == nil {
 			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
-				pr.mu.RLock()
-				defer pr.mu.RUnlock()
+				pr.mu.Lock()
+				defer pr.mu.Unlock()
 				if !pr.mu.partitioned {
 					return false
 				}
@@ -353,8 +353,8 @@ func setupPartitionedRangeWithHandlers(
 		}
 		if h.dropResp == nil {
 			h.dropResp = func(resp *kvserverpb.RaftMessageResponse) bool {
-				pr.mu.RLock()
-				defer pr.mu.RUnlock()
+				pr.mu.Lock()
+				defer pr.mu.Unlock()
 				return pr.mu.partitioned &&
 					(s == pr.mu.partitionedNodeIdx ||
 						resp.FromReplica.StoreID == roachpb.StoreID(pr.mu.partitionedNodeIdx)+1)
@@ -362,8 +362,8 @@ func setupPartitionedRangeWithHandlers(
 		}
 		if h.snapErr == nil {
 			h.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
-				pr.mu.RLock()
-				defer pr.mu.RUnlock()
+				pr.mu.Lock()
+				defer pr.mu.Unlock()
 				if !pr.mu.partitioned {
 					return nil
 				}
@@ -375,8 +375,8 @@ func setupPartitionedRangeWithHandlers(
 		}
 		if h.delegateErr == nil {
 			h.delegateErr = func(resp *kvserverpb.DelegateSendSnapshotRequest) error {
-				pr.mu.RLock()
-				defer pr.mu.RUnlock()
+				pr.mu.Lock()
+				defer pr.mu.Unlock()
 				if pr.mu.partitionedReplicas[resp.DelegatedSender.ReplicaID] {
 					return errors.New("partitioned")
 				}
@@ -390,8 +390,8 @@ func setupPartitionedRangeWithHandlers(
 		pr.addStore(tc.Servers[partitionedNodeIdx].GetFirstStoreID())
 
 		shouldDropStoreLivenessMessage := func(from roachpb.StoreID, to roachpb.StoreID) bool {
-			pr.mu.RLock()
-			defer pr.mu.RUnlock()
+			pr.mu.Lock()
+			defer pr.mu.Unlock()
 			// Drop all messages from/to partitioned stores.
 			return pr.mu.partitioned && (pr.mu.partitionedStores[from] || pr.mu.partitionedStores[to])
 		}

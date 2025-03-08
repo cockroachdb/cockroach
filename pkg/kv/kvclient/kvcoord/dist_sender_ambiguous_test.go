@@ -188,7 +188,7 @@ func (cp InterceptPoint) String() string {
 // functions is particular to the test/subtest; this way the logic can be
 // modified after the test cluster has started.
 type interceptorHelperMutex struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	interceptorTestConfig
 }
 
@@ -298,8 +298,8 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 					Transport: transport,
 					nID:       nID,
 					beforeSend: func(ctx context.Context, req *interceptedReq) (overrideResp *interceptedResp) {
-						tMu.RLock()
-						defer tMu.RUnlock()
+						tMu.Lock()
+						defer tMu.Unlock()
 
 						if tMu.filter != nil && tMu.filter(req) {
 							opID := atomic.AddInt64(&tMu.lastInterceptedOpID, 1)
@@ -321,8 +321,8 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 						return nil
 					},
 					afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
-						tMu.RLock()
-						defer tMu.RUnlock()
+						tMu.Lock()
+						defer tMu.Unlock()
 
 						if tMu.filter != nil && tMu.filter(req) && tMu.maybeWait != nil {
 							err := tMu.maybeWait(AfterSending, req, resp)

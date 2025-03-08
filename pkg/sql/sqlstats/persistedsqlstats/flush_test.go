@@ -978,29 +978,29 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 }
 
 type stubTime struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	t           time.Time
 	aggInterval time.Duration
 	timeStubbed bool
 }
 
 func (s *stubTime) setTime(t time.Time) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
 	s.t = t
 	s.timeStubbed = true
 }
 
 func (s *stubTime) getAggTimeTs() time.Time {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 	return s.t.Truncate(s.aggInterval)
 }
 
 func (s *stubTime) Now() time.Time {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
 	if s.timeStubbed {
 		return s.t

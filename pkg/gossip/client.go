@@ -137,8 +137,8 @@ func (c *client) startLocked(
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
 				peerID, addr := func() (roachpb.NodeID, net.Addr) {
-					g.mu.RLock()
-					defer g.mu.RUnlock()
+					g.mu.Lock()
+					defer g.mu.Unlock()
 					return c.peerID, c.addr
 				}()
 				if peerID != 0 {
@@ -167,8 +167,8 @@ func (c *client) close() {
 // timestamps.
 func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 	nodeAddr, highWaterStamps := func() (util.UnresolvedAddr, map[roachpb.NodeID]int64) {
-		g.mu.RLock()
-		defer g.mu.RUnlock()
+		g.mu.Lock()
+		defer g.mu.Unlock()
 		return g.mu.is.NodeAddr, g.mu.is.getHighWaterStamps()
 	}()
 	args := &Request{

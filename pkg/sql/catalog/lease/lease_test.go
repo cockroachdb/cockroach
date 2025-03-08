@@ -2614,13 +2614,13 @@ func TestOfflineLeaseRefresh(t *testing.T) {
 	waitForRqstFilter := make(chan chan struct{})
 	errorChan := make(chan error)
 	var txnID uuid.UUID
-	var mu syncutil.RWMutex
+	var mu syncutil.Mutex
 
 	knobs := &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
-			mu.RLock()
+			mu.Lock()
 			checkRequest := req.Txn != nil && req.Txn.ID.Equal(txnID)
-			mu.RUnlock()
+			mu.Unlock()
 			if _, ok := req.GetArg(kvpb.EndTxn); checkRequest && ok {
 				notify := make(chan struct{})
 				waitForRqstFilter <- notify
@@ -2707,9 +2707,9 @@ CREATE TABLE d1.t2 (name int);
 
 	for notify := range waitForTxn {
 		close(notify)
-		mu.RLock()
+		mu.Lock()
 		rqstFilterChannel := waitForRqstFilter
-		mu.RUnlock()
+		mu.Unlock()
 		for notify2 := range rqstFilterChannel {
 			// Push the query trying to online the table out by
 			// leasing out the table again

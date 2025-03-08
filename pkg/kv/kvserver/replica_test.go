@@ -304,9 +304,9 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 
 	tc.repl.raftMu.Lock()
 	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
-	tc.repl.mu.RLock()
+	tc.repl.mu.Lock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
-	tc.repl.mu.RUnlock()
+	tc.repl.mu.Unlock()
 	tc.repl.raftMu.Unlock()
 	return newReplica, nil
 }
@@ -856,13 +856,13 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 			},
 		},
 	}
-	tc.repl.mu.RLock()
+	tc.repl.mu.Lock()
 	fr := kvserverbase.CheckForcedErr(
 		ctx, raftlog.MakeCmdIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.shMu.state,
 	)
 	pErr := fr.ForcedError
-	tc.repl.mu.RUnlock()
+	tc.repl.mu.Unlock()
 	if _, isErr := pErr.GetDetail().(*kvpb.LeaseRejectedError); !isErr {
 		t.Fatal(pErr)
 	} else if !testutils.IsPError(pErr, "replica not part of range") {
@@ -6678,9 +6678,9 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		tc.repl.mu.RLock()
+		tc.repl.mu.Lock()
 		newAppliedIndex := tc.repl.shMu.state.RaftAppliedIndex
-		tc.repl.mu.RUnlock()
+		tc.repl.mu.Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
@@ -7925,12 +7925,12 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	// Set the max lease index to that of the recently applied write.
 	// Two requests can't have the same lease applied index.
-	tc.repl.mu.RLock()
+	tc.repl.mu.Lock()
 	wrongLeaseIndex = tc.repl.shMu.state.LeaseAppliedIndex
 	if wrongLeaseIndex < 1 {
 		t.Fatal("committed a few batches, but still at lease index zero")
 	}
-	tc.repl.mu.RUnlock()
+	tc.repl.mu.Unlock()
 
 	log.Infof(ctx, "test begins")
 
@@ -8139,8 +8139,8 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		t.Fatalf("expected indexes %v, got %v", origIndexes, seenCmds)
 	}
 
-	tc.repl.mu.RLock()
-	defer tc.repl.mu.RUnlock()
+	tc.repl.mu.Lock()
+	defer tc.repl.mu.Unlock()
 	if tc.repl.hasPendingProposalsRLocked() {
 		t.Fatal("still pending commands")
 	}

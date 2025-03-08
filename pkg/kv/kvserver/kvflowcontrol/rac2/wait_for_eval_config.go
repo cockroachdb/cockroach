@@ -36,7 +36,7 @@ func (wec WaitForEvalCategory) Bypass(wc admissionpb.WorkClass) bool {
 type WaitForEvalConfig struct {
 	st *cluster.Settings
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		waitCategory            WaitForEvalCategory
 		waitCategoryDecreasedCh chan struct{}
 	}
@@ -96,9 +96,9 @@ func (w *WaitForEvalConfig) notifyChanged() {
 	}()
 	w.watcherMu.Lock()
 	defer w.watcherMu.Unlock()
-	w.mu.RLock()
+	w.mu.Lock()
 	wc := w.mu.waitCategory
-	w.mu.RUnlock()
+	w.mu.Unlock()
 	for _, cb := range w.watcherMu.cbs {
 		cb(wc)
 	}
@@ -108,8 +108,8 @@ func (w *WaitForEvalConfig) notifyChanged() {
 // the category value decreases (which narrows the set of work that needs to
 // WaitForEval).
 func (w *WaitForEvalConfig) Current() (WaitForEvalCategory, <-chan struct{}) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.mu.waitCategory, w.mu.waitCategoryDecreasedCh
 }
 
@@ -134,9 +134,9 @@ func (w *WaitForEvalConfig) computeCategory() WaitForEvalCategory {
 func (w *WaitForEvalConfig) RegisterWatcher(cb WatcherCallback) {
 	w.watcherMu.Lock()
 	defer w.watcherMu.Unlock()
-	w.mu.RLock()
+	w.mu.Lock()
 	wc := w.mu.waitCategory
-	w.mu.RUnlock()
+	w.mu.Unlock()
 	cb(wc)
 	w.watcherMu.cbs = append(w.watcherMu.cbs, cb)
 }

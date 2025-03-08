@@ -50,7 +50,7 @@ type Cache struct {
 	nodeDialer *nodedialer.Dialer
 	st         *cluster.Settings
 	mu         struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// lastNodeUpdate stores timestamps of StoreDescriptor updates in Gossip.
 		// This is tracking based on NodeID, so any store that is updated on this
 		// node will update teh lastNodeUpdate. We don't have the ability to handle
@@ -214,8 +214,8 @@ func (c *Cache) self() (_ Record, ok bool) {
 // includes the raw, encoded value that the database has for this liveness
 // record in addition to the decoded liveness proto.
 func (c *Cache) getLiveness(nodeID roachpb.NodeID) (_ Record, ok bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if l, ok := c.mu.nodes[nodeID]; ok {
 		return l, true
 	}
@@ -262,8 +262,8 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 // decommissioned)
 func (c *Cache) getIsLiveMap() livenesspb.IsLiveMap {
 	lMap := livenesspb.IsLiveMap{}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	now := c.clock.Now()
 	for nID, l := range c.mu.nodes {
 		isLive := l.IsLive(now)
@@ -284,8 +284,8 @@ func (c *Cache) getIsLiveMap() livenesspb.IsLiveMap {
 // get the entry they need. In a few places in the code it is more efficient to
 // get the entries once and keep the map in memory for later iteration.
 func (c *Cache) getAllLivenessEntries() []livenesspb.Liveness {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	cpy := make([]livenesspb.Liveness, 0, len(c.mu.nodes))
 	for _, l := range c.mu.nodes {
 		cpy = append(cpy, l.Liveness)
@@ -313,8 +313,8 @@ func (c *Cache) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 
 // lastDescriptorUpdate returns when this node last had an update.
 func (c *Cache) lastDescriptorUpdate(nodeID roachpb.NodeID) UpdateInfo {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if l, ok := c.mu.lastNodeUpdate[nodeID]; ok {
 		return l
 	}

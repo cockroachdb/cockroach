@@ -127,7 +127,7 @@ type StructuredLogSpy[T any] struct {
 	eventTypeRe []*regexp.Regexp
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		logs map[logpb.Channel][]T
 
@@ -198,8 +198,8 @@ func (s *StructuredLogSpy[T]) ClearFilters() {
 // Count returns the number of logs that have been intercepted in
 // the given channels. If no channels are provided, all logs are counted.
 func (s *StructuredLogSpy[T]) Count(channels ...logpb.Channel) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	sum := 0
 	chs := channels
 	if len(channels) == 0 {
@@ -218,8 +218,8 @@ func (s *StructuredLogSpy[T]) GetLastNLogs(ch logpb.Channel, n int) []T {
 	if n < 0 {
 		return nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if n > len(s.mu.logs[ch]) {
 		n = len(s.mu.logs[ch])
 	}
@@ -230,8 +230,8 @@ func (s *StructuredLogSpy[T]) GetLastNLogs(ch logpb.Channel, n int) []T {
 
 // GetLogs returns all logs that have been intercepted in the given channel.
 func (s *StructuredLogSpy[T]) GetLogs(ch logpb.Channel) []T {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	logs := make([]T, 0, len(s.mu.logs[ch]))
 	logs = append(logs, s.mu.logs[ch]...)
 	return logs

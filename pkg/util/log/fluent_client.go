@@ -23,7 +23,7 @@ type fluentSink struct {
 	addr    string
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		// good indicates that the connection can be used.
 		good bool
 		conn net.Conn

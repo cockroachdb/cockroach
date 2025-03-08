@@ -35,8 +35,8 @@ func (s *Store) TestingApplyInternal(
 func (s *Store) TestingSplitKeys(
 	tb testing.TB, ctx context.Context, start, end roachpb.RKey,
 ) []roachpb.RKey {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.spanConfigStore.TestingSplitKeys(tb, ctx, start, end)
 }
@@ -395,8 +395,8 @@ type interned struct {
 }
 
 func (s *Store) testingInterned() []interned {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.mu.spanConfigStore.testingInterned()
 }

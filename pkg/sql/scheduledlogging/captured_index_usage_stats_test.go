@@ -28,7 +28,7 @@ import (
 )
 
 type stubDurations struct {
-	syncutil.RWMutex
+	syncutil.Mutex
 	loggingDuration time.Duration
 	overlapDuration time.Duration
 }
@@ -40,8 +40,8 @@ func (s *stubDurations) setLoggingDuration(d time.Duration) {
 }
 
 func (s *stubDurations) getLoggingDuration() time.Duration {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	return s.loggingDuration
 }
 
@@ -52,8 +52,8 @@ func (s *stubDurations) setOverlapDuration(d time.Duration) {
 }
 
 func (s *stubDurations) getOverlapDuration() time.Duration {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	return s.overlapDuration
 }
 

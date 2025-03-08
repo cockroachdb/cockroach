@@ -54,7 +54,7 @@ type AnomalyDetector struct {
 	metrics  Metrics
 	store    *list.List
 	mu       struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		index map[appstatspb.StmtFingerprintID]*list.Element
 	}
@@ -89,8 +89,8 @@ func (d *AnomalyDetector) isSlow(stmt *Statement) (decision bool) {
 func (d *AnomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
 	// Ensure that Query doesn't flush which allows us to take the read lock.
 	const shouldFlush = false
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	latencies := PercentileValues{}
 	if entry, ok := d.mu.index[id]; ok {
 		latencySummary := entry.Value.(latencySummaryEntry).value

@@ -34,7 +34,7 @@ import (
 type hotRangesLogSpy struct {
 	t  *testing.T
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		logs []eventpb.HotRangesStats
 	}
 }
@@ -61,8 +61,8 @@ func (spy *hotRangesLogSpy) Intercept(e []byte) {
 }
 
 func (spy *hotRangesLogSpy) Logs() []eventpb.HotRangesStats {
-	spy.mu.RLock()
-	defer spy.mu.RUnlock()
+	spy.mu.Lock()
+	defer spy.mu.Unlock()
 	logs := make([]eventpb.HotRangesStats, len(spy.mu.logs))
 	copy(logs, spy.mu.logs)
 	return logs

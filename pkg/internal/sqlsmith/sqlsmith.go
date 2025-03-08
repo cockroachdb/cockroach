@@ -59,7 +59,7 @@ type Smither struct {
 	rnd *rand.Rand
 	db  *gosql.DB
 	// TODO(yuzefovich): clarify which objects this lock is protecting.
-	lock      syncutil.RWMutex
+	lock      syncutil.Mutex
 	dbName    string
 	schemas   []*schemaRef
 	tables    []*tableRef
