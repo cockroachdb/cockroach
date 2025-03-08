@@ -42,7 +42,7 @@ func TestEntryID(t *testing.T) {
 	}
 }
 
-func TestLogSlice(t *testing.T) {
+func TestLeadSlice(t *testing.T) {
 	id := func(index, term uint64) entryID {
 		return entryID{term: term, index: index}
 	}
@@ -84,7 +84,7 @@ func TestLogSlice(t *testing.T) {
 		{term: 10, prev: id(12, 2), entries: []pb.Entry{e(13, 2), e(14, 3)}, last: id(14, 3)},
 	} {
 		t.Run("", func(t *testing.T) {
-			s := LeadSlice{term: tt.term, prev: tt.prev, entries: tt.entries}
+			s := LeadSlice{term: tt.term, LogSlice: LogSlice{prev: tt.prev, entries: tt.entries}}
 			require.Equal(t, tt.notOk, s.valid() != nil)
 			if tt.notOk {
 				return
@@ -106,20 +106,19 @@ func TestLogSliceForward(t *testing.T) {
 	id := func(index, term uint64) entryID {
 		return entryID{term: term, index: index}
 	}
-	ls := func(prev entryID, terms ...uint64) LeadSlice {
+	ls := func(prev entryID, terms ...uint64) LogSlice {
 		empty := make([]pb.Entry, 0) // hack to canonicalize empty slices
-		return LeadSlice{
-			term:    8,
+		return LogSlice{
 			prev:    prev,
 			entries: append(empty, index(prev.index+1).terms(terms...)...),
 		}
 	}
 	for _, tt := range []struct {
-		ls   LeadSlice
+		ls   LogSlice
 		to   uint64
-		want LeadSlice
+		want LogSlice
 	}{
-		{ls: LeadSlice{}, to: 0, want: LeadSlice{}},
+		{ls: LogSlice{}, to: 0, want: LogSlice{}},
 		{ls: ls(id(5, 1)), to: 5, want: ls(id(5, 1))},
 		{ls: ls(id(10, 3), 3, 4, 5), to: 10, want: ls(id(10, 3), 3, 4, 5)},
 		{ls: ls(id(10, 3), 3, 4, 5), to: 11, want: ls(id(11, 3), 4, 5)},
