@@ -40,7 +40,7 @@ func (env *InteractionEnv) handleSendMsgApp(t *testing.T, d datadriven.TestData)
 func (env *InteractionEnv) SendMsgApp(from int, to pb.PeerID, lo, hi uint64) error {
 	rn := env.Nodes[from].RawNode
 	snap := rn.LogSnapshot()
-	ls, err := snap.LogSlice(lo, hi, math.MaxUint64)
+	ls, err := snap.LeadSlice(lo, hi, math.MaxUint64)
 	if err != nil {
 		return err
 	}

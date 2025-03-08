@@ -490,7 +490,7 @@ func (r *testingRCRange) logSnapshot() raft.LogSnapshot {
 }
 
 func (r *testingRCRange) SendMsgAppRaftMuLocked(
-	replicaID roachpb.ReplicaID, ls raft.LogSlice,
+	replicaID roachpb.ReplicaID, ls raft.LeadSlice,
 ) (raftpb.Message, bool) {
 	// TODO(pav-kv): populate the message correctly.
 	// TODO(pav-kv): use the real RawNode instead of fakes.
