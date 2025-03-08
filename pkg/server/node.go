@@ -193,18 +193,6 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaActiveMuxRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.mux_rangefeed.active",
-		Help:        `Number of currently running MuxRangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalMuxRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.mux_rangefeed.recv",
-		Help:        `Total number of MuxRangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // Cluster settings.
@@ -267,11 +255,13 @@ type nodeMetrics struct {
 	CrossRegionBatchResponseBytes *metric.Counter
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
-	NumMuxRangeFeed               *metric.Counter
-	ActiveMuxRangeFeed            *metric.Gauge
+	// StreamManagerMetrics is for monitoring of StreamManagers for rangefeed.
+	// Note that there could be multiple stream managers in a node.
+	StreamManagerMetrics *rangefeed.StreamManagerMetrics
+	// BufferedSenderMetrics is for monitoring of BufferedSenders for rangefeed.
+	// Note that there could be multiple buffered senders in a node.
+	BufferedSenderMetrics *rangefeed.BufferedSenderMetrics
 }
-
-var _ rangefeed.RangefeedMetricsRecorder = &nodeMetrics{}
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
 	nm := &nodeMetrics{
@@ -290,8 +280,8 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
-		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
-		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
+		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
+		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
 	}
 
 	for i := range nm.MethodCounts {
@@ -352,25 +342,6 @@ func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
 		nm.CrossZoneBatchResponseBytes.Inc(inc)
 	}
-}
-
-// UpdateOnRangefeedConnect increments rangefeed metrics when a new server
-// rangefeed is added.
-func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
-	nm.NumMuxRangeFeed.Inc(1)
-	nm.ActiveMuxRangeFeed.Inc(1)
-}
-
-// UpdateMetricsOnRangefeedDisconnect decrements rangefeed metrics when one
-// server rangefeed is disconnected.
-func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
-	nm.UpdateMetricsOnRangefeedDisconnectBy(1)
-}
-
-// UpdateMetricsOnRangefeedDisconnectBy decrements rangefeed metrics by the
-// given num argument when there are multiple rangefeed disconnects.
-func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnectBy(num int64) {
-	nm.ActiveMuxRangeFeed.Dec(num)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -2219,9 +2190,10 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 	sm := &rangefeed.StreamManager{}
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
-		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream), n.metrics)
+		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream, n.metrics.BufferedSenderMetrics),
+			n.metrics.StreamManagerMetrics)
 	} else {
-		sm = rangefeed.NewStreamManager(rangefeed.NewUnbufferedSender(lockedMuxStream), n.metrics)
+		sm = rangefeed.NewStreamManager(rangefeed.NewUnbufferedSender(lockedMuxStream), n.metrics.StreamManagerMetrics)
 	}
 
 	if err := sm.Start(ctx, n.stopper); err != nil {

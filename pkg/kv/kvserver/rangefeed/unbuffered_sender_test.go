@@ -47,9 +47,9 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
+	smMetrics := NewStreamManagerMetrics()
 	ubs := NewUnbufferedSender(testServerStream)
-	sm := NewStreamManager(ubs, testRangefeedCounter)
+	sm := NewStreamManager(ubs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
 	t.Run("nil handling", func(t *testing.T) {
@@ -71,11 +71,11 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			},
 		})
 		// Note that kvpb.NewError(nil) == nil.
-		require.Equal(t, 1, testRangefeedCounter.get())
+		require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 		sm.DisconnectStream(streamID, err)
 		// todo(wait for error)
 		testServerStream.waitForEvent(t, ev)
-		require.Equal(t, 0, testRangefeedCounter.get())
+		require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 		require.Equal(t, context.Canceled, streamCtx.Err())
 		require.Equal(t, 1, testServerStream.totalEventsSent())
 
@@ -95,7 +95,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			{2, 2, &kvpb.NodeUnavailableError{}},
 		}
 
-		require.Equal(t, 0, testRangefeedCounter.get())
+		require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 
 		for _, muxError := range testRangefeedCompletionErrors {
 			streamID := muxError.streamID
@@ -108,7 +108,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 			})
 		}
 
-		require.Equal(t, 3, testRangefeedCounter.get())
+		require.Equal(t, int64(3), smMetrics.ActiveMuxRangeFeed.Value())
 
 		var wg sync.WaitGroup
 		for _, muxError := range testRangefeedCompletionErrors {
@@ -136,7 +136,7 @@ func TestUnbufferedSenderDisconnect(t *testing.T) {
 					muxError, testServerStream.String())
 			})
 		}
-		testRangefeedCounter.waitForRangefeedCount(t, 0)
+		waitForRangefeedCount(t, smMetrics, 0)
 	})
 }
 
@@ -155,9 +155,9 @@ func TestUnbufferedSenderDisconnectBlockingIO(t *testing.T) {
 	const rangeID = 1
 	sp := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")}
 	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
+	smMetrics := NewStreamManagerMetrics()
 	ubs := NewUnbufferedSender(testServerStream)
-	sm := NewStreamManager(ubs, testRangefeedCounter)
+	sm := NewStreamManager(ubs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
 
@@ -212,15 +212,15 @@ func TestUnbufferedSenderWithConcurrentSend(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
-	sm := NewStreamManager(NewUnbufferedSender(testServerStream), testRangefeedCounter)
+	smMetrics := NewStreamManagerMetrics()
+	sm := NewStreamManager(NewUnbufferedSender(testServerStream), smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
 
 	sm.AddStream(1, &cancelCtxDisconnector{
 		cancel: func() {},
 	})
-	require.Equal(t, 1, testRangefeedCounter.get())
+	require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
