@@ -914,6 +914,28 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	}
 	s.constIdxs, s.placeholderIdxs, s.resolvableIdxs = typeCheckSplitExprs(s.exprs)
 
+	// Process variadic functions with unrestrained wildcards as their variadic
+	// parameter. This special cas short circuits the logic below, most of which
+	// assumes AnyElement behavior for untyped parameters.
+	for i := range s.params {
+		if vt, ok := s.params[i].(VariadicType); ok && vt.VarType == types.Any {
+			if numOverloads > 1 {
+				return errors.AssertionFailedf(
+					"only one overload can have VariadicType {types.Any} parameters")
+			}
+			for j := range s.exprs {
+				typedExpr, err := s.exprs[j].TypeCheck(ctx, semaCtx, vt.GetAt(j))
+				if err != nil {
+					return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+						"error type checking resolved expression:")
+				}
+				s.typedExprs[j] = typedExpr
+			}
+			s.overloadIdxs = append(s.overloadIdxs[:0], uint8(i))
+			return nil
+		}
+	}
+
 	// If no overloads are provided, just type check parameters and return.
 	if numOverloads == 0 {
 		for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
