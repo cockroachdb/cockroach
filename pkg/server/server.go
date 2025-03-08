@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -163,6 +164,7 @@ type topLevelServer struct {
 	promRuleExporter *metric.PrometheusRuleExporter
 	updates          *diagnostics.UpdateChecker
 	ctSender         *sidetransport.Sender
+	latencyTracker   *multiregion.LatencyTracker
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -661,7 +663,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	nodeRegistry.AddMetricStruct(storeLivenessTransport.Metrics())
 
-	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	latencyTracker := multiregion.NewLatencyTracker(
+		cfg.Locality, rpcContext.RemoteClocks.Latency, g.GetNodeDescriptor)
+	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer, latencyTracker)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
 	// The Executor will be further initialized later, as we create more
@@ -880,6 +884,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		TimeSeriesDataStore:          tsDB,
 		ClosedTimestampSender:        ctSender,
 		ClosedTimestampReceiver:      ctReceiver,
+		LatencyTracker:               latencyTracker,
 		ProtectedTimestampReader:     protectedTSReader,
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
@@ -1278,6 +1283,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		promRuleExporter:          promRuleExporter,
 		updates:                   updates,
 		ctSender:                  ctSender,
+		latencyTracker:            latencyTracker,
 		runtime:                   runtimeSampler,
 		http:                      sHTTP,
 		adminAuthzCheck:           adminAuthzCheck,
