@@ -61,19 +61,19 @@ func (l LogMark) After(other LogMark) bool {
 	return l.Term > other.Term || l.Term == other.Term && l.Index > other.Index
 }
 
-// LogSlice describes a correct slice of a raft log.
+// LeadSlice describes a correct slice of a raft log.
 //
 // Every log slice is considered in a context of a specific leader term. This
 // term does not necessarily match entryID.term of the entries, since a leader
 // log contains both entries from its own term, and some earlier terms.
 //
-// Two slices with a matching LogSlice.term are guaranteed to be consistent,
+// Two slices with a matching LeadSlice.term are guaranteed to be consistent,
 // i.e. they never contain two different entries at the same index. The reverse
-// is not true: two slices with different LogSlice.term may contain both
+// is not true: two slices with different LeadSlice.term may contain both
 // matching and mismatching entries. Specifically, logs at two different leader
 // terms share a common prefix, after which they *permanently* diverge.
 //
-// A well-formed LogSlice conforms to raft safety properties. It provides the
+// A well-formed LeadSlice conforms to raft safety properties. It provides the
 // following guarantees:
 //
 //  1. entries[i].Index == prev.index + 1 + i,
@@ -86,15 +86,15 @@ func (l LogMark) After(other LogMark) bool {
 // leader log at a specific term never has entries from higher terms.
 //
 // Users of this struct can assume the invariants hold true. Exception is the
-// "gateway" code that initially constructs LogSlice, such as when its content
+// "gateway" code that initially constructs LeadSlice, such as when its content
 // is sourced from a message that was received via transport, or from Storage,
 // or in a test code that manually hard-codes this struct. In these cases, the
 // invariants should be validated using the valid() method.
 //
-// The LogSlice is immutable. The entries slice must not be mutated, but it can
+// The LeadSlice is immutable. The entries slice must not be mutated, but it can
 // be appended to in some cases, when the callee protects its underlying slice
 // by capping the returned entries slice with a full slice expression.
-type LogSlice struct {
+type LeadSlice struct {
 	// term is the leader term containing the given entries in its log.
 	term uint64
 	// prev is the ID of the entry immediately preceding the entries.
@@ -105,57 +105,57 @@ type LogSlice struct {
 
 // Entries returns the log entries covered by this slice. The returned slice
 // must not be mutated.
-func (s LogSlice) Entries() []pb.Entry {
+func (s LeadSlice) Entries() []pb.Entry {
 	return s.entries
 }
 
 // lastIndex returns the index of the last entry in this log slice. Returns
 // prev.index if there are no entries.
-func (s LogSlice) lastIndex() uint64 {
+func (s LeadSlice) lastIndex() uint64 {
 	return s.prev.index + uint64(len(s.entries))
 }
 
 // lastEntryID returns the ID of the last entry in this log slice, or prev if
 // there are no entries.
-func (s LogSlice) lastEntryID() entryID {
+func (s LeadSlice) lastEntryID() entryID {
 	if ln := len(s.entries); ln != 0 {
 		return pbEntryID(&s.entries[ln-1])
 	}
 	return s.prev
 }
 
-// mark returns the LogMark identifying the end of this LogSlice.
-func (s LogSlice) mark() LogMark {
+// mark returns the LogMark identifying the end of this LeadSlice.
+func (s LeadSlice) mark() LogMark {
 	return LogMark{Term: s.term, Index: s.lastIndex()}
 }
 
 // termAt returns the term of the entry at the given index.
 // Requires: prev.index <= index <= lastIndex().
-func (s LogSlice) termAt(index uint64) uint64 {
+func (s LeadSlice) termAt(index uint64) uint64 {
 	if index == s.prev.index {
 		return s.prev.term
 	}
 	return s.entries[index-s.prev.index-1].Term
 }
 
-// forward returns a LogSlice with prev forwarded to the given index.
+// forward returns a LeadSlice with prev forwarded to the given index.
 // Requires: prev.index <= index <= lastIndex().
-func (s LogSlice) forward(index uint64) LogSlice {
-	return LogSlice{
+func (s LeadSlice) forward(index uint64) LeadSlice {
+	return LeadSlice{
 		term:    s.term,
 		prev:    entryID{term: s.termAt(index), index: index},
 		entries: s.entries[index-s.prev.index:],
 	}
 }
 
-// sub returns the entries of this LogSlice with indices in (after, to].
-func (s LogSlice) sub(after, to uint64) []pb.Entry {
+// sub returns the entries of this LeadSlice with indices in (after, to].
+func (s LeadSlice) sub(after, to uint64) []pb.Entry {
 	return s.entries[after-s.prev.index : to-s.prev.index]
 }
 
-// valid returns nil iff the LogSlice is a well-formed log slice. See LogSlice
+// valid returns nil iff the LeadSlice is a well-formed log slice. See LeadSlice
 // comment for details on what constitutes a valid raft log slice.
-func (s LogSlice) valid() error {
+func (s LeadSlice) valid() error {
 	prev := s.prev
 	for i := range s.entries {
 		id := pbEntryID(&s.entries[i])
@@ -173,7 +173,7 @@ func (s LogSlice) valid() error {
 // snapshot is a state machine snapshot tied to the term of the leader who
 // observed this committed state.
 //
-// Semantically, from the log perspective, this type is equivalent to a LogSlice
+// Semantically, from the log perspective, this type is equivalent to a LeadSlice
 // from 0 to lastEntryID(), plus a commit LogMark. All leader logs at terms >=
 // snapshot.term contain all entries up to the lastEntryID(). At earlier terms,
 // logs may or may not be consistent with this snapshot, depending on whether

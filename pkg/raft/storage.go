@@ -90,8 +90,8 @@ type LogStorage interface {
 	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
 	// this index is not available.
 	//
-	// TODO(pav-kv): replace this with a Prev() method equivalent to LogSlice's
-	// prev field. The log storage is just a storage-backed LogSlice.
+	// TODO(pav-kv): replace this with a Prev() method equivalent to LeadSlice's
+	// prev field. The log storage is just a storage-backed LeadSlice.
 	FirstIndex() uint64
 
 	// LogSnapshot returns an immutable point-in-time log storage snapshot.
@@ -148,11 +148,11 @@ type MemoryStorage struct {
 
 	// ls contains the log entries.
 	//
-	// TODO(pav-kv): the term field of the LogSlice is conservatively populated
-	// to be the last entry term, to keep the LogSlice valid. But it must be
+	// TODO(pav-kv): the term field of the LeadSlice is conservatively populated
+	// to be the last entry term, to keep the LeadSlice valid. But it must be
 	// sourced from the upper layer's last accepted term (which is >= the last
 	// entry term).
-	ls LogSlice
+	ls LeadSlice
 
 	callStats inMemStorageCallStats
 }
@@ -261,7 +261,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap pb.Snapshot) error {
 	}
 	ms.snapshot = snap
 	// TODO(pav-kv): the term must be the last accepted term passed in.
-	ms.ls = LogSlice{term: id.term, prev: id}
+	ms.ls = LeadSlice{term: id.term, prev: id}
 	return nil
 }
 
@@ -306,7 +306,7 @@ func (ms *MemoryStorage) Compact(index uint64) error {
 
 // Append the new entries to storage.
 //
-// TODO(pav-kv): pass in a LogSlice which carries correctness semantics.
+// TODO(pav-kv): pass in a LeadSlice which carries correctness semantics.
 func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	if len(entries) == 0 {
 		return nil
