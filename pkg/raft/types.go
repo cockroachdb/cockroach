@@ -89,6 +89,51 @@ type LogSlice struct {
 	entries []pb.Entry
 }
 
+// Entries returns the log entries covered by this slice. The returned slice
+// must not be mutated.
+func (s LogSlice) Entries() []pb.Entry {
+	return s.entries
+}
+
+// lastIndex returns the index of the last entry in this log slice. Returns
+// prev.index if there are no entries.
+func (s LogSlice) lastIndex() uint64 {
+	return s.prev.index + uint64(len(s.entries))
+}
+
+// lastEntryID returns the ID of the last entry in this log slice, or prev if
+// there are no entries.
+func (s LogSlice) lastEntryID() entryID {
+	if ln := len(s.entries); ln != 0 {
+		return pbEntryID(&s.entries[ln-1])
+	}
+	return s.prev
+}
+
+// termAt returns the term of the entry at the given index.
+// Requires: prev.index <= index <= lastIndex().
+func (s LogSlice) termAt(index uint64) uint64 {
+	if index == s.prev.index {
+		return s.prev.term
+	}
+	return s.entries[index-s.prev.index-1].Term
+}
+
+// forward returns a LogSlice with prev forwarded to the given index.
+// Requires: prev.index <= index <= lastIndex().
+func (s LogSlice) forward(index uint64) LogSlice {
+	return LogSlice{
+		prev:    entryID{term: s.termAt(index), index: index},
+		entries: s.entries[index-s.prev.index:],
+	}
+}
+
+// sub returns the entries of this slice at indices in (after, to].
+// Requires: prev.index <= after <= to <= lastIndex().
+func (s LogSlice) sub(after, to uint64) []pb.Entry {
+	return s.entries[after-s.prev.index : to-s.prev.index]
+}
+
 // valid returns nil iff the LogSlice is a well-formed log slice. See LogSlice
 // comment for details on what constitutes a valid raft log slice.
 func (s LogSlice) valid() error {
@@ -135,54 +180,9 @@ type LeadSlice struct {
 	LogSlice
 }
 
-// Entries returns the log entries covered by this slice. The returned slice
-// must not be mutated.
-func (s LogSlice) Entries() []pb.Entry {
-	return s.entries
-}
-
-// lastIndex returns the index of the last entry in this log slice. Returns
-// prev.index if there are no entries.
-func (s LogSlice) lastIndex() uint64 {
-	return s.prev.index + uint64(len(s.entries))
-}
-
-// lastEntryID returns the ID of the last entry in this log slice, or prev if
-// there are no entries.
-func (s LogSlice) lastEntryID() entryID {
-	if ln := len(s.entries); ln != 0 {
-		return pbEntryID(&s.entries[ln-1])
-	}
-	return s.prev
-}
-
 // mark returns the LogMark identifying the end of this LeadSlice.
 func (s LeadSlice) mark() LogMark {
 	return LogMark{Term: s.term, Index: s.lastIndex()}
-}
-
-// termAt returns the term of the entry at the given index.
-// Requires: prev.index <= index <= lastIndex().
-func (s LogSlice) termAt(index uint64) uint64 {
-	if index == s.prev.index {
-		return s.prev.term
-	}
-	return s.entries[index-s.prev.index-1].Term
-}
-
-// forward returns a LogSlice with prev forwarded to the given index.
-// Requires: prev.index <= index <= lastIndex().
-func (s LogSlice) forward(index uint64) LogSlice {
-	return LogSlice{
-		prev:    entryID{term: s.termAt(index), index: index},
-		entries: s.entries[index-s.prev.index:],
-	}
-}
-
-// sub returns the entries of this slice at indices in (after, to].
-// Requires: prev.index <= after <= to <= lastIndex().
-func (s LogSlice) sub(after, to uint64) []pb.Entry {
-	return s.entries[after-s.prev.index : to-s.prev.index]
 }
 
 // valid returns nil iff the LeadSlice is a well-formed leader log slice. See
