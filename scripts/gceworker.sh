@@ -18,6 +18,14 @@ USER_ID=$(id -un)
 NAME=${GCEWORKER_NAME-gceworker-${USER_ID//.}}
 FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 
+# IMAGE_FAMILY can be used to override the image when creating a gceworker.
+# For example:
+#   IMAGE_FAMILY=ubuntu-2410-amd64 scripts/gceworker.sh create
+#
+# Note that ubuntu-2004-lts is the only image that we know will consistently
+# work with respect to our build or scripts.
+IMAGE_FAMILY=${IMAGE_FAMILY-ubuntu-2004-lts}
+
 cmd=${1-}
 if [[ "${cmd}" ]]; then
   shift
@@ -84,7 +92,7 @@ case "${cmd}" in
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
-           --image-family "ubuntu-2004-lts" \
+           --image-family "${IMAGE_FAMILY}" \
            --boot-disk-size "250" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
