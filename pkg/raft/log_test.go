@@ -786,7 +786,7 @@ func TestSlice(t *testing.T) {
 	halfe := pb.Entry{Index: half, Term: half}
 
 	entries := func(lo, hi uint64) []pb.Entry { // (lo, hi]
-		return index(lo+1).termRange(lo+1, hi+1)
+		return index(lo + 1).terms(intRange(lo+1, hi+1)...)
 	}
 
 	storage := NewMemoryStorage()
@@ -871,7 +871,7 @@ func TestScan(t *testing.T) {
 	last := offset + num
 	half := offset + num/2
 	entries := func(from, to uint64) []pb.Entry {
-		return index(from).termRange(from, to)
+		return index(from).terms(intRange(from, to)...)
 	}
 	entrySize := entsSize(entries(half, half+1))
 
@@ -944,13 +944,6 @@ func (i index) terms(terms ...uint64) []pb.Entry {
 		index++
 	}
 	return entries
-}
-
-// termRange generates a slice of to-from entries, at consecutive indices
-// starting from i, and consecutive terms in [from, to).
-// TODO(pav-kv): remove.
-func (i index) termRange(from, to uint64) []pb.Entry {
-	return i.terms(intRange(from, to)...)
 }
 
 // append generates a valid LogSlice of entries appended after the given entry
