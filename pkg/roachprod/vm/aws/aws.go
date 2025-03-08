@@ -1080,6 +1080,13 @@ type DescribeInstancesOutputInstance struct {
 	InstanceType          string
 	InstanceLifecycle     string `json:"InstanceLifecycle"`
 	SpotInstanceRequestId string `json:"SpotInstanceRequestId"`
+
+	// Encodes IAM identifier for this instance.
+	IamInstanceProfile struct {
+		// Of the form "Arn": "arn:aws:iam::[0-9]+:instance-profile/roachprod-testing"
+		Arn string `json:"Arn"`
+		Id  string `json:"Id"`
+	}
 }
 
 // toVM converts an ec2 instance to a vm.VM struct.
@@ -1123,6 +1130,12 @@ func (in *DescribeInstancesOutputInstance) toVM(
 			}
 		}
 	}
+	// Parse IamInstanceProfile.Arn to extract IAM identifier.
+	// The ARN is of the form "arn:aws:iam::[0-9]+:instance-profile/roachprod-testing"
+	iamIdentifier := ""
+	if in.IamInstanceProfile.Arn != "" {
+		iamIdentifier = strings.Split(strings.TrimPrefix(in.IamInstanceProfile.Arn, "arn:aws:iam::"), ":")[0]
+	}
 
 	return &vm.VM{
 		CreatedAt:              createdAt,
@@ -1134,6 +1147,7 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		PrivateIP:              in.PrivateIPAddress,
 		Provider:               ProviderName,
 		ProviderID:             in.InstanceID,
+		ProviderAccountID:      iamIdentifier,
 		PublicIP:               in.PublicIPAddress,
 		RemoteUser:             remoteUserName,
 		VPC:                    in.VpcID,
@@ -1143,7 +1157,6 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		NonBootAttachedVolumes: nonBootableVolumes,
 		Preemptible:            in.InstanceLifecycle == "spot",
 	}
-
 }
 
 // CancelSpotInstanceRequestsOutput represents the output structure of the cancel-spot-instance-requests command.
