@@ -164,10 +164,11 @@ func Name(cluster string, idx int) string {
 
 // Error values for VM.Error
 var (
-	ErrBadNetwork    = errors.New("could not determine network information")
-	ErrBadScheduling = errors.New("could not determine scheduling information")
-	ErrInvalidName   = errors.New("invalid VM name")
-	ErrNoExpiration  = errors.New("could not determine expiration")
+	ErrBadNetwork         = errors.New("could not determine network information")
+	ErrBadScheduling      = errors.New("could not determine scheduling information")
+	ErrInvalidUserName    = errors.New("invalid user name")
+	ErrInvalidClusterName = errors.New("invalid cluster name")
+	ErrNoExpiration       = errors.New("could not determine expiration")
 )
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)

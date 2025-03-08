@@ -2980,9 +2980,17 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
 
 		// Run the command, extracting the JSON payload
-		jsonVMS := make([]jsonVM, 0)
-		if err := runJSONCommand(args, &jsonVMS); err != nil {
+		allVMS := make([]jsonVM, 0)
+		if err := runJSONCommand(args, &allVMS); err != nil {
 			return nil, err
+		}
+		jsonVMS := make([]jsonVM, 0)
+		// Remove instances that weren't created by roachprod.
+		// N.B. The same filter is applied in other providers, i.e., aws and azure.
+		for _, v := range allVMS {
+			if v.Labels[vm.TagRoachprod] == "true" {
+				jsonVMS = append(jsonVMS, v)
+			}
 		}
 
 		// Find all instance templates that are currently in use.
