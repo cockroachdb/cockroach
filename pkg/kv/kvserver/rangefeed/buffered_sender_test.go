@@ -33,9 +33,9 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
-	bs := NewBufferedSender(testServerStream)
-	sm := NewStreamManager(bs, testRangefeedCounter)
+	smMetrics := NewStreamManagerMetrics()
+	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
 
@@ -51,13 +51,13 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 				require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
 			},
 		})
-		require.Equal(t, 1, testRangefeedCounter.get())
+		require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 		require.Equal(t, 0, bs.len())
 		sm.DisconnectStream(int64(streamID), err)
 		testServerStream.waitForEvent(t, errEvent)
 		require.Equal(t, int32(1), num.Load())
 		require.Equal(t, 1, testServerStream.totalEventsSent())
-		testRangefeedCounter.waitForRangefeedCount(t, 0)
+		waitForRangefeedCount(t, smMetrics, 0)
 		testServerStream.reset()
 	})
 	t.Run("disconnect stream on the same stream is idempotent", func(t *testing.T) {
@@ -66,14 +66,14 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 				require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
 			},
 		})
-		require.Equal(t, 1, testRangefeedCounter.get())
+		require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 		sm.DisconnectStream(int64(streamID), err)
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		sm.DisconnectStream(int64(streamID), err)
 		require.NoError(t, bs.waitForEmptyBuffer(ctx))
 		require.Equalf(t, 1, testServerStream.totalEventsSent(),
 			"expected only 1 error event in %s", testServerStream.String())
-		testRangefeedCounter.waitForRangefeedCount(t, 0)
+		waitForRangefeedCount(t, smMetrics, 0)
 	})
 }
 
@@ -85,9 +85,10 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
-	testRangefeedCounter := newTestRangefeedCounter()
-	bs := NewBufferedSender(testServerStream)
-	sm := NewStreamManager(bs, testRangefeedCounter)
+
+	smMetrics := NewStreamManagerMetrics()
+	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 
 	rng, _ := randutil.NewTestRand()
@@ -139,12 +140,12 @@ func TestBufferedSenderChaosWithStop(t *testing.T) {
 		require.Equal(t, activeStreamStart, int64(testServerStream.totalEventsSent()))
 		expectedActiveStreams := activeStreamEnd - activeStreamStart
 		require.Equal(t, int(expectedActiveStreams), sm.activeStreamCount())
-		testRangefeedCounter.waitForRangefeedCount(t, int(expectedActiveStreams))
+		waitForRangefeedCount(t, smMetrics, int(expectedActiveStreams))
 	})
 
 	t.Run("stream manager on stop", func(t *testing.T) {
 		sm.Stop(ctx)
-		require.Equal(t, 0, testRangefeedCounter.get())
+		require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 		require.Equal(t, 0, sm.activeStreamCount())
 		// Cleanup functions should be called for all active streams.
 		require.Equal(t, int32(activeStreamEnd), actualSum.Load())
