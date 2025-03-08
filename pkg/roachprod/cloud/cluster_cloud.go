@@ -263,11 +263,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, err := v.UserName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidName)
+				v.Errors = append(v.Errors, vm.ErrInvalidUserName)
 			}
 			clusterName, err := v.ClusterName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidName)
+				v.Errors = append(v.Errors, vm.ErrInvalidClusterName)
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct

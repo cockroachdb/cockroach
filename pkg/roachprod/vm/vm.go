@@ -116,8 +116,11 @@ type VM struct {
 	// The provider-specific id for the instance.  This may or may not be the same as Name, depending
 	// on whether or not the cloud provider automatically assigns VM identifiers.
 	ProviderID string `json:"provider_id"`
-	PrivateIP  string `json:"private_ip"`
-	PublicIP   string `json:"public_ip"`
+	// The provider-specific account id for the instance. E.g., in GCE this is project name, in AWS this is IAM id,
+	// in Azure it's a subscription id, etc.
+	ProviderAccountID string `json:"provider_account_id"`
+	PrivateIP         string `json:"private_ip"`
+	PublicIP          string `json:"public_ip"`
 	// The username that should be used to connect to the VM.
 	RemoteUser string `json:"remote_user"`
 	// The VPC value defines an equivalency set for VMs that can route
@@ -164,10 +167,11 @@ func Name(cluster string, idx int) string {
 
 // Error values for VM.Error
 var (
-	ErrBadNetwork    = errors.New("could not determine network information")
-	ErrBadScheduling = errors.New("could not determine scheduling information")
-	ErrInvalidName   = errors.New("invalid VM name")
-	ErrNoExpiration  = errors.New("could not determine expiration")
+	ErrBadNetwork         = errors.New("could not determine network information")
+	ErrBadScheduling      = errors.New("could not determine scheduling information")
+	ErrInvalidUserName    = errors.New("invalid user name")
+	ErrInvalidClusterName = errors.New("invalid cluster name")
+	ErrNoExpiration       = errors.New("could not determine expiration")
 )
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)
