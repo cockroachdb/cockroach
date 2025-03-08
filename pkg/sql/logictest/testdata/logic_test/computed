@@ -357,7 +357,7 @@ CREATE TABLE y (
   c TIMESTAMPTZ AS (a+ b) STORED
 )
 
-statement error concat\(\): uuid_v4\(\): volatile functions are not allowed in STORED COMPUTED COLUMN
+statement error pq: concat\(\): error type checking resolved expression:: uuid_v4\(\): volatile functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
   a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
 )
