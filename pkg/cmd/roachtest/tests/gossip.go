@@ -289,37 +289,37 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	}
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := g.conn(ctx, t.L(), i)
-		//nolint:deferloop TODO(#137605)
-		defer db.Close()
-		if i == 1 {
-			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+		func() {
+			db := g.conn(ctx, t.L(), i)
+			defer db.Close()
+			if i == 1 {
+				if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
-				t.Fatal(err)
+			defer rows.Close()
+			var count int
+			if rows.Next() {
+				if err := rows.Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if count != i {
+					t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i)
+				}
+			} else {
+				t.Fatalf("no results found from update")
 			}
-			if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
-				t.Fatal(err)
-			}
-		}
-		rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		//nolint:deferloop TODO(#137605)
-		defer rows.Close()
-		var count int
-		if rows.Next() {
-			if err := rows.Scan(&count); err != nil {
-				t.Fatal(err)
-			}
-			if count != i {
-				t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i)
-			}
-		} else {
-			t.Fatalf("no results found from update")
-		}
+		}()
 	}
 }
 
@@ -563,9 +563,6 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		db := c.Conn(ctx, t.L(), 1)
-		//nolint:deferloop TODO(#137605)
-		defer db.Close()
-
 		rows, err := db.Query(
 			`SELECT node_id, advertise_address FROM crdb_internal.gossip_nodes`,
 		)
@@ -595,6 +592,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 				}
 			}
 		}
+		db.Close()
 	}
 	if rowCount <= 0 {
 		t.Fatal("No results for " +
