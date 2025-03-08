@@ -7,9 +7,11 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +19,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+func (r *Replica) GetLocality() ctpb.RangeClosedTimestampByPolicyLocality {
+	r.mu.AssertRHeld()
+	desc := r.descRLocked()
+	res := ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY
+	for _, peer := range desc.InternalReplicas {
+		peerLocality := r.store.latencyTracker.GetLatencyByLocalityProximity(peer.NodeID)
+		res = max(res, peerLocality)
+	}
+	r.mu.cachedLocality = res
+	return res
+}
+
+func getTargetAndPolicyLocality(
+	policy roachpb.RangeClosedTimestampPolicy,
+	latencyBucket ctpb.RangeClosedTimestampByPolicyLocality,
+	targetByPolicy map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp,
+) (targetTS hlc.Timestamp, policyLocality ctpb.RangeClosedTimestampByPolicyLocality) {
+	if targetTS, ok := targetByPolicy[latencyBucket]; ok {
+		return targetTS, latencyBucket
+	}
+	return targetByPolicy[ctpb.RangeClosedTimestampByPolicyLocality(policy)],
+		ctpb.RangeClosedTimestampByPolicyLocality(policy)
+}
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
@@ -32,7 +58,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicy map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -50,10 +76,11 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	target, policyLocality := getTargetAndPolicyLocality(
+		r.closedTimestampPolicyRLocked(), r.GetLocality(), targetByPolicy)
+
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
-	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
+	// We need to own the lease but note that stass (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
 	if !valid || !st.OwnedBy(r.StoreID()) {
@@ -104,7 +131,7 @@ func (r *Replica) BumpSideTransportClosed(
 	r.sideTransportClosedTimestamp.forward(ctx, target, lai, knownApplied)
 	res.OK = true
 	res.LAI = lai
-	res.Policy = policy
+	res.Policy = policyLocality
 	return res
 }
 
@@ -118,7 +145,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedts.DefaultMaxNetworkRTT,
+		time.Duration(30*int(r.mu.cachedLocality)-1)*time.Millisecond,
 		r.closedTimestampPolicyRLocked(),
 	)
 }

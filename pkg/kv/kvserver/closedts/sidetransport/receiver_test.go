@@ -57,9 +57,17 @@ func (m *mockStores) getAndClearRecording() []rangeUpdate {
 var ts10 = hlc.Timestamp{WallTime: 10}
 var ts11 = hlc.Timestamp{WallTime: 11}
 var ts12 = hlc.Timestamp{WallTime: 12}
+var ts15 = hlc.Timestamp{WallTime: 15}
+var ts16 = hlc.Timestamp{WallTime: 16}
+var ts17 = hlc.Timestamp{WallTime: 17}
+var ts18 = hlc.Timestamp{WallTime: 18}
+var ts19 = hlc.Timestamp{WallTime: 19}
 var ts20 = hlc.Timestamp{WallTime: 20}
 var ts21 = hlc.Timestamp{WallTime: 21}
 var ts22 = hlc.Timestamp{WallTime: 22}
+var ts25 = hlc.Timestamp{WallTime: 25}
+var ts26 = hlc.Timestamp{WallTime: 26}
+var ts27 = hlc.Timestamp{WallTime: 27}
 var laiZero = kvpb.LeaseAppliedIndex(0)
 
 const lai100 = kvpb.LeaseAppliedIndex(100)
@@ -88,11 +96,17 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
 			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts10},
 			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: ts20},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE, ClosedTimestamp: ts15},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE, ClosedTimestamp: ts18},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION, ClosedTimestamp: ts25},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
 			{RangeID: 1, LAI: lai100, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
 			{RangeID: 2, LAI: lai101, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
 			{RangeID: 3, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY},
+			{RangeID: 4, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION},
+			{RangeID: 5, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE},
+			{RangeID: 6, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE},
 		},
 		Removed: nil,
 	}
@@ -106,9 +120,18 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 	ts, lai = r.GetClosedTimestamp(ctx, 3)
 	require.Equal(t, ts20, ts)
 	require.Equal(t, lai102, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 4)
+	require.Equal(t, ts25, ts)
+	require.Equal(t, lai102, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 5)
+	require.Equal(t, ts18, ts)
+	require.Equal(t, lai102, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 6)
+	require.Equal(t, ts15, ts)
+	require.Equal(t, lai102, lai)
 	require.Empty(t, stores.getAndClearRecording())
 
-	// Remove range 1, update 2 implicitly, update 3 explicitly.
+	// Remove range 1, update 2 implicitly, update 3 (LAI), 4,6(locality) explicitly.
 	msg = &ctpb.Update{
 		NodeID:   1,
 		SeqNum:   2,
@@ -116,9 +139,14 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
 			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts11},
 			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: ts21},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE, ClosedTimestamp: ts16},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE, ClosedTimestamp: ts19},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION, ClosedTimestamp: ts26},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
 			{RangeID: 3, LAI: lai103, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY},
+			{RangeID: 4, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE},
+			{RangeID: 6, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION},
 		},
 		Removed: []roachpb.RangeID{1},
 	}
@@ -132,6 +160,15 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 	ts, lai = r.GetClosedTimestamp(ctx, 3)
 	require.Equal(t, ts21, ts)
 	require.Equal(t, lai103, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 4)
+	require.Equal(t, ts16, ts)
+	require.Equal(t, lai102, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 5)
+	require.Equal(t, ts19, ts)
+	require.Equal(t, lai102, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 6)
+	require.Equal(t, ts26, ts)
+	require.Equal(t, lai102, lai)
 	require.Equal(t, []rangeUpdate{{rid: 1, closedTS: ts10, lai: lai100}}, stores.getAndClearRecording())
 
 	// Send a snapshot and check that it rests all the state.
@@ -142,10 +179,14 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 		ClosedTimestamps: []ctpb.Update_GroupUpdate{
 			{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: ts12},
 			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: ts22},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE, ClosedTimestamp: ts17},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE, ClosedTimestamp: ts20},
+			{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION, ClosedTimestamp: ts27},
 		},
 		AddedOrUpdated: []ctpb.Update_RangeUpdate{
 			{RangeID: 3, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY},
 			{RangeID: 4, LAI: lai100, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
+			{RangeID: 6, LAI: lai102, Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY},
 		},
 		Removed: nil,
 	}
@@ -159,6 +200,12 @@ func TestIncomingStreamProcessUpdateBasic(t *testing.T) {
 	ts, lai = r.GetClosedTimestamp(ctx, 4)
 	require.Equal(t, ts12, ts)
 	require.Equal(t, lai100, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 5)
+	require.Empty(t, ts)
+	require.Equal(t, laiZero, lai)
+	ts, lai = r.GetClosedTimestamp(ctx, 6)
+	require.Equal(t, ts22, ts)
+	require.Equal(t, lai102, lai)
 	require.Empty(t, stores.getAndClearRecording())
 }
 
