@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -242,7 +243,10 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
+	args *kvpb.RangeFeedRequest,
+	stream rangefeed.Stream,
+	pacer *admission.Pacer,
+	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) error {
 	ctx := r.AnnotateCtx(stream.Context())
 
@@ -283,8 +287,18 @@ func (r *Replica) RangeFeed(
 	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
 		usingCatchUpIter = true
+		perConsumerRelease := func() {}
+		if perConsumerCatchupLimiter != nil {
+			perConsumerAlloc, err := perConsumerCatchupLimiter.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			perConsumerRelease = perConsumerAlloc.Release
+		}
+
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
+			perConsumerRelease()
 			return err
 		}
 
@@ -298,7 +312,11 @@ func (r *Replica) RangeFeed(
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
-			iterSemReleaseOnce.Do(alloc.Release)
+			iterSemReleaseOnce.Do(func() {
+				alloc.Release()
+				perConsumerRelease()
+			})
+
 		}
 	}
 
