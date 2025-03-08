@@ -191,7 +191,7 @@ const (
 // a single KV. Note that the returned KV is only valid until the next call to
 // NextKV.
 type mvccScanFetchAdapter struct {
-	scanner *pebbleMVCCScanner
+	scanner *pointScanner
 	machine onNextKVFn
 	results singleResults
 }
@@ -420,16 +420,16 @@ func mvccScanToCols(
 	opts MVCCScanOptions,
 	st *cluster.Settings,
 ) (MVCCScanResult, error) {
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
+	scanner := pointScannerPool.Get().(*pointScanner)
 	adapter := mvccScanFetchAdapter{machine: onNextKVSeek}
 	adapter.results.maxKeysPerRow = indexFetchSpec.MaxKeysPerRow
 	adapter.results.maxFamilyID = uint32(indexFetchSpec.MaxFamilyID)
-	ok, res, err := mvccScanInit(mvccScanner, iter, key, endKey, timestamp, opts, &adapter.results)
+	ok, res, err := mvccScanInit(scanner, iter, key, endKey, timestamp, opts, &adapter.results)
 	if !ok {
 		return res, err
 	}
-	defer mvccScanner.release()
-	adapter.scanner = mvccScanner
+	defer scanner.release()
+	adapter.scanner = scanner
 
 	// Try to use the same root monitor (from the store) if the account is
 	// provided.
@@ -498,11 +498,11 @@ func mvccScanToCols(
 		}
 	}
 
-	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()
+	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = scanner.afterScan()
 	if err != nil {
 		return MVCCScanResult{}, err
 	}
-	if err = finalizeScanResult(mvccScanner, &res, opts); err != nil {
+	if err = finalizeScanResult(scanner, &res, opts); err != nil {
 		return MVCCScanResult{}, err
 	}
 	return res, nil

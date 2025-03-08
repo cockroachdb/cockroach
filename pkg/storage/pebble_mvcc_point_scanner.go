@@ -11,11 +11,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 // Pool for allocating pebble MVCC Scanners.
@@ -104,15 +104,12 @@ type pointScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey      MVCCKey
-	curRawKey         []byte
-	curUnsafeValue    MVCCValue
-	curRawValue       pebble.LazyValue
-	curRangeKeys      MVCCRangeKeyStack
-	savedRangeKeys    MVCCRangeKeyStack
-	savedRangeKeyVers MVCCRangeKeyVersion
-	results           results
-	intents           pebble.Batch
+	curUnsafeKey   MVCCKey
+	curRawKey      []byte
+	curUnsafeValue MVCCValue
+	curRawValue    pebble.LazyValue
+	results        results
+	intents        pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -163,9 +160,7 @@ func (p *pointScanner) release() {
 
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
-func (p *pointScanner) init(
-	txn *roachpb.Transaction, ui uncertainty.Interval, results results,
-) {
+func (p *pointScanner) init(txn *roachpb.Transaction, ui uncertainty.Interval, results results) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
 	p.results = results
 
@@ -196,32 +191,10 @@ func (p *pointScanner) get(ctx context.Context) {
 	if !p.iterValid() {
 		return
 	}
-
-	// Unlike scans, if tombstones are enabled, we synthesize point tombstones
-	// for MVCC range tombstones even if there is no existing point key below
-	// it. These are often needed for e.g. conflict checks. However, both
-	// processRangeKeys and getOne may need to advance the iterator,
-	// moving away from range key we originally landed on. If we're in tombstone
-	// mode and there's a range key, save the most recent visible value so that
-	// we can use it to synthesize a tombstone if we fail to find a KV.
-	var hadMVCCRangeTombstone bool
-
-	var added bool
-	if p.processRangeKeys(true /* seeked */, false /* reverse */) {
-		if p.updateCurrent() {
-			_, added = p.getOne(ctx)
-		}
+	if p.updateCurrent() {
+		_, _ = p.getOne(ctx)
 	}
 	p.maybeFailOnMoreRecent()
-
-	// In tombstone mode, if there was no existing point key we may need to
-	// synthesize a point tombstone if we saved a range key before
-	// Unlike scans, if tombstones are enabled, we synthesize point tombstones
-	// for MVCC range tombstones even if there is no existing point key below
-	// it. These are often needed for e.g. conflict checks.
-	if p.tombstones && hadMVCCRangeTombstone && !added && p.err == nil {
-		p.addSynthetic(ctx, p.start, p.savedRangeKeyVers)
-	}
 }
 
 // seekToStartOfScan positions the scanner at the initial key.
@@ -273,9 +246,7 @@ func (p *pointScanner) advance() bool {
 // scan iterates until a limit is exceeded, the underlying iterator is
 // exhausted, or an error is encountered. If a limit was exceeded, it returns a
 // resume span, resume reason, and for targetBytes the size of the next result.
-func (p *pointScanner) scan(
-	ctx context.Context,
-) (*roachpb.Span, kvpb.ResumeReason, int64, error) {
+func (p *pointScanner) scan(ctx context.Context) (*roachpb.Span, kvpb.ResumeReason, int64, error) {
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
@@ -427,13 +398,6 @@ func (p *pointScanner) uncertaintyError(
 // range key. Range keys are processed separately in processRangeKeys().
 func (p *pointScanner) getOne(ctx context.Context) (ok, added bool) {
 	if !p.curUnsafeKey.Timestamp.IsEmpty() {
-		// Range key where read ts >= range key ts >= point key ts. Synthesize a
-		// point tombstone for it. Range key conflict checks are done in
-		// processRangeKeys().
-		if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
-			return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
-		}
-
 		// We are eagerly fetching and decoding the value, even though it may be
 		// too recent. With some care, this could be optimized to be lazy.
 		v, valid := p.getFromLazyValue()
@@ -725,9 +689,6 @@ func (p *pointScanner) nextKey() bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
-		return false
-	}
 	return p.updateCurrent()
 }
 
@@ -813,9 +774,6 @@ func (p *pointScanner) advanceKeyAtEndReverse() bool {
 	p.peeked = false
 	p.parent.SeekLT(MVCCKey{Key: p.end})
 	if !p.iterValid() {
-		return false
-	}
-	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
 		return false
 	}
 	if !p.updateCurrent() {
@@ -1028,9 +986,6 @@ func (p *pointScanner) seekVersion(
 				}
 			}
 			if !uncertaintyCheckRequired {
-				if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
-					return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
-				}
 				return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 			}
 			// Iterate through uncertainty interval. Though we found a value in
@@ -1076,9 +1031,6 @@ func (p *pointScanner) seekVersion(
 			}
 		}
 		if !uncertaintyCheckRequired {
-			if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
-				return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
-			}
 			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 		// Iterate through uncertainty interval. See the comment above about why
@@ -1091,127 +1043,6 @@ func (p *pointScanner) seekVersion(
 		if !p.iterNext() {
 			p.setAdvanceKeyAtEnd()
 			return true /* ok */, false
-		}
-	}
-}
-
-// coveredByRangeKey returns the topmost range key at the current position
-// between the given timestamp and the read timestamp p.ts, if any.
-//
-// gcassert:inline
-func (p *pointScanner) coveredByRangeKey(ts hlc.Timestamp) (rkv MVCCRangeKeyVersion, ok bool) {
-	// This code is a bit odd to fit it within the mid-stack inlining budget. We
-	// can't use p.curRangeKeys.IsEmpty(), nor early returns.
-	if len(p.curRangeKeys.Versions) > 0 {
-		rkv, ok = p.doCoveredByRangeKey(ts)
-	}
-	return rkv, ok
-}
-
-// doCoveredByRangeKey is a helper for coveredByRangeKey to allow mid-stack
-// inlining.  It is only called when there are range keys present.
-func (p *pointScanner) doCoveredByRangeKey(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
-	// In the common case when tombstones are disabled, range key masking will be
-	// enabled and so the point key will generally always be above the upper range
-	// key (unless we're reading in the past). We fast-path this here.
-	if p.tombstones || ts.LessEq(p.curRangeKeys.Newest()) {
-		if rkv, ok := p.curRangeKeys.FirstAtOrBelow(p.ts); ok && ts.LessEq(rkv.Timestamp) {
-			return rkv, true
-		}
-	}
-	return MVCCRangeKeyVersion{}, false
-}
-
-// processRangeKeys will check for any newly encountered MVCC range keys (as
-// determined by RangeKeyChanged), perform conflict checks for them, decode them
-// into p.curRangeKeys, and skip across bare range keys until positioned on a
-// point key or exhausted iterator. It must be called after every iterator
-// positioning operation, to make sure it sees the RangeKeyChanged signal.
-// Requires a valid iterator. Returns true if iteration can continue.
-//
-// seeked must be set to true following an iterator seek operation. In the
-// forward direction, bare range keys are only possible with RangeKeyChanged or
-// SeekGE, which allows omitting HasPointAndRange calls in the common Next case.
-// It's also required to handle the case where the scanner is given a used
-// iterator that may already be positioned on a range key such that the initial
-// seek won't trigger RangeKeyChanged.
-//
-// reverse must be set to true if the previous iterator operation was a reverse
-// operation (SeekLT or Prev). This determines the direction to skip in, and
-// also requires checking for bare range keys after every step, since we'll
-// land on them last.
-func (p *pointScanner) processRangeKeys(seeked bool, reverse bool) bool {
-
-	// Look for new range keys to process, and step across bare range keys until
-	// we land on a point key (or exhaust the iterator).
-	for {
-		// In the forward direction, we can only land on a bare range key when
-		// RangeKeyChanged fires (at its start bound) or when we SeekGE within it.
-		rangeKeyChanged := p.parent.RangeKeyChanged()
-		if !rangeKeyChanged && !reverse && !seeked {
-			return true
-		}
-
-		// We fast-path the common no-range-key case.
-		hasPoint, hasRange := p.parent.HasPointAndRange()
-		if !hasRange {
-			p.curRangeKeys = MVCCRangeKeyStack{}
-			return true
-		}
-
-		// Process new range keys. On the initial seek it's possible that we're
-		// given an iterator that's already positioned on a range key, so
-		// RangeKeyChanged won't fire -- we handle that case here as well.
-		if rangeKeyChanged || (seeked && p.curRangeKeys.IsEmpty()) {
-			p.curRangeKeys = p.parent.RangeKeys()
-
-			// Check for conflicts with range keys at or above the read timestamp.
-			// We don't need to handle e.g. skipLocked, because range keys don't
-			// currently have intents.
-			if p.failOnMoreRecent {
-				if key := p.parent.UnsafeKey(); !hasPoint || !key.Timestamp.IsEmpty() {
-					if newest := p.curRangeKeys.Newest(); p.ts.LessEq(newest) {
-						if p.mostRecentTS.Forward(newest) {
-							p.mostRecentKey = append(p.mostRecentKey[:0], key.Key...)
-						}
-					}
-				}
-			}
-
-			// Check if any of the range keys are in the uncertainty interval.
-			if p.checkUncertainty {
-				for _, version := range p.curRangeKeys.Versions {
-					if version.Timestamp.LessEq(p.ts) {
-						break
-					}
-					var value MVCCValue
-					var simple bool
-					value, simple, p.err = tryDecodeSimpleMVCCValue(version.Value)
-					if !simple && p.err == nil {
-						value, p.err = decodeExtendedMVCCValue(version.Value, true)
-					}
-					if p.err != nil {
-						return false
-					}
-					localTS := value.GetLocalTimestamp(version.Timestamp)
-					if p.uncertainty.IsUncertain(version.Timestamp, localTS) {
-						return p.uncertaintyError(version.Timestamp, localTS)
-					}
-				}
-			}
-		}
-
-		// If we're on a point key we're done, otherwise keep stepping.
-		if hasPoint {
-			return true
-		}
-		if !reverse {
-			p.parent.Next()
-		} else {
-			p.parent.Prev()
-		}
-		if !p.iterValid() {
-			return false
 		}
 	}
 }
@@ -1319,9 +1150,6 @@ func (p *pointScanner) iterSeek(key MVCCKey) bool {
 	if !p.iterValid() {
 		return false
 	}
-	if !p.processRangeKeys(true /* seeked */, false /* reverse */) {
-		return false
-	}
 	return p.updateCurrent()
 }
 
@@ -1330,9 +1158,6 @@ func (p *pointScanner) iterSeekReverse(key MVCCKey) bool {
 	p.clearPeeked()
 	p.parent.SeekLT(key)
 	if !p.iterValid() {
-		return false
-	}
-	if !p.processRangeKeys(true /* seeked */, true /* reverse */) {
 		return false
 	}
 	if !p.updateCurrent() {
@@ -1357,11 +1182,6 @@ func (p *pointScanner) iterNext() bool {
 		// it's okay to Next: Pebble will reposition to the first visible key.
 		p.peeked = false
 		p.parent.Next()
-		// We don't need to process range key changes here, because curRangeKeys
-		// already contains the range keys at this position from before the peek.
-		if buildutil.CrdbTestBuild {
-			p.assertOwnedRangeKeys()
-		}
 		if !p.iterValid() {
 			return false
 		}
@@ -1369,9 +1189,6 @@ func (p *pointScanner) iterNext() bool {
 	// Step forward from the current entry.
 	p.parent.Next()
 	if !p.iterValid() {
-		return false
-	}
-	if !p.processRangeKeys(false /* seeked */, false /* reverse */) {
 		return false
 	}
 	return p.updateCurrent()
@@ -1385,9 +1202,6 @@ func (p *pointScanner) iterPrev() bool {
 		p.parent.Prev()
 	}
 	if !p.iterValid() {
-		return false
-	}
-	if !p.processRangeKeys(false /* seeked */, true /* reverse */) {
 		return false
 	}
 	return p.updateCurrent()
@@ -1416,15 +1230,6 @@ func (p *pointScanner) iterPeekPrev() ([]byte, bool, bool) {
 		// The raw key is always a prefix of the encoded MVCC key. Take advantage of this to
 		// sub-slice the raw key directly, instead of calling SplitMVCCKey.
 		p.curUnsafeKey.Key = p.curRawKey[:len(p.curUnsafeKey.Key)]
-		// We need to save copies of the current range keys too, but we can avoid
-		// this if we already saved them previously (if cur and saved share memory).
-		if curStart := p.curRangeKeys.Bounds.Key; len(curStart) > 0 {
-			savedStart := p.savedRangeKeys.Bounds.Key
-			if len(curStart) != len(savedStart) || &curStart[0] != &savedStart[0] {
-				p.curRangeKeys.CloneInto(&p.savedRangeKeys)
-				p.curRangeKeys = p.savedRangeKeys
-			}
-		}
 
 		// With the current iterator state saved we can move the iterator to the
 		// previous entry.
@@ -1538,17 +1343,4 @@ func (p *pointScanner) intentsRepr() []byte {
 		return nil
 	}
 	return p.intents.Repr()
-}
-
-// assertOwnedRangeKeys asserts that p.curRangeKeys is empty, or backed by
-// p.savedRangeKeys's buffers.
-func (p *pointScanner) assertOwnedRangeKeys() {
-	if p.curRangeKeys.IsEmpty() {
-		return
-	}
-	// NB: We compare on the EndKey in case the start key is /Min, the empty
-	// key.
-	if &p.curRangeKeys.Bounds.EndKey[0] != &p.savedRangeKeys.Bounds.EndKey[0] {
-		panic(errors.AssertionFailedf("current range keys are not scanner-owned"))
-	}
 }
