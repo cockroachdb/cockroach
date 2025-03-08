@@ -36,7 +36,7 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
+		smMetrics := NewStreamManagerMetrics()
 		var s sender
 		switch rt {
 		case scheduledProcessorWithUnbufferedSender:
@@ -45,7 +45,7 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 			t.Fatalf("unknown rangefeed test type %v", rt)
 		}
 
-		sm := NewStreamManager(s, testRangefeedCounter)
+		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
 		defer sm.Stop(ctx)
 
@@ -61,13 +61,13 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
 				},
 			})
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 0, testServerStream.totalEventsSent())
 			sm.DisconnectStream(int64(streamID), err)
 			testServerStream.waitForEvent(t, errEvent)
 			require.Equal(t, int32(1), num.Load())
 			require.Equal(t, 1, testServerStream.totalEventsSent())
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testServerStream.reset()
 		})
 		t.Run("disconnect stream on the same stream is idempotent", func(t *testing.T) {
@@ -76,13 +76,13 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
 				},
 			})
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			sm.DisconnectStream(int64(streamID), err)
 			sm.DisconnectStream(int64(streamID), err)
 			testServerStream.waitForEvent(t, errEvent)
 			require.Equalf(t, 1, testServerStream.totalEventsSent(),
 				"expected only 1 error event but got %s", testServerStream.String())
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 		})
 	})
 }
@@ -98,7 +98,7 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
+		smMetrics := NewStreamManagerMetrics()
 		var s sender
 		switch rt {
 		case scheduledProcessorWithUnbufferedSender:
@@ -106,7 +106,7 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 		default:
 			t.Fatalf("unknown rangefeed test type %v", rt)
 		}
-		sm := NewStreamManager(s, testRangefeedCounter)
+		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
 
 		rng, _ := randutil.NewTestRand()
@@ -150,12 +150,12 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 			testServerStream.waitForEventCount(t, int(activeStreamStart))
 			expectedActiveStreams := activeStreamEnd - activeStreamStart
 			require.Equal(t, int(expectedActiveStreams), sm.activeStreamCount())
-			testRangefeedCounter.waitForRangefeedCount(t, int(expectedActiveStreams))
+			waitForRangefeedCount(t, smMetrics, int(expectedActiveStreams))
 		})
 
 		t.Run("stream manager on stop", func(t *testing.T) {
 			sm.Stop(ctx)
-			require.Equal(t, 0, testRangefeedCounter.get())
+			require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 0, sm.activeStreamCount())
 			// Cleanup functions should be called for all active streams.
 			require.Equal(t, int32(activeStreamEnd), actualSum.Load())
@@ -174,18 +174,18 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
+		smMetrics := NewStreamManagerMetrics()
 		var s sender
 		switch rt {
 		case scheduledProcessorWithUnbufferedSender:
 			s = NewUnbufferedSender(testServerStream)
 		case scheduledProcessorWithBufferedSender:
-			s = NewBufferedSender(testServerStream)
+			s = NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
 		default:
 			t.Fatalf("unknown rangefeed test type %v", rt)
 		}
 
-		sm := NewStreamManager(s, testRangefeedCounter)
+		sm := NewStreamManager(s, smMetrics)
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		require.NoError(t, sm.Start(ctx, stopper))
@@ -193,7 +193,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		disconnectErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 
 		expectErrorHandlingInvariance := func(p Processor) {
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testutils.SucceedsSoon(t, func() error {
 				if p.Len() == 0 {
 					return nil
@@ -226,7 +226,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 					stream)
 				require.True(t, registered)
 				go p.StopWithErr(disconnectErr)
-				require.Equal(t, 0, testRangefeedCounter.get())
+				require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 				sm.AddStream(sID, d)
 				expectErrorHandlingInvariance(p)
 				testServerStream.reset()
@@ -241,7 +241,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, 1, p.Len())
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			sm.DisconnectStream(sID, disconnectErr)
 			expectErrorHandlingInvariance(p)
 			testServerStream.reset()
@@ -255,11 +255,11 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				stream)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 1, p.Len())
 			sm.Stop(ctx)
 			// No disconnect events should be sent during Stop().
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testutils.SucceedsSoon(t, func() error {
 				if p.Len() == 0 {
 					return nil
