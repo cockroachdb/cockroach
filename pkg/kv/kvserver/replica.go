@@ -939,6 +939,13 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// cachedLocalityProximity is the cached result of the locality comparison
+		// result between the local node and other replicas. It is only updated and
+		// used for leaseholder replicas. It is used to estimate network latency and
+		// time it takes to propagate closed timestamp from leaseholder replicas to
+		// follower replicas.
+		cachedLocalityProximity roachpb.LocalityComparisonType
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own

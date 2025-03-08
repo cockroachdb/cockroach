@@ -18,9 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -89,6 +91,11 @@ type Sender struct {
 		syncutil.Mutex
 		conns map[roachpb.NodeID]conn
 	}
+
+	// latencyTracker periodically refreshes latency information for this node.
+	// Based on the follower nodes this node has, the latency refresher will
+	// update the latency for different locality comparison types.
+	latencyTracker *multiregion.LatencyTracker
 }
 
 // streamState encapsulates the state that's tracked by a stream. Both the
@@ -97,9 +104,12 @@ type Sender struct {
 type streamState struct {
 	// lastSeqNum is the sequence number of the last message published.
 	lastSeqNum ctpb.SeqNum
-	// lastClosed is the closed timestamp published for each policy in the
-	// last message.
-	lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	// lastClosed is the closed timestamp published for each policy in the last
+	// message. During mixed version state, lastClosed will only be populated for
+	// enums with a corresponding roachpb.RangeClosedTimestampPolicy, and the rest
+	// will be empty. Receivers will infer its policies based on trackedRange
+	// below.
+	lastClosed map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp
 	// tracked maintains the information that was communicated to connections in
 	// the last sent message (implicitly or explicitly). A range enters this
 	// structure as soon as it's included in a message, and exits it when it's
@@ -116,7 +126,7 @@ type connTestingKnobs struct {
 // about a particular range.
 type trackedRange struct {
 	lai    kvpb.LeaseAppliedIndex
-	policy roachpb.RangeClosedTimestampPolicy
+	policy ctpb.RangeClosedTimestampByPolicyLocality
 }
 
 // leaseholder represents a leaseholder replicas that has been registered with
@@ -151,8 +161,14 @@ type Replica interface {
 	BumpSideTransportClosed(
 		ctx context.Context,
 		now hlc.ClockTimestamp,
-		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+		targetByPolicy map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp,
 	) BumpSideTransportClosedResult
+
+	// GetLocalityProximity gets the locality proximity between the leaseholder
+	// and its follower replicas based on node localities. It is used for
+	// LEAD_FOR_GLOBAL_READS to estimate network latency and time it takes to
+	// propagate closed timestamps.
+	GetLocalityProximity() roachpb.LocalityComparisonType
 }
 
 // BumpSideTransportClosedResult represents the retval of BumpSideTransportClosed.
@@ -170,7 +186,7 @@ type BumpSideTransportClosedResult struct {
 	// The range's current LAI, to be associated with the closed timestamp.
 	LAI kvpb.LeaseAppliedIndex
 	// The range's current policy.
-	Policy roachpb.RangeClosedTimestampPolicy
+	Policy ctpb.RangeClosedTimestampByPolicyLocality
 }
 
 // CantCloseReason enumerates the reasons why BunpSideTransportClosed might fail
@@ -194,22 +210,32 @@ const (
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
 func NewSender(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	dialer *nodedialer.Dialer,
+	latencyTracker *multiregion.LatencyTracker,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}))
+	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}), latencyTracker)
 }
 
 func newSenderWithConnFactory(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, connFactory connFactory,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	connFactory connFactory,
+	latencyTracker *multiregion.LatencyTracker,
 ) *Sender {
 	s := &Sender{
-		stopper:     stopper,
-		st:          st,
-		clock:       clock,
-		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		stopper:        stopper,
+		st:             st,
+		clock:          clock,
+		connFactory:    connFactory,
+		buf:            newUpdatesBuf(),
+		latencyTracker: latencyTracker,
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
+	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connsMu.conns = make(map[roachpb.NodeID]conn)
 	return s
@@ -231,6 +257,18 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
 
+	confForLatencyRefresherCh := make(chan struct{}, 1)
+	// Note that the config channel doesn't listen to cluster version changes,
+	// which is fine since we expect the timer to be relatively short if
+	// auto-tuning is enabled.
+	confChangedForLatencyRefresher := func(ctx context.Context) {
+		select {
+		case confForLatencyRefresherCh <- struct{}{}:
+		default:
+		}
+	}
+	closedts.LeadForGlobalReadsAutoTuneInterval.SetOnChange(&s.st.SV, confChangedForLatencyRefresher)
+
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
 			defer func() {
@@ -240,26 +278,72 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 
 			var timer timeutil.Timer
 			defer timer.Stop()
+			var timerForLatencyRefresher timeutil.Timer
+			defer timerForLatencyRefresher.Stop()
 			for {
 				interval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+				intervalForLatencyRefresher := closedts.LeadForGlobalReadsAutoTuneInterval.Get(&s.st.SV)
 				if interval > 0 {
 					timer.Reset(interval)
 				} else {
 					// Disable the side-transport.
 					timer.Stop()
 				}
+				if intervalForLatencyRefresher > 0 && s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+					timerForLatencyRefresher.Reset(intervalForLatencyRefresher)
+				} else {
+					// Disable the latency refresher.
+					timerForLatencyRefresher.Stop()
+					s.latencyTracker.Disable()
+				}
 				select {
 				case <-timer.C:
 					timer.Read = true
 					s.publish(ctx)
+				case <-timerForLatencyRefresher.C:
+					timerForLatencyRefresher.Read = true
+					s.latencyTracker.RefreshLatency(s.getFollowerNodes())
 				case <-confCh:
 					// Loop around to use the updated timer.
+					continue
+				case <-confForLatencyRefresherCh:
 					continue
 				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
 		})
+}
+
+// getFollowerNodes returns the node IDs of all the nodes that have follower
+// replicas for the leaseholders on this node.
+func (s *Sender) getFollowerNodes() roachpb.NodeIDSlice {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+	nodes := make(roachpb.NodeIDSlice, 0, len(s.connsMu.conns))
+	for nodeID := range s.connsMu.conns {
+		nodes = append(nodes, nodeID)
+	}
+	return nodes
+}
+
+func (s *Sender) getNetworkRTTByPolicyLocality(
+	policyLocality ctpb.RangeClosedTimestampByPolicyLocality,
+) time.Duration {
+	switch policyLocality {
+	case ctpb.LAG_BY_CLUSTER_SETTING:
+		return closedts.DefaultMaxNetworkRTT
+	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY:
+		return closedts.DefaultMaxNetworkRTT
+	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_REGION:
+		return s.latencyTracker.GetLatencyByLocalityProximity(roachpb.LocalityComparisonType_CROSS_REGION)
+	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_CROSS_ZONE:
+		return s.latencyTracker.GetLatencyByLocalityProximity(roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE)
+	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_SAME_ZONE:
+		return s.latencyTracker.GetLatencyByLocalityProximity(roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE)
+	default:
+		panic(fmt.Sprintf("unknown policy locality %s", policyLocality))
+	}
 }
 
 // RegisterLeaseholder adds a replica to the leaseholders collection. From now
@@ -300,15 +384,37 @@ func (s *Sender) UnregisterLeaseholder(
 	}
 }
 
+func closedTimestampPolicy(
+	policy ctpb.RangeClosedTimestampByPolicyLocality,
+) roachpb.RangeClosedTimestampPolicy {
+	switch policy {
+	case ctpb.LAG_BY_CLUSTER_SETTING:
+		return roachpb.LAG_BY_CLUSTER_SETTING
+	default:
+		return roachpb.LEAD_FOR_GLOBAL_READS
+	}
+}
+
+// If the cluster is not fully upgraded or if the
+// lead_for_global_reads_auto_tune_interval is 0, only look at closed timestamps
+// policies without considering locality info.
+func (s *Sender) maxClosedTimestampPoliciesTrackedMuLocked() int {
+	if s.latencyTracker.Enabled() {
+		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	}
+	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+}
+
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	numOfPolicies := s.maxClosedTimestampPoliciesTrackedMuLocked()
 	log.VEventf(ctx, 4, "side-transport generating a new message")
 	s.trackedMu.closingFailures = [MaxReason]int{}
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
-		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, numOfPolicies),
 	}
 
 	// Determine the message's sequence number.
@@ -326,20 +432,20 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
-	for i := range s.trackedMu.lastClosed {
-		pol := ctpb.RangeClosedTimestampByPolicyLocality(i)
+	for i := 0; i < numOfPolicies; i++ {
+		policyLocality := ctpb.RangeClosedTimestampByPolicyLocality(i)
 		target := closedts.TargetForPolicy(
 			now,
 			maxClockOffset,
 			lagTargetDuration,
 			leadTargetOverride,
 			sideTransportCloseInterval,
-			closedts.DefaultMaxNetworkRTT,
-			roachpb.RangeClosedTimestampPolicy(pol),
+			s.getNetworkRTTByPolicyLocality(policyLocality),
+			closedTimestampPolicy(policyLocality),
 		)
-		s.trackedMu.lastClosed[pol] = target
-		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
-			Policy:          pol,
+		s.trackedMu.lastClosed[policyLocality] = target
+		msg.ClosedTimestamps[policyLocality] = ctpb.Update_GroupUpdate{
+			Policy:          policyLocality,
 			ClosedTimestamp: target,
 		}
 	}
@@ -424,7 +530,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
 				RangeID: lhRangeID,
 				LAI:     closeRes.LAI,
-				Policy:  ctpb.RangeClosedTimestampByPolicyLocality(closeRes.Policy),
+				Policy:  closeRes.Policy,
 			})
 			s.trackedMu.tracked[lhRangeID] = trackedRange{lai: closeRes.LAI, policy: closeRes.Policy}
 		}
@@ -483,20 +589,20 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 		// of incremental messages.
 		SeqNum:           s.trackedMu.lastSeqNum,
 		Snapshot:         true,
-		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, 0, len(s.trackedMu.lastClosed)),
 		AddedOrUpdated:   make([]ctpb.Update_RangeUpdate, 0, len(s.trackedMu.tracked)),
 	}
 	for pol, ts := range s.trackedMu.lastClosed {
-		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
-			Policy:          ctpb.RangeClosedTimestampByPolicyLocality(pol),
+		msg.ClosedTimestamps = append(msg.ClosedTimestamps, ctpb.Update_GroupUpdate{
+			Policy:          pol,
 			ClosedTimestamp: ts,
-		}
+		})
 	}
 	for rid, r := range s.trackedMu.tracked {
 		msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
 			RangeID: rid,
 			LAI:     r.lai,
-			Policy:  ctpb.RangeClosedTimestampByPolicyLocality(r.policy),
+			Policy:  r.policy,
 		})
 	}
 	return msg
@@ -887,7 +993,7 @@ func (s streamState) String() string {
 		} else {
 			agoMsg = fmt.Sprintf("%s in the future", -ago)
 		}
-		fmt.Fprintf(sb, "%s:%s (%s)", roachpb.RangeClosedTimestampPolicy(policy), closedTS, agoMsg)
+		fmt.Fprintf(sb, "%s:%s (%s)", policy, closedTS, agoMsg)
 	}
 
 	// List the tracked ranges.
@@ -896,7 +1002,7 @@ func (s streamState) String() string {
 		id roachpb.RangeID
 		trackedRange
 	}
-	rangesByPolicy := make(map[roachpb.RangeClosedTimestampPolicy][]rangeInfo)
+	rangesByPolicy := make(map[ctpb.RangeClosedTimestampByPolicyLocality][]rangeInfo)
 	for rid, info := range s.tracked {
 		rangesByPolicy[info.policy] = append(rangesByPolicy[info.policy], rangeInfo{id: rid, trackedRange: info})
 	}
