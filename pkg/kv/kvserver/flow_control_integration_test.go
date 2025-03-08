@@ -682,8 +682,6 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			stickyServerArgs := make(map[int]base.TestServerArgs)
 			var disableWorkQueueGranting atomic.Bool
 			disableWorkQueueGranting.Store(true)
-			var bypassReplicaUnreachable atomic.Bool
-			bypassReplicaUnreachable.Store(false)
 			ctx := context.Background()
 			settings := cluster.MakeTestingClusterSettings()
 			// This test doesn't want leadership changing hands, and leader leases (by
@@ -693,6 +691,10 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			// Using a manual clock here ensures that StoreLiveness support, once
 			// established, never expires. By extension, leadership should stay
 			// sticky.
+			//
+			// TODO(pav-kv): doesn't look like this manual clock has any effect. It
+			// ticks just like a regular clock, the only difference is that we can
+			// pause/jump it. But we don't do it in this and other tests here.
 			manualClock := hlc.NewHybridManualClock()
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
@@ -711,11 +713,11 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 						Store: &kvserver.StoreTestingKnobs{
 							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
 								// This test is going to crash nodes, then truncate the raft log
-								// and assert that tokens are returned upon an replica entering
+								// and assert that tokens are returned upon a replica entering
 								// StateSnapshot. To avoid the stopped replicas entering
 								// StateProbe returning tokens, we disable reporting a replica
 								// as unreachable while nodes are down.
-								return bypassReplicaUnreachable.Load()
+								return true
 							},
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
@@ -820,11 +822,10 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			// their logs to make sure that when store 1 + 2 comes back up they will
 			// require a snapshot from Raft.
 			//
-			// Also prevent replicas on the killed nodes from being marked as
+			// NB: we prevented replicas on the killed nodes from being marked as
 			// unreachable, in order to prevent them from returning tokens via
 			// entering StateProbe, before we're able to truncate the log and assert
 			// on the snapshot behavior.
-			bypassReplicaUnreachable.Store(true)
 			tc.StopServer(1)
 			tc.StopServer(2)
 
@@ -876,7 +877,6 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			h.comment(`-- (Restarting n2 and n3.)`)
 			require.NoError(t, tc.RestartServer(1))
 			require.NoError(t, tc.RestartServer(2))
-			bypassReplicaUnreachable.Store(false)
 
 			tc.WaitForValues(t, k, []int64{incAB, incAB, incAB, incAB, incAB})
 
