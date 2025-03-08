@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -1168,13 +1169,13 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
 
-  this node is terminating because of sstable corruption.
-	Corruption may be a consequence of a hardware error.
+This node is terminating because of sstable corruption.
+Corruption may be a consequence of a hardware error.
+A file preventing this node from restarting was placed at:
+%s
 
-	Error: %s
-
-  A file preventing this node from restarting was placed at:
-  %s`, corruptionError.Error(), path)
+Error details: %s
+`, path, redact.Sprintf("%+v", corruptionError))
 
 	if err := fs.WriteFile(p.cfg.env.UnencryptedFS, path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
 		log.Warningf(ctx, "%v", err)
@@ -1184,9 +1185,19 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
 func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventListener {
 	return pebble.EventListener{
 		BackgroundError: func(err error) {
-			if errors.Is(err, pebble.ErrCorruption) {
-				p.writePreventStartupFile(ctx, err)
-				log.Fatalf(ctx, "local corruption detected: %v", err)
+			// These errors are already logged inside Pebble.
+			//
+			// TODO(radu): we should turn these into cluster events if they are
+			// persistent.
+		},
+		DataCorruption: func(info pebble.DataCorruptionInfo) {
+			if !info.IsRemote {
+				p.writePreventStartupFile(ctx, info.Details)
+				log.Fatalf(ctx, "local corruption detected: %+v", info.Details)
+			} else {
+				// TODO: schedule an excise the corrupted table and change this to Errorf.
+				p.writePreventStartupFile(ctx, info.Details)
+				log.Fatalf(ctx, "remote corruption detected: %+v", info.Details)
 			}
 		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
