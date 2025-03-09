@@ -1,0 +1,35 @@
+# Sanity-check: put creates an intent, get reads back the value.
+new-txn txn=t1
+----
+
+put txn=t1 k=a v=bar
+----
+
+commit txn=t1
+----
+
+new-txn txn=t2
+----
+
+get txn=t2 k=a lock=Exclusive dur=Unreplicated
+----
+get: "\xfaa"="bar"
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t2 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)]
+
+flush-lock-table start=a end=z
+----
+
+print-in-memory-lock-table
+----
+num=0
+
+print-replicated-lock-table start=a end=z
+----
+key: "\xfaa", str: Exclusive, txn: t2
+
+commit txn=t2
