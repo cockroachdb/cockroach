@@ -5,7 +5,10 @@
 
 package insights
 
-import "github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+)
 
 // TestingKnobs provides hooks and testingKnobs for unit tests.
 type TestingKnobs struct {
@@ -16,11 +19,11 @@ type TestingKnobs struct {
 	// InsightsWriterTxnInterceptor is a callback that's triggered when a txn insight
 	// is observed by the ingester. The callback is called instead of writing the
 	// insight to the buffer.
-	InsightsWriterTxnInterceptor func(sessionID clusterunique.ID, transaction *Transaction)
+	InsightsWriterTxnInterceptor func(sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats)
 
 	// InsightsWriterStmtInterceptor is a callback that's triggered when a stmt insight
 	// is observed. The callback is called instead of writing the insight to the buffer.
-	InsightsWriterStmtInterceptor func(sessionID clusterunique.ID, statement *Statement)
+	InsightsWriterStmtInterceptor func(sessionID clusterunique.ID, statement *sqlstats.RecordedStmtStats)
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
