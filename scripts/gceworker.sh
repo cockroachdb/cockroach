@@ -70,6 +70,18 @@ function refresh_ssh_config() {
     fi
 }
 
+function update_firewall() {
+    MY_IP="$(curl -4 -s https://icanhazip.com/)"
+    RULE="$(whoami)-home-ssh-rule"
+    gcloud compute firewall-rules delete --quiet "$RULE" || true
+    gcloud compute firewall-rules create --quiet "$RULE" \
+      --network=default \
+      --allow=tcp:22 \
+      --source-ranges="$MY_IP/32" \
+      --direction=INGRESS \
+      --priority=0
+}
+
 case "${cmd}" in
     gcloud)
     gcloud "$@"
@@ -100,6 +112,7 @@ case "${cmd}" in
            --labels "created-by=${gsuite_account_for_label:0:63}" \
            --metadata enable-oslogin=TRUE,block-project-ssh-keys=TRUE
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
+    update_firewall
 
     # wait a bit to let gcloud create the instance before retrying
     sleep 30
@@ -121,15 +134,7 @@ case "${cmd}" in
 
     ;;
     update-firewall)
-    MY_IP="$(curl -4 -s https://icanhazip.com/)"
-    RULE="$(whoami)-home-ssh-rule"
-    gcloud compute firewall-rules delete --quiet "$RULE" || true
-    gcloud compute firewall-rules create --quiet "$RULE" \
-      --network=default \
-      --allow=tcp:22 \
-      --source-ranges="$MY_IP/32" \
-      --direction=INGRESS \
-      --priority=0
+    update_firewall
     ;;
     start)
     start_and_wait "${NAME}"
@@ -200,6 +205,8 @@ case "${cmd}" in
     fi
     status=0
     gcloud compute firewall-rules delete "${NAME}-mosh" --quiet || status=$((status+1))
+    RULE="$(whoami)-home-ssh-rule"
+    gcloud compute firewall-rules delete --quiet "$RULE" || status=$((status+1))
     gcloud compute instances delete "${NAME}" --quiet || status=$((status+1))
     exit ${status}
     ;;
