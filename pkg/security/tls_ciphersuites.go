@@ -5,7 +5,14 @@
 
 package security
 
-import "crypto/tls"
+import (
+	"crypto/tls"
+	"net"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/slices"
+)
 
 // RecommendedCipherSuites returns a list of enabled TLS 1.2 cipher
 // suites. The order of the list is ignored; prioritization of cipher
@@ -68,4 +75,108 @@ func OldCipherSuites() []uint16 {
 		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 	}
+}
+
+var tlsCipherSuitesConfigured struct {
+	syncutil.RWMutex
+	c []string
+}
+
+// getAllowedCiphersMapByName returns map of cipher names to cipher ID.
+// These are all the ciphers which golang implements and have been allowed for
+// cockroach in RecommendedCipherSuites, OldCipherSuites or as part of TLS 1.3
+// ciphers in crypto/tls.
+func getAllowedCiphersMapByName() map[string]uint16 {
+	cockroachEnabledCiphers := append(RecommendedCipherSuites(), OldCipherSuites()...)
+	ciphersMap := map[string]uint16{}
+	for _, cipher := range tls.CipherSuites() {
+		if slices.Contains(cockroachEnabledCiphers, cipher.ID) || slices.Contains(cipher.SupportedVersions, tls.VersionTLS13) {
+			ciphersMap[cipher.Name] = cipher.ID
+		}
+	}
+	for _, cipher := range tls.InsecureCipherSuites() {
+		if slices.Contains(cockroachEnabledCiphers, cipher.ID) || slices.Contains(cipher.SupportedVersions, tls.VersionTLS13) {
+			ciphersMap[cipher.Name] = cipher.ID
+		}
+	}
+
+	return ciphersMap
+}
+
+// getAllowedCiphersMapByID returns map of cipher ID to cipher names.
+// These are all the ciphers which golang implements and have been allowed for
+// cockroach in RecommendedCipherSuites, OldCipherSuites or as part of TLS 1.3
+// ciphers in crypto/tls.
+func getAllowedCiphersMapByID() map[uint16]string {
+	cockroachEnabledCiphers := append(RecommendedCipherSuites(), OldCipherSuites()...)
+	ciphersMap := map[uint16]string{}
+	for _, cipher := range tls.CipherSuites() {
+		if slices.Contains(cockroachEnabledCiphers, cipher.ID) || slices.Contains(cipher.SupportedVersions, tls.VersionTLS13) {
+			ciphersMap[cipher.ID] = cipher.Name
+		}
+	}
+	for _, cipher := range tls.InsecureCipherSuites() {
+		if slices.Contains(cockroachEnabledCiphers, cipher.ID) || slices.Contains(cipher.SupportedVersions, tls.VersionTLS13) {
+			ciphersMap[cipher.ID] = cipher.Name
+		}
+	}
+
+	return ciphersMap
+}
+
+// getCipherID verifies if provided cipher is implemented by crypto/tls and
+// return the corresponding cipherID
+func getCipherNameFromID(cid uint16) (cipher string, ok bool) {
+	allowedCiphersMap := getAllowedCiphersMapByID()
+	cipher, ok = allowedCiphersMap[cid]
+	return
+}
+
+// SetTLSCipherSuitesConfigured sets the global TLS cipher suites for all
+// incoming connections(sql/rpc/http, etc.) of a node. The entries in the list
+// should be a subset of RecommendedCipherSuites or OldCipherSuites in case of
+// TLS 1.2. For TLS 1.3, they should be a subset of ciphers list defined at
+// https://github.com/golang/go/blob/4aa1efed4853ea067d665a952eee77c52faac774/src/crypto/tls/cipher_suites.go#L676-L679
+// for TLS 1.3.
+func SetTLSCipherSuitesConfigured(ciphers []string) error {
+	allowedCiphersMap := getAllowedCiphersMapByName()
+	for _, cipher := range ciphers {
+		if _, ok := allowedCiphersMap[cipher]; !ok {
+			return errors.Errorf("invalid cipher provided in tls cipher suites: %s", cipher)
+		}
+	}
+
+	tlsCipherSuitesConfigured.Lock()
+	defer tlsCipherSuitesConfigured.Unlock()
+	tlsCipherSuitesConfigured.c = ciphers
+
+	return nil
+}
+
+func GetTLSCipherSuitesConfigured() []string {
+	tlsCipherSuitesConfigured.Lock()
+	defer tlsCipherSuitesConfigured.Unlock()
+	return tlsCipherSuitesConfigured.c
+}
+
+// TLSCipherRestrict restricts the cipher suites used for tls connections to
+// ones specified by tls-cipher-suites cli flag. If the flag is not set, we do
+// not check for used ciphers in the connection. It returns an error if the used
+// cipher is not present in the configured ciphers for the node.
+func TLSCipherRestrict(conn net.Conn) (err error) {
+	if configuredCiphers := GetTLSCipherSuitesConfigured(); len(configuredCiphers) != 0 {
+		if tlsConn, ok := conn.(*tls.Conn); ok {
+			selectedCipherID := tlsConn.ConnectionState().CipherSuite
+			cName, ok := getCipherNameFromID(selectedCipherID)
+			if !ok {
+				return errors.Errorf("cipher id %v does match implemented tls ciphers", selectedCipherID)
+			}
+			if !slices.Contains(configuredCiphers, cName) {
+				return errors.Newf("presented cipher %s not in allowed cipher suite list", cName)
+			}
+		} else {
+			return errors.New("connection provided is not TLS, cannot obtain TLS connection details.")
+		}
+	}
+	return
 }
