@@ -2053,7 +2053,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
-			Volatility: volatility.Immutable,
+			Volatility: volatility.Stable,
 		}),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like
