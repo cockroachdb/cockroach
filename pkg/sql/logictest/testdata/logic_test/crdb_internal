@@ -124,7 +124,7 @@ pg_operator                      false
 pg_opfamily                      true
 pg_partitioned_table             true
 pg_policies                      true
-pg_policy                        true
+pg_policy                        false
 pg_prepared_statements           false
 pg_prepared_xacts                false
 pg_proc                          false
