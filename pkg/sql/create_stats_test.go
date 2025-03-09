@@ -216,7 +216,7 @@ func BenchmarkAnalyze(b *testing.B) {
 			INSERT INTO t (id, k, c, pad)
 			SELECT
 				i,
-				(random() * `+strconv.Itoa(numRows)+`)::INT, 
+				(random() * `+strconv.Itoa(numRows)+`)::INT,
 				substr(md5(random()::TEXT) || md5(random()::TEXT) || md5(random()::TEXT) || md5(random()::TEXT), 0, 120),
 				substr(md5(random()::TEXT) || md5(random()::TEXT), 0, 60)
 			FROM generate_series($1, $2) AS g(i)
@@ -226,8 +226,12 @@ func BenchmarkAnalyze(b *testing.B) {
 	// Run a full table scan to resolve intents and reduce variance.
 	sqlRunner.Exec(b, `SELECT count(*) FROM t`)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		sqlRunner.Exec(b, `ANALYZE t`)
+	for _, numSamples := range []string{"10000", "100000"} {
+		sqlRunner.Exec(b, `SET CLUSTER SETTING sql.stats.histogram_samples.min = `+numSamples)
+		b.Run(numSamples, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				sqlRunner.Exec(b, `ANALYZE t`)
+			}
+		})
 	}
 }
