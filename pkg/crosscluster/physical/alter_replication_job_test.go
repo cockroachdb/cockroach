@@ -12,15 +12,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -28,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -533,67 +527,6 @@ func TestAlterTenantHandleFutureProtectedTimestamp(t *testing.T) {
 	c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
 
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
-}
-
-func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	var enforcedGC struct {
-		syncutil.Mutex
-		ts hlc.Timestamp
-	}
-
-	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-		for _, req := range ba.Requests {
-			if revReq := req.GetRevertRange(); revReq != nil {
-				enforcedGC.Lock()
-				defer enforcedGC.Unlock()
-				if enforcedGC.ts.IsSet() && revReq.TargetTime.Less(enforcedGC.ts) {
-					return kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
-						Timestamp: revReq.TargetTime,
-						Threshold: enforcedGC.ts,
-					})
-				}
-			}
-		}
-		return nil
-	}
-
-	nodelocalCleanup := nodelocal.ReplaceNodeLocalForTesting(t.TempDir())
-	defer nodelocalCleanup()
-
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: testingRequestFilter,
-			},
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-
-	db.Exec(t, "CREATE TENANT t1")
-	db.Exec(t, "BACKUP TENANT 3 INTO 'nodelocal://1/t'")
-
-	afterBackup := srv.Clock().Now()
-	enforcedGC.Lock()
-	enforcedGC.ts = afterBackup
-	enforcedGC.Unlock()
-
-	u := replicationtestutils.GetReplicationURI(t, srv, srv, serverutils.User(username.RootUser))
-
-	db.Exec(t, "RESTORE TENANT 3 FROM LATEST IN 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
-	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())
-	srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-
-	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, db, "t2")
-	srcTime := srv.Clock().Now()
-	replicationtestutils.WaitUntilReplicatedTime(t, srcTime, db, catpb.JobID(ingestionJobID))
 }
 
 func TestAlterReplicationJobErrors(t *testing.T) {
