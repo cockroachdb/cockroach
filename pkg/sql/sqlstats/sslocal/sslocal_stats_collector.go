@@ -268,10 +268,23 @@ func (s *StatsCollector) ObserveStatement(
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 		ErrorMsg:             errorMsg,
+		SqlCommenterTags:     s.buildSQLCommenterTags(value.SQLCommenterTags),
 	}
 	if s.insightsWriter != nil {
 		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
 	}
+}
+
+func (s *StatsCollector) buildSQLCommenterTags(m map[string]string) []*insights.SqlCommenterTag {
+	tags := make([]*insights.SqlCommenterTag, 0, len(m))
+	for k, v := range m {
+		tags = append(tags, &insights.SqlCommenterTag{
+			Name:  k,
+			Value: v,
+		})
+	}
+
+	return tags
 }
 
 // ObserveTransaction sends the recorded transaction stats to the insights system

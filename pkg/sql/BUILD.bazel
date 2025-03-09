@@ -245,6 +245,7 @@ go_library(
         "split.go",
         "spool.go",
         "sql_activity_update_job.go",
+        "sql_commenter.go",
         "sql_cursor.go",
         "statement.go",
         "subquery.go",
