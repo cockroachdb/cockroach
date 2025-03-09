@@ -37,4 +37,5 @@ $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   --smtp-user=cronjob@cockroachlabs.com \
   --smtp-host=smtp.gmail.com \
   --smtp-port=587 \
+  --artifacts-dir=/artifacts \
   --to=$to
