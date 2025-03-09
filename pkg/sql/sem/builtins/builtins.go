@@ -7250,7 +7250,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7273,7 +7273,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
