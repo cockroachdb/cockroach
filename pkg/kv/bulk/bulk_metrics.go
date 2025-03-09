@@ -17,6 +17,8 @@ import (
 type Metrics struct {
 	MaxBytesHist  metric.IHistogram
 	CurBytesCount *metric.Gauge
+	BytesIn       *metric.Counter
+	BytesOut      *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -37,6 +39,18 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBulkBytesIn = metric.Metadata{
+		Name:        "bulk_adder.bytes_in",
+		Help:        "Bytes being sent into the bulk adder",
+		Measurement: "Bytes ingested",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBulkBytesOut = metric.Metadata{
+		Name:        "bulk_adder.bytes_out",
+		Help:        "Bytes being flushed out of the bulk adder",
+		Measurement: "Bytes flushed",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -54,6 +68,8 @@ func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
 			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
+		BytesIn:       metric.NewCounter(metaBulkBytesIn),
+		BytesOut:      metric.NewCounter(metaBulkBytesOut),
 	}
 }
 
