@@ -124,12 +124,12 @@ inner-join (lookup abcd)
  ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) c:8(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── stats: [rows=0.3349493, distinct(1)=0.334949, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949, null(6)=0, distinct(7)=1e-10, null(7)=0]
+ ├── stats: [rows=0.3349493, distinct(1)=0.334949, null(1)=0, distinct(2)=0.334949, null(2)=0.00334949, distinct(6)=0.334949, null(6)=0, distinct(7)=0.334949, null(7)=0.00334949]
  ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── key columns: [1 2] = [6 7]
- │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.970299, null(6)=0, distinct(7)=1e-10, null(7)=0]
+ │    ├── stats: [rows=0.970299, distinct(1)=0.970299, null(1)=0, distinct(2)=0.970299, null(2)=0.00970299, distinct(6)=0.970299, null(6)=0, distinct(7)=0.970299, null(7)=0.00970299]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
@@ -411,12 +411,14 @@ inner-join (lookup wxyz)
  ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
- ├── stats: [rows=49.34419, distinct(1)=39.1263, null(1)=0, distinct(7)=39.1263, null(7)=0]
+ ├── stats: [rows=49.34419, distinct(1)=40, null(1)=0, distinct(7)=40, null(7)=0]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
  ├── inner-join (lookup wxyz@wxyz_x_y_z_idx)
  │    ├── columns: m:1(int!null) n:2(int) x:7(int!null) y:8(int!null) z:9(int) wxyz.rowid:10(int!null)
  │    ├── key columns: [1 13] = [7 8]
  │    ├── stats: [rows=19.8, distinct(1)=19.8, null(1)=0, distinct(7)=19.8, null(7)=0, distinct(8)=1, null(8)=0, distinct(13)=1, null(13)=0]
+ │    │   histogram(8)=  0 19.8
+ │    │                <--- 10
  │    ├── fd: ()-->(8), (10)-->(7,9), (1)==(7), (7)==(1)
  │    ├── project
  │    │    ├── columns: "lookup_join_const_col_@8":13(int!null) m:1(int) n:2(int)

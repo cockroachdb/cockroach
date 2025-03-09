@@ -734,13 +734,13 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
- ├── stats: [rows=5000, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
+ ├── stats: [rows=5000, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=500, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2,7), (9)-->(1-4,7,8), (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid) u:7(int!null) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
       ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
+      ├── stats: [rows=5000, distinct(1)=500, null(1)=0, distinct(2)=399.999, null(2)=2500, distinct(3)=499.977, null(3)=50, distinct(7)=500, null(7)=0, distinct(2,3)=3160.69, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,9)=5000, null(1,2,9)=0]
       ├── key: (9)
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
       ├── scan xysd
@@ -977,7 +977,7 @@ inner-join (merge)
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
  ├── left ordering: +1
  ├── right ordering: +7
- ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=499, null(7)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
+ ├── stats: [rows=5000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(7)=500, null(7)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,7)=5000, null(3,7)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
  ├── key: (9)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8), (1)==(7), (7)==(1)
  ├── scan xysd
