@@ -724,7 +724,7 @@ func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	if storeGranter, ok := coord.granters[KVWork].(*kvStoreTokenGranter); ok {
-		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats)
 	}
 }
 
@@ -1017,11 +1017,14 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
+				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d, "+
+					"disk-write-iops-avail: %d, disk-read-iops-deducted: %d",
 					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
 					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
 					g.coordMu.diskTokensAvailable.writeByteTokens,
-					g.coordMu.diskTokensError.diskReadTokensAlreadyDeducted,
+					g.coordMu.diskTokensError.tokensAlreadyDeducted.readByteTokens,
+					g.coordMu.diskTokensAvailable.writeIOPSTokens,
+					g.coordMu.diskTokensError.tokensAlreadyDeducted.readIOPSTokens,
 				)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:

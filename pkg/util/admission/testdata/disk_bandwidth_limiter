@@ -1,18 +1,18 @@
-init
+init  int-provisioned-bytes=1000 int-provisioned-iops=100
 ----
-diskBandwidthLimiter (tokenUtilization 0.00, tokensUsed (elastic 0 B, snapshot 0 B, regular 0 B) tokens (write 0 B (prev 0 B), read 0 B (prev 0 B)), writeBW 0 B/s, readBW 0 B/s, provisioned 0 B/s)
+diskBandwidthLimiter (tokenUtilization 0.00, tokensUsed (elastic 0 B, snapshot 0 B, regular 0 B) tokens (write 0 B (prev 0 B), read 0 B (prev 0 B)), writeBW 0 B/s, readBW 0 B/s, provisioned 0 B/s); diskIOPS (tokenUtilization 0.00, tokensUsed (elastic 0, snapshot 0, regular 0) tokens (write 0 (prev 0), read 0 (prev 0)), writeIOPS 0/s, readIOPS 0/s, provisioned 0/s)
 
 # Since token utilization is from the previous estimation loop, we expect that to be +Inf in the first iteration.
-compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=1000 regular-tokens-used=60 snapshot-tokens-used=5 elastic-tokens-used=20
+compute int-read-bytes=50 int-read-count=5 int-write-bytes=100 int-write-count=10 regular-tokens-used=60 snapshot-tokens-used=5 elastic-tokens-used=20 regular-iops-tokens-used=5 snapshot-iops-tokens-used=4 elastic-iops-tokens-used=10
 ----
-diskBandwidthLimiter (tokenUtilization +Inf, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s)
+diskBandwidthLimiter (tokenUtilization +Inf, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s); diskIOPS (tokenUtilization +Inf, tokensUsed (elastic 10, snapshot 4, regular 5) tokens (write 85 (prev 0), read 5 (prev 0)), writeIOPS 0/s, readIOPS 0/s, provisioned 6/s)
 
-# Utilization is now not Inf. For token calculation, we adjust using the max of smoothed read bytes and the current value. Here we use 80.
-compute int-read-bytes=80 int-write-bytes=150 int-provisioned-bytes=800 regular-tokens-used=100  snapshot-tokens-used=5 elastic-tokens-used=30
+# Utilization is now not Inf. For token calculation, we adjust using the max of smoothed read bytes and the current value. Here we use 80. We do the same for IOPS, hence 10.
+compute int-read-bytes=80 int-read-count=10 int-write-bytes=150 int-write-count=15 regular-tokens-used=100  snapshot-tokens-used=5 elastic-tokens-used=30 regular-iops-tokens-used=7 snapshot-iops-tokens-used=5 elastic-iops-tokens-used=12
 ----
-diskBandwidthLimiter (tokenUtilization 0.16, tokensUsed (elastic 30 B, snapshot 5 B, regular 100 B) tokens (write 640 B (prev 850 B), read 80 B (prev 50 B)), writeBW 10 B/s, readBW 5 B/s, provisioned 53 B/s)
+diskBandwidthLimiter (tokenUtilization 0.16, tokensUsed (elastic 30 B, snapshot 5 B, regular 100 B) tokens (write 820 B (prev 850 B), read 80 B (prev 50 B)), writeBW 10 B/s, readBW 5 B/s, provisioned 66 B/s); diskIOPS (tokenUtilization 0.28, tokensUsed (elastic 12, snapshot 5, regular 7) tokens (write 80 (prev 85), read 10 (prev 5)), writeIOPS 1/s, readIOPS 0/s, provisioned 6/s)
 
-# Now we use 65 for read bandwidth adjustment.
-compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30
+# Now we use 65 for read bandwidth adjustment and 8 for read IOPS adjustment.
+compute int-read-bytes=50 int-read-count=6 int-write-bytes=100 int-write-count=12 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 regular-iops-tokens-used=3 snapshot-iops-tokens-used=5 elastic-iops-tokens-used=12
 ----
-diskBandwidthLimiter (tokenUtilization 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 655 B (prev 640 B), read 65 B (prev 80 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 53 B/s)
+diskBandwidthLimiter (tokenUtilization 0.05, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 835 B (prev 820 B), read 65 B (prev 80 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s); diskIOPS (tokenUtilization 0.25, tokensUsed (elastic 12, snapshot 5, regular 3) tokens (write 82 (prev 80), read 8 (prev 10)), writeIOPS 0/s, readIOPS 0/s, provisioned 6/s)

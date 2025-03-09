@@ -79,9 +79,18 @@ type intervalDiskLoadInfo struct {
 	intReadBytes int64
 	// intWriteBytes represents measured write bytes in a given interval.
 	intWriteBytes int64
+	// intReadCount represents the number of read IO operations in a given
+	// interval.
+	intReadCount int64
+	// intWriteCount represents the number of write IO operations in a given
+	// interval.
+	intWriteCount int64
 	// intProvisionedDiskBytes represents the disk writes (in bytes) available in
 	// an adjustmentInterval.
 	intProvisionedDiskBytes int64
+	// intProvisionedIOCount represents the number of total IO operations
+	// available in an adjustmentInterval.
+	intProvisionedIOCount int64
 	// elasticBandwidthMaxUtil sets the maximum disk bandwidth utilization for
 	// elastic requests
 	elasticBandwidthMaxUtil float64
@@ -90,11 +99,12 @@ type intervalDiskLoadInfo struct {
 // diskBandwidthLimiterState is used as auxiliary information for logging
 // purposes and keeping past state.
 type diskBandwidthLimiterState struct {
-	tokens     diskTokens
-	prevTokens diskTokens
-	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens
-	diskBWUtil float64
-	diskLoad   intervalDiskLoadInfo
+	tokens       diskTokens
+	prevTokens   diskTokens
+	usedTokens   [admissionpb.NumStoreWorkTypes]diskTokens
+	diskBWUtil   float64
+	diskIOPSUtil float64
+	diskLoad     intervalDiskLoadInfo
 }
 
 // diskBandwidthLimiter produces tokens for elastic work.
@@ -122,13 +132,12 @@ type diskTokens struct {
 func (d *diskBandwidthLimiter) computeElasticTokens(
 	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) diskTokens {
-	// TODO(aaditya): Include calculation for read and IOPS.
-	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
-
 	// We are using disk read bytes over the previous adjustment interval as a
 	// proxy for future reads. This is a bad estimate, but we account for errors
 	// in this estimate separately at a higher frequency. See
-	// kvStoreTokenGranter.adjustDiskTokenErrorLocked.
+	// kvStoreTokenGranter.adjustDiskTokenErrorLocked. The longer term solution to
+	// this is to pace read traffic and account for reads on a per-request basis.
+	// See https://github.com/cockroachdb/cockroach/issues/107623.
 	const alpha = 0.5
 	smoothedReadBytes := alpha*float64(id.intReadBytes) + alpha*float64(d.state.diskLoad.intReadBytes)
 	// Pessimistic approach using the max value between the smoothed and current
@@ -140,20 +149,27 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	// elastic writes completely due to out-sized reads from above.
 	diskWriteTokens = int64(math.Max(0, float64(diskWriteTokens)))
 
+	// IOPS calculation.
+	writeIOPSTokens := int64(float64(id.intProvisionedIOCount) * id.elasticBandwidthMaxUtil)
+	smoothedReadIOPS := alpha*float64(id.intReadCount) + alpha*float64(d.state.diskLoad.intReadCount)
+	intReadIOPS := int64(math.Max(smoothedReadIOPS, float64(id.intReadCount)))
+	writeIOPSTokens = writeIOPSTokens - intReadIOPS
+
 	totalUsedTokens := sumDiskTokens(usedTokens)
 	tokens := diskTokens{
 		readByteTokens:  intReadBytes,
 		writeByteTokens: diskWriteTokens,
-		readIOPSTokens:  0,
-		writeIOPSTokens: 0,
+		readIOPSTokens:  intReadIOPS,
+		writeIOPSTokens: writeIOPSTokens,
 	}
 	prevState := d.state
 	d.state = diskBandwidthLimiterState{
-		tokens:     tokens,
-		prevTokens: prevState.tokens,
-		usedTokens: usedTokens,
-		diskBWUtil: float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
-		diskLoad:   id,
+		tokens:       tokens,
+		prevTokens:   prevState.tokens,
+		usedTokens:   usedTokens,
+		diskBWUtil:   float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens),
+		diskIOPSUtil: float64(totalUsedTokens.writeIOPSTokens) / float64(prevState.tokens.writeIOPSTokens),
+		diskLoad:     id,
 	}
 	return tokens
 }
@@ -162,7 +178,9 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
-		"readBW %s/s, provisioned %s/s)",
+		"readBW %s/s, provisioned %s/s); diskIOPS (tokenUtilization %.2f, tokensUsed (elastic %d, "+
+		"snapshot %d, regular %d) tokens (write %d (prev %d), read %d (prev %d)), writeIOPS %d/s, "+
+		"readIOPS %d/s, provisioned %d/s)",
 		d.state.diskBWUtil,
 		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
 		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
@@ -174,6 +192,17 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 		ib(d.state.diskLoad.intWriteBytes/adjustmentInterval),
 		ib(d.state.diskLoad.intReadBytes/adjustmentInterval),
 		ib(d.state.diskLoad.intProvisionedDiskBytes/adjustmentInterval),
+		d.state.diskIOPSUtil,
+		d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeIOPSTokens,
+		d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeIOPSTokens,
+		d.state.usedTokens[admissionpb.RegularStoreWorkType].writeIOPSTokens,
+		d.state.tokens.writeIOPSTokens,
+		d.state.prevTokens.writeIOPSTokens,
+		d.state.tokens.readIOPSTokens,
+		d.state.prevTokens.readIOPSTokens,
+		d.state.diskLoad.intWriteCount/adjustmentInterval,
+		d.state.diskLoad.intReadCount/adjustmentInterval,
+		d.state.diskLoad.intProvisionedIOCount/adjustmentInterval,
 	)
 }
 
