@@ -2277,3 +2277,331 @@ vectorized: true
 
 statement ok
 RESET variable_inequality_lookup_join_enabled
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 100
+│ table: def@def_pkey
+│ equality: (a) = (f)
+│ reverse scans
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 100
+│ table: def@desc_idx
+│ equality: (a) = (f)
+│ reverse scans
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 100
+│ table: def@desc_idx
+│ equality: (a) = (f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,+e
+    │ estimated row count: 33
+    │ table: def@def_pkey
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,-e
+    │ estimated row count: 33
+    │ table: def@def_pkey
+    │ reverse scans
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 33
+│ table: def@def_pkey
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 33
+│ table: def@def_pkey
+│ reverse scans
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,+e
+    │ estimated row count: 33
+    │ table: def@desc_idx
+    │ reverse scans
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│
+└── • lookup join (inner)
+    │ columns: (column15, a, b, c, d, e, f)
+    │ ordering: +a,+c,-e
+    │ estimated row count: 33
+    │ table: def@desc_idx
+    │ lookup condition: (column15 <= e) AND (a = f)
+    │
+    └── • render
+        │ columns: (column15, a, b, c)
+        │ ordering: +a,+c
+        │ render column15: c - 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              ordering: +a,+c
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,+e
+│ estimated row count: 33
+│ table: def@desc_idx
+│ reverse scans
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@desc_idx ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, c, d, e, f)
+│ ordering: +a,+c,-e
+│ estimated row count: 33
+│ table: def@desc_idx
+│ lookup condition: (e <= c) AND (a = f)
+│
+└── • scan
+      columns: (a, b, c)
+      ordering: +a,+c
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# Do not plan a lookup join with reverse scans if the session setting is
+# turned off.
+statement ok
+SET optimizer_plan_lookup_joins_with_reverse_scans = false
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc INNER LOOKUP JOIN def@primary ON f = a ORDER BY a, c, e DESC;
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ columns: (a, b, c, d, e, f)
+│ estimated row count: 100
+│ order: +a,+c,-e
+│ already ordered: +a,+c
+│
+└── • lookup join (inner)
+    │ columns: (a, b, c, d, e, f)
+    │ ordering: +a,+c
+    │ estimated row count: 100
+    │ table: def@def_pkey
+    │ equality: (a) = (f)
+    │
+    └── • scan
+          columns: (a, b, c)
+          ordering: +a,+c
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+RESET optimizer_plan_lookup_joins_with_reverse_scans

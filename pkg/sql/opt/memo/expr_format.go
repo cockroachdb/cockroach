@@ -878,6 +878,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if relational.HasPlaceholder {
 			writeFlag("has-placeholder")
 		}
+		if lookupJoin, ok := e.(*LookupJoinExpr); ok {
+			// For lookup joins, indicate whether reverse scans are required to
+			// satisfy the ordering.
+			if lookupJoinMustUseReverseScans(md, lookupJoin, &required.Ordering) {
+				writeFlag("reverse-scans")
+			}
+		}
 
 		if f.Buffer.Len() != 0 {
 			tp.Child(f.Buffer.String())
@@ -1014,6 +1021,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	for i, n := 0, e.ChildCount(); i < n; i++ {
 		f.formatExpr(e.Child(i), tp)
 	}
+}
+
+// lookupJoinMustUseReverseScans returns true if the given lookup join must use
+// reverse scans in its lookups in order to satisfy the required ordering.
+// It assumes that the required ordering *can* be satisfied by the lookup join.
+func lookupJoinMustUseReverseScans(
+	md *opt.Metadata, lookupJoin *LookupJoinExpr, requiredOrdering *props.OrderingChoice,
+) bool {
+	inputCols := lookupJoin.Input.Relational().OutputCols
+	for _, ordColChoice := range requiredOrdering.Columns {
+		if ordColChoice.Group.Intersects(inputCols) {
+			// This is part of the prefix that can be satisfied by the input.
+			continue
+		}
+		// Forward scans if the index is ordered in the same direction as the
+		// required ordering, reverse scans otherwise.
+		idx := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
+		return ordColChoice.Descending != idx.Column(0).Descending
+	}
+	return false
 }
 
 func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {

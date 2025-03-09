@@ -6,6 +6,8 @@
 package ordering
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -17,19 +19,27 @@ import (
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required ordering.
-func CanProvide(mem *memo.Memo, expr memo.RelExpr, required *props.OrderingChoice) bool {
+func CanProvide(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	expr memo.RelExpr,
+	required *props.OrderingChoice,
+) bool {
 	if required.Any() {
 		return true
 	}
 	if buildutil.CrdbTestBuild {
 		checkRequired(expr, required)
 	}
-	// Special cases for operators that need to access the memo.
+	// Special cases for operators that need to access fields beyond the
+	// expression and required ordering.
 	switch expr.Op() {
 	case opt.ScanOp:
 		return scanCanProvideOrdering(mem, expr, required)
 	case opt.LookupJoinOp:
-		return lookupJoinCanProvideOrdering(mem, expr, required)
+		canProvide, _ := LookupJoinCanProvideOrdering(ctx, evalCtx, mem, expr, required)
+		return canProvide
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
 }

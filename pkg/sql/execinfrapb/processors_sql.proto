@@ -379,6 +379,12 @@ message JoinReaderSpec {
   // that read into remote regions, though the lookups are defined in
   // LookupExpr, not RemoteLookupExpr.
   optional bool remote_only_lookups = 23 [(gogoproto.nullable) = false];
+
+  // If true, causes lookups to use ReverseScan requests instead of Scan
+  // requests. This causes lookups *for each input row* to return results in
+  // reverse order. This is only useful if a lookup can return more than one
+  // row.
+  optional bool reverse_scans = 25 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
