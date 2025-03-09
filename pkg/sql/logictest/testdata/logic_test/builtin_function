@@ -3063,6 +3063,33 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 2  0
 
+statement ok
+PREPARE nn_stmt AS SELECT num_nulls(42, $1::STRING, a, b),
+                          num_nulls(b, $1, 42, a),
+                          num_nulls(a, b, $1, 42),
+                          num_nulls($1, a, b, 42),
+                          num_nonnulls(42, $1, a, b),
+                          num_nonnulls(b, $1, 42, a),
+                          num_nonnulls(a, b, $1, 42),
+                          num_nonnulls($1, a, b, 42)
+                     FROM nulls_test
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt(NULL)
+----
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
+2  2  2  2  2  2  2  2
+3  3  3  3  1  1  1  1
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt('foo')
+----
+0  0  0  0  4  4  4  4
+1  1  1  1  3  3  3  3
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
+
 subtest pb_to_json
 
 query T
