@@ -44,6 +44,7 @@ func initIndexBackfillerSpec(
 	writeAtBatchTimestamp bool,
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
+	sourceIndexID descpb.IndexID,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
 		Table:                 desc,
@@ -53,6 +54,7 @@ func initIndexBackfillerSpec(
 		Type:                  execinfrapb.BackfillerSpec_Index,
 		ChunkSize:             chunkSize,
 		IndexesToBackfill:     indexesToBackfill,
+		SourceIndexID:         sourceIndexID,
 	}, nil
 }
 
