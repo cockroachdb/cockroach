@@ -787,32 +787,36 @@ func generateSubzoneSpans(
 	a := &tree.DatumAlloc{}
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	var err error
-	b.QueryByID(tableID).FilterIndexName().NotToAbsent().ForEach(
-		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-			_, indexSubzoneExists := subzoneIndexByIndexID[e.IndexID]
-			if indexSubzoneExists {
-				prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, e.IndexID))
-				idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-				// Each index starts with a unique prefix, so (from a precedence
-				// perspective) it's safe to append them all together.
-				indexCovering = append(indexCovering, covering.Range{
-					Start: idxSpan.Key, End: idxSpan.EndKey,
-					Payload: zonepb.Subzone{IndexID: uint32(e.IndexID)},
-				})
-			}
-			var emptyPrefix []tree.Datum
-			partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, e.IndexID)
-			var indexPartitionCoverings []covering.Covering
-			indexPartitionCoverings, err = indexCoveringsForPartitioning(
-				b, a, tableID, e.IndexID, partitioning, subzoneIndexByPartition, emptyPrefix)
-			if err != nil {
-				return
-			}
-			partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
+	var indexes []catid.IndexID
+	// TODO(before merge): do we care about the ordering and why
+	b.QueryByID(tableID).FilterIndexName().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			indexes = append(indexes, e.IndexID)
 		})
-	if err != nil {
-		return nil, err
+	b.QueryByID(tableID).FilterTemporaryIndex().Transient().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) {
+			indexes = append(indexes, e.IndexID)
+		})
+	for _, idxID := range indexes {
+		_, indexSubzoneExists := subzoneIndexByIndexID[idxID]
+		if indexSubzoneExists {
+			prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, idxID))
+			idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+			// Each index starts with a unique prefix, so (from a precedence
+			// perspective) it's safe to append them all together.
+			indexCovering = append(indexCovering, covering.Range{
+				Start: idxSpan.Key, End: idxSpan.EndKey,
+				Payload: zonepb.Subzone{IndexID: uint32(idxID)},
+			})
+		}
+		var emptyPrefix []tree.Datum
+		partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, idxID)
+		indexPartitionCoverings, err := indexCoveringsForPartitioning(
+			b, a, tableID, idxID, partitioning, subzoneIndexByPartition, emptyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
 	}
 
 	// OverlapCoveringMerge returns the payloads for any coverings that overlap
@@ -1351,6 +1355,70 @@ func constructSideEffectPartitionElem(
 	return elem
 }
 
+// getMostRecentTableZoneCfgSeq returns the most recent seqNum associated with
+// our tableID's zone config (if any).
+//
+// N.B. Adding a new zone config element entails adding a new element where the
+// seqNum is 1 greater than the most recent zone config element. This helps
+// ensure zone config changes are applied in the correct order during explicit
+// transactions.
+func getMostRecentTableZoneCfgSeq(b BuildCtx, tableID catid.DescID) uint32 {
+	maxSeq := uint32(0)
+	b.QueryByID(tableID).FilterTableZoneConfig().
+		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
+			if elem.SeqNum > maxSeq {
+				maxSeq = elem.SeqNum
+			}
+		})
+	return maxSeq
+}
+
+// configureZoneConfigForNewIndexBackfill will ensure that current subzone
+// configs for the given index on tableID are updated to the newIndexID.
+func configureZoneConfigForNewIndexBackfill(
+	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID,
+) error {
+	currentZoneConfigWithRaw, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	if currentZoneConfigWithRaw == nil {
+		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
+			"on tableID %d that does not have subzone configs", oldIndexID, tableID)
+	}
+	tempIndex := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+			return target == scpb.Transient && e.SourceIndexID == oldIndexID
+		}).MustGetZeroOrOneElement()
+	newIndex := getLatestPrimaryIndex(b, tableID)
+	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
+	newSubzones := make([]zonepb.Subzone, 0)
+	// For the indexes we will use as a part of the backfill, ensure we copy
+	// over each subzone config from the old index to the backfill-related ones.
+	for _, idxToAdd := range newIndexesForBackfill {
+		for _, subzone := range newZoneConfig.Subzones {
+			if subzone.IndexID == uint32(oldIndexID) {
+				subzone.IndexID = uint32(idxToAdd)
+			}
+			newSubzones = append(newSubzones, subzone)
+		}
+	}
+	newZoneConfig.Subzones = newSubzones
+	newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+	if err != nil {
+		return err
+	}
+	mostRecentSeqNum := getMostRecentTableZoneCfgSeq(b, tableID)
+	tzc := &scpb.TableZoneConfig{
+		TableID:    tableID,
+		ZoneConfig: &newZoneConfig,
+		SeqNum:     mostRecentSeqNum + 1,
+	}
+	b.Add(tzc)
+	return nil
+}
+
 // TODO(annie): This is unused for now.
 var _ = configureZoneConfigForNewIndexPartitioning
 
@@ -1482,20 +1550,11 @@ func ApplyZoneConfigForMultiRegionTable(
 	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
 		return nil
 	}
-	// Adding a new zone config element entails adding a new element where the
-	// seqNum is 1 greater than the most recent zone config element. This ensures
-	// zone config changes are applied in the correct order during schema changes.
-	maxSeq := uint32(0)
-	b.QueryByID(tableID).FilterTableZoneConfig().
-		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
-			if elem.SeqNum > maxSeq {
-				maxSeq = elem.SeqNum
-			}
-		})
+	mostRecentSeqNum := getMostRecentTableZoneCfgSeq(b, tableID)
 	tzc := &scpb.TableZoneConfig{
 		TableID:    tableID,
 		ZoneConfig: &newZoneConfig,
-		SeqNum:     maxSeq + 1,
+		SeqNum:     mostRecentSeqNum + 1,
 	}
 	b.Add(tzc)
 	return nil
