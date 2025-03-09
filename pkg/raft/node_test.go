@@ -127,7 +127,7 @@ func TestNodeProposeConfig(t *testing.T) {
 
 	require.Len(t, msgs, 2)
 	assert.Equal(t, raftpb.MsgFortifyLeaderResp, msgs[0].Type)
-	assert.Equal(t, raftpb.MsgProp, msgs[1].Type)
+	assert.Equal(t, raftpb.MsgPropConfig, msgs[1].Type)
 	assert.Equal(t, ccdata, msgs[1].Entries[0].Data)
 }
 
