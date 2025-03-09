@@ -42,9 +42,15 @@ type LogSnapshot struct {
 	storage LogStorage
 	// unstable contains the unstable log entries.
 	unstable LogSlice
+	// termCache contains a compressed entryID suffix of raftLog.
+	termCache *TermCache
 	// logger gives access to logging errors.
 	logger raftlogger.Logger
 }
+
+const (
+	termCacheSize = 10
+)
 
 type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
@@ -53,6 +59,10 @@ type raftLog struct {
 	// unstable contains all unstable entries and snapshot.
 	// they will be saved into storage.
 	unstable unstable
+
+	// termCache contains a suffix of the whole raftLog(both stable and unstable)
+	// used for term lookup.
+	termCache *TermCache
 
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
@@ -108,6 +118,7 @@ func newLogWithSize(
 	return &raftLog{
 		storage:             storage,
 		unstable:            newUnstable(last, logger),
+		termCache:           NewTermCache(termCacheSize, last),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
 		// Initialize our committed and applied pointers to the time of the last compaction.
@@ -172,7 +183,12 @@ func (l *raftLog) maybeAppend(a LogSlice) bool {
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	return l.unstable.truncateAndAppend(a)
+
+	if ok = l.unstable.truncateAndAppend(a); ok {
+		l.termCache.ScanAppend(a)
+	}
+
+	return ok
 }
 
 // append adds the given log slice to the end of the log.
@@ -444,6 +460,10 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 		return 0, ErrCompacted
 	}
 
+	term, found := l.termCache.Term(index)
+	if found {
+		return term, nil
+	}
 	term, err := l.storage.Term(index)
 	if err == nil {
 		return term, nil
@@ -660,9 +680,10 @@ func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 // read from while the underlying storage is not mutated.
 func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	return LogSnapshot{
-		first:    l.firstIndex(),
-		storage:  storage,
-		unstable: l.unstable.LogSlice,
-		logger:   l.logger,
+		first:     l.firstIndex(),
+		storage:   storage,
+		unstable:  l.unstable.LogSlice,
+		termCache: l.termCache,
+		logger:    l.logger,
 	}
 }
