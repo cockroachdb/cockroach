@@ -30,7 +30,7 @@ UPDATE ti SET b = 2 WHERE a = 4
 ----
 Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/2:2:Int/2
-Del /Table/106/2/4/0
+Del (locking) /Table/106/2/4/0
 Put /Table/106/2/2/0 -> /BYTES/0x8c
 
 kvtrace
@@ -45,7 +45,7 @@ UPSERT INTO ti VALUES (2, 1)
 ----
 Scan /Table/106/1/2/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/2/0 -> /TUPLE/2:2:Int/1
-Del /Table/106/2/2/0
+Del (locking) /Table/106/2/2/0
 Put /Table/106/2/1/0 -> /BYTES/0x8a
 
 kvtrace
@@ -60,7 +60,7 @@ INSERT INTO ti VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 ----
 Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/1/0 -> /TUPLE/2:2:Int/2
-Del /Table/106/2/1/0
+Del (locking) /Table/106/2/1/0
 Put /Table/106/2/2/0 -> /BYTES/0x89
 
 # ---------------------------------------------------------
@@ -113,7 +113,7 @@ UPDATE tpfp SET b = b + 1, c = 'foobar'
 ----
 Scan /Table/107/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
-Del /Table/107/2/"foo"/0
+Del (locking) /Table/107/2/"foo"/0
 Put /Table/107/2/"foobar"/0 -> /BYTES/0x8b
 
 # Update a row that matches the partial index before but not after.
@@ -122,7 +122,7 @@ UPDATE tpfp SET c = 'baz'
 ----
 Scan /Table/107/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/baz
-Del /Table/107/2/"foobar"/0
+Del (locking) /Table/107/2/"foobar"/0
 
 # ---------------------------------------------------------
 # Expression Index With ForcePut
@@ -147,7 +147,7 @@ UPDATE tefp SET a = a + 1, b = b + 100
 ----
 Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/108/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
-Del /Table/108/2/102/0
+Del (locking) /Table/108/2/102/0
 CPut /Table/108/2/203/0 -> /BYTES/0x89
 
 # Update a row with different values without changing the index entry.

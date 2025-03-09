@@ -1401,6 +1401,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
@@ -1418,6 +1419,7 @@ func (e *distSQLSpecExecFactory) ConstructUpsert(
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: upsert")
@@ -1429,6 +1431,7 @@ func (e *distSQLSpecExecFactory) ConstructDelete(
 	fetchCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	lockedIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete")

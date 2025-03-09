@@ -1075,5 +1075,5 @@ DELETE FROM t57085_p WHERE p = 1;
 Del (locking) /Table/114/1/1/0
 Scan /Table/115/{1-2}
 Del /Table/115/2/1/10/0
-Del /Table/115/1/10/0
-Del /Table/115/1/20/0
+Del (locking) /Table/115/1/10/0
+Del (locking) /Table/115/1/20/0
