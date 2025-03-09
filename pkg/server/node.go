@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1883,6 +1884,7 @@ func (n *Node) batchStreamImpl(
 	recvMsg func(*kvpb.BatchRequest) error,
 ) error {
 	ctx := stream.Context()
+	respMsg := new(grpcutil.PreparedMsg)
 	for {
 		argsAlloc := new(struct {
 			args kvpb.BatchRequest
@@ -1903,7 +1905,11 @@ func (n *Node) batchStreamImpl(
 		if err != nil {
 			return err
 		}
-		err = stream.Send(br)
+		err = respMsg.Encode(stream, br)
+		if err != nil {
+			return err
+		}
+		err = stream.SendMsg(respMsg.AsGrpc())
 		if err != nil {
 			return err
 		}
