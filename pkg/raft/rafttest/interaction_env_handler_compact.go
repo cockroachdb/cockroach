@@ -36,5 +36,6 @@ func (env *InteractionEnv) Compact(idx int, newFirstIndex uint64) error {
 	if err := env.Nodes[idx].Compact(newFirstIndex); err != nil {
 		return err
 	}
+	env.Nodes[idx].Compacted(newFirstIndex)
 	return env.RaftLog(idx)
 }

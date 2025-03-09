@@ -47,6 +47,8 @@ type LogSnapshot struct {
 }
 
 type raftLog struct {
+	// compacted is the index up to which the log in storage is compacted.
+	compacted uint64
 	// storage contains all stable entries since the last snapshot.
 	storage Storage
 
@@ -107,6 +109,7 @@ func newLogWithSize(
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
 		storage:             storage,
+		compacted:           firstIndex - 1,
 		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
@@ -181,6 +184,10 @@ func (l *raftLog) maybeAppend(a LogSlice) bool {
 // the lastEntryID of this log, or a.term is outdated.
 func (l *raftLog) append(a LogSlice) bool {
 	return l.unstable.append(a)
+}
+
+func (l *raftLog) compact(index uint64) {
+	l.compacted = index
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
@@ -352,7 +359,7 @@ func (l *raftLog) firstIndex() uint64 {
 	if i, ok := l.unstable.maybeFirstIndex(); ok {
 		return i
 	}
-	return l.storage.FirstIndex()
+	return l.compacted + 1
 }
 
 func (l *raftLog) lastIndex() uint64 {
