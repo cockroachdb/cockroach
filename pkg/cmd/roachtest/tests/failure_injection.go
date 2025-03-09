@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -35,45 +36,79 @@ type failureSmokeTest struct {
 
 func (t *failureSmokeTest) run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, fr *failures.FailureRegistry,
-) error {
+) (err error) {
 	// TODO(darryl): In the future, roachtests should interact with the failure injection library
 	// through helper functions in roachtestutil so they don't have to interface with roachprod
 	// directly.
-	failureMode, err := fr.GetFailureMode(c.MakeNodes(), t.failureName, l, c.IsSecure())
+	failureMode, err := fr.GetFailureMode(c.MakeNodes(c.CRDBNodes()), t.failureName, l, c.IsSecure())
 	if err != nil {
 		return err
 	}
-	if err = failureMode.Setup(ctx, l, t.args); err != nil {
+	// Make sure to cleanup the failure mode even if the test fails.
+	defer func() {
+		quietLogger, file, logErr := roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "cleanup")
+		if logErr != nil {
+			l.Printf("failed to create logger for cleanup: %v", logErr)
+			quietLogger = l
+		}
+		l.Printf("%s: Running Cleanup(); details in %s.log", t.failureName, file)
+		err = errors.CombineErrors(err, failureMode.Cleanup(ctx, quietLogger, t.args))
+	}()
+
+	quietLogger, file, err := roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "setup")
+	if err != nil {
 		return err
 	}
-	if err = failureMode.Inject(ctx, l, t.args); err != nil {
+	l.Printf("%s: Running Setup(); details in %s.log", t.failureName, file)
+	if err = failureMode.Setup(ctx, quietLogger, t.args); err != nil {
+		return err
+	}
+
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "inject")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running Inject(); details in %s.log", t.failureName, file)
+	if err = failureMode.Inject(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
 	// Allow the failure to take effect.
-	if err = failureMode.WaitForFailureToPropagate(ctx, l, t.args); err != nil {
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for propagate")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running WaitForFailureToPropagate(); details in %s.log", t.failureName, file)
+	if err = failureMode.WaitForFailureToPropagate(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
+	l.Printf("validating failure was properly injected")
 	if err = t.validateFailure(ctx, l, c); err != nil {
 		return err
 	}
-	if err = failureMode.Restore(ctx, l, t.args); err != nil {
+
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "restore")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running Restore(); details in %s.log", t.failureName, file)
+	if err = failureMode.Restore(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
 	// Allow the cluster to return to normal.
-	if err = failureMode.WaitForFailureToRestore(ctx, l, t.args); err != nil {
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for restore")
+	if err != nil {
+		return err
+	}
+	l.Printf("%s: Running WaitForFailureToRestore(); details in %s.log", t.failureName, file)
+	if err = failureMode.WaitForFailureToRestore(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
-	if err = t.validateRestore(ctx, l, c); err != nil {
-		return err
-	}
-	if err = failureMode.Cleanup(ctx, l, t.args); err != nil {
-		return err
-	}
-	return nil
+	l.Printf("validating failure was properly restored")
+	return t.validateRestore(ctx, l, c)
 }
 
 func (t *failureSmokeTest) noopRun(
@@ -233,6 +268,69 @@ var asymmetricOutgoingNetworkPartitionTest = func(c cluster.Cluster) failureSmok
 	}
 }
 
+var latencyTest = func(c cluster.Cluster) failureSmokeTest {
+	nodes := c.CRDBNodes()
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	srcNode := nodes[0]
+	destNode := nodes[1]
+	unaffectedNode := nodes[2]
+	return failureSmokeTest{
+		testName:    "Network Latency",
+		failureName: failures.NetworkLatencyName,
+		args: failures.NetworkLatencyArgs{
+			ArtificialLatencies: []failures.ArtificialLatency{
+				{
+					Source:      install.Nodes{install.Node(srcNode)},
+					Destination: install.Nodes{install.Node(destNode)},
+					Delay:       2 * time.Second,
+				},
+				{
+					Source:      install.Nodes{install.Node(destNode)},
+					Destination: install.Nodes{install.Node(srcNode)},
+					Delay:       2 * time.Second,
+				},
+			},
+		},
+		validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+			// Note that this is one way latency, since the sender doesn't have the matching port.
+			delayedLatency, err := roachtestutil.PortLatency(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			normalLatency, err := roachtestutil.PortLatency(ctx, l, c, c.Nodes(unaffectedNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			if delayedLatency < normalLatency*2 {
+				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to be much higher than between nodes without (n%d and n%d)", srcNode, destNode, unaffectedNode, destNode)
+			}
+			if delayedLatency < time.Second || delayedLatency > 3*time.Second {
+				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to be at least within 1s and 3s", srcNode, destNode)
+			}
+			return nil
+		},
+		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster) error {
+			delayedLatency, err := roachtestutil.PortLatency(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			normalLatency, err := roachtestutil.PortLatency(ctx, l, c, c.Nodes(unaffectedNode), c.Nodes(destNode))
+			if err != nil {
+				return err
+			}
+			if delayedLatency > 2*normalLatency {
+				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to be close to latency between nodes without (n%d and n%d)", srcNode, destNode, unaffectedNode, destNode)
+			}
+			if delayedLatency > 500*time.Millisecond {
+				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to have restored to at least less than 500ms", srcNode, destNode)
+			}
+			return nil
+		},
+	}
+}
+
 func setupFailureSmokeTests(ctx context.Context, t test.Test, c cluster.Cluster) error {
 	// Download any dependencies needed.
 	if err := c.Install(ctx, t.L(), c.CRDBNodes(), "nmap"); err != nil {
@@ -258,6 +356,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 		bidirectionalNetworkPartitionTest(c),
 		asymmetricIncomingNetworkPartitionTest(c),
 		asymmetricOutgoingNetworkPartitionTest(c),
+		latencyTest(c),
 	}
 
 	// Randomize the order of the tests in case any of the failures have unexpected side
@@ -284,7 +383,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 
 func registerFISmokeTest(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "failure-injection-smoke-test",
+		Name:             "failure-injection/smoke-test",
 		Owner:            registry.OwnerTestEng,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
 		CompatibleClouds: registry.OnlyGCE,
@@ -295,7 +394,7 @@ func registerFISmokeTest(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "failure-injection-noop-smoke-test",
+		Name:             "failure-injection/smoke-test/noop",
 		Owner:            registry.OwnerTestEng,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
 		CompatibleClouds: registry.OnlyGCE,

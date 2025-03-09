@@ -4,6 +4,7 @@ go_library(
     name = "failures",
     srcs = [
         "failure.go",
+        "latency.go",
         "network_partition.go",
         "registry.go",
     ],
@@ -13,5 +14,6 @@ go_library(
         "//pkg/roachprod",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
