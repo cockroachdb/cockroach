@@ -129,7 +129,7 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 ) error {
 
 	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, nil)
-	report, err := serializeOpenmetricsReport(*r, &labelString)
+	report, err := SerializeOpenmetricsReport(*r, &labelString)
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
 	}
@@ -137,7 +137,7 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	return statsWriter(ctx, t, c, report, dest)
 }
 
-func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.Buffer, error) {
+func SerializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.Buffer, error) {
 	var buffer bytes.Buffer
 
 	// Emit summary metrics from Total
