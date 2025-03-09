@@ -8,6 +8,7 @@
 package syncutil
 
 import (
+	"sync"
 	"time"
 
 	deadlock "github.com/sasha-s/go-deadlock"
@@ -35,8 +36,10 @@ func (rw *Mutex) TryLock() bool {
 }
 
 // An RWMutex is a reader/writer mutual exclusion lock.
+// NOTE: Due to https://github.com/golang/go/issues/17973, this implementation
+// has the behavior of a normal Mutex.
 type RWMutex struct {
-	deadlock.RWMutex
+	deadlock.Mutex
 }
 
 // AssertHeld is a no-op for deadlock mutexes.
@@ -56,3 +59,24 @@ func (rw *RWMutex) TryLock() bool {
 func (rw *RWMutex) TryRLock() bool {
 	return false
 }
+
+// RLock is identical to Lock in the current implementation.
+func (rw *RWMutex) RLock() {
+	rw.Lock()
+}
+
+// RUnlock is identical to Unlock in the current implementation.
+func (rw *RWMutex) RUnlock() {
+	rw.Unlock()
+}
+
+// RLocker returns a [Locker] interface that implements
+// the [Locker.Lock] and [Locker.Unlock] methods by calling rw.RLock and rw.RUnlock.
+func (rw *RWMutex) RLocker() sync.Locker {
+	return (*rlocker)(rw)
+}
+
+type rlocker RWMutex
+
+func (r *rlocker) Lock()   { (*RWMutex)(r).RLock() }
+func (r *rlocker) Unlock() { (*RWMutex)(r).RUnlock() }
