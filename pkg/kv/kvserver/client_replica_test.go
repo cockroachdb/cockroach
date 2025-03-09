@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -2726,6 +2727,103 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	// +1 for transitioning out of joint config
 	// +1 for removing learner
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
+}
+
+// TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable checks that if a range
+// lost its quorum, the remaining replicas in that range will have their
+// leaderlessWatcher indicate that the range is unavailable. Also, it checks
+// that when the range regains quorum, the leaderlessWatcher will indicate that
+// the range is available.
+func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+
+	stickyVFSRegistry := fs.NewStickyRegistry()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
+
+	// Perform a basic test setup with two nodes.
+	const numServers int = 2
+	st := cluster.MakeTestingClusterSettings()
+
+	// Set `kv.replica_raft.leaderless_unavailable_threshold` to 10 seconds.
+	threshold := time.Second * 10
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, &st.SV, threshold)
+
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			Settings: st,
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, numServers,
+		base.TestClusterArgs{
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
+		})
+
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
+
+	// Randomly stop server index 0 or 1.
+	stoppedNodeInx := rand.Intn(2)
+	aliveNodeIdx := 1 - stoppedNodeInx
+	tc.StopServer(stoppedNodeInx)
+	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
+
+	// The range is available initially.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+
+	// Wait until the remaining replica becomes leaderless.
+	testutils.SucceedsSoon(t, func() error {
+		if repl.RaftStatus().Lead != raft.None {
+			return errors.New("Leader still exists")
+		}
+		return nil
+	})
+
+	// Increment the clock by the leaderlessWatcher unavailable threshold.
+	manualClock.Increment(threshold.Nanoseconds())
+
+	// Wait for the leaderlessWatcher to indicate that the range is unavailable.
+	testutils.SucceedsSoon(t, func() error {
+		tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
+		if !repl.LeaderlessWatcher.IsUnavailable() {
+			return errors.New("range is still available")
+		}
+		return nil
+	})
+
+	// At this point we know that the replica is considered unavailable. Regain
+	// the quorum and check that the leaderlessWatcher indicates that the range is
+	// available.
+	require.NoError(t, tc.RestartServer(stoppedNodeInx))
+
+	testutils.SucceedsSoon(t, func() error {
+		repl = tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
+		tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
+		if repl.LeaderlessWatcher.IsUnavailable() {
+			return errors.New("range is still unavailable")
+		}
+		return nil
+	})
 }
 
 func TestClearRange(t *testing.T) {
