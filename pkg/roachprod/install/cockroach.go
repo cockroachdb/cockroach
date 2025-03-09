@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -153,6 +154,10 @@ type StartOpts struct {
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
 	// in the CockroachDB logging configuration.
 	EnableFluentSink bool
+
+	// PreStartHooks are hooks that are run after service registration has occurred,
+	// but before starting the cockroach process.
+	PreStartHooks []PreStartHook
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -432,6 +437,16 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}, "\n"))
 		startOpts.SQLPort = config.DefaultSQLPort
 		startOpts.AdminUIPort = config.DefaultAdminUIPort
+	}
+
+	for _, hook := range startOpts.PreStartHooks {
+		hookCtx, cancel := context.WithTimeout(ctx, hook.Timeout)
+		l.Printf("running pre-start hook: %s", hook.Name)
+		err := panicAsError(hookCtx, l, hook.Fn)
+		cancel()
+		if err != nil {
+			return err
+		}
 	}
 
 	if startOpts.IsVirtualCluster() {
@@ -1670,4 +1685,32 @@ func getEnvVars() []string {
 // this workaround and just log the constants once when the cluster is started.
 func SuppressMetamorphicConstantsEnvVar() string {
 	return config.DisableMetamorphicTestingEnvVar
+}
+
+// PreStartHook is a hook that is run locally after service registration has completed
+// but before any cockroach processes have started in the cluster.
+type PreStartHook struct {
+	Name    string
+	Fn      func(context.Context) error
+	Timeout time.Duration
+}
+
+// logPanicToErr logs the panic stack trace and returns an error with the
+// panic message.
+func panicAsError(
+	ctx context.Context, l *logger.Logger, f func(context.Context) error,
+) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = logPanicToErr(l, r)
+		}
+	}()
+	return f(ctx)
+}
+
+// logPanicToErr logs the panic stack trace and returns an error with the
+// panic message.
+func logPanicToErr(l *logger.Logger, r interface{}) error {
+	l.Printf("panic stack trace:\n%s", debugutil.Stack())
+	return fmt.Errorf("panic (stack trace above): %v", r)
 }
