@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,7 +51,9 @@ type tpccSetupType int
 const (
 	usingImport tpccSetupType = iota
 	usingInit
-	usingExistingData // skips import
+	usingExistingData    // skips import
+	warehouseLabelString = "warehouses"
+	newOrderTableName    = "newOrder"
 )
 
 // rampDuration returns the default durations passed to the `ramp`
@@ -61,6 +64,99 @@ func rampDuration(isLocal bool) time.Duration {
 	}
 
 	return 5 * time.Minute
+}
+
+func getMaxWarehousesAboveEfficiency(
+	testName string, histogramMetrics *roachtestutil.HistogramMetric,
+) (roachtestutil.AggregatedPerfMetrics, error) {
+	metricsByWarehouse := make(map[int64]*roachtestutil.HistogramMetric)
+
+	for _, metric := range histogramMetrics.Summaries {
+		var wareHouse string
+		for _, label := range metric.Labels {
+			if label.Name == warehouseLabelString {
+				wareHouse = label.Value
+				break
+			}
+		}
+
+		if wareHouse == "" {
+			continue
+		}
+		warehouseValue, err := strconv.ParseInt(wareHouse, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := metricsByWarehouse[warehouseValue]; !exists {
+			metricsByWarehouse[warehouseValue] = &roachtestutil.HistogramMetric{
+				Summaries: []*roachtestutil.HistogramSummaryMetric{metric},
+			}
+		} else {
+			metricsByWarehouse[warehouseValue].Summaries = append(metricsByWarehouse[warehouseValue].Summaries, metric)
+		}
+
+	}
+	tpmcPerWareHouse := make(map[int64]float64)
+	maxWareHouse := int64(0)
+	getEfficiencyFn := func(tpmc float64, warehouse int64) float64 {
+		return (tpmc / (12.605 * float64(warehouse))) * 100
+	}
+	for warehouse, metrics := range metricsByWarehouse {
+		totalCount := int64(0)
+		totalElapsed := int64(0)
+		for _, metric := range metrics.Summaries {
+			if metric.Name == newOrderTableName {
+				totalCount += metric.TotalCount
+				totalElapsed += metric.TotalElapsed
+			}
+		}
+
+		opsPerSec := float64(totalCount*1000) / float64(totalElapsed)
+		tpmc := opsPerSec * 60
+		tpmcPerWareHouse[warehouse] = tpmc
+
+		efficiency := getEfficiencyFn(tpmc, warehouse)
+		if efficiency > 85 && warehouse > maxWareHouse {
+			maxWareHouse = warehouse
+		}
+	}
+
+	var aggregatedMetrics roachtestutil.AggregatedPerfMetrics
+	for warehouse, tpmc := range tpmcPerWareHouse {
+		label := &roachtestutil.Label{
+			Name:  warehouseLabelString,
+			Value: strconv.FormatInt(warehouse, 10),
+		}
+		aggregatedMetrics = append(aggregatedMetrics, []*roachtestutil.AggregatedMetric{{
+			Name:           fmt.Sprintf("%s_tpmc", testName),
+			Value:          roachtestutil.MetricPoint(tpmc),
+			Unit:           "txn/min",
+			IsHigherBetter: true,
+			AdditionalLabels: []*roachtestutil.Label{
+				label,
+			},
+		},
+			{
+				Name:             fmt.Sprintf("%s_efficiency", testName),
+				Value:            roachtestutil.MetricPoint(getEfficiencyFn(tpmc, warehouse)),
+				Unit:             "percentage",
+				IsHigherBetter:   true,
+				AdditionalLabels: []*roachtestutil.Label{label},
+			},
+		}...)
+	}
+	aggregatedMetrics = append(aggregatedMetrics, &roachtestutil.AggregatedMetric{
+		Name:           fmt.Sprintf("%s_max_efficient_warehouse", testName),
+		Value:          roachtestutil.MetricPoint(maxWareHouse),
+		Unit:           "",
+		IsHigherBetter: true,
+		AdditionalLabels: []*roachtestutil.Label{{
+			Name: warehouseLabelString,
+			// Adding empty label to remove warehouse label in this metric
+			Value: "",
+		}},
+	})
+	return aggregatedMetrics, nil
 }
 
 type tpccOptions struct {
@@ -1410,15 +1506,16 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	nodes := r.MakeClusterSpec(numNodes, opts...)
 
 	r.Add(registry.TestSpec{
-		Name:              name,
-		Owner:             owner,
-		Benchmark:         true,
-		Cluster:           nodes,
-		Timeout:           7 * time.Hour,
-		CompatibleClouds:  b.Clouds,
-		Suites:            b.Suites,
-		EncryptionSupport: encryptionSupport,
-		Leases:            leases,
+		Name:                   name,
+		Owner:                  owner,
+		Benchmark:              true,
+		Cluster:                nodes,
+		Timeout:                7 * time.Hour,
+		CompatibleClouds:       b.Clouds,
+		Suites:                 b.Suites,
+		EncryptionSupport:      encryptionSupport,
+		Leases:                 leases,
+		PostProcessPerfMetrics: getMaxWarehousesAboveEfficiency,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -1732,7 +1829,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 
 					// Create buffer for performance metrics
 					perfBuf := bytes.NewBuffer([]byte{})
-					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
+					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{warehouseLabelString: fmt.Sprintf("%d", warehouses)})
 					writer := io.Writer(perfBuf)
 					exporter.Init(&writer)
 					defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, group.LoadNodes, statsFilePrefix)
