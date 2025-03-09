@@ -493,6 +493,20 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			annotateNodeForTable(e.Table)
 		case *memo.VectorSearchExpr:
 			annotateNodeForTable(e.Table)
+		case *memo.InsertExpr:
+			annotateNodeForTable(e.Table)
+		case *memo.DeleteExpr:
+			// Typically, policy information is displayed in the scan node. However,
+			// a `DeleteExpr` built for a delete range operation does not emit a scan node,
+			// as everything is included within the `deleteRangeOp` node.
+			// To ensure policy information is included, we handle that case here.
+			//
+			// We identify this scenario by checking if the input to `DeleteExpr`
+			// is a `ScanExpr` directly. If it is not a delete range operation,
+			// the input will be a projection instead.
+			if scan, ok := e.Input.(*memo.ScanExpr); ok {
+				annotateNodeForTable(scan.Table)
+			}
 		}
 	}
 }
