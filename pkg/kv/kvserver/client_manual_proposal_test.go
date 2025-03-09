@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttermcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -229,6 +230,7 @@ LIMIT
 			Sideload:    nil,
 			StateLoader: rsl,
 			SyncWaiter:  swl,
+			TermCache:   rafttermcache.NewTermCache(8),
 			EntryCache:  raftentry.NewCache(1024),
 			Settings:    st,
 			Metrics: logstore.Metrics{
@@ -240,6 +242,8 @@ LIMIT
 				}),
 			},
 		}
+
+		ls.TermCache.ResetWithFirst(lastEntryID.Term, lastEntryID.Index)
 
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
