@@ -78,14 +78,21 @@
 .latency-table__empty
   padding: 30px;
 
-
-.crdb-ant-tooltip.Chip--tooltip
-  min-width 384px
-  .crdb-ant-tooltip-inner
-    background-color black
-    padding 12px 18px
-  .crdb-ant-tooltip-content
-    width 100%
+.Chip--tooltip
+  font-family $font-family--base
+  font-size 12px
+  color white
+  background-color black
+  position: absolute
+  bottom: 100%
+  left: 50%
+  transform: translateX(-50%)
+  margin-bottom: 8px
+  padding: 8px
+  border-radius: 4px
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15)
+  z-index: 1000
+  min-width: 384px
   span, p
     font-family $font-family--base
     font-size 14px
@@ -103,9 +110,6 @@
         margin-right 8px
       &:last-child
         margin-left 8px
-    .crdb-ant-divider
-      background #3b4a60
-      margin 0
     &--item-title, &--item-description
       font-family $font-family--base
       font-size 14px
@@ -128,3 +132,14 @@
       color $colors--functional-yellow-3
     &--red
       color $colors--functional-red-3
+
+.Chip--tooltip-arrow
+  position: absolute
+  bottom: -8px
+  left: 50%
+  transform: translateX(-50%)
+  width: 0
+  height: 0
+  border-left: 8px solid transparent
+  border-right: 8px solid transparent
+  border-top: 8px solid black
