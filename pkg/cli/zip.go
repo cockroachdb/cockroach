@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -202,6 +203,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	var tenants []*serverpb.Tenant
 	if err := func() error {
 		s := zr.start("discovering virtual clusters")
+		serverCfg.User = username.NodeUserName()
 		conn, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
