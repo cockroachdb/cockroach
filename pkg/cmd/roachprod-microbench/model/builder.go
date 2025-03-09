@@ -93,7 +93,7 @@ func (m *Metric) ComputeComparison(benchmarkName, oldID, newID string) *Comparis
 			return nil
 		}
 	}
-	// Compute the comparison and delta.
+	// Compute the comparison, confidence interval and delta.
 	comparison := Comparison{}
 	oldSample, newSample := benchmarkEntry.Samples[oldID], benchmarkEntry.Samples[newID]
 	comparison.Distribution = m.Assumption.Compare(oldSample, newSample)
@@ -104,6 +104,7 @@ func (m *Metric) ComputeComparison(benchmarkName, oldID, newID string) *Comparis
 	} else {
 		comparison.Delta = ((newSummary.Center / oldSummary.Center) - 1.0) * 100
 	}
+	comparison.ConfidenceInterval = calculateConfidenceInterval(newSample.Values, oldSample.Values)
 	return &comparison
 }
 
