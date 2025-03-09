@@ -11938,7 +11938,8 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	type params struct {
-		raftStatus              raft.SparseStatus
+		raftStatus              raft.BasicStatus
+		progress                *tracker.Progress
 		leaseStatus             kvserverpb.LeaseStatus
 		leaseAcquisitionPending bool
 		storeID                 roachpb.StoreID
@@ -11951,23 +11952,19 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 	const localID = 1
 	const remoteID = 2
 	base := params{
-		raftStatus: raft.SparseStatus{
-			BasicStatus: raft.BasicStatus{
-				SoftState: raft.SoftState{
-					RaftState: raftpb.StateLeader,
-				},
-				HardState: raftpb.HardState{
-					Lead:   localID,
-					Commit: 10,
-				},
+		raftStatus: raft.BasicStatus{
+			SoftState: raft.SoftState{
+				RaftState: raftpb.StateLeader,
 			},
-			Progress: map[raftpb.PeerID]tracker.Progress{
-				remoteID: {Match: 10},
+			HardState: raftpb.HardState{
+				Lead:   localID,
+				Commit: 10,
 			},
 		},
+		progress: &tracker.Progress{Match: 10},
 		leaseStatus: kvserverpb.LeaseStatus{
 			Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
-				ReplicaID: remoteID,
+				StoreID: remoteID,
 			}},
 			State: kvserverpb.LeaseState_VALID,
 		},
@@ -11999,23 +11996,23 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			p.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
 		}},
 		"local lease": {false, func(p *params) {
-			p.leaseStatus.Lease.Replica.ReplicaID = localID
+			p.leaseStatus.Lease.Replica.StoreID = localID
 		}},
 		"lease request pending": {false, func(p *params) {
 			p.leaseAcquisitionPending = true
 		}},
 		"no progress": {false, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.progress = nil
 		}},
 		"insufficient progress": {false, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.progress = &tracker.Progress{Match: 9}
 		}},
 		"no progress, draining": {true, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.progress = nil
 			p.draining = true
 		}},
 		"insufficient progress, draining": {true, func(p *params) {
-			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.progress = &tracker.Progress{Match: 9}
 			p.draining = true
 		}},
 	}
@@ -12025,7 +12022,7 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 			p := base
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldTransferRaftLeadershipToLeaseholderLocked(
-				p.raftStatus, p.leaseStatus, p.leaseAcquisitionPending, p.storeID, p.draining))
+				p.raftStatus, p.progress, p.leaseStatus, p.leaseAcquisitionPending, p.storeID, p.draining))
 		})
 	}
 }
