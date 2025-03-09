@@ -59,7 +59,7 @@ func newStoreGossiper(
 
 	desc := sg.descriptorGetter(false /* cached */)
 	knobs := kvserver.StoreGossipTestingKnobs{AsyncDisabled: true}
-	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &cluster.MakeTestingClusterSettings().SV, clock)
+	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &cluster.MakeTestingClusterSettings().SV, clock, nil)
 	sg.local.Ident = roachpb.StoreIdent{StoreID: desc.StoreID, NodeID: desc.Node.NodeID}
 
 	return sg
