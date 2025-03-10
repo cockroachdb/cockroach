@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -36,8 +37,9 @@ import (
 // information to be read at node startup.
 type Stores struct {
 	log.AmbientContext
-	clock    *hlc.Clock
-	storeMap syncutil.Map[roachpb.StoreID, Store]
+	clock       *hlc.Clock
+	storeMap    syncutil.Map[roachpb.StoreID, Store]
+	loadMonitor *load.RuntimeLoadMonitor
 
 	mu struct {
 		syncutil.Mutex
@@ -51,10 +53,13 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
+func NewStores(
+	ambient log.AmbientContext, clock *hlc.Clock, loadMonitor *load.RuntimeLoadMonitor,
+) *Stores {
 	return &Stores{
 		AmbientContext: ambient,
 		clock:          clock,
+		loadMonitor:    loadMonitor,
 	}
 }
 
@@ -347,6 +352,10 @@ func (ls *Stores) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
 		nc.NumStores++
 		return nil
 	})
-	// TODO: fill in the rest of the fields.
+	if ls.loadMonitor != nil {
+		runtimeStats := ls.loadMonitor.Stats()
+		nc.NodeCPURateCapacity = runtimeStats.CPURateCapacity
+		nc.NodeCPURateUsage = runtimeStats.CPURateUsage
+	}
 	return nc
 }
