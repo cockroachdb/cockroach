@@ -61,6 +61,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
@@ -256,13 +257,6 @@ stringer(
     name = "gen-txnstate-stringer",
     src = "txn_coord_sender.go",
     typ = "txnState",
-)
-
-disallowed_imports_test(
-    "kvcoord",
-    disallowed_list = [
-        "//pkg/storage",
-    ],
 )
 
 gen_interval_btree(

@@ -153,7 +153,7 @@ func (k MVCCKey) Format(f fmt.State, c rune) {
 // Len returns the size of the MVCCKey when encoded. Implements the
 // pebble.Encodeable interface.
 func (k MVCCKey) Len() int {
-	return encodedMVCCKeyLength(k)
+	return EncodedMVCCKeyLength(k)
 }
 
 // EncodeMVCCKey encodes an MVCCKey into its Pebble representation. The encoding
@@ -180,7 +180,7 @@ func (k MVCCKey) Len() int {
 // then, decoding routines must be prepared to handle it, but can ignore the
 // synthetic bit.
 func EncodeMVCCKey(key MVCCKey) []byte {
-	keyLen := encodedMVCCKeyLength(key)
+	keyLen := EncodedMVCCKeyLength(key)
 	buf := make([]byte, keyLen)
 	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
@@ -189,7 +189,7 @@ func EncodeMVCCKey(key MVCCKey) []byte {
 // EncodeMVCCKeyToBuf encodes an MVCCKey into its Pebble representation, reusing
 // the given byte buffer if it has sufficient capacity.
 func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
-	keyLen := encodedMVCCKeyLength(key)
+	keyLen := EncodedMVCCKeyLength(key)
 	if cap(buf) < keyLen {
 		buf = make([]byte, keyLen)
 	} else {
@@ -288,8 +288,8 @@ func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 	}
 }
 
-// encodedMVCCKeyLength returns the encoded length of the given MVCCKey.
-func encodedMVCCKeyLength(key MVCCKey) int {
+// EncodedMVCCKeyLength returns the encoded length of the given MVCCKey.
+func EncodedMVCCKeyLength(key MVCCKey) int {
 	// NB: We don't call into EncodedMVCCKeyPrefixLength() or
 	// EncodedMVCCTimestampSuffixLength() here because the additional function
 	// call overhead is significant.
@@ -312,11 +312,11 @@ func EncodedMVCCKeyPrefixLength(key roachpb.Key) int {
 // encodedMVCCTimestampLength returns the encoded length of the given MVCC
 // timestamp, excluding the length suffix and sentinel bytes.
 func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
-	// This is backwards, but encodedMVCCKeyLength() is called in the
+	// This is backwards, but EncodedMVCCKeyLength() is called in the
 	// EncodeMVCCKey() hot path and an additional function call to this function
 	// shows ~6% overhead in benchmarks. We therefore do the timestamp length
-	// calculation inline in encodedMVCCKeyLength(), and remove the excess here.
-	tsLen := encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
+	// calculation inline in EncodedMVCCKeyLength(), and remove the excess here.
+	tsLen := EncodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 	if tsLen > 0 {
 		tsLen -= mvccEncodedTimeLengthLen
 	}
@@ -328,7 +328,7 @@ func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
 // if the timestamp is empty.
 func EncodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
 	// This is backwards, see comment in encodedMVCCTimestampLength() for why.
-	return encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
+	return EncodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 }
 
 // TODO(erikgrinaker): merge in the enginepb decoding functions once it can
