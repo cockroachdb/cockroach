@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
@@ -913,7 +914,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 					// evaluation context as the default value for backfill.
 					err = pgerror.WithCandidateCode(err, pgcode.FeatureNotSupported)
 				}
-				return err
+				return scerrors.SchemaChangerUserError(err)
 			}
 			colIdx, ok := ib.colIdxMap.Get(colID)
 			if !ok {
