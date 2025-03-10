@@ -21,7 +21,7 @@ import (
 // To add a builtin, add signatures to the bottom of the slice.
 // Values in this slice are function name concatenated to overload.Signature(true).
 var builtinOidsArray = []string{
-	// There is no 0 function oid.
+	// There is no 1 function oid.
 	0:    `INVALID`,
 	1:    `array_agg(arg1: bool) -> bool[]`,
 	2:    `array_agg(arg1: box2d) -> box2d[]`,
@@ -333,7 +333,7 @@ var builtinOidsArray = []string{
 	308:  `percentile_cont_impl(arg1: float, arg2: interval) -> interval`,
 	309:  `percentile_cont_impl(arg1: float[], arg2: float) -> float[]`,
 	310:  `percentile_cont_impl(arg1: float[], arg2: interval) -> interval[]`,
-	311:  `format(string, anyelement...) -> string`,
+	311:  `format(string, any...) -> string`,
 	312:  `array_to_json(array: anyelement[]) -> jsonb`,
 	313:  `array_to_json(array: anyelement[], pretty_bool: bool) -> jsonb`,
 	314:  `aclexplode(aclitems: string[]) -> tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}`,
