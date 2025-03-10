@@ -6,11 +6,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"html"
 	"io"
+	"io/fs"
 	"math/rand"
 	"net"
 	"net/http"
@@ -173,6 +175,19 @@ type testRunner struct {
 	// sideEyeClient, if set, is the client used to communicate with the Side-Eye
 	// debugging service.
 	sideEyeClient *sideeyeclient.SideEyeClient
+}
+
+type perfMetricsCollector struct {
+	// histogramMetrics is the total metrics from every file
+	histogramMetrics *roachtestutil.HistogramMetric
+	// labels is the slice of openmetrics label key and values for the run
+	labels []*roachtestutil.Label
+	// elapsed is the avg elapsed time of the run
+	elapsed int64
+	// count is the count of perf files
+	count int64
+	t     *testImpl
+	ctx   context.Context
 }
 
 // newTestRunner constructs a testRunner.
@@ -984,7 +999,13 @@ func (r *testRunner) runWorker(
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
 			if t.spec.Benchmark {
-				getPerfArtifacts(ctx, c, t)
+				dstDirFn := func(nodeIdx int) string {
+					return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
+				}
+				getPerfArtifacts(ctx, c, t, dstDirFn)
+				if t.ExportOpenmetrics() {
+					r.postProcessPerfMetrics(ctx, t, c, dstDirFn)
+				}
 			}
 			if clustersOpt.debugMode == DebugKeepAlways {
 				// We already marked the cluster as a saved cluster above.
@@ -1063,10 +1084,9 @@ fi'`
 }
 
 // getPerfArtifacts retrieves the perf artifacts for the test.
-func getPerfArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
-	dstDirFn := func(nodeIdx int) string {
-		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, perfArtifactsDir)
-	}
+func getPerfArtifacts(
+	ctx context.Context, c *clusterImpl, t test.Test, dstDirFn func(nodeIdx int) string,
+) {
 	getArtifacts(ctx, c, t, t.PerfArtifactsDir(), dstDirFn)
 }
 
@@ -1405,6 +1425,7 @@ func (r *testRunner) runTest(
 		if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
 			l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
 		}
+
 	} else {
 		l.Printf("skipping post test assertions as test failed")
 	}
@@ -1980,6 +2001,114 @@ func (r *testRunner) maybeInitSideEyeClient(ctx context.Context, l *logger.Logge
 		r.sideEyeClient = client
 	}
 	return token
+}
+
+func (r *testRunner) postProcessPerfMetrics(
+	ctx context.Context, t *testImpl, c *clusterImpl, dstDirFn func(nodeIdx int) string,
+) {
+	// Initialize metrics collector
+	metrics := &perfMetricsCollector{
+		histogramMetrics: &roachtestutil.HistogramMetric{},
+		t:                t,
+		ctx:              ctx,
+	}
+
+	// Collect and aggregate metrics from all relevant nodes
+	if err := metrics.collectFromNodes(c, dstDirFn); err != nil {
+		t.L().PrintfCtx(ctx, "failed to collect metrics: %v", err)
+		return
+	}
+
+	// Process and write aggregated metrics
+	if err := metrics.processAndWrite(c, dstDirFn); err != nil {
+		t.L().PrintfCtx(ctx, "failed to process and write metrics: %v", err)
+	}
+}
+
+func (m *perfMetricsCollector) collectFromNodes(
+	c *clusterImpl, dstDirFn func(nodeIdx int) string,
+) error {
+	for _, node := range getPerfArtifactsNode(c) {
+		files, err := m.findMetricsFiles(dstDirFn(node))
+		if err != nil {
+			return errors.Wrapf(err, "finding metrics files")
+		}
+
+		if err := m.processFiles(files); err != nil {
+			return errors.Wrapf(err, "error while processing files")
+		}
+	}
+	return nil
+}
+
+func (m *perfMetricsCollector) findMetricsFiles(dirPath string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.Contains(d.Name(), roachtestutil.GetBenchmarkMetricsFileName(m.t)) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
+}
+
+func (m *perfMetricsCollector) processFiles(files []string) error {
+	for _, file := range files {
+		fileBytes, err := os.ReadFile(file)
+		if err != nil {
+			return errors.Wrapf(err, "reading file %s:", file)
+		}
+
+		histograms, labels, err := roachtestutil.GetHistogramMetrics(bytes.NewBuffer(fileBytes))
+		if err != nil {
+			return errors.Wrapf(err, "getting histogram metrics")
+		}
+
+		m.histogramMetrics.Summaries = append(m.histogramMetrics.Summaries, histograms.Summaries...)
+		m.elapsed += int64(histograms.Elapsed)
+		m.labels = labels
+		m.count++
+	}
+	return nil
+}
+
+func (m *perfMetricsCollector) processAndWrite(
+	c *clusterImpl, dstDirFn func(nodeIdx int) string,
+) error {
+	if m.count == 0 {
+		return errors.New("no metrics files found")
+	}
+	m.histogramMetrics.Elapsed = roachtestutil.MetricPoint(m.elapsed / m.count)
+
+	// Post-process metrics
+	aggregatedMetrics, err := roachtestutil.PostProcessMetrics(
+		m.t.Name(),
+		m.t.spec.GetPostProcessWorkloadMetricsFunction(),
+		m.histogramMetrics,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "post-processing metrics")
+	}
+
+	// Convert to bytes
+	finalMetricsBuffer := &bytes.Buffer{}
+	if err := roachtestutil.GetAggregatedMetricBytes(aggregatedMetrics, m.labels, m.t.start, finalMetricsBuffer); err != nil {
+		return errors.Wrapf(err, "converting metrics to bytes")
+	}
+
+	// Write the file and take the first node of the cluster
+	outputPath := filepath.Join(dstDirFn(getPerfArtifactsNode(c)[0]), "aggregated_stats.om")
+	return os.WriteFile(outputPath, finalMetricsBuffer.Bytes(), 0644)
+}
+
+func getPerfArtifactsNode(c cluster.Cluster) option.NodeListOption {
+	if c.Spec().WorkloadNode {
+		return c.WorkloadNode()
+	}
+	return c.All()
 }
 
 // completedTestInfo represents information on a completed test run.
