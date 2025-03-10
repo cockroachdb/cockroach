@@ -2044,7 +2044,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_column_size": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
