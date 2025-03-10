@@ -1,0 +1,50 @@
+# This Workflow automatically merges pull requests, submitted by certain users
+# if they pass certain criteria.
+name: Automerge pkg/testutils/release/cockroach_releases.yaml
+
+on:
+  pull_request:
+    branches: [ release-* ]
+    paths:
+    # Trigger the workflow only for certain files. First we need to exclude all
+    # files, then add the files we care about.
+    - "!**"
+    - "pkg/testutils/release/cockroach_releases.yaml"
+    - "pkg/sql/logictest/REPOSITORIES.bzl"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'cockroach-teamcity' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch all branches so it is possible to checkout the default branch files.
+          fetch-depth: 0
+      # The next steps tries to reproduce the steps taken to generate the
+      # files. We restore the source tree to its original state on the base
+      # branch, run the commands to regenerate the change, and verify the
+      # result matches the PR contents (git diff does not show any changes).
+      - name: Regenerate the patch
+        run: |
+          set -euxo pipefail
+          git restore --source="origin/${{ github.base_ref }}" -- .
+          git diff || true
+          bazel build //pkg/cmd/release
+          $(bazel info bazel-bin)/pkg/cmd/release/release_/release update-releases-file
+          git diff || true
+      - name: Verify nothing changed
+        run: git diff --exit-code
+      - name: Approve the PR
+        run: gh pr review --approve "${{github.event.pull_request.html_url}}"
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - name: Enable auto-merge
+        # TODO: this step won't work, because auto merge or merge queue are not enabled.
+        run: gh pr merge --auto --merge --queue "${{github.event.pull_request.html_url}}"
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
