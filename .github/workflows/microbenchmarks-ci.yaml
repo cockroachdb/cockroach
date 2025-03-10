@@ -44,7 +44,7 @@ jobs:
           ref: head
           pkg: ${{ env.PACKAGE }}
   run-group-1:
-    runs-on: [self-hosted, basic_big_runner_group]
+    runs-on: [self-hosted, basic_microbench_runner_group]
     timeout-minutes: 30
     needs: [base, head]
     steps:
@@ -57,7 +57,7 @@ jobs:
           pkg: ${{ env.PACKAGE }}
           group: 1
   run-group-2:
-    runs-on: [self-hosted, basic_big_runner_group]
+    runs-on: [self-hosted, basic_microbench_runner_group]
     timeout-minutes: 30
     needs: [base, head]
     steps:
