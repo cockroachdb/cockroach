@@ -15,18 +15,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -76,14 +78,21 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	}
 	iter, err := newPebbleIterator(context.Background(), p.db, iterOpts, StandardDurability, p)
 	require.NoError(t, err)
+	defer iter.Close()
 
-	// Seeking into the table catches the corruption.
-	ok, err := iter.SeekEngineKeyGE(ek)
-	require.False(t, ok)
-	require.True(t, errors.Is(err, pebble.ErrCorruption))
+	var fatalCalled atomic.Uint32
+	log.SetExitFunc(true /* hideStack */, func(code exit.Code) {
+		fatalCalled.Add(1)
+	})
+	defer log.ResetExitFunc()
+	// Seeking into the table runs into the corruption and reports it
+	// synchronously through the event listener; it should cause a Fatalf during
+	// this call.
+	_, _ = iter.SeekEngineKeyGE(ek)
 
-	// Closing the iter results in a panic due to the corruption.
-	require.Panics(t, func() { iter.Close() })
+	if fatalCalled.Load() == 0 {
+		t.Fatalf("Fatalf not called")
+	}
 
 	// Should have laid down marker file to prevent startup.
 	_, err = p.Env().Stat(base.PreventedStartupFile(p.GetAuxiliaryDir()))
@@ -136,7 +145,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 
 	// We may error early, while opening the iterator.
 	if err != nil {
-		require.True(t, errors.Is(err, pebble.ErrCorruption))
+		require.True(t, pebble.IsCorruptionError(err))
 		return
 	}
 
@@ -148,7 +157,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	}
 	// Or we may error during iteration.
 	if err != nil {
-		require.True(t, errors.Is(err, pebble.ErrCorruption))
+		require.True(t, pebble.IsCorruptionError(err))
 	}
 	it.Close()
 }
