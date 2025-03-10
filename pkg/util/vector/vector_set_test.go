@@ -112,6 +112,16 @@ func TestVectorSet(t *testing.T) {
 		require.Equal(t, []float32{}, vs4.Data)
 	})
 
+	t.Run("Slice method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		require.Equal(t, Set{Dims: 2, Count: 0, Data: []float32{}}, vs.Slice(0, 0))
+		require.Equal(t, Set{Dims: 2, Count: 0, Data: []float32{}}, vs.Slice(2, 0))
+		require.Equal(t, Set{Dims: 2, Count: 1, Data: []float32{1, 2}}, vs.Slice(0, 1))
+		require.Equal(t, Set{Dims: 2, Count: 1, Data: []float32{3, 4}}, vs.Slice(1, 1))
+		require.Equal(t, Set{Dims: 2, Count: 2, Data: []float32{3, 4, 5, 6}}, vs.Slice(1, 2))
+		require.Equal(t, Set{Dims: 2, Count: 3, Data: []float32{1, 2, 3, 4, 5, 6}}, vs.Slice(0, 3))
+	})
+
 	t.Run("AsMatrix method", func(t *testing.T) {
 		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
 		mat := vs.AsMatrix()
