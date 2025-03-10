@@ -1216,9 +1216,23 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
 	ctx := context.Background()
-	knobs, ltk := makeReplicationTestKnobs()
+	_, ltk := makeReplicationTestKnobs()
+	// targetRangeID is the ID of the only range for which we will enable the
+	// replicate queue. This is the range the test makes assertions for. If other
+	// ranges get enqueued as well, it might take longer to process the range the
+	// test cares about. This is particularly important for leader leases because
+	// the target range is the only one with RF=3; other ranges have RF=1 and thus
+	// get leaders and leaseholder much faster as they don't need to wait for
+	// store liveness support.
+	var targetRangeID atomic.Value
+	ltk.storeKnobs.BaseQueueDisabledBypassFilter = func(rangeID roachpb.RangeID) bool {
+		if target := targetRangeID.Load(); target != nil && rangeID == target {
+			return true
+		}
+		return false
+	}
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{Store: &ltk.storeKnobs}},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -1230,11 +1244,12 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	})
 
-	// Run the replicate queue.
+	// Run the replicate queue only for our target range.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
+		// Set our target range ID in the knobs.
+		targetRangeID.Store(repl.RangeID)
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		store.TestingSetReplicateQueueActive(true)
 		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 		processErr, err := store.Enqueue(
 			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
@@ -1255,15 +1270,16 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			}
 			return nil
 		})
-		// It has done everything it needs to do now, disable before the next test section.
-		store.TestingSetReplicateQueueActive(false)
+		// Unset the target range ID before the next test.
+		targetRangeID.Store(roachpb.RangeID(0))
 	}
 
 	// Create a VOTER_OUTGOING, i.e. a joint configuration.
 	ltk.withStopAfterJointConfig(func() {
+		// Set our target range ID in the knobs.
+		targetRangeID.Store(repl.RangeID)
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		store.TestingSetReplicateQueueActive(true)
 		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 		processErr, err := store.Enqueue(
 			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
@@ -1280,7 +1296,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			}
 			return nil
 		})
-		store.TestingSetReplicateQueueActive(false)
+		targetRangeID.Store(roachpb.RangeID(0))
 	})
 }
 

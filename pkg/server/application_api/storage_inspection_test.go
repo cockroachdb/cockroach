@@ -349,54 +349,35 @@ func TestHotRangesResponse(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
 
-	var hotRangesResp serverpb.HotRangesResponse
-	if err := srvtestutils.GetStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
+	var hotRangesResp serverpb.HotRangesResponseV2
+	if err := srvtestutils.PostStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
 		t.Fatal(err)
 	}
-	if len(hotRangesResp.HotRangesByNodeID) == 0 {
+
+	if len(hotRangesResp.Ranges) == 0 {
 		t.Fatalf("didn't get hot range responses from any nodes")
 	}
-
-	for nodeID, nodeResp := range hotRangesResp.HotRangesByNodeID {
-		if len(nodeResp.Stores) == 0 {
-			t.Errorf("didn't get any stores in hot range response from n%d: %v",
-				nodeID, nodeResp.ErrorMessage)
-		}
-		for _, storeResp := range nodeResp.Stores {
-			// Only the first store will actually have any ranges on it.
-			if storeResp.StoreID != roachpb.StoreID(1) {
-				continue
+	lastQPS := math.MaxFloat64
+	for _, r := range hotRangesResp.Ranges {
+		if r.QPS > 0 {
+			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
+					r.QPS, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
 			}
-			lastQPS := math.MaxFloat64
-			if len(storeResp.HotRanges) == 0 {
-				t.Errorf("didn't get any hot ranges in response from n%d,s%d: %v",
-					nodeID, storeResp.StoreID, nodeResp.ErrorMessage)
-			}
-			for _, r := range storeResp.HotRanges {
-				if r.Desc.RangeID == 0 || (len(r.Desc.StartKey) == 0 && len(r.Desc.EndKey) == 0) {
-					t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
-				}
-				if r.QueriesPerSecond > 0 {
-					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 && r.ReadBytesPerSecond == 0 && r.WriteBytesPerSecond == 0 {
-						t.Errorf("qps %.2f > 0, expected either reads=%.2f, writes=%.2f, readBytes=%.2f or writeBytes=%.2f to be non-zero",
-							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond, r.ReadBytesPerSecond, r.WriteBytesPerSecond)
-					}
-					// If the architecture doesn't support sampling CPU, it
-					// will also be zero.
-					if grunning.Supported() && r.CPUTimePerSecond == 0 {
-						t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
-							r.QueriesPerSecond, r.CPUTimePerSecond)
-					}
-				}
-				if r.QueriesPerSecond > lastQPS {
-					t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f, desc=%v",
-						lastQPS, r.QueriesPerSecond, r.Desc)
-				}
-				lastQPS = r.QueriesPerSecond
+			// If the architecture doesn't support sampling CPU, it
+			// will also be zero.
+			if grunning.Supported() && r.CPUTimePerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
+					r.QPS, r.CPUTimePerSecond)
 			}
 		}
-
+		if r.QPS > lastQPS {
+			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f",
+				lastQPS, r.QPS)
+		}
+		lastQPS = r.QPS
 	}
+
 }
 
 func TestHotRanges2Response(t *testing.T) {
