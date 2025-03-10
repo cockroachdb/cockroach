@@ -630,16 +630,13 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 	return true, Tier{}
 }
 
-// getFirstRegionFirstZone iterates through the locality tiers and returns
-// multiple values containing:
-// 1. The value of the first encountered "region" tier.
-// 2. A boolean indicating whether the "region" tier key was found.
-// 3,4. The key and the value of the first encountered "zone" tier.
-// 5. A boolean indicating whether the "zone" tier key was found.
+// getFirstRegionFirstZone returns the first region and zone values found in the locality tiers.
+// Returns:
+// - First region value and whether region was found.
+// - First zone value and whether zone was found.
 func (l Locality) getFirstRegionFirstZone() (
 	firstRegionValue string,
 	hasRegion bool,
-	firstZoneKey string,
 	firstZoneValue string,
 	hasZone bool,
 ) {
@@ -655,65 +652,59 @@ func (l Locality) getFirstRegionFirstZone() (
 			}
 		case "zone", "availability-zone", "az":
 			if !hasZone {
-				firstZoneKey, firstZoneValue = tier.Key, tier.Value
+				firstZoneValue = tier.Value
 				hasZone = true
 			}
 		}
 	}
-	return firstRegionValue, hasRegion, firstZoneKey, firstZoneValue, hasZone
+	return firstRegionValue, hasRegion, firstZoneValue, hasZone
 }
 
-// CompareWithLocality returns the comparison result between this and the
-// provided other locality along with any lookup errors. Possible errors include
-// 1. if either locality does not have a "region" tier key. 2. if either
-// locality does not have a "zone" tier key or if the first "zone" tier keys
-// used by two localities are different.
+// Compare compares two localities based on their region and zone tiers.
 //
-// Limitation:
-// - It is unfortunate that the tier key is hardcoded here. Ideally, we would
-// prefer a more robust way to look up node locality regions and zones.
-// - Although it is technically possible for users to use  “az”, “zone”,
-// “availability-zone” as tier keys within a single locality, it can cause
-// confusion when choosing the zone tier values for cross-zone comparison. In
-// such cases, we would want to return an error. Ideally, both localities would
-// be checked thoroughly for duplicate zone tier keys and key mismatches.
-// However, due to frequent invocation of this function, we prefer to terminate
-// the check after examining the first encountered zone tier key-value pairs.
+// Returns:
+//   - UNDEFINED if neither region nor zone tiers exist in both localities.
+//   - CROSS_REGION if regions exist in both and differ.
+//   - SAME_REGION_CROSS_ZONE if zones exist in both and differ.
+//   - SAME_REGION_SAME_ZONE if regions/zones match or partial matches exist.
+//     Partial matches occur when only one locality has a region but zones match,
+//     or only one has a zone but regions match.
 //
-// Note: it is intentional here to perform multiple locality tiers comparison in
-// a single function to avoid overhead. If you are adding additional locality
-// tiers comparisons, it is recommended to handle them within one tier list
-// iteration.
-func (l Locality) CompareWithLocality(
-	other Locality,
-) (_ LocalityComparisonType, regionValid bool, zoneValid bool) {
-	firstRegionValue, hasRegion, firstZoneKey, firstZone, hasZone := l.getFirstRegionFirstZone()
-	firstRegionValueOther, hasRegionOther, firstZoneKeyOther, firstZoneOther, hasZoneOther := other.getFirstRegionFirstZone()
+// Limitations:
+// - Region and zone keys are hardcoded.
+// - Only first matching zone tier is considered.
+// - Assume at most one region/zone tier per locality.
+//
+// All comparisons are done in a single pass for performance.
+func (l Locality) Compare(other Locality) LocalityComparisonType {
+	// Get region and zone information for both localities.
+	thisRegion, hasThisRegion, thisZone, hasThisZone := l.getFirstRegionFirstZone()
+	otherRegion, hasOtherRegion, otherZone, hasOtherZone := other.getFirstRegionFirstZone()
 
-	isCrossRegion := firstRegionValue != firstRegionValueOther
-	isCrossZone := firstZone != firstZoneOther
+	// Check if we have valid region and zone information to compare.
+	hasValidRegions := hasThisRegion && hasOtherRegion
+	hasValidZones := hasThisZone && hasOtherZone
 
-	if !hasRegion || !hasRegionOther {
-		isCrossRegion = false
-	} else {
-		regionValid = true
+	// Return UNDEFINED if we lack both region and zone information.
+	if !hasValidRegions && !hasValidZones {
+		return LocalityComparisonType_UNDEFINED
 	}
 
-	if (!hasZone || !hasZoneOther) || (firstZoneKey != firstZoneKeyOther) {
-		isCrossZone = false
-	} else {
-		zoneValid = true
+	// Return CROSS_REGION if regions differ.
+	if hasValidRegions && thisRegion != otherRegion {
+		return LocalityComparisonType_CROSS_REGION
 	}
 
-	if isCrossRegion {
-		return LocalityComparisonType_CROSS_REGION, regionValid, zoneValid
-	} else {
-		if isCrossZone {
-			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionValid, zoneValid
-		} else {
-			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionValid, zoneValid
-		}
+	// Return SAME_REGION_CROSS_ZONE if zones differ but regions match.
+	if hasValidZones && thisZone != otherZone {
+		return LocalityComparisonType_SAME_REGION_CROSS_ZONE
 	}
+
+	// Return SAME_REGION_SAME_ZONE for matching or partial matches. Partial
+	// matches occur when only one locality has a region but zones match, or only
+	// one has a zone, but regions match. In the case of partial matches, the
+	// locality with the missing information is considered to be more local.
+	return LocalityComparisonType_SAME_REGION_SAME_ZONE
 }
 
 // SharedPrefix returns the number of this locality's tiers which match those of

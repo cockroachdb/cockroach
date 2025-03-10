@@ -328,7 +328,7 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
-	comparisonResult := s.getLocalityComparison(ctx, req.FromReplica.NodeID, req.ToReplica.NodeID)
+	comparisonResult := s.getLocalityComparison(req.FromReplica.NodeID, req.ToReplica.NodeID)
 	s.metrics.updateCrossLocalityMetricsOnIncomingRaftMsg(comparisonResult, int64(req.Size()))
 	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
 	// Store, this one doesn't need to directly run through a Stopper task because
@@ -389,7 +389,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 func (s *Store) HandleRaftRequestSent(
 	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64,
 ) {
-	comparisonResult := s.getLocalityComparison(ctx, fromNodeID, toNodeID)
+	comparisonResult := s.getLocalityComparison(fromNodeID, toNodeID)
 	s.metrics.updateCrossLocalityMetricsOnOutgoingRaftMsg(comparisonResult, msgSize)
 }
 

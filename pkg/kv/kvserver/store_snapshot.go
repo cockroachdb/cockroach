@@ -456,18 +456,11 @@ func (s *Store) checkSnapshotOverlapLocked(
 // comparison result between their corresponding nodes. This result indicates
 // whether the two nodes are located in different regions or zones.
 func (s *Store) getLocalityComparison(
-	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID,
+	fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID,
 ) roachpb.LocalityComparisonType {
 	firstLocality := s.cfg.StorePool.GetNodeLocality(fromNodeID)
 	secLocality := s.cfg.StorePool.GetNodeLocality(toNodeID)
-	comparisonResult, regionValid, zoneValid := firstLocality.CompareWithLocality(secLocality)
-	if !regionValid {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region")
-	}
-	if !zoneValid {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone")
-	}
-	return comparisonResult
+	return firstLocality.Compare(secLocality)
 }
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
@@ -574,8 +567,8 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
-	comparisonResult := s.getLocalityComparison(ctx,
-		header.RaftMessageRequest.FromReplica.NodeID, header.RaftMessageRequest.ToReplica.NodeID)
+	comparisonResult := s.getLocalityComparison(header.RaftMessageRequest.FromReplica.NodeID,
+		header.RaftMessageRequest.ToReplica.NodeID)
 
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
