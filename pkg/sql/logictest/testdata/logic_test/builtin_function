@@ -428,8 +428,10 @@ SELECT concat_ws(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error unknown signature: concat_ws\(string, string, int, unknown, int\)
+query T
 SELECT concat_ws(',', 'abcde', 2, NULL, 22)
+----
+abcde,2,22
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
