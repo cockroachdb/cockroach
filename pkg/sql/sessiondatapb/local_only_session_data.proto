@@ -614,6 +614,8 @@ message LocalOnlySessionData {
   // no lower bound.
   double optimizer_check_input_min_row_count = 157;
 
+  bool optimizer_use_histograms_for_join_selectivity = 158;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
