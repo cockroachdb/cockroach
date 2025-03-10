@@ -79,6 +79,9 @@ func TestFlowControlBasicV2(t *testing.T) {
 					Settings: settings,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
+							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+								return true
+							},
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
 								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -172,6 +175,9 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -291,6 +297,9 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -401,6 +410,9 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -536,6 +548,11 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		// virtue of raft fortification) help ensure this. Override to disable any
 		// metamorphosis.
 		kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+
+		// We want to observe a disconnected stream when crashing a node, however
+		// we don't care about replicas blipping into StateProbe otherwise.
+		var bypassReplicaUnreachable atomic.Bool
+		bypassReplicaUnreachable.Store(true)
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -547,6 +564,9 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return bypassReplicaUnreachable.Load()
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -603,9 +623,11 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		h.comment(`-- Observe the per-stream tracked tokens on n1, before n2 is crashed.`)
 		h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 
+		bypassReplicaUnreachable.Store(false)
 		h.comment(`-- (Crashing n2)`)
 		tc.StopServer(1)
 		h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
+		bypassReplicaUnreachable.Store(true)
 
 		h.comment(`
 -- Observe the per-stream tracked tokens on n1, after n2 crashed. We're no
@@ -638,8 +660,6 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 		stickyServerArgs := make(map[int]base.TestServerArgs)
 		var disableWorkQueueGranting atomic.Bool
 		disableWorkQueueGranting.Store(true)
-		var bypassReplicaUnreachable atomic.Bool
-		bypassReplicaUnreachable.Store(false)
 		ctx := context.Background()
 		settings := cluster.MakeTestingClusterSettings()
 		// This test doesn't want leadership changing hands, and leader leases (by
@@ -666,12 +686,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
-							// This test is going to crash nodes, then truncate the raft log
-							// and assert that tokens are returned upon an replica entering
-							// StateSnapshot. To avoid the stopped replicas entering
-							// StateProbe returning tokens, we disable reporting a replica
-							// as unreachable while nodes are down.
-							return bypassReplicaUnreachable.Load()
+							return true
 						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
@@ -776,12 +791,6 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 		// Kill stores 1 + 2, increment the key on the other stores and truncate
 		// their logs to make sure that when store 1 + 2 comes back up they will
 		// require a snapshot from Raft.
-		//
-		// Also prevent replicas on the killed nodes from being marked as
-		// unreachable, in order to prevent them from returning tokens via
-		// entering StateProbe, before we're able to truncate the log and assert
-		// on the snapshot behavior.
-		bypassReplicaUnreachable.Store(true)
 		tc.StopServer(1)
 		tc.StopServer(2)
 
@@ -833,7 +842,6 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 		h.comment(`-- (Restarting n2 and n3.)`)
 		require.NoError(t, tc.RestartServer(1))
 		require.NoError(t, tc.RestartServer(2))
-		bypassReplicaUnreachable.Store(false)
 
 		tc.WaitForValues(t, k, []int64{incAB, incAB, incAB, incAB, incAB})
 
@@ -907,6 +915,9 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1036,6 +1047,9 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 					Settings: settings,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
+							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+								return true
+							},
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
 								OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1165,6 +1179,9 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1268,6 +1285,9 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1382,6 +1402,9 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1469,6 +1492,9 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						// Disable leader transfers during leaseholder changes so
 						// that we can easily create leader-not-leaseholder
 						// scenarios.
@@ -1584,6 +1610,9 @@ func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -1723,6 +1752,9 @@ func TestFlowControlSendQueue(t *testing.T) {
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -2056,6 +2088,9 @@ func TestFlowControlRepeatedlySwitchMode(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -2141,6 +2176,9 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -2334,6 +2372,9 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 					Settings: settings,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
+							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+								return true
+							},
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
 								OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -2554,6 +2595,9 @@ func TestFlowControlRangeSplitMergeMixedVersion(t *testing.T) {
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -2796,6 +2840,9 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						// Because we are migrating from a version (currently) prior to the
 						// range force flush key version gate, we won't trigger the force
@@ -3008,6 +3055,9 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -3253,6 +3303,9 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
+					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+						return true
+					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
 						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
@@ -3964,6 +4017,9 @@ func BenchmarkFlowControlV2Basic(b *testing.B) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
+							return true
+						},
 						FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 							UseOnlyForScratchRanges: true,
 							OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
