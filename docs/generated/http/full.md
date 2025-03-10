@@ -3684,6 +3684,10 @@ target node(s) selected in a HotRangesRequest.
 | write_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | Write bytes per second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | Read bytes per second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
 | cpu_time_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | CPU time per second is the recent cpu usage in nanoseconds of this range. | [reserved](#support-status) |
+| mvcc_garbage_pct | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  |  | [reserved](#support-status) |
+| popular_key | [string](#cockroach.server.serverpb.HotRangesResponse-string) |  |  | [reserved](#support-status) |
+| popular_key_frequency | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  |  | [reserved](#support-status) |
+| access_direction | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  |  | [reserved](#support-status) |
 
 
 
@@ -3742,7 +3746,8 @@ HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 <a name="cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange"></a>
 #### HotRangesResponseV2.HotRange
 
-HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
+HotRange message describes a single hot range, ie its QPS, node ID it
+belongs to, etc.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -3761,6 +3766,10 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | databases | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Databases for the range. | [reserved](#support-status) |
 | tables | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Tables for the range | [reserved](#support-status) |
 | indexes | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Indexes for the range | [reserved](#support-status) |
+| mvcc_garbage_pct | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  |  | [reserved](#support-status) |
+| popular_key | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  | [reserved](#support-status) |
+| popular_key_frequency | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  |  | [reserved](#support-status) |
+| access_direction | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  |  | [reserved](#support-status) |
 
 
 
@@ -4384,7 +4393,8 @@ tenant pods.
 
 `GET /_status/combinedstmts`
 
-Retrieve the combined in-memory and persisted statement stats by date range.
+Retrieve the combined in-memory and persisted statement stats by date
+range.
 
 Support status: [reserved](#support-status)
 
@@ -4508,7 +4518,8 @@ Support status: [reserved](#support-status)
 
 
 
-StatementDetailsRequest requests the details of a Statement, based on its keys.
+StatementDetailsRequest requests the details of a Statement, based on its
+keys.
 
 
 | Field | Type | Label | Description | Support status |
@@ -5269,8 +5280,9 @@ Support status: [reserved](#support-status)
 
 
 
-ListExecutionInsights returns potentially problematic statements cluster-wide,
-along with actions we suggest the application developer might take to remedy them.
+ListExecutionInsights returns potentially problematic statements
+cluster-wide, along with actions we suggest the application developer might
+take to remedy them.
 
 Support status: [reserved](#support-status)
 

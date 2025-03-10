@@ -199,7 +199,7 @@ func TestReplicaStats(t *testing.T) {
 			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
 		}
 		rs.ResetRequestCounts(now)
-		if actual, _ := rs.Sum(); actual != 0 {
+		if actual, _ := rs.Sum(6); actual != 0 {
 			t.Errorf("%d: unexpected non-empty QPS averages after resetting: %+v", i, actual)
 		}
 	}

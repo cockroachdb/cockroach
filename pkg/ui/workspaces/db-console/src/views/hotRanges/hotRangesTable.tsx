@@ -162,6 +162,58 @@ const HotRangesTable = ({
         sort: val => val.read_bytes_per_second,
       },
       {
+        name: "garbageData",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The percentage of garbage data in this range."
+          >
+            MVCC Garbage
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.mvcc_garbage_pct * 100, 4)}%</>,
+        sort: val => val.mvcc_garbage_pct,
+      },
+      {
+        name: "popularKey",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The most popular key sampled for this replica."
+          >
+            Popular Key
+          </Tooltip>
+        ),
+        cell: val => <>{val.popular_key}</>,
+        sort: val => val.popular_key,
+      },
+      {
+        name: "popularKeyFrequency",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The percentage of accesses the most popular key for this range has."
+          >
+            Popular Key Frequency
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.popular_key_frequency * 100, 4)}%</>,
+        sort: val => val.popular_key_frequency,
+      },
+      {
+        name: "keyAccessDirection",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The direction of accesses over time on this range."
+          >
+            Key Access Direction
+          </Tooltip>
+        ),
+        cell: val => <>{formatKeyAccessDirection(val.access_direction)}</>,
+        sort: val => val.access_direction,
+      },
+      {
         name: "nodes",
         title: (
           <Tooltip
@@ -337,5 +389,19 @@ const mapDispatchToProps = {
 const mapStateToProps = (state: AdminUIState) => ({
   sortSetting: sortSettingLocalSetting.selector(state),
 });
+
+// formatKeyAccessDirection returns a formatted string for the access direction
+function formatKeyAccessDirection(access_direction: number) {
+  if (access_direction === null || access_direction === undefined) {
+    return "";
+  }
+  const direction = access_direction < 0 ? "descending" : "ascending";
+  const magnitude = Math.abs(access_direction);
+  if (magnitude < .1) {
+    return "N/A"
+  }
+  const pct = round(magnitude * 100, 2);
+  return `${direction} (${pct}%)`;
+}
 
 export default connect(mapStateToProps, mapDispatchToProps)(HotRangesTable);
