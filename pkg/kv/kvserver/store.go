@@ -2536,8 +2536,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 
 		var timer timeutil.Timer
 		defer timer.Stop()
-		errInterrupted := errors.New("waiting interrupted")
-		wait := func(ctx context.Context, until time.Time, interrupt <-chan struct{}) error {
+		wait := func(ctx context.Context, until time.Time) error {
 			now := timeutil.Now()
 			if !now.Before(until) {
 				return nil
@@ -2547,8 +2546,6 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			case <-timer.C:
 				timer.Read = true
 				return nil
-			case <-interrupt:
-				return errInterrupted
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -2581,14 +2578,13 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			// Configuration may have changed between runs, load it unconditionally.
 			// This will block until an "active" configuration exists, i.e. a one with
 			// non-zero refresh and smear intervals.
-			refresh, smear, err := conf.wait(ctx)
-			if err != nil {
-				return // context canceled
-			}
-			// Aim to complete this run in exactly refresh interval.
 			now := timeutil.Now()
-			deadline := now.Add(refresh)
-			var waitErr error
+
+			// Aim to complete this run in exactly refresh interval.
+			deadline := now.Add(conf.getRefresh())
+
+			pacer := NewTaskPacer(conf, now)
+
 			// We're about to perform one work cycle, where we go through all replicas
 			// that have an active rangefeed on them and update them with the current
 			// closed timestamp for their range. While doing so, we'll keep track of
@@ -2597,13 +2593,14 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 			// some metrics when the work cycle completes.
 			var earliestClosedTS hlc.Timestamp
 			var numExcessivelyLaggingClosedTS int64
-
+			var waitErr error
 			for work, startAt := updateRangeIDs(), now; len(work) != 0; {
-				if waitErr = wait(ctx, startAt, conf.changed); waitErr != nil {
+				if waitErr = wait(ctx, startAt); waitErr != nil {
 					// NB: a configuration change abandons the update loop
 					break
 				}
-				todo, by := rangeFeedUpdaterPace(timeutil.Now(), deadline, smear, len(work))
+
+				todo, by := pacer.GetWork(timeutil.Now(), len(work))
 				for _, id := range work[:todo] {
 					if r := s.GetReplicaIfExists(id); r != nil {
 						cts := r.GetCurrentClosedTimestamp(ctx)
@@ -2618,18 +2615,11 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				work = work[todo:]
 				startAt = by
 			}
-			if waitErr == nil {
-				waitErr = wait(ctx, deadline, conf.changed) // wait out any remaining time
-			}
-			// NB: an errInterrupted means this run was interrupted by relevant
-			// cluster setting changes. In this case we abandon the current run, and
-			// start a new one immediately by looping around.
-			//
-			// TODO(pavelkalinnikov): honour config changes without interrupting the
-			// run, as rangeFeedUpdaterPace makes this algorithm adaptive.
-			if waitErr != nil && !errors.Is(waitErr, errInterrupted) {
+			waitErr = wait(ctx, deadline) // wait out any remaining time
+			if waitErr != nil {
 				return // context canceled
 			}
+
 			// We've successfully finished one work cycle where we went through all
 			// replicas that had an active rangefeed on them; update metrics.
 			if !earliestClosedTS.IsEmpty() {
