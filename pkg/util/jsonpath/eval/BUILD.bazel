@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "eval",
+    srcs = ["eval.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/json",
+        "//pkg/util/jsonpath",
+        "//pkg/util/jsonpath/parser",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

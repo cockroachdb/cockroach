@@ -124,6 +124,9 @@ var (
 	InvalidXMLContent                     = MakeCode("2200N")
 	InvalidXMLComment                     = MakeCode("2200S")
 	InvalidXMLProcessingInstruction       = MakeCode("2200T")
+	ArraySubscriptOutOfBounds             = MakeCode("22033")
+	WildcardOnNonArray                    = MakeCode("22039")
+	KeyNotInJSON                          = MakeCode("2203A")
 	// Section: Class 23 - Integrity Constraint Violation
 	IntegrityConstraintViolation = MakeCode("23000")
 	RestrictViolation            = MakeCode("23001")
