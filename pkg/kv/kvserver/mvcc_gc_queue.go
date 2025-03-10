@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -715,18 +714,11 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	var snap storage.Reader
-	if repl.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&repl.ClusterSettings().SV) {
-		efos := repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
-		if util.RaceEnabled {
-			ss := rditer.MakeReplicatedKeySpanSet(desc)
-			defer ss.Release()
-			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
-		} else {
-			snap = efos
-		}
-	} else {
-		snap = repl.store.TODOEngine().NewSnapshot()
+	snap := repl.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
+	if util.RaceEnabled {
+		ss := rditer.MakeReplicatedKeySpanSet(desc)
+		defer ss.Release()
+		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	defer snap.Close()
 
