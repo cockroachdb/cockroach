@@ -248,7 +248,7 @@ func createTestStoreWithoutStart(
 		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
 	)
 
-	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
+	stores := NewStores(cfg.AmbientCtx, cfg.Clock, nil)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
 	rangeProv := &dummyFirstRangeProvider{}
