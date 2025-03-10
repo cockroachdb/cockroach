@@ -157,6 +157,7 @@ go_test(
     shard_count = 4,
     deps = [
         "//pkg/base",
+        "//pkg/cli/exit",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/gcp",
