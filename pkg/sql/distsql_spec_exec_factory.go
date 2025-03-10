@@ -896,6 +896,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	locking opt.Locking,
 	limitHint int64,
 	remoteOnlyLookups bool,
+	reverseScans bool,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	var planNodesToClose []planNode
@@ -943,6 +944,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 			reqOrdering:                ReqOrdering(reqOrdering),
 			limitHint:                  limitHint,
 			remoteOnlyLookups:          remoteOnlyLookups,
+			reverseScans:               reverseScans,
 		}
 		if onCond != tree.DBoolTrue {
 			planInfo.onCond = onCond

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLookupJoinProvided(t *testing.T) {
@@ -119,7 +120,16 @@ func TestLookupJoinProvided(t *testing.T) {
 			input:    "+5,+6",
 			provided: "+5,+6,+2",
 		},
-		{ // case 6: the lookup join outputs all columns and adds column c2 as an
+		{ // Case 6: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			keyCols:  opt.ColList{5},
+			inputKey: c(5, 6),
+			outCols:  c(2, 3, 4, 5, 6),
+			required: "+(1|5),+6,-2",
+			input:    "+5,+6",
+			provided: "+5,+6,-2",
+		},
+		{ // case 7: the lookup join outputs all columns and adds column c2 as an
 			// ordering column. Joining on c1 = c6.
 			keyCols:  opt.ColList{6},
 			inputKey: c(6),
@@ -128,7 +138,16 @@ func TestLookupJoinProvided(t *testing.T) {
 			input:    "-5,+6",
 			provided: "-5,+6,+2",
 		},
-		{ // case 7: the lookup join does not produce input columns 5,6; we must
+		{ // Case 8: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			keyCols:  opt.ColList{6},
+			inputKey: c(6),
+			outCols:  c(1, 2, 3, 4, 5, 6),
+			required: "-5,+(1|6),-2",
+			input:    "-5,+6",
+			provided: "-5,+6,-2",
+		},
+		{ // case 9: the lookup join does not produce input columns 5,6; we must
 			// remap the input ordering to refer to output column 1 instead.
 			keyCols:  opt.ColList{5},
 			inputKey: c(5),
@@ -137,7 +156,16 @@ func TestLookupJoinProvided(t *testing.T) {
 			input:    "+5",
 			provided: "+1,+2",
 		},
-		{ // case 8: the lookup join preserves the input ordering and maintains the
+		{ // Case 10: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			keyCols:  opt.ColList{5},
+			inputKey: c(5),
+			outCols:  c(1, 2, 3, 4),
+			required: "+(1|5),-2",
+			input:    "+5",
+			provided: "+1,-2",
+		},
+		{ // case 11: the lookup join preserves the input ordering and maintains the
 			// ordering of the descending index on lookups. Joining on c1 = c5.
 			index:    descendingIndex,
 			keyCols:  opt.ColList{5},
@@ -146,6 +174,16 @@ func TestLookupJoinProvided(t *testing.T) {
 			required: "+(1|5),+6,-2",
 			input:    "+5,+6",
 			provided: "+5,+6,-2",
+		},
+		{ // Case 12: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			index:    descendingIndex,
+			keyCols:  opt.ColList{5},
+			inputKey: c(5, 6),
+			outCols:  c(2, 3, 4, 5, 6),
+			required: "+(1|5),+6,+2",
+			input:    "+5,+6",
+			provided: "+5,+6,+2",
 		},
 	}
 
@@ -195,7 +233,9 @@ func TestLookupJoinCanProvide(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(st)
+	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = true
 	var f norm.Factory
 	f.Init(context.Background(), evalCtx, tc)
 	md := f.Metadata()
@@ -258,7 +298,15 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+6,+2",
 			canProvide: true,
 		},
-		{ // Case 4: the ordering cannot project only input columns, but the lookup
+		{ // Case 4: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			keyCols:    opt.ColList{5},
+			outCols:    c(1, 2, 5, 6),
+			inputKey:   c(5, 6),
+			required:   "+(1|5),+6,-2",
+			canProvide: true,
+		},
+		{ // Case 5: the ordering cannot project only input columns, but the lookup
 			// can maintain the ordering on both input and lookup columns.
 			idx:        secondaryIndex,
 			keyCols:    opt.ColList{5},
@@ -267,7 +315,16 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(3|5),+4",
 			canProvide: true,
 		},
-		{ // Case 5: the ordering cannot project only input columns, but the lookup
+		{ // Case 6: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			idx:        secondaryIndex,
+			keyCols:    opt.ColList{5},
+			outCols:    c(1, 2, 3, 4, 5, 6),
+			inputKey:   c(5),
+			required:   "+(3|5),-4",
+			canProvide: true,
+		},
+		{ // Case 7: the ordering cannot project only input columns, but the lookup
 			// can maintain the ordering on both input and lookup columns.
 			idx:        secondaryIndex,
 			keyCols:    opt.ColList{5},
@@ -276,7 +333,16 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(3|5),+6,+4,+2 opt(1)",
 			canProvide: true,
 		},
-		{ // Case 6: the ordering cannot be satisfied because the input and lookup
+		{ // Case 8: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			idx:        secondaryIndex,
+			keyCols:    opt.ColList{5},
+			outCols:    c(1, 2, 5, 6),
+			inputKey:   c(5, 6),
+			required:   "+(3|5),+6,-4,-2 opt(1)",
+			canProvide: true,
+		},
+		{ // Case 9: the ordering cannot be satisfied because the input and lookup
 			// ordering columns are interleaved.
 			keyCols:    opt.ColList{5},
 			outCols:    c(1, 2, 5, 6),
@@ -284,7 +350,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+2,+6",
 			canProvide: false,
 		},
-		{ // Case 7: the ordering cannot be satisfied because the input ordering
+		{ // Case 10: the ordering cannot be satisfied because the input ordering
 			// columns do not form a key over the input.
 			keyCols:    opt.ColList{5},
 			outCols:    c(1, 2, 5, 6),
@@ -292,7 +358,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+2",
 			canProvide: false,
 		},
-		{ // Case 8: the ordering cannot be satisfied because the lookup ordering
+		{ // Case 11: the ordering cannot be satisfied because the lookup ordering
 			// involves columns that are not part of the index.
 			keyCols:    opt.ColList{5, 6},
 			outCols:    c(1, 3, 5, 6),
@@ -300,7 +366,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+6,+3",
 			canProvide: false,
 		},
-		{ // Case 9: the ordering cannot be satisfied because the lookup ordering
+		{ // Case 12: the ordering cannot be satisfied because the lookup ordering
 			// columns are not in index order.
 			idx:        secondaryIndex,
 			keyCols:    opt.ColList{5},
@@ -309,15 +375,16 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(3|5),+1,+4",
 			canProvide: false,
 		},
-		{ // Case 10: the ordering cannot be satisfied because one of the lookup
+		{ // Case 13: the ordering cannot be satisfied because one of the lookup
 			// ordering columns is sorted in the wrong direction.
+			idx:        secondaryIndex,
 			keyCols:    opt.ColList{5},
 			outCols:    c(1, 2, 5, 6),
 			inputKey:   c(5, 6),
-			required:   "+(1|5),+6,-2",
+			required:   "+(3|5),+6,+4,-2 opt(1)",
 			canProvide: false,
 		},
-		{ // Case 11: an ordering with a descending column can be satisfied..
+		{ // Case 14: an ordering with a descending column can be satisfied.
 			idx:        descendingIndex,
 			keyCols:    opt.ColList{5},
 			outCols:    c(1, 2, 5, 6),
@@ -325,7 +392,16 @@ func TestLookupJoinCanProvide(t *testing.T) {
 			required:   "+(1|5),+6,-2",
 			canProvide: true,
 		},
-		{ // Case 12: the ordering cannot be satisfied because the required ordering
+		{ // Case 15: previous case, reversed. The lookup join would have to perform
+			// reverse scans.
+			idx:        descendingIndex,
+			keyCols:    opt.ColList{5},
+			outCols:    c(1, 2, 5, 6),
+			inputKey:   c(5, 6),
+			required:   "+(1|5),+6,+2",
+			canProvide: true,
+		},
+		{ // Case 16: the ordering cannot be satisfied because the required ordering
 			// is missing index column c1.
 			idx:        secondaryIndex,
 			keyCols:    opt.ColList{5},
@@ -358,7 +434,7 @@ func TestLookupJoinCanProvide(t *testing.T) {
 				},
 			)
 			req := props.ParseOrderingChoice(tc.required)
-			canProvide := lookupJoinCanProvideOrdering(f.Memo(), lookupJoin, &req)
+			canProvide, _ := LookupJoinCanProvideOrdering(ctx, evalCtx, f.Memo(), lookupJoin, &req)
 			if canProvide != tc.canProvide {
 				t.Errorf(errorString(tc.canProvide), req)
 			}
@@ -368,74 +444,125 @@ func TestLookupJoinCanProvide(t *testing.T) {
 
 func TestTrySatisfyRequired(t *testing.T) {
 	testCases := []struct {
-		required string
-		provided string
-		prefix   string
-		toExtend string
+		required  string
+		provided  string
+		prefix    string
+		toExtend  string
+		direction string
 	}{
 		{ // Case 1: required ordering is prefix of provided.
-			required: "+1,+2,+3",
-			provided: "+1,+2,+3,+4",
-			prefix:   "+1,+2,+3",
-			toExtend: "",
+			required:  "+1,+2,+3",
+			provided:  "+1,+2,+3,+4",
+			prefix:    "+1,+2,+3",
+			toExtend:  "",
+			direction: "forward",
 		},
-		{ // Case 2: required ordering is empty.
-			required: "",
-			provided: "+1,-2",
-			prefix:   "",
-			toExtend: "",
+		{ // Case 2: required ordering is prefix of provided, reversed.
+			required:  "-1,-2,-3",
+			provided:  "+1,+2,+3,+4",
+			prefix:    "+1,+2,+3",
+			toExtend:  "",
+			direction: "reverse",
 		},
-		{ // Case 3: provided ordering includes optional columns.
-			required: "+1,+2,+3 opt(4,5)",
-			provided: "+1,-4,+2,+5,+3",
-			prefix:   "+1,-4,+2,+5,+3",
-			toExtend: "",
+		{ // Case 3: required ordering is empty.
+			required:  "",
+			provided:  "+1,-2",
+			prefix:    "",
+			toExtend:  "",
+			direction: "either",
 		},
-		{ // Case 4: required ordering includes equivalent columns.
-			required: "+(1|4),-(2|5),+3",
-			provided: "+1,-2,+3",
-			prefix:   "+1,-2,+3",
-			toExtend: "",
+		{ // Case 4: provided ordering includes optional columns.
+			required:  "+1,+2,+3 opt(4,5)",
+			provided:  "+1,-4,+2,+5,+3",
+			prefix:    "+1,-4,+2,+5,+3",
+			toExtend:  "",
+			direction: "forward",
 		},
-		{ // Case 5: provided ordering is prefix of required.
-			required: "+1,+2,+3",
-			provided: "+1,+2",
-			prefix:   "+1,+2",
-			toExtend: "+3",
+		{ // Case 5: provided ordering includes optional columns, reversed.
+			required:  "-1,-2,+3 opt(4,5)",
+			provided:  "+1,+4,+2,-5,-3",
+			prefix:    "+1,+4,+2,-5,-3",
+			toExtend:  "",
+			direction: "reverse",
 		},
-		{ // Case 6: provided ordering has non-optional columns between required
+		{ // Case 6: required ordering includes equivalent columns.
+			required:  "+(1|4),-(2|5),+3",
+			provided:  "+1,-2,+3",
+			prefix:    "+1,-2,+3",
+			toExtend:  "",
+			direction: "forward",
+		},
+		{ // Case 7: required ordering includes equivalent columns, reversed.
+			required:  "+(1|4),-(2|5),+3",
+			provided:  "-1,+2,-3",
+			prefix:    "-1,+2,-3",
+			toExtend:  "",
+			direction: "reverse",
+		},
+		{ // Case 8: provided ordering is prefix of required.
+			required:  "+1,+2,+3",
+			provided:  "+1,+2",
+			prefix:    "+1,+2",
+			toExtend:  "+3",
+			direction: "forward",
+		},
+		{ // Case 9: provided ordering is prefix of required, reversed.
+			required:  "+1,+2,+3",
+			provided:  "-1,-2",
+			prefix:    "-1,-2",
+			toExtend:  "+3",
+			direction: "reverse",
+		},
+		{ // Case 10: provided ordering has non-optional columns between required
 			// columns.
-			required: "+1,+2,+3",
-			provided: "+1,+2,+4,+3",
-			prefix:   "+1,+2",
-			toExtend: "+3",
+			required:  "+1,+2,+3",
+			provided:  "+1,+2,+4,+3",
+			prefix:    "+1,+2",
+			toExtend:  "+3",
+			direction: "forward",
 		},
-		{ // Case 7: provided ordering column is in the wrong direction.
-			required: "+1,+2,+3",
-			provided: "+1,-2,+3",
-			prefix:   "+1",
-			toExtend: "+2,+3",
+		{ // Case 11: provided ordering has non-optional columns between required
+			// columns, reversed.
+			required:  "+1,-2,+3",
+			provided:  "-1,+2,+4,-3",
+			prefix:    "-1,+2",
+			toExtend:  "+3",
+			direction: "reverse",
 		},
-		{ // Case 8: provided ordering is empty and required is non-empty.
-			required: "+1",
-			provided: "",
-			prefix:   "",
-			toExtend: "+1",
+		{ // Case 12: second provided ordering column is in the wrong direction.
+			required:  "+1,+2,+3",
+			provided:  "+1,-2,+3",
+			prefix:    "+1",
+			toExtend:  "+2,+3",
+			direction: "forward",
+		},
+		{ // Case 13: second provided ordering column is in the wrong direction,
+			// reversed.
+			required:  "+1,+2,+3",
+			provided:  "-1,+2,-3",
+			prefix:    "-1",
+			toExtend:  "+2,+3",
+			direction: "reverse",
+		},
+		{ // Case 14: provided ordering is empty and required is non-empty.
+			required:  "+1",
+			provided:  "",
+			prefix:    "",
+			toExtend:  "+1",
+			direction: "either",
 		},
 	}
 
 	expect := func(exp, got string) {
 		t.Helper()
-		if got != exp {
-			t.Errorf("expected %s; got %s", exp, got)
-		}
+		require.Equalf(t, exp, got, "expected %s; got %s", exp, got)
 	}
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
 			required := props.ParseOrderingChoice(tc.required)
 			provided := props.ParseOrdering(tc.provided)
-			prefix, toExtend := trySatisfyRequired(&required, provided)
+			prefix, toExtend, direction := trySatisfyRequired(&required, provided)
 			prefixString, toExtendString := "", ""
 			if prefix != nil {
 				prefixString = prefix.String()
@@ -445,6 +572,7 @@ func TestTrySatisfyRequired(t *testing.T) {
 			}
 			expect(tc.prefix, prefixString)
 			expect(tc.toExtend, toExtendString)
+			expect(tc.direction, direction.String())
 		})
 	}
 }

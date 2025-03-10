@@ -3146,15 +3146,7 @@ func (ds *DistSender) getLocalityComparison(
 		log.VEventf(ctx, 5, "failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
-
-	comparisonResult, regionValid, zoneValid := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
-	if !regionValid {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
-	}
-	if !zoneValid {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
-	}
-	return comparisonResult
+	return gatewayNodeDesc.Locality.Compare(destinationNodeDesc.Locality)
 }
 
 func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err error) {

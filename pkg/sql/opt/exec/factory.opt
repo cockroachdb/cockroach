@@ -325,6 +325,7 @@ define LookupJoin {
     Locking opt.Locking
     LimitHint int64
     RemoteOnlyLookups bool
+    ReverseScans bool
 }
 
 # InvertedJoin performs a lookup join into an inverted index.
