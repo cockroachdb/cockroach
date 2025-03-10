@@ -77,6 +77,11 @@ type testProposer struct {
 	leaderReplicaType roachpb.ReplicaType
 	// rangePolicy is used in closedTimestampTarget.
 	rangePolicy roachpb.RangeClosedTimestampPolicy
+
+	// networkRTT is used by closedTimestampTarget to simulate the observed
+	// network round trip latency. This is to estimate the time for raft logs to
+	// propagate closed timestamp to followers.
+	networkRTT time.Duration
 }
 
 var _ proposer = &testProposer{}
@@ -175,12 +180,13 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 		return hlc.Timestamp{}
 	}
 	return closedts.TargetForPolicy(
-		t.clock.NowAsClockTimestamp(),
-		t.clock.MaxOffset(),
-		1*time.Second,
-		0,
-		200*time.Millisecond,
-		t.rangePolicy,
+		t.clock.NowAsClockTimestamp(), /*now*/
+		t.clock.MaxOffset(),           /*maxClockOffset*/
+		1*time.Second,                 /*lagTargetDuration*/
+		0,                             /*leadTargetOverride*/
+		200*time.Millisecond,          /*sideTransportCloseInterval*/
+		t.networkRTT,                  /*observedMaxNetworkRTT*/
+		t.rangePolicy,                 /*policy*/
 	)
 }
 
@@ -533,9 +539,8 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		leaderNotLive bool
 		// If true, the follower has a valid lease.
 		ownsValidLease bool
-
-		expRejection bool
-		expCampaign  bool
+		expRejection   bool
+		expCampaign    bool
 	}{
 		{
 			name:   "leader",
@@ -928,6 +933,14 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	nowPlusGlobalReadLead := nowTS.Add((maxOffset +
 		275*time.Millisecond /* sideTransportPropTime */ +
 		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0)
+
+	const networkRTT = 200 * time.Millisecond
+	const raftTransportOverhead = 20 * time.Millisecond
+	raftTransportPropTime := networkRTT*3/2 + raftTransportOverhead
+	autoTuneGlobalReadLeadFromRaft := nowTS.Add((maxOffset +
+		raftTransportPropTime +
+		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0)
+
 	expiredLeaseTimestamp := nowTS.Add(-1000, 0)
 	someClosedTS := nowTS.Add(-2000, 0)
 
@@ -995,6 +1008,10 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		// prevClosedTimestamp, regardless of whether the proposal carries a closed
 		// timestamp or not (expClosed).
 		expAssignedClosedBumped bool
+
+		// networkRTT is used to mock the observed latency of max network round trip
+		// latency between the lease replica and its follower replicas.
+		networkRTT time.Duration
 	}{
 		{
 			name:                    "basic",
@@ -1005,6 +1022,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			prevClosedTimestamp:     hlc.Timestamp{},
 			expClosed:               nowMinusClosedLag,
 			expAssignedClosedBumped: true,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			// The request tracker will prevent us from closing below its lower bound.
@@ -1016,6 +1034,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			prevClosedTimestamp:     hlc.Timestamp{},
 			expClosed:               nowMinusTwiceClosedLag.FloorPrev(),
 			expAssignedClosedBumped: true,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			// Like the basic test, except that we can't close timestamp below what
@@ -1028,6 +1047,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			prevClosedTimestamp:     someClosedTS,
 			expClosed:               someClosedTS,
 			expAssignedClosedBumped: false,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			name:    "brand new lease",
@@ -1050,6 +1070,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			// requests based on the start time of a proposed lease. See comments in
 			// propBuf.assignClosedTimestampAndLAIToProposalLocked().
 			expAssignedClosedBumped: false,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			name:    "lease extension",
@@ -1068,6 +1089,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			// Lease extensions don't carry closed timestamps.
 			expClosed:               hlc.Timestamp{},
 			expAssignedClosedBumped: false,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			// Lease transfers behave just like regular writes. The lease start time
@@ -1084,6 +1106,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			rangePolicy:             roachpb.LAG_BY_CLUSTER_SETTING,
 			expClosed:               nowMinusClosedLag,
 			expAssignedClosedBumped: true,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
 		},
 		{
 			// With the LEAD_FOR_GLOBAL_READS policy, we're expecting to close
@@ -1096,6 +1119,20 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			prevClosedTimestamp:     hlc.Timestamp{},
 			expClosed:               nowPlusGlobalReadLead,
 			expAssignedClosedBumped: true,
+			networkRTT:              closedts.DefaultMaxNetworkRTT,
+		},
+		{
+			// With the LEAD_FOR_GLOBAL_READS policy and auto-tuning, we're expecting
+			// to close timestamps in the future based on observedRaftPropLatency.
+			name:                    "global range with auto tune",
+			reqType:                 regularWrite,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LEAD_FOR_GLOBAL_READS,
+			prevClosedTimestamp:     hlc.Timestamp{},
+			expClosed:               autoTuneGlobalReadLeadFromRaft,
+			expAssignedClosedBumped: true,
+			networkRTT:              networkRTT,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1110,6 +1147,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 				lai:         10,
 				raftGroup:   r,
 				rangePolicy: tc.rangePolicy,
+				networkRTT:  tc.networkRTT,
 			}
 			tracker := mockTracker{
 				lowerBound: tc.trackerLowerBound,
