@@ -2535,13 +2535,6 @@ func TestTenantLogic_values(
 	runLogicTest(t, "values")
 }
 
-func TestTenantLogic_vector_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "vector_index")
-}
-
 func TestTenantLogic_vectorize(
 	t *testing.T,
 ) {

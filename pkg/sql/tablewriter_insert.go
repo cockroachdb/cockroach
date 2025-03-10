@@ -34,15 +34,24 @@ func (ti *tableInserter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Cont
 // to avoid updating when performing row modification. This is necessary
 // because not all rows are indexed by partial indexes.
 //
+// The VectorIndexUpdateHelper is used to determine which partitions to update
+// in each vector index and supply the quantized vectors to add to the
+// partitions. This is necessary because these values are not part of the table,
+// and are materialized only for the purpose of updating vector indexes.
+//
 // The traceKV parameter determines whether the individual K/V operations
 // should be logged to the context. We use a separate argument here instead
 // of a Value field on the context because Value access in context.Context
 // is rather expensive.
 func (ti *tableInserter) row(
-	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
+	ctx context.Context,
+	values tree.Datums,
+	pm row.PartialIndexUpdateHelper,
+	vh row.VectorIndexUpdateHelper,
+	traceKV bool,
 ) error {
 	ti.currentBatchSize++
-	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, nil, row.CPutOp, traceKV)
+	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, vh, nil, row.CPutOp, traceKV)
 }
 
 // tableDesc returns the TableDescriptor for the table that the tableInserter

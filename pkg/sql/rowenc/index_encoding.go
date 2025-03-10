@@ -1449,6 +1449,7 @@ func encodeSecondaryIndexWithKeyPrefix(
 
 		if tableDesc.NumFamilies() == 1 ||
 			secondaryIndex.GetType() == idxtype.INVERTED ||
+			secondaryIndex.GetType() == idxtype.VECTOR ||
 			secondaryIndex.GetVersion() == descpb.BaseIndexFormatVersion {
 			// We do all computation that affects indexes with families in a separate
 			// code path to avoid performance regression for tables without column

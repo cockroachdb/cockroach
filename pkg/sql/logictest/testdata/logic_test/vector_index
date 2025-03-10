@@ -1,3 +1,6 @@
+# LogicTest: local
+# KV tracing is used to verify that the correct mutations are being made, which is flummoxed by the use of multi-tenant
+
 # ------------------------------------------------------------------------------
 # CREATE TABLE/INDEX tests.
 # ------------------------------------------------------------------------------
@@ -264,12 +267,80 @@ DROP TABLE alter_test
 
 statement ok
 CREATE TABLE exec_test (
-  a INT PRIMARY KEY,
-  vec1 VECTOR(3),
-  VECTOR INDEX (vec1)
+  id INT PRIMARY KEY,
+  user_id INT,
+  data STRING COLLATE en_US_u_ks_level2,
+  encoding VECTOR(3),
+  VECTOR INDEX simple (encoding),
+  VECTOR INDEX prefix (user_id, encoding),
+  VECTOR INDEX composite_prefix (data, encoding),
+  FAMILY fam_id_uid_d_enc (id, user_id, data, encoding)
 )
 
-# TODO(drewk): write these tests once execution is supported.
+# Vector mutation consumes columns after partial index columns, so add this in as an extra opportunity for something
+# to go wrong.
+statement ok
+CREATE INDEX ON exec_test (user_id) WHERE user_id >= 10 AND user_id <= 20
+
+statement ok
+SET tracing = kv
+
+statement ok
+INSERT INTO exec_test VALUES (1, 1, 'foo', '[1, 2, 3]'), (2, 10, 'bar', '[4, 5, 6]'), (3, 15, 'baz', '[7, 8, 9]')
+
+statement ok
+UPSERT INTO exec_test VALUES (2, 10, 'bar', '[6, 5, 4]'), (4, 20, 'qux', '[10, 11, 12]')
+
+statement ok
+UPDATE exec_test SET encoding = '[3, 2, 1]' WHERE id = 1
+
+statement ok
+UPDATE exec_test SET data = 'fooo' WHERE user_id = 15;
+
+statement ok
+DELETE FROM exec_test WHERE user_id = 10
+
+query T
+SELECT SUBSTRING(message, '(.* -> /BYTES/)') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'CPut%BYTES%' ORDER BY message
+----
+CPut /Table/113/2/1/1/0 -> /BYTES/
+CPut /Table/113/2/1/1/0 -> /BYTES/
+CPut /Table/113/2/1/2/0 -> /BYTES/
+CPut /Table/113/2/1/2/0 -> /BYTES/
+CPut /Table/113/2/1/3/0 -> /BYTES/
+CPut /Table/113/2/1/4/0 -> /BYTES/
+CPut /Table/113/3/1/1/1/0 -> /BYTES/
+CPut /Table/113/3/1/1/1/0 -> /BYTES/
+CPut /Table/113/3/10/1/2/0 -> /BYTES/
+CPut /Table/113/3/10/1/2/0 -> /BYTES/
+CPut /Table/113/3/15/1/3/0 -> /BYTES/
+CPut /Table/113/3/20/1/4/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/3/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0 -> /BYTES/
+CPut /Table/113/4/"\x16\x84\x17q\x17q\x17q\x00\x00\x00 \x00 \x00 \x00 "/1/3/0 -> /BYTES/
+CPut /Table/113/4/"\x17\xab\x186\x18{\x00\x00\x00 \x00 \x00 "/1/4/0 -> /BYTES/
+CPut /Table/113/5/10/2/0 -> /BYTES/
+CPut /Table/113/5/15/3/0 -> /BYTES/
+CPut /Table/113/5/20/4/0 -> /BYTES/
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Del /Table/113/%' ORDER BY message
+----
+Del /Table/113/1/2/0
+Del /Table/113/2/1/1/0
+Del /Table/113/2/1/2/0
+Del /Table/113/2/1/2/0
+Del /Table/113/3/1/1/1/0
+Del /Table/113/3/10/1/2/0
+Del /Table/113/3/10/1/2/0
+Del /Table/113/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0
+Del /Table/113/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/2/0
+Del /Table/113/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/3/0
+Del /Table/113/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/0
+Del /Table/113/5/10/2/0
 
 statement ok
 DROP TABLE exec_test
