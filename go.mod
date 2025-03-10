@@ -136,7 +136,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250305234908-5fb8d04f5328
+	github.com/cockroachdb/pebble v0.0.0-20250308042136-de0c5a11d2ee
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -312,7 +312,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/swiss v0.0.0-20250228210649-a321086955f2 // indirect
+	github.com/cockroachdb/swiss v0.0.0-20250304010804-34a2c6a59016 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
