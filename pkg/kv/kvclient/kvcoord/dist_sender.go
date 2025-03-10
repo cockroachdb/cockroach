@@ -2220,7 +2220,8 @@ func (ds *DistSender) sendPartialBatch(
 			// RPC is not retried any more.
 			if err != nil || reply.Error != nil {
 				ds.metrics.SlowRPCs.Inc(1)
-				//nolint:deferloop TODO(#137605)
+				// This defer is intended to run after the loop; this code runs at most once per loop.
+				//nolint:deferloop
 				defer func(tBegin crtime.Mono, attempts int64) {
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder

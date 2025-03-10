@@ -1446,7 +1446,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
 						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
-					//nolint:deferloop TODO(#137605)
+					//nolint:deferloop
 					defer func(attempt int) {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
 						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)

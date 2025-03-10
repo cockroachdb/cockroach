@@ -608,8 +608,7 @@ func (m *Manager) waitForSignal(
 				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
-				//nolint:deferloop TODO(#137605)
-				defer m.slowReqs.Dec(1)
+				defer m.slowReqs.Dec(1) //nolint:deferloop
 			}
 		case <-ctx.Done():
 			log.VEventf(ctx, 2, "%s while acquiring %s latch %s, held by %s latch %s",
