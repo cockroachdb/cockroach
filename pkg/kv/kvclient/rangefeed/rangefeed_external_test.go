@@ -68,6 +68,9 @@ var feedTypes = []rangefeedTestType{
 	{
 		useBufferedSender: false,
 	},
+	{
+		useBufferedSender: true,
+	},
 }
 
 // TestRangeFeedIntegration is a basic integration test demonstrating all of
