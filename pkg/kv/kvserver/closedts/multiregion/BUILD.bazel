@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "multiregion",
+    srcs = ["latency_tracker.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "multiregion_test",
+    srcs = ["latency_tracker_test.go"],
+    embed = [":multiregion"],
+    deps = [
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
