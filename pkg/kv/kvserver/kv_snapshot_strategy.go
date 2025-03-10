@@ -120,7 +120,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	// TODO(aaditya): Remove once we support flushableIngests for shared and
 	// external files in the engine.
-	skipClearForMVCCSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	skipClearForMVCCSpan := doExcise
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
@@ -158,11 +158,16 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return noSnap, sendSnapshotError(snapshotCtx, s, stream, err)
 		}
 		if req.TransitionFromSharedToRegularReplicate {
-			doExcise = false
 			sharedSSTs = nil
 			externalSSTs = nil
-			if err := msstw.addClearForMVCCSpan(); err != nil {
-				return noSnap, errors.Wrap(err, "adding tombstone for last span")
+			if !doExcise {
+				// TODO(tbg): this is dead code. We always excise if there is
+				// initially any chance of shared/external SSTs, and never
+				// opt out of that.
+				if err := msstw.addClearForMVCCSpan(); err != nil {
+					return noSnap, errors.Wrap(err, "adding tombstone for last span")
+				}
+				return noSnap, errors.AssertionFailedf("unexpected TransitionFromSharedToRegularReplicate without excising")
 			}
 		}
 
@@ -197,6 +202,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}
 				}
+				// TODO(tbg): document why many key kinds are only possible in the
+				// excise case.
 				switch batchReader.KeyKind() {
 				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
 					if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
@@ -267,7 +274,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 			timingTag.stop("sst")
 		}
-		if len(req.SharedTables) > 0 && doExcise {
+
+		if len(req.SharedTables) > 0 {
 			for i := range req.SharedTables {
 				sst := req.SharedTables[i]
 				pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
@@ -286,7 +294,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				})
 			}
 		}
-		if len(req.ExternalTables) > 0 && doExcise {
+		if len(req.ExternalTables) > 0 {
 			for i := range req.ExternalTables {
 				sst := req.ExternalTables[i]
 				externalSSTs = append(externalSSTs, pebble.ExternalFile{
@@ -545,6 +553,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return nil
 			}
 		}
+		kvsBefore := kvs
 		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
@@ -590,6 +599,17 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return maybeFlushBatch()
 		}, sharedVisitor, externalVisitor)
 		if err != nil && errors.Is(err, pebble.ErrInvalidSkipSharedIteration) {
+			// IterateReplicaKeySpansShared will return ErrInvalidSkipSharedIteration
+			// before visiting user keys. This is a subtle contract.
+			// See also:
+			//
+			// https://cockroachlabs.slack.com/archives/CAC6K3SLU/p1741360036808799?thread_ts=1741356670.269679&cid=CAC6K3S
+			if kvsBefore != kvs {
+				return 0, errors.AssertionFailedf(
+					"unable to transition from shared to regular replicate: %d user keys were already sent",
+					kvs-kvsBefore,
+				)
+			}
 			transitionFromSharedToRegularReplicate = true
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
