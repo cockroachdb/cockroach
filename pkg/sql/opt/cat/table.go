@@ -188,6 +188,10 @@ type Table interface {
 	// IsRowLevelSecurityEnabled is true if policies should be applied during the query.
 	IsRowLevelSecurityEnabled() bool
 
+	// IsRowLevelSecurityForced is true if row-level security policies should be
+	// applied to the table owner.
+	IsRowLevelSecurityForced() bool
+
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies
 }

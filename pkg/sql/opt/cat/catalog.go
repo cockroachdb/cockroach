@@ -271,4 +271,7 @@ type Catalog interface {
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.
 	GetRoutineOwner(ctx context.Context, routineOid oid.Oid) (username.SQLUsername, error)
+
+	// IsOwner returns true if user is the owner of the object o
+	IsOwner(ctx context.Context, o Object, user username.SQLUsername) (bool, error)
 }

@@ -34,6 +34,10 @@ type RowLevelSecurityMeta struct {
 	// PoliciesApplied is the set of policies that were applied for each relation
 	// in the query.
 	PoliciesApplied map[TableID]PolicyIDSet
+
+	// NoForceExempt is a map that tracks if any of the tables had their policies
+	// exempt because they were the table owner and force RLS wasn't set.
+	NoForceExempt map[TableID]bool
 }
 
 func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole bool) {
@@ -43,6 +47,7 @@ func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole
 	r.User = user
 	r.HasAdminRole = hasAdminRole
 	r.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	r.NoForceExempt = make(map[TableID]bool)
 	r.IsInitialized = true
 }
 
@@ -54,10 +59,11 @@ func (r *RowLevelSecurityMeta) Clear() {
 // AddTableUse indicates that an RLS-enabled table was encountered while
 // building the query plan. If any policies are in use, they will be added
 // via the AddPolicyUse call.
-func (r *RowLevelSecurityMeta) AddTableUse(tableID TableID) {
+func (r *RowLevelSecurityMeta) AddTableUse(tableID TableID, isTableOwnerAndNotForced bool) {
 	if _, found := r.PoliciesApplied[tableID]; !found {
 		r.PoliciesApplied[tableID] = PolicyIDSet{}
 	}
+	r.NoForceExempt[tableID] = isTableOwnerAndNotForced
 }
 
 // AddPoliciesUsed is used to indicate the given set of policyID of a table were

@@ -184,6 +184,13 @@ func (s *TestState) HasOwnership(
 	return true, nil
 }
 
+// UserHasOwnership implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) UserHasOwnership(
+	context.Context, privilege.Object, username.SQLUsername,
+) (bool, error) {
+	return true, nil
+}
+
 // HasPrivilege implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) HasPrivilege(
 	ctx context.Context,

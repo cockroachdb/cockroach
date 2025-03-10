@@ -463,7 +463,7 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			policies, found := rlsMeta.PoliciesApplied[tabID]
 			if found {
 				val := exec.RLSPoliciesApplied{
-					PoliciesSkippedForRole: rlsMeta.HasAdminRole,
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole || rlsMeta.NoForceExempt[tabID],
 					Policies:               policies,
 				}
 				ef.AnnotateNode(node, exec.PolicyInfoID, &val)

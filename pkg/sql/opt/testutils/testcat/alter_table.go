@@ -10,6 +10,7 @@ import (
 	gojson "encoding/json"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,6 +52,28 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 			panic(errors.AssertionFailedf("unsupported ALTER TABLE command %T", t))
 		}
 	}
+}
+
+// AlterTableOwner is an implementation of the ALTER TABLE ... OWNER statement.
+func (tc *Catalog) AlterTableOwner(stmt *tree.AlterTableOwner) {
+	if stmt.IfExists || stmt.IsView || stmt.IsMaterialized || stmt.IsSequence {
+		panic(errors.AssertionFailedf("unsupported options with ALTER TABLE ... OWNER: %v", stmt))
+	}
+
+	tn := stmt.Name.ToTableName()
+	tc.qualifyTableName(&tn)
+	tab := tc.Table(&tn)
+
+	user, err := username.MakeSQLUsernameFromUserInput(stmt.Owner.Name, username.PurposeValidation)
+	if err != nil {
+		panic(err)
+	}
+	_, found := tc.users[user]
+	if !found {
+		panic(errors.Newf(`user %q does not exist`, stmt.Owner.Name))
+	}
+
+	tab.Owner = user
 }
 
 // injectTableStats sets the table statistics as specified by a JSON object.
@@ -100,6 +123,10 @@ func toggleRLSMode(tt *Table, mode tree.TableRLSMode) {
 	case tree.TableRLSDisable:
 		tt.rlsEnabled = false
 		tt.removeRLSConstraint()
+	case tree.TableRLSForce:
+		tt.rlsForced = true
+	case tree.TableRLSNoForce:
+		tt.rlsForced = false
 	default:
 		panic(errors.AssertionFailedf("unsupported RLS mode %v", mode))
 	}

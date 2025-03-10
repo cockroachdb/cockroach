@@ -408,8 +408,13 @@ func isOwner(
 func (p *planner) HasOwnership(
 	ctx context.Context, privilegeObject privilege.Object,
 ) (bool, error) {
-	user := p.SessionData().User()
+	return p.UserHasOwnership(ctx, privilegeObject, p.SessionData().User())
+}
 
+// UserHasOwnership implements the AuthorizationAccessor interface.
+func (p *planner) UserHasOwnership(
+	ctx context.Context, privilegeObject privilege.Object, user username.SQLUsername,
+) (bool, error) {
 	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
 		return isOwner(ctx, p, privilegeObject, role)
 	})

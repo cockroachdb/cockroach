@@ -339,6 +339,10 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	for id, policies := range from.rlsMeta.PoliciesApplied {
 		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
 	}
+	md.rlsMeta.NoForceExempt = make(map[TableID]bool)
+	for id, isExempt := range from.rlsMeta.NoForceExempt {
+		md.rlsMeta.NoForceExempt[id] = isExempt
+	}
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -1185,9 +1189,11 @@ func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 
 // SetRLSEnabled will update the metadata to indicate we came across a table
 // that had row-level security enabled.
-func (md *Metadata) SetRLSEnabled(user username.SQLUsername, isAdmin bool, tableID TableID) {
+func (md *Metadata) SetRLSEnabled(
+	user username.SQLUsername, isAdmin bool, tableID TableID, isTableOwnerAndNotForced bool,
+) {
 	md.rlsMeta.MaybeInit(user, isAdmin)
-	md.rlsMeta.AddTableUse(tableID)
+	md.rlsMeta.AddTableUse(tableID, isTableOwnerAndNotForced)
 }
 
 // ClearRLSEnabled will clear out the initialized state for the rls meta. This
