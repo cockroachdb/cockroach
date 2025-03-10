@@ -943,7 +943,7 @@ func (e EncodingOptions) Validate() error {
 		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
 	}
 
-	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
+	if e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool
@@ -1007,10 +1007,11 @@ type Filters struct {
 
 // GetFilters returns a populated Filters.
 func (s StatementOptions) GetFilters() Filters {
+	envelopeType, _ := s.m[OptEnvelope]
 	_, withDiff := s.m[OptDiff]
 	_, withIgnoreDisableChangefeedReplication := s.m[OptIgnoreDisableChangefeedReplication]
 	return Filters{
-		WithDiff:      withDiff,
+		WithDiff:      withDiff || envelopeType == string(OptEnvelopeEnriched),
 		WithFiltering: !withIgnoreDisableChangefeedReplication,
 	}
 }
