@@ -151,6 +151,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
+	r.mu.cachedLocalityProximity = roachpb.LocalityComparisonType_UNDEFINED
 
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}

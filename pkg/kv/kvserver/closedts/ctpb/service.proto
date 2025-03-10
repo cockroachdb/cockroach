@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/c
 
 import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
+import "roachpb/metadata.proto";
 
 import "gogoproto/gogo.proto";
 
@@ -48,7 +49,7 @@ message Update {
   bool snapshot = 3;
 
   // closed_timestamps represents the timestamps that are being closed for each
-  // group of ranges, with a group being represented by its policy.
+  // group of ranges, with a group being represented by its policy and locality.
   //
   // The recipient is supposed to forward the closed timestamps of the affected
   // ranges to these values. Upon receiving one of these updates, the recipient
@@ -59,6 +60,7 @@ message Update {
   message GroupUpdate {
     roachpb.RangeClosedTimestampPolicy policy = 1;
     util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+    roachpb.LocalityComparisonWrapper locality = 3[(gogoproto.nullable) = false];
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
 
@@ -72,15 +74,17 @@ message Update {
   repeated int32 removed = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
   // added_or_updated contains the set of ranges that are either being added to
-  // the tracked ranges set with a given (lai, policy) or updated within the
-  // tracked range set with a new (lai, policy). All future updates on the
-  // stream are applicable to these ranges until they are removed, either
-  // explicitly by being included in a future removed set or implicitly by not
-  // being included in the added_or_updated field of a future snapshot.
+  // the tracked ranges set with a given (lai, policy, locality) or updated
+  // within the tracked range set with a new (lai, policy, locality). All future
+  // updates on the stream are applicable to these ranges until they are
+  // removed, either explicitly by being included in a future removed set or
+  // implicitly by not being included in the added_or_updated field of a future
+  // snapshot.
   message RangeUpdate {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
     roachpb.RangeClosedTimestampPolicy policy = 3;
+    roachpb.LocalityComparisonWrapper locality = 4[(gogoproto.nullable) = false];
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
 }

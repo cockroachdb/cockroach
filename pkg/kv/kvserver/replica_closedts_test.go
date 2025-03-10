@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -262,8 +264,9 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			setup: func(a setupArgs) (chan struct{}, chan error, error) {
 				// Manually bump the assigned closed timestamp to a time below
 				// where the test will attempt to bump it to.
-				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(-1, 0)
+				var targets multiregion.PolicyLocalityToTimestampMap
+				targets.Set(multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+					a.target.Add(-1, 0))
 				return nil, nil, testutils.SucceedsSoonError(func() error {
 					res := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !res.OK {
@@ -279,8 +282,8 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			setup: func(a setupArgs) (chan struct{}, chan error, error) {
 				// Manually bump the assigned closed timestamp to a time equal
 				// to where the test will attempt to bump it to.
-				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target
+				var targets multiregion.PolicyLocalityToTimestampMap
+				targets.Set(multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}, a.target)
 				return nil, nil, testutils.SucceedsSoonError(func() error {
 					res := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !res.OK {
@@ -296,8 +299,9 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			setup: func(a setupArgs) (chan struct{}, chan error, error) {
 				// Manually bump the assigned closed timestamp to a time above
 				// where the test will attempt to bump it to.
-				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(1, 0)
+				var targets multiregion.PolicyLocalityToTimestampMap
+				targets.Set(multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+					a.target.Add(1, 0))
 				return nil, nil, testutils.SucceedsSoonError(func() error {
 					res := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !res.OK {
@@ -373,8 +377,8 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			} else {
 				target, exp = test.computeTarget(repl)
 			}
-			var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-			targets[roachpb.LAG_BY_CLUSTER_SETTING] = target
+			var targets multiregion.PolicyLocalityToTimestampMap
+			targets.Set(multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING}, target)
 
 			// Run the setup function to get the replica in the desired state.
 			var unblockFilterC chan struct{}
@@ -716,13 +720,14 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 
 	manual.Pause()
 	now := s.Clock().NowAsClockTimestamp()
-	var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	var targets multiregion.PolicyLocalityToTimestampMap
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Advance time and the closed timestamp target.
 		now = now.ToTimestamp().Add(1, 0).UnsafeToClockTimestamp()
-		targets[roachpb.LAG_BY_CLUSTER_SETTING] = now.ToTimestamp()
+		targets.Set(multiregion.PolicyLocalityKey{Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+			now.ToTimestamp())
 
 		// Perform the call.
 		res := r.BumpSideTransportClosed(ctx, now, targets)

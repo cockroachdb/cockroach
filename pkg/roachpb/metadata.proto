@@ -427,6 +427,12 @@ message Tier {
   optional string value = 2 [(gogoproto.nullable) = false];
 }
 
+// LocalityComparisonWrapper wraps a proto2 LocalityComparisonType enum to enable
+// usage in proto3, since proto3 cannot directly use proto2 enums.
+message LocalityComparisonWrapper {
+  required LocalityComparisonType comparison_type = 1[(gogoproto.nullable) = false];
+}
+
 // LocalityComparisonType represents different types of comparison results that
 // indicate the relationship between two localities.
 enum LocalityComparisonType {
@@ -441,6 +447,8 @@ enum LocalityComparisonType {
   // SAME_REGION_SAME_ZONE indicates that the two localities have same region
   // and same zone tiers.
   SAME_REGION_SAME_ZONE = 3;
+  // Keep this sentinel value higher than the rest.
+  MAX_LOCALITY_COMPARISON_TYPE = 4;
 }
 
 message Version {
