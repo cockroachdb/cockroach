@@ -416,7 +416,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'
 	streamID = rps.StreamID
 	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 	require.NoError(t, client.Complete(ctx, streamID, true))
-	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, testTenantName))
+	h.SysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, testTenantName))
 	jobutils.WaitForJobToSucceed(t, h.SysSQL, jobspb.JobID(streamID))
 
 }

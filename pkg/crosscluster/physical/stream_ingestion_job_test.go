@@ -67,7 +67,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 			"CREATE TENANT [1] FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
 	t.Run("cannot set expiration window on create tenant from replication", func(t *testing.T) {
-		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
+		sysSQL.ExpectErr(t, `at or near "expiration": syntax error`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
 	})
 	t.Run("destination cannot exist without resume timestamp", func(t *testing.T) {
@@ -272,7 +272,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
 	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
-	sqlB.ExpectErr(t, "cannot specify EXPIRATION WINDOW option while starting a physical replication stream", "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1 WITH EXPIRATION WINDOW = '1ms'", serverAURL.String())
 	t.Logf("starting replication f->g")
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g START REPLICATION OF f ON $1", serverAURL.String())
 	_, consumerGJobID = replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
