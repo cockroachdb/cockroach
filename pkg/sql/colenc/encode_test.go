@@ -728,6 +728,10 @@ func (c *capturePutter) Del(key ...interface{}) {
 	colexecerror.InternalError(errors.New("unimplemented"))
 }
 
+func (c *capturePutter) DelMustAcquireExclusiveLock(key ...interface{}) {
+	colexecerror.InternalError(errors.New("unimplemented"))
+}
+
 func (c *capturePutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
 	for i, k := range kys {
 		if len(k) == 0 {
