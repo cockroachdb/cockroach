@@ -551,7 +551,7 @@ func TestRawNodeStart(t *testing.T) {
 	}
 
 	storage := NewMemoryStorage()
-	storage.ls = LogSlice{term: 1, prev: entryID{index: 1, term: 1}}
+	storage.ls = LogSlice{prev: entryID{index: 1, term: 1}}
 
 	// TODO(tbg): this is a first prototype of what bootstrapping could look
 	// like (without the annoying faux ConfChanges). We want to persist a
@@ -770,7 +770,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 		entries[i] = ent
 		size += uint64(ent.Size())
 	}
-	s.ls = LogSlice{term: 1, entries: entries}
+	s.ls = LogSlice{entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should

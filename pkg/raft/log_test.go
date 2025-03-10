@@ -33,7 +33,7 @@ func TestMatch(t *testing.T) {
 		ids[i] = entryID{term: init.termAt(uint64(i)), index: uint64(i)}
 	}
 	for _, tt := range []struct {
-		sl    LogSlice
+		sl    LeadSlice
 		notOk bool
 		want  uint64
 	}{
@@ -42,7 +42,7 @@ func TestMatch(t *testing.T) {
 		{sl: entryID{term: 4, index: 1}.append(4, 4), notOk: true},
 		{sl: entryID{term: 5, index: 2}.append(5, 6), notOk: true},
 		// no conflict, empty slice
-		{sl: LogSlice{}, want: 0},
+		{sl: LeadSlice{}, want: 0},
 		// no conflict
 		{sl: ids[0].append(1, 2, 3), want: 3},
 		{sl: ids[1].append(2, 3), want: 3},
@@ -75,7 +75,7 @@ func TestFindConflictByTerm(t *testing.T) {
 	noSnap := entryID{}
 	snap10 := entryID{term: 3, index: 10}
 	for _, tt := range []struct {
-		sl    LogSlice
+		sl    LeadSlice
 		index uint64
 		term  uint64
 		want  uint64
@@ -155,12 +155,12 @@ func TestIsUpToDate(t *testing.T) {
 func TestAppend(t *testing.T) {
 	init := entryID{}.append(1, 2, 2)
 	for _, tt := range []struct {
-		app   LogSlice
-		want  LogSlice
+		app   LeadSlice
+		want  LeadSlice
 		notOk bool
 	}{
 		// appends not at the end of the log
-		{app: LogSlice{}, notOk: true},
+		{app: LeadSlice{}, notOk: true},
 		{app: entryID{term: 1, index: 1}.append(3), notOk: true},
 		{app: entryID{term: 2, index: 4}.append(3), notOk: true},
 		// appends at the end of the log
@@ -204,7 +204,7 @@ func TestLogMaybeAppend(t *testing.T) {
 	commit := uint64(1)
 
 	for _, tt := range []struct {
-		app   LogSlice
+		app   LeadSlice
 		want  []pb.Entry
 		notOk bool
 		panic bool
@@ -222,7 +222,7 @@ func TestLogMaybeAppend(t *testing.T) {
 		{app: last.append(4), want: index(1).terms(1, 2, 3, 4)},
 		{app: last.append(4, 4), want: index(1).terms(1, 2, 3, 4, 4)},
 		// appends from before the end of the log
-		{app: LogSlice{}, want: init.entries},
+		{app: LeadSlice{}, want: init.entries},
 		{app: entryID{term: 1, index: 1}.append(4), want: index(1).terms(1, 4)},
 		{app: entryID{term: 1, index: 1}.append(4, 4), want: index(1).terms(1, 4, 4)},
 		{app: entryID{term: 2, index: 2}.append(4), want: index(1).terms(1, 2, 4)},
@@ -507,7 +507,7 @@ func TestAppliedTo(t *testing.T) {
 // the entries correctly, before and after making them stable.
 func TestNextUnstableEnts(t *testing.T) {
 	init := entryID{}.append(1, 2)
-	for _, tt := range []LogSlice{
+	for _, tt := range []LeadSlice{
 		init.lastEntryID().append(),
 		init.lastEntryID().append(2, 2),
 		init.lastEntryID().append(3, 4, 5, 6),
@@ -590,7 +590,7 @@ func TestStableToWithSnap(t *testing.T) {
 	snapID := entryID{term: 2, index: 5}
 	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
 	for _, tt := range []struct {
-		sl   LogSlice
+		sl   LeadSlice
 		to   LogMark
 		want uint64 // prev.index
 	}{
@@ -786,7 +786,7 @@ func TestSlice(t *testing.T) {
 	halfe := pb.Entry{Index: half, Term: half}
 
 	entries := func(lo, hi uint64) []pb.Entry { // (lo, hi]
-		return index(lo+1).termRange(lo+1, hi+1)
+		return index(lo + 1).terms(intRange(lo+1, hi+1)...)
 	}
 
 	storage := NewMemoryStorage()
@@ -871,7 +871,7 @@ func TestScan(t *testing.T) {
 	last := offset + num
 	half := offset + num/2
 	entries := func(from, to uint64) []pb.Entry {
-		return index(from).termRange(from, to)
+		return index(from).terms(intRange(from, to)...)
 	}
 	entrySize := entsSize(entries(half, half+1))
 
@@ -946,25 +946,20 @@ func (i index) terms(terms ...uint64) []pb.Entry {
 	return entries
 }
 
-// termRange generates a slice of to-from entries, at consecutive indices
-// starting from i, and consecutive terms in [from, to).
-// TODO(pav-kv): remove.
-func (i index) termRange(from, to uint64) []pb.Entry {
-	return i.terms(intRange(from, to)...)
-}
-
-// append generates a valid LogSlice of entries appended after the given entry
+// append generates a valid LeadSlice of entries appended after the given entry
 // ID, at indices [id.index+1, id.index+len(terms)], with the given terms of
 // each entry. Terms must be >= id.term, and non-decreasing.
-func (id entryID) append(terms ...uint64) LogSlice {
+func (id entryID) append(terms ...uint64) LeadSlice {
 	term := id.term
 	if ln := len(terms); ln != 0 {
 		term = terms[ln-1]
 	}
-	ls := LogSlice{
-		term:    term,
-		prev:    id,
-		entries: index(id.index + 1).terms(terms...),
+	ls := LeadSlice{
+		term: term,
+		LogSlice: LogSlice{
+			prev:    id,
+			entries: index(id.index + 1).terms(terms...),
+		},
 	}
 	if err := ls.valid(); err != nil {
 		panic(err)
