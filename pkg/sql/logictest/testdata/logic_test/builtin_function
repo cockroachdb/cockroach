@@ -2680,6 +2680,19 @@ SELECT format('|%-*s|', -10, 'foo')
 ----
 |foo       |
 
+statement
+PREPARE format_stmt AS SELECT format('|%*s|', $1::INT, $2::STRING)
+
+query T
+EXECUTE format_stmt(10, 'foo')
+----
+|       foo|
+
+query T
+EXECUTE format_stmt(-10, 'foo')
+----
+|foo       |
+
 # Escaping $ into \x24 only needed in testlogic or prepared statements
 query T
 SELECT format(E'Testing %3\x24s, %2\x24s, %1\x24s', 'one', 'two', 'three')
