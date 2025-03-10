@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -64,14 +65,6 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 	4,
 	settings.PositiveInt,
 )
-
-// keyBatch will manage merging a batch of keys. Potentially splitting the batch
-// across multiple transactions depending on contention.
-type keyBatch struct {
-	sourceKeys    []roachpb.Key
-	processedKeys int
-	batchSize     int
-}
 
 // IndexBackfillMerger is a processor that merges entries from the corresponding
 // temporary index to a new index.
@@ -344,10 +337,17 @@ func (ibm *IndexBackfillMerger) merge(
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
-	batch := &keyBatch{sourceKeys: sourceKeys}
+	if len(sourceKeys) == 0 {
+		return nil
+	}
 
-	err := retryWithReducedBatchWhenAutoRetryLimitExceeded(ctx, batch,
-		func(ctx context.Context, keys []roachpb.Key) error {
+	batch := retry.Batch{
+		Do: func(ctx context.Context, processed int, batchSize int) error {
+			until := processed + batchSize
+			if until > len(sourceKeys) {
+				until = len(sourceKeys)
+			}
+			keys := sourceKeys[processed:until]
 			return ibm.flowCtx.Cfg.DB.Txn(ctx, func(
 				ctx context.Context, txn isql.Txn,
 			) error {
@@ -388,9 +388,16 @@ func (ibm *IndexBackfillMerger) merge(
 				return nil
 			},
 				isql.WithPriority(admissionpb.BulkNormalPri))
-		})
-
-	return err
+		},
+		IsRetryableError: kv.IsAutoRetryLimitExhaustedError,
+		OnRetry: func(err error, batchSize int) error {
+			log.Infof(ctx,
+				"kv auto retry limit was reached, retrying with a reduced batch size of %d keys. kv error: %v",
+				batchSize, err)
+			return nil
+		},
+	}
+	return batch.Execute(ctx, len(sourceKeys))
 }
 
 func (ibm *IndexBackfillMerger) constructMergeBatch(
@@ -550,67 +557,3 @@ var _ base.ModuleTestingKnobs = &IndexBackfillMergerTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*IndexBackfillMergerTestingKnobs) ModuleTestingKnobs() {}
-
-// retryWithReducedBatchWhenAutoRetryLimitExceeded is a helper that will
-// continually try to merge a batch. If the KV internal retry limit is reached,
-// it will keep retrying the batch but with a progressively smaller batch size
-// each time.
-func retryWithReducedBatchWhenAutoRetryLimitExceeded(
-	ctx context.Context, batch *keyBatch, f func(context.Context, []roachpb.Key) error,
-) error {
-	const minBatchSize = 1
-
-	for batch.hasAnotherBatch() {
-		err := f(ctx, batch.getKeysForNextBatch())
-		if err == nil {
-			batch.setLastBatchComplete()
-			continue
-		}
-		// We stop retrying if we still couldn't complete the batch at the minimum
-		// size. We will return the error and let a higher level handle it.
-		if batch.batchSize == minBatchSize {
-			return err
-		}
-		// If we reached the auto retry limit, we reduce the keys for the next batch.
-		if kv.IsAutoRetryLimitExhaustedError(err) {
-			batch.reduceForRetry()
-			log.Infof(ctx,
-				"kv auto retry limit was reached, retrying with a reduced batch size of %d keys. kv error: %v",
-				batch.batchSize, err)
-			continue
-		}
-		return err
-	}
-	return nil
-}
-
-// reduceForRetry will reduce the size of the next batch due to a KV retry
-// related to contention.
-func (k *keyBatch) reduceForRetry() {
-	if k.batchSize > 0 {
-		k.batchSize /= 2
-		k.batchSize = max(k.batchSize, 1)
-	}
-}
-
-// getKeysForNextBatch returns a set of keys to merge in the next batch.
-func (k *keyBatch) getKeysForNextBatch() []roachpb.Key {
-	// Init to the full set of keys in the first attempt
-	if k.batchSize == 0 {
-		k.batchSize = len(k.sourceKeys)
-	}
-	batchEnd := min(k.processedKeys+k.batchSize, len(k.sourceKeys))
-	return k.sourceKeys[k.processedKeys:batchEnd]
-}
-
-// setLastBatchComplete is a helper for when we successfully merged the last
-// batch of keys.
-func (k *keyBatch) setLastBatchComplete() {
-	k.processedKeys += k.batchSize
-}
-
-// hasAnotherBatch returns true if there are keys in the batch that still need
-// to be merged.
-func (k *keyBatch) hasAnotherBatch() bool {
-	return k.processedKeys < len(k.sourceKeys)
-}
