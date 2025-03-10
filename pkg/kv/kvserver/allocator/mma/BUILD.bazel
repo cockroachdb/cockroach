@@ -11,6 +11,7 @@ go_library(
         "load.go",
         "memo_helper.go",
         "messages.go",
+        "top_k_replicas.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma",
     visibility = ["//visibility:public"],

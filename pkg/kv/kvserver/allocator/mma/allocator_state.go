@@ -74,7 +74,7 @@ func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 //   of cpu overload.
 
 // Called periodically, say every 10s.
-func (a *allocatorState) rebalanceStores() []PendingRangeChange {
+func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []PendingRangeChange {
 	now := timeutil.Now()
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
@@ -146,7 +146,10 @@ func (a *allocatorState) rebalanceStores() []PendingRangeChange {
 			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
-			for _, rangeID := range ss.adjusted.topKRanges {
+			topKRanges := ss.adjusted.topKRanges[localStoreID]
+			n := topKRanges.len()
+			for i := 0; i < n; i++ {
+				rangeID := topKRanges.index(i)
 				rstate := a.cs.ranges[rangeID]
 				if len(rstate.pendingChanges) > 0 {
 					// If the range has pending changes, don't make more changes.
@@ -237,7 +240,10 @@ func (a *allocatorState) rebalanceStores() []PendingRangeChange {
 		}
 
 		// Iterate over top-K ranges first and try to move them.
-		for _, rangeID := range ss.adjusted.topKRanges {
+		topKRanges := ss.adjusted.topKRanges[localStoreID]
+		n := topKRanges.len()
+		for i := 0; i < n; i++ {
+			rangeID := topKRanges.index(i)
 			// TODO(sumeer): the following code belongs in a closure, since we will
 			// repeat it for some random selection of non topKRanges.
 			rstate := a.cs.ranges[rangeID]
