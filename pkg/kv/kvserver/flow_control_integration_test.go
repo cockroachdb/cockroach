@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1708,8 +1707,6 @@ func TestFlowControlSendQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 142414)
-
 	ctx := context.Background()
 	const numNodes = 5
 	var noopWaitForEval atomic.Bool
@@ -1734,6 +1731,10 @@ func TestFlowControlSendQueue(t *testing.T) {
 	// Using a manual clock here ensures that StoreLiveness support, once
 	// established, never expires. By extension, leadership should stay sticky.
 	manualClock := hlc.NewHybridManualClock()
+	// We want to observe a disconnected stream when crashing a node, however
+	// we don't care about replicas blipping into StateProbe otherwise.
+	var bypassReplicaUnreachable atomic.Bool
+	bypassReplicaUnreachable.Store(true)
 	stickyArgsPerServer := make(map[int]base.TestServerArgs)
 	for i := range disableWorkQueueGrantingServers {
 		// Start with admission (logical token return) disabled across all nodes.
@@ -1753,7 +1754,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
-						return true
+						return bypassReplicaUnreachable.Load()
 					},
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
@@ -1908,6 +1909,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Stopping n2.)`)
+	bypassReplicaUnreachable.Store(false)
 	tc.StopServer(1 /* n2 */)
 	// There should now be 2 connected streams (n1,n3).
 	h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
@@ -1959,6 +1961,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
 	h.comment(`-- (Starting n2.)`)
+	bypassReplicaUnreachable.Store(true)
 	require.NoError(t, tc.RestartServer(1))
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 	h.comment(`-- There should now be 3 connected streams again.`)
