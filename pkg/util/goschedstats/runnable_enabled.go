@@ -93,7 +93,7 @@ var callbackInfo struct {
 	st  *cluster.Settings
 }
 
-func registerRunnableCountCallback(cb RunnableCountCallback) (id int64) {
+func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
 	callbackInfo.mu.Lock()
 	defer callbackInfo.mu.Unlock()
 	id = callbackInfo.id
@@ -102,7 +102,7 @@ func registerRunnableCountCallback(cb RunnableCountCallback) (id int64) {
 		RunnableCountCallback: cb,
 		id:                    id,
 	})
-	return id
+	return id, true
 }
 
 // See UnregisterRunnableCountCallback.

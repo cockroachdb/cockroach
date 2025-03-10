@@ -19,8 +19,8 @@ func cumulativeNormalizedRunnableGoroutines() float64 {
 	return 0.0
 }
 
-func registerRunnableCountCallback(cb RunnableCountCallback) (id int64) {
-	return -1
+func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
+	return -1, false
 }
 
 func unregisterRunnableCountCallback(id int64) {}
