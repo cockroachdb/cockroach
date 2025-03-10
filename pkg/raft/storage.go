@@ -90,8 +90,8 @@ type LogStorage interface {
 	// FirstIndex still returns the snapshot index + 1, yet the first log entry at
 	// this index is not available.
 	//
-	// TODO(pav-kv): replace this with a Prev() method equivalent to LogSlice's
-	// prev field. The log storage is just a storage-backed LogSlice.
+	// TODO(pav-kv): replace this with a Prev() method equivalent to LeadSlice's
+	// prev field. The log storage is just a storage-backed LeadSlice.
 	FirstIndex() uint64
 
 	// LogSnapshot returns an immutable point-in-time log storage snapshot.
@@ -147,11 +147,6 @@ type MemoryStorage struct {
 	snapshot  pb.Snapshot
 
 	// ls contains the log entries.
-	//
-	// TODO(pav-kv): the term field of the LogSlice is conservatively populated
-	// to be the last entry term, to keep the LogSlice valid. But it must be
-	// sourced from the upper layer's last accepted term (which is >= the last
-	// entry term).
 	ls LogSlice
 
 	callStats inMemStorageCallStats
@@ -260,8 +255,7 @@ func (ms *MemoryStorage) ApplySnapshot(snap pb.Snapshot) error {
 		raftlogger.GetLogger().Panicf("snapshot at %+v regresses the term %d", id, oldTerm)
 	}
 	ms.snapshot = snap
-	// TODO(pav-kv): the term must be the last accepted term passed in.
-	ms.ls = LogSlice{term: id.term, prev: id}
+	ms.ls = LogSlice{prev: id}
 	return nil
 }
 
@@ -306,7 +300,7 @@ func (ms *MemoryStorage) Compact(index uint64) error {
 
 // Append the new entries to storage.
 //
-// TODO(pav-kv): pass in a LogSlice which carries correctness semantics.
+// TODO(pav-kv): pass in a LeadSlice which carries correctness semantics.
 func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 	if len(entries) == 0 {
 		return nil
@@ -322,10 +316,6 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 		raftlogger.GetLogger().Panicf("missing log entry [last: %d, append at: %d]", last, first)
 	}
 
-	// TODO(pav-kv): this must have the correct last accepted term. Pass in the
-	// logSlice to this append method to update it correctly.
-	ms.ls.term = entries[len(entries)-1].Term
-
 	if first == ms.ls.lastIndex()+1 { // appending at the end of the log
 		ms.ls.entries = append(ms.ls.entries, entries...)
 	} else { // first <= lastIndex, after checks above
@@ -339,10 +329,11 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 // MakeLogSnapshot converts the MemoryStorage to a LogSnapshot type serving the
 // log from the MemoryStorage snapshot. Only for testing.
 func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
+	ls := ms.ls.forward(ms.ls.lastIndex())
 	return LogSnapshot{
 		first:    ms.FirstIndex(),
 		storage:  ms.LogSnapshot(),
-		unstable: ms.ls.forward(ms.ls.lastIndex()),
+		unstable: LeadSlice{term: ls.lastEntryID().term, LogSlice: ls},
 		logger:   raftlogger.DiscardLogger,
 	}
 }
