@@ -29,9 +29,37 @@ func (m *Mutex) AssertHeld() {
 }
 
 // An RWMutex is a reader/writer mutual exclusion lock.
+// NOTE: Due to https://github.com/golang/go/issues/17973, this implementation
+// has the behavior of a normal Mutex.
 type RWMutex struct {
-	sync.RWMutex
+	sync.Mutex
 }
+
+// RLock is identical to Lock in the current implementation.
+func (rw *RWMutex) RLock() {
+	rw.Lock()
+}
+
+// RUnlock is identical to Unlock in the current implementation.
+func (rw *RWMutex) RUnlock() {
+	rw.Unlock()
+}
+
+// TryRLock is identical to TryLock in the current implementation.
+func (rw *RWMutex) TryRLock() bool {
+	return rw.TryLock()
+}
+
+// RLocker returns a [Locker] interface that implements
+// the [Locker.Lock] and [Locker.Unlock] methods by calling rw.RLock and rw.RUnlock.
+func (rw *RWMutex) RLocker() sync.Locker {
+	return (*rlocker)(rw)
+}
+
+type rlocker RWMutex
+
+func (r *rlocker) Lock()   { (*RWMutex)(r).RLock() }
+func (r *rlocker) Unlock() { (*RWMutex)(r).RUnlock() }
 
 // AssertHeld may panic if the mutex is not locked for writing (but it is not
 // required to do so). Functions which require that their callers hold a

@@ -57,8 +57,10 @@ func (m *Mutex) AssertHeld() {
 }
 
 // An RWMutex is a reader/writer mutual exclusion lock.
+// NOTE: Due to https://github.com/golang/go/issues/17973, this implementation
+// has the behavior of a normal Mutex.
 type RWMutex struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	wLocked int32 // updated atomically
 	rLocked int32 // updated atomically
 }
@@ -84,25 +86,28 @@ func (rw *RWMutex) Unlock() {
 	rw.mu.Unlock()
 }
 
-// RLock locks m for reading.
+// RLock locks rw for reading. It is identical to Lock in the current
+// implementation.
 func (rw *RWMutex) RLock() {
-	rw.mu.RLock()
+	rw.mu.Lock()
 	atomic.AddInt32(&rw.rLocked, 1)
 }
 
 // TryRLock tries to lock rw for reading and reports whether it succeeded.
+// It is identical to TryLock in the current implementation.
 func (rw *RWMutex) TryRLock() bool {
-	if !rw.mu.TryRLock() {
+	if !rw.mu.TryLock() {
 		return false
 	}
 	atomic.AddInt32(&rw.rLocked, 1)
 	return true
 }
 
-// RUnlock undoes a single RLock call.
+// RUnlock undoes a single RLock call. It is identical to Lock in the current
+// implementation.
 func (rw *RWMutex) RUnlock() {
 	atomic.AddInt32(&rw.rLocked, -1)
-	rw.mu.RUnlock()
+	rw.mu.Unlock()
 }
 
 // RLocker returns a Locker interface that implements
