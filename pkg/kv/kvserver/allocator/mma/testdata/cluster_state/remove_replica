@@ -33,7 +33,7 @@ make-pending-changes range-id=1
   remove-replica: remove-store-id=2
 ----
 pending(1)
-change-id=1 store-id=2 range-id=1 load-delta=[-20,-80,-80] start=0s
+change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[-20,-80,-80] start=0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -60,7 +60,7 @@ store-id=1
 get-pending-changes
 ----
 pending(1)
-change-id=1 store-id=2 range-id=1 load-delta=[-20,-80,-80] start=0s enacted=0s
+change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[-20,-80,-80] start=0s enacted=0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
