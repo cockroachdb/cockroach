@@ -200,6 +200,9 @@ type AuthorizationAccessor interface {
 	// of, has ownership privilege of the desc.
 	HasOwnership(ctx context.Context, privilegeObject privilege.Object) (bool, error)
 
+	// UserHasOwnership is like HasOwnership but allows you to specify the owner.
+	UserHasOwnership(ctx context.Context, privilegeObject privilege.Object, user username.SQLUsername) (bool, error)
+
 	// CheckPrivilegeForUser verifies that `user` has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
 		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,

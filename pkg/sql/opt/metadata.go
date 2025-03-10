@@ -335,7 +335,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta
-	md.rlsMeta.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	md.rlsMeta.PoliciesApplied = make(map[TableID]PoliciesApplied)
 	for id, policies := range from.rlsMeta.PoliciesApplied {
 		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
 	}
@@ -1185,9 +1185,11 @@ func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
 
 // SetRLSEnabled will update the metadata to indicate we came across a table
 // that had row-level security enabled.
-func (md *Metadata) SetRLSEnabled(user username.SQLUsername, isAdmin bool, tableID TableID) {
+func (md *Metadata) SetRLSEnabled(
+	user username.SQLUsername, isAdmin bool, tableID TableID, isTableOwnerAndNotForced bool,
+) {
 	md.rlsMeta.MaybeInit(user, isAdmin)
-	md.rlsMeta.AddTableUse(tableID)
+	md.rlsMeta.AddTableUse(tableID, isTableOwnerAndNotForced)
 }
 
 // ClearRLSEnabled will clear out the initialized state for the rls meta. This

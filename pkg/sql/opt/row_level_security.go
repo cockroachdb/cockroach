@@ -33,7 +33,7 @@ type RowLevelSecurityMeta struct {
 
 	// PoliciesApplied is the set of policies that were applied for each relation
 	// in the query.
-	PoliciesApplied map[TableID]PolicyIDSet
+	PoliciesApplied map[TableID]PoliciesApplied
 }
 
 func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole bool) {
@@ -42,7 +42,7 @@ func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole
 	}
 	r.User = user
 	r.HasAdminRole = hasAdminRole
-	r.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	r.PoliciesApplied = make(map[TableID]PoliciesApplied)
 	r.IsInitialized = true
 }
 
@@ -54,17 +54,39 @@ func (r *RowLevelSecurityMeta) Clear() {
 // AddTableUse indicates that an RLS-enabled table was encountered while
 // building the query plan. If any policies are in use, they will be added
 // via the AddPolicyUse call.
-func (r *RowLevelSecurityMeta) AddTableUse(tableID TableID) {
+func (r *RowLevelSecurityMeta) AddTableUse(tableID TableID, isTableOwnerAndNotForced bool) {
 	if _, found := r.PoliciesApplied[tableID]; !found {
-		r.PoliciesApplied[tableID] = PolicyIDSet{}
+		r.PoliciesApplied[tableID] = PoliciesApplied{
+			NoForceExempt: isTableOwnerAndNotForced,
+			Policies:      PolicyIDSet{},
+		}
 	}
 }
 
 // AddPoliciesUsed is used to indicate the given set of policyID of a table were
 // applied in the query.
 func (r *RowLevelSecurityMeta) AddPoliciesUsed(tableID TableID, policies PolicyIDSet) {
-	s := r.PoliciesApplied[tableID]
-	r.PoliciesApplied[tableID] = s.Union(policies)
+	a := r.PoliciesApplied[tableID]
+	s := r.PoliciesApplied[tableID].Policies
+	a.Policies = s.Union(policies)
+	r.PoliciesApplied[tableID] = a
+}
+
+// PoliciesApplied stores the set of policies that were applied to a table.
+type PoliciesApplied struct {
+	// NoForceExempt is true if the policies were exempt because they were the
+	// table owner and force RLS wasn't set.
+	NoForceExempt bool
+
+	// Policies is the list of policy IDs that were applied for the table.
+	Policies PolicyIDSet
+}
+
+func (p *PoliciesApplied) Copy() PoliciesApplied {
+	return PoliciesApplied{
+		NoForceExempt: p.NoForceExempt,
+		Policies:      p.Policies.Copy(),
+	}
 }
 
 // PolicyIDSet stores an unordered set of policy ids.

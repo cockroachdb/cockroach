@@ -460,11 +460,11 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 		// Helper to annotate a node for the given table ID.
 		annotateNodeForTable := func(tabID opt.TableID) {
 			// Pull out the policy information for the table the node was built for.
-			policies, found := rlsMeta.PoliciesApplied[tabID]
+			policiesApplied, found := rlsMeta.PoliciesApplied[tabID]
 			if found {
 				val := exec.RLSPoliciesApplied{
-					PoliciesSkippedForRole: rlsMeta.HasAdminRole,
-					Policies:               policies,
+					PoliciesSkippedForRole: rlsMeta.HasAdminRole || policiesApplied.NoForceExempt,
+					Policies:               policiesApplied.Policies,
 				}
 				ef.AnnotateNode(node, exec.PolicyInfoID, &val)
 			}
