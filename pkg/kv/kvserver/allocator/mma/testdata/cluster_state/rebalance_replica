@@ -31,10 +31,10 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=1 add-store-id=2
 ----
 pending(2)
-change-id=1 store-id=2 range-id=1 load-delta=[80,80,80] start=0s
+change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[80,80,80] start=0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -57,10 +57,10 @@ store-id=2
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 range-id=1 load-delta=[80,80,80] start=0s enacted=0s
+change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[80,80,80] start=0s enacted=0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s enacted=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s enacted=0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -71,7 +71,7 @@ store-load-msg
 get-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s enacted=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s enacted=0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 

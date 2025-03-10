@@ -74,7 +74,7 @@ func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 //   of cpu overload.
 
 // Called periodically, say every 10s.
-func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
+func (a *allocatorState) rebalanceStores() []PendingRangeChange {
 	now := timeutil.Now()
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
@@ -130,7 +130,7 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
 		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls))
 	})
-	var changes []*pendingReplicaChange
+	var changes []PendingRangeChange
 	var disj [1]constraintsConj
 	var storesToExclude storeIDPostingList
 	var storesToExcludeForRange storeIDPostingList
@@ -197,10 +197,21 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 				if !a.cs.canAddLoad(targetSS, rstate.load.Load, &means) {
 					continue
 				}
+				addTarget := roachpb.ReplicationTarget{
+					NodeID:  targetSS.NodeID,
+					StoreID: targetSS.StoreID,
+				}
+				removeTarget := roachpb.ReplicationTarget{
+					NodeID:  ss.NodeID,
+					StoreID: ss.StoreID,
+				}
 				leaseChanges := makeLeaseTransferChanges(
-					rangeID, rstate.replicas, rstate.load, targetStoreID, ss.StoreID)
+					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 				pendingChanges := a.cs.createPendingChanges(rangeID, leaseChanges[:]...)
-				changes = append(changes, pendingChanges[:]...)
+				changes = append(changes, PendingRangeChange{
+					rangeID:               rangeID,
+					pendingReplicaChanges: pendingChanges[:],
+				})
 				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 				if doneShedding {
 					break
@@ -303,10 +314,21 @@ func (a *allocatorState) rebalanceStores() []*pendingReplicaChange {
 			if !a.cs.canAddLoad(targetSS, addedLoad, cands.means) {
 				continue
 			}
+			addTarget := roachpb.ReplicationTarget{
+				NodeID:  targetSS.NodeID,
+				StoreID: targetSS.StoreID,
+			}
+			removeTarget := roachpb.ReplicationTarget{
+				NodeID:  ss.NodeID,
+				StoreID: ss.StoreID,
+			}
 			replicaChanges := makeRebalanceReplicaChanges(
-				rangeID, rstate.replicas, rstate.load, targetStoreID, ss.StoreID)
+				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
-			changes = append(changes, pendingChanges[:]...)
+			changes = append(changes, PendingRangeChange{
+				rangeID:               rangeID,
+				pendingReplicaChanges: pendingChanges[:],
+			})
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
