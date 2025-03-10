@@ -301,6 +301,27 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+
+			metricName := fmt.Sprintf("%s_elapsed", test)
+			totalElapsed := histogram.Elapsed
+
+			numNodes := int64(10)
+			tb := int64(1 << 40)
+			mb := int64(1 << 20)
+			dataSizeInMB := (2 * tb) / mb
+			backupDuration := int64(totalElapsed / 1000)
+			avgRatePerNode := roachtestutil.MetricPoint(float64(dataSizeInMB) / float64(numNodes*backupDuration))
+
+			return roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           metricName,
+					Value:          avgRatePerNode,
+					Unit:           "MB/s/node",
+					IsHigherBetter: false,
+				},
+			}, nil
+		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {
