@@ -46,6 +46,4 @@ func Elapsed(start, end time.Duration) time.Duration {
 // Supported returns true iff per-goroutine running time is available in this
 // build. We use a patched Go runtime for all platforms officially supported for
 // CRDB when built using Bazel.
-func Supported() bool {
-	return supported()
-}
+const Supported = supported

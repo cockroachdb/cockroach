@@ -304,7 +304,7 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 	} else {
 		s.Exec.ExecTime.Set(time)
 	}
-	if cpuTime > 0 && grunning.Supported() {
+	if cpuTime > 0 && grunning.Supported {
 		// Note that in rare cases, the measured CPU time can be less than zero
 		// grunning uses a non-monotonic clock. This should only happen rarely when
 		// the actual CPU time is very small, so it seems OK to not set the value in

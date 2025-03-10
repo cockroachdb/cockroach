@@ -3214,7 +3214,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	// balancing objective is permitted. If this is not updated, the cpu per
 	// second will be zero and other stores will likely begin rebalancing
 	// towards this store as it will appear underfull.
-	if !grunning.Supported() {
+	if !grunning.Supported {
 		totalStoreCPUTimePerSecond = -1
 	} else {
 		totalStoreCPUTimePerSecond = math.Max(totalStoreCPUTimePerSecond, 0)

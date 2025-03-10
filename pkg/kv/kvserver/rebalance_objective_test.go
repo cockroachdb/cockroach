@@ -80,7 +80,7 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 	// On ARM MacOS and other architectures, grunning isn't supported so
 	// changing the objective to CPU should never work. If this test is  run on
 	// one of these unsupported aarch, test this behavior only.
-	if !grunning.Supported() {
+	if !grunning.Supported {
 		st := cluster.MakeTestingClusterSettings()
 
 		gossipStoreDescProvider := testMakeProviderNotifier(allPositiveCPUMap)
@@ -172,7 +172,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 	// On ARM MacOS and other architectures, grunning isn't supported so
 	// changing the objective to CPU should never work. If this test is  run on
 	// one of these unsupported aarch, test this behavior only.
-	if !grunning.Supported() {
+	if !grunning.Supported {
 		st := cluster.MakeTestingClusterSettings()
 		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		providerNotifier := testMakeProviderNotifier(allPositiveCPUMap)
