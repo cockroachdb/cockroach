@@ -2916,7 +2916,7 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="encode"></a><code>encode(data: <a href="bytes.html">bytes</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Encodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="format"></a><code>format(<a href="string.html">string</a>, anyelement...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.</p>
+<tr><td><a name="format"></a><code>format(<a href="string.html">string</a>, any...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="from_ip"></a><code>from_ip(val: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the byte string representation of an IP to its character string representation.</p>
 </span></td><td>Immutable</td></tr>
