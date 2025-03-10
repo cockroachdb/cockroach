@@ -4054,28 +4054,50 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909'`)
-		defer closeFeed(t, foo)
-
-		var jobID int64
-		if _, ok := foo.(*sinklessFeed); !ok {
-			sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
-		}
-
-		assertionKey := `{"a":{"long":0}}`
-		assertionAfter := `"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}`
-
-		assertPayloadsEnriched(t, foo, []string{
-			fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}}`,
-				assertionKey, assertionAfter),
-		}, nil)
+	cases := []struct {
+		name               string
+		enrichedProperties []string
+		withSource         bool
+	}{
+		{name: "none", enrichedProperties: []string{""}},
+		{name: "with source", enrichedProperties: []string{"source"}, withSource: true},
+		// no change in output from the first two -- the schema is part of the avro format
+		{name: "with schema", enrichedProperties: []string{"schema"}},
+		{name: "with schema and source", enrichedProperties: []string{"schema", "source"}, withSource: true},
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+				enrichedPropsStr := ""
+				if len(tc.enrichedProperties) > 0 {
+					enrichedPropsStr = fmt.Sprintf(", enriched_properties='%s'", strings.Join(tc.enrichedProperties, ","))
+				}
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='localhost:90909' %s`, enrichedPropsStr))
+				defer closeFeed(t, foo)
+
+				assertionKey := `{"a":{"long":0}}`
+				assertionAfter := `"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}`
+
+				sourceAssertion := func(actualSource map[string]any) {
+					if tc.withSource {
+						require.NotNil(t, actualSource)
+					} else {
+						require.Nil(t, actualSource)
+					}
+				}
+				assertPayloadsEnriched(t, foo, []string{
+					fmt.Sprintf(`foo: %s->{%s, "op": {"string": "c"}}`,
+						assertionKey, assertionAfter),
+				}, sourceAssertion)
+			}
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
+		})
+	}
 }
 
 func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
