@@ -71,7 +71,7 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 		typedExpr := tableScope.resolveType(parsedExpr, types.AnyElement)
 		scalar := b.buildScalar(typedExpr, tableScope, nil, nil, nil)
 		// TODO(136742): Apply multiple RLS policies.
-		b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed)
+		b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, true /* applyFilterExpr */)
 		return scalar
 	}
 
@@ -187,7 +187,7 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 		sb.WriteString(expr)
 		sb.WriteString(")")
 		// TODO(136742): Add support for multiple policies.
-		r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed)
+		r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed, false /* applyFilterExpr */)
 		break
 	}
 
