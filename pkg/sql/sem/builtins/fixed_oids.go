@@ -1497,7 +1497,7 @@ var builtinOidsArray = []string{
 	1526: `inet_client_port() -> int`,
 	1527: `inet_server_addr() -> inet`,
 	1528: `inet_server_port() -> int`,
-	1529: `pg_column_size(anyelement...) -> int`,
+	1529: `pg_column_size(any...) -> int`,
 	1530: `information_schema._pg_truetypid(pg_attribute: tuple, pg_type: tuple) -> oid`,
 	1531: `information_schema._pg_truetypmod(pg_attribute: tuple, pg_type: tuple) -> int4`,
 	1532: `information_schema._pg_char_max_length(typid: oid, typmod: int4) -> int`,
