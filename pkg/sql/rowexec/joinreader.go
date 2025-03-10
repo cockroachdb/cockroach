@@ -608,6 +608,9 @@ func newJoinReader(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			jr.contentionEventsListener.Init(flowTxn.ID())
+		}
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -1259,6 +1262,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:        optional.MakeTimeValue(jr.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:       optional.MakeTimeValue(jr.contentionEventsListener.GetLatchWaitTime()),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 			UsedStreamer:        jr.usesStreamer,
