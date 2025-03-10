@@ -3900,6 +3900,12 @@ func TestChangefeedEnriched(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	withField := func(fieldName string, schema map[string]any) map[string]any {
+		s := maps.Clone(schema)
+		s["field"] = fieldName
+		return s
+	}
+
 	key := map[string]any{"a": 0}
 	keySchema := map[string]any{
 		"name": "foo.key",
@@ -3939,7 +3945,8 @@ func TestChangefeedEnriched(t *testing.T) {
 	var sourceMap map[string]any
 	require.NoError(t, gojson.Unmarshal([]byte(source.String()), &sourceMap))
 
-	sourceSchema := esp.KafkaConnectJSONSchema().AsJSON()
+	sourceSchema, err := esp.KafkaConnectJSONSchema().AsJSON()
+	require.NoError(t, err)
 	var sourceSchemaMap map[string]any
 	require.NoError(t, gojson.Unmarshal([]byte(sourceSchema.String()), &sourceSchemaMap))
 	sourceSchemaMap["field"] = "source"
@@ -3953,6 +3960,7 @@ func TestChangefeedEnriched(t *testing.T) {
 		messageWithoutSource map[string]any
 		withSource           bool
 		expectedKey          map[string]any
+		keyInValue           bool
 	}{
 		{
 			name:                 "with nothing",
@@ -4010,24 +4018,118 @@ func TestChangefeedEnriched(t *testing.T) {
 				"schema":  keySchema,
 			},
 		},
+		{
+			name:       "with key_in_value",
+			keyInValue: true,
+			messageWithoutSource: map[string]any{
+				"after": afterVal,
+				"op":    "c",
+				"key":   key,
+			},
+			expectedKey: key,
+		},
+		{
+			name:               "with source and key_in_value",
+			enrichedProperties: []string{"source"},
+			keyInValue:         true,
+			messageWithoutSource: map[string]any{
+				"after": afterVal,
+				"op":    "c",
+				"key":   key,
+			},
+			withSource:  true,
+			expectedKey: key,
+		},
+		{
+			name:               "with schema and key_in_value",
+			enrichedProperties: []string{"schema"},
+			keyInValue:         true,
+			messageWithoutSource: map[string]any{
+				"payload": map[string]any{
+					"after": afterVal,
+					"op":    "c",
+					// NOTE: this key does not have its schema in it here, because that would be redundant/strange.
+					"key": key,
+				},
+				"schema": map[string]any{
+					"name":     "cockroachdb.envelope",
+					"optional": false,
+					"fields": []map[string]any{
+						afterSchema,
+						withField("key", keySchema),
+						tsNsSchema,
+						opSchema,
+					},
+					"type": "struct",
+				},
+			},
+			withSource: false,
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
+		{
+			name:               "with schema, source, and key_in_value",
+			enrichedProperties: []string{"schema", "source"},
+			keyInValue:         true,
+			messageWithoutSource: map[string]any{
+				"payload": map[string]any{
+					"after": afterVal,
+					"op":    "c",
+					"key":   key,
+				},
+				"schema": map[string]any{
+					"name":     "cockroachdb.envelope",
+					"optional": false,
+					"fields": []map[string]any{
+						afterSchema,
+						sourceSchemaMap,
+						withField("key", keySchema),
+						tsNsSchema,
+						opSchema,
+					},
+					"type": "struct",
+				},
+			},
+			withSource: true,
+			expectedKey: map[string]any{
+				"payload": key,
+				"schema":  keySchema,
+			},
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				_, isWebhook := f.(*webhookFeedFactory)
+
+				// The webhook sink forces key_in_value, and its implementation
+				// in the cdctest framework strips out the key in the value.
+				// This makes it impossible to test these features on that sink.
+				// TODO(#138749): fix this situation
+				if isWebhook && (tc.keyInValue || slices.Contains(tc.enrichedProperties, "schema")) {
+					return
+				}
+
 				sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 
-				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='%s'`,
-					strings.Join(tc.enrichedProperties, ",")))
+				create := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='%s'`,
+					strings.Join(tc.enrichedProperties, ","))
+				if tc.keyInValue {
+					create += ", key_in_value"
+				}
+				foo := feed(t, f, create)
 				defer closeFeed(t, foo)
 				// TODO(#139660): the webhook sink forces topic_in_value, but
 				// this is not supported by the enriched envelope type. We should adapt
 				// the test framework to account for this.
 				topic := "foo"
-				if _, ok := foo.(*webhookFeed); ok {
+				if isWebhook {
 					topic = ""
 				}
 

@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/geo",
         "//pkg/sql/types",
         "//pkg/util/json",
         "@com_github_cockroachdb_errors//:errors",
@@ -20,7 +21,6 @@ go_test(
     embed = [":kcjsonschema"],
     deps = [
         "//pkg/ccl/changefeedccl/cdcevent",
-        "//pkg/geo",
         "//pkg/keys",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
@@ -43,7 +43,6 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_pkg_errors//:errors",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
