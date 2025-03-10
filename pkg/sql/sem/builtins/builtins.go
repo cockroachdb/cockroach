@@ -436,7 +436,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.AnyElement},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
@@ -7250,7 +7250,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7273,7 +7273,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -9276,7 +9276,7 @@ func makeSubStringImpls() builtinDefinition {
 
 var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
-		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.AnyElement},
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if args[0] == tree.DNull {

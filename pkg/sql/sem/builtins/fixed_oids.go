@@ -21,7 +21,7 @@ import (
 // To add a builtin, add signatures to the bottom of the slice.
 // Values in this slice are function name concatenated to overload.Signature(true).
 var builtinOidsArray = []string{
-	// There is no 0 function oid.
+	// There is no 1 function oid.
 	0:    `INVALID`,
 	1:    `array_agg(arg1: bool) -> bool[]`,
 	2:    `array_agg(arg1: box2d) -> box2d[]`,
@@ -333,7 +333,7 @@ var builtinOidsArray = []string{
 	308:  `percentile_cont_impl(arg1: float, arg2: interval) -> interval`,
 	309:  `percentile_cont_impl(arg1: float[], arg2: float) -> float[]`,
 	310:  `percentile_cont_impl(arg1: float[], arg2: interval) -> interval[]`,
-	311:  `format(string, anyelement...) -> string`,
+	311:  `format(string, any...) -> string`,
 	312:  `array_to_json(array: anyelement[]) -> jsonb`,
 	313:  `array_to_json(array: anyelement[], pretty_bool: bool) -> jsonb`,
 	314:  `aclexplode(aclitems: string[]) -> tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}`,
@@ -821,7 +821,7 @@ var builtinOidsArray = []string{
 	845:  `substring(input: varbit, start_pos: int, length: int) -> varbit`,
 	846:  `substring(input: bytes, start_pos: int) -> bytes`,
 	847:  `substring(input: bytes, start_pos: int, length: int) -> bytes`,
-	848:  `concat(anyelement...) -> string`,
+	848:  `concat(any...) -> string`,
 	849:  `concat_ws(string...) -> string`,
 	850:  `convert_from(str: bytes, enc: string) -> string`,
 	851:  `convert_to(str: string, enc: string) -> bytes`,
@@ -1326,8 +1326,8 @@ var builtinOidsArray = []string{
 	1355: `crdb_internal.update_tenant_resource_limits(tenant_id: int, available_tokens: float, refill_rate: float, max_burst_tokens: float, as_of: timestamp, as_of_consumed_tokens: float) -> int`,
 	1356: `crdb_internal.compact_engine_span(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> bool`,
 	1357: `crdb_internal.increment_feature_counter(feature: string) -> bool`,
-	1358: `num_nulls(anyelement...) -> int`,
-	1359: `num_nonnulls(anyelement...) -> int`,
+	1358: `num_nulls(any...) -> int`,
+	1359: `num_nonnulls(any...) -> int`,
 	1360: `gateway_region() -> string`,
 	1361: `default_to_database_primary_region(val: string) -> string`,
 	1362: `rehome_row() -> string`,
@@ -2645,6 +2645,10 @@ var builtinOidsArray = []string{
 	2682: `char(jsonpath: jsonpath) -> "char"`,
 	2683: `substring_index(input: string, delim: string, count: int) -> string`,
 	2684: `crdb_internal.sql_liveness_is_alive(session_id: bytes, is_sync: bool) -> bool`,
+	2685: `anysend(any: any) -> bytes`,
+	2686: `anyrecv(input: anyelement) -> any`,
+	2687: `anyout(any: any) -> bytes`,
+	2688: `anyin(input: anyelement) -> any`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
