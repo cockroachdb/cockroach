@@ -230,69 +230,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}
 				}
-				switch batchReader.KeyKind() {
-				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
-					if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
-						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
-					}
-				case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
-					if !header.SharedReplicate {
-						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-					}
-					if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
-						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
-					}
-				case pebble.InternalKeyKindRangeDelete:
-					if !header.SharedReplicate {
-						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-					}
-					start := batchReader.Key()
-					end, err := batchReader.EndKey()
-					if err != nil {
-						return noSnap, err
-					}
-					if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
-						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
-					}
 
-				case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
-					if !header.SharedReplicate {
-						return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
-					}
-					start := batchReader.Key()
-					end, err := batchReader.EndKey()
-					if err != nil {
-						return noSnap, err
-					}
-					rangeKeys, err := batchReader.RawRangeKeys()
-					if err != nil {
-						return noSnap, err
-					}
-					for _, rkv := range rangeKeys {
-						err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
-						if err != nil {
-							return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
-						}
-					}
-				case pebble.InternalKeyKindRangeKeySet:
-					start := ek
-					end, err := batchReader.EngineEndKey()
-					if err != nil {
-						return noSnap, err
-					}
-					rangeKeys, err := batchReader.EngineRangeKeys()
-					if err != nil {
-						return noSnap, err
-					}
-					for _, rkv := range rangeKeys {
-						err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
-						if err != nil {
-							return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
-						}
-					}
-
-				default:
-					return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+				if err := kvSS.readOneToBatch(ctx, ek, header.SharedReplicate, batchReader, msstw); err != nil {
+					return noSnap, err
 				}
 			}
 			if batchReader.Error() != nil {
@@ -388,6 +328,79 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			return inSnap, nil
 		}
 	}
+}
+
+func (kvSS *kvBatchSnapshotStrategy) readOneToBatch(
+	ctx context.Context,
+	ek storage.EngineKey,
+	shared bool, // may receive shared SSTs
+	batchReader *storage.BatchReader,
+	msstw *multiSSTWriter,
+) error {
+	switch batchReader.KeyKind() {
+	case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
+		if err := msstw.Put(ctx, ek, batchReader.Value()); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		if err := msstw.PutInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+	case pebble.InternalKeyKindRangeDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		if err := msstw.PutInternalRangeDelete(ctx, start, end); err != nil {
+			return errors.Wrapf(err, "writing sst for raft snapshot")
+		}
+
+	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
+		if !shared {
+			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+		}
+		start := batchReader.Key()
+		end, err := batchReader.EndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.RawRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.PutInternalRangeKey(ctx, start, end, rkv)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	case pebble.InternalKeyKindRangeKeySet:
+		start := ek
+		end, err := batchReader.EngineEndKey()
+		if err != nil {
+			return err
+		}
+		rangeKeys, err := batchReader.EngineRangeKeys()
+		if err != nil {
+			return err
+		}
+		for _, rkv := range rangeKeys {
+			err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
+			if err != nil {
+				return errors.Wrapf(err, "writing sst for raft snapshot")
+			}
+		}
+	default:
+		return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
+	}
+	return nil
 }
 
 // Send implements the snapshotStrategy interface.
