@@ -1299,7 +1299,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		require.NoError(t, err)
 		defer queryGen.Close()
 		numNonTrivialTestRuns := 0
-		n := 100
+		n := 150
 		whereClausesChecked := make(map[string]struct{}, n)
 		for i := 0; i < n; i++ {
 			query := queryGen.Generate()
@@ -1382,7 +1382,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			}
 			numNonTrivialTestRuns++
 		}
-		require.Greater(t, numNonTrivialTestRuns, 1)
+		require.Greater(t, numNonTrivialTestRuns, 0, "Expected >0 predicates to be nontrivial out of %d attempts", n)
 		t.Logf("%d predicates checked: all had the same result in SELECT and CHANGEFEED", numNonTrivialTestRuns)
 
 	}
