@@ -1249,7 +1249,7 @@ var builtinOidsArray = []string{
 	1273: `crdb_internal.json_to_pb(pbname: string, json: jsonb) -> bytes`,
 	1274: `crdb_internal.read_file(uri: string) -> bytes`,
 	1275: `crdb_internal.write_file(data: bytes, uri: string) -> int`,
-	1276: `crdb_internal.datums_to_bytes(anyelement...) -> bytes`,
+	1276: `crdb_internal.datums_to_bytes(any...) -> bytes`,
 	1277: `crdb_internal.merge_statement_stats(input: jsonb[]) -> jsonb`,
 	1278: `crdb_internal.merge_transaction_stats(input: jsonb[]) -> jsonb`,
 	1279: `crdb_internal.merge_stats_metadata(input: jsonb[]) -> jsonb`,
