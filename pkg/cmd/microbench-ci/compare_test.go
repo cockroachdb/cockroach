@@ -107,13 +107,11 @@ func TestRunAndCompare(t *testing.T) {
 				require.NoError(t, err)
 				results, err := suite.Benchmarks.compareBenchmarks()
 				require.NoError(t, err)
-				err = results.writeGitHubSummary(config.GitHubSummaryPath)
+				summary, err := results.githubSummary(config.GitHubSummaryPath)
 				require.NoError(t, err)
 				err = results.writeJSONSummary(config.SummaryPath)
 				require.NoError(t, err)
-				data, err := os.ReadFile(config.GitHubSummaryPath)
-				require.NoError(t, err)
-				return string(data)
+				return summary
 			case "json":
 				data, err := os.ReadFile(config.SummaryPath)
 				require.NoError(t, err)
