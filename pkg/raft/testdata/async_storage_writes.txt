@@ -57,14 +57,14 @@ stabilize
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
   Messages:
   2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Responses:[
-    2->1 MsgVoteResp Term:1 Log:0/0
+    2->1 MsgVoteResp Term:1 Log:1/0
   ]
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
   Messages:
   3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Responses:[
-    3->1 MsgVoteResp Term:1 Log:0/0
+    3->1 MsgVoteResp Term:1 Log:1/0
   ]
 > 1 receiving messages
   1->1 MsgVoteResp Term:1 Log:0/0
@@ -74,18 +74,19 @@ stabilize
   Processing:
   2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1
   Responses:
-  2->1 MsgVoteResp Term:1 Log:0/0
+  2->1 MsgVoteResp Term:1 Log:1/0
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1
   Responses:
-  3->1 MsgVoteResp Term:1 Log:0/0
+  3->1 MsgVoteResp Term:1 Log:1/0
 > 1 receiving messages
-  2->1 MsgVoteResp Term:1 Log:0/0
+  2->1 MsgVoteResp Term:1 Log:1/0
   INFO 1 received MsgVoteResp from 2 at term 1
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
-  3->1 MsgVoteResp Term:1 Log:0/0
+  DEBUG ignore sending snapshot to 2 since it is not recently active
+  3->1 MsgVoteResp Term:1 Log:1/0
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader
@@ -95,7 +96,6 @@ stabilize
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
     1->1 MsgAppResp Term:1 Log:0/11 Commit:10
@@ -104,7 +104,6 @@ stabilize
   ]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
@@ -118,13 +117,9 @@ stabilize
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
-  Entries:
-  1/11 EntryNormal ""
   Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
+  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Responses:[
     2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-    2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
   ]
 > 3 handling Ready
   Ready MustSync=true:
@@ -143,11 +138,9 @@ stabilize
   AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Lead:1 LeadEpoch:1
   Responses:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""]
@@ -157,11 +150,10 @@ stabilize
   AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  DEBUG 1 [firstindex: 11, commit: 10] sent snapshot[index: 10, term: 1] to 2 [StateProbe match=0 next=10 sentCommit=0 matchCommit=0]
+  DEBUG 1 paused sending replication messages to 2 [StateSnapshot match=0 next=11 sentCommit=10 matchCommit=0 paused pendingSnap=10]
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:10
-> 2 receiving messages
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
 > 3 receiving messages
   AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 handling Ready
@@ -170,19 +162,20 @@ stabilize
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/11 Commit:11
-  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+  1->2 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:10 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
   1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1
   1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""] Responses:[
     ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
   ]
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->2 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:10 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO 2 [commit: 10] ignored snapshot [index: 10, term: 1]
 > 3 receiving messages
-  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
 > 1 processing append thread
   Processing:
@@ -194,17 +187,10 @@ stabilize
   Responses:
   ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/11 EntryNormal ""
+  Ready MustSync=false:
   Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-    2->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  ]
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""] Responses:[
-    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:0 Log:0/0 Responses:[
+    2->1 MsgAppResp Term:1 Log:0/10 Commit:10
   ]
 > 3 handling Ready
   Ready MustSync=true:
@@ -213,7 +199,7 @@ stabilize
   1/11 EntryNormal ""
   Messages:
   3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+    3->1 MsgAppResp Term:1 Log:0/11 Commit:10
     3->1 MsgAppResp Term:1 Log:0/11 Commit:11
   ]
   3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""] Responses:[
@@ -223,35 +209,68 @@ stabilize
   ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1
+  2->AppendThread MsgStorageAppend Term:0 Log:0/0
   Responses:
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  2->1 MsgAppResp Term:1 Log:0/10 Commit:10
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1
   Responses:
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-> 2 processing apply thread
-  Processing:
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
-  Responses:
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 3 processing apply thread
   Processing:
   3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
   Responses:
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  2->1 MsgAppResp Term:1 Log:0/10 Commit:10
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=10 next=11 sentCommit=10 matchCommit=10 paused pendingSnap=10]
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-> 2 receiving messages
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 > 3 receiving messages
   ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->2 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
+    2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
+  ]
+> 2 processing append thread
+  Processing:
+  2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""]
+  Responses:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 2 receiving messages
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
+> 2 handling Ready
+  Ready MustSync=false:
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""] Responses:[
+    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
+  ]
+> 2 processing apply thread
+  Processing:
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
+  Responses:
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
+> 2 receiving messages
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[1/11 EntryNormal ""]
 
 propose 1 prop_1
 ----

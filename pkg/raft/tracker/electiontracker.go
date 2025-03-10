@@ -16,21 +16,24 @@ type ElectionTracker struct {
 	config *quorum.Config
 
 	votes map[pb.PeerID]bool
+	hints map[pb.PeerID]pb.Entry
 }
 
 func MakeElectionTracker(config *quorum.Config) ElectionTracker {
 	return ElectionTracker{
 		config: config,
 		votes:  map[pb.PeerID]bool{},
+		hints:  map[pb.PeerID]pb.Entry{},
 	}
 }
 
 // RecordVote records that the node with the given id voted for this Raft
 // instance if v == true (and declined it otherwise).
-func (e *ElectionTracker) RecordVote(id pb.PeerID, vote bool) {
+func (e *ElectionTracker) RecordVote(id pb.PeerID, vote bool, hintEntry pb.Entry) {
 	_, ok := e.votes[id]
 	if !ok {
 		e.votes[id] = vote
+		e.hints[id] = hintEntry
 	}
 }
 
@@ -55,9 +58,20 @@ func (e *ElectionTracker) TallyVotes() (granted int, rejected int, _ quorum.Vote
 	return granted, rejected, result
 }
 
+// GetHintEntry returns the hint entry for the given peer id.
+// It returns false if the peer id is not found.
+func (e *ElectionTracker) GetHintEntry(id pb.PeerID) (pb.Entry, bool) {
+	hint, ok := e.hints[id]
+	if !ok {
+		return pb.Entry{}, false
+	}
+	return hint, true
+}
+
 // ResetVotes prepares for a new round of vote counting via recordVote.
 func (e *ElectionTracker) ResetVotes() {
 	clear(e.votes)
+	clear(e.hints)
 }
 
 // TestingGetVotes exports the votes map for testing.
