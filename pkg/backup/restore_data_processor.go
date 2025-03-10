@@ -320,7 +320,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	// getIter returns a multiplexed iterator covering the currently accumulated
 	// files over the channel.
-	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, completeUpTo hlc.Timestamp) (mergedSST, error) {
+	getIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage, completeUpTo hlc.Timestamp) mergedSST {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
@@ -342,7 +342,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 
 		dirs = make([]cloud.ExternalStorage, 0)
-		return mSST, nil
+		return mSST
 	}
 
 	log.VEventf(ctx, 1, "ingesting %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
@@ -377,12 +377,12 @@ func (rd *restoreDataProcessor) openSSTs(
 		return mergedSST{}, nil, err
 	}
 
-	mSST, err := getIter(iter, dirs, rd.spec.RestoreTime)
+	mSST := getIter(iter, dirs, rd.spec.RestoreTime)
 	res := &resumeEntry{
 		idx:  idx,
 		done: true,
 	}
-	return mSST, res, err
+	return mSST, res, nil
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(
