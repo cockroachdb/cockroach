@@ -74,6 +74,12 @@ func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr track
 	})
 }
 
+// getReplicaProgress returns the progress for the replica with the given ID.
+// It returns nil if the replica is not being tracked.
+func getReplicaProgress(r *raft, id pb.PeerID) *tracker.Progress {
+	return r.trk.Progress(id)
+}
+
 func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
 	m := make(map[pb.PeerID]tracker.Progress, r.trk.Len())
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
