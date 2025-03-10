@@ -142,87 +142,90 @@ func WriteInitialClusterData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
-		batch := eng.NewBatch()
-		//nolint:deferloop TODO(#137605)
-		defer batch.Close()
 
-		now := hlc.Timestamp{
-			WallTime: nowNanos,
-			Logical:  0,
-		}
+		err := func() error {
+			batch := eng.NewBatch()
+			defer batch.Close()
 
-		// NOTE: We don't do stats computations in any of the puts below. Instead,
-		// we write everything and then compute the stats over the whole range.
-
-		// If requested, write an MVCC range tombstone at the bottom of the
-		// keyspace, for performance and correctness testing.
-		if knobs.GlobalMVCCRangeTombstone {
-			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
-				return err
+			now := hlc.Timestamp{
+				WallTime: nowNanos,
+				Logical:  0,
 			}
-		}
 
-		// Range descriptor.
-		if err := storage.MVCCPutProto(
-			ctx, batch, keys.RangeDescriptorKey(desc.StartKey),
-			now, desc, storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
-		}
+			// NOTE: We don't do stats computations in any of the puts below. Instead,
+			// we write everything and then compute the stats over the whole range.
 
-		// Replica GC timestamp.
-		if err := storage.MVCCPutProto(
-			ctx, batch, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
-			hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
-		}
-		// Range addressing for meta2.
-		meta2Key := keys.RangeMetaKey(endKey)
-		if err := storage.MVCCPutProto(
-			ctx, batch, meta2Key.AsRawKey(),
-			now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
-		); err != nil {
-			return err
-		}
+			// If requested, write an MVCC range tombstone at the bottom of the
+			// keyspace, for performance and correctness testing.
+			if knobs.GlobalMVCCRangeTombstone {
+				if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
+					return err
+				}
+			}
 
-		// The first range gets some special treatment.
-		if startKey.Equal(roachpb.RKeyMin) {
-			// Range addressing for meta1.
-			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			// Range descriptor.
 			if err := storage.MVCCPutProto(
-				ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
+				ctx, batch, keys.RangeDescriptorKey(desc.StartKey),
+				now, desc, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
-		}
 
-		// Now add all passed-in default entries.
-		for _, kv := range rangeInitialValues {
-			// Initialize the checksums.
-			kv.Value.InitChecksum(kv.Key)
-			if _, err := storage.MVCCPut(
-				ctx, batch, kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
+			// Replica GC timestamp.
+			if err := storage.MVCCPutProto(
+				ctx, batch, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
+				hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
-		}
+			// Range addressing for meta2.
+			meta2Key := keys.RangeMetaKey(endKey)
+			if err := storage.MVCCPutProto(
+				ctx, batch, meta2Key.AsRawKey(),
+				now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
+			); err != nil {
+				return err
+			}
 
-		if err := stateloader.WriteInitialRangeState(
-			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
-			return err
-		}
-		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
+			// The first range gets some special treatment.
+			if startKey.Equal(roachpb.RKeyMin) {
+				// Range addressing for meta1.
+				meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+				if err := storage.MVCCPutProto(
+					ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
+				); err != nil {
+					return err
+				}
+			}
+
+			// Now add all passed-in default entries.
+			for _, kv := range rangeInitialValues {
+				// Initialize the checksums.
+				kv.Value.InitChecksum(kv.Key)
+				if _, err := storage.MVCCPut(
+					ctx, batch, kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
+				); err != nil {
+					return err
+				}
+			}
+
+			if err := stateloader.WriteInitialRangeState(
+				ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
+				return err
+			}
+			computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
+			if err != nil {
+				return err
+			}
+
+			sl := stateloader.Make(rangeID)
+			if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
+				return err
+			}
+
+			return batch.Commit(true /* sync */)
+		}()
 		if err != nil {
-			return err
-		}
-
-		sl := stateloader.Make(rangeID)
-		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
-			return err
-		}
-
-		if err := batch.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
