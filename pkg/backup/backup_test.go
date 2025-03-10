@@ -912,7 +912,7 @@ func backupAndRestore(
 
 		found := false
 		stmt := `
-SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
+SELECT payload FROM "".crdb_internal.system_jobs WHERE job_type = 'BACKUP' ORDER BY created DESC LIMIT 10
 `
 		rows := sqlDB.Query(t, stmt)
 		for rows.Next() {
