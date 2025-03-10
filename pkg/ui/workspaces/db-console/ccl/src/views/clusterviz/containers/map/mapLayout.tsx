@@ -3,7 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import * as d3 from "d3";
+import { geoEquirectangular, geoMercator, GeoProjection } from "d3-geo";
+import { select, Selection } from "d3-selection";
+import { transition, Transition } from "d3-transition";
+import { zoom, ZoomBehavior, ZoomTransform } from "d3-zoom";
 import isEmpty from "lodash/isEmpty";
 import isEqual from "lodash/isEqual";
 import map from "lodash/map";
@@ -37,12 +40,12 @@ interface MapLayoutState {
 
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   gEl: React.RefObject<SVGGElement> = React.createRef();
-  zoom: d3.behavior.Zoom<any>;
+  zoomBehavior: ZoomBehavior<SVGGElement, unknown>;
 
   constructor(props: MapLayoutProps) {
     super(props);
 
-    const projection = d3.geo.equirectangular();
+    const projection = geoEquirectangular();
     const topLeft = projection([-180, 140]);
     const botRight = projection([180, -120]);
     const bounds = new Box(
@@ -59,7 +62,9 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     };
 
     // Create a new zoom behavior and apply it to the svg element.
-    this.zoom = d3.behavior.zoom().on("zoom", this.onZoom);
+    this.zoomBehavior = zoom<SVGGElement, unknown>()
+      .scaleExtent([zoomTransform.minScale(), zoomTransform.minScale() * 10])
+      .on("zoom", this.onZoom);
 
     // Set initial zoom state.
     this.updateZoom(zoomTransform);
@@ -74,23 +79,24 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   // component will actually be re-rendered.
   updateZoom(zt: ZoomTransformer, animate = false) {
     const minScale = zt.minScale();
-
-    this.zoom.scaleExtent([minScale, minScale * 10]).size(zt.viewportSize());
+    this.zoomBehavior.scaleExtent([minScale, minScale * 10]);
 
     if (animate) {
       // Call zoom.event on the current zoom state, then transition to the
       // target zoom state. This is needed because free pan-and-zoom does not
       // update the internal animation state used by zoom.event, and will cause
       // animations after the first to have the wrong starting position.
-      d3.select(this.gEl.current)
-        .call(this.zoom.event)
+      const selection = select(this.gEl.current);
+      selection
+        .call(this.zoomBehavior.transform as any, new ZoomTransform(zt.scale(), zt.translate()[0], zt.translate()[1]))
         .transition()
         .duration(750)
-        .call(this.zoom.scale(zt.scale()).translate(zt.translate()).event);
+        .call(this.zoomBehavior.transform as any, new ZoomTransform(zt.scale(), zt.translate()[0], zt.translate()[1]));
     } else {
       // Call zoom.event on the element itself, rather than a transition.
-      d3.select(this.gEl.current).call(
-        this.zoom.scale(zt.scale()).translate(zt.translate()).event,
+      select(this.gEl.current).call(
+        this.zoomBehavior.transform as any,
+        new ZoomTransform(zt.scale(), zt.translate()[0], zt.translate()[1])
       );
     }
   }
@@ -98,15 +104,18 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   // onZoom is called by d3 whenever the zoom needs to be updated. We apply
   // the translations from d3 to our react-land zoomTransform state, causing
   // the component to re-render with the new zoom.
-  onZoom = () => {
+  onZoom = (event: any) => {
     const zoomTransform = this.state.zoomTransform.withScaleAndTranslate(
-      this.zoom.scale(),
-      this.zoom.translate(),
+      event.transform.k,
+      [event.transform.x, event.transform.y],
     );
 
     // In case the transform was adjusted, apply the scale and translation back
     // to the d3 zoom behavior.
-    this.zoom.scale(zoomTransform.scale()).translate(zoomTransform.translate());
+    this.zoomBehavior.transform(
+      select(this.gEl.current),
+      new ZoomTransform(zoomTransform.scale(), zoomTransform.translate()[0], zoomTransform.translate()[1])
+    );
 
     this.setState({ zoomTransform });
   };
@@ -129,7 +138,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     }
 
     // Compute a new zoom based on the new set of localities.
-    const projection = d3.geo.mercator();
+    const projection = geoMercator();
     const boxes = locations.map(location => {
       const center = projection([location.longitude, location.latitude]);
 
@@ -147,7 +156,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   }
 
   componentDidMount() {
-    d3.select(this.gEl.current).call(this.zoom);
+    select(this.gEl.current).call(this.zoomBehavior);
     this.rezoomToLocalities(this.state.zoomTransform);
   }
 
@@ -163,14 +172,14 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     this.rezoomToLocalities(zoomTransform);
   }
 
-  renderChildLocalities(projection: d3.geo.Projection) {
+  renderChildLocalities(projection: GeoProjection) {
     const { localityTree, locationTree } = this.props;
     return map(getChildLocalities(localityTree), locality => {
       const location = findOrCalculateLocation(locationTree, locality);
       const center = projection([location.longitude, location.latitude]);
 
       return (
-        <g transform={`translate(${center})`}>
+        <g key={`${locality.tiers[0].key}-${locality.tiers[0].value}`} transform={`translate(${center})`}>
           <LocalityView
             localityTree={locality}
             livenessStatuses={this.props.livenessStatuses}
@@ -187,7 +196,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     // top of the default scale and translation.
     const scale = this.state.zoomTransform.scale();
     const translate = this.state.zoomTransform.translate();
-    const projection = d3.geo.mercator();
+    const projection = geoMercator();
     projection.scale(projection.scale() * scale);
     projection.translate(
       vector.add(vector.mult(projection.translate(), scale), translate),

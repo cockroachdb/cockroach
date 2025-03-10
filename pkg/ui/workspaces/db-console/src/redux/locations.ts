@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import d3 from "d3";
+import { rollup } from "d3-array";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
@@ -27,11 +27,12 @@ export function selectLocations(state: LocationState) {
   return state.cachedData.locations.data.locations;
 }
 
-const nestLocations = d3
-  .nest()
-  .key((loc: ILocation) => loc.locality_key)
-  .key((loc: ILocation) => loc.locality_value)
-  .rollup(locations => locations[0]).map; // cannot collide since ^^ is primary key
+const nestLocations = (data: ILocation[]) => rollup(
+  data, 
+  (locations: ILocation[]) => locations[0],
+  (loc: ILocation) => loc.locality_key,
+  (loc: ILocation) => loc.locality_value
+); // cannot collide since ^^ is primary key
 
 export interface LocationTree {
   [key: string]: {
