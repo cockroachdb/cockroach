@@ -5257,7 +5257,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
+			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'service_mode',
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
@@ -5270,7 +5270,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'name', $2::STRING))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
 			Language:   tree.RoutineLangSQL,
@@ -5281,7 +5281,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1::STRING))`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Volatile,
@@ -7005,7 +7005,7 @@ SELECT
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1, 'counts', array[$2]))`,
+json_build_object('names', $1::STRING, 'counts', array[$2::INT]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, num) is an alias for
@@ -7021,7 +7021,7 @@ generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1, 'counts', $2))`,
+json_build_object('names', $1::STRING, 'counts', $2::INT[]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, counts) is an alias for
@@ -10054,7 +10054,7 @@ func jsonProps() tree.FunctionProperties {
 }
 
 var jsonBuildObjectImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
@@ -10132,7 +10132,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonBuildArrayImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))

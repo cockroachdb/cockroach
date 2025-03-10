@@ -1180,9 +1180,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="json_build_array"></a><code>json_build_array(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="json_build_object"></a><code>json_build_object(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
@@ -1218,9 +1218,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
