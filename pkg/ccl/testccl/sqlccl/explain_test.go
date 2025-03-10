@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -299,7 +300,8 @@ func TestExplainGist(t *testing.T) {
 				}
 			case <-time.After(time.Minute):
 				t.Log(successfulStmts.String())
-				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 1m: %s", stmt)
+				sl := allstacks.Get()
+				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 1m: %s\nstacks:\n\n%s", stmt, sl)
 			}
 		}
 	})
