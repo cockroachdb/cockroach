@@ -472,7 +472,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat_ws": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
+			Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
@@ -481,25 +481,24 @@ var regularBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
-				sep := string(tree.MustBeDString(args[0]))
-				var buf bytes.Buffer
-				prefix := ""
-				length := 0
+				sep := tree.MustBeDString(args[0])
+				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
+				prefix := false
 				for _, d := range args[1:] {
 					if d == tree.DNull {
 						continue
 					}
-					length += len(prefix) + len(string(tree.MustBeDString(d)))
-					if length > builtinconstants.MaxAllocatedStringSize {
+					if ctx.Buffer.Len()+int(d.Size())+int(sep.Size()) > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
-					// Note: we can't use the range index here because that
-					// would break when the 2nd argument is NULL.
-					buf.WriteString(prefix)
-					prefix = sep
-					buf.WriteString(string(tree.MustBeDString(d)))
+					if prefix {
+						sep.Format(ctx)
+					} else {
+						prefix = true
+					}
+					d.Format(ctx)
 				}
-				return tree.NewDString(buf.String()), nil
+				return tree.NewDString(ctx.CloseAndGetString()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
