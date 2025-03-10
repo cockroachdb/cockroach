@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -513,7 +514,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 
-	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	// TODO(kvoli,sumeerbhola): Find a better place for this, it is adqeuate here
+	// but passing into the Stores struct seems odd, given this is w.r.t a
+	// Server, or ignoring SQL, a KVServer Node.
+	kvRuntimeLoadMonitor := load.NewRuntimeLoadMonitor()
+	kvRuntimeLoadMonitor.Start(ctx, stopper)
+	stores := kvserver.NewStores(cfg.AmbientCtx, clock, kvRuntimeLoadMonitor)
 
 	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
