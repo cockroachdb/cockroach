@@ -38,7 +38,8 @@ func CanProvidePhysicalProps(
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.
-	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(mem, e, &required.Ordering)
+	canProvideOrdering := e.Op() == opt.SortOp ||
+		ordering.CanProvide(ctx, evalCtx, mem, e, &required.Ordering)
 	canProvideDistribution := e.Op() == opt.DistributeOp ||
 		distribution.CanProvide(ctx, evalCtx, mem, e, &required.Distribution)
 	return canProvideOrdering && canProvideDistribution

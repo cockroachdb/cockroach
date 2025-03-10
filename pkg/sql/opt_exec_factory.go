@@ -743,6 +743,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	locking opt.Locking,
 	limitHint int64,
 	remoteOnlyLookups bool,
+	reverseScans bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return constructVirtualTableLookupJoin(
@@ -785,6 +786,7 @@ func (ef *execFactory) ConstructLookupJoin(
 			reqOrdering:                ReqOrdering(reqOrdering),
 			limitHint:                  limitHint,
 			remoteOnlyLookups:          remoteOnlyLookups,
+			reverseScans:               reverseScans,
 		},
 	}
 	if onCond != tree.DBoolTrue {

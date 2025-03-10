@@ -26,6 +26,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
@@ -67,5 +68,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

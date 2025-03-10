@@ -1779,20 +1779,12 @@ func (n *Node) getLocalityComparison(
 	}
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
-		log.VInfof(ctx, 2,
+		log.VInfof(ctx, 5,
 			"failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionValid, zoneValid := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
-	if !regionValid {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
-	}
-	if !zoneValid {
-		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
-	}
-
-	return comparisonResult
+	return n.Descriptor.Locality.Compare(gatewayNodeDesc.Locality)
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
