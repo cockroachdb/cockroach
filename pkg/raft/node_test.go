@@ -810,7 +810,7 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 		entries[i] = ent
 		size += uint64(ent.Size())
 	}
-	s.ls = LogSlice{term: 1, entries: entries}
+	s.ls = LogSlice{entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should

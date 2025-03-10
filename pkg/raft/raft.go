@@ -664,7 +664,7 @@ func (r *raft) send(m pb.Message) {
 // prepareMsgApp constructs a MsgApp message for being sent to the given peer,
 // and hands it over to the caller. Updates the replication flow control state
 // to account for the fact that the message is about to be sent.
-func (r *raft) prepareMsgApp(to pb.PeerID, pr *tracker.Progress, ls LogSlice) pb.Message {
+func (r *raft) prepareMsgApp(to pb.PeerID, pr *tracker.Progress, ls LeadSlice) pb.Message {
 	commit := r.raftLog.committed
 	// Update the progress accordingly to the message being sent.
 	pr.SentEntries(len(ls.entries), uint64(payloadsSize(ls.entries)))
@@ -688,7 +688,7 @@ func (r *raft) prepareMsgApp(to pb.PeerID, pr *tracker.Progress, ls LogSlice) pb
 //
 // Returns false if the current state of the node does not permit this MsgApp
 // send, e.g. the log slice is misaligned with the replication flow status.
-func (r *raft) maybePrepareMsgApp(to pb.PeerID, ls LogSlice) (pb.Message, bool) {
+func (r *raft) maybePrepareMsgApp(to pb.PeerID, ls LeadSlice) (pb.Message, bool) {
 	if r.state != pb.StateLeader || r.Term != ls.term {
 		return pb.Message{}, false
 	}
@@ -737,10 +737,12 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		}
 	}
 
-	r.send(r.prepareMsgApp(to, pr, LogSlice{
-		term:    r.Term,
-		prev:    entryID{index: prevIndex, term: prevTerm},
-		entries: entries,
+	r.send(r.prepareMsgApp(to, pr, LeadSlice{
+		term: r.Term,
+		LogSlice: LogSlice{
+			prev:    entryID{index: prevIndex, term: prevTerm},
+			entries: entries,
+		},
 	}))
 	return true
 }
@@ -761,9 +763,9 @@ func (r *raft) sendPing(to pb.PeerID) bool {
 		return false
 	}
 	// NB: this sets MsgAppProbesPaused to true again.
-	r.send(r.prepareMsgApp(to, pr, LogSlice{
-		term: r.Term,
-		prev: entryID{index: prevIndex, term: prevTerm},
+	r.send(r.prepareMsgApp(to, pr, LeadSlice{
+		term:     r.Term,
+		LogSlice: LogSlice{prev: entryID{index: prevIndex, term: prevTerm}},
 	}))
 	return true
 }
@@ -1154,7 +1156,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	app := LogSlice{term: r.Term, prev: last, entries: es}
+	app := LeadSlice{term: r.Term, LogSlice: LogSlice{prev: last, entries: es}}
 	if err := app.valid(); err != nil {
 		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
 	} else if !r.raftLog.append(app) {
@@ -2367,22 +2369,24 @@ func (r *raft) checkQuorumActive() {
 	})
 }
 
-// logSliceFromMsgApp extracts the appended LogSlice from a MsgApp message.
-func logSliceFromMsgApp(m *pb.Message) LogSlice {
-	// TODO(pav-kv): consider also validating the LogSlice here.
-	return LogSlice{
-		term:    m.Term,
-		prev:    entryID{term: m.LogTerm, index: m.Index},
-		entries: m.Entries,
+// leadSliceFromMsgApp extracts the appended LeadSlice from a MsgApp message.
+func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
+	// TODO(pav-kv): consider also validating the LeadSlice here.
+	return LeadSlice{
+		term: m.Term,
+		LogSlice: LogSlice{
+			prev:    entryID{term: m.LogTerm, index: m.Index},
+			entries: m.Entries,
+		},
 	}
 }
 
 func (r *raft) handleAppendEntries(m pb.Message) {
 	r.checkMatch(m.Match)
 
-	// TODO(pav-kv): construct LogSlice up the stack next to receiving the
+	// TODO(pav-kv): construct LeadSlice up the stack next to receiving the
 	// message, and validate it before taking any action (e.g. bumping term).
-	a := logSliceFromMsgApp(&m)
+	a := leadSliceFromMsgApp(&m)
 	if err := a.valid(); err != nil {
 		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
 		// but logs an error in prod. We want to eliminate all such errors in tests.

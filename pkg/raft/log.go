@@ -41,7 +41,7 @@ type LogSnapshot struct {
 	// storage contains the stable log entries.
 	storage LogStorage
 	// unstable contains the unstable log entries.
-	unstable LogSlice
+	unstable LeadSlice
 	// logger gives access to logging errors.
 	logger raftlogger.Logger
 }
@@ -155,14 +155,14 @@ func (l *raftLog) accTerm() uint64 {
 // the log (so this log slice is insufficient to make our log consistent with
 // the leader log), the slice is out of bounds (appending it would introduce a
 // gap), or a.term is outdated.
-func (l *raftLog) maybeAppend(a LogSlice) bool {
+func (l *raftLog) maybeAppend(a LeadSlice) bool {
 	match, ok := l.match(a)
 	if !ok {
 		return false
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	a = a.forward(match)
+	a.LogSlice = a.forward(match)
 
 	if len(a.entries) == 0 {
 		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
@@ -179,7 +179,7 @@ func (l *raftLog) maybeAppend(a LogSlice) bool {
 //
 // Returns false if the operation can not be done: entry a.prev does not match
 // the lastEntryID of this log, or a.term is outdated.
-func (l *raftLog) append(a LogSlice) bool {
+func (l *raftLog) append(a LeadSlice) bool {
 	return l.unstable.append(a)
 }
 
@@ -191,8 +191,8 @@ func (l *raftLog) append(a LogSlice) bool {
 //
 // All the entries up to the returned index are already present in the log, and
 // do not need to be rewritten. The caller can safely fast-forward the appended
-// LogSlice to this index.
-func (l *raftLog) match(s LogSlice) (uint64, bool) {
+// LeadSlice to this index.
+func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 	if !l.matchTerm(s.prev) {
 		return 0, false
 	}
@@ -551,29 +551,32 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	return l.snap(l.storage).slice(lo, hi, maxSize)
 }
 
-// LogSlice returns a valid log slice for a prefix of the (lo, hi] log index
+// LeadSlice returns a valid log slice for a prefix of the (lo, hi] log index
 // interval, with the total entries size not exceeding maxSize.
 //
 // Returns at least one entry if the interval contains any. The maxSize can only
 // be exceeded if the first entry (lo+1) is larger.
-func (l LogSnapshot) LogSlice(lo, hi uint64, maxSize uint64) (LogSlice, error) {
+func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error) {
 	prevTerm, err := l.term(lo)
 	if err != nil {
 		// The log is probably compacted at index > lo (err == ErrCompacted), or it
 		// can be a custom storage error.
-		return LogSlice{}, err
+		return LeadSlice{}, err
 	}
 	ents, err := l.slice(lo, hi, entryEncodingSize(maxSize))
 	if err != nil {
-		return LogSlice{}, err
+		return LeadSlice{}, err
 	}
-	return LogSlice{
-		term:    l.unstable.term,
-		prev:    entryID{term: prevTerm, index: lo},
-		entries: ents,
+	return LeadSlice{
+		term: l.unstable.term,
+		LogSlice: LogSlice{
+			prev:    entryID{term: prevTerm, index: lo},
+			entries: ents,
+		},
 	}, nil
 }
 
+// TODO(pav-kv): return LogSlice.
 func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
@@ -662,7 +665,7 @@ func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	return LogSnapshot{
 		first:    l.firstIndex(),
 		storage:  storage,
-		unstable: l.unstable.LogSlice,
+		unstable: l.unstable.LeadSlice,
 		logger:   l.logger,
 	}
 }

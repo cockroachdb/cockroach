@@ -27,7 +27,7 @@ import (
 
 func TestStorageTerm(t *testing.T) {
 	prev3 := entryID{index: 3, term: 3}
-	ls := prev3.append(4, 5)
+	ls := prev3.append(4, 5).LogSlice
 	tests := []struct {
 		i uint64
 
@@ -59,7 +59,7 @@ func TestStorageTerm(t *testing.T) {
 
 func TestStorageEntries(t *testing.T) {
 	prev3 := entryID{index: 3, term: 3}
-	ls := prev3.append(4, 5, 6)
+	ls := prev3.append(4, 5, 6).LogSlice
 	ents := ls.entries
 	tests := []struct {
 		lo, hi, maxsize uint64
@@ -94,21 +94,21 @@ func TestStorageEntries(t *testing.T) {
 }
 
 func TestStorageLastIndex(t *testing.T) {
-	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5).LogSlice}
 	require.Equal(t, uint64(5), s.LastIndex())
 	require.NoError(t, s.Append(index(6).terms(5)))
 	require.Equal(t, uint64(6), s.LastIndex())
 }
 
 func TestStorageFirstIndex(t *testing.T) {
-	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5).LogSlice}
 	require.Equal(t, uint64(4), s.FirstIndex())
 	require.NoError(t, s.Compact(4))
 	require.Equal(t, uint64(5), s.FirstIndex())
 }
 
 func TestStorageCompact(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
 	tests := []struct {
 		i uint64
 
@@ -135,7 +135,7 @@ func TestStorageCompact(t *testing.T) {
 }
 
 func TestStorageCreateSnapshot(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
 	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
 
@@ -160,7 +160,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 }
 
 func TestStorageAppend(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5)
+	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
 	tests := []struct {
 		entries []pb.Entry
 
