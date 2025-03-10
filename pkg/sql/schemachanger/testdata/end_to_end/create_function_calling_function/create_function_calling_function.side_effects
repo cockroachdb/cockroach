@@ -110,8 +110,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "4"
-  +  version: "5"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
   ...
      - 110
@@ -221,8 +221,8 @@ upsert descriptor #101
   ...
          withGrantOption: "2"
        version: 3
-  -  version: "4"
-  +  version: "5"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
   ...
      - 110
