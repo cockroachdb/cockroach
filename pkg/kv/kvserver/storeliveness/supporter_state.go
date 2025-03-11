@@ -306,13 +306,14 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 // The function returns the store IDs for which support was withdrawn.
 func (ssfu *supporterStateForUpdate) withdrawSupport(
 	ctx context.Context, now hlc.ClockTimestamp,
-) (supportWithdrawnForStoreIDs []roachpb.StoreID) {
+) (supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
 		len(ssfu.inProgress.supportFor) == 0, "reading from supporterStateForUpdate."+
 			"checkedIn.supportFor while supporterStateForUpdate.inProgress.supportFor is not empty",
 	)
+	supportWithdrawnForStoreIDs = make(map[roachpb.StoreID]struct{})
 	for id, ss := range ssfu.checkedIn.supportFor {
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
@@ -322,7 +323,7 @@ func (ssfu *supporterStateForUpdate) withdrawSupport(
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
 			}
-			supportWithdrawnForStoreIDs = append(supportWithdrawnForStoreIDs, id.StoreID)
+			supportWithdrawnForStoreIDs[id.StoreID] = struct{}{}
 		}
 	}
 	return supportWithdrawnForStoreIDs
