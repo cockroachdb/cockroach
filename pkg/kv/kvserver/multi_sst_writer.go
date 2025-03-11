@@ -246,26 +246,6 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	return nil
 }
 
-// addClearForMVCCSpan allows us to explicitly add a deletion tombstone
-// for the mvcc span in the msstw, if it was instantiated with the expectation
-// that no tombstone was necessary.
-func (msstw *multiSSTWriter) addClearForMVCCSpan() error {
-	if !msstw.skipClearForMVCCSpan {
-		// Nothing to do.
-		return nil
-	}
-	if msstw.currSpan < len(msstw.localKeySpans) {
-		// When we switch to the mvcc key span, we will just add a rangedel for it.
-		// Set skipClearForMVCCSpan to false.
-		msstw.skipClearForMVCCSpan = false
-		return nil
-	}
-	if msstw.currSpan >= len(msstw.localKeySpans) {
-		panic("cannot clearEngineRange if sst writer has moved past user keys")
-	}
-	panic("multiSSTWriter already added keys to sstable that cannot be deleted by a rangedel/rangekeydel within it")
-}
-
 // rolloverSST rolls the underlying SST writer over to the appropriate SST
 // writer for writing a point/range key at key. For point keys, endKey and key
 // must equal each other.

@@ -100,7 +100,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
 
-	doExcise := header.SharedReplicate || header.ExternalReplicate || storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV)
 	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
@@ -112,17 +111,15 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// opaque slice of keyRanges, we just tell it to add a rangedel for the last
 	// span. To avoid bugs, assert on the last span in keyRanges actually being
 	// equal to the user key span.
-	if doExcise {
-		if !keyRanges[len(keyRanges)-1].Equal(header.State.Desc.KeySpan().AsRawSpanWithNoLocals()) {
-			return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
-		}
+	if !keyRanges[len(keyRanges)-1].Equal(header.State.Desc.KeySpan().AsRawSpanWithNoLocals()) {
+		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
 
 	// TODO(aaditya): Remove once we support flushableIngests for shared and
 	// external files in the engine.
 
-	// TODO(tbg): skipClearForMVCCSpan should equal `doExcise`, but there appear
-	// to be bugs in this code as demonstrated by
+	// TODO(tbg): skipClearForMVCCSpan should equal true (since we always excise
+	// the MVCC span), but there appear to be bugs in this code as demonstrated by
 	// TestRaftSnapshotsWithMVCCRangeKeysEverywhere failing with the proposed
 	// change:
 	//
@@ -147,7 +144,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	//
 	// Another note: CI passes when this is unconditionally set to `false`,
 	// indicating that we have poor coverage of the shared and external code paths.
-	skipClearForMVCCSpan := doExcise && (header.SharedReplicate || header.ExternalReplicate)
+	skipClearForMVCCSpan := header.SharedReplicate || header.ExternalReplicate
 
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
@@ -188,15 +185,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		if req.TransitionFromSharedToRegularReplicate {
 			sharedSSTs = nil
 			externalSSTs = nil
-			if !doExcise {
-				// TODO(tbg): this is dead code. We always excise if there is
-				// initially any chance of shared/external SSTs, and never
-				// opt out of that.
-				if err := msstw.addClearForMVCCSpan(); err != nil {
-					return noSnap, errors.Wrap(err, "adding tombstone for last span")
-				}
-				return noSnap, errors.AssertionFailedf("unexpected TransitionFromSharedToRegularReplicate without excising")
-			}
 		}
 
 		if req.KVBatch != nil {
@@ -317,7 +305,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				msgAppRespCh:                make(chan raftpb.Message, 1),
 				sharedSSTs:                  sharedSSTs,
 				externalSSTs:                externalSSTs,
-				doExcise:                    doExcise,
 				includesRangeDelForLastSpan: !skipClearForMVCCSpan,
 				clearedSpans:                keyRanges,
 			}
