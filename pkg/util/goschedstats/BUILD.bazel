@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "goschedstats",
     srcs = [
-        "runnable_common.go",
+        "runnable.go",
         "runnable_enabled.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
