@@ -1203,6 +1203,8 @@ GO_TARGETS = [
     "//pkg/cmd/reduce/reduce:reduce_test",
     "//pkg/cmd/reduce:reduce",
     "//pkg/cmd/reduce:reduce_lib",
+    "//pkg/cmd/release/sentry:sentry",
+    "//pkg/cmd/release/sentry:sentry_lib",
     "//pkg/cmd/release:release",
     "//pkg/cmd/release:release_lib",
     "//pkg/cmd/release:release_test",
