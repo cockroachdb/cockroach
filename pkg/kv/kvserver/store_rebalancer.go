@@ -81,6 +81,7 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingOff:               "off",
 		LBRebalancingLeasesOnly:        "leases",
 		LBRebalancingLeasesAndReplicas: "leases and replicas",
+		LBRebalancingMultiMetric:       "multi-metric",
 	},
 	settings.WithPublic)
 
@@ -98,6 +99,10 @@ const (
 	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
+	// LBRebalancingMultiMetric means that the store rebalancer yields to the
+	// multi-metric store rebalancer, balancing both leases and replicas based on
+	// store-level load imbalances.
+	LBRebalancingMultiMetric
 )
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
@@ -199,7 +204,8 @@ func NewStoreRebalancer(
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 		disabled: func() bool {
-			return LoadBasedRebalancingMode.Get(&st.SV) == LBRebalancingOff ||
+			mode := LoadBasedRebalancingMode.Get(&st.SV)
+			return mode == LBRebalancingOff || mode == LBRebalancingMultiMetric ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}

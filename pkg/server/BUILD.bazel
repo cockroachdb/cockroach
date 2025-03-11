@@ -128,6 +128,7 @@ go_library(
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/mma",
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/ctpb",

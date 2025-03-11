@@ -888,6 +888,7 @@ type Store struct {
 	replRankings         *ReplicaRankings
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
+	mmStoreRebalancer    *multiMetricStoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
@@ -1170,18 +1171,20 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StoreLiveness        *storeliveness.NodeContainer
-	StorePool            *storepool.StorePool
-	Transport            *RaftTransport
-	NodeDialer           *nodedialer.Dialer
-	RPCContext           *rpc.Context
-	RangeDescriptorCache *rangecache.RangeCache
+	DefaultSpanConfig      roachpb.SpanConfig
+	Settings               *cluster.Settings
+	Clock                  *hlc.Clock
+	Gossip                 *gossip.Gossip
+	DB                     *kv.DB
+	NodeLiveness           *liveness.NodeLiveness
+	StorePool              *storepool.StorePool
+	StoreLiveness          *storeliveness.NodeContainer
+	MMAllocator            mma.Allocator
+	Transport              *RaftTransport
+	StoreLivenessTransport *storeliveness.Transport
+	NodeDialer             *nodedialer.Dialer
+	RPCContext             *rpc.Context
+	RangeDescriptorCache   *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -2431,6 +2434,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer = NewStoreRebalancer(
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
+
+		// TODO(kvoli): We will want something here to switch between the two store
+		// rebalancers.
+		s.mmStoreRebalancer = &multiMetricStoreRebalancer{
+			allocator: s.cfg.MMAllocator,
+			store:     s,
+		}
+		s.mmStoreRebalancer.start(ctx, s.stopper)
 	}
 
 	// Set the started flag (for unittests).

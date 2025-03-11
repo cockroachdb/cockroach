@@ -20,6 +20,7 @@ go_library(
         "merge_queue.go",
         "metric_rules.go",
         "metrics.go",
+        "multi_metric_store_rebalancer.go",
         "mvcc_gc_queue.go",
         "queue.go",
         "queue_helpers_testutil.go",
