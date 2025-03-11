@@ -5707,6 +5707,25 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestNoTenants)
 }
 
+// TestChangefeedCursorWarning tests that we show a warning when a user creates a
+// changefeed with a cursor older than 2 hours but before GC threshold
+func TestChangefeedCursorWarning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) { // Create the data table; it will only contain a single row with multiple
+		// versions.
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		forceTableGC(t, s.SystemServer, sqlDB, "d", "foo")
+		outdatedTS := s.Server.Clock().Now().AsOfSystemTime()
+		createChangefeed := "CREATE CHANGEFEED FOR TABLE foo with updated, cursor = '" + outdatedTS + "'"
+		sqlDB.ExpectErrWithHint(t, "could not create changefeed: cursor .* is older than the GC threshold .*", "use a more recent cursor", createChangefeed)
+	}
+	cdcTestWithSystem(t, testFn, feedTestNoTenants)
+}
+
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5934,7 +5953,7 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `param client_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=!`,
-	)
+	
 	sqlDB.ExpectErrWithTimeout(
 		t, `param client_key must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_key=!`,
