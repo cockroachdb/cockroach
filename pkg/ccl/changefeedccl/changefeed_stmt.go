@@ -133,6 +133,49 @@ func changefeedTypeCheck(
 	return true, withSinkHeader, nil
 }
 
+func maybeShowCursorAgeWarning(
+	ctx context.Context, p sql.PlanHookState, opts changefeedbase.StatementOptions,
+) error {
+	st, err := opts.GetInitialScanType()
+	if err != nil {
+		return err
+	}
+
+	if !opts.HasStartCursor() || st == changefeedbase.OnlyInitialScan {
+		return nil
+	}
+	statementTS := p.ExtendedEvalContext().GetStmtTimestamp().UnixNano()
+	cursorTS, err := evalCursor(ctx, p, hlc.Timestamp{WallTime: statementTS}, opts.GetCursor())
+	if err != nil {
+		return err
+	}
+
+	warningAge := int64(5 * time.Hour)
+	cursorAge := func() int64 {
+		knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+		if knobs != nil && knobs.OverrideCursorAge != nil {
+			return knobs.OverrideCursorAge()
+		}
+		return statementTS - cursorTS.WallTime
+	}()
+
+	if cursorAge > warningAge {
+		err = p.SendClientNotice(ctx,
+			pgnotice.Newf(
+				`the provided cursor is %d hours old; `+
+					`older cursors can result in increased changefeed latency`,
+				cursorAge/int64(time.Hour),
+			),
+			true,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // changefeedPlanHook implements sql.planHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -229,6 +272,9 @@ func changefeedPlanHook(
 
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+			if err := maybeShowCursorAgeWarning(ctx, p, opts); err != nil {
+				return err
+			}
 
 			err := coreChangefeed(ctx, p, details, description, progress, resultsCh)
 			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
@@ -314,6 +360,10 @@ func changefeedPlanHook(
 			return err
 		}
 
+		if err := maybeShowCursorAgeWarning(ctx, p, opts); err != nil {
+			return err
+		}
+
 		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 		select {
@@ -388,6 +438,22 @@ func coreChangefeed(
 	}
 }
 
+func evalCursor(
+	ctx context.Context, p sql.PlanHookState, statementTime hlc.Timestamp, timeString string,
+) (hlc.Timestamp, error) {
+	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		if knobs != nil && knobs.OverrideCursor != nil {
+			timeString = knobs.OverrideCursor(&statementTime)
+		}
+	}
+	asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(timeString)}
+	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return asOf.Timestamp, nil
+}
+
 func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -408,22 +474,10 @@ func createChangefeedJobRecord(
 		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 	}
 	var initialHighWater hlc.Timestamp
-	evalTimestamp := func(s string) (hlc.Timestamp, error) {
-		if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-			if knobs != nil && knobs.OverrideCursor != nil {
-				s = knobs.OverrideCursor(&statementTime)
-			}
-		}
-		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
-		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
-		if err != nil {
-			return hlc.Timestamp{}, err
-		}
-		return asOf.Timestamp, nil
-	}
+
 	if opts.HasStartCursor() {
 		var err error
-		initialHighWater, err = evalTimestamp(opts.GetCursor())
+		initialHighWater, err = evalCursor(ctx, p, statementTime, opts.GetCursor())
 		if err != nil {
 			return nil, err
 		}

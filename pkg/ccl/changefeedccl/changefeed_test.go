@@ -5864,6 +5864,62 @@ func TestChangefeedOutdatedCursor(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestNoTenants)
 }
 
+// TestChangefeedCursorWarning ensures that we show a warning if
+// any of the tables we're creating a changefeed is past
+// the warning threshold.
+func TestChangefeedCursorAgeWarning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var cursorAges = []time.Duration{
+		time.Hour,
+		6 * time.Hour,
+	}
+
+	testutils.RunValues(t, "cursor age", cursorAges, func(t *testing.T, cursorAge time.Duration) {
+		s, stopServer := makeServer(t)
+		defer stopServer()
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.OverrideCursorAge = func() int64 {
+			return int64(cursorAge)
+		}
+
+		warning := fmt.Sprintf(
+			"the provided cursor is %d hours old; older cursors can result in increased changefeed latency",
+			int64(cursorAge/time.Hour))
+		noWarning := "(no notice)"
+
+		expectedWarning := func(initial_scan string) string {
+			if cursorAge == time.Hour || initial_scan == "only" {
+				return noWarning
+			}
+			return warning
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
+		timeNow := strings.Split(s.Server.Clock().Now().AsOfSystemTime(), ".")[0]
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='only'`,
+				timeNow), expectedWarning("only"))
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='yes'`,
+				timeNow), expectedWarning("yes"))
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
+				timeNow), expectedWarning("no"))
+	})
+}
+
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
 // where the feed has fallen behind the GC TTL of the table's schema.
 func TestChangefeedSchemaTTL(t *testing.T) {
