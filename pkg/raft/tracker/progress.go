@@ -268,7 +268,7 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 		// Directly decrease next to match + 1.
 		//
 		// TODO(tbg): why not use matchHint if it's larger?
-		pr.Next = pr.Match + 1
+		pr.Next = max(pr.Match, matchHint) + 1
 		// Regress the SentCommit since it unlikely has been applied.
 		pr.SentCommit = min(pr.SentCommit, pr.Next-1)
 		return true
