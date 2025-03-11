@@ -76,9 +76,9 @@ func (r *Replica) Metrics(
 	vitalityMap livenesspb.NodeVitalityMap,
 	clusterNodes int,
 ) ReplicaMetrics {
-	r.store.quiescence.Lock()
-	_, ticking := r.store.quiescence.unquiescedOrAwake[r.RangeID]
-	r.store.quiescence.Unlock()
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	_, ticking := r.store.unquiescedOrAwakeReplicas.m[r.RangeID]
+	r.store.unquiescedOrAwakeReplicas.Unlock()
 
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()

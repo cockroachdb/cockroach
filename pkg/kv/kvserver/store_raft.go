@@ -818,18 +818,31 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 // support form other stores in store liveness. The goal of this callback is to
 // unquiesce any replicas on the local store that have leaders on any of the
 // remote stores.
-func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs []roachpb.StoreID) {
-	for _, storeID := range supportWithdrawnForStoreIDs {
-		asleepReplicas, ok := s.quiescence.asleepByLeaderStore[storeID]
-		if !ok || len(asleepReplicas) == 0 {
-			continue
+func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
+	// TODO(mira): Is it expensive to iterate over all replicas? This callback
+	// will be called at most every SupportExpiryInterval (100ms). Alternatively,
+	// we'd have to maintain some data structure of asleep-only replicas. When we
+	// tried this in #140476, we ran into an inherent lock inversion: when falling
+	// asleep or waking up due to an incoming Raft message, Replica.mu is already
+	// held and we need to lock the new data structure for update; but in this
+	// function, we need to lock the new data structure first before we even know
+	// which replicas' Replica.mu to lock.
+	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
+		// If we couldn't locate the leader, wake up the replica.
+		if err != nil || leader.StoreID == 0 {
+			r.maybeWakeUpRMuLocked()
+			return true
 		}
-		for replica := range asleepReplicas {
-			replica.mu.Lock()
-			replica.maybeWakeUpReplicaMuLocked()
-			replica.mu.Unlock()
+		// If a replica is asleep, and we just withdrew support for its leader,
+		// wake it up.
+		if _, ok := supportWithdrawnForStoreIDs[leader.StoreID]; ok {
+			r.maybeWakeUpRMuLocked()
 		}
-	}
+		return true
+	})
 }
 
 func (s *Store) processRaft(ctx context.Context) {
@@ -882,17 +895,17 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			}
 			s.updateIOThresholdMap()
 
-			s.quiescence.Lock()
+			s.unquiescedOrAwakeReplicas.Lock()
 			// Why do we bother to ever queue a Replica on the Raft scheduler for
 			// tick processing? Couldn't we just call Replica.tick() here? Yes, but
 			// then a single bad/slow Replica can disrupt tick processing for every
 			// Replica on the store which cascades into Raft elections and more
 			// disruption.
 			batch := s.scheduler.NewEnqueueBatch()
-			for rangeID := range s.quiescence.unquiescedOrAwake {
+			for rangeID := range s.unquiescedOrAwakeReplicas.m {
 				batch.Add(rangeID)
 			}
-			s.quiescence.Unlock()
+			s.unquiescedOrAwakeReplicas.Unlock()
 
 			s.scheduler.EnqueueRaftTicks(batch)
 			batch.Close()
