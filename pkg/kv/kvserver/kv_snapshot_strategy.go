@@ -645,6 +645,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 					kvs-kvsBefore,
 				)
 			}
+			// TODO(tbg): the shared and external visitors never flush, so at this
+			// point the receiver hasn't gotten any shared/external SST references
+			// sent to it. This implies that an explicit transition is unnecessary
+			// and we can remove this.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
 			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 				rditer.ReplicatedSpansUserOnly, iterateRKSpansVisitor)
