@@ -4650,7 +4650,7 @@ func TestMergeQueue(t *testing.T) {
 
 					clearRange(t, lhsStartKey, rhsEndKey)
 					setSplitObjective(secondSplitObjective)
-					if !grunning.Supported() {
+					if !grunning.Supported {
 						// CPU isn't a supported split objective when grunning isn't
 						// supported. Switching the dimension will have no effect, as the
 						// objective gets overridden in such cases to always be QPS.
