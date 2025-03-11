@@ -366,7 +366,7 @@ func TestHotRangesResponse(t *testing.T) {
 			}
 			// If the architecture doesn't support sampling CPU, it
 			// will also be zero.
-			if grunning.Supported() && r.CPUTimePerSecond == 0 {
+			if grunning.Supported && r.CPUTimePerSecond == 0 {
 				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
 					r.QPS, r.CPUTimePerSecond)
 			}
@@ -407,7 +407,7 @@ func TestHotRanges2Response(t *testing.T) {
 			}
 			// If the architecture doesn't support sampling CPU, it
 			// will also be zero.
-			if grunning.Supported() && r.CPUTimePerSecond == 0 {
+			if grunning.Supported && r.CPUTimePerSecond == 0 {
 				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero", r.QPS, r.CPUTimePerSecond)
 			}
 		}
