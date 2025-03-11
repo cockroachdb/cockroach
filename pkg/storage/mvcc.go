@@ -5239,7 +5239,7 @@ func MVCCResolveWriteIntent(
 			var iter MVCCIterator
 			iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 				Prefix:       true,
-				KeyTypes:     IterKeyTypePointsAndRanges,
+				KeyTypes:     IterKeyTypePointsOnly,
 				ReadCategory: fs.IntentResolutionReadCategory,
 			})
 			if err != nil {
