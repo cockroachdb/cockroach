@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -9055,9 +9056,11 @@ WHERE object_id = table_descriptor_id
 				{Name: "end_time", Typ: types.Decimal},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
+			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
+			Volatility: volatility.Volatile,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if StartCompactionJob == nil {
-					return nil, errors.Newf("missing CompactBackups")
+					return nil, errors.Newf("missing StartCompactionJob")
 				}
 				ary := *tree.MustBeDArray(args[0])
 				collectionURI, ok := darrayToStringSlice(ary)
@@ -9087,8 +9090,76 @@ WHERE object_id = table_descriptor_id
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "backup_stmt", Typ: types.String},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "end_time", Typ: types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
 			Volatility: volatility.Volatile,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if StartCompactionJob == nil {
+					return nil, errors.Newf("missing StartCompactionJob")
+				}
+				stmt := string(tree.MustBeDString(args[0]))
+				ast, err := parser.ParseOne(stmt)
+				if err != nil {
+					return nil, err
+				}
+				backupAST, ok := ast.AST.(*tree.Backup)
+				if !ok {
+					return nil, errors.Newf("expected BACKUP statement, got %s", stmt)
+				}
+				opts := backupAST.Options
+				exprSliceToStrSlice := func(exprs []tree.Expr) []string {
+					return util.Map(exprs, func(expr tree.Expr) string {
+						return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
+					})
+				}
+				encryption := jobspb.BackupEncryptionOptions{
+					Mode: jobspb.EncryptionMode_None,
+				}
+				if opts.EncryptionPassphrase != nil {
+					encryption.Mode = jobspb.EncryptionMode_Passphrase
+					encryption.RawPassphrase = tree.AsStringWithFlags(
+						opts.EncryptionPassphrase,
+						tree.FmtBareStrings,
+					)
+				} else if opts.EncryptionKMSURI != nil {
+					if encryption.Mode != jobspb.EncryptionMode_None {
+						return nil, errors.Newf("only one encryption mode can be specified")
+					}
+					encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
+				}
+				var fullPath string
+				if backupAST.Subdir != nil {
+					fullPath = tree.AsStringWithFlags(backupAST.Subdir, tree.FmtBareStrings)
+				} else {
+					if !backupAST.AppendToLatest {
+						return nil, errors.Newf("full backup path must be specified")
+					}
+					fullPath = "LATEST"
+				}
+				collectionURI := exprSliceToStrSlice(backupAST.To)
+				incrLoc := exprSliceToStrSlice(backupAST.Options.IncrementalStorage)
+				start := tree.MustBeDDecimal(args[1])
+				startTs, err := hlc.DecimalToHLC(&start.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				end := tree.MustBeDDecimal(args[2])
+				endTs, err := hlc.DecimalToHLC(&end.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				jobID, err := StartCompactionJob(
+					ctx, evalCtx.Planner, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
+				)
+				return tree.NewDInt(tree.DInt(jobID)), err
+			},
 		},
 	),
 }
