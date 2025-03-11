@@ -1964,6 +1964,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			r.logger.Debugf("%x received MsgAppResp(rejected, hint: (index %d, term %d)) from %x for index %d",
 				r.id, m.RejectHint, m.LogTerm, m.From, m.Index)
 			nextProbeIdx := m.RejectHint
+			nextTerm := m.LogTerm
 			if m.LogTerm > 0 {
 				// If the follower has an uncommitted log tail, we would end up
 				// probing one by one until we hit the common prefix.
@@ -2059,13 +2060,29 @@ func stepLeader(r *raft, m pb.Message) error {
 				//    7, the rejection points it at the end of the follower's log
 				//    which is at a higher log term than the actually committed
 				//    log.
-				nextProbeIdx, _ = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
+				nextProbeIdx, nextTerm = r.raftLog.findConflictByTerm(m.RejectHint, m.LogTerm)
 			}
-			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
-				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
-				if pr.State == tracker.StateReplicate {
+			if m.LogTerm != 0 && nextTerm == m.LogTerm && pr.State == tracker.StateReplicate {
+				// try m.Index
+			} else if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
+				// match := r.raftLog.matchTerm(entryID{nextTerm, nextProbeIdx})
+				r.logger.Debugf("%x progress before for %x was [%s]", r.id, m.From, pr)
+				r.logger.Debugf("nextTerm: %d, logTerm: %d", nextTerm, m.LogTerm)
+				if m.LogTerm != 0 && nextTerm == m.LogTerm {
+					r.logger.Debugf("state: %v", pr.State)
+					r.logger.Debugf("nextProbeIdx=%d, match=%d", nextProbeIdx, pr.Match)
+					r.logger.Debugf("hint: index %d, term %d", m.RejectHint, m.LogTerm)
+					if pr.State == tracker.StateProbe {
+						r.logger.Debugf("becomeReplicate")
+						r.becomeReplicate(pr)
+						pr.Next = max(nextProbeIdx+1, pr.Match+1)
+					}
+				} else if pr.State == tracker.StateReplicate {
+					r.logger.Debugf("becomeProbe")
 					r.becomeProbe(pr)
 				}
+				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
+
 				r.maybeSendAppend(m.From)
 			}
 		} else {
