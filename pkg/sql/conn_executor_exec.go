@@ -557,6 +557,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// txnState.mu.priority, so we don't need to get a mutex here.
 		ex.state.mu.priority,
 		ex.extraTxnState.shouldCollectTxnExecutionStats,
+		ex.state.mu.autoRetryCounter,
 	)
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1517,6 +1518,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			// txnState.mu.priority, so we don't need to get a mutex here.
 			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
+			ex.state.mu.autoRetryCounter,
 		)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
