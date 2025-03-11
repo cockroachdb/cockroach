@@ -999,6 +999,16 @@ func (b *builderState) ResolveTargetObject(
 			tree.ErrString(&objName)),
 			"verify that the current database and search_path are valid and/or the target database exists"))
 	}
+	// Object creation never locks the parent schema or database, since
+	// that would be super aggressive. However, if we detect the parent
+	// is undergoing a schema change, we should retry, since the object
+	// maybe in the process of being dropped.
+	if sc.HasConcurrentSchemaChanges() {
+		panic(scerrors.ConcurrentSchemaChangeError(sc))
+	}
+	if db.HasConcurrentSchemaChanges() {
+		panic(scerrors.ConcurrentSchemaChangeError(db))
+	}
 	b.ensureDescriptor(db.GetID())
 	if sc.SchemaKind() == catalog.SchemaVirtual {
 		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
