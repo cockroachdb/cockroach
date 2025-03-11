@@ -381,6 +381,7 @@ func startPProfEndPoint(ctx context.Context) {
 
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), exitSignals...)
+	defer cancel()
 
 	var formatter outputFormat
 	switch *displayFormat {
@@ -477,13 +478,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	// We set up a timer that cancels this context after prepareTimeout,
 	// but we'll collect the stacks before we do, so that they can be
 	// logged.
-	prepareCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	prepareCtx, prepareCancel := context.WithCancel(ctx)
+	defer prepareCancel()
 	stacksCh := make(chan []byte, 1)
 	const prepareTimeout = 90 * time.Minute
 	defer time.AfterFunc(prepareTimeout, func() {
 		stacksCh <- allstacks.Get()
-		cancel()
+		prepareCancel()
 	}).Stop()
 	if prepareErr := func(ctx context.Context) error {
 		retry := retry.StartWithCtx(ctx, retry.Options{})
@@ -581,11 +582,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	everySecond := log.Every(*displayEvery)
 
-	// durationCtx implements the --duration timeout
-	durationCtx, _ := context.WithCancel(ctx) // nolint:lostcancel
+	// doneCtx implements the --duration timeout
+	doneCtx, doneCancel := context.WithCancel(ctx)
 	if *duration > 0 {
-		durationCtx, _ = context.WithTimeout(ctx, *duration+*ramp) // nolint:lostcancel
+		doneCtx, doneCancel = context.WithTimeout(ctx, *duration+*ramp)
 	}
+	// this goroutine implements the --max-ops limit (when all the workers are done)
+	go func() {
+		wg.Wait()
+		doneCancel()
+	}()
 
 	for {
 		select {
@@ -612,7 +618,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			})
 
-		case <-durationCtx.Done():
+		case <-doneCtx.Done():
 			cancelWorkers()
 
 			startElapsed := timeutil.Since(start)
