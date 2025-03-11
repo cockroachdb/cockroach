@@ -382,8 +382,16 @@ func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
 // AdjustPendingChangesDisposition implements the Allocator interface.
 func (a *allocatorState) AdjustPendingChangesDisposition(
 	changes []PendingRangeChange, success bool,
-) error {
-	panic("unimplemented")
+) {
+	for _, rangeChange := range changes {
+		for _, replicaChange := range rangeChange.pendingReplicaChanges {
+			if success {
+				a.cs.markPendingChangeEnacted(replicaChange.changeID, a.cs.ts.Now())
+			} else {
+				a.cs.undoPendingChange(replicaChange.changeID)
+			}
+		}
+	}
 }
 
 // ComputeChanges implements the Allocator interface.
