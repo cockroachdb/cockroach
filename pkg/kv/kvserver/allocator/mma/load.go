@@ -31,6 +31,23 @@ const (
 	NumLoadDimensions
 )
 
+func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch dim {
+	case CPURate:
+		w.Printf("CPURate")
+	case WriteBandwidth:
+		w.Print("WriteBandwidth")
+	case ByteSize:
+		w.Printf("ByteSize")
+	default:
+		panic("unknown LoadDimension")
+	}
+}
+
+func (dim LoadDimension) String() string {
+	return redact.StringWithoutMarkers(dim)
+}
+
 // LoadValue is the load on a resource.
 type LoadValue int64
 

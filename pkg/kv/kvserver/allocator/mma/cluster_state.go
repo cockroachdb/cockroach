@@ -928,6 +928,12 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
+	cs.processStoreLeaseholderMsgInternal(msg, numTopKReplicas)
+}
+
+func (cs *clusterState) processStoreLeaseholderMsgInternal(
+	msg *StoreLeaseholderMsg, numTopKReplicas int,
+) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -991,7 +997,7 @@ func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
 	for _, ss := range cs.stores {
 		topk := ss.adjusted.topKRanges[msg.StoreID]
 		if topk == nil {
-			topk = &topKReplicas{}
+			topk = &topKReplicas{k: numTopKReplicas}
 			ss.adjusted.topKRanges[msg.StoreID] = topk
 		}
 		topk.startInit()

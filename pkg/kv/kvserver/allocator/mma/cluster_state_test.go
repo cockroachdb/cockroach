@@ -298,6 +298,17 @@ func TestClusterState(t *testing.T) {
 							"store-id=%v node-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
 							ss.StoreID, ss.NodeID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
 						)
+						for ls, topk := range ss.adjusted.topKRanges {
+							n := topk.len()
+							if n == 0 {
+								continue
+							}
+							fmt.Fprintf(&buf, "  top-k-ranges (local-store-id=%v) dim=%v:", ls, topk.dim)
+							for i := 0; i < n; i++ {
+								fmt.Fprintf(&buf, " r%v", topk.index(i))
+							}
+							fmt.Fprintf(&buf, "\n")
+						}
 					}
 					return buf.String()
 
@@ -354,7 +365,7 @@ func TestClusterState(t *testing.T) {
 
 				case "store-leaseholder-msg":
 					msg := parseStoreLeaseholderMsg(t, d.Input)
-					cs.processStoreLeaseholderMsg(&msg)
+					cs.processStoreLeaseholderMsgInternal(&msg, 2)
 					return ""
 
 				case "make-pending-changes":

@@ -7,6 +7,7 @@ import (
 )
 
 type topKReplicas struct {
+	k   int
 	dim LoadDimension
 	// Decreasing load.
 	replicas    []replicaLoad
@@ -24,7 +25,7 @@ func (t *topKReplicas) startInit() {
 }
 
 func (t *topKReplicas) addReplica(rangeID roachpb.RangeID, loadValue LoadValue) {
-	if t.replicaHeap.Len() >= numTopKReplicas {
+	if t.replicaHeap.Len() >= t.k {
 		if loadValue > t.replicaHeap[0].load {
 			heap.Pop(&t.replicaHeap)
 		} else {
