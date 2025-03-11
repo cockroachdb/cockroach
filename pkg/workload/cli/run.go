@@ -553,8 +553,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 
-	// implements the --duration and --ramp timeouts
-	if *duration+*ramp > 0 {
+	// implement the --duration timeout
+	if *duration > 0 {
 		workersCtx, cancelWorkers = context.WithTimeout(workersCtx, *duration+*ramp)
 	}
 
