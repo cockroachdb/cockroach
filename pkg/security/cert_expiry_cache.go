@@ -35,8 +35,8 @@ var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
 	settings.WithPublic)
 
 type clientCertExpirationMetrics struct {
-	expiration aggmetric.Gauge
-	ttl        aggmetric.Gauge
+	expiration *aggmetric.Gauge
+	ttl        *aggmetric.Gauge
 }
 
 // ClientCertExpirationCache contains a cache of gauge objects keyed by
@@ -189,7 +189,7 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 				expiration := parentExpirationGauge.AddChild(key)
 				expiration.Update(newExpiry)
 				ttl := parentTTLGauge.AddFunctionalChild(ttlFunc(c.timeNow, newExpiry), key)
-				c.mu.cache.Add(key, &clientCertExpirationMetrics{*expiration, *ttl})
+				c.mu.cache.Add(key, &clientCertExpirationMetrics{expiration, ttl})
 			}
 		} else {
 			log.Ops.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
