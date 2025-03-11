@@ -23,6 +23,13 @@ store-id=1
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
 
+get-load-info
+----
+store-id=1 node-id=1 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[20,80,80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+
 ranges
 ----
 range-id=1 load=[80,80,80] raft-cpu=20
@@ -49,13 +56,21 @@ range-id=1 load=[80,80,80] raft-cpu=20
 get-load-info
 ----
 store-id=1 node-id=1 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
 store-id=2 node-id=2 reported=[20,80,80] adjusted=[0,0,0] node-reported-cpu=20 node-adjusted-cpu=0 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
 
 store-leaseholder-msg
 store-id=1
   range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
+
+get-load-info
+----
+store-id=1 node-id=1 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[0,0,0] node-reported-cpu=20 node-adjusted-cpu=0 seq=2
 
 get-pending-changes
 ----
@@ -67,6 +82,12 @@ change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[-20,-80,-80] start=0s en
 store-load-msg
   store-id=2 node-id=2 load=[0,0,0] capacity=[100,100,100] secondary-load=0 load-time=15s
 ----
+
+get-load-info
+----
+store-id=1 node-id=1 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=3
 
 get-pending-changes
 ----

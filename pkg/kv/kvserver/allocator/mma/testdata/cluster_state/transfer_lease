@@ -27,6 +27,13 @@ store-id=1
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
 
+get-load-info
+----
+store-id=1 node-id=1 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[20,80,80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r0
+
 ranges
 ----
 range-id=1 load=[80,80,80] raft-cpu=20
@@ -44,6 +51,13 @@ change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[60,0,0] start=0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=2 type=VOTER_FULL leaseholder=true)
 
+get-load-info
+----
+store-id=1 node-id=1 reported=[80,80,80] adjusted=[20,80,80] node-reported-cpu=80 node-adjusted-cpu=20 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[80,80,80] node-reported-cpu=20 node-adjusted-cpu=80 seq=2
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r0
+
 ranges
 ----
 range-id=1 load=[80,80,80] raft-cpu=20
@@ -53,6 +67,13 @@ range-id=1 load=[80,80,80] raft-cpu=20
 reject-pending-changes change-ids=(1,2)
 ----
 pending(0)
+
+get-load-info
+----
+store-id=1 node-id=1 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=3
+  top-k-ranges (local-store-id=1) dim=CPURate: r0
+store-id=2 node-id=2 reported=[20,80,80] adjusted=[20,80,80] node-reported-cpu=20 node-adjusted-cpu=20 seq=3
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r0
 
 ranges
 ----
