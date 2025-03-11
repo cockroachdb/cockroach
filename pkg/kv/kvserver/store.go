@@ -4237,6 +4237,12 @@ func (s *Store) MakeStoreLeaseholderMsg() mma.StoreLeaseholderMsg {
 	}
 }
 
+// TestingMMStoreRebalance is a testing-only method that triggers the store's
+// mmStoreRebalancer to run once.
+func (s *Store) TestingMMStoreRebalance(ctx context.Context) {
+	s.mmStoreRebalancer.rebalance(ctx)
+}
+
 // Implementation of the storeForTruncator interface.
 type storeForTruncatorImpl Store
 

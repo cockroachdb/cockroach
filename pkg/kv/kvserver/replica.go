@@ -3065,8 +3065,8 @@ func (r *Replica) TryConstructMMARangeMsg() (mma.RangeMsg, bool) {
 	var isLeaseholder bool
 	var wasLeaseholder bool
 	func() {
-		r.mu.RUnlock()
-		defer r.mu.RLock()
+		r.mu.RLock()
+		defer r.mu.RUnlock()
 		lease := r.shMu.state.Lease
 		isLeaseholder = lease != nil && lease.OwnedBy(r.store.StoreID())
 		wasLeaseholder = r.mu.mmaRangeMessageNeeded.lastIsLeaseholder

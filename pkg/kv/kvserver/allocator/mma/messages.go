@@ -33,14 +33,6 @@ type StoreLoadMsg struct {
 	LoadTime time.Time
 }
 
-// NodeLoadMsg provides all the load information for a node and its
-// constituent stores.
-type NodeLoadMsg struct {
-	NodeLoad
-	Stores   []StoreLoadMsg
-	LoadTime time.Time
-}
-
 // StoreLeaseholderMsg is sent by a local store and includes information about
 // all ranges for which this store is the leaseholder. The range information
 // includes other replica stores. This is a local message and will be sent
@@ -89,6 +81,3 @@ var _ = RangeMsg{}.RangeID
 var _ = RangeMsg{}.Replicas
 var _ = RangeMsg{}.Conf
 var _ = RangeMsg{}.RangeLoad
-var _ = NodeLoadMsg{}.NodeLoad
-var _ = NodeLoadMsg{}.Stores
-var _ = NodeLoadMsg{}.LoadTime

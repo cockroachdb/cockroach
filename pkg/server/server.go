@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -593,6 +594,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 
 	mmAllocator := mma.NewAllocatorState(timeutil.DefaultTimeSource{})
+	// TODO: Move this into a dedicated integration struct (per node, not
+	// per-store) for mma.Allocator.
+	g.RegisterCallbackWithOrigTimestamp(
+		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+		func(_ string, content roachpb.Value, origTimestampNanos int64) {
+			var storeDesc roachpb.StoreDescriptor
+			if err := content.GetProto(&storeDesc); err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			storeLoadMsg := allocator.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
+			mmAllocator.SetStore(storeDesc)
+			mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
+		},
+	)
+
 	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {

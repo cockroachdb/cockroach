@@ -9,18 +9,36 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type multiMetricStoreRebalancer struct {
-	// allocator mma.Allocator
+	// TODO: Spec out a minimal interface required from the Store, we should not
+	// be using the Store directly.
+	store *Store
+
 	allocator mma.Allocator
-	store     *Store
 	st        *cluster.Settings
 }
 
+// TODO(kvoli): We should add an integration struct (see server.go gossip
+// callback), which will be responsible for:
+//   - registering the gossip callback (see server.go)
+//   - Allocator.SetStore() upon a new store being seen (triggered via
+//     gossip callback presumably).
+//   - Allocator.UpdateFailureDetectionSummary() upon node liveness
+//     status changing. (draining|dead|live|unavailable).
+
+// In the future, it would also be responsible for:
+//   - Allocator.UpdateStoreMembership() upon a store being marked as
+//     decommissioning. We can defer this for now, since we don't need to
+//     necessarily support decommissioning stores in the prototype
+//   - updating the StorePool with enacted changes made by this rebalancer and
+//     vice-versa for the replicate queue, lease queue and store rebalancer
 func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "multi-metric-store-rebalancer", func(ctx context.Context) {
 		var timer timeutil.Timer
@@ -39,19 +57,57 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 			if LoadBasedRebalancingMode.Get(&m.st.SV) != LBRebalancingMultiMetric {
 				continue
 			}
-			// TODO(kvoli): Call ComputeChanges, implement the change enactment and
-			// reject/success handling. e.g.,
-			//
-			// changes := m.allocator.ComputeChanges(mma.ChangeOptions{
-			// 	LocalStoreID: m.store.StoreID(),
-			// })
-			// for _, change := range changes {
-			// 	if change.IsTransferLease() {
-			// 	} else if change.IsChangeReplicas() {
-			// 	} else {
-			// 		panic("unexpected change type")
-			// 	}
-			// }
+			m.rebalance(ctx)
 		}
 	})
+}
+
+func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) {
+	// We first construct a message containing the up-to-date store range
+	// information before any allocator pass. This ensures up to date
+	// allocator state.
+	storeLeaseholderMsg := m.store.MakeStoreLeaseholderMsg()
+	m.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
+	changes := m.allocator.ComputeChanges(mma.ChangeOptions{
+		LocalStoreID: m.store.StoreID(),
+	})
+
+	var success bool
+	for _, change := range changes {
+		success = true
+		repl := m.store.GetReplicaIfExists(change.RangeID)
+
+		if repl == nil {
+			log.VInfof(ctx, 1, "skipping pending change for r%d, replica not found", change.RangeID)
+			success = false
+		} else {
+			if change.IsTransferLease() {
+				if err := repl.AdminTransferLease(
+					ctx,
+					change.LeaseTransferTarget(),
+					false, /* bypassSafetyChecks */
+				); err != nil {
+					log.VInfof(ctx, 1, "failed to transfer lease for range %d: %v", change.RangeID, err)
+					success = false
+				}
+			} else if change.IsChangeReplicas() {
+				// TODO(kvoli): We should be setting a timeout on the ctx here, in
+				// the case where rebalancing takes  a long time (stuck behind
+				// other snapshots). See replicateQueue.processTimeoutFunc.
+				if _, err := repl.changeReplicasImpl(
+					ctx,
+					repl.Desc(),
+					kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+					0,
+					kvserverpb.ReasonRebalance,
+					"todo: this is the rebalance detail for the range log",
+					change.ReplicationChanges(),
+				); err != nil {
+					log.VInfof(ctx, 1, "failed to change replicas for r%d: %v", change.RangeID, err)
+					success = false
+				}
+			}
+		}
+		m.allocator.AdjustPendingChangesDisposition([]mma.PendingRangeChange{change}, success)
+	}
 }
