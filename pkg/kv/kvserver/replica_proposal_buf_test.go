@@ -139,9 +139,6 @@ func (t *testProposer) locker() sync.Locker {
 	return &t.RWMutex
 }
 
-func (t *testProposer) rlocker() sync.Locker {
-	return t.RWMutex.RLocker()
-}
 func (t *testProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
 	return &testFlowTokenHandle{}
 }

@@ -2965,10 +2965,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
 
-	r.mu.RLock()
+	r.mu.Lock()
 	sender, err := r.getReplicaDescriptorRLocked()
 	_, destPaused := r.mu.pausedFollowers[recipient.ReplicaID]
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	if err != nil {
 		return err
@@ -3142,10 +3142,10 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// Check the raft applied state index and term to determine if this replica
 	// is not too far behind the leaseholder. If the delegate is too far behind
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
-	r.mu.RLock()
+	r.mu.Lock()
 	replIdx := r.shMu.state.RaftAppliedIndex + 1
 	status := r.raftBasicStatusRLocked()
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	if status.Empty() {
 		// This code path is sometimes hit during scatter for replicas that haven't

@@ -140,8 +140,8 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
 func (r *Replica) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.shMu.state.LeaseAppliedIndex
 }
 
@@ -785,9 +785,9 @@ func (r *Replica) applySnapshot(
 	// after the application of the snapshot. Do so under a read lock, as this
 	// operation can be expensive. This is safe, as we hold the Replica.raftMu
 	// across both Replica.mu critical sections.
-	r.mu.RLock()
+	r.mu.Lock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	// The rangefeed processor is listening for the logical ops attached to
 	// each raft command. These will be lost during a snapshot, so disconnect

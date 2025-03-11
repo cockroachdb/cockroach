@@ -1050,7 +1050,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 
 	require.True(t, clearOlderOverlapping(ctx, cache, &bToMaxDesc))
 	cache.addEntryLocked(&cacheEntry{desc: bToMaxDesc})
-	ce, _ := cache.getCachedRLocked(ctx, roachpb.RKey("b"), false)
+	ce, _ := cache.getCachedLocked(ctx, roachpb.RKey("b"), false)
 	require.Equal(t, bToMaxDesc, ce.desc)
 
 	// Add default descriptor back which should remove two split descriptors.
@@ -1060,7 +1060,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	require.True(t, clearOlderOverlapping(ctx, cache, &defDescCpy))
 	cache.addEntryLocked(&cacheEntry{desc: defDescCpy})
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
-		ce, _ = cache.getCachedRLocked(ctx, key, false)
+		ce, _ = cache.getCachedLocked(ctx, key, false)
 		require.Equal(t, defDescCpy, ce.desc)
 	}
 
@@ -1073,7 +1073,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, &bToCDesc))
 	cache.addEntryLocked(&cacheEntry{desc: bToCDesc})
-	ce, _ = cache.getCachedRLocked(ctx, roachpb.RKey("c"), true)
+	ce, _ = cache.getCachedLocked(ctx, roachpb.RKey("c"), true)
 	require.Equal(t, bToCDesc, ce.desc)
 
 	curGeneration++
@@ -1084,7 +1084,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, aToBDesc))
 	cache.addEntryLocked(ce)
-	ce, _ = cache.getCachedRLocked(ctx, roachpb.RKey("c"), true)
+	ce, _ = cache.getCachedLocked(ctx, roachpb.RKey("c"), true)
 	require.Equal(t, bToCDesc, ce.desc)
 }
 
@@ -1340,9 +1340,9 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			cache.rangeCache.RLock()
-			targetRange, _ := cache.getCachedRLocked(ctx, test.queryKey, true /* inverted */)
-			cache.rangeCache.RUnlock()
+			cache.rangeCache.Lock()
+			targetRange, _ := cache.getCachedLocked(ctx, test.queryKey, true /* inverted */)
+			cache.rangeCache.Unlock()
 
 			if !test.rng.IsInitialized() {
 				require.Nil(t, targetRange)

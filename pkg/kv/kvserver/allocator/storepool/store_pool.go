@@ -337,7 +337,7 @@ type StorePool struct {
 	// storeDetails.
 	// NB: Exported for use in tests and allocator simulator.
 	DetailsMu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		StoreDetails map[roachpb.StoreID]*StoreDetail
 	}
 	localitiesMu struct {
@@ -403,8 +403,8 @@ func (sp *StorePool) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
 
 	ids := make(roachpb.StoreIDSlice, 0, len(sp.DetailsMu.StoreDetails))
 	for id := range sp.DetailsMu.StoreDetails {
@@ -649,8 +649,8 @@ func newStoreDetail() *StoreDetail {
 // Stores without descriptor (a node that didn't come up yet after a cluster
 // restart) will not be part of the returned set.
 func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
 	stores := make(map[roachpb.StoreID]roachpb.StoreDescriptor, len(sp.DetailsMu.StoreDetails))
 	for _, s := range sp.DetailsMu.StoreDetails {
 		if s.Desc != nil {
@@ -681,8 +681,8 @@ func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail 
 // GetStoreDescriptor returns the latest store descriptor for the given
 // storeID.
 func (sp *StorePool) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
-	sp.DetailsMu.RLock()
-	defer sp.DetailsMu.RUnlock()
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
 
 	if detail, ok := sp.DetailsMu.StoreDetails[storeID]; ok && detail.Desc != nil {
 		return *detail.Desc, true

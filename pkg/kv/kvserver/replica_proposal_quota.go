@@ -41,10 +41,10 @@ func (r *Replica) maybeAcquireProposalQuota(
 		return nil, nil
 	}
 
-	r.mu.RLock()
+	r.mu.Lock()
 	enabled := r.getQuotaPoolEnabledRLocked(ctx)
 	quotaPool := r.mu.proposalQuota
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	if !enabled {
 		return nil, nil

@@ -29,7 +29,7 @@ type splitDelayHelper Replica
 
 func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *raft.Status) {
 	r := (*Replica)(sdh)
-	r.mu.RLock()
+	r.mu.Lock()
 	raftStatus := r.raftStatusRLocked()
 	if raftStatus != nil {
 		updateRaftProgressFromActivity(
@@ -39,7 +39,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 			},
 		)
 	}
-	r.mu.RUnlock()
+	r.mu.Unlock()
 	return r.RangeID, raftStatus
 }
 
