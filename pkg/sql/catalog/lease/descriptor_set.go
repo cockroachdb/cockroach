@@ -106,12 +106,10 @@ func (l *descriptorSet) findPreviousToExpire(dropped bool) *descriptorVersionSta
 		// avoid expiring.
 		return nil
 	}
-	exp.mu.Lock()
-	defer exp.mu.Unlock()
 	// If the refcount has hit zero then this version will be cleaned up
-	// automatically. If an expiration time is already setup, then this
-	// version has already been expired.
-	if exp.mu.refcount == 0 || !exp.mu.expiration.IsEmpty() {
+	// automatically. The expiration time is non-nil only if a version has
+	// been expired or is considered stale.
+	if exp.refcount.Load() == 0 || (exp.expiration.Load() != nil) {
 		return nil
 	}
 	return exp
