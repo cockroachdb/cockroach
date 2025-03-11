@@ -426,8 +426,9 @@ func (tx *memTxn) lockPartition(
 			memPart.lock.ReleaseShared()
 		}
 
-		// Push forward transaction's current time so that the restarted operation
-		// will see the root partition if it was replaced.
+		// Push forward transaction's current time in case the root partition was
+		// deleted as part of being replaced. The restarted operation needs to
+		// see the new root partition.
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.current = tx.store.tickLocked()
