@@ -55,22 +55,7 @@ import (
 	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
-	humanize "github.com/dustin/go-humanize"
-)
-
-// UseExciseForSnapshots controls whether virtual-sstable-based excises should
-// be used instead of range deletions for clearing out replica contents as part
-// of a rebalance/recovery snapshot application. Applied on the receiver side.
-// Note that setting this setting to true also effectively causes UseEFOS above
-// to become true. This interaction is why this setting is defined in the
-// storage package even though it mostly affects KV.
-var UseExciseForSnapshots = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.snapshot_receiver.excise.enabled",
-	"set to false to disable excises in place of range deletions for KV snapshots",
-	metamorphic.ConstantWithTestBool(
-		"kv.snapshot_receiver.excise.enabled", true), /* defaultValue */
-	settings.WithPublic,
+	"github.com/dustin/go-humanize"
 )
 
 // IngestSplitEnabled controls whether ingest-time splitting is enabled in
