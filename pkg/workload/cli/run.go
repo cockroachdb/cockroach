@@ -521,6 +521,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	displayTicker := time.NewTicker(*displayEvery)
 	defer displayTicker.Stop()
 
+	var resetStats atomic.Bool // Reset stats after ramp completes
+
 	// Create a context indicate channel to signal when the ramp period finishes.
 	if *ramp > 0 {
 		rampCtx, _ := context.WithTimeout(ctx, *ramp) //nolint:lostcancel
@@ -528,15 +530,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		// Reset the ticker and stats after the ramp period is complete
 		go func() {
 			<-rampCtx.Done()
-			// Once the load generator is fully ramped up, reset the histogram and the
-			// start time to throw away the stats for the ramp up period.
-			displayTicker.Reset(*displayEvery)
-			start = timeutil.Now()
-			formatter.rampDone()
-			reg.Tick(func(t histogram.Tick) {
-				t.Cumulative.Reset()
-				t.Hist.Reset()
-			})
+			resetStats.Store(true)
 		}()
 	}
 
@@ -618,6 +612,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					}
 				}
 			})
+
+			if resetStats.CompareAndSwap(true, false) {
+				// Used by load generator to reset stats after workload is fully ramped
+				// up.  Reset the histogram and the start time to throw away the stats
+				// for the ramp up period.
+				reg.Tick(func(t histogram.Tick) {
+					t.Elapsed = 0
+					t.Cumulative.Reset()
+					t.Hist.Reset()
+				})
+				formatter.rampDone()
+				start = timeutil.Now()
+				displayTicker.Reset(*displayEvery)
+			}
 
 		case <-workersCtx.Done():
 			cancelWorkers()
