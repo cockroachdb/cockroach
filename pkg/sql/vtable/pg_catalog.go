@@ -1496,7 +1496,8 @@ CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
 	tablespaces_streamed INT
 )`
 
-// PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
+// PgCatalogPolicy describes the schema of the pg_catalog.pg_policy table.
+// https://www.postgresql.org/docs/17/catalog-pg-policy.html,
 const PgCatalogPolicy = `
 CREATE TABLE pg_catalog.pg_policy (
 	oid OID,
@@ -1506,7 +1507,8 @@ CREATE TABLE pg_catalog.pg_policy (
 	polpermissive BOOL,
 	polroles OID[],
 	polqual STRING,
-	polwithcheck STRING
+	polwithcheck STRING,
+	INDEX (polrelid)
 )`
 
 // PgCatalogStatArchiver is an empty table in the pg_catalog that is not implemented yet
