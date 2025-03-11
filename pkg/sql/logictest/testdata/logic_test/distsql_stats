@@ -2424,6 +2424,11 @@ INSERT INTO abcd VALUES
 statement ok
 INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
 CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
 
@@ -2539,13 +2544,13 @@ INSERT INTO a_null VALUES (NULL), (1), (2);
 statement ok
 CREATE STATISTICS a_null_stat ON a FROM a_null;
 
+statement ok
+INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
+
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
-
-statement ok
-INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
 
 statement ok
 CREATE STATISTICS a_null_stat_partial ON a FROM a_null USING EXTREMES;
@@ -2577,13 +2582,13 @@ INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
 statement ok
 CREATE STATISTICS sd ON a FROM d_desc;
 
+statement ok
+INSERT INTO d_desc VALUES (0, 0), (5, 50);
+
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
-
-statement ok
-INSERT INTO d_desc VALUES (0, 0), (5, 50);
 
 statement ok
 CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES;
@@ -3016,6 +3021,11 @@ ANALYZE t130817;
 statement ok
 INSERT INTO t68254 (a, b, c) VALUES (5, '5', '{"foo": {"bar": {"baz": 5}}}')
 
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement ok
 CREATE STATISTICS j6 ON d FROM t68254 USING EXTREMES
 
@@ -3081,10 +3091,12 @@ ALTER TABLE int_outer_buckets INJECT STATISTICS '[
 ]'
 
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
-
-statement ok
 INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS int_outer_buckets_partial ON a FROM int_outer_buckets USING EXTREMES;
@@ -3143,11 +3155,6 @@ INSERT INTO timestamp_outer_buckets VALUES
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_full ON a FROM timestamp_outer_buckets;
 
-# Clear the stat cache so that creating partial statistics has access to the
-# latest full statistic.
-statement ok
-SELECT crdb_internal.clear_table_stats_cache();
-
 let $hist_id_timestamp_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE timestamp_outer_buckets] WHERE statistics_name = 'timestamp_outer_buckets_full'
 
@@ -3161,6 +3168,11 @@ statement ok
 INSERT INTO timestamp_outer_buckets VALUES
   ('2024-06-26 00:00:00'),
   ('2024-06-27 03:30:00');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
@@ -3232,6 +3244,11 @@ ALTER TABLE timestamp_outer_buckets INJECT STATISTICS '[
 
 statement ok
 INSERT INTO timestamp_outer_buckets VALUES ('2024-06-28 01:00:00');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS timestamp_outer_buckets_partial ON a FROM timestamp_outer_buckets USING EXTREMES;
@@ -3614,6 +3631,11 @@ INSERT INTO pstat_allindex VALUES
   (5, 5, 5, 5, 5, 5,'{"5": "5"}'),
   (6, 6, 6, 6, 6, 6, '{"6": "6"}'),
   (7, 7, 7, 7, 7, 7, '{"7": "7"}');
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS pstat_allindex_partial FROM pstat_allindex USING EXTREMES;
