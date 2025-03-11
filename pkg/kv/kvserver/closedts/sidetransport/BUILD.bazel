@@ -5,6 +5,7 @@ go_library(
     name = "sidetransport",
     srcs = [
         "debug.go",
+        "policy_locality.go",
         "receiver.go",
         "sender.go",
         ":gen-cantclosereason-stringer",  # keep
@@ -35,7 +36,9 @@ go_library(
 go_test(
     name = "sidetransport_test",
     srcs = [
+        "policy_locality_test.go",
         "receiver_test.go",
+        "sender_helper_test.go",
         "sender_test.go",
     ],
     embed = [":sidetransport"],
