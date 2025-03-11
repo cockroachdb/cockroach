@@ -60,7 +60,9 @@ func TestReduceBatchSizeWhenAutoRetryLimitExhausted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			i := 0
 			batch := tc.batch
-			err := retryWithReducedBatchWhenAutoRetryLimitExceeded(ctx, &batch, func(context.Context, []roachpb.Key) error {
+			err := retryWithReducedBatchWhenAutoRetryLimitExceeded(ctx, &batch, func(context.Context) error {
+				// Fetch the keys for the next batch.
+				_ = batch.getKeysForNextBatch()
 				// Return the next error in the list, or the last one if we run out.
 				if i >= len(tc.kvErrs) {
 					i = len(tc.kvErrs) - 1

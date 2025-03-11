@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -70,7 +71,11 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 type keyBatch struct {
 	sourceKeys    []roachpb.Key
 	processedKeys int
-	batchSize     int
+	// batchSize the size of the current batches being used.
+	batchSize int
+	// adjustedBatchSize is the current batch size with keys
+	// removed via applyKeysToRemove.
+	adjustedBatchSize int
 }
 
 // IndexBackfillMerger is a processor that merges entries from the corresponding
@@ -344,14 +349,30 @@ func (ibm *IndexBackfillMerger) merge(
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
+	keysToRemove := intsets.MakeFast()
 	batch := &keyBatch{sourceKeys: sourceKeys}
-
 	err := retryWithReducedBatchWhenAutoRetryLimitExceeded(ctx, batch,
-		func(ctx context.Context, keys []roachpb.Key) error {
+		func(ctx context.Context) error {
 			return ibm.flowCtx.Cfg.DB.Txn(ctx, func(
 				ctx context.Context, txn isql.Txn,
-			) error {
+			) (err error) {
+				keys := batch.getKeysForNextBatch()
+				if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+					if knobs != nil && knobs.RunBeforeMergeTxn != nil {
+						if err := knobs.RunBeforeMergeTxn(ctx, txn.KV(), keys); err != nil {
+							return err
+						}
+					}
+				}
+
 				var deletedCount int
+				defer func() {
+					// Apply any keys have hve been removed.
+					if !keysToRemove.Empty() {
+						batch.applyKeysToRemove(keysToRemove)
+						keysToRemove = intsets.MakeFast()
+					}
+				}()
 				txn.KV().AddCommitTrigger(func(ctx context.Context) {
 					commitTs, _ := txn.KV().CommitTimestamp()
 					log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
@@ -365,8 +386,11 @@ func (ibm *IndexBackfillMerger) merge(
 					return nil
 				}
 
-				wb, memUsedInMerge, deletedKeys, err := ibm.constructMergeBatch(
-					ctx, txn.KV(), keys, sourcePrefix, destPrefix,
+				var wb *kv.Batch
+				var memUsedInMerge int64
+				var deletedKeys int
+				wb, memUsedInMerge, deletedKeys, err = ibm.constructMergeBatch(
+					ctx, txn.KV(), keys, sourcePrefix, destPrefix, &keysToRemove,
 				)
 				if err != nil {
 					return err
@@ -399,6 +423,7 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 	sourceKeys []roachpb.Key,
 	sourcePrefix []byte,
 	destPrefix []byte,
+	keysToRemove *intsets.Fast,
 ) (*kv.Batch, int64, int, error) {
 	rb := txn.NewBatch()
 	for i := range sourceKeys {
@@ -436,7 +461,12 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		if len(sourceKV.Key) < prefixLen {
 			return nil, 0, 0, errors.Errorf("key for index entry %v does not start with prefix %v", sourceKV, sourcePrefix)
 		}
-
+		// If the timestamp we are looking at is after the merge timestamp,
+		// then no work needs to be done for this row.
+		if !sourceKV.Value.Timestamp.LessEq(ibm.spec.MergeTimestamp) {
+			keysToRemove.Add(i)
+			continue
+		}
 		destKey = destKey[:0]
 		destKey = append(destKey, destPrefix...)
 		destKey = append(destKey, sourceKV.Key[prefixLen:]...)
@@ -536,6 +566,8 @@ type IndexBackfillMergerTestingKnobs struct {
 	// RunAfterScanChunk is called once after a chunk has been successfully scanned.
 	RunAfterScanChunk func()
 
+	RunBeforeMergeTxn func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key) error
+
 	RunDuringMergeTxn func(ctx context.Context, txn *kv.Txn, startKey roachpb.Key, endKey roachpb.Key) error
 
 	// PushesProgressEveryChunk forces the process to push the merge process after
@@ -556,13 +588,19 @@ func (*IndexBackfillMergerTestingKnobs) ModuleTestingKnobs() {}
 // it will keep retrying the batch but with a progressively smaller batch size
 // each time.
 func retryWithReducedBatchWhenAutoRetryLimitExceeded(
-	ctx context.Context, batch *keyBatch, f func(context.Context, []roachpb.Key) error,
+	ctx context.Context, batch *keyBatch, f func(context.Context) error,
 ) error {
 	const minBatchSize = 1
 
 	for batch.hasAnotherBatch() {
-		err := f(ctx, batch.getKeysForNextBatch())
+		batch.adjustedBatchSize = batch.batchSize
+		err := f(ctx)
 		if err == nil {
+			// Sanity: The callback should always get keys for the
+			// next batch size.
+			if batch.batchSize == 0 {
+				panic(errors.AssertionFailedf("batch.getKeysForNextBatch must be invoked by callback."))
+			}
 			batch.setLastBatchComplete()
 			continue
 		}
@@ -584,6 +622,30 @@ func retryWithReducedBatchWhenAutoRetryLimitExceeded(
 	return nil
 }
 
+// applyKeysToRemove removes keys from the current batch before
+// a retry, if keys in the current batch no longer need processing.
+func (k *keyBatch) applyKeysToRemove(keysToRemove intsets.Fast) {
+	removeCount := keysToRemove.Len()
+	newSourceKeys := make([]roachpb.Key, len(k.sourceKeys)-removeCount)
+	// Copy everything before the current batch.
+	copy(newSourceKeys, k.sourceKeys[:k.processedKeys])
+	// Copy things from the batch minus removed keys
+	writeIdx := k.processedKeys
+	for i := k.processedKeys; i < k.adjustedBatchSize+k.processedKeys; i++ {
+		if keysToRemove.Contains(i) {
+			continue
+		}
+		newSourceKeys[writeIdx] = k.sourceKeys[i]
+		writeIdx++
+	}
+	// Copy the remaining array over.
+	copy(newSourceKeys[writeIdx:], k.sourceKeys[k.processedKeys+k.adjustedBatchSize:])
+	k.sourceKeys = newSourceKeys
+	// If a batch is being retried it will contain the same
+	// keys minus the removed ones, so shrink the size.
+	k.adjustedBatchSize -= removeCount
+}
+
 // reduceForRetry will reduce the size of the next batch due to a KV retry
 // related to contention.
 func (k *keyBatch) reduceForRetry() {
@@ -598,15 +660,20 @@ func (k *keyBatch) getKeysForNextBatch() []roachpb.Key {
 	// Init to the full set of keys in the first attempt
 	if k.batchSize == 0 {
 		k.batchSize = len(k.sourceKeys)
+		k.adjustedBatchSize = len(k.sourceKeys)
 	}
-	batchEnd := min(k.processedKeys+k.batchSize, len(k.sourceKeys))
+	// All keys have been removed from his batch.
+	if k.adjustedBatchSize == 0 {
+		return nil
+	}
+	batchEnd := min(k.processedKeys+k.adjustedBatchSize, len(k.sourceKeys))
 	return k.sourceKeys[k.processedKeys:batchEnd]
 }
 
 // setLastBatchComplete is a helper for when we successfully merged the last
 // batch of keys.
 func (k *keyBatch) setLastBatchComplete() {
-	k.processedKeys += k.batchSize
+	k.processedKeys += k.adjustedBatchSize
 }
 
 // hasAnotherBatch returns true if there are keys in the batch that still need
