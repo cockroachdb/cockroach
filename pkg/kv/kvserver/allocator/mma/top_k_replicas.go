@@ -7,6 +7,7 @@ import (
 )
 
 type topKReplicas struct {
+	dim LoadDimension
 	// Decreasing load.
 	replicas    []replicaLoad
 	replicaHeap replicaHeap
@@ -49,6 +50,9 @@ func (t *topKReplicas) doneInit() {
 }
 
 func (t *topKReplicas) len() int {
+	if t == nil {
+		return 0
+	}
 	return len(t.replicas)
 }
 
