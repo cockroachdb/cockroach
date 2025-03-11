@@ -46,18 +46,18 @@ stabilize
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
   Messages:
-  2->1 MsgVoteResp Term:1 Log:0/0
+  2->1 MsgVoteResp Term:1 Log:1/0
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
   Messages:
-  3->1 MsgVoteResp Term:1 Log:0/0
+  3->1 MsgVoteResp Term:1 Log:1/0
 > 1 receiving messages
-  2->1 MsgVoteResp Term:1 Log:0/0
+  2->1 MsgVoteResp Term:1 Log:1/0
   INFO 1 received MsgVoteResp from 2 at term 1
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
-  3->1 MsgVoteResp Term:1 Log:0/0
+  3->1 MsgVoteResp Term:1 Log:1/0
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader
@@ -67,22 +67,17 @@ stabilize
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:1
-  Entries:
-  1/3 EntryNormal ""
   Messages:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:1
@@ -93,7 +88,6 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 handling Ready
@@ -102,34 +96,47 @@ stabilize
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
-  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/3 Commit:3
-  1->3 MsgApp Term:1 Log:1/2 Commit:3 Entries:[1/3 EntryNormal ""]
+  1->2 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:2 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/3 Commit:3
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/3 Commit:3
+  1->2 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:2 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO 2 [commit: 2] ignored snapshot [index: 2, term: 1]
 > 3 receiving messages
-  1->3 MsgApp Term:1 Log:1/2 Commit:3 Entries:[1/3 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/3 Commit:3
 > 2 handling Ready
-  Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/3 EntryNormal ""
+  Ready MustSync=false:
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
-  2->1 MsgAppResp Term:1 Log:0/3 Commit:3
+  2->1 MsgAppResp Term:1 Log:0/2 Commit:2
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:2
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  2->1 MsgAppResp Term:1 Log:0/2 Commit:2
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->2 MsgApp Term:1 Log:1/2 Commit:3 Entries:[1/3 EntryNormal ""]
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/2 Commit:3 Entries:[1/3 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:1
+  Entries:
+  1/3 EntryNormal ""
+  CommittedEntries:
+  1/3 EntryNormal ""
+  Messages:
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
-  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
-  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:3

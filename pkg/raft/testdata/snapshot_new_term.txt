@@ -71,9 +71,9 @@ stabilize 1 2
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0
 > 2 receiving messages
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0
   INFO 2 received MsgVoteResp from 1 at term 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
@@ -86,21 +86,49 @@ stabilize 1 2
   Messages:
   2->1 MsgFortifyLeader Term:2 Log:0/0
   2->3 MsgFortifyLeader Term:2 Log:0/0
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->1 MsgApp Term:2 Log:1/10 Commit:11 Entries:[
+    1/11 EntryNormal ""
+    2/12 EntryNormal ""
+  ]
   2->3 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:2 Log:0/0
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+  2->1 MsgApp Term:2 Log:1/10 Commit:11 Entries:[
+    1/11 EntryNormal ""
+    2/12 EntryNormal ""
+  ]
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
+  Messages:
+  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:2 Log:0/11 Commit:11
+> 2 receiving messages
+  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:2 Log:0/11 Commit:11
+> 2 handling Ready
+  Ready MustSync=false:
+  Messages:
+  2->1 MsgApp Term:2 Log:1/10 Commit:11 Entries:[
+    1/11 EntryNormal ""
+    2/12 EntryNormal ""
+  ]
+  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+> 1 receiving messages
+  2->1 MsgApp Term:2 Log:1/10 Commit:11 Entries:[
+    1/11 EntryNormal ""
+    2/12 EntryNormal ""
+  ]
+  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+> 1 handling Ready
+  Ready MustSync=true:
   Entries:
   2/12 EntryNormal ""
   Messages:
-  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:2 Log:0/11 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 receiving messages
-  1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:2 Log:0/11 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 handling Ready
   Ready MustSync=true:
@@ -108,10 +136,8 @@ stabilize 1 2
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 receiving messages
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
   Ready MustSync=true:
@@ -119,10 +145,8 @@ stabilize 1 2
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 receiving messages
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
 # Drop inflight messages to 3.
