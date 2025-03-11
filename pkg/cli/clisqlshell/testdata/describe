@@ -560,7 +560,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html"
 pg_catalog,pg_opfamily,table,node,permanent,prefix,pg_opfamily was created for compatibility and is currently unimplemented
 pg_catalog,pg_partitioned_table,table,node,permanent,prefix,pg_partitioned_table was created for compatibility and is currently unimplemented
 pg_catalog,pg_policies,table,node,permanent,prefix,pg_policies was created for compatibility and is currently unimplemented
-pg_catalog,pg_policy,table,node,permanent,prefix,pg_policy was created for compatibility and is currently unimplemented
+pg_catalog,pg_policy,table,node,permanent,prefix,"stores row-level security policies for tables
+https://www.postgresql.org/docs/17/catalog-pg-policy.html"
 pg_catalog,pg_prepared_statements,table,node,permanent,prefix,"prepared statements
 https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
 pg_catalog,pg_prepared_xacts,table,node,permanent,prefix,"prepared transactions
