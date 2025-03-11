@@ -550,13 +550,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		ast = stmt.Statement.AST
 	}
 
+	// This goroutine is the only one that can modify txnState.mu.priority and
+	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	ctx = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 		&stmt, os.ImplicitTxn.Get(),
-		// This goroutine is the only one that can modify
-		// txnState.mu.priority, so we don't need to get a mutex here.
 		ex.state.mu.priority,
 		ex.extraTxnState.shouldCollectTxnExecutionStats,
+		ex.state.mu.autoRetryCounter,
 	)
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1509,14 +1510,16 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// For pausable portal, the instrumentation helper needs to be set up only
 	// when the portal is executed for the first time.
+	//
+	// This goroutine is the only one that can modify txnState.mu.priority and
+	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 			&vars.stmt, os.ImplicitTxn.Get(),
-			// This goroutine is the only one that can modify
-			// txnState.mu.priority, so we don't need to get a mutex here.
 			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
+			ex.state.mu.autoRetryCounter,
 		)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
