@@ -50,7 +50,7 @@ var _ raftstoreliveness.StoreLiveness = (*replicaRLockedStoreLiveness)(nil)
 func (r *replicaRLockedStoreLiveness) getStoreIdent(
 	replicaID raftpb.PeerID,
 ) (slpb.StoreIdent, bool) {
-	r.mu.AssertRHeld()
+	r.mu.AssertHeld()
 	desc, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if !ok {
 		return slpb.StoreIdent{}, false

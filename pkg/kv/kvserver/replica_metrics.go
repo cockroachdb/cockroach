@@ -87,7 +87,7 @@ func (r *Replica) Metrics(
 	nodeAttrs := r.store.nodeDesc.Attrs
 	nodeLocality := r.store.nodeDesc.Locality
 
-	r.mu.RLock()
+	r.mu.Lock()
 
 	var qpUsed, qpCap int64
 	if q := r.mu.proposalQuota; q != nil {
@@ -124,7 +124,7 @@ func (r *Replica) Metrics(
 		slowRaftProposalCount:    r.mu.slowProposalCount,
 	}
 
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	return calcReplicaMetrics(input)
 }

@@ -133,7 +133,6 @@ type singleBatchProposer interface {
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
 type proposer interface {
 	locker() sync.Locker
-	rlocker() sync.Locker
 
 	// The following require the proposer to hold (at least) a shared lock.
 	singleBatchProposer
@@ -177,7 +176,7 @@ func (b *propBuf) Init(
 	p proposer, tracker tracker.Tracker, clock *hlc.Clock, settings *cluster.Settings,
 ) {
 	b.p = p
-	b.full.L = p.rlocker()
+	b.full.L = p.locker()
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
@@ -223,8 +222,8 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	// insertion attempts will also grab the read lock, so they can insert
 	// concurrently. Consumers of the proposal buffer will grab the write lock,
 	// so they must wait for concurrent insertion attempts to finish.
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	b.p.locker().Lock()
+	defer b.p.locker().Unlock()
 
 	if p.v2SeenDuringApplication {
 		// We should never see a proposal that has already been on the apply loop
@@ -344,8 +343,8 @@ func (b *propBuf) flushRLocked(ctx context.Context) error {
 	// Upgrade the shared lock to an exclusive lock. After doing so, check again
 	// whether the proposer has been destroyed. If so, wake up other goroutines
 	// waiting for the flush.
-	b.p.rlocker().Unlock()
-	defer b.p.rlocker().Lock()
+	b.p.locker().Unlock()
+	defer b.p.locker().Lock()
 	b.p.locker().Lock()
 	defer b.p.locker().Unlock()
 	if status := b.p.destroyed(); !status.IsAlive() {
@@ -979,8 +978,8 @@ func (b *propBuf) OnLeaseChangeLocked(
 // EvaluatingRequestsCount returns the count of requests currently tracked by
 // the propBuf.
 func (b *propBuf) EvaluatingRequestsCount() int {
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	b.p.locker().Lock()
+	defer b.p.locker().Unlock()
 	return b.evalTracker.Count()
 }
 
@@ -1064,8 +1063,8 @@ func (t *TrackedRequestToken) Move(ctx context.Context) TrackedRequestToken {
 func (b *propBuf) TrackEvaluatingRequest(
 	ctx context.Context, wts hlc.Timestamp,
 ) (minTS hlc.Timestamp, _ TrackedRequestToken) {
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	b.p.locker().Lock()
+	defer b.p.locker().Unlock()
 
 	minTS = b.assignedClosedTimestamp.Next()
 	wts.Forward(minTS)
@@ -1162,10 +1161,6 @@ var _ proposer = &replicaProposer{}
 
 func (rp *replicaProposer) locker() sync.Locker {
 	return &rp.mu.ReplicaMutex
-}
-
-func (rp *replicaProposer) rlocker() sync.Locker {
-	return rp.mu.ReplicaMutex.RLocker()
 }
 
 func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {

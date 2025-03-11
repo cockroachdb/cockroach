@@ -564,10 +564,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// destroyed once we return errors from mutexes (#9190). After all, it
 		// can still happen with this code.
 		rs.visited++
-		repl.mu.RLock()
+		repl.mu.Lock()
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.IsInitialized()
-		repl.mu.RUnlock()
+		repl.mu.Unlock()
 		if initialized && destroyed.IsAlive() && !visitor(repl) {
 			break
 		}

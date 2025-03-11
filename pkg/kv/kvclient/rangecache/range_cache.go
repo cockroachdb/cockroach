@@ -140,7 +140,7 @@ type RangeCache struct {
 	// filled while servicing read and write requests to the key value
 	// store.
 	rangeCache struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		cache *cache.OrderedCache
 	}
 	// lookupRequests stores all inflight requests retrieving range
@@ -247,8 +247,8 @@ func NewRangeCache(
 }
 
 func (rc *RangeCache) String() string {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
 	return rc.stringLocked()
 }
 
@@ -367,7 +367,7 @@ func (et EvictionToken) ClosedTimestampPolicy(
 func (et *EvictionToken) syncRLocked(
 	ctx context.Context,
 ) (stillValid bool, cachedEntry *cacheEntry, rawEntry *cache.Entry) {
-	cachedEntry, rawEntry = et.rdc.getCachedRLocked(ctx, et.entry.desc.StartKey, false /* inverted */)
+	cachedEntry, rawEntry = et.rdc.getCachedLocked(ctx, et.entry.desc.StartKey, false /* inverted */)
 	if cachedEntry == nil || !descsCompatible(&cachedEntry.desc, et.Desc()) {
 		et.clear()
 		return false, nil, nil
@@ -624,8 +624,8 @@ func (rc *RangeCache) Lookup(ctx context.Context, key roachpb.RKey) (roachpb.Ran
 func (rc *RangeCache) GetCachedOverlapping(
 	ctx context.Context, span roachpb.RSpan,
 ) []roachpb.RangeInfo {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
 	rawEntries := rc.getCachedOverlappingRLocked(ctx, span)
 	entries := make([]roachpb.RangeInfo, len(rawEntries))
 	for i, e := range rawEntries {
@@ -709,9 +709,9 @@ func newLookupCoalescingError(key roachpb.RKey, wrongDesc *roachpb.RangeDescript
 func (rc *RangeCache) tryLookup(
 	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
 ) (EvictionToken, error) {
-	rc.rangeCache.RLock()
-	if entry, _ := rc.getCachedRLocked(ctx, key, useReverseScan); entry != nil {
-		rc.rangeCache.RUnlock()
+	rc.rangeCache.Lock()
+	if entry, _ := rc.getCachedLocked(ctx, key, useReverseScan); entry != nil {
+		rc.rangeCache.Unlock()
 		returnToken := EvictionToken{rdc: rc, entry: entry}
 		return returnToken, nil
 	}
@@ -790,7 +790,7 @@ func (rc *RangeCache) tryLookup(
 	// We must use DoChan above so that we can always unlock this mutex. This must
 	// be done *after* the request has been added to the lookupRequests group, or
 	// we risk it racing with an inflight request.
-	rc.rangeCache.RUnlock()
+	rc.rangeCache.Unlock()
 
 	if !leader {
 		log.VEvent(ctx, 2, "coalesced range lookup request onto in-flight one")
@@ -997,7 +997,7 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 	rc.rangeCache.Lock()
 	defer rc.rangeCache.Unlock()
 
-	cachedDesc, entry := rc.getCachedRLocked(ctx, descKey, false /* inverted */)
+	cachedDesc, entry := rc.getCachedLocked(ctx, descKey, false /* inverted */)
 	if cachedDesc == nil {
 		return false
 	}
@@ -1009,7 +1009,7 @@ func (rc *RangeCache) EvictByKey(ctx context.Context, descKey roachpb.RKey) bool
 // evictDescLocked evicts a cache entry unless it's newer than the provided
 // descriptor.
 func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDescriptor) bool {
-	cachedEntry, rawEntry := rc.getCachedRLocked(ctx, desc.StartKey, false /* inverted */)
+	cachedEntry, rawEntry := rc.getCachedLocked(ctx, desc.StartKey, false /* inverted */)
 	if cachedEntry == nil {
 		// Cache is empty; nothing to do.
 		return false
@@ -1036,9 +1036,9 @@ func (rc *RangeCache) evictDescLocked(ctx context.Context, desc *roachpb.RangeDe
 func (rc *RangeCache) TestingGetCached(
 	ctx context.Context, key roachpb.RKey, inverted bool, _default roachpb.RangeClosedTimestampPolicy,
 ) (roachpb.RangeInfo, error) {
-	rc.rangeCache.RLock()
-	defer rc.rangeCache.RUnlock()
-	entry, _ := rc.getCachedRLocked(ctx, key, inverted)
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
+	entry, _ := rc.getCachedLocked(ctx, key, inverted)
 	if entry == nil {
 		return roachpb.RangeInfo{}, errors.Newf("no entry found for %s in cache", key)
 	}
@@ -1052,12 +1052,12 @@ func (rc *RangeCache) TestingGetCached(
 	return info, nil
 }
 
-// getCachedRLocked is like TestingGetCached, but it assumes that the caller holds a
-// read lock on rdc.rangeCache.
+// getCachedLocked is like TestingGetCached, but it assumes that the caller holds a
+// lock on rdc.rangeCache.
 //
 // In addition to TestingGetCached, it also returns an internal cache Entry that can be
 // used for descriptor eviction.
-func (rc *RangeCache) getCachedRLocked(
+func (rc *RangeCache) getCachedLocked(
 	ctx context.Context, key roachpb.RKey, inverted bool,
 ) (*cacheEntry, *cache.Entry) {
 	// rawEntry will be the range containing key, or the first cached entry around

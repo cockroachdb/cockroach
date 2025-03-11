@@ -142,7 +142,7 @@ type intervalSkl struct {
 	// lock is acquired by the Add and Lookup operations. The write lock is
 	// acquired only when the pages are rotated. Since that is very rare, the
 	// vast majority of operations can proceed without blocking.
-	rotMutex syncutil.RWMutex
+	rotMutex syncutil.Mutex
 
 	// The following fields are used to enforce a minimum retention window on
 	// all timestamp intervals. intervalSkl promises to retain all timestamp
@@ -293,10 +293,10 @@ func (s *intervalSkl) AddRange(
 func (s *intervalSkl) addRange(
 	ctx context.Context, from, to []byte, opt rangeOptions, val cacheValue,
 ) *sklPage {
-	// Acquire the rotation mutex read lock so that the page will not be rotated
+	// Acquire the rotation mutex lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
-	s.rotMutex.TracedRLock(ctx)
-	defer s.rotMutex.RUnlock()
+	s.rotMutex.TracedLock(ctx)
+	defer s.rotMutex.Unlock()
 
 	// If floor ts is >= requested timestamp, then no need to perform a search or
 	// add any records.
@@ -431,7 +431,7 @@ func (s *intervalSkl) maximumPageSize() uint32 {
 // timestamp, in order to guarantee that timestamp lookups never return decreasing
 // values.
 func (s *intervalSkl) rotatePages(ctx context.Context, filledPage *sklPage) {
-	// Acquire the rotation mutex write lock to lock the entire intervalSkl.
+	// Acquire the rotation mutex lock to lock the entire intervalSkl.
 	s.rotMutex.TracedLock(ctx)
 	defer s.rotMutex.Unlock()
 
@@ -507,10 +507,10 @@ func (s *intervalSkl) LookupTimestampRange(
 		panic("from and to keys cannot be nil")
 	}
 
-	// Acquire the rotation mutex read lock so that the page will not be rotated
+	// Acquire the rotation mutex lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
-	s.rotMutex.TracedRLock(ctx)
-	defer s.rotMutex.RUnlock()
+	s.rotMutex.TracedLock(ctx)
+	defer s.rotMutex.Unlock()
 
 	// Iterate over the pages, performing the lookup on each and remembering the
 	// maximum value we've seen so far.
@@ -569,10 +569,10 @@ func (s *intervalSkl) Serialize(ctx context.Context, from, to []byte) rspb.Segme
 // serializePages returns a serialized representation of each of the
 // intervalSkl's pages over the interval spanning from start to end.
 func (s *intervalSkl) serializePages(ctx context.Context, from, to []byte) []rspb.Segment {
-	// Acquire the rotation mutex read lock so that the page will not be rotated
+	// Acquire the rotation mutex lock so that the page will not be rotated
 	// while serialize operations are in progress.
-	s.rotMutex.TracedRLock(ctx)
-	defer s.rotMutex.RUnlock()
+	s.rotMutex.TracedLock(ctx)
+	defer s.rotMutex.Unlock()
 
 	// Iterate over the pages, serializing each and merging as we go.
 	segs := make([]rspb.Segment, 0, s.pages.Len())
@@ -587,8 +587,8 @@ func (s *intervalSkl) serializePages(ctx context.Context, from, to []byte) []rsp
 
 // FloorTS returns the receiver's floor timestamp.
 func (s *intervalSkl) FloorTS() hlc.Timestamp {
-	s.rotMutex.RLock()
-	defer s.rotMutex.RUnlock()
+	s.rotMutex.Lock()
+	defer s.rotMutex.Unlock()
 	return s.floorTS
 }
 

@@ -145,8 +145,8 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 // GetLastIndex returns the index of the last entry in the raft log.
 // Requires that r.mu is not held.
 func (r *Replica) GetLastIndex() kvpb.RaftIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.raftLastIndexRLocked()
 }
 
@@ -164,8 +164,8 @@ func (r *Replica) raftFirstIndexRLocked() kvpb.RaftIndex {
 // GetFirstIndex returns the index of the first entry in the raft log.
 // Requires that r.mu is not held.
 func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.raftFirstIndexRLocked()
 }
 
@@ -176,7 +176,7 @@ func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
 // returned snapshot.
 func (r *replicaLogStorage) LogSnapshot() raft.LogStorageSnapshot {
 	r.raftMu.AssertHeld()
-	r.mu.AssertRHeld()
+	r.mu.AssertHeld()
 	return (*replicaRaftMuLogSnap)(r)
 }
 

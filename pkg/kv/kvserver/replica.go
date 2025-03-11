@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -176,44 +175,24 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
-// ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
+// ReplicaMutex is a Mutex. It has its own type to make it easier to look for
 // usages specific to the replica mutex.
-type ReplicaMutex syncutil.RWMutex
+type ReplicaMutex syncutil.Mutex
 
 func (mu *ReplicaMutex) Lock() {
-	(*syncutil.RWMutex)(mu).Lock()
+	(*syncutil.Mutex)(mu).Lock()
 }
 
 func (mu *ReplicaMutex) TracedLock(ctx context.Context) {
-	(*syncutil.RWMutex)(mu).TracedLock(ctx)
+	(*syncutil.Mutex)(mu).TracedLock(ctx)
 }
 
 func (mu *ReplicaMutex) Unlock() {
-	(*syncutil.RWMutex)(mu).Unlock()
-}
-
-func (mu *ReplicaMutex) RLock() {
-	(*syncutil.RWMutex)(mu).RLock()
-}
-
-func (mu *ReplicaMutex) TracedRLock(ctx context.Context) {
-	(*syncutil.RWMutex)(mu).TracedRLock(ctx)
+	(*syncutil.Mutex)(mu).Unlock()
 }
 
 func (mu *ReplicaMutex) AssertHeld() {
-	(*syncutil.RWMutex)(mu).AssertHeld()
-}
-
-func (mu *ReplicaMutex) AssertRHeld() {
-	(*syncutil.RWMutex)(mu).AssertRHeld()
-}
-
-func (mu *ReplicaMutex) RUnlock() {
-	(*syncutil.RWMutex)(mu).RUnlock()
-}
-
-func (mu *ReplicaMutex) RLocker() sync.Locker {
-	return (*syncutil.RWMutex)(mu).RLocker()
+	(*syncutil.Mutex)(mu).AssertHeld()
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
@@ -1060,15 +1039,15 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 
 // GetMinBytes gets the replica's minimum byte threshold.
 func (r *Replica) GetMinBytes(_ context.Context) int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes(_ context.Context) int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.conf.RangeMaxBytes
 }
 
@@ -1154,8 +1133,8 @@ func (r *Replica) HasExternalBytes() (bool, error) {
 // IsScratchRange returns true if this is range is a scratch range (i.e.
 // overlaps with the scratch span and has a start key <= keys.ScratchRangeMin).
 func (r *Replica) IsScratchRange() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.isScratchRangeRLocked()
 }
 
@@ -1174,8 +1153,8 @@ func (r *Replica) IsFirstRange() bool {
 // IsDestroyed returns a non-nil error if the replica has been destroyed
 // and the reason if it has.
 func (r *Replica) IsDestroyed() (DestroyReason, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.isDestroyedRLocked()
 }
 
@@ -1185,23 +1164,23 @@ func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
 
 // IsQuiescent returns whether the replica is quiescent or not.
 func (r *Replica) IsQuiescent() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.quiescent
 }
 
 // IsAsleep returns whether the replica is asleep or not.
 func (r *Replica) IsAsleep() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.asleep
 }
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
 func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// This method is being removed shortly. We can't pass out a pointer to the
 	// underlying replica's SpanConfig.
 	conf := r.mu.conf
@@ -1210,8 +1189,8 @@ func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanCo
 
 // LoadSpanConfig loads the authoritative span config for the replica.
 func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// This method is being removed shortly. We can't pass out a pointer to the
 	// underlying replica's SpanConfig.
 	conf := r.mu.conf
@@ -1221,13 +1200,13 @@ func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error)
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.shMu.state.Desc
 }
 
 func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
-	r.mu.AssertRHeld()
+	r.mu.AssertHeld()
 	return r.shMu.state.Desc
 }
 
@@ -1301,23 +1280,23 @@ func (r *Replica) GetRangeID() roachpb.RangeID {
 
 // GetGCThreshold returns the GC threshold.
 func (r *Replica) GetGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return *r.shMu.state.GCThreshold
 }
 
 // GetGCHint returns the GC hint.
 func (r *Replica) GetGCHint() roachpb.GCHint {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return *r.shMu.state.GCHint
 }
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
 func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.entireSpanExcludedFromBackupRLocked(ctx, sp)
 }
 
@@ -1354,8 +1333,8 @@ func (r *Replica) entireSpanExcludedFromBackupRLocked(
 
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.shMu.state.Version == nil {
 		// We introduced replica versions in v21.1 to service long-running
 		// migrations. For replicas that were instantiated pre-21.1, it's
@@ -1380,8 +1359,8 @@ func (r *Replica) Version() roachpb.Version {
 
 // GetRangeInfo atomically reads the range's current range info.
 func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	desc := r.descRLocked()
 	l, _ /* nextLease */ := r.getLeaseRLocked()
 	closedts := r.closedTimestampPolicyRLocked()
@@ -1453,8 +1432,8 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 }
 
 func (r *Replica) isRangefeedEnabled() (ret bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	return r.isRangefeedEnabledRLocked()
 }
@@ -1496,8 +1475,8 @@ func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 // LastReplicaAdded returns the ID of the most recently added replica and the
 // time at which it was added.
 func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.mu.lastReplicaAdded, r.mu.lastReplicaAddedTime
 }
 
@@ -1505,8 +1484,8 @@ func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
 // descriptor. Returns a *RangeNotFoundError if the replica is not found.
 // No other errors are returned.
 func (r *Replica) GetReplicaDescriptor() (roachpb.ReplicaDescriptor, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.getReplicaDescriptorRLocked()
 }
 
@@ -1521,8 +1500,8 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 }
 
 func (r *Replica) getMergeCompleteCh() chan struct{} {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.getMergeCompleteChRLocked()
 }
 
@@ -1558,8 +1537,8 @@ func (r *Replica) getLastReplicaDescriptors() (to, from roachpb.ReplicaDescripto
 // This accessor is thread-safe, but provides no guarantees about its
 // synchronization with any concurrent writes.
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return *r.shMu.state.Stats
 }
 
@@ -1669,16 +1648,16 @@ func (r *Replica) setQueueLastProcessed(
 // RaftStatus returns the current raft status of the replica. It returns nil
 // if the Raft group has not been initialized yet.
 func (r *Replica) RaftStatus() *raft.Status {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.raftStatusRLocked()
 }
 
 // RaftBasicStatus returns the current raft basic status of the replica. An empty
 // BasicStatus is returned if the Raft group hasn't been initialized.
 func (r *Replica) RaftBasicStatus() raft.BasicStatus {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.raftBasicStatusRLocked()
 }
 
@@ -1745,8 +1724,8 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// it's best to keep it out of the Replica.mu critical section.
 	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.shMu.state)).(*kvserverpb.ReplicaState)
 	// TODO(#97613): add a dedicated TruncatedState field to RangeInfo when the
 	// TruncatedState field is removed from ReplicaState. We can't do it right now
@@ -1903,8 +1882,8 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Has the replica been initialized?
 	// NB: this should have already been checked in Store.Send, so we don't need
@@ -1969,8 +1948,8 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 		return err
 	}
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Ensure the request is entirely contained within the range's key bounds
 	// (even) after the storage engine has been pinned by the iterator. Given we
@@ -2067,8 +2046,8 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
 	now := r.Clock().NowAsClockTimestamp()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	status := r.leaseStatusForRequestRLocked(ctx, now, ts)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
@@ -2617,8 +2596,8 @@ func (r *Replica) HasOutstandingLearnerSnapshotInFlightForTesting() bool {
 func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
 	var ts cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&ts)
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	ts, err = r.readProtectedTimestampsRLocked(ctx)
 	return err
 }

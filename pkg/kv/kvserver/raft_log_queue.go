@@ -242,7 +242,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
-	r.mu.RLock()
+	r.mu.Lock()
 	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.shMu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
@@ -275,7 +275,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.shMu.raftLogSizeTrusted
 	firstIndex := r.raftFirstIndexRLocked()
-	r.mu.RUnlock()
+	r.mu.Unlock()
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 
 	if raftStatus == nil {
@@ -293,7 +293,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 	// For all our followers, overwrite the RecentActive field with our own
 	// activity check.
-	r.mu.RLock()
+	r.mu.Lock()
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
 	updateRaftProgressFromActivity(
@@ -303,7 +303,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,

@@ -57,19 +57,19 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
-	sp.DetailsMu.RLock()
+	sp.DetailsMu.Lock()
 	if _, ok := sp.DetailsMu.StoreDetails[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
-	sp.DetailsMu.RUnlock()
+	sp.DetailsMu.Unlock()
 
 	sg.GossipStores(uniqueStore, t)
 
-	sp.DetailsMu.RLock()
+	sp.DetailsMu.Lock()
 	if _, ok := sp.DetailsMu.StoreDetails[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
-	sp.DetailsMu.RUnlock()
+	sp.DetailsMu.Unlock()
 }
 
 // verifyStoreList ensures that the returned list of stores is correct.

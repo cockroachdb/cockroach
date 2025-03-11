@@ -803,10 +803,10 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
+		r.mu.Lock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
-		r.mu.RUnlock()
+		r.mu.Unlock()
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}

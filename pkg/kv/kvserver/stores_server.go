@@ -86,9 +86,9 @@ func (is Server) WaitForApplication(
 			if err != nil {
 				return err
 			}
-			repl.mu.RLock()
+			repl.mu.Lock()
 			leaseAppliedIndex := repl.shMu.state.LeaseAppliedIndex
-			repl.mu.RUnlock()
+			repl.mu.Unlock()
 			if leaseAppliedIndex >= req.LeaseIndex {
 				// For performance reasons, we don't sync to disk when
 				// applying raft commands. This means that if a node restarts

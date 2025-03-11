@@ -194,7 +194,7 @@ type tokenCounter struct {
 	tokenType TokenType
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
@@ -256,8 +256,8 @@ func (t *tokenCounter) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (t *tokenCounter) SafeFormat(w redact.SafePrinter, _ rune) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	w.Printf("reg=%v/%v ela=%v/%v",
 		t.mu.counters[admissionpb.RegularWorkClass].tokens,
 		t.mu.counters[admissionpb.RegularWorkClass].limit,
@@ -271,8 +271,8 @@ func (t *tokenCounter) Stream() kvflowcontrol.Stream {
 }
 
 func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return tokensPerWorkClass{
 		regular: t.tokensLocked(admissionpb.RegularWorkClass),
 		elastic: t.tokensLocked(admissionpb.ElasticWorkClass),
@@ -280,8 +280,8 @@ func (t *tokenCounter) tokensPerWorkClass() tokensPerWorkClass {
 }
 
 func (t *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.tokensLocked(wc)
 }
 
@@ -290,8 +290,8 @@ func (t *tokenCounter) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Toke
 }
 
 func (t *tokenCounter) limit(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.mu.counters[wc].limit
 }
 
