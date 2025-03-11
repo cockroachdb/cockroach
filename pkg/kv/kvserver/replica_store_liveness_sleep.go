@@ -6,13 +6,9 @@
 package kvserver
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
@@ -54,69 +50,32 @@ func (r *Replica) maybeFallAsleepRMuLocked(leaseStatus kvserverpb.LeaseStatus) b
 	if ticks := r.ticksSinceLastMessageRLocked(); ticks < goToSleepAfterTicks {
 		return false
 	}
-	// Grab the quiescence lock here to prevent races between support withdrawal
-	// and falling asleep.
-	r.store.quiescence.Lock()
-	defer r.store.quiescence.Unlock()
+	// Grab the unquiescedOrAwakeReplicas lock here to prevent races between
+	// support withdrawal and falling asleep.
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	defer r.store.unquiescedOrAwakeReplicas.Unlock()
 	// If not supporting a fortified leader, do not fall asleep.
 	if !r.raftSupportingFortifiedLeaderRLocked() {
 		return false
 	}
-	leader, ok := r.lookupLeaderRLocked()
-	// If the leader is not found, do no fall asleep.
-	if !ok {
-		return false
-	}
-	// It's safe to fall asleep here: after quiescence.Lock() above, this follower
-	// supports the leader. If it withdrew support for the leader since then, the
-	// callback to wake up the replica will wait for the quiescence.Unlock().
+	// It's safe to fall asleep here: after locking unquiescedOrAwakeReplicas
+	// above, this follower supports the leader. If it withdrew support since
+	// then, the call to maybeWakeUpRMuLocked will wait for the unlock and wake up
+	// the replica.
 	r.mu.asleep = true
-	delete(r.store.quiescence.unquiescedOrAwake, r.RangeID)
-	_, ok = r.store.quiescence.asleepByLeaderStore[leader.StoreID]
-	if !ok {
-		r.store.quiescence.asleepByLeaderStore[leader.StoreID] = make(map[*Replica]struct{})
-	}
-	r.store.quiescence.asleepByLeaderStore[leader.StoreID][r] = struct{}{}
+	delete(r.store.unquiescedOrAwakeReplicas.m, r.RangeID)
 	return true
 }
 
-// maybeWakeUpReplicaMuLocked marks a follower as awake.
-func (r *Replica) maybeWakeUpReplicaMuLocked() {
-	r.mu.AssertHeld()
+// maybeWakeUpRMuLocked marks a follower as awake.
+func (r *Replica) maybeWakeUpRMuLocked() {
 	if !r.mu.asleep {
 		return
 	}
-	r.maybeRemoveAsleepReplicaFromQuiescenceStateReplicaMuLocked()
 	// Prevent immediate falling asleep.
 	r.mu.lastMessageAtTicks = r.mu.ticks
 	r.mu.asleep = false
-}
-
-func (r *Replica) maybeRemoveAsleepReplicaFromQuiescenceStateReplicaMuLocked() {
-	r.mu.AssertHeld()
-	if !r.mu.asleep {
-		return
-	}
-	r.store.quiescence.Lock()
-	defer r.store.quiescence.Unlock()
-	r.store.quiescence.unquiescedOrAwake[r.RangeID] = struct{}{}
-	leader, ok := r.lookupLeaderRLocked()
-	// This shouldn't be possible because the replica's view of its leader can't
-	// change while it's asleep. A change in the leader's descriptor would require
-	// consensus, which would wake up the replica.
-	// TODO(mira): turn into an assertion?
-	if !ok {
-		ctx := r.AnnotateCtx(context.TODO())
-		log.Warningf(ctx, "asleep replica %v can't find its leader", r.replicaID)
-		return
-	}
-	delete(r.store.quiescence.asleepByLeaderStore[leader.StoreID], r)
-	if len(r.store.quiescence.asleepByLeaderStore[leader.StoreID]) == 0 {
-		delete(r.store.quiescence.asleepByLeaderStore, leader.StoreID)
-	}
-}
-
-// lookupLeaderRLocked attempts to find the leader's descriptor.
-func (r *Replica) lookupLeaderRLocked() (roachpb.ReplicaDescriptor, bool) {
-	return r.shMu.state.Desc.GetReplicaDescriptorByID(r.mu.leaderID)
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	defer r.store.unquiescedOrAwakeReplicas.Unlock()
+	r.store.unquiescedOrAwakeReplicas.m[r.RangeID] = struct{}{}
 }

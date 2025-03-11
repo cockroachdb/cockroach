@@ -39,9 +39,9 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
-		r.store.quiescence.Lock()
-		delete(r.store.quiescence.unquiescedOrAwake, r.RangeID)
-		r.store.quiescence.Unlock()
+		r.store.unquiescedOrAwakeReplicas.Lock()
+		delete(r.store.unquiescedOrAwakeReplicas.m, r.RangeID)
+		r.store.unquiescedOrAwakeReplicas.Unlock()
 	} else if log.V(4) {
 		log.Infof(ctx, "r%d already quiesced", r.RangeID)
 	}
@@ -82,9 +82,9 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	}
 	r.mu.quiescent = false
 	r.mu.laggingFollowersOnQuiesce = nil
-	r.store.quiescence.Lock()
-	r.store.quiescence.unquiescedOrAwake[r.RangeID] = struct{}{}
-	r.store.quiescence.Unlock()
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	r.store.unquiescedOrAwakeReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedOrAwakeReplicas.Unlock()
 
 	st := r.raftSparseStatusRLocked()
 	if st.RaftState == raftpb.StateLeader {

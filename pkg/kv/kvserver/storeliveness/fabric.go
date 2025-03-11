@@ -67,7 +67,7 @@ type Fabric interface {
 	// liveness). The replica may need to help elect a new leader.
 	//
 	// Returns the set of stores for which support was withdrawn.
-	RegisterSupportWithdrawalCallback(func(storeIDs []roachpb.StoreID))
+	RegisterSupportWithdrawalCallback(func(storeIDs map[roachpb.StoreID]struct{}))
 }
 
 // InspectFabric is an interface that exposes all in-memory support state for a
