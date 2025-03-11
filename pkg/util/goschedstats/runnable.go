@@ -12,10 +12,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
+// Enabled is true if the system has access to the internal goroutine statistics
+// (i.e. if CockroachDB was built using our Go fork).
 const Enabled = enabled
 
-// CumulativeNormalizedRunnableGoroutines returns the sum, over all seconds
-// since the program started, of the average number of runnable goroutines per
+// CumulativeNormalizedRunnableGoroutines returns the sum (over all seconds
+// since the program started) of the average number of runnable goroutines per
 // GOMAXPROC.
 //
 // Runnable goroutines are goroutines which are ready to run but are waiting for
@@ -24,6 +26,8 @@ const Enabled = enabled
 //
 // The number of runnable goroutines is sampled frequently, and an average is
 // calculated and accumulated once per second.
+//
+// If Enabled is false, returns 0.
 func CumulativeNormalizedRunnableGoroutines() float64 {
 	return cumulativeNormalizedRunnableGoroutines()
 }
@@ -42,20 +46,20 @@ func CumulativeNormalizedRunnableGoroutines() float64 {
 // cpu bound could stress the usage of a smoothed signal).
 //
 // This function returns a unique ID for this callback which can be un-registered
-// by passing the ID to UnregisterRunnableCountCallback. Notably, this function
-// may return a negative number if we have no access to the internal Goroutine
-// machinery (i.e. if we running a recent upstream version of Go; *not* our
-// internal fork). In this case, the callback has not been registered.
-func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64) {
+// by passing the ID to UnregisterRunnableCountCallback.
+//
+// If Enabled is false, returns id=-1 and ok=false. The caller must handle this
+// case because the callback will never fire.
+func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
 	return registerRunnableCountCallback(cb)
 }
 
-// RunnableCountCallback is provided the current value of runnable goroutines,
-// GOMAXPROCS, and the current sampling period.
-type RunnableCountCallback func(numRunnable int, numProcs int, samplePeriod time.Duration)
+// RunnableCountCallback is called with the current value of runnable
+// goroutines, GOMAXPROCS, and the current sampling period.
+type RunnableCountCallback func(numRunnable int, numGoMaxProcs int, samplePeriod time.Duration)
 
-// UnregisterRunnableCountCallback unregisters the callback to be run with the
-// runnable and procs info.
+// UnregisterRunnableCountCallback unregisters a callback previously registered
+// with RegisterRunnableCountCallback.
 func UnregisterRunnableCountCallback(id int64) {
 	unregisterRunnableCountCallback(id)
 }
