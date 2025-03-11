@@ -780,7 +780,6 @@ type StoreIDAndReplicaState struct {
 
 // rangeState is periodically updated based on reporting by the leaseholder.
 type rangeState struct {
-	rangeID roachpb.RangeID
 	// replicas is the adjusted replicas. It is always consistent with
 	// the storeState.adjusted.replicas in the corresponding stores.
 	replicas []StoreIDAndReplicaState
@@ -1037,11 +1036,11 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 					if !replica.ReplicaState.IsLeaseholder {
 						l = rs.load.RaftCPU
 					}
-					topk.addReplica(rs.rangeID, l)
+					topk.addReplica(rangeID, l)
 				case WriteBandwidth:
-					topk.addReplica(rs.rangeID, rs.load.Load[WriteBandwidth])
+					topk.addReplica(rangeID, rs.load.Load[WriteBandwidth])
 				case ByteSize:
-					topk.addReplica(rs.rangeID, rs.load.Load[ByteSize])
+					topk.addReplica(rangeID, rs.load.Load[ByteSize])
 				}
 			}
 		}
@@ -1326,7 +1325,6 @@ func (cs *clusterState) computeLoadSummary(
 var _ = ReplicaState{}.VoterIsLagging
 var _ = storeState{}.maxFractionPending
 var _ = rangeState{}.diversityIncreaseLastFailedAttempt
-var _ = rangeState{}.rangeID
 var _ = enactedReplicaChange{}
 var _ = storeEnactedHistory{}.changes
 var _ = storeEnactedHistory{}.totalDelta
