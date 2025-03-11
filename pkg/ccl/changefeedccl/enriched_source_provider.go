@@ -28,7 +28,7 @@ type enrichedSourceProviderOpts struct {
 	updated, mvccTimestamp bool
 }
 type enrichedSourceData struct {
-	jobID,
+	jobID, sink,
 	dbVersion, clusterName, sourceNodeLocality, nodeName, nodeID, clusterID string
 	// TODO(#139692): Add schema info support.
 	// TODO(#139691): Add job info support.
@@ -40,7 +40,10 @@ type enrichedSourceProvider struct {
 }
 
 func newEnrichedSourceData(
-	ctx context.Context, cfg *execinfra.ServerConfig, spec execinfrapb.ChangeAggregatorSpec,
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
+	sink sinkType,
 ) (enrichedSourceData, error) {
 	var sourceNodeLocality, nodeName, nodeID string
 	tiers := cfg.Locality.Tiers
@@ -72,6 +75,7 @@ func newEnrichedSourceData(
 
 	return enrichedSourceData{
 		jobID:              spec.JobID.String(),
+		sink:               sink.String(),
 		dbVersion:          build.GetInfo().Tag,
 		clusterName:        cfg.ExecutorConfig.(*sql.ExecutorConfig).RPCContext.ClusterName(),
 		clusterID:          nodeInfo.LogicalClusterID().String(),
@@ -97,6 +101,7 @@ func (p *enrichedSourceProvider) avroSourceFunction(row cdcevent.Row) (map[strin
 	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
 	return map[string]any{
 		"job_id":               goavro.Union(avro.SchemaTypeString, p.sourceData.jobID),
+		"changefeed_sink":      goavro.Union(avro.SchemaTypeString, p.sourceData.sink),
 		"db_version":           goavro.Union(avro.SchemaTypeString, p.sourceData.dbVersion),
 		"cluster_name":         goavro.Union(avro.SchemaTypeString, p.sourceData.clusterName),
 		"cluster_id":           goavro.Union(avro.SchemaTypeString, p.sourceData.clusterID),
@@ -113,10 +118,7 @@ func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error) {
 	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
 	// TODO(various): Add fields here.
-	keys := []string{
-		fieldNameJobID, fieldNameDBVersion, fieldNameClusterName, fieldNameClusterID,
-		fieldNameSourceNodeLocality, fieldNameNodeName, fieldNameNodeID,
-	}
+	keys := jsonFields
 
 	b, err := json.NewFixedKeysObjectBuilder(keys)
 	if err != nil {
@@ -124,6 +126,9 @@ func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error
 	}
 
 	if err := b.Set(fieldNameJobID, json.FromString(p.sourceData.jobID)); err != nil {
+		return nil, err
+	}
+	if err := b.Set(fieldNameChangefeedSink, json.FromString(p.sourceData.sink)); err != nil {
 		return nil, err
 	}
 	if err := b.Set(fieldNameDBVersion, json.FromString(p.sourceData.dbVersion)); err != nil {
@@ -160,6 +165,7 @@ func (p *enrichedSourceProvider) GetAvro(
 
 const (
 	fieldNameJobID              = "job_id"
+	fieldNameChangefeedSink     = "changefeed_sink"
 	fieldNameDBVersion          = "db_version"
 	fieldNameClusterName        = "cluster_name"
 	fieldNameClusterID          = "cluster_id"
@@ -174,6 +180,17 @@ type fieldInfo struct {
 }
 
 var allFieldInfo = map[string]fieldInfo{
+	fieldNameChangefeedSink: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameChangefeedSink,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameChangefeedSink,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
 	fieldNameJobID: {
 		avroSchemaField: avro.SchemaField{
 			Name:       fieldNameJobID,
@@ -257,6 +274,9 @@ var allFieldInfo = map[string]fieldInfo{
 var avroFields []*avro.SchemaField
 
 // filled in by init() using allFieldInfo
+var jsonFields []string
+
+// filled in by init() using allFieldInfo
 var kafkaConnectJSONSchema kcjsonschema.Schema
 
 func init() {
@@ -264,6 +284,7 @@ func init() {
 	for _, info := range allFieldInfo {
 		avroFields = append(avroFields, &info.avroSchemaField)
 		kcjFields = append(kcjFields, info.kafkaConnectSchema)
+		jsonFields = append(jsonFields, info.kafkaConnectSchema.Field)
 	}
 
 	kafkaConnectJSONSchema = kcjsonschema.Schema{
