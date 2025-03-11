@@ -152,8 +152,8 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 // further explanation). It ensures that writes are always backpressured if the
 // range's size is already larger than the absolute maximum we'll allow.
 func (r *Replica) shouldBackpressureWrites() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 
 	// Check if the current range's size is already over the absolute maximum
 	// we'll allow. Don't bother with any multipliers/byte tolerance calculations

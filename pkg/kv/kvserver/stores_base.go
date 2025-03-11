@@ -87,10 +87,10 @@ func (s *baseStore) SetQueueActive(active bool, queue string) error {
 }
 
 // GetReplicaMutexForTesting is part of kvserverbase.Store.
-func (s *baseStore) GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RWMutex {
+func (s *baseStore) GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RBMutex {
 	store := (*Store)(s)
 	if repl := store.GetReplicaIfExists(rangeID); repl != nil {
-		return (*syncutil.RWMutex)(repl.GetMutexForTesting())
+		return (*syncutil.RBMutex)(repl.GetMutexForTesting())
 	}
 	return nil
 }

@@ -144,13 +144,13 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.r = r
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
-	r.mu.RLock()
+	token := r.mu.RLock()
 	b.state = r.shMu.state
 	b.truncState = r.shMu.raftTruncState
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 	b.changeRemovesReplica = false
 	b.changeTruncatesSideloadedFiles = false
 	b.truncatedSideloadedSize = 0
@@ -206,11 +206,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		if shouldAssert {
 			// Assert that the on-disk state doesn't diverge from the in-memory
 			// state as a result of the side effects.
-			sm.r.mu.RLock()
+			token := sm.r.mu.RLock()
 			// TODO(sep-raft-log): either check only statemachine invariants or
 			// pass both engines in.
 			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
-			sm.r.mu.RUnlock()
+			sm.r.mu.RUnlock(token)
 			sm.applyStats.stateAssertions++
 		}
 	} else if res := cmd.ReplicatedResult(); !res.IsZero() {

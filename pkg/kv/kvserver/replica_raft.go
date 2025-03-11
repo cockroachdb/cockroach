@@ -2055,7 +2055,7 @@ func (r *Replica) sendRaftMessage(
 ) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
-	r.mu.RLock()
+	token := r.mu.RLock()
 	traced := r.mu.raftTracer.MaybeTrace(msg)
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), lastFromReplica)
@@ -2077,7 +2077,7 @@ func (r *Replica) sendRaftMessage(
 			}
 		})
 	}
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
@@ -2336,8 +2336,8 @@ func (r *Replica) errOnOutstandingLearnerSnapshotInflight() error {
 func (r *Replica) hasOutstandingSnapshotInFlightToStore(
 	storeID roachpb.StoreID, initialOnly bool,
 ) ([]snapTruncationInfo, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	sl, idx := r.getSnapshotLogTruncationConstraintsRLocked(storeID, initialOnly)
 	return sl, idx > 0
 }

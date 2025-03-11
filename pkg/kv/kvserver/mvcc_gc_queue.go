@@ -302,10 +302,10 @@ func makeMVCCGCQueueScore(
 	gcTTL time.Duration,
 	canAdvanceGCThreshold bool,
 ) mvccGCQueueScore {
-	repl.mu.RLock()
+	token := repl.mu.RLock()
 	ms := *repl.shMu.state.Stats
 	hint := *repl.shMu.state.GCHint
-	repl.mu.RUnlock()
+	repl.mu.RUnlock(token)
 
 	if repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lastGC = hlc.Timestamp{}

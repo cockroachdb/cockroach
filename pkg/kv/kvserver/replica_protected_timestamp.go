@@ -117,8 +117,8 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	// record.
 	var read cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&read)
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	defer read.clearIfNotNewer(r.mu.cachedProtectedTS)
 
 	oldThreshold = *r.shMu.state.GCThreshold

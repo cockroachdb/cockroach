@@ -828,8 +828,8 @@ func TestTruncateLogRecompute(t *testing.T) {
 	repl := tc.store.LookupReplica(keys.MustAddr(key))
 
 	trusted := func() bool {
-		repl.mu.RLock()
-		defer repl.mu.RUnlock()
+		token := repl.mu.RLock()
+		defer repl.mu.RUnlock(token)
 		return repl.shMu.raftLogSizeTrusted
 	}
 

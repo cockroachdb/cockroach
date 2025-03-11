@@ -773,9 +773,9 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	})
 	require.Equal(t, errRemoved, err)
 
-	repl1.mu.RLock()
+	token := repl1.mu.RLock()
 	expErr := repl1.mu.destroyStatus.err
-	repl1.mu.RUnlock()
+	repl1.mu.RUnlock(token)
 
 	if expErr == nil {
 		t.Fatal("replica was not marked as destroyed")

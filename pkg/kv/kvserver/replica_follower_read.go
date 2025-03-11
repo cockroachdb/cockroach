@@ -162,7 +162,7 @@ func (r *Replica) getCurrentClosedTimestampLocked(
 // GetCurrentClosedTimestamp returns the current maximum closed timestamp for
 // this range.
 func (r *Replica) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */)
 }
