@@ -13,18 +13,16 @@ package goschedstats
 
 import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 
-// CumulativeNormalizedRunnableGoroutines returns 0.0.
-func CumulativeNormalizedRunnableGoroutines() float64 {
+const enabled = false
+
+func cumulativeNormalizedRunnableGoroutines() float64 {
 	return 0.0
 }
 
-// RegisterRunnableCountCallback does nothing and returns -1.
-func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64) {
-	return -1
+func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
+	return -1, false
 }
 
-// UnregisterRunnableCountCallback is a no-op.
-func UnregisterRunnableCountCallback(id int64) {}
+func unregisterRunnableCountCallback(id int64) {}
 
-// RegisterSettings is a no-op.
-func RegisterSettings(st *cluster.Settings) {}
+func registerSettings(st *cluster.Settings) {}
