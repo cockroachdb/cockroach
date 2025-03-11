@@ -552,8 +552,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
-	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+
+	// implements the --duration and --ramp timeouts
+	if *duration+*ramp > 0 {
+		workersCtx, cancelWorkers = context.WithTimeout(workersCtx, *duration+*ramp)
+	}
+
+	var workerWG sync.WaitGroup
+	workerWG.Add(len(ops.WorkerFns))
+
+	// Cancel all implement --max-ops limit (when all the workers are done)
+	go func() {
+		workerWG.Wait()
+		cancelWorkers()
+	}()
 
 	// Spawn workers
 	go func() {
@@ -573,7 +585,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					time.Sleep(time.Duration(i) * rampPerWorker)
 				}
 				rampWG.Done()
-				workerRun(workersCtx, errCh, &wg, limiter, workFn)
+				workerRun(workersCtx, errCh, &workerWG, limiter, workFn)
 			}()
 		}
 
@@ -581,17 +593,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}()
 
 	everySecond := log.Every(*displayEvery)
-
-	// doneCtx implements the --duration timeout
-	doneCtx, doneCancel := context.WithCancel(ctx)
-	if *duration > 0 {
-		doneCtx, doneCancel = context.WithTimeout(ctx, *duration+*ramp)
-	}
-	// this goroutine implements the --max-ops limit (when all the workers are done)
-	go func() {
-		wg.Wait()
-		doneCancel()
-	}()
 
 	for {
 		select {
@@ -618,7 +619,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			})
 
-		case <-doneCtx.Done():
+		case <-workersCtx.Done():
 			cancelWorkers()
 
 			startElapsed := timeutil.Since(start)
