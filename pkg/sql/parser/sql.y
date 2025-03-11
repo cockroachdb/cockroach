@@ -1060,7 +1060,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
-%token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
+%token <str> SNAPSHOT SOME SOURCE SPLIT SQL SQLLOGIN
 %token <str> STABLE START STATE STATEMENT STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBJECT SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
@@ -1435,7 +1435,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
-%type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
+%type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
@@ -4989,14 +4989,29 @@ replication_options:
   {
     $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
   }
-|
-  EXPIRATION WINDOW '=' d_expr
-  {
-      $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
-  }
 | READ VIRTUAL CLUSTER
   {
     $$.val = &tree.TenantReplicationOptions{EnableReaderTenant: tree.MakeDBool(true)}
+  }
+
+source_replication_options_list:
+  // Require at least one option
+  source_replication_options
+  {
+    $$.val = $1.tenantReplicationOptions()
+  }
+| source_replication_options_list ',' source_replication_options
+  {
+    if err := $1.tenantReplicationOptions().CombineWith($3.tenantReplicationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+  // List of valid tenant replication options.
+source_replication_options:
+  EXPIRATION WINDOW '=' d_expr
+  {
+      $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
   }
 
 // %Help: CREATE SCHEDULE
@@ -7824,6 +7839,7 @@ alter_virtual_cluster_service_stmt:
 // ALTER VIRTUAL CLUSTER <virtual_cluster_spec> COMPLETE REPLICATION TO LATEST
 // ALTER VIRTUAL CLUSTER <virtual_cluster_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time'
 // ALTER VIRTUAL CLUSTER <virtual_cluster_spec> SET REPLICATION opt=value,...
+// ALTER VIRTUAL CLUSTER <virtual_cluster_spec> SET SOURCE REPLICATION opt=value,...
 alter_virtual_cluster_replication_stmt:
   ALTER virtual_cluster virtual_cluster_spec PAUSE REPLICATION
   {
@@ -7867,6 +7883,15 @@ alter_virtual_cluster_replication_stmt:
     $$.val = &tree.AlterTenantReplication{
       TenantSpec: $3.tenantSpec(),
       Options: *$6.tenantReplicationOptions(),
+    }
+  }
+| ALTER virtual_cluster virtual_cluster_spec SET REPLICATION SOURCE source_replication_options_list
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantReplication{
+      TenantSpec: $3.tenantSpec(),
+      Producer: true,
+      Options: *$7.tenantReplicationOptions(),
     }
   }
 | ALTER virtual_cluster virtual_cluster_spec START REPLICATION OF d_expr ON d_expr opt_with_replication_options
@@ -18418,6 +18443,7 @@ unreserved_keyword:
 | SKIP_MISSING_SEQUENCE_OWNERS
 | SKIP_MISSING_VIEWS
 | SKIP_MISSING_UDFS
+| SOURCE
 | SNAPSHOT
 | SPLIT
 | SQL
@@ -19009,6 +19035,7 @@ bare_label_keywords:
 | SMALLINT
 | SNAPSHOT
 | SOME
+| SOURCE
 | SPLIT
 | SQL
 | SQLLOGIN

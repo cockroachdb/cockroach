@@ -288,7 +288,7 @@ func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobsp
 // WaitForPostCutoverRetentionJob should be called after cutover completes to
 // verify that there exists a new producer job on the newly cutover to tenant. This should be called after the replication job completes.
 func (c *TenantStreamingClusters) WaitForPostCutoverRetentionJob() {
-	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='10ms'`, c.Args.DestTenantName))
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='10ms'`, c.Args.DestTenantName))
 	var retentionJobID jobspb.JobID
 	retentionJobQuery := fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS]
 WHERE description = 'History Retention for Physical Replication of %s'
