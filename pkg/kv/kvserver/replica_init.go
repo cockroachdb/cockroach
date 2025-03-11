@@ -192,6 +192,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		)
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
+	r.mu.mmaRangeMessageNeeded.lastLaggingState = map[roachpb.ReplicaID]laggingState{}
 
 	// NB: state and raftTruncState will be loaded when the replica gets
 	// initialized.

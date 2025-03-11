@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func makeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mma.StoreLoadMsg {
+func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mma.StoreLoadMsg {
 	var load, capacity mma.LoadVector
 	load[mma.CPURate] = mma.LoadValue(desc.Capacity.CPUPerSecond)
 	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
