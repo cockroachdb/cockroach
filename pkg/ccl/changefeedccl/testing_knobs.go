@@ -108,6 +108,9 @@ type TestingKnobs struct {
 
 	// WrapTelemetryLogger is used to wrap the periodic telemetry logger in tests.
 	WrapTelemetryLogger func(logger telemetryLogger) telemetryLogger
+
+	// OverrideCursorAge is used to change how old a cursor is. Returns time in nanoseconds.
+	OverrideCursorAge func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
