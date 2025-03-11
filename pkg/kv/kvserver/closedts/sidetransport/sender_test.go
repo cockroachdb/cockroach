@@ -166,7 +166,7 @@ func TestSenderBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(connFactory, noopLatencyTracker())
 	defer stopper.Stop(ctx)
 
 	// No leaseholders.
@@ -272,7 +272,7 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
-	s, stopper := newMockSender(connFactory)
+	s, stopper := newMockSender(connFactory, noopLatencyTracker())
 	defer stopper.Stop(ctx)
 
 	rt := func(node, store int) roachpb.ReplicationTarget {
@@ -487,7 +487,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
 			// Try to send an update to ch, if anyone is still listening.
 			ch <- struct{}{}
-		}}))
+		}}), noopLatencyTracker())
 	defer stopper.Stop(ctx)
 
 	// Add leaseholders that can close, in order to establish a connection to n2.
@@ -593,7 +593,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s, senderStopper := newMockSender(newRPCConnFactory(dialer, connTestingKnobs{}))
+	s, senderStopper := newMockSender(newRPCConnFactory(dialer, connTestingKnobs{}), noopLatencyTracker())
 	defer senderStopper.Stop(ctx)
 	s.Run(ctx, roachpb.NodeID(1))
 
