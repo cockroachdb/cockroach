@@ -381,6 +381,7 @@ func startPProfEndPoint(ctx context.Context) {
 
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), exitSignals...)
+	defer cancel()
 
 	var formatter outputFormat
 	switch *displayFormat {
@@ -477,13 +478,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	// We set up a timer that cancels this context after prepareTimeout,
 	// but we'll collect the stacks before we do, so that they can be
 	// logged.
-	prepareCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	prepareCtx, prepareCancel := context.WithCancel(ctx)
+	defer prepareCancel()
 	stacksCh := make(chan []byte, 1)
 	const prepareTimeout = 90 * time.Minute
 	defer time.AfterFunc(prepareTimeout, func() {
 		stacksCh <- allstacks.Get()
-		cancel()
+		prepareCancel()
 	}).Stop()
 	if prepareErr := func(ctx context.Context) error {
 		retry := retry.StartWithCtx(ctx, retry.Options{})
@@ -551,8 +552,20 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
-	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+
+	// implement the --duration timeout
+	if *duration > 0 {
+		workersCtx, cancelWorkers = context.WithTimeout(workersCtx, *duration+*ramp)
+	}
+
+	var workerWG sync.WaitGroup
+	workerWG.Add(len(ops.WorkerFns))
+
+	// Cancel all implement --max-ops limit (when all the workers are done)
+	go func() {
+		workerWG.Wait()
+		cancelWorkers()
+	}()
 
 	// Spawn workers
 	go func() {
@@ -572,7 +585,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					time.Sleep(time.Duration(i) * rampPerWorker)
 				}
 				rampWG.Done()
-				workerRun(workersCtx, errCh, &wg, limiter, workFn)
+				workerRun(workersCtx, errCh, &workerWG, limiter, workFn)
 			}()
 		}
 
@@ -580,12 +593,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}()
 
 	everySecond := log.Every(*displayEvery)
-
-	// durationCtx implements the --duration timeout
-	durationCtx, _ := context.WithCancel(ctx) // nolint:lostcancel
-	if *duration > 0 {
-		durationCtx, _ = context.WithTimeout(ctx, *duration+*ramp) // nolint:lostcancel
-	}
 
 	for {
 		select {
@@ -612,7 +619,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			})
 
-		case <-durationCtx.Done():
+		case <-workersCtx.Done():
 			cancelWorkers()
 
 			startElapsed := timeutil.Since(start)
