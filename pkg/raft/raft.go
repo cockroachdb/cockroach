@@ -2120,15 +2120,8 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 
 	case pb.MsgFortifyLeaderResp:
+		pr.RecentActive = true
 		r.handleFortifyResp(m)
-		// We do the same as we do when receiving a MsgHeartbeatResp.
-		// NB: We ignore self-addressed messages as we don't send MsgApp to
-		// ourselves.
-		if m.From != r.id {
-			pr.RecentActive = true
-			pr.MsgAppProbesPaused = false
-			r.maybeSendAppend(m.From)
-		}
 
 	case pb.MsgHeartbeatResp:
 		pr.RecentActive = true

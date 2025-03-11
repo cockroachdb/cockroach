@@ -140,15 +140,11 @@ stabilize
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->2 MsgApp Term:1 Log:1/11 Commit:11
-  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 3 receiving messages
-  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
   Ready MustSync=true:
@@ -156,7 +152,6 @@ stabilize
   CommittedEntries:
   1/11 EntryNormal ""
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 3 handling Ready
   Ready MustSync=true:
@@ -165,11 +160,8 @@ stabilize
   1/11 EntryNormal ""
   Messages:
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
 store-liveness
