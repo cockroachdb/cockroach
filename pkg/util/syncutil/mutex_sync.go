@@ -68,6 +68,11 @@ type DRWMutex struct {
 	drwmutex.DRWMutex
 }
 
+// New returns a new, unlocked, distributed RWMutex.
+func NewDRWMutex() DRWMutex {
+	return DRWMutex{DRWMutex: drwmutex.New()}
+}
+
 // AssertHeld may panic if the mutex is not locked for writing (but it is not
 // required to do so). Functions which require that their callers hold a
 // particular lock may use this to enforce this requirement more directly than
