@@ -27,7 +27,6 @@ type allocatorState struct {
 	// pending changes go away it gets added back so we can check on it.
 	rangesNeedingAttention map[roachpb.RangeID]struct{}
 
-	meansMemo            *meansMemo
 	diversityScoringMemo *diversityScoringMemo
 
 	changeRateLimiter *storeChangeRateLimiter
@@ -51,7 +50,6 @@ func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
 	return &allocatorState{
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
-		meansMemo:              newMeansMemo(cs, cs.constraintMatcher),
 		diversityScoringMemo:   newDiversityScoringMemo(),
 		changeRateLimiter:      newStoreChangeRateLimiter(rateChangeLimiterGCInterval),
 	}
@@ -94,7 +92,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	clusterMeans := a.meansMemo.getMeans(nil)
+	clusterMeans := a.cs.meansMemo.getMeans(nil)
 	a.changeRateLimiter.initForRebalancePass(numAllocators, clusterMeans.storeLoad)
 	type sheddingStore struct {
 		roachpb.StoreID
@@ -114,7 +112,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	// via replicate_queue.go.
 	for storeID, ss := range a.cs.stores {
 		a.changeRateLimiter.updateForRebalancePass(&ss.adjusted.enactedHistory, now)
-		sls := a.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
+		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
 		if sls.sls >= overloadSlow && ss.adjusted.enactedHistory.allowLoadBasedChanges() &&
 			ss.maxFractionPending < maxFractionPendingThreshold {
 			sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
@@ -532,11 +530,11 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 func (a *allocatorState) computeCandidatesForRange(
 	expr constraintsDisj, storesToExclude storeIDPostingList, loadSheddingStore roachpb.StoreID,
 ) candidateSet {
-	means := a.meansMemo.getMeans(expr)
+	means := a.cs.meansMemo.getMeans(expr)
 	sheddingThreshold := overloadUrgent
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
-		sheddingSLS := a.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
+		sheddingSLS := a.cs.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls < sheddingThreshold {
 			sheddingThreshold = sheddingSLS.sls
 		}
@@ -562,7 +560,7 @@ func (a *allocatorState) computeCandidatesForRange(
 			continue
 		}
 		ss := a.cs.stores[storeID]
-		csls := a.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
+		csls := a.cs.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
 		if csls.sls >= sheddingThreshold || csls.nls >= sheddingThreshold || csls.fd != fdOK {
 			continue
 		}
