@@ -1,5 +1,7 @@
 #! /usr/bin/env expect -f
 
+# TODO(141942): Re-enable this test once we have investigated its flakiness.
+
 source [file join [file dirname $argv0] common.tcl]
 
 spawn $argv demo --no-line-editor --empty --nodes 3 --multitenant --log-dir=logs
