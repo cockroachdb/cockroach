@@ -10,6 +10,7 @@ package syncutil
 import (
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v3"
 	deadlock "github.com/sasha-s/go-deadlock"
 )
 
@@ -56,3 +57,32 @@ func (rw *RWMutex) TryLock() bool {
 func (rw *RWMutex) TryRLock() bool {
 	return false
 }
+
+// A RBMutex is a reader biased reader/writer mutual exclusion lock.
+// It behaves the same in deadlock builds and non-deadlock builds.
+type RBMutex struct {
+	xsync.RBMutex
+}
+
+// AssertHeld may panic if the mutex is not locked for writing (but it is not
+// required to do so). Functions which require that their callers hold a
+// particular lock may use this to enforce this requirement more directly than
+// relying on the race detector.
+//
+// Note that we do not require the exclusive lock to be held by any particular
+// thread, just that some thread holds the lock. This is both more efficient
+// and allows for rare cases where a mutex is locked in one thread and used in
+// another.
+func (rb *RBMutex) AssertHeld() {}
+
+// AssertRHeld may panic if the mutex is not locked for reading (but it is not
+// required to do so). If the mutex is locked for writing, it is also considered
+// to be locked for reading. Functions which require that their callers hold a
+// particular lock may use this to enforce this requirement more directly than
+// relying on the race detector.
+//
+// Note that we do not require the shared lock to be held by any particular
+// thread, just that some thread holds the lock. This is both more efficient
+// and allows for rare cases where a mutex is locked in one thread and used in
+// another.
+func (rb *RBMutex) AssertRHeld() {}
