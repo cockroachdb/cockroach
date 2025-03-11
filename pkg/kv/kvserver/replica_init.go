@@ -192,6 +192,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		)
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
+	r.mu.mmaRangeMessageNeeded.lastLaggingState = map[roachpb.ReplicaID]laggingState{}
 
 	// NB: state will be loaded when the replica gets initialized.
 	r.shMu.state = uninitState

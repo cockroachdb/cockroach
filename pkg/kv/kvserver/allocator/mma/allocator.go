@@ -31,7 +31,7 @@ type Allocator interface {
 	// SetStore informs the allocator about a new store, or when something about
 	// the store descriptor has changed. The allocator's knowledge about the
 	// nodes in the cluster is a side effect of this method.
-	SetStore(store roachpb.StoreDescriptor) error
+	SetStore(store roachpb.StoreDescriptor)
 
 	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
 	// stores.
@@ -41,13 +41,13 @@ type Allocator interface {
 	// failure detection state for a node. A node starts in the fdOK state.
 	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
 
-	// ProcessNodeLoadMsg provides frequent the state of every node and store in
-	// the cluster.
-	ProcessNodeLoadMsg(msg *NodeLoadMsg) error
+	// ProcessStoreLoadMsg provides frequent the state of every store and its
+	// associated node in the cluster.
+	ProcessStoreLoadMsg(msg *StoreLoadMsg)
 
 	// ProcessStoreLeaseholderMsg provides updates for each local store and the
 	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error
+	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg)
 
 	// TODO(sumeer): only a subset of the fields in
 	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide

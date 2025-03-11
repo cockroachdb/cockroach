@@ -212,7 +212,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 				pendingChanges := a.cs.createPendingChanges(rangeID, leaseChanges[:]...)
 				changes = append(changes, PendingRangeChange{
-					rangeID:               rangeID,
+					RangeID:               rangeID,
 					pendingReplicaChanges: pendingChanges[:],
 				})
 				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
@@ -332,7 +332,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
 			changes = append(changes, PendingRangeChange{
-				rangeID:               rangeID,
+				RangeID:               rangeID,
 				pendingReplicaChanges: pendingChanges[:],
 			})
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
@@ -353,8 +353,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 }
 
 // ComputeChanges implements the Allocator interface.
-func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) error {
-	panic("unimplemented")
+func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) {
+	a.cs.setStore(store)
 }
 
 // RemoveNodeAndStores implements the Allocator interface.
@@ -370,13 +370,13 @@ func (a *allocatorState) UpdateFailureDetectionSummary(
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
-func (a *allocatorState) ProcessNodeLoadMsg(msg *NodeLoadMsg) error {
-	panic("unimplemented")
+func (a *allocatorState) ProcessStoreLoadMsg(msg *StoreLoadMsg) {
+	a.cs.processStoreLoadMsg(msg)
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
-func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error {
-	panic("unimplemented")
+func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
+	a.cs.processStoreLeaseholderMsg(msg)
 }
 
 // AdjustPendingChangesDisposition implements the Allocator interface.
@@ -497,7 +497,7 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 	}
 	// Populate the constraints.
 	rac := newRangeAnalyzedConstraints()
-	buf := rstate.constraints.stateForInit()
+	buf := rac.stateForInit()
 	leaseholder := roachpb.StoreID(-1)
 	for _, replica := range rstate.replicas {
 		buf.tryAddingStore(replica.StoreID, replica.ReplicaIDAndType.ReplicaType.ReplicaType,

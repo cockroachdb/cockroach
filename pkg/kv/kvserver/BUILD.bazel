@@ -322,6 +322,7 @@ go_test(
         "merge_queue_test.go",
         "metric_rules_test.go",
         "metrics_test.go",
+        "multi_metric_store_rebalancer_test.go",
         "mvcc_gc_queue_test.go",
         "node_liveness_test.go",
         "obsolete_code_test.go",
