@@ -430,9 +430,9 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 
 	sm := r.getStateMachine()
 
-	r.mu.RLock()
+	token := r.mu.RLock()
 	raftAppliedIndex := r.shMu.state.RaftAppliedIndex
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 
 	descWriteRepr := func(v string) (kvpb.Request, []byte) {
 		b := tc.store.TODOEngine().NewBatch()

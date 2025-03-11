@@ -156,6 +156,23 @@ type RBMutex struct {
 	rLocked int32 // updated atomically
 }
 
+// RLock locks rb for reading and returns a reader token. The
+// token must be used in the later RUnlock call.
+//
+// Should not be used for recursive read locking; a blocked Lock
+// call excludes new readers from acquiring the lock.
+func (rb *RBMutex) RLock() *RToken {
+	return (*RToken)(rb.RBMutex.RLock())
+}
+
+// RUnlock undoes a single RLock call. A reader token obtained from
+// the RLock call must be provided. RUnlock does not affect other
+// simultaneous readers. A panic is raised if m is not locked for
+// reading on entry to RUnlock.
+func (rb *RBMutex) RUnlock(token *RToken) {
+	rb.RBMutex.RUnlock((*xsync.RToken)(token))
+}
+
 // AssertHeld may panic if the mutex is not locked for writing (but it is not
 // required to do so). Functions which require that their callers hold a
 // particular lock may use this to enforce this requirement more directly than
