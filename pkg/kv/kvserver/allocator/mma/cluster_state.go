@@ -309,7 +309,7 @@ func makeRebalanceReplicaChanges(
 // TODO: The intention is to use these to applying changes by the enacting
 // module.
 type PendingRangeChange struct {
-	rangeID               roachpb.RangeID
+	RangeID               roachpb.RangeID
 	pendingReplicaChanges []*pendingReplicaChange
 }
 
