@@ -979,16 +979,20 @@ func (r *raft) maybeUnpauseAndBcastAppend() {
 			// the peers' values.
 			return
 		}
-
-		if _, supported := r.fortificationTracker.IsFortifiedBy(id); !supported {
-			// If the follower's store isn't providing active store liveness support
-			// to the leader's store, or it is but the leader isn't hearing about it,
-			// we don't send a MsgApp.
+		// Send a MsgApp if the peer's store provides the store liveness support,
+		// i.e. we are bidirectionally connected to it.
+		if _, supported := r.fortificationTracker.IsFortifiedBy(id); supported {
+			pr.MsgAppProbesPaused = false
+			r.maybeSendAppend(id)
 			return
 		}
-
-		pr.MsgAppProbesPaused = false
-		r.maybeSendAppend(id)
+		// If the follower's store isn't providing active store liveness support to
+		// the leader's store, or it is but the leader isn't hearing about it, we do
+		// not send a MsgApp. Moreover, we downgrade the flow state to StateProbe to
+		// prevent active/optimistic replication attempts.
+		if pr.State == tracker.StateReplicate {
+			r.becomeProbe(pr)
+		}
 	})
 }
 
