@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -155,7 +156,7 @@ func (r *Registry) GC(ctx context.Context, l *logger.Logger) error {
 
 	for _, f := range toDelete {
 		l.Printf("deleting fixture %q: %s", f.metadata.DataPath, f.reason)
-		if err := r.deleteBlobsMatchingPrefix(f.metadata.DataPath); err != nil {
+		if err := r.deleteBlobsMatchingPrefix(ctx, f.metadata.DataPath); err != nil {
 			return err
 		}
 		if err := r.deleteMetadata(f.metadata); err != nil {
@@ -263,11 +264,47 @@ func (r *Registry) deleteMetadata(metadata FixtureMetadata) error {
 	return errors.Wrap(r.storage.Delete(context.Background(), metadata.MetadataPath), "failed to delete metadata")
 }
 
-func (r *Registry) deleteBlobsMatchingPrefix(prefix string) error {
-	err := r.storage.List(context.Background(), prefix, "", func(path string) error {
-		return r.storage.Delete(context.Background(), prefix+path)
+// deleteBlobsMatchingPrefix deletes all blobs with the given prefix using concurrent workers.
+// It spawns numWorkers goroutines to perform deletions in parallel. A single producer goroutine
+// lists all matching blobs and sends their paths through an unbuffered channel to the workers.
+// If any worker encounters an error, panics, or the context is canceled, all goroutines will
+// exit and the error will be returned.
+func (r *Registry) deleteBlobsMatchingPrefix(ctx context.Context, prefix string) error {
+	const numWorkers = 10
+
+	g := ctxgroup.WithContext(ctx)
+	paths := make(chan string)
+
+	// Start worker goroutines
+	for i := 0; i < numWorkers; i++ {
+		g.GoCtx(func(ctx context.Context) error {
+			for path := range paths {
+				if err := r.storage.Delete(ctx, prefix+path); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	// Producer goroutine
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(paths)
+		err := r.storage.List(ctx, prefix, "", func(path string) error {
+			select {
+			case paths <- path:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+		return err
 	})
-	return errors.Wrapf(err, "failed to delete blobs matching prefix %q", prefix)
+
+	if err := g.Wait(); err != nil {
+		return errors.Wrapf(err, "failed to delete blobs matching prefix %q", prefix)
+	}
+	return nil
 }
 
 // ScratchHandle is returned by Registry.Create and is used to mark a fixture
