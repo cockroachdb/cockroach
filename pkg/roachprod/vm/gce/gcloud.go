@@ -188,8 +188,10 @@ type jsonVM struct {
 	MachineType string
 	// CPU platform corresponding to machine type; see https://cloud.google.com/compute/docs/cpu-platforms
 	CPUPlatform string
-	SelfLink    string
-	Zone        string
+	// Of the form  "https://www.googleapis.com/compute/v1/projects/cockroach-workers/zones/us-central1-a/instances/...".
+	// N.B. The self-link contains the name of the GCE project.
+	SelfLink string
+	Zone     string
 	instanceDisksResponse
 }
 
@@ -261,6 +263,16 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		}
 
 	}
+	// Parse jsonVM.SelfLink to extract the project name.
+	// N.B. The self-link contains the name of the GCE project. E.g.,
+	// "https://www.googleapis.com/compute/v1/projects/cockroach-workers/zones/us-central1-a/instances/..."
+	projectName := ""
+	if idx := strings.Index(jsonVM.SelfLink, "/projects/"); idx != -1 {
+		projectName = jsonVM.SelfLink[idx+len("/projects/"):]
+		if idx := strings.Index(projectName, "/"); idx != -1 {
+			projectName = projectName[:idx]
+		}
+	}
 
 	return &vm.VM{
 		Name:                   jsonVM.Name,
@@ -274,6 +286,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		Provider:               ProviderName,
 		DNSProvider:            ProviderName,
 		ProviderID:             jsonVM.Name,
+		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
 		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
 		RemoteUser:             remoteUser,
@@ -2980,9 +2993,17 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
 
 		// Run the command, extracting the JSON payload
-		jsonVMS := make([]jsonVM, 0)
-		if err := runJSONCommand(args, &jsonVMS); err != nil {
+		allVMS := make([]jsonVM, 0)
+		if err := runJSONCommand(args, &allVMS); err != nil {
 			return nil, err
+		}
+		jsonVMS := make([]jsonVM, 0)
+		// Remove instances that weren't created by roachprod.
+		// N.B. The same filter is applied in other providers, i.e., aws and azure.
+		for _, v := range allVMS {
+			if v.Labels[vm.TagRoachprod] == "true" {
+				jsonVMS = append(jsonVMS, v)
+			}
 		}
 
 		// Find all instance templates that are currently in use.
