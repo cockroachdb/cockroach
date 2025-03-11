@@ -108,10 +108,8 @@ stabilize 1 2
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 receiving messages
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
   Ready MustSync=true:
@@ -119,10 +117,8 @@ stabilize 1 2
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 receiving messages
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
 # Drop inflight messages to 3.

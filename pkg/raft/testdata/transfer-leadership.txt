@@ -134,15 +134,11 @@ stabilize
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
-  2->3 MsgApp Term:2 Log:1/11 Commit:12 Entries:[2/12 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/12 Commit:12
 > 1 receiving messages
-  2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 3 receiving messages
-  2->3 MsgApp Term:2 Log:1/11 Commit:12 Entries:[2/12 EntryNormal ""]
   2->3 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
   Ready MustSync=true:
@@ -150,7 +146,6 @@ stabilize
   CommittedEntries:
   2/12 EntryNormal ""
   Messages:
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 3 handling Ready
   Ready MustSync=true:
@@ -159,11 +154,8 @@ stabilize
   2/12 EntryNormal ""
   Messages:
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12
-  3->2 MsgAppResp Term:2 Log:0/12 Commit:12
 > 2 receiving messages
-  1->2 MsgAppResp Term:2 Log:0/12 Commit:11
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
-  3->2 MsgAppResp Term:2 Log:0/12 Commit:12
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
 # Withdraw support for 3 and transfer leadership to it.

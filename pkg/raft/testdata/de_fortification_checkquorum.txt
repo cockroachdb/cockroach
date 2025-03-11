@@ -344,10 +344,8 @@ stabilize 1 3
   CommittedEntries:
   3/13 EntryNormal ""
   Messages:
-  3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
   3->1 MsgApp Term:3 Log:3/13 Commit:13
 > 1 receiving messages
-  3->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
   3->1 MsgApp Term:3 Log:3/13 Commit:13
 > 1 handling Ready
   Ready MustSync=true:
@@ -355,10 +353,8 @@ stabilize 1 3
   CommittedEntries:
   3/13 EntryNormal ""
   Messages:
-  1->3 MsgAppResp Term:3 Log:0/13 Commit:12
   1->3 MsgAppResp Term:3 Log:0/13 Commit:13
 > 3 receiving messages
-  1->3 MsgAppResp Term:3 Log:0/13 Commit:12
   1->3 MsgAppResp Term:3 Log:0/13 Commit:13
 
 deliver-msgs drop=(2)
@@ -454,18 +450,6 @@ stabilize
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
   INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
-  2->3 MsgAppResp Term:3 Log:0/13 Commit:13
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
-> 2 receiving messages
-  3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
-> 2 handling Ready
-  Ready MustSync=false:
-  Messages:
-  2->3 MsgAppResp Term:3 Log:0/13 Commit:13
-> 3 receiving messages
   2->3 MsgAppResp Term:3 Log:0/13 Commit:13
 
 raft-state

@@ -109,18 +109,9 @@ stabilize 1 2
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[
-    1/4 EntryConfChangeV2 v2 v3
-    1/5 EntryNormal ""
-  ]
   1->2 MsgSnap Term:1 Log:0/0
     Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[
-    1/4 EntryConfChangeV2 v2 v3
-    1/5 EntryNormal ""
-  ]
-  DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
   1->2 MsgSnap Term:1 Log:0/0
     Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
   INFO log [committed=0, applied=0, applying=0, unstable.offset=1, unstable.offsetInProgress=1, len(unstable.Entries)=0] starts to restore snapshot [index: 4, term: 1]
@@ -132,11 +123,8 @@ stabilize 1 2
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:1
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
-  DEBUG 1 received MsgAppResp(rejected, hint: (index 0, term 0)) from 2 for index 3
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 sentCommit=4 matchCommit=4 paused pendingSnap=4]
 > 1 handling Ready
@@ -242,20 +230,9 @@ stabilize 1 3
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->3 MsgApp Term:1 Log:1/3 Commit:6 Entries:[
-    1/4 EntryConfChangeV2 v2 v3
-    1/5 EntryNormal ""
-    1/6 EntryConfChangeV2
-  ]
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 3 receiving messages
-  1->3 MsgApp Term:1 Log:1/3 Commit:6 Entries:[
-    1/4 EntryConfChangeV2 v2 v3
-    1/5 EntryNormal ""
-    1/6 EntryConfChangeV2
-  ]
-  DEBUG 3 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   INFO log [committed=0, applied=0, applying=0, unstable.offset=1, unstable.offsetInProgress=1, len(unstable.Entries)=0] starts to restore snapshot [index: 6, term: 1]
@@ -267,11 +244,8 @@ stabilize 1 3
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   Snapshot Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
-  DEBUG 1 received MsgAppResp(rejected, hint: (index 0, term 0)) from 3 for index 3
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=6 next=7 sentCommit=6 matchCommit=6 paused pendingSnap=6]
 

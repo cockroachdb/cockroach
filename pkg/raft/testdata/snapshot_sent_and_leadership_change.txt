@@ -187,7 +187,6 @@ stabilize 2
   2->3 MsgSnap Term:2 Log:0/0
     Snapshot: Index:16 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   2->3 MsgApp Term:2 Log:1/15 Commit:16 Entries:[2/16 EntryNormal ""]
-  2->3 MsgApp Term:2 Log:2/16 Commit:16
 
 status 2
 ----
