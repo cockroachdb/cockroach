@@ -2452,39 +2452,6 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	return s
 }
 
-// boundSettingReader wraps a storage.Reader and sets unset bounds on
-// NewMVCCIterator.
-type boundSettingReader struct {
-	storage.Reader
-}
-
-// NewMVCCIterator implements the Reader interface.
-func (b boundSettingReader) NewMVCCIterator(
-	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) (storage.MVCCIterator, error) {
-	if !opts.Prefix {
-		if len(opts.LowerBound) == 0 {
-			// This logic exists because intentInterleavingIter does not support
-			// iterator bounds spanning the local and global keyspace.
-			if len(opts.UpperBound) != 0 && keys.IsLocal(opts.UpperBound) {
-				opts.LowerBound = keys.MinKey
-			} else {
-				opts.LowerBound = keys.LocalMax
-			}
-		}
-		if len(opts.UpperBound) == 0 {
-			// NB: The above conditional will force a LocalMax min key if lower bound
-			// was initially unset, and LocalMax is not local.
-			if len(opts.LowerBound) != 0 && keys.IsLocal(opts.LowerBound) {
-				opts.UpperBound = keys.LocalMax
-			} else {
-				opts.UpperBound = keys.MaxKey
-			}
-		}
-	}
-	return b.Reader.NewMVCCIterator(ctx, iterKind, opts)
-}
-
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -2648,10 +2615,8 @@ func (e *evalCtx) newReader() storage.Reader {
 		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
-	case "snapshot":
+	case "snapshot", "efos":
 		return e.engine.NewSnapshot()
-	case "efos":
-		return boundSettingReader{e.engine.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}})}
 	default:
 		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
 		return nil
