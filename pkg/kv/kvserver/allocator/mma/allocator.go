@@ -9,6 +9,7 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
 type ChangeOptions struct {
+	LocalStoreID roachpb.StoreID
 	// DryRun tells the allocator not to update its internal state with the
 	// proposed pending changes.
 	DryRun bool
@@ -48,8 +49,9 @@ type Allocator interface {
 	// ranges for which it is the leaseholder.
 	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error
 
-	// TODO(sumeer): only a subset of the fields in pendingReplicaChange are
-	// relevant to the caller. Hide the remaining.
+	// TODO(sumeer): only a subset of the fields in
+	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide
+	// the remaining.
 
 	// Methods related to making changes.
 
@@ -63,7 +65,7 @@ type Allocator interface {
 	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangesDisposition(changes []pendingReplicaChange, success bool) error
+	AdjustPendingChangesDisposition(changes []PendingRangeChange, success bool) error
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
@@ -77,7 +79,7 @@ type Allocator interface {
 	// Unless ChangeOptions.DryRun is true, changes returned are remembered by
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
-	ComputeChanges(opts ChangeOptions) []*pendingReplicaChange
+	ComputeChanges(opts ChangeOptions) []PendingRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//
