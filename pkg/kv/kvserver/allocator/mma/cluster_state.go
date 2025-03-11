@@ -648,7 +648,7 @@ type storeState struct {
 		// may provide a building block for the incremental computation.
 		//
 		// The key in this map is a local store-id.
-		topKRanges map[roachpb.StoreID]topKReplicas
+		topKRanges map[roachpb.StoreID]*topKReplicas
 		// TODO(kvoli,sumeerbhola): Update enactedHistory when integrating the
 		// storeChangeRateLimiter.
 		enactedHistory storeEnactedHistory
@@ -716,7 +716,7 @@ func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
 	}
 	ss.adjusted.loadPendingChanges = map[changeID]*pendingReplicaChange{}
 	ss.adjusted.replicas = map[roachpb.RangeID]ReplicaState{}
-	ss.adjusted.topKRanges = map[roachpb.StoreID]topKReplicas{}
+	ss.adjusted.topKRanges = map[roachpb.StoreID]*topKReplicas{}
 	return ss
 }
 
@@ -865,10 +865,11 @@ type clusterState struct {
 
 	*constraintMatcher
 	*localityTierInterner
+	meansMemo *meansMemo
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
-	return &clusterState{
+	cs := &clusterState{
 		ts:                   ts,
 		nodes:                map[roachpb.NodeID]*nodeState{},
 		stores:               map[roachpb.StoreID]*storeState{},
@@ -877,6 +878,8 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
 	}
+	cs.meansMemo = newMeansMemo(cs, cs.constraintMatcher)
+	return cs
 }
 
 func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
@@ -982,6 +985,66 @@ func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
 		}
 		rs.conf = normSpanConfig
 	}
+	localss := cs.stores[msg.StoreID]
+	cs.meansMemo.clear()
+	clusterMeans := cs.meansMemo.getMeans(nil)
+	for _, ss := range cs.stores {
+		topk := ss.adjusted.topKRanges[msg.StoreID]
+		if topk == nil {
+			topk = &topKReplicas{}
+			ss.adjusted.topKRanges[msg.StoreID] = topk
+		}
+		topk.startInit()
+		sls := cs.computeLoadSummary(ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
+		if ss.StoreID == localss.StoreID {
+			topk.dim = CPURate
+		} else {
+			topk.dim = WriteBandwidth
+		}
+		if sls.highDiskSpaceUtilization {
+			topk.dim = ByteSize
+		} else if sls.storeCPUSummary > loadNoChange {
+			topk.dim = CPURate
+		} else if sls.sls > loadNoChange {
+			// TODO: WriteBandwidth is the only remaining dimension. But we can add
+			// more dimensions. So we should keep the per dimension loadSummary in
+			// sls.
+			topk.dim = WriteBandwidth
+		}
+	}
+	// TODO: replica is already adjusted for some ongoing changes, which may be
+	// undone. So if s10 is a replica for range r1 whose leaseholder is the
+	// local store s1 that is trying to transfer the lease away, s10 will not
+	// see r1 below.
+	for rangeID := range localss.adjusted.replicas {
+		rs := cs.ranges[rangeID]
+		// TODO: replicas is also already adjusted.
+		for _, replica := range rs.replicas {
+			switch replica.ReplicaState.ReplicaType.ReplicaType {
+			// TODO: another place we are picking only a few types.
+			case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER, roachpb.VOTER_DEMOTING_NON_VOTER:
+				ss := cs.stores[replica.StoreID]
+				topk := ss.adjusted.topKRanges[msg.StoreID]
+				switch topk.dim {
+				case CPURate:
+					l := rs.load.Load[CPURate]
+					if !replica.ReplicaState.IsLeaseholder {
+						l = rs.load.RaftCPU
+					}
+					topk.addReplica(rs.rangeID, l)
+				case WriteBandwidth:
+					topk.addReplica(rs.rangeID, rs.load.Load[WriteBandwidth])
+				case ByteSize:
+					topk.addReplica(rs.rangeID, rs.load.Load[ByteSize])
+				}
+			}
+		}
+	}
+	for _, ss := range cs.stores {
+		topk := ss.adjusted.topKRanges[msg.StoreID]
+		topk.doneInit()
+	}
+
 }
 
 // If the pending change does not happen within this GC duration, we
