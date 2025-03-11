@@ -4100,7 +4100,7 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 	}
 }
 
-func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
+func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -4138,40 +4138,46 @@ func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
 			clusterName := "clusterName123"
 			dbVersion := "v999.0.0"
 			defer build.TestingOverrideVersion(dbVersion)()
-			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-				clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
 
-				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
-				sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-				testFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format))
-				defer closeFeed(t, testFeed)
+					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+					testFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format))
+					defer closeFeed(t, testFeed)
 
-				var jobID int64
-				var nodeName string
-				var sourceAssertion func(actualSource map[string]any)
-				if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
-					jobID = int64(ef.JobID())
-				}
-				sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
-
-				sourceAssertion = func(actualSource map[string]any) {
-					var nodeID any
-					if testCase.format == "avro" {
-						actualSourceValue := actualSource["source"].(map[string]any)
-						nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
-					} else {
-						nodeID = actualSource["node_id"]
+					var jobID int64
+					var nodeName string
+					var sourceAssertion func(actualSource map[string]any)
+					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+						jobID = int64(ef.JobID())
 					}
-					require.NotNil(t, nodeID)
+					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
 
-					sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+					sourceAssertion = func(actualSource map[string]any) {
+						var nodeID any
+						if testCase.format == "avro" {
+							actualSourceValue := actualSource["source"].(map[string]any)
+							nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
+						} else {
+							nodeID = actualSource["node_id"]
+						}
+						require.NotNil(t, nodeID)
 
-					var assertion string
-					if testCase.format == "avro" {
-						assertion = fmt.Sprintf(
-							`{
+						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+						// There are some differences between how we specify sinks here and their actual names.
+						if sink == "sinkless" {
+							sink = sinkTypeSinklessBuffer.String()
+						}
+
+						var assertion string
+						if testCase.format == "avro" {
+							assertion = fmt.Sprintf(
+								`{
 								"source": {
 									"cluster_id": {"string": "%s"},
 									"cluster_name": {"string": "%s"},
@@ -4179,30 +4185,33 @@ func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
 									"job_id": {"string": "%d"},
 									"node_id": {"string": "%s"},
 									"node_name": {"string": "%s"},
+									"changefeed_sink": {"string": "%s"},
 									"source_node_locality": {"string": "%s"}
 								}
 							}`,
-							clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sourceNodeLocality)
-					} else {
-						assertion = fmt.Sprintf(
-							`{
+								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
+						} else {
+							assertion = fmt.Sprintf(
+								`{
 								"cluster_id": "%s",
 								"cluster_name": "%s",
 								"db_version": "%s",
 								"job_id": "%d",
 								"node_id": "%s",
 								"node_name": "%s",
+								"changefeed_sink": "%s",
 								"source_node_locality": "%s"
 							}`,
-							clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sourceNodeLocality)
+								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
+						}
+
+						value, err := reformatJSON(actualSource)
+						require.NoError(t, err)
+						require.JSONEq(t, assertion, string(value))
 					}
 
-					value, err := reformatJSON(actualSource)
-					require.NoError(t, err)
-					require.JSONEq(t, assertion, string(value))
+					assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
 				}
-
-				assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
 			}
 
 			for _, sink := range testCase.supportedSinks {
@@ -4211,7 +4220,7 @@ func TestChangefeedEnrichedSourceWithNodeAndClusterInfo(t *testing.T) {
 						Key:   "region",
 						Value: testServerRegion,
 					}}}
-				cdcTest(t, testFn, feedTestForceSink(sink), feedTestUseClusterName(clusterName),
+				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
 					feedTestUseLocality(testLocality))
 			}
 		})
