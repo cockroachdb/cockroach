@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -93,11 +95,45 @@ func (c *mockConn) run(context.Context, *stop.Stopper) { c.running = true }
 func (c *mockConn) close()                             { c.closed = true }
 func (c *mockConn) getState() connState                { return connState{} }
 
-func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
+var sameZoneLocality = roachpb.Locality{
+	Tiers: []roachpb.Tier{
+		{Key: "region", Value: "us-east"},
+		{Key: "zone", Value: "us-east-1a"},
+	},
+}
+var sameRegionDiffZoneLocality = roachpb.Locality{
+	Tiers: []roachpb.Tier{
+		{Key: "region", Value: "us-east"},
+		{Key: "zone", Value: "us-east-1b"},
+	},
+}
+var crossRegionLocality = roachpb.Locality{
+	Tiers: []roachpb.Tier{
+		{Key: "region", Value: "us-west"},
+		{Key: "zone", Value: "us-west-1a"},
+	},
+}
+
+var nodeDescs = map[roachpb.NodeID]roachpb.Locality{
+	roachpb.NodeID(1): sameZoneLocality,
+	roachpb.NodeID(2): sameRegionDiffZoneLocality,
+	roachpb.NodeID(3): crossRegionLocality,
+}
+
+var getNodeDesc = func(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	return &roachpb.NodeDescriptor{
+		NodeID:   nodeID,
+		Locality: nodeDescs[nodeID],
+	}, nil
+}
+
+func newMockSender(
+	connFactory connFactory, latencyTracker *multiregion.LatencyTracker,
+) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(nil)
-	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
+	s := newSenderWithConnFactory(stopper, st, clock, connFactory, latencyTracker)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
 }
@@ -152,6 +188,13 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 		{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
 		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
 	}
+}
+
+func noopLatencyTracker() *multiregion.LatencyTracker {
+	getLatency := func(roachpb.NodeID) (time.Duration, bool) {
+		return 0, false
+	}
+	return multiregion.NewLatencyTracker(roachpb.Locality{}, getLatency, getNodeDesc)
 }
 
 // mockReceiver is a SideTransportServer.

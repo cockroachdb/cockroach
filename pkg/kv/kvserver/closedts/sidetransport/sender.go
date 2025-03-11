@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -89,6 +90,11 @@ type Sender struct {
 		syncutil.Mutex
 		conns map[roachpb.NodeID]conn
 	}
+
+	// latencyTracker periodically refreshes latency information for this node.
+	// Based on the follower nodes this node has, the latency refresher will
+	// update the latency for different locality comparison types.
+	latencyTracker *multiregion.LatencyTracker
 }
 
 // streamState encapsulates the state that's tracked by a stream. Both the
@@ -194,20 +200,29 @@ const (
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
 func NewSender(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	dialer *nodedialer.Dialer,
+	latencyTracker *multiregion.LatencyTracker,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}))
+	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}), latencyTracker)
 }
 
 func newSenderWithConnFactory(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, connFactory connFactory,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	connFactory connFactory,
+	latencyTracker *multiregion.LatencyTracker,
 ) *Sender {
 	s := &Sender{
-		stopper:     stopper,
-		st:          st,
-		clock:       clock,
-		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		stopper:        stopper,
+		st:             st,
+		clock:          clock,
+		connFactory:    connFactory,
+		buf:            newUpdatesBuf(),
+		latencyTracker: latencyTracker,
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
