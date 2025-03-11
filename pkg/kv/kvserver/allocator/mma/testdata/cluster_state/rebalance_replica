@@ -30,7 +30,7 @@ range-id=1 load=[80,80,80] raft-cpu=20
 get-load-info
 ----
 store-id=1 node-id=1 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
-  top-k-ranges (local-store-id=1) dim=CPURate: r0
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
 make-pending-changes range-id=1
@@ -52,7 +52,7 @@ range-id=1 load=[80,80,80] raft-cpu=20
 get-load-info
 ----
 store-id=1 node-id=1 reported=[80,80,80] adjusted=[0,0,0] node-reported-cpu=80 node-adjusted-cpu=0 seq=2
-  top-k-ranges (local-store-id=1) dim=CPURate: r0
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[0,0,0] adjusted=[80,80,80] node-reported-cpu=0 node-adjusted-cpu=80 seq=1
 
 store-leaseholder-msg
@@ -64,9 +64,9 @@ store-id=2
 get-load-info
 ----
 store-id=1 node-id=1 reported=[80,80,80] adjusted=[0,0,0] node-reported-cpu=80 node-adjusted-cpu=0 seq=2
-  top-k-ranges (local-store-id=1) dim=CPURate: r0
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[0,0,0] adjusted=[80,80,80] node-reported-cpu=0 node-adjusted-cpu=80 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r0
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 get-pending-changes
 ----
@@ -92,9 +92,9 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[-80,-80,-80] start=0s en
 get-load-info
 ----
 store-id=1 node-id=1 reported=[80,80,80] adjusted=[0,0,0] node-reported-cpu=80 node-adjusted-cpu=0 seq=2
-  top-k-ranges (local-store-id=1) dim=CPURate: r0
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
-  top-k-ranges (local-store-id=2) dim=ByteSize: r0
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 
 store-load-msg
@@ -108,6 +108,6 @@ pending(0)
 get-load-info
 ----
 store-id=1 node-id=1 reported=[0,0,0] adjusted=[0,0,0] node-reported-cpu=0 node-adjusted-cpu=0 seq=3
-  top-k-ranges (local-store-id=1) dim=CPURate: r0
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 reported=[80,80,80] adjusted=[80,80,80] node-reported-cpu=80 node-adjusted-cpu=80 seq=2
-  top-k-ranges (local-store-id=2) dim=ByteSize: r0
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
