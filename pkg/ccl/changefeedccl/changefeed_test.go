@@ -5781,6 +5781,45 @@ func TestChangefeedOutdatedCursor(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestNoTenants)
 }
 
+// TestChangefeedCursorWarning ensures that we show a warning if
+// any of the tables we're creating a changefeed is past
+// the warning threshold
+func TestChangefeedCursorWarning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+	sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
+	timeNow := strings.Split(s.Server.Clock().Now().AsOfSystemTime(), ".")[0]
+
+	expectedNoWarning :=
+		"(no notice)"
+	expectNotice(t, s.Server,
+		fmt.Sprintf(
+			`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
+			timeNow), expectedNoWarning)
+
+	knobs := s.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+	knobs.UseTestWarningThreshold = true
+
+	expectedWarning :=
+		"the provided cursor is more than 0 hours old, which could result in increased changefeed latency"
+	expectNotice(t, s.Server,
+		fmt.Sprintf(
+			`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
+			timeNow), expectedWarning)
+	expectNotice(t, s.Server,
+		fmt.Sprintf(
+			`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='only'`,
+			timeNow), expectedNoWarning)
+}
+
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
 // where the feed has fallen behind the GC TTL of the table's schema.
 func TestChangefeedSchemaTTL(t *testing.T) {

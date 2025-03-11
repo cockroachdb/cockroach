@@ -314,6 +314,36 @@ func changefeedPlanHook(
 			return err
 		}
 
+		// This warning will only appear for enterprise changefeeds due to how
+		// the planhook buffer works
+		// TODO (keithch): Should we expand this to sinkless?
+		if opts.HasStartCursor() && st != changefeedbase.OnlyInitialScan {
+			statementTS := p.ExtendedEvalContext().GetStmtTimestamp().UnixNano()
+			cursorTS, err := evalTimestamp(ctx, p, hlc.Timestamp{WallTime: statementTS}, opts.GetCursor())
+			if err != nil {
+				return err
+			}
+
+			cursorAge := statementTS - cursorTS.WallTime
+			warningAge := func() int64 {
+				knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+				if knobs != nil && knobs.UseTestWarningThreshold {
+					return int64(time.Nanosecond)
+				} else {
+					return int64(5 * time.Hour / time.Nanosecond)
+				}
+			}()
+			if cursorAge > warningAge {
+				p.BufferClientNotice(ctx,
+					pgnotice.Newf(
+						`the provided cursor is more than %d hours old, `+
+							`which could result in increased changefeed latency`,
+						(warningAge/int64(time.Hour)),
+					),
+				)
+			}
+		}
+
 		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 		select {
@@ -388,6 +418,22 @@ func coreChangefeed(
 	}
 }
 
+func evalTimestamp(
+	ctx context.Context, p sql.PlanHookState, statementTime hlc.Timestamp, timeString string,
+) (hlc.Timestamp, error) {
+	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		if knobs != nil && knobs.OverrideCursor != nil {
+			timeString = knobs.OverrideCursor(&statementTime)
+		}
+	}
+	asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(timeString)}
+	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return asOf.Timestamp, nil
+}
+
 func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -408,22 +454,10 @@ func createChangefeedJobRecord(
 		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 	}
 	var initialHighWater hlc.Timestamp
-	evalTimestamp := func(s string) (hlc.Timestamp, error) {
-		if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-			if knobs != nil && knobs.OverrideCursor != nil {
-				s = knobs.OverrideCursor(&statementTime)
-			}
-		}
-		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
-		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
-		if err != nil {
-			return hlc.Timestamp{}, err
-		}
-		return asOf.Timestamp, nil
-	}
+
 	if opts.HasStartCursor() {
 		var err error
-		initialHighWater, err = evalTimestamp(opts.GetCursor())
+		initialHighWater, err = evalTimestamp(ctx, p, statementTime, opts.GetCursor())
 		if err != nil {
 			return nil, err
 		}
