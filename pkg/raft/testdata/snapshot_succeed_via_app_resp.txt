@@ -86,13 +86,18 @@ stabilize 1
 ----
 > 1 receiving messages
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11 sentCommit=10 matchCommit=0]
-  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11]
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->3 MsgSnap Term:1 Log:0/0
-    Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+
+tick-heartbeat 1
+----
+DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11 sentCommit=10 matchCommit=0]
+DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11]
+
+process-ready 1
+----
+Ready MustSync=false:
+Messages:
+1->3 MsgSnap Term:1 Log:0/0
+  Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 status 1
 ----
