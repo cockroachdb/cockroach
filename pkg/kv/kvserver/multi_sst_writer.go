@@ -377,9 +377,6 @@ func decodeRangeStartEnd(
 }
 
 func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, end []byte) error {
-	if !msstw.skipClearForMVCCSpan {
-		panic("can only add internal range deletes to multiSSTWriter if skipClearForMVCCSpan is true")
-	}
 	decodedStart, decodedEnd, err := decodeRangeStartEnd(start, end)
 	if err != nil {
 		return err
@@ -398,9 +395,6 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 func (msstw *multiSSTWriter) PutInternalRangeKey(
 	ctx context.Context, start, end []byte, key rangekey.Key,
 ) error {
-	if !msstw.skipClearForMVCCSpan {
-		panic("can only add internal range deletes to multiSSTWriter if skipClearForMVCCSpan is true")
-	}
 	decodedStart, decodedEnd, err := decodeRangeStartEnd(start, end)
 	if err != nil {
 		return err
