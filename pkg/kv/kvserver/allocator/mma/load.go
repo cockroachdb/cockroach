@@ -15,57 +15,55 @@ import (
 
 // Misc helper classes for working with range, store and node load.
 
-// loadDimension is an enum of load dimensions corresponding to "real"
+// LoadDimension is an enum of load dimensions corresponding to "real"
 // resources. Such resources can sometimes have a capacity. It is generally
 // important to rebalance based on these. The code in this package should be
 // structured that adding additional resource dimensions is easy.
-type loadDimension uint8
+type LoadDimension uint8
 
 const (
-	// Nanos per second
-	cpu loadDimension = iota
-	// Bytes per second.
-	writeBandwidth
-	// Bytes.
-	byteSize
-	numLoadDimensions
+	// CPURate is in nanos per second.
+	CPURate LoadDimension = iota
+	// WriteBandwidth is the writes in bytes/s.
+	WriteBandwidth
+	// ByteSize is the size in bytes.
+	ByteSize
+	NumLoadDimensions
 )
 
-// The load on a resource.
-type loadValue int64
+// LoadValue is the load on a resource.
+type LoadValue int64
 
-// loadVector represents a vector of loads, with one element for each resource
+// LoadVector represents a vector of loads, with one element for each resource
 // dimension.
-type loadVector [numLoadDimensions]loadValue
+type LoadVector [NumLoadDimensions]LoadValue
 
-func (lv loadVector) String() string {
+func (lv LoadVector) String() string {
 	return redact.StringWithoutMarkers(lv)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (lv loadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[%d,%d,%d]", lv[cpu], lv[writeBandwidth], lv[byteSize])
+func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[%d,%d,%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
 }
 
-func (lv *loadVector) add(other loadVector) {
+func (lv *LoadVector) add(other LoadVector) {
 	for i := range other {
 		(*lv)[i] += other[i]
 	}
 }
 
-func (lv *loadVector) subtract(other loadVector) {
+func (lv *LoadVector) subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
 }
 
-// A resource can have a capacity, which is also expressed using loadValue.
+// A resource can have a capacity, which is also expressed using LoadValue.
 // There are some special case capacity values, enumerated here.
 const (
-	// unknownCapacity is currenly only used for writeBandwidth.
-	unknownCapacity loadValue = math.MaxInt64
-	// parentCapacity is currently only used for cpu at the store level.
-	parentCapacity loadValue = math.MaxInt64 - 1
+	// UnknownCapacity is currenly only used for WriteBandwidth.
+	UnknownCapacity LoadValue = math.MaxInt64
 )
 
 // Secondary load dimensions should be considered after we are done
@@ -85,43 +83,43 @@ const (
 // the latter -- confirmed by kvoli. Also look at
 // https://github.com/cockroachdb/cockroach/pull/98893 regarding load means
 // and lease means.
-type secondaryLoadDimension uint8
+type SecondaryLoadDimension uint8
 
 const (
-	leaseCount secondaryLoadDimension = iota
-	numSecondaryLoadDimensions
+	LeaseCount SecondaryLoadDimension = iota
+	NumSecondaryLoadDimensions
 )
 
-type secondaryLoadVector [numSecondaryLoadDimensions]loadValue
+type SecondaryLoadVector [NumSecondaryLoadDimensions]LoadValue
 
-func (lv *secondaryLoadVector) add(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) add(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] += other[i]
 	}
 }
 
-func (lv *secondaryLoadVector) subtract(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) subtract(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
 }
 
-type rangeLoad struct {
-	load loadVector
-	// Nanos per second. raftCPU <= load[cpu]. Handling this as a special case,
+type RangeLoad struct {
+	Load LoadVector
+	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,
 	// rather than trying to (over) generalize, since currently this is the only
 	// resource broken down into two components.
 	//
-	// load[cpu]-raftCPU is work being done on this store for evaluating
+	// Load[cpu]-RaftCPU is work being done on this store for evaluating
 	// proposals and can vary across replicas. Pessimistically, one can assume
 	// that if this replica is the leaseholder and we move the lease to a
-	// different existing replica, it will see an addition of load[cpu]-raftCPU.
-	raftCPU loadValue
+	// different existing replica, it will see an addition of Load[cpu]-RaftCPU.
+	RaftCPU LoadValue
 }
 
 // storeLoad is the load information for a store. Roughly, this is the
 // information we need each store to provide us periodically, i.e.,
-// storeLoadMsg is the input used to compute this.
+// StoreLoadMsg is the input used to compute this.
 type storeLoad struct {
 	roachpb.StoreID
 	roachpb.StoreDescriptor
@@ -130,13 +128,11 @@ type storeLoad struct {
 	// Aggregate store load. In general, we don't require this to be a sum of
 	// the range loads (since a sharded allocator may only have information
 	// about a subset of ranges).
-	reportedLoad loadVector
+	reportedLoad LoadVector
 
 	// Capacity information for this store.
 	//
-	// capacity[cpu] is parentCapacity.
-	//
-	// capacity[writeBandwidth] is unknownCapacity.
+	// capacity[WriteBandwidth] is UnknownCapacity.
 	//
 	// TODO(sumeer): add diskBandwidth, since we will become more aware of
 	// provisioned disk bandwidth in the near future.
@@ -145,43 +141,48 @@ type storeLoad struct {
 	// signal? We had earlier considered having the store set the capacity to a
 	// synthesized value that indicates high utilization, in order to shed some
 	// load. However, the code below assumes homogeneity across stores/nodes in
-	// terms of whether they use a real capacity or not for a loadDimension.
+	// terms of whether they use a real capacity or not for a LoadDimension.
 	//
-	// capacity[byteSize] is the actual capacity.
-	capacity loadVector
+	// capacity[ByteSize] is the actual capacity.
+	capacity LoadVector
 
-	reportedSecondaryLoad secondaryLoadVector
+	reportedSecondaryLoad SecondaryLoadVector
 }
 
-// nodeLoad is the load information for a node. Roughly, this is the
-// information we need each node to provide us periodically.
-type nodeLoad struct {
-	nodeID      roachpb.NodeID
-	reportedCPU loadValue
-	capacityCPU loadValue
+// NodeLoad is the load information for a node.
+type NodeLoad struct {
+	NodeID roachpb.NodeID
+	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
+	// stores on this node.
+	ReportedCPU LoadValue
+	CapacityCPU LoadValue
 }
 
 // The mean store load for a set of stores.
 type meanStoreLoad struct {
-	load     loadVector
-	capacity loadVector
-	// Util is 0 for cpu, writeBandwidth. Non-zero for byteSize.
-	util [numLoadDimensions]float64
+	load     LoadVector
+	capacity LoadVector
+	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
+	util [NumLoadDimensions]float64
 
-	secondaryLoad secondaryLoadVector
+	secondaryLoad SecondaryLoadVector
 }
 
-// The mean node load for a set of nodeLoad.
+// The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
-	loadCPU     loadValue
-	capacityCPU loadValue
+	loadCPU     LoadValue
+	capacityCPU LoadValue
 	utilCPU     float64
 }
 
 type storeLoadSummary struct {
-	sls        loadSummary
-	nls        loadSummary
-	fd         failureDetectionSummary
+	sls                      loadSummary
+	nls                      loadSummary
+	storeCPUSummary          loadSummary
+	highDiskSpaceUtilization bool
+	fd                       failureDetectionSummary
+	maxFractionPending       float64
+
 	loadSeqNum uint64
 }
 
@@ -247,7 +248,7 @@ type meansMemo struct {
 	constraintMatcher *constraintMatcher
 	meansMap          *clearableMemoMap[constraintsDisj, *meansForStoreSet]
 
-	scratchNodes map[roachpb.NodeID]*nodeLoad
+	scratchNodes map[roachpb.NodeID]*NodeLoad
 }
 
 var meansForStoreSetSlicePool = sync.Pool{
@@ -287,7 +288,7 @@ func newMeansMemo(
 		constraintMatcher: constraintMatcher,
 		meansMap: newClearableMapMemo[constraintsDisj, *meansForStoreSet](
 			meansForStoreSetAllocator{}, meansForStoreSetSlicePoolImpl{}),
-		scratchNodes: map[roachpb.NodeID]*nodeLoad{},
+		scratchNodes: map[roachpb.NodeID]*NodeLoad{},
 	}
 }
 
@@ -297,7 +298,7 @@ func (mm *meansMemo) clear() {
 
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) *storeLoad
-	getNodeReportedLoad(roachpb.NodeID) *nodeLoad
+	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
 	computeLoadSummary(roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
 }
 
@@ -309,51 +310,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	n := len(means.stores)
-	clear(mm.scratchNodes)
-	for _, storeID := range means.stores {
-		sload := mm.loadInfoProvider.getStoreReportedLoad(storeID)
-		for j := range sload.reportedLoad {
-			means.storeLoad.load[j] += sload.reportedLoad[j]
-			if sload.capacity[j] == parentCapacity || sload.capacity[j] == unknownCapacity {
-				means.storeLoad.capacity[j] = parentCapacity
-			} else if means.storeLoad.capacity[j] != parentCapacity {
-				means.storeLoad.capacity[j] += sload.capacity[j]
-			}
-		}
-		for j := range sload.reportedSecondaryLoad {
-			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
-		}
-		nodeID := sload.NodeID
-		nLoad := mm.scratchNodes[nodeID]
-		if nLoad == nil {
-			mm.scratchNodes[sload.NodeID] = mm.loadInfoProvider.getNodeReportedLoad(nodeID)
-		}
-	}
-	for i := range means.storeLoad.load {
-		if means.storeLoad.capacity[i] != parentCapacity {
-			means.storeLoad.util[i] =
-				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
-			means.storeLoad.capacity[i] /= loadValue(n)
-		} else {
-			means.storeLoad.util[i] = 0
-		}
-		means.storeLoad.load[i] /= loadValue(n)
-	}
-	for i := range means.storeLoad.secondaryLoad {
-		means.storeLoad.secondaryLoad[i] /= loadValue(n)
-	}
-
-	n = len(mm.scratchNodes)
-	for _, nl := range mm.scratchNodes {
-		means.nodeLoad.loadCPU += nl.reportedCPU
-		means.nodeLoad.capacityCPU += nl.capacityCPU
-	}
-	means.nodeLoad.utilCPU =
-		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
-	means.nodeLoad.loadCPU /= loadValue(n)
-	means.nodeLoad.capacityCPU /= loadValue(n)
-
+	computeMeansForStoreSet(means.stores, mm.loadInfoProvider, means, mm.scratchNodes)
 	return means
 }
 
@@ -372,32 +329,88 @@ func (mm *meansMemo) getStoreLoadSummary(
 	return summary
 }
 
+// TODO: Exclude stores which are storeMembershipRemoving,
+// storeMembershipRemoved, fdDrain and fdDead. As these are never eligible
+// candidate stores and should therefore not be considered in the means.
+func computeMeansForStoreSet(
+	stores storeIDPostingList,
+	loadProvider loadInfoProvider,
+	means *meansForStoreSet,
+	scratchNodes map[roachpb.NodeID]*NodeLoad,
+) {
+	n := len(means.stores)
+	clear(scratchNodes)
+	for _, storeID := range means.stores {
+		sload := loadProvider.getStoreReportedLoad(storeID)
+		for j := range sload.reportedLoad {
+			means.storeLoad.load[j] += sload.reportedLoad[j]
+			if sload.capacity[j] == UnknownCapacity {
+				means.storeLoad.capacity[j] = UnknownCapacity
+			} else if means.storeLoad.capacity[j] != UnknownCapacity {
+				means.storeLoad.capacity[j] += sload.capacity[j]
+			}
+		}
+		for j := range sload.reportedSecondaryLoad {
+			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
+		}
+		nodeID := sload.NodeID
+		nLoad := scratchNodes[nodeID]
+		if nLoad == nil {
+			scratchNodes[sload.NodeID] = loadProvider.getNodeReportedLoad(nodeID)
+		}
+	}
+	for i := range means.storeLoad.load {
+		if means.storeLoad.capacity[i] != UnknownCapacity {
+			means.storeLoad.util[i] =
+				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
+			means.storeLoad.capacity[i] /= LoadValue(n)
+		} else {
+			means.storeLoad.util[i] = 0
+		}
+		means.storeLoad.load[i] /= LoadValue(n)
+	}
+	for i := range means.storeLoad.secondaryLoad {
+		means.storeLoad.secondaryLoad[i] /= LoadValue(n)
+	}
+
+	n = len(scratchNodes)
+	for _, nl := range scratchNodes {
+		means.nodeLoad.loadCPU += nl.ReportedCPU
+		means.nodeLoad.capacityCPU += nl.CapacityCPU
+	}
+	means.nodeLoad.utilCPU =
+		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
+	means.nodeLoad.loadCPU /= LoadValue(n)
+	means.nodeLoad.capacityCPU /= LoadValue(n)
+}
+
 // loadSummary aggregates across all load dimensions for a store, or a node.
 // This could be a score instead of an enum, but eventually we want to decide
 // what scores are roughly equal when deciding on rebalancing priority, and to
-// decide how to order the stores we will try to rebalance to. So we simply
-// use an enum.
+// decide how to order the stores we will try to rebalance to. So we simply use
+// an enum.
 type loadSummary uint8
 
 const (
-	// The two overload states represent the degree of overload.
-	overloadUrgent loadSummary = iota
-	overloadSlow
+	loadLow loadSummary = iota
+	// loadNormal represents that the load is within normal bounds.
+	loadNormal
 	// loadNoChange represents that no load should be added or removed from this
 	// store. This is typically only used when there are enough pending changes
 	// at this store that we want to let them finish.
 	loadNoChange
-	loadNormal
-	loadLow
+	// overloadSlow is a state where the store is overloaded, but not so much
+	// that it is urgent to shed load.
+	overloadSlow
+	// overloadUrgent is a state where the store is overloaded and it is urgent
+	// to shed load.
+	overloadUrgent
 )
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
-	load loadValue, capacity loadValue, meanLoad loadValue, meanUtil float64,
+	load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
 ) loadSummary {
-	if capacity == parentCapacity {
-		return loadLow
-	}
 	loadSummary := loadLow
 	// Heuristics: this is all very rough and subject to revision. There are two
 	// uses for this loadSummary: to find source stores to shed load and to
@@ -410,10 +423,10 @@ func loadSummaryForDimension(
 	//
 	// The load summarization should be specialized for each load dimension and
 	// secondary load dimension e.g. we want to do a different summarization for
-	// cpu and byteSize since the consequence of running out-of-disk is much
+	// cpu and ByteSize since the consequence of running out-of-disk is much
 	// more severe.
 	//
-	// The capacity may be unknownCapacity. Even if we have a known capacity, we
+	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
 	// consider how far we are from the mean. The mean isn't very useful when
 	// there are heterogeneous nodes/stores.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
@@ -424,7 +437,7 @@ func loadSummaryForDimension(
 	} else {
 		loadSummary = loadNormal
 	}
-	if capacity != unknownCapacity {
+	if capacity != UnknownCapacity {
 		// Further tune the summary based on utilization.
 		fractionUsed := float64(load) / float64(capacity)
 		if fractionUsed > 0.9 {
@@ -449,23 +462,32 @@ func loadSummaryForDimension(
 	return loadSummary
 }
 
+func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
+	if capacity == UnknownCapacity {
+		// TODO(sumeer): log an error.
+		return false
+	}
+	fractionUsed := float64(load) / float64(capacity)
+	return fractionUsed > 0.9
+}
+
 // Avoid unused lint errors.
 
 var _ = meansForStoreSetSlicePoolImpl{}.newEntry
 var _ = meansForStoreSetSlicePoolImpl{}.releaseEntry
 var _ = meansForStoreSetAllocator{}.ensureNonNilMapEntry
 var _ = (&meansMemo{}).clear
-var _ = rangeLoad{}.load
-var _ = rangeLoad{}.raftCPU
+var _ = RangeLoad{}.Load
+var _ = RangeLoad{}.RaftCPU
 var _ = storeLoad{}.StoreID
 var _ = storeLoad{}.StoreDescriptor
 var _ = storeLoad{}.NodeID
 var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
-var _ = nodeLoad{}.nodeID
-var _ = nodeLoad{}.reportedCPU
-var _ = nodeLoad{}.capacityCPU
-var _ = cpu
-var _ = writeBandwidth
-var _ = byteSize
+var _ = NodeLoad{}.NodeID
+var _ = NodeLoad{}.ReportedCPU
+var _ = NodeLoad{}.CapacityCPU
+var _ = CPURate
+var _ = WriteBandwidth
+var _ = ByteSize

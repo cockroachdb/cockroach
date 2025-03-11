@@ -41,110 +41,88 @@ func stripBrackets(t *testing.T, in string) string {
 	return lrTrim
 }
 
-func parseLoadVector(t *testing.T, in string) loadVector {
-	var vec loadVector
+func parseLoadVector(t *testing.T, in string) LoadVector {
+	var vec LoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(numLoadDimensions))
+	require.Len(t, parts, int(NumLoadDimensions))
 	for dim := range vec {
-		vec[dim] = loadValue(parseInt(t, parts[dim]))
+		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
 
-func parseSecondaryLoadVector(t *testing.T, in string) secondaryLoadVector {
-	var vec secondaryLoadVector
+func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
+	var vec SecondaryLoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(numSecondaryLoadDimensions))
+	require.Len(t, parts, int(NumSecondaryLoadDimensions))
 	for dim := range vec {
-		vec[dim] = loadValue(parseInt(t, parts[dim]))
+		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
 
-func parseStoreLoadMsg(t *testing.T, in string) storeLoadMsg {
-	var msg storeLoadMsg
+func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
+	var msg StoreLoadMsg
 	for _, v := range strings.Fields(in) {
 		parts := strings.Split(v, "=")
 		require.Len(t, parts, 2)
 		switch parts[0] {
 		case "store-id":
 			msg.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
+		case "node-id":
+			msg.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
 		case "load":
-			msg.load = parseLoadVector(t, parts[1])
+			msg.Load = parseLoadVector(t, parts[1])
 		case "capacity":
-			msg.capacity = parseLoadVector(t, parts[1])
-			for i := range msg.capacity {
-				if msg.capacity[i] < 0 {
-					msg.capacity[i] = parentCapacity
+			msg.Capacity = parseLoadVector(t, parts[1])
+			for i := range msg.Capacity {
+				if msg.Capacity[i] < 0 {
+					msg.Capacity[i] = UnknownCapacity
 				}
 			}
-		case "secondary-load":
-			msg.secondaryLoad = parseSecondaryLoadVector(t, parts[1])
-		default:
-			t.Fatalf("Unknown argument: %s", parts[0])
-		}
-	}
-	return msg
-}
-
-func parseNodeLoadMsg(t *testing.T, in string) nodeLoadMsg {
-	var msg nodeLoadMsg
-	lines := strings.Split(in, "\n")
-	for _, part := range strings.Fields(lines[0]) {
-		parts := strings.Split(part, "=")
-		require.Len(t, parts, 2)
-		switch parts[0] {
-		case "node-id":
-			msg.nodeID = roachpb.NodeID(parseInt(t, parts[1]))
-		case "cpu-load":
-			msg.reportedCPU = loadValue(parseInt(t, parts[1]))
-		case "cpu-capacity":
-			msg.capacityCPU = loadValue(parseInt(t, parts[1]))
 		case "load-time":
 			duration, err := time.ParseDuration(parts[1])
 			require.NoError(t, err)
-			msg.loadTime = testingBaseTime.Add(duration)
+			msg.LoadTime = testingBaseTime.Add(duration)
+		case "secondary-load":
+			msg.SecondaryLoad = parseSecondaryLoadVector(t, parts[1])
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
 	}
-	msg.stores = make([]storeLoadMsg, 0, len(lines)-1)
-	for _, line := range lines[1:] {
-		msg.stores = append(msg.stores, parseStoreLoadMsg(t, line))
-	}
 	return msg
 }
 
-func parseStoreLeaseholderMsg(t *testing.T, in string) storeLeaseholderMsg {
-	var msg storeLeaseholderMsg
+func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
+	var msg StoreLeaseholderMsg
 
 	lines := strings.Split(in, "\n")
 	require.True(t, strings.HasPrefix(lines[0], "store-id="))
 	msg.StoreID = roachpb.StoreID(parseInt(t, strings.TrimPrefix(lines[0], "store-id=")))
 
-	var rMsg rangeMsg
+	var rMsg RangeMsg
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "range-id") {
 			if rMsg.RangeID != 0 {
-				msg.ranges = append(msg.ranges, rMsg)
+				msg.Ranges = append(msg.Ranges, rMsg)
 			}
-			rMsg = rangeMsg{RangeID: 0}
+			rMsg = RangeMsg{RangeID: 0}
 			for _, field := range strings.Fields(line) {
 				parts := strings.SplitN(field, "=", 2)
 				switch parts[0] {
 				case "range-id":
 					rMsg.RangeID = roachpb.RangeID(parseInt(t, parts[1]))
 				case "load":
-					rMsg.rangeLoad.load = parseLoadVector(t, parts[1])
+					rMsg.RangeLoad.Load = parseLoadVector(t, parts[1])
 				case "raft-cpu":
-					rMsg.rangeLoad.raftCPU = loadValue(parseInt(t, parts[1]))
+					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
-			rMsg.conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
+			rMsg.Conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
 		} else {
-			var repl storeIDAndReplicaState
+			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
 			require.Greater(t, len(fields), 2)
 			for _, field := range fields {
@@ -156,25 +134,26 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) storeLeaseholderMsg {
 				case "replica-id":
 					repl.ReplicaID = roachpb.ReplicaID(parseInt(t, parts[1]))
 				case "leaseholder":
-					repl.isLeaseholder = parseBool(t, parts[1])
+					repl.IsLeaseholder = parseBool(t, parts[1])
 				case "type":
 					replType, err := parseReplicaType(parts[1])
 					require.NoError(t, err)
-					repl.replicaType.replicaType = replType
+					repl.ReplicaType.ReplicaType = replType
 				default:
 					panic(fmt.Sprintf("unknown argument: %s", parts[0]))
 				}
 			}
-			rMsg.replicas = append(rMsg.replicas, repl)
+			rMsg.Replicas = append(rMsg.Replicas, repl)
 		}
 	}
 	if rMsg.RangeID != 0 {
-		msg.ranges = append(msg.ranges, rMsg)
+		msg.Ranges = append(msg.Ranges, rMsg)
 	}
 
 	return msg
 }
 
+// TODO(kvoli): Parse a NodeID here as well, for roachpb.ReplicationTarget.
 func parseChangeAddRemove(
 	t *testing.T, in string,
 ) (add, remove roachpb.StoreID, replType roachpb.ReplicaType) {
@@ -202,8 +181,8 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
-		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v range-id=%v load-delta=%v start=%v",
-			change.changeID, change.storeID, change.rangeID,
+		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
+			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
 			change.loadDelta, change.startTime.Sub(testingBaseTime),
 		)
 		if !(change.enactedAtTime == time.Time{}) {
@@ -227,15 +206,37 @@ func testingGetStoreList(cs *clusterState) (member, removed storeIDPostingList) 
 	return member, removed
 }
 
-func testingGetPendingChanges(cs *clusterState) []*pendingReplicaChange {
-	var pendingChangeList []*pendingReplicaChange
+func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaChange {
+	var clusterPendingChangeList []*pendingReplicaChange
+	var storePendingChangeList []*pendingReplicaChange
+	var rangePendingChangeList []*pendingReplicaChange
 	for _, change := range cs.pendingChanges {
-		pendingChangeList = append(pendingChangeList, change)
+		clusterPendingChangeList = append(clusterPendingChangeList, change)
 	}
-	sort.Slice(pendingChangeList, func(i, j int) bool {
-		return pendingChangeList[i].changeID < pendingChangeList[j].changeID
+	for _, store := range cs.stores {
+		for _, change := range store.adjusted.loadPendingChanges {
+			storePendingChangeList = append(storePendingChangeList, change)
+		}
+	}
+	for _, rng := range cs.ranges {
+		for _, change := range rng.pendingChanges {
+			rangePendingChangeList = append(rangePendingChangeList, change)
+		}
+	}
+	// NB: Although redundant, we compare all of the de-normalized pending change
+	// to ensure that they are in sync.
+	sort.Slice(clusterPendingChangeList, func(i, j int) bool {
+		return clusterPendingChangeList[i].changeID < clusterPendingChangeList[j].changeID
 	})
-	return pendingChangeList
+	sort.Slice(storePendingChangeList, func(i, j int) bool {
+		return storePendingChangeList[i].changeID < storePendingChangeList[j].changeID
+	})
+	sort.Slice(rangePendingChangeList, func(i, j int) bool {
+		return rangePendingChangeList[i].changeID < rangePendingChangeList[j].changeID
+	})
+	require.EqualValues(t, clusterPendingChangeList, storePendingChangeList)
+	require.EqualValues(t, rangePendingChangeList, storePendingChangeList)
+	return clusterPendingChangeList
 }
 
 func TestClusterState(t *testing.T) {
@@ -255,7 +256,7 @@ func TestClusterState(t *testing.T) {
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
 					fmt.Fprintf(&buf, "node-id=%s failure-summary=%s locality-tiers=%s\n",
-						ns.nodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreDescriptor.Locality())
+						ns.NodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreDescriptor.Locality())
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
 						fmt.Fprintf(&buf, "  store-id=%v membership=%v attrs=%s locality-code=%s\n",
@@ -278,10 +279,10 @@ func TestClusterState(t *testing.T) {
 					var buf strings.Builder
 					for _, rangeID := range rangeIDs {
 						rs := cs.ranges[roachpb.RangeID(rangeID)]
-						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.load, rs.load.raftCPU)
+						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.Load, rs.load.RaftCPU)
 						for _, repl := range rs.replicas {
 							fmt.Fprintf(&buf, "  store-id=%v %v\n",
-								repl.StoreID, repl.replicaIDAndType,
+								repl.StoreID, repl.ReplicaIDAndType,
 							)
 						}
 					}
@@ -289,16 +290,13 @@ func TestClusterState(t *testing.T) {
 
 				case "get-load-info":
 					var buf strings.Builder
-					storeList, _ := testingGetStoreList(cs)
-					for _, storeID := range storeList {
+					memberStores, _ := testingGetStoreList(cs)
+					for _, storeID := range memberStores {
 						ss := cs.stores[storeID]
-						if ss.storeMembership == storeMembershipRemoved {
-							continue
-						}
 						ns := cs.nodes[ss.NodeID]
 						fmt.Fprintf(&buf,
-							"store-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
-							ss.StoreID, ss.reportedLoad, ss.adjusted.load, ns.reportedCPU, ns.adjustedCPU, ss.loadSeqNum,
+							"store-id=%v node-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
+							ss.StoreID, ss.NodeID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
 						)
 					}
 					return buf.String()
@@ -349,9 +347,9 @@ func TestClusterState(t *testing.T) {
 					cs.updateFailureDetectionSummary(roachpb.NodeID(nodeID), fd)
 					return printNodeListMeta()
 
-				case "node-load-msg":
-					msg := parseNodeLoadMsg(t, d.Input)
-					cs.processNodeLoadMsg(&msg)
+				case "store-load-msg":
+					msg := parseStoreLoadMsg(t, d.Input)
+					cs.processStoreLoadMsg(&msg)
 					return ""
 
 				case "store-leaseholder-msg":
@@ -372,32 +370,38 @@ func TestClusterState(t *testing.T) {
 						switch parts[0] {
 						case "transfer-lease":
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
-							transferChanges := makeLeaseTransferChanges(rangeID, rState.replicas, rState.load, add, remove)
+							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
+							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
+							transferChanges := makeLeaseTransferChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
 							changes = append(changes, transferChanges[:]...)
 						case "add-replica":
 							add, _, replType := parseChangeAddRemove(t, parts[1])
-							changes = append(changes, makeAddReplicaChange(rangeID, rState.load, add, replType))
+							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
+							changes = append(changes, makeAddReplicaChange(rangeID, rState.load, replType, addTarget))
 						case "remove-replica":
 							_, remove, _ := parseChangeAddRemove(t, parts[1])
-							var removeRepl storeIDAndReplicaState
+							var removeRepl StoreIDAndReplicaState
 							for _, replica := range rState.replicas {
 								if replica.StoreID == remove {
 									removeRepl = replica
 								}
 							}
-							changes = append(changes, makeRemoveReplicaChange(rangeID, rState.load, removeRepl))
+							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
+							changes = append(changes, makeRemoveReplicaChange(rangeID, rState.load, removeRepl.ReplicaState, removeTarget))
 						case "rebalance-replica":
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
-							rebalanceChanges := makeRebalanceReplicaChanges(rangeID, rState.replicas, rState.load, add, remove)
+							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
+							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
+							rebalanceChanges := makeRebalanceReplicaChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
 					cs.createPendingChanges(rangeID, changes...)
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
 					cs.gcPendingChanges(cs.ts.Now())
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
 					var changeIDsInt []int
@@ -407,10 +411,10 @@ func TestClusterState(t *testing.T) {
 						changeIDs = append(changeIDs, changeID(id))
 					}
 					cs.pendingChangesRejected(changeIDs)
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "get-pending-changes":
-					return printPendingChanges(testingGetPendingChanges(cs))
+					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					var seconds int

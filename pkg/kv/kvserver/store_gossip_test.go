@@ -107,7 +107,7 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 				nil,
 				cfg.TestingKnobs.GossipTestingKnobs,
 				&cluster.MakeTestingClusterSettings().SV,
-				timeutil.DefaultTimeSource{},
+				timeutil.DefaultTimeSource{}, nil,
 			)
 			sg.cachedCapacity.cached = tc.cached
 			sg.cachedCapacity.lastGossiped = tc.lastGossiped

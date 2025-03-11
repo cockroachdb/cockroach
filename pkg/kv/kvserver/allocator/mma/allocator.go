@@ -32,7 +32,7 @@ type Allocator interface {
 	// nodes in the cluster is a side effect of this method.
 	SetStore(store roachpb.StoreDescriptor) error
 
-	// RemoveNodeAndStores tells the allocator to remove the nodeID and all its
+	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
 	// stores.
 	RemoveNodeAndStores(nodeID roachpb.NodeID) error
 
@@ -42,11 +42,11 @@ type Allocator interface {
 
 	// ProcessNodeLoadMsg provides frequent the state of every node and store in
 	// the cluster.
-	ProcessNodeLoadMsg(msg *nodeLoadMsg) error
+	ProcessNodeLoadMsg(msg *NodeLoadMsg) error
 
 	// ProcessStoreLeaseholderMsg provides updates for each local store and the
 	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *storeLeaseholderMsg) error
+	ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error
 
 	// TODO(sumeer): only a subset of the fields in pendingReplicaChange are
 	// relevant to the caller. Hide the remaining.
