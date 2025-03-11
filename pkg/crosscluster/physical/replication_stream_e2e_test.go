@@ -103,7 +103,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1m'`, c.Args.SrcTenantName))
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1m'`, c.Args.SrcTenantName))
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
@@ -114,7 +114,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
 
 	// Make producer job easily times out
-	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	// The ingestion job will stop retrying as this is a permanent job error.
@@ -1035,7 +1035,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				var emptyCutoverTime time.Time
 				c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
-				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 			}
 
 			// Set GC TTL low, so that the GC job completes quickly in the test.
@@ -1043,7 +1043,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 
 			if !completeReplication {
-				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='1ms'`, c.Args.SrcTenantName))
+				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1ms'`, c.Args.SrcTenantName))
 				jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 			}
