@@ -11,8 +11,7 @@ log-level none
 ----
 ok
 
-# Start with two nodes, but the config already has a third.
-add-nodes 2 voters=(1,2,3) index=10
+add-nodes 3 voters=(1,2,3) index=10
 ----
 ok
 
@@ -20,12 +19,20 @@ campaign 1
 ----
 ok
 
-# Fully replicate everything, including the leader's empty index.
 stabilize
 ----
 ok
 
-compact 1 11
+propose 1 entry12
+----
+ok
+
+stabilize 1 2
+----
+ok
+
+# Compact the new entry out from the leader's log.
+compact 1 12
 ----
 ok
 
@@ -39,97 +46,71 @@ log-level debug
 ----
 ok
 
+# The log is fully replicated and committed on nodes 1 and 2. For node 3, the
+# last entry 12 has been sent but dropped. The leader is not yet aware of that.
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
-2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
-3: StateProbe match=0 next=11 sentCommit=10 matchCommit=0 paused inactive
+1: StateReplicate match=12 next=13 sentCommit=11 matchCommit=11
+2: StateReplicate match=12 next=13 sentCommit=12 matchCommit=12
+3: StateReplicate match=11 next=13 sentCommit=12 matchCommit=11 inflight=1
 
-# Add the node that will receive a snapshot (it has no state at all, does not
-# even have a config).
-add-nodes 1
-----
-INFO 3 switched to configuration voters=()
-INFO 3 became follower at term 0
-DEBUG 3 reset election elapsed to 0
-INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
-
-# Time passes on the leader so that it will try the previously missing follower
-# again.
-# TODO(ibrahim): Consider not constructing a snapshot in the first place if we
-# can't send it.
+# Time passes on the leader, and it pings the lagging follower again.
 tick-heartbeat 1
 ----
-DEBUG ignore sending snapshot to 3 since it is not recently active
+ok
 
-process-ready 1
-----
-Ready MustSync=false:
-Messages:
-1->3 MsgFortifyLeader Term:1 Log:0/0
-
-# Iterate until no more work is done by the new peer.
-stabilize 3
-----
-> 3 receiving messages
-  1->3 MsgFortifyLeader Term:1 Log:0/0
-  INFO 3 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
-  INFO 3 became follower at term 1
-  DEBUG 3 reset election elapsed to 0
-> 3 handling Ready
-  Ready MustSync=true:
-  HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
-  Messages:
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-
-stabilize 1
-----
-> 1 receiving messages
-  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11 sentCommit=10 matchCommit=0]
-  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11]
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->3 MsgSnap Term:1 Log:0/0
-    Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-
-status 1
-----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
-2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
-3: StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11
-
+# A MsgApp reject from the follower on node 3 coerces the leader into sending a
+# snapshot at the last log index.
+#
 # Follower applies the snapshot. Note how it reacts with a MsgAppResp upon completion.
 # The snapshot fully catches the follower up (i.e. there are no more log entries it
 # needs to apply after). The bug was that the leader failed to realize that the follower
 # was now fully caught up.
-stabilize 3
+stabilize
 ----
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgApp Term:1 Log:1/12 Commit:12
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/12 Commit:12
+  DEBUG 3 [logterm: 0, index: 12] rejected MsgApp [logterm: 1, index: 12] from 1
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->1 MsgAppResp Term:1 Log:1/12 Rejected (Hint: 11) Commit:11
+> 1 receiving messages
+  3->1 MsgAppResp Term:1 Log:1/12 Rejected (Hint: 11) Commit:11
+  DEBUG 1 received MsgAppResp(rejected, hint: (index 11, term 1)) from 3 for index 12
+  DEBUG 1 decreased progress of 3 to [StateReplicate match=11 next=12 sentCommit=11 matchCommit=11 inflight=1]
+  DEBUG 1 [firstindex: 13, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=11 next=12 sentCommit=11 matchCommit=11]
+  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=11 next=13 sentCommit=12 matchCommit=11 paused pendingSnap=12]
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgSnap Term:1 Log:0/0
+    Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 3 receiving messages
   1->3 MsgSnap Term:1 Log:0/0
-    Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  INFO log [committed=0, applied=0, applying=0, unstable.offset=1, unstable.offsetInProgress=1, len(unstable.Entries)=0] starts to restore snapshot [index: 11, term: 1]
+    Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  INFO log [committed=11, applied=11, applying=11, unstable.offset=12, unstable.offsetInProgress=12, len(unstable.Entries)=0] starts to restore snapshot [index: 12, term: 1]
   INFO 3 switched to configuration voters=(1 2 3)
-  INFO 3 [commit: 11, lastindex: 11, lastterm: 1] restored snapshot [index: 11, term: 1]
-  INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
+  INFO 3 [commit: 12, lastindex: 12, lastterm: 1] restored snapshot [index: 12, term: 1]
+  INFO 3 [commit: 12] restored snapshot [index: 12, term: 1]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:11 Lead:1 LeadEpoch:1
-  Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
+  Snapshot Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-
-# The MsgAppResp lets the leader move the follower back to replicating state.
-# Leader sends another MsgAppResp, to communicate the updated commit index.
-stabilize 1
-----
+  3->1 MsgAppResp Term:1 Log:0/12 Commit:12
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=12 sentCommit=11 matchCommit=11 paused pendingSnap=11]
+  3->1 MsgAppResp Term:1 Log:0/12 Commit:12
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=12 next=13 sentCommit=12 matchCommit=12 paused pendingSnap=12]
 
+# The MsgAppResp let the leader move the follower back to replicating state.
+# Everything has converged to fully replicated.
 status 1
 ----
-1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
-2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
-3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+1: StateReplicate match=12 next=13 sentCommit=11 matchCommit=11
+2: StateReplicate match=12 next=13 sentCommit=12 matchCommit=12
+3: StateReplicate match=12 next=13 sentCommit=12 matchCommit=12
