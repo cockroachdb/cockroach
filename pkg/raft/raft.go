@@ -1869,59 +1869,8 @@ func stepLeader(r *raft, m pb.Message) error {
 	case pb.MsgBeat:
 		r.bcastHeartbeat()
 		return nil
-	case pb.MsgProp:
-		if len(m.Entries) == 0 {
-			r.logger.Panicf("%x stepped empty MsgProp", r.id)
-		}
-		if r.trk.Progress(r.id) == nil {
-			// If we are not currently a member of the range (i.e. this node
-			// was removed from the configuration while serving as leader),
-			// drop any new proposals.
-			return ErrProposalDropped
-		}
-		if r.leadTransferee != None {
-			r.logger.Debugf("%x [term %d] transfer leadership to %x is in progress; dropping proposal", r.id, r.Term, r.leadTransferee)
-			return ErrProposalDropped
-		}
-
-		for i := range m.Entries {
-			e := &m.Entries[i]
-			var cc pb.ConfChangeI
-			if e.Type == pb.EntryConfChange {
-				var ccc pb.ConfChange
-				if err := ccc.Unmarshal(e.Data); err != nil {
-					panic(err)
-				}
-				cc = ccc
-			} else if e.Type == pb.EntryConfChangeV2 {
-				var ccc pb.ConfChangeV2
-				if err := ccc.Unmarshal(e.Data); err != nil {
-					panic(err)
-				}
-				cc = ccc
-			}
-			if cc != nil {
-				ccCtx := confchange.ValidationContext{
-					CurConfig:                         &r.config,
-					Applied:                           r.raftLog.applied,
-					PendingConfIndex:                  r.pendingConfIndex,
-					LeadSupportSafe:                   r.fortificationTracker.ConfigChangeSafe(),
-					DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
-				}
-				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
-					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
-				} else {
-					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
-				}
-			}
-		}
-
-		if !r.appendEntry(m.Entries...) {
-			return ErrProposalDropped
-		}
-		r.bcastAppend()
-		return nil
+	case pb.MsgProp, pb.MsgPropConfig:
+		return r.handleProposeEntries(m)
 
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
@@ -2228,7 +2177,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		myVoteRespType = pb.MsgVoteResp
 	}
 	switch m.Type {
-	case pb.MsgProp:
+	case pb.MsgProp, pb.MsgPropConfig:
 		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
 	case pb.MsgSnap:
@@ -2268,7 +2217,7 @@ func stepFollower(r *raft, m pb.Message) error {
 		}
 	}
 	switch m.Type {
-	case pb.MsgProp:
+	case pb.MsgProp, pb.MsgPropConfig:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 			return ErrProposalDropped
@@ -2379,6 +2328,69 @@ func leadSliceFromMsgApp(m *pb.Message) LeadSlice {
 			entries: m.Entries,
 		},
 	}
+}
+
+func (r *raft) handleProposeEntries(m pb.Message) error {
+	if len(m.Entries) == 0 {
+		r.logger.Panicf("%x stepped empty MsgProp", r.id)
+	}
+	if r.trk.Progress(r.id) == nil {
+		// If we are not currently a member of the range (i.e. this node
+		// was removed from the configuration while serving as leader),
+		// drop any new proposals.
+		return ErrProposalDropped
+	}
+	if r.leadTransferee != None {
+		r.logger.Debugf("%x [term %d] transfer leadership to %x is in progress; dropping proposal", r.id, r.Term, r.leadTransferee)
+		return ErrProposalDropped
+	}
+
+	// FIXME: we should guard the change by a version gate, and live with the old
+	// code for a bit.
+	if m.Type == pb.MsgPropConfig && !r.handleProposeConfig(m) {
+		return ErrProposalDropped
+	}
+	if !r.appendEntry(m.Entries...) {
+		return ErrProposalDropped
+	}
+	r.bcastAppend()
+	return nil
+}
+
+func (r *raft) handleProposeConfig(m pb.Message) bool {
+	if ln := len(m.Entries); ln != 1 {
+		r.logger.Panicf("%x stepped MsgPropConfig has %d entries, must be 1", r.id, ln)
+	}
+	var cc pb.ConfChangeI
+	if e := &m.Entries[0]; e.Type == pb.EntryConfChange {
+		var ccc pb.ConfChange
+		if err := ccc.Unmarshal(e.Data); err != nil {
+			panic(err)
+		}
+		cc = ccc
+	} else if e.Type == pb.EntryConfChangeV2 {
+		var ccc pb.ConfChangeV2
+		if err := ccc.Unmarshal(e.Data); err != nil {
+			panic(err)
+		}
+		cc = ccc
+	}
+	if cc != nil {
+		ccCtx := confchange.ValidationContext{
+			CurConfig:                         &r.config,
+			Applied:                           r.raftLog.applied,
+			PendingConfIndex:                  r.pendingConfIndex,
+			LeadSupportSafe:                   r.fortificationTracker.ConfigChangeSafe(),
+			DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
+		}
+		if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
+			r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
+			return false
+		} else {
+			r.pendingConfIndex = r.raftLog.lastIndex() + 1
+		}
+	}
+	return true
 }
 
 func (r *raft) handleAppendEntries(m pb.Message) {

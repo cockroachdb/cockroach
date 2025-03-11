@@ -500,7 +500,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles,
+				buf[firstProp:nextProp], raftpb.MsgProp)
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -540,7 +541,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// that it can be shared. For now, this is fine since conf changes are
 			// internal commands anyway and unlikely to be sent at significant volume.
 			if err := proposeBatch(
-				ctx, b.p, raftGroup, sl, []admitEntHandle{{}}, []*ProposalData{p},
+				ctx, b.p, raftGroup, sl, []admitEntHandle{{}}, []*ProposalData{p}, raftpb.MsgPropConfig,
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
@@ -582,7 +583,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles,
+		buf[firstProp:nextProp], raftpb.MsgProp)
 	return used, propErr
 }
 
@@ -853,6 +855,7 @@ func proposeBatch(
 	ents []raftpb.Entry,
 	handles []admitEntHandle,
 	props []*ProposalData,
+	typ raftpb.MessageType,
 ) (_ error) {
 	if len(ents) != len(props) {
 		return errors.AssertionFailedf("ents and props don't match up: %v and %v", ents, props)
@@ -862,7 +865,7 @@ func proposeBatch(
 	}
 	replID := p.getReplicaID()
 	err := raftGroup.Step(raftpb.Message{
-		Type:    raftpb.MsgProp,
+		Type:    typ,
 		From:    raftpb.PeerID(replID),
 		Entries: ents,
 	})

@@ -39,10 +39,13 @@ message Snapshot {
 
 // For description of different message types, see:
 // https://pkg.go.dev/go.etcd.io/raft/v3#hdr-MessageType
+//
+// Next value: 28.
 enum MessageType {
   MsgHup               = 0;
   MsgBeat              = 1;
   MsgProp              = 2;
+  MsgPropConfig        = 27;
   MsgApp               = 3;
   MsgAppResp           = 4;
   MsgVote              = 5;

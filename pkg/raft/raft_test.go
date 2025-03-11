@@ -3269,7 +3269,7 @@ func TestStepConfig(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	index := r.raftLog.lastIndex()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
+	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgPropConfig, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
 	assert.Equal(t, index+1, r.raftLog.lastIndex())
 	assert.Equal(t, index+1, r.pendingConfIndex)
 }
@@ -3282,14 +3282,16 @@ func TestStepIgnoreConfig(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	r.becomeCandidate()
 	r.becomeLeader()
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
+	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgPropConfig, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
 	index := r.raftLog.lastIndex()
 	pendingConfIndex := r.pendingConfIndex
-	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Type: pb.EntryConfChange}}})
-	wents := []pb.Entry{{Type: pb.EntryNormal, Term: 1, Index: 3, Data: nil}}
+	require.Error(t, ErrProposalDropped, r.Step(pb.Message{
+		From: 1, To: 1, Type: pb.MsgPropConfig,
+		Entries: []pb.Entry{{Type: pb.EntryConfChange}},
+	}))
 	ents, err := r.raftLog.entries(index, noLimit)
 	require.NoError(t, err)
-	assert.Equal(t, wents, ents)
+	assert.Empty(t, ents)
 	assert.Equal(t, pendingConfIndex, r.pendingConfIndex)
 }
 
