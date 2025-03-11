@@ -108,6 +108,9 @@ type TestingKnobs struct {
 
 	// WrapTelemetryLogger is used to wrap the periodic telemetry logger in tests.
 	WrapTelemetryLogger func(logger telemetryLogger) telemetryLogger
+
+	// Used in unit test to change time scale. Returns time in nanoseconds.
+	OverrideCursorAge func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
