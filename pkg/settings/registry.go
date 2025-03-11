@@ -258,6 +258,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.metrics.statement_details.plan_collection.period":       {},
 
 	// removed as of 25.2
+	"kv.snapshot_receiver.excise.enabled":                {},
 	"sql.catalog.experimental_use_session_based_leasing": {},
 	"bulkio.backup.merge_file_buffer_size":               {},
 	"changefeed.new_webhook_sink_enabled":                {},

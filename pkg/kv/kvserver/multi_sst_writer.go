@@ -249,6 +249,8 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 // addClearForMVCCSpan allows us to explicitly add a deletion tombstone
 // for the mvcc span in the msstw, if it was instantiated with the expectation
 // that no tombstone was necessary.
+//
+// TODO(tbg): delete.
 func (msstw *multiSSTWriter) addClearForMVCCSpan() error {
 	if !msstw.skipClearForMVCCSpan {
 		// Nothing to do.
