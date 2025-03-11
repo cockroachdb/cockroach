@@ -65,7 +65,7 @@ type Allocator interface {
 	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangesDisposition(changes []PendingRangeChange, success bool) error
+	AdjustPendingChangesDisposition(changes []PendingRangeChange, success bool)
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
