@@ -36,15 +36,17 @@ type allocatorState struct {
 	rand *rand.Rand
 }
 
+var _ Allocator = &allocatorState{}
+
 // TODO(sumeer): temporary constants.
 const (
-	rebalanceInterval           time.Duration = 10 * time.Second
+	RebalanceInterval           time.Duration = 10 * time.Second
 	rateChangeLimiterGCInterval               = 15 * time.Second
 	numAllocators                             = 20
 	maxFractionPendingThreshold               = 0.1
 )
 
-func newAllocatorState(ts timeutil.TimeSource) *allocatorState {
+func NewAllocatorState(ts timeutil.TimeSource) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
@@ -350,10 +352,61 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	return changes
 }
 
-func (a *allocatorState) allocChangeID() changeID {
-	id := a.changeIDCounter
-	a.changeIDCounter++
-	return id
+// ComputeChanges implements the Allocator interface.
+func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) error {
+	panic("unimplemented")
+}
+
+// RemoveNodeAndStores implements the Allocator interface.
+func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
+	panic("unimplemented")
+}
+
+// UpdateFailureDetectionSummary implements the Allocator interface.
+func (a *allocatorState) UpdateFailureDetectionSummary(
+	nodeID roachpb.NodeID, fd failureDetectionSummary,
+) error {
+	panic("unimplemented")
+}
+
+// ProcessStoreLeaseholderMsg implements the Allocator interface.
+func (a *allocatorState) ProcessNodeLoadMsg(msg *NodeLoadMsg) error {
+	panic("unimplemented")
+}
+
+// ProcessStoreLeaseholderMsg implements the Allocator interface.
+func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) error {
+	panic("unimplemented")
+}
+
+// AdjustPendingChangesDisposition implements the Allocator interface.
+func (a *allocatorState) AdjustPendingChangesDisposition(
+	changes []PendingRangeChange, success bool,
+) error {
+	panic("unimplemented")
+}
+
+// ComputeChanges implements the Allocator interface.
+func (a *allocatorState) ComputeChanges(opts ChangeOptions) []PendingRangeChange {
+	return a.rebalanceStores(opts.LocalStoreID)
+}
+
+// AdminRelocateOne implements the Allocator interface.
+func (a *allocatorState) AdminRelocateOne(
+	desc *roachpb.RangeDescriptor,
+	conf *roachpb.SpanConfig,
+	leaseholderStore roachpb.StoreID,
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
+) ([]pendingReplicaChange, error) {
+	panic("unimplemented")
+}
+
+// AdminScatterOne implements the Allocator interface.
+func (a *allocatorState) AdminScatterOne(
+	rangeID roachpb.RangeID, canTransferLease bool, opts ChangeOptions,
+) ([]pendingReplicaChange, error) {
+	panic("unimplemented")
 }
 
 // TODO(sumeer): look at support methods for allocatorState.tryMovingRange in
@@ -807,7 +860,7 @@ const epsilon = 1e-10
 
 // Avoid unused lint errors.
 
-var _ = newAllocatorState
+var _ = NewAllocatorState
 var _ = allocatorState{}.changeRateLimiter
 var _ = (&existingReplicaLocalities{}).clear
 var _ = replicasLocalityTiers{}.hash
