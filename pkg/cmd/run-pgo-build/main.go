@@ -144,7 +144,7 @@ func downloadArtifacts(buildID int64, tmpDir string) (ReadAtCloser, int64, error
 // function processes that sub-zip archive and extracts all the CPU (.pprof)
 // files.
 //
-// The .pprof files will be parsed and put into the pprofFilesChan.
+// The .pprof files will be parsed and put into the profilesChan.
 // wg.Done() will be called when this function completes.
 func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sync.WaitGroup) {
 	archive, err := f.Open()
@@ -161,6 +161,7 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 	if err != nil {
 		panic(err)
 	}
+	var profiles []*profile.Profile
 	for _, file := range zipReader.File {
 		if strings.HasSuffix(file.FileHeader.Name, ".pprof") &&
 			strings.Contains(file.FileHeader.Name, "/cpuprof.") &&
@@ -175,9 +176,19 @@ func processArtifactsZip(f *zip.File, profilesChan chan *profile.Profile, wg *sy
 			if err != nil {
 				panic(err)
 			}
-			profilesChan <- prof
+			profiles = append(profiles, prof)
 		}
 	}
+	// There will be a lot of data in the profiles and we don't need all of
+	// it. We'll pick every 25th profile to reduce the size of the final
+	// result.
+	var idx, selected int
+	for idx < len(profiles) {
+		profilesChan <- profiles[idx]
+		selected += 1
+		idx += 25
+	}
+	fmt.Printf("Picked %d out of %d profiles\n", selected, len(profiles))
 	wg.Done()
 }
 

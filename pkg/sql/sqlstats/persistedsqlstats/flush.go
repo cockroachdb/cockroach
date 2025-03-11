@@ -200,6 +200,8 @@ func (s *PersistedSQLStats) flush(
 	})
 	if err != nil {
 		log.Warningf(ctx, "failed to execute sql-stmt-stats-flush task, %s", err.Error())
+		wg.Done()
+		return
 	}
 
 	err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
@@ -211,6 +213,8 @@ func (s *PersistedSQLStats) flush(
 	})
 	if err != nil {
 		log.Warningf(ctx, "failed to execute sql-txn-stats-flush task, %s", err.Error())
+		wg.Done()
+		return
 	}
 
 	wg.Wait()

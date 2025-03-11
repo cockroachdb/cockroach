@@ -1601,44 +1601,48 @@ REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 query TTTTTB rowsort
 SHOW GRANTS ON t
 ----
-a  public  t  admin      ALL         true
-a  public  t  readwrite  BACKUP      false
-a  public  t  readwrite  CHANGEFEED  false
-a  public  t  readwrite  CREATE      false
-a  public  t  readwrite  DROP        false
-a  public  t  readwrite  SELECT      false
-a  public  t  readwrite  TRIGGER     false
-a  public  t  readwrite  UPDATE      false
-a  public  t  readwrite  ZONECONFIG  false
-a  public  t  root       ALL         true
-a  public  t  test-user  BACKUP      false
-a  public  t  test-user  CHANGEFEED  false
-a  public  t  test-user  CREATE      false
-a  public  t  test-user  DROP        false
-a  public  t  test-user  SELECT      false
-a  public  t  test-user  TRIGGER     false
-a  public  t  test-user  UPDATE      false
-a  public  t  test-user  ZONECONFIG  false
+a  public  t  admin      ALL              true
+a  public  t  readwrite  BACKUP           false
+a  public  t  readwrite  CHANGEFEED       false
+a  public  t  readwrite  CREATE           false
+a  public  t  readwrite  DROP             false
+a  public  t  readwrite  REPLICATIONDEST  false
+a  public  t  readwrite  SELECT           false
+a  public  t  readwrite  TRIGGER          false
+a  public  t  readwrite  UPDATE           false
+a  public  t  readwrite  ZONECONFIG       false
+a  public  t  root       ALL              true
+a  public  t  test-user  BACKUP           false
+a  public  t  test-user  CHANGEFEED       false
+a  public  t  test-user  CREATE           false
+a  public  t  test-user  DROP             false
+a  public  t  test-user  REPLICATIONDEST  false
+a  public  t  test-user  SELECT           false
+a  public  t  test-user  TRIGGER          false
+a  public  t  test-user  UPDATE           false
+a  public  t  test-user  ZONECONFIG       false
 
 query TTTTTB rowsort
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  public  t  readwrite  BACKUP      false
-a  public  t  readwrite  CHANGEFEED  false
-a  public  t  readwrite  CREATE      false
-a  public  t  readwrite  DROP        false
-a  public  t  readwrite  SELECT      false
-a  public  t  readwrite  TRIGGER     false
-a  public  t  readwrite  UPDATE      false
-a  public  t  readwrite  ZONECONFIG  false
-a  public  t  test-user  BACKUP      false
-a  public  t  test-user  CHANGEFEED  false
-a  public  t  test-user  CREATE      false
-a  public  t  test-user  DROP        false
-a  public  t  test-user  SELECT      false
-a  public  t  test-user  TRIGGER     false
-a  public  t  test-user  UPDATE      false
-a  public  t  test-user  ZONECONFIG  false
+a  public  t  readwrite  BACKUP           false
+a  public  t  readwrite  CHANGEFEED       false
+a  public  t  readwrite  CREATE           false
+a  public  t  readwrite  DROP             false
+a  public  t  readwrite  REPLICATIONDEST  false
+a  public  t  readwrite  SELECT           false
+a  public  t  readwrite  TRIGGER          false
+a  public  t  readwrite  UPDATE           false
+a  public  t  readwrite  ZONECONFIG       false
+a  public  t  test-user  BACKUP           false
+a  public  t  test-user  CHANGEFEED       false
+a  public  t  test-user  CREATE           false
+a  public  t  test-user  DROP             false
+a  public  t  test-user  REPLICATIONDEST  false
+a  public  t  test-user  SELECT           false
+a  public  t  test-user  TRIGGER          false
+a  public  t  test-user  UPDATE           false
+a  public  t  test-user  ZONECONFIG       false
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
@@ -1646,42 +1650,46 @@ REVOKE SELECT ON t FROM "test-user"
 query TTTTTB rowsort
 SHOW GRANTS ON t
 ----
-a  public  t  admin      ALL         true
-a  public  t  readwrite  BACKUP      false
-a  public  t  readwrite  CHANGEFEED  false
-a  public  t  readwrite  CREATE      false
-a  public  t  readwrite  DROP        false
-a  public  t  readwrite  SELECT      false
-a  public  t  readwrite  TRIGGER     false
-a  public  t  readwrite  UPDATE      false
-a  public  t  readwrite  ZONECONFIG  false
-a  public  t  root       ALL         true
-a  public  t  test-user  BACKUP      false
-a  public  t  test-user  CHANGEFEED  false
-a  public  t  test-user  CREATE      false
-a  public  t  test-user  DROP        false
-a  public  t  test-user  TRIGGER     false
-a  public  t  test-user  UPDATE      false
-a  public  t  test-user  ZONECONFIG  false
+a  public  t  admin      ALL              true
+a  public  t  readwrite  BACKUP           false
+a  public  t  readwrite  CHANGEFEED       false
+a  public  t  readwrite  CREATE           false
+a  public  t  readwrite  DROP             false
+a  public  t  readwrite  REPLICATIONDEST  false
+a  public  t  readwrite  SELECT           false
+a  public  t  readwrite  TRIGGER          false
+a  public  t  readwrite  UPDATE           false
+a  public  t  readwrite  ZONECONFIG       false
+a  public  t  root       ALL              true
+a  public  t  test-user  BACKUP           false
+a  public  t  test-user  CHANGEFEED       false
+a  public  t  test-user  CREATE           false
+a  public  t  test-user  DROP             false
+a  public  t  test-user  REPLICATIONDEST  false
+a  public  t  test-user  TRIGGER          false
+a  public  t  test-user  UPDATE           false
+a  public  t  test-user  ZONECONFIG       false
 
 query TTTTTB rowsort
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  public  t  readwrite  BACKUP      false
-a  public  t  readwrite  CHANGEFEED  false
-a  public  t  readwrite  CREATE      false
-a  public  t  readwrite  DROP        false
-a  public  t  readwrite  SELECT      false
-a  public  t  readwrite  TRIGGER     false
-a  public  t  readwrite  UPDATE      false
-a  public  t  readwrite  ZONECONFIG  false
-a  public  t  test-user  BACKUP      false
-a  public  t  test-user  CHANGEFEED  false
-a  public  t  test-user  CREATE      false
-a  public  t  test-user  DROP        false
-a  public  t  test-user  TRIGGER     false
-a  public  t  test-user  UPDATE      false
-a  public  t  test-user  ZONECONFIG  false
+a  public  t  readwrite  BACKUP           false
+a  public  t  readwrite  CHANGEFEED       false
+a  public  t  readwrite  CREATE           false
+a  public  t  readwrite  DROP             false
+a  public  t  readwrite  REPLICATIONDEST  false
+a  public  t  readwrite  SELECT           false
+a  public  t  readwrite  TRIGGER          false
+a  public  t  readwrite  UPDATE           false
+a  public  t  readwrite  ZONECONFIG       false
+a  public  t  test-user  BACKUP           false
+a  public  t  test-user  CHANGEFEED       false
+a  public  t  test-user  CREATE           false
+a  public  t  test-user  DROP             false
+a  public  t  test-user  REPLICATIONDEST  false
+a  public  t  test-user  TRIGGER          false
+a  public  t  test-user  UPDATE           false
+a  public  t  test-user  ZONECONFIG       false
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
@@ -1738,44 +1746,48 @@ REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
 query TTTTTB rowsort
 SHOW GRANTS ON v
 ----
-a  public  v  admin      ALL         true
-a  public  v  readwrite  BACKUP      false
-a  public  v  readwrite  CHANGEFEED  false
-a  public  v  readwrite  CREATE      false
-a  public  v  readwrite  DROP        false
-a  public  v  readwrite  SELECT      false
-a  public  v  readwrite  TRIGGER     false
-a  public  v  readwrite  UPDATE      false
-a  public  v  readwrite  ZONECONFIG  false
-a  public  v  root       ALL         true
-a  public  v  test-user  BACKUP      false
-a  public  v  test-user  CHANGEFEED  false
-a  public  v  test-user  CREATE      false
-a  public  v  test-user  DROP        false
-a  public  v  test-user  SELECT      false
-a  public  v  test-user  TRIGGER     false
-a  public  v  test-user  UPDATE      false
-a  public  v  test-user  ZONECONFIG  false
+a  public  v  admin      ALL              true
+a  public  v  readwrite  BACKUP           false
+a  public  v  readwrite  CHANGEFEED       false
+a  public  v  readwrite  CREATE           false
+a  public  v  readwrite  DROP             false
+a  public  v  readwrite  REPLICATIONDEST  false
+a  public  v  readwrite  SELECT           false
+a  public  v  readwrite  TRIGGER          false
+a  public  v  readwrite  UPDATE           false
+a  public  v  readwrite  ZONECONFIG       false
+a  public  v  root       ALL              true
+a  public  v  test-user  BACKUP           false
+a  public  v  test-user  CHANGEFEED       false
+a  public  v  test-user  CREATE           false
+a  public  v  test-user  DROP             false
+a  public  v  test-user  REPLICATIONDEST  false
+a  public  v  test-user  SELECT           false
+a  public  v  test-user  TRIGGER          false
+a  public  v  test-user  UPDATE           false
+a  public  v  test-user  ZONECONFIG       false
 
 query TTTTTB rowsort
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  public  v  readwrite  BACKUP      false
-a  public  v  readwrite  CHANGEFEED  false
-a  public  v  readwrite  CREATE      false
-a  public  v  readwrite  DROP        false
-a  public  v  readwrite  SELECT      false
-a  public  v  readwrite  TRIGGER     false
-a  public  v  readwrite  UPDATE      false
-a  public  v  readwrite  ZONECONFIG  false
-a  public  v  test-user  BACKUP      false
-a  public  v  test-user  CHANGEFEED  false
-a  public  v  test-user  CREATE      false
-a  public  v  test-user  DROP        false
-a  public  v  test-user  SELECT      false
-a  public  v  test-user  TRIGGER     false
-a  public  v  test-user  UPDATE      false
-a  public  v  test-user  ZONECONFIG  false
+a  public  v  readwrite  BACKUP           false
+a  public  v  readwrite  CHANGEFEED       false
+a  public  v  readwrite  CREATE           false
+a  public  v  readwrite  DROP             false
+a  public  v  readwrite  REPLICATIONDEST  false
+a  public  v  readwrite  SELECT           false
+a  public  v  readwrite  TRIGGER          false
+a  public  v  readwrite  UPDATE           false
+a  public  v  readwrite  ZONECONFIG       false
+a  public  v  test-user  BACKUP           false
+a  public  v  test-user  CHANGEFEED       false
+a  public  v  test-user  CREATE           false
+a  public  v  test-user  DROP             false
+a  public  v  test-user  REPLICATIONDEST  false
+a  public  v  test-user  SELECT           false
+a  public  v  test-user  TRIGGER          false
+a  public  v  test-user  UPDATE           false
+a  public  v  test-user  ZONECONFIG       false
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
@@ -1783,64 +1795,70 @@ REVOKE SELECT ON v FROM "test-user"
 query TTTTTB rowsort
 SHOW GRANTS ON v
 ----
-a  public  v  admin      ALL         true
-a  public  v  readwrite  BACKUP      false
-a  public  v  readwrite  CHANGEFEED  false
-a  public  v  readwrite  CREATE      false
-a  public  v  readwrite  DROP        false
-a  public  v  readwrite  SELECT      false
-a  public  v  readwrite  TRIGGER     false
-a  public  v  readwrite  UPDATE      false
-a  public  v  readwrite  ZONECONFIG  false
-a  public  v  root       ALL         true
-a  public  v  test-user  BACKUP      false
-a  public  v  test-user  CHANGEFEED  false
-a  public  v  test-user  CREATE      false
-a  public  v  test-user  DROP        false
-a  public  v  test-user  TRIGGER     false
-a  public  v  test-user  UPDATE      false
-a  public  v  test-user  ZONECONFIG  false
+a  public  v  admin      ALL              true
+a  public  v  readwrite  BACKUP           false
+a  public  v  readwrite  CHANGEFEED       false
+a  public  v  readwrite  CREATE           false
+a  public  v  readwrite  DROP             false
+a  public  v  readwrite  REPLICATIONDEST  false
+a  public  v  readwrite  SELECT           false
+a  public  v  readwrite  TRIGGER          false
+a  public  v  readwrite  UPDATE           false
+a  public  v  readwrite  ZONECONFIG       false
+a  public  v  root       ALL              true
+a  public  v  test-user  BACKUP           false
+a  public  v  test-user  CHANGEFEED       false
+a  public  v  test-user  CREATE           false
+a  public  v  test-user  DROP             false
+a  public  v  test-user  REPLICATIONDEST  false
+a  public  v  test-user  TRIGGER          false
+a  public  v  test-user  UPDATE           false
+a  public  v  test-user  ZONECONFIG       false
 
 query TTTTTB rowsort
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  public  v  readwrite  BACKUP      false
-a  public  v  readwrite  CHANGEFEED  false
-a  public  v  readwrite  CREATE      false
-a  public  v  readwrite  DROP        false
-a  public  v  readwrite  SELECT      false
-a  public  v  readwrite  TRIGGER     false
-a  public  v  readwrite  UPDATE      false
-a  public  v  readwrite  ZONECONFIG  false
-a  public  v  test-user  BACKUP      false
-a  public  v  test-user  CHANGEFEED  false
-a  public  v  test-user  CREATE      false
-a  public  v  test-user  DROP        false
-a  public  v  test-user  TRIGGER     false
-a  public  v  test-user  UPDATE      false
-a  public  v  test-user  ZONECONFIG  false
+a  public  v  readwrite  BACKUP           false
+a  public  v  readwrite  CHANGEFEED       false
+a  public  v  readwrite  CREATE           false
+a  public  v  readwrite  DROP             false
+a  public  v  readwrite  REPLICATIONDEST  false
+a  public  v  readwrite  SELECT           false
+a  public  v  readwrite  TRIGGER          false
+a  public  v  readwrite  UPDATE           false
+a  public  v  readwrite  ZONECONFIG       false
+a  public  v  test-user  BACKUP           false
+a  public  v  test-user  CHANGEFEED       false
+a  public  v  test-user  CREATE           false
+a  public  v  test-user  DROP             false
+a  public  v  test-user  REPLICATIONDEST  false
+a  public  v  test-user  TRIGGER          false
+a  public  v  test-user  UPDATE           false
+a  public  v  test-user  ZONECONFIG       false
 
 query TTTTTTB rowsort
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL    NULL  database  readwrite  ALL         false
-a  public  NULL  schema    public     CREATE      false
-a  public  NULL  schema    public     USAGE       false
-a  public  v     table     readwrite  BACKUP      false
-a  public  v     table     readwrite  CHANGEFEED  false
-a  public  v     table     readwrite  CREATE      false
-a  public  v     table     readwrite  DROP        false
-a  public  v     table     readwrite  SELECT      false
-a  public  v     table     readwrite  TRIGGER     false
-a  public  v     table     readwrite  UPDATE      false
-a  public  v     table     readwrite  ZONECONFIG  false
-a  public  v     table     test-user  BACKUP      false
-a  public  v     table     test-user  CHANGEFEED  false
-a  public  v     table     test-user  CREATE      false
-a  public  v     table     test-user  DROP        false
-a  public  v     table     test-user  TRIGGER     false
-a  public  v     table     test-user  UPDATE      false
-a  public  v     table     test-user  ZONECONFIG  false
+a  NULL    NULL  database  readwrite  ALL              false
+a  public  NULL  schema    public     CREATE           false
+a  public  NULL  schema    public     USAGE            false
+a  public  v     table     readwrite  BACKUP           false
+a  public  v     table     readwrite  CHANGEFEED       false
+a  public  v     table     readwrite  CREATE           false
+a  public  v     table     readwrite  DROP             false
+a  public  v     table     readwrite  REPLICATIONDEST  false
+a  public  v     table     readwrite  SELECT           false
+a  public  v     table     readwrite  TRIGGER          false
+a  public  v     table     readwrite  UPDATE           false
+a  public  v     table     readwrite  ZONECONFIG       false
+a  public  v     table     test-user  BACKUP           false
+a  public  v     table     test-user  CHANGEFEED       false
+a  public  v     table     test-user  CREATE           false
+a  public  v     table     test-user  DROP             false
+a  public  v     table     test-user  REPLICATIONDEST  false
+a  public  v     table     test-user  TRIGGER          false
+a  public  v     table     test-user  UPDATE           false
+a  public  v     table     test-user  ZONECONFIG       false
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"

@@ -73,15 +73,20 @@ func TestPCRPrivs(t *testing.T) {
 		c.Args.SrcTenantName,
 		srcURL.String())
 
+	// Dest user requires both the MANAGEVIRTUALCLUSTER and REPLICATIONDEST system privileges.
 	testuser.ExpectErr(t, "user testuser does not have MANAGEVIRTUALCLUSTER system privilege", streamReplStmt)
 
 	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM MANAGEVIRTUALCLUSTER TO %s", username.TestUser))
-	testuser.ExpectErr(t, "user testuser2 does not have REPLICATION system privilege", streamReplStmt)
+	testuser.ExpectErr(t, "user testuser does not have REPLICATIONDEST system privilege", streamReplStmt)
 
+	c.DestSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
+
+	// Ensure the source user has the REPLICATION privilege.
+	testuser.ExpectErr(t, "user testuser2 does not have REPLICATION system privilege", streamReplStmt)
 	c.SrcSysSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"2"))
 	c.DestSysSQL.Exec(t, streamReplStmt)
 
-	// Ensure job based auth allows the replication to prceed.
+	// Ensure job based auth allows the replication to proceed.
 	var ingestionJobID jobspb.JobID
 	c.DestSysSQL.QueryRow(t, "SELECT id FROM system.jobs WHERE job_type = 'REPLICATION STREAM INGESTION'").Scan(&ingestionJobID)
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, ingestionJobID)
@@ -138,6 +143,42 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	// After resumed, the ingestion job paused on failure again.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func TestFailbackFailsWithExpiredPTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "takes too long")
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	// init cutover
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
+
+	// Make producer job pts job easily time out
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='10ms'`, c.Args.SrcTenantName))
+	jobutils.WaitForJobToSucceed(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	destPgURL, cleanupSinkCert := pgurlutils.PGUrl(t, c.DestSysServer.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupSinkCert()
+
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER '%s' STOP SERVICE", c.Args.SrcTenantName))
+	waitUntilTenantServerStopped(t, c.DestSysServer, string(c.Args.SrcTenantName))
+
+	c.SrcSysSQL.ExpectErr(c.T, `cannot resume replication into tenant`,
+		`ALTER TENANT $1 START REPLICATION OF $2 ON $3`,
+		args.SrcTenantName, args.DestTenantName, destPgURL.String())
 }
 
 // TestTenantStreamingJobRetryReset tests that the job level retry counter

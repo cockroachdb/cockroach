@@ -63,7 +63,8 @@ const (
 	REPAIRCLUSTER            Kind = 36
 	TRIGGER                  Kind = 37
 	BYPASSRLS                Kind = 38
-	largestKind                   = BYPASSRLS
+	REPLICATIONDEST          Kind = 39
+	largestKind                   = REPLICATIONDEST
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -153,6 +154,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "TRIGGER"
 	case BYPASSRLS:
 		return "BYPASSRLS"
+	case REPLICATIONDEST:
+		return "REPLICATIONDEST"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
