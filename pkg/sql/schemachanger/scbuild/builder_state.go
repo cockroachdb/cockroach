@@ -185,11 +185,23 @@ func (b *builderState) checkForConcurrentSchemaChanges(e scpb.Element) *elementS
 	b.ensureDescriptors(e)
 	// Check that there are no descriptors which are undergoing a concurrent
 	// schema change which might interfere with this one.
-	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+	checkID := func(id descpb.ID) {
 		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
 			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
 		}
-	})
+	}
+	screl.AllTargetDescIDs(e).ForEach(checkID)
+	// For new namespace elements we need to also check their parents
+	// are not in middle of a schema change. Otherwise, it's possible to
+	// add an new namespace entry inside a dropped SCHEMA or DATABASE.
+	if namespace, ok := (e).(*scpb.Namespace); ok {
+		if namespace.DatabaseID != descpb.InvalidID {
+			checkID(namespace.DatabaseID)
+		}
+		if namespace.SchemaID != descpb.InvalidID {
+			checkID(namespace.SchemaID)
+		}
+	}
 	// We may have mutated the builder state for this element.
 	// Specifically, the output slice might have grown and have been realloc'ed.
 	return b.getExistingElementState(e)
