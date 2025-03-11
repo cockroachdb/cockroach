@@ -152,8 +152,8 @@ func (t *descriptorState) upsertLeaseLocked(
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		existingLease = *s.mu.lease
+		s.session.Store(&session)
 		s.mu.lease.sessionID = session.ID().UnsafeBytes()
-		s.mu.session = session
 	}()
 	// Delete the existing lease on behalf of the caller.
 	t.m.storage.release(ctx, t.m.stopper, &existingLease)
@@ -186,8 +186,10 @@ func newDescriptorVersionState(
 				"session based leases (got: %s on Desc: %s(%d))", expiration.String(), desc.GetName(), desc.GetID()))
 		}
 	}
-	descState.mu.session = session
-	descState.mu.expiration = expiration
+	descState.session.Store(&session)
+	if !expiration.IsEmpty() {
+		descState.expiration.Store(&expiration)
+	}
 
 	return descState
 }
@@ -199,17 +201,13 @@ func (t *descriptorState) removeInactiveVersions() []*storedLease {
 	// A copy of t.mu.active.data must be made since t.mu.active.data will be changed
 	// within the loop.
 	for _, desc := range append([]*descriptorVersionState(nil), t.mu.active.data...) {
-		func() {
-			desc.mu.Lock()
-			defer desc.mu.Unlock()
-			if desc.mu.refcount == 0 {
-				t.mu.active.remove(desc)
-				if l := desc.mu.lease; l != nil {
-					desc.mu.lease = nil
-					leases = append(leases, l)
-				}
+		if desc.refcount.Load() == 0 {
+			t.mu.active.remove(desc)
+			if l := desc.mu.lease; l != nil {
+				desc.mu.lease = nil
+				leases = append(leases, l)
 			}
-		}()
+		}
 	}
 	return leases
 }
@@ -222,13 +220,11 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 	// from the store.
 	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	decRefCount := func(s *descriptorVersionState) (shouldRemove bool) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		s.mu.refcount--
+		currCount := s.refcount.Add(-1)
 		if expensiveLoggingEnabled {
-			log.Infof(ctx, "release: %s", s.stringLocked())
+			log.Infof(ctx, "release: %s", s.redactedString())
 		}
-		return s.mu.refcount == 0
+		return currCount == 0
 	}
 	maybeMarkRemoveStoredLease := func(s *descriptorVersionState) *storedLease {
 		// Figure out if we'd like to remove the lease from the store asap (i.e.
@@ -246,12 +242,15 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		if !removeOnceDereferenced {
 			return nil
 		}
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if s.mu.refcount < 0 {
+		// Note: Because the descriptorState is locked, no one can acquire
+		// this descriptorVersionState right now. So, this atomic is sufficient
+		// for detecting that the usage can be removed.
+		if s.refcount.Load() < 0 {
 			panic(errors.AssertionFailedf("negative ref count: %s", s))
 		}
-		if s.mu.refcount == 0 && s.mu.lease != nil && removeOnceDereferenced {
+		if s.refcount.Load() == 0 && s.mu.lease != nil && removeOnceDereferenced {
+			s.mu.Lock()
+			defer s.mu.Unlock()
 			l := s.mu.lease
 			s.mu.lease = nil
 			return l

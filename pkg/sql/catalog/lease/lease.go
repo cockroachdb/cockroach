@@ -987,9 +987,9 @@ func purgeOldVersions(
 		if leaseToExpire != nil {
 			func() {
 				m.mu.Lock()
+				defer m.mu.Unlock()
 				leaseToExpire.mu.Lock()
 				defer leaseToExpire.mu.Unlock()
-				defer m.mu.Unlock()
 				// Expire any active old versions into the future based on the lease
 				// duration. If the session lifetime had been longer then use
 				// that. We will only expire later into the future, then what
@@ -997,10 +997,11 @@ func purgeOldVersions(
 				// picked this time. If the lease duration is zero, then we are
 				// looking at instant expiration for testing.
 				leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
-				leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
-				if sessionExpiry := leaseToExpire.mu.session.Expiration(); leaseDuration > 0 && leaseToExpire.mu.expiration.Less(sessionExpiry) {
-					leaseToExpire.mu.expiration = sessionExpiry
+				expiration := m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
+				if sessionExpiry := (*leaseToExpire.session.Load()).Expiration(); leaseDuration > 0 && expiration.Less(sessionExpiry) {
+					expiration = sessionExpiry
 				}
+				leaseToExpire.expiration.Store(&expiration)
 				if leaseToExpire.mu.lease != nil {
 					m.storage.sessionBasedLeasesWaitingToExpire.Inc(1)
 					m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
@@ -1116,6 +1117,10 @@ type Manager struct {
 	// waitForInit used when the lease manager is starting up prevent leases from
 	// being acquired before the range feed.
 	waitForInit chan struct{}
+
+	// initComplete is a fast check to confirm that initialization is complete, since
+	// performance testing showed select on the waitForInit channel can be expensive.
+	initComplete atomic.Bool
 }
 
 const leaseConcurrencyLimit = 5
@@ -1551,6 +1556,9 @@ func (m *Manager) isDescriptorStateEmpty(id descpb.ID) bool {
 
 // maybeWaitForInit waits for the lease manager to startup.
 func (m *Manager) maybeWaitForInit() {
+	if m.initComplete.Load() {
+		return
+	}
 	select {
 	case <-m.waitForInit:
 	case <-m.stopper.ShouldQuiesce():
@@ -1578,6 +1586,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer close(m.waitForInit)
+	defer m.initComplete.Swap(true)
 	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
@@ -2154,7 +2163,7 @@ func (m *Manager) VisitLeases(
 				lease, refCount := func() (*storedLease, int) {
 					state.mu.Lock()
 					defer state.mu.Unlock()
-					return state.mu.lease, state.mu.refcount
+					return state.mu.lease, int(state.refcount.Load())
 				}()
 
 				if lease == nil {
@@ -2285,6 +2294,7 @@ func (m *Manager) TestingMarkInit() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	close(m.waitForInit)
+	m.initComplete.Swap(true)
 }
 
 // deleteOrphanedLeasesFromStaleSession deletes leases from sessions that are
