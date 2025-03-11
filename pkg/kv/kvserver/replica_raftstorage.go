@@ -186,16 +186,29 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 }
 
 // GetSnapshot returns a snapshot of the replica appropriate for sending to a
-// replica. If this method returns without error, callers must eventually call
-// OutgoingSnapshot.Close.
+// replica, and the term of the replica. If this method returns without error,
+// callers must eventually call OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
 	ctx context.Context, snapUUID uuid.UUID,
-) (_ *OutgoingSnapshot, err error) {
+) (_ kvpb.RaftTerm, _ *OutgoingSnapshot, err error) {
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	var snap storage.Reader
+	var term kvpb.RaftTerm
 	r.raftMu.Lock()
+	// Get the raft term while holding raftMu and mu, to have the guarantee that
+	// this term is >= the term under which all the entries in the snapshot were
+	// committed and applied.
+	r.mu.RLock()
+	if rg := r.mu.internalRaftGroup; rg != nil {
+		term = kvpb.RaftTerm(rg.Term())
+	}
+	r.mu.RUnlock()
+	if term == 0 {
+		r.raftMu.Unlock()
+		return 0, nil, errors.Errorf("raft term is missing")
+	}
 	startKey := r.shMu.state.Desc.StartKey
 	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
@@ -237,9 +250,9 @@ func (r *Replica) GetSnapshot(
 	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
-		return nil, err
+		return 0, nil, err
 	}
-	return &snapData, nil
+	return term, &snapData, nil
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a
