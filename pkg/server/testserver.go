@@ -150,6 +150,13 @@ func configureSlimTestServer(params base.TestServerArgs) base.TestServerArgs {
 	if !cfg.Options.EnableSpanConfigJob {
 		spanconfigmanager.JobEnabledSetting.Override(context.Background(), &params.Settings.SV, false)
 	}
+	if !cfg.Options.EnableAllUpgrades {
+		if params.Knobs.UpgradeManager == nil {
+			params.Knobs.UpgradeManager = &upgradebase.TestingKnobs{}
+		}
+		params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = true
+	}
+
 	return params
 }
 
@@ -671,6 +678,9 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 			InjectedLatencyOracle:  ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle,
 			InjectedLatencyEnabled: ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled,
 		}
+	}
+	if ts.params.Knobs.UpgradeManager != nil {
+		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
 	}
 }
 

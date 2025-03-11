@@ -86,11 +86,26 @@ func TestServerProperties(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sql, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	t.Run("default", func(t *testing.T) {
+		s, sql, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(context.Background())
 
-	sqlDB := sqlutils.MakeSQLRunner(sql)
+		sqlDB := sqlutils.MakeSQLRunner(sql)
 
-	// Ensure all ranges have 1 replica
-	sqlDB.CheckQueryResults(t, "select count(*) from [show cluster ranges] where replicas = '{1}'", sqlDB.QueryStr(t, "select count(*) from [show cluster ranges]"))
+		// Ensure all ranges have 1 replica
+		sqlDB.CheckQueryResults(t, "select count(*) from [show cluster ranges] where replicas = '{1}'", sqlDB.QueryStr(t, "select count(*) from [show cluster ranges]"))
+	})
+
+	t.Run("slim", func(t *testing.T) {
+		s, sql, _ := serverutils.StartSlimServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(context.Background())
+
+		// Ensure there isn't a metrics poller job, as the permanent upgrade that
+		// creates it is skipped in slim mode.
+		sqlDB := sqlutils.MakeSQLRunner(sql)
+		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM system.jobs WHERE id = 101", [][]string{{"0"}})
+
+		// Ensure no span config job has spun up
+		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM system.jobs WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'", [][]string{{"0"}})
+	})
 }
