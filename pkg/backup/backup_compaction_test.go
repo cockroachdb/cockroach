@@ -59,9 +59,9 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 	}
 	// Note: Each subtest should create their backups in their own subdirectory to
 	// avoid false negatives from subtests relying on backups from other subtests.
-	fullBackupAostCmd := "BACKUP INTO 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
-	incBackupCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d'"
-	incBackupAostCmd := "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
+	const fullBackupAostCmd = "BACKUP INTO 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
+	const incBackupCmd = "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d'"
+	const incBackupAostCmd = "BACKUP INTO LATEST IN 'nodelocal://1/backup/%d' AS OF SYSTEM TIME '%d'"
 
 	t.Run("basic operations insert, update, and delete", func(t *testing.T) {
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
@@ -312,6 +312,33 @@ crdb_internal.json_to_pb(
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
+	})
+
+	t.Run("builtin using backup statement", func(t *testing.T) {
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		start := getTime(t)
+		opts := "encryption_passphrase = 'correct-horse-battery-staple'"
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd+" WITH %s", 9, start, opts))
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd+" WITH %s", 9, opts))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		end := getTime(t)
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd+" WITH %s", 9, end, opts))
+		var jobID jobspb.JobID
+		db.QueryRow(t, fmt.Sprintf(
+			`SELECT crdb_internal.backup_compaction(
+        'BACKUP INTO LATEST IN ''nodelocal://1/backup/9'' WITH encryption_passphrase = ''correct-horse-battery-staple''', 
+        %d::DECIMAL, %d::DECIMAL
+      )`, start, end,
+		)).Scan(&jobID)
+		waitForSuccessfulJob(t, tc, jobID)
+		validateCompactedBackupForTablesWithOpts(
+			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, opts,
+		)
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
