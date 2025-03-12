@@ -1,0 +1,573 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_aggregate.out --label=/mnt/data1/postgres/src/test/regress/results/create_aggregate.out /mnt/data1/postgres/src/test/regress/expected/create_aggregate.out /mnt/data1/postgres/src/test/regress/results/create_aggregate.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_aggregate.out
++++ /mnt/data1/postgres/src/test/regress/results/create_aggregate.out
+@@ -7,35 +7,87 @@
+    finalfunc = int8_avg,
+    initcond1 = '{0,0}'
+ );
++ERROR:  at or near "newavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE newavg (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- test comments
+ COMMENT ON AGGREGATE newavg_wrong (int4) IS 'an agg comment';
+-ERROR:  aggregate newavg_wrong(integer) does not exist
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE newavg_wrong (int4) IS 'an agg comment'
++           ^
+ COMMENT ON AGGREGATE newavg (int4) IS 'an agg comment';
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE newavg (int4) IS 'an agg comment'
++           ^
+ COMMENT ON AGGREGATE newavg (int4) IS NULL;
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE newavg (int4) IS NULL
++           ^
+ -- without finalfunc; test obsolete spellings 'sfunc1' etc
+ CREATE AGGREGATE newsum (
+    sfunc1 = int4pl, basetype = int4, stype1 = int4,
+    initcond1 = '0'
+ );
++ERROR:  at or near "newsum": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE newsum (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- zero-argument aggregate
+ CREATE AGGREGATE newcnt (*) (
+    sfunc = int8inc, stype = int8,
+    initcond = '0', parallel = safe
+ );
++ERROR:  at or near "newcnt": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE newcnt (*) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- old-style spelling of same (except without parallel-safe; that's too new)
+ CREATE AGGREGATE oldcnt (
+    sfunc = int8inc, basetype = 'ANY', stype = int8,
+    initcond = '0'
+ );
++ERROR:  at or near "oldcnt": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE oldcnt (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- aggregate that only cares about null/nonnull input
+ CREATE AGGREGATE newcnt ("any") (
+    sfunc = int8inc_any, stype = int8,
+    initcond = '0'
+ );
++ERROR:  at or near "newcnt": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE newcnt ("any") (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ COMMENT ON AGGREGATE nosuchagg (*) IS 'should fail';
+-ERROR:  aggregate nosuchagg(*) does not exist
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE nosuchagg (*) IS 'should fail'
++           ^
+ COMMENT ON AGGREGATE newcnt (*) IS 'an agg(*) comment';
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE newcnt (*) IS 'an agg(*) comment'
++           ^
+ COMMENT ON AGGREGATE newcnt ("any") IS 'an agg(any) comment';
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++COMMENT ON AGGREGATE newcnt ("any") IS 'an agg(any) comment'
++           ^
+ -- multi-argument aggregate
+ create function sum3(int8,int8,int8) returns int8 as
+ 'select $1 + $2 + $3' language sql strict immutable;
+@@ -43,55 +95,127 @@
+    sfunc = sum3, stype = int8,
+    initcond = '0'
+ );
++ERROR:  at or near "sum2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate sum2(int8,int8) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- multi-argument aggregates sensitive to distinct/order, strict/nonstrict
+ create type aggtype as (a integer, b integer, c text);
+ create function aggf_trans(aggtype[],integer,integer,text) returns aggtype[]
+ as 'select array_append($1,ROW($2,$3,$4)::aggtype)'
+ language sql strict immutable;
++ERROR:  no value provided for placeholder: $2
+ create function aggfns_trans(aggtype[],integer,integer,text) returns aggtype[]
+ as 'select array_append($1,ROW($2,$3,$4)::aggtype)'
+ language sql immutable;
++ERROR:  no value provided for placeholder: $2
+ create aggregate aggfstr(integer,integer,text) (
+    sfunc = aggf_trans, stype = aggtype[],
+    initcond = '{}'
+ );
++ERROR:  at or near "aggfstr": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate aggfstr(integer,integer,text) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate aggfns(integer,integer,text) (
+    sfunc = aggfns_trans, stype = aggtype[], sspace = 10000,
+    initcond = '{}'
+ );
++ERROR:  at or near "aggfns": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate aggfns(integer,integer,text) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- check error cases that would require run-time type coercion
+ create function least_accum(int8, int8) returns int8 language sql as
+   'select least($1, $2)';
+ create aggregate least_agg(int4) (
+   stype = int8, sfunc = least_accum
+ );  -- fails
+-ERROR:  function least_accum(bigint, bigint) requires run-time type coercion
++ERROR:  at or near "least_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate least_agg(int4) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ drop function least_accum(int8, int8);
+ create function least_accum(anycompatible, anycompatible)
+ returns anycompatible language sql as
+   'select least($1, $2)';
++ERROR:  type "anycompatible" does not exist
+ create aggregate least_agg(int4) (
+   stype = int8, sfunc = least_accum
+ );  -- fails
+-ERROR:  function least_accum(bigint, bigint) requires run-time type coercion
++ERROR:  at or near "least_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate least_agg(int4) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate least_agg(int8) (
+   stype = int8, sfunc = least_accum
+ );
++ERROR:  at or near "least_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate least_agg(int8) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ drop function least_accum(anycompatible, anycompatible) cascade;
+-NOTICE:  drop cascades to function least_agg(bigint)
++ERROR:  unimplemented: drop function cascade not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- variadic aggregates
+ create function least_accum(anyelement, variadic anyarray)
+ returns anyelement language sql as
+   'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
++ERROR:  at or near "variadic": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create function least_accum(anyelement, variadic anyarray)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/88947/_version_
+ create aggregate least_agg(variadic items anyarray) (
+   stype = anyelement, sfunc = least_accum
+ );
++ERROR:  at or near "least_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate least_agg(variadic items anyarray) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create function cleast_accum(anycompatible, variadic anycompatiblearray)
+ returns anycompatible language sql as
+   'select least($1, min($2[i])) from generate_subscripts($2,1) g(i)';
++ERROR:  at or near "variadic": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create function cleast_accum(anycompatible, variadic anycompatiblearray)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/88947/_version_
+ create aggregate cleast_agg(variadic items anycompatiblearray) (
+   stype = anycompatible, sfunc = cleast_accum
+ );
++ERROR:  at or near "cleast_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate cleast_agg(variadic items anycompatiblearray) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- test ordered-set aggs using built-in support functions
+ create aggregate my_percentile_disc(float8 ORDER BY anyelement) (
+   stype = internal,
+@@ -100,6 +224,12 @@
+   finalfunc_extra = true,
+   finalfunc_modify = read_write
+ );
++ERROR:  at or near "my_percentile_disc": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_percentile_disc(float8 ORDER BY anyelement) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate my_rank(VARIADIC "any" ORDER BY VARIADIC "any") (
+   stype = internal,
+   sfunc = ordered_set_transition_multi,
+@@ -107,18 +237,44 @@
+   finalfunc_extra = true,
+   hypothetical
+ );
++ERROR:  at or near "my_rank": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_rank(VARIADIC "any" ORDER BY VARIADIC "any") (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ alter aggregate my_percentile_disc(float8 ORDER BY anyelement)
+   rename to test_percentile_disc;
++ERROR:  at or near "my_percentile_disc": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter aggregate my_percentile_disc(float8 ORDER BY anyelement)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ alter aggregate my_rank(VARIADIC "any" ORDER BY VARIADIC "any")
+   rename to test_rank;
++ERROR:  at or near "my_rank": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter aggregate my_rank(VARIADIC "any" ORDER BY VARIADIC "any")
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ \da test_*
+-                                       List of aggregate functions
+- Schema |         Name         | Result data type |          Argument data types           | Description 
+---------+----------------------+------------------+----------------------------------------+-------------
+- public | test_percentile_disc | anyelement       | double precision ORDER BY anyelement   | 
+- public | test_rank            | bigint           | VARIADIC "any" ORDER BY VARIADIC "any" | 
+-(2 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname AS "Name",
++  pg_catalog.format_type(p.prorettype, NULL) AS "Result data type",
++  CASE WHEN p.pronargs = 0
++    THEN CAST('*' AS pg_catalog.text)
++    ELSE pg_catalog.pg_get_function_arguments(p.oid)
++  END AS "Argument data types",
++  pg_catalog.obj_description(p.oid, 'pg_proc') as "Description"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.prokind = 'a'
++  AND p.proname OPERATOR(pg_catalog.~) '^(test_.*)$' COLLATE pg_catalog.default
++                                                                       ^
+ -- moving-aggregate options
+ CREATE AGGREGATE sumdouble (float8)
+ (
+@@ -128,6 +284,12 @@
+     msfunc = float8pl,
+     minvfunc = float8mi
+ );
++ERROR:  at or near "sumdouble": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE sumdouble (float8)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- aggregate combine and serialization functions
+ -- can't specify just one of serialfunc and deserialfunc
+ CREATE AGGREGATE myavg (numeric)
+@@ -136,7 +298,12 @@
+ 	sfunc = numeric_avg_accum,
+ 	serialfunc = numeric_avg_serialize
+ );
+-ERROR:  must specify both or neither of serialization and deserialization functions
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- serialfunc must have correct parameters
+ CREATE AGGREGATE myavg (numeric)
+ (
+@@ -145,7 +312,12 @@
+ 	serialfunc = numeric_avg_deserialize,
+ 	deserialfunc = numeric_avg_deserialize
+ );
+-ERROR:  function numeric_avg_deserialize(internal) does not exist
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- deserialfunc must have correct parameters
+ CREATE AGGREGATE myavg (numeric)
+ (
+@@ -154,7 +326,12 @@
+ 	serialfunc = numeric_avg_serialize,
+ 	deserialfunc = numeric_avg_serialize
+ );
+-ERROR:  function numeric_avg_serialize(bytea, internal) does not exist
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- ensure combine function parameters are checked
+ CREATE AGGREGATE myavg (numeric)
+ (
+@@ -164,7 +341,12 @@
+ 	deserialfunc = numeric_avg_deserialize,
+ 	combinefunc = int4larger
+ );
+-ERROR:  function int4larger(internal, internal) does not exist
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- ensure create aggregate works.
+ CREATE AGGREGATE myavg (numeric)
+ (
+@@ -176,17 +358,25 @@
+ 	combinefunc = numeric_avg_combine,
+ 	finalfunc_modify = shareable  -- just to test a non-default setting
+ );
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- Ensure all these functions made it into the catalog
+ SELECT aggfnoid, aggtransfn, aggcombinefn, aggtranstype::regtype,
+        aggserialfn, aggdeserialfn, aggfinalmodify
+ FROM pg_aggregate
+ WHERE aggfnoid = 'myavg'::REGPROC;
+- aggfnoid |    aggtransfn     |    aggcombinefn     | aggtranstype |      aggserialfn      |      aggdeserialfn      | aggfinalmodify 
+-----------+-------------------+---------------------+--------------+-----------------------+-------------------------+----------------
+- myavg    | numeric_avg_accum | numeric_avg_combine | internal     | numeric_avg_serialize | numeric_avg_deserialize | s
+-(1 row)
+-
++ERROR:  unknown function: myavg()
+ DROP AGGREGATE myavg (numeric);
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE myavg (numeric)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- create or replace aggregate
+ CREATE AGGREGATE myavg (numeric)
+ (
+@@ -194,6 +384,12 @@
+ 	sfunc = numeric_avg_accum,
+ 	finalfunc = numeric_avg
+ );
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE myavg (numeric)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE OR REPLACE AGGREGATE myavg (numeric)
+ (
+ 	stype = internal,
+@@ -204,31 +400,33 @@
+ 	combinefunc = numeric_avg_combine,
+ 	finalfunc_modify = shareable  -- just to test a non-default setting
+ );
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE AGGREGATE myavg (numeric)
++                  ^
++HINT:  try \h CREATE
+ -- Ensure all these functions made it into the catalog again
+ SELECT aggfnoid, aggtransfn, aggcombinefn, aggtranstype::regtype,
+        aggserialfn, aggdeserialfn, aggfinalmodify
+ FROM pg_aggregate
+ WHERE aggfnoid = 'myavg'::REGPROC;
+- aggfnoid |    aggtransfn     |    aggcombinefn     | aggtranstype |      aggserialfn      |      aggdeserialfn      | aggfinalmodify 
+-----------+-------------------+---------------------+--------------+-----------------------+-------------------------+----------------
+- myavg    | numeric_avg_accum | numeric_avg_combine | internal     | numeric_avg_serialize | numeric_avg_deserialize | s
+-(1 row)
+-
++ERROR:  unknown function: myavg()
+ -- can change stype:
+ CREATE OR REPLACE AGGREGATE myavg (numeric)
+ (
+ 	stype = numeric,
+ 	sfunc = numeric_add
+ );
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE AGGREGATE myavg (numeric)
++                  ^
++HINT:  try \h CREATE
+ SELECT aggfnoid, aggtransfn, aggcombinefn, aggtranstype::regtype,
+        aggserialfn, aggdeserialfn, aggfinalmodify
+ FROM pg_aggregate
+ WHERE aggfnoid = 'myavg'::REGPROC;
+- aggfnoid | aggtransfn  | aggcombinefn | aggtranstype | aggserialfn | aggdeserialfn | aggfinalmodify 
+-----------+-------------+--------------+--------------+-------------+---------------+----------------
+- myavg    | numeric_add | -            | numeric      | -           | -             | r
+-(1 row)
+-
++ERROR:  unknown function: myavg()
+ -- can't change return type:
+ CREATE OR REPLACE AGGREGATE myavg (numeric)
+ (
+@@ -236,16 +434,22 @@
+ 	sfunc = numeric_add,
+ 	finalfunc = numeric_out
+ );
+-ERROR:  cannot change return type of existing function
+-HINT:  Use DROP AGGREGATE myavg(numeric) first.
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE AGGREGATE myavg (numeric)
++                  ^
++HINT:  try \h CREATE
+ -- can't change to a different kind:
+ CREATE OR REPLACE AGGREGATE myavg (order by numeric)
+ (
+ 	stype = numeric,
+ 	sfunc = numeric_add
+ );
+-ERROR:  cannot change routine kind
+-DETAIL:  "myavg" is an ordinary aggregate function.
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE AGGREGATE myavg (order by numeric)
++                  ^
++HINT:  try \h CREATE
+ -- can't change plain function to aggregate:
+ create function sum4(int8,int8,int8,int8) returns int8 as
+ 'select $1 + $2 + $3 + $4' language sql strict immutable;
+@@ -254,10 +458,19 @@
+ 	stype = int8,
+ 	sfunc = sum4
+ );
+-ERROR:  cannot change routine kind
+-DETAIL:  "sum3" is a function.
++ERROR:  at or near "aggregate": syntax error
++DETAIL:  source SQL:
++CREATE OR REPLACE AGGREGATE sum3 (int8,int8,int8)
++                  ^
++HINT:  try \h CREATE
+ drop function sum4(int8,int8,int8,int8);
+ DROP AGGREGATE myavg (numeric);
++ERROR:  at or near "myavg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP AGGREGATE myavg (numeric)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- invalid: bad parallel-safety marking
+ CREATE AGGREGATE mysum (int)
+ (
+@@ -265,7 +478,12 @@
+ 	sfunc = int4pl,
+ 	parallel = pear
+ );
+-ERROR:  parameter "parallel" must be SAFE, RESTRICTED, or UNSAFE
++ERROR:  at or near "mysum": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE mysum (int)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- invalid: nonstrict inverse with strict forward function
+ CREATE FUNCTION float8mi_n(float8, float8) RETURNS float8 AS
+ $$ SELECT $1 - $2; $$
+@@ -278,7 +496,12 @@
+     msfunc = float8pl,
+     minvfunc = float8mi_n
+ );
+-ERROR:  strictness of aggregate's forward and inverse transition functions must match
++ERROR:  at or near "invalidsumdouble": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE invalidsumdouble (float8)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- invalid: non-matching result types
+ CREATE FUNCTION float8mi_int(float8, float8) RETURNS int AS
+ $$ SELECT CAST($1 - $2 AS INT); $$
+@@ -291,7 +514,12 @@
+     msfunc = float8pl,
+     minvfunc = float8mi_int
+ );
+-ERROR:  return type of inverse transition function float8mi_int is not double precision
++ERROR:  at or near "wrongreturntype": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE wrongreturntype (float8)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- invalid: non-lowercase quoted identifiers
+ CREATE AGGREGATE case_agg ( -- old syntax
+ 	"Sfunc1" = int4pl,
+@@ -300,12 +528,12 @@
+ 	"Initcond1" = '0',
+ 	"Parallel" = safe
+ );
+-WARNING:  aggregate attribute "Sfunc1" not recognized
+-WARNING:  aggregate attribute "Basetype" not recognized
+-WARNING:  aggregate attribute "Stype1" not recognized
+-WARNING:  aggregate attribute "Initcond1" not recognized
+-WARNING:  aggregate attribute "Parallel" not recognized
+-ERROR:  aggregate stype must be specified
++ERROR:  at or near "case_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE case_agg ( 
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE AGGREGATE case_agg(float8)
+ (
+ 	"Stype" = internal,
+@@ -315,10 +543,9 @@
+ 	"Finalfunc_modify" = read_write,
+ 	"Parallel" = safe
+ );
+-WARNING:  aggregate attribute "Stype" not recognized
+-WARNING:  aggregate attribute "Sfunc" not recognized
+-WARNING:  aggregate attribute "Finalfunc" not recognized
+-WARNING:  aggregate attribute "Finalfunc_extra" not recognized
+-WARNING:  aggregate attribute "Finalfunc_modify" not recognized
+-WARNING:  aggregate attribute "Parallel" not recognized
+-ERROR:  aggregate stype must be specified
++ERROR:  at or near "case_agg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE case_agg(float8)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_

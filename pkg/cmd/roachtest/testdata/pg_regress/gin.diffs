@@ -1,0 +1,372 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/gin.out --label=/mnt/data1/postgres/src/test/regress/results/gin.out /mnt/data1/postgres/src/test/regress/expected/gin.out /mnt/data1/postgres/src/test/regress/results/gin.out
+--- /mnt/data1/postgres/src/test/regress/expected/gin.out
++++ /mnt/data1/postgres/src/test/regress/results/gin.out
+@@ -5,48 +5,57 @@
+ -- GIN itself.
+ -- Create and populate a test table with a GIN index.
+ create table gin_test_tbl(i int4[]) with (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ create index gin_test_idx on gin_test_tbl using gin (i)
+   with (fastupdate = on, gin_pending_list_limit = 4096);
++ERROR:  unimplemented: storage parameter "fastupdate"
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/43299/_version_
+ insert into gin_test_tbl select array[1, 2, g] from generate_series(1, 20000) g;
+ insert into gin_test_tbl select array[1, 3, g] from generate_series(1, 1000) g;
+ select gin_clean_pending_list('gin_test_idx')>10 as many; -- flush the fastupdate buffers
+- many 
+-------
+- t
+-(1 row)
+-
++ERROR:  unknown function: gin_clean_pending_list()
+ insert into gin_test_tbl select array[3, 1, g] from generate_series(1, 1000) g;
+ vacuum gin_test_tbl; -- flush the fastupdate buffers
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum gin_test_tbl
++^
+ select gin_clean_pending_list('gin_test_idx'); -- nothing to flush
+- gin_clean_pending_list 
+-------------------------
+-                      0
+-(1 row)
+-
++ERROR:  unknown function: gin_clean_pending_list()
+ -- Test vacuuming
+ delete from gin_test_tbl where i @> array[2];
+ vacuum gin_test_tbl;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum gin_test_tbl
++^
+ -- Disable fastupdate, and do more insertions. With fastupdate enabled, most
+ -- insertions (by flushing the list pages) cause page splits. Without
+ -- fastupdate, we get more churn in the GIN data leaf pages, and exercise the
+ -- recompression codepaths.
+ alter index gin_test_idx set (fastupdate = off);
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++alter index gin_test_idx set (fastupdate = off)
++                         ^
++HINT:  try \h ALTER INDEX
+ insert into gin_test_tbl select array[1, 2, g] from generate_series(1, 1000) g;
+ insert into gin_test_tbl select array[1, 3, g] from generate_series(1, 1000) g;
+ delete from gin_test_tbl where i @> array[2];
+ vacuum gin_test_tbl;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum gin_test_tbl
++^
+ -- Test for "rare && frequent" searches
+ explain (costs off)
+ select count(*) from gin_test_tbl where i @> array[1, 999];
+-                      QUERY PLAN                       
+--------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on gin_test_tbl
+-         Recheck Cond: (i @> '{1,999}'::integer[])
+-         ->  Bitmap Index Scan on gin_test_idx
+-               Index Cond: (i @> '{1,999}'::integer[])
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from gin_test_tbl where i @> array[1, 999];
+  count 
+ -------
+@@ -55,17 +64,25 @@
+ 
+ -- Very weak test for gin_fuzzy_search_limit
+ set gin_fuzzy_search_limit = 1000;
++ERROR:  unimplemented: the configuration setting "gin_fuzzy_search_limit" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select count(*) > 0 as ok from gin_test_tbl where i @> array[1];
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on gin_test_tbl
+-         Recheck Cond: (i @> '{1}'::integer[])
+-         ->  Bitmap Index Scan on gin_test_idx
+-               Index Cond: (i @> '{1}'::integer[])
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) > 0 as ok from gin_test_tbl where i @> array[1];
+  ok 
+ ----
+@@ -73,6 +90,18 @@
+ (1 row)
+ 
+ reset gin_fuzzy_search_limit;
++ERROR:  unimplemented: the configuration setting "gin_fuzzy_search_limit" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test optimization of empty queries
+ create temp table t_gin_test_tbl(i int4[], j int4[]);
+ create index on t_gin_test_tbl using gin (i, j);
+@@ -89,16 +118,14 @@
+   ('{1,3}', '{}'),
+   ('{1,1}', '{10}');
+ set enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ explain (costs off)
+ select * from t_gin_test_tbl where array[0] <@ i;
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Bitmap Heap Scan on t_gin_test_tbl
+-   Recheck Cond: ('{0}'::integer[] <@ i)
+-   ->  Bitmap Index Scan on t_gin_test_tbl_i_j_idx
+-         Index Cond: (i @> '{0}'::integer[])
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from t_gin_test_tbl where array[0] <@ i;
+  i | j 
+ ---+---
+@@ -111,14 +138,11 @@
+ 
+ explain (costs off)
+ select * from t_gin_test_tbl where i @> '{}';
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Bitmap Heap Scan on t_gin_test_tbl
+-   Recheck Cond: (i @> '{}'::integer[])
+-   ->  Bitmap Index Scan on t_gin_test_tbl_i_j_idx
+-         Index Cond: (i @> '{}'::integer[])
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from t_gin_test_tbl where i @> '{}';
+    i   |  j   
+ -------+------
+@@ -141,6 +165,9 @@
+   return query execute 'EXPLAIN (ANALYZE, FORMAT json) ' || query_sql;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ create function execute_text_query_index(query_sql text)
+ returns setof text
+ language plpgsql
+@@ -152,6 +179,9 @@
+   return query execute query_sql;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ create function execute_text_query_heap(query_sql text)
+ returns setof text
+ language plpgsql
+@@ -163,6 +193,9 @@
+   return query execute query_sql;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ -- check number of rows returned by index and removed by recheck
+ select
+   query,
+@@ -185,88 +218,90 @@
+   lateral explain_query_json($$select * from t_gin_test_tbl where $$ || query) js,
+   lateral execute_text_query_index($$select string_agg((i, j)::text, ' ') from t_gin_test_tbl where $$ || query) res_index,
+   lateral execute_text_query_heap($$select string_agg((i, j)::text, ' ') from t_gin_test_tbl where $$ || query) res_heap;
+-                   query                   | return by index | removed by recheck | match 
+--------------------------------------------+-----------------+--------------------+-------
+-  i @> '{}'                                | 7               | 0                  | t
+-  j @> '{}'                                | 6               | 0                  | t
+-  i @> '{}' and j @> '{}'                  | 4               | 0                  | t
+-  i @> '{1}'                               | 5               | 0                  | t
+-  i @> '{1}' and j @> '{}'                 | 3               | 0                  | t
+-  i @> '{1}' and i @> '{}' and j @> '{}'   | 3               | 0                  | t
+-  j @> '{10}'                              | 4               | 0                  | t
+-  j @> '{10}' and i @> '{}'                | 3               | 0                  | t
+-  j @> '{10}' and j @> '{}' and i @> '{}'  | 3               | 0                  | t
+-  i @> '{1}' and j @> '{10}'               | 2               | 0                  | t
+-(10 rows)
+-
++ERROR:  unknown function: explain_query_json()
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- re-purpose t_gin_test_tbl to test scans involving posting trees
+ insert into t_gin_test_tbl select array[1, g, g/10], array[2, g, g/10]
+   from generate_series(1, 20000) g;
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ select gin_clean_pending_list('t_gin_test_tbl_i_j_idx') is not null;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: gin_clean_pending_list()
+ analyze t_gin_test_tbl;
+ set enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_bitmapscan = on;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select count(*) from t_gin_test_tbl where j @> array[50];
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on t_gin_test_tbl
+-         Recheck Cond: (j @> '{50}'::integer[])
+-         ->  Bitmap Index Scan on t_gin_test_tbl_i_j_idx
+-               Index Cond: (j @> '{50}'::integer[])
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from t_gin_test_tbl where j @> array[50];
+  count 
+ -------
+-    11
++     0
+ (1 row)
+ 
+ explain (costs off)
+ select count(*) from t_gin_test_tbl where j @> array[2];
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on t_gin_test_tbl
+-         Recheck Cond: (j @> '{2}'::integer[])
+-         ->  Bitmap Index Scan on t_gin_test_tbl_i_j_idx
+-               Index Cond: (j @> '{2}'::integer[])
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from t_gin_test_tbl where j @> array[2];
+  count 
+ -------
+- 20000
++     0
+ (1 row)
+ 
+ explain (costs off)
+ select count(*) from t_gin_test_tbl where j @> '{}'::int[];
+-                       QUERY PLAN                        
+----------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on t_gin_test_tbl
+-         Recheck Cond: (j @> '{}'::integer[])
+-         ->  Bitmap Index Scan on t_gin_test_tbl_i_j_idx
+-               Index Cond: (j @> '{}'::integer[])
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from t_gin_test_tbl where j @> '{}'::int[];
+  count 
+ -------
+- 20006
++     6
+ (1 row)
+ 
+ -- test vacuuming of posting trees
+ delete from t_gin_test_tbl where j @> array[2];
+ vacuum t_gin_test_tbl;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum t_gin_test_tbl
++^
+ select count(*) from t_gin_test_tbl where j @> array[50];
+  count 
+ -------
+@@ -286,10 +321,24 @@
+ (1 row)
+ 
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table t_gin_test_tbl;
+ -- test an unlogged table, mostly to get coverage of ginbuildempty
+ create unlogged table t_gin_test_tbl(i int4[], j int4[]);
++NOTICE:  UNLOGGED TABLE will behave as a regular table in CockroachDB
+ create index on t_gin_test_tbl using gin (i, j);
+ insert into t_gin_test_tbl
+ values

@@ -1,0 +1,89 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/char.out --label=/mnt/data1/postgres/src/test/regress/results/char.out /mnt/data1/postgres/src/test/regress/expected/char.out /mnt/data1/postgres/src/test/regress/results/char.out
+--- /mnt/data1/postgres/src/test/regress/expected/char.out
++++ /mnt/data1/postgres/src/test/regress/results/char.out
+@@ -24,7 +24,7 @@
+ INSERT INTO CHAR_TBL (f1) VALUES ('');
+ -- try char's of greater than 1 length
+ INSERT INTO CHAR_TBL (f1) VALUES ('cd');
+-ERROR:  value too long for type character(1)
++ERROR:  value too long for type CHAR
+ INSERT INTO CHAR_TBL (f1) VALUES ('c     ');
+ SELECT * FROM CHAR_TBL;
+  f1 
+@@ -109,7 +109,7 @@
+ -- Here we just try to insert bad values.
+ --
+ INSERT INTO CHAR_TBL (f1) VALUES ('abcde');
+-ERROR:  value too long for type character(4)
++ERROR:  value too long for type CHAR(4)
+ SELECT * FROM CHAR_TBL;
+   f1  
+ ------
+@@ -121,23 +121,11 @@
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('abcd  ', 'char(4)');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('abcde', 'char(4)');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('abcde', 'char(4)');
+-               message                | detail | hint | sql_error_code 
+---------------------------------------+--------+------+----------------
+- value too long for type character(4) |        |      | 22001
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- Also test "char", which is an ad-hoc one-byte type.  It can only
+ -- really store ASCII characters, but we allow high-bit-set characters
+@@ -152,13 +140,13 @@
+ SELECT '\101'::"char";
+  char 
+ ------
+- A
++ \
+ (1 row)
+ 
+ SELECT '\377'::"char";
+  char 
+ ------
+- \377
++ \
+ (1 row)
+ 
+ SELECT 'a'::"char"::text;
+@@ -170,13 +158,13 @@
+ SELECT '\377'::"char"::text;
+  text 
+ ------
+- \377
++ \
+ (1 row)
+ 
+ SELECT '\000'::"char"::text;
+  text 
+ ------
+- 
++ \
+ (1 row)
+ 
+ SELECT 'a'::text::"char";
+@@ -188,7 +176,7 @@
+ SELECT '\377'::text::"char";
+  char 
+ ------
+- \377
++ \
+ (1 row)
+ 
+ SELECT ''::text::"char";

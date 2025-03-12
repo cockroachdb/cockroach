@@ -1,0 +1,1030 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out --label=/mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
+--- /mnt/data1/postgres/src/test/regress/expected/collate.linux.utf8_1.out
++++ /mnt/data1/postgres/src/test/regress/results/collate.linux.utf8.out
+@@ -7,5 +7,1026 @@
+        (SELECT count(*) FROM pg_collation WHERE collname IN ('de_DE', 'en_US', 'sv_SE', 'tr_TR') AND collencoding = pg_char_to_encoding('UTF8')) <> 4 OR
+        version() !~ 'linux-gnu'
+        AS skip_test \gset
++ERROR:  unknown function: pg_char_to_encoding()
+ \if :skip_test
++unrecognized value ":skip_test" for "\if expression": Boolean expected
+ \quit
++\endif
++SET client_encoding TO UTF8;
++CREATE SCHEMA collate_tests;
++SET search_path = collate_tests;
++CREATE TABLE collate_test1 (
++    a int,
++    b text COLLATE "en_US" NOT NULL
++);
++\d collate_test1
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_test1)$' COLLATE pg_catalog.default
++                                                                             ^
++CREATE TABLE collate_test_fail (
++    a int,
++    b text COLLATE "ja_JP.eucjp"
++);
++ERROR:  at or near ")": syntax error: invalid locale ja_JP.eucjp: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test_fail (
++    a int,
++    b text COLLATE "ja_JP.eucjp"
++)
++^
++CREATE TABLE collate_test_fail (
++    a int,
++    b text COLLATE "foo"
++);
++ERROR:  at or near ")": syntax error: invalid locale foo: language: subtag "foo" is well-formed but unknown
++DETAIL:  source SQL:
++CREATE TABLE collate_test_fail (
++    a int,
++    b text COLLATE "foo"
++)
++^
++CREATE TABLE collate_test_fail (
++    a int COLLATE "en_US",
++    b text
++);
++ERROR:  at or near ",": syntax error: COLLATE declaration for non-string-typed column "a"
++DETAIL:  source SQL:
++CREATE TABLE collate_test_fail (
++    a int COLLATE "en_US",
++                         ^
++CREATE TABLE collate_test_like (
++    LIKE collate_test1
++);
++\d collate_test_like
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_test_like)$' COLLATE pg_catalog.default
++                                                                                 ^
++CREATE TABLE collate_test2 (
++    a int,
++    b text COLLATE "sv_SE"
++);
++CREATE TABLE collate_test3 (
++    a int,
++    b text COLLATE "C"
++);
++ERROR:  at or near ")": syntax error: invalid locale C: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_test3 (
++    a int,
++    b text COLLATE "C"
++)
++^
++INSERT INTO collate_test1 VALUES (1, 'abc'), (2, 'äbc'), (3, 'bbc'), (4, 'ABC');
++INSERT INTO collate_test2 SELECT * FROM collate_test1;
++INSERT INTO collate_test3 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test3" does not exist
++SELECT * FROM collate_test1 WHERE b >= 'bbc';
++ a |  b  
++---+-----
++ 3 | bbc
++(1 row)
++
++SELECT * FROM collate_test2 WHERE b >= 'bbc';
++ a |  b  
++---+-----
++ 2 | äbc
++ 3 | bbc
++(2 rows)
++
++SELECT * FROM collate_test3 WHERE b >= 'bbc';
++ERROR:  relation "collate_test3" does not exist
++SELECT * FROM collate_test3 WHERE b >= 'BBC';
++ERROR:  relation "collate_test3" does not exist
++SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
++ a |  b  
++---+-----
++ 3 | bbc
++(1 row)
++
++SELECT * FROM collate_test1 WHERE b >= 'bbc' COLLATE "C";
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> >= <string>
++SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "C";
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> >= <string>
++SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc' COLLATE "en_US";
++ a |  b  
++---+-----
++ 3 | bbc
++(1 row)
++
++CREATE DOMAIN testdomain_sv AS text COLLATE "sv_SE";
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain_sv AS text COLLATE "sv_SE"
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
++CREATE DOMAIN testdomain_i AS int COLLATE "sv_SE"; -- fails
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain_i AS int COLLATE "sv_SE"
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
++CREATE TABLE collate_test4 (
++    a int,
++    b testdomain_sv
++);
++ERROR:  type "testdomain_sv" does not exist
++INSERT INTO collate_test4 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test4" does not exist
++SELECT a, b FROM collate_test4 ORDER BY b;
++ERROR:  relation "collate_test4" does not exist
++CREATE TABLE collate_test5 (
++    a int,
++    b testdomain_sv COLLATE "en_US"
++);
++ERROR:  at or near ")": syntax error: COLLATE declaration for non-string-typed column "b"
++DETAIL:  source SQL:
++CREATE TABLE collate_test5 (
++    a int,
++    b testdomain_sv COLLATE "en_US"
++)
++^
++INSERT INTO collate_test5 SELECT * FROM collate_test1;
++ERROR:  relation "collate_test5" does not exist
++SELECT a, b FROM collate_test5 ORDER BY b;
++ERROR:  relation "collate_test5" does not exist
++SELECT a, b FROM collate_test1 ORDER BY b;
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++SELECT a, b FROM collate_test2 ORDER BY b;
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, b FROM collate_test3 ORDER BY b;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++-- star expansion
++SELECT * FROM collate_test1 ORDER BY b;
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++SELECT * FROM collate_test2 ORDER BY b;
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT * FROM collate_test3 ORDER BY b;
++ERROR:  relation "collate_test3" does not exist
++-- constant expression folding
++SELECT 'bbc' COLLATE "en_US" > 'äbc' COLLATE "en_US" AS "true";
++ true 
++------
++ t
++(1 row)
++
++SELECT 'bbc' COLLATE "sv_SE" > 'äbc' COLLATE "sv_SE" AS "false";
++ false 
++-------
++ f
++(1 row)
++
++-- upper/lower
++CREATE TABLE collate_test10 (
++    a int,
++    x text COLLATE "en_US",
++    y text COLLATE "tr_TR"
++);
++INSERT INTO collate_test10 VALUES (1, 'hij', 'hij'), (2, 'HIJ', 'HIJ');
++SELECT a, lower(x), lower(y), upper(x), upper(y), initcap(x), initcap(y) FROM collate_test10;
++ERROR:  unknown signature: lower(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a, lower(x COLLATE "C"), lower(y COLLATE "C") FROM collate_test10;
++ERROR:  unknown signature: lower(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a, x, y FROM collate_test10 ORDER BY lower(y), a;
++ERROR:  unknown signature: lower(collatedstring{tr_TR})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++-- LIKE/ILIKE
++SELECT * FROM collate_test1 WHERE b LIKE 'abc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++SELECT * FROM collate_test1 WHERE b LIKE 'abc%';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++SELECT * FROM collate_test1 WHERE b LIKE '%bc%';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> LIKE <string>
++SELECT * FROM collate_test1 WHERE b ILIKE 'abc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
++SELECT * FROM collate_test1 WHERE b ILIKE 'abc%';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
++SELECT * FROM collate_test1 WHERE b ILIKE '%bc%';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
++SELECT 'Türkiye' COLLATE "en_US" ILIKE '%KI%' AS "true";
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ILIKE <string>
++SELECT 'Türkiye' COLLATE "tr_TR" ILIKE '%KI%' AS "false";
++ERROR:  unsupported comparison operator: <collatedstring{tr_TR}> ILIKE <string>
++SELECT 'bıt' ILIKE 'BIT' COLLATE "en_US" AS "false";
++ERROR:  unsupported comparison operator: <string> ILIKE <collatedstring{en_US}>
++SELECT 'bıt' ILIKE 'BIT' COLLATE "tr_TR" AS "true";
++ERROR:  unsupported comparison operator: <string> ILIKE <collatedstring{tr_TR}>
++-- The following actually exercises the selectivity estimation for ILIKE.
++SELECT relname FROM pg_class WHERE relname ILIKE 'abc%';
++ relname 
++---------
++(0 rows)
++
++-- regular expressions
++SELECT * FROM collate_test1 WHERE b ~ '^abc$';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~ <string>
++SELECT * FROM collate_test1 WHERE b ~ '^abc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~ <string>
++SELECT * FROM collate_test1 WHERE b ~ 'bc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~ <string>
++SELECT * FROM collate_test1 WHERE b ~* '^abc$';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~* <string>
++SELECT * FROM collate_test1 WHERE b ~* '^abc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~* <string>
++SELECT * FROM collate_test1 WHERE b ~* 'bc';
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~* <string>
++CREATE TABLE collate_test6 (
++    a int,
++    b text COLLATE "en_US"
++);
++INSERT INTO collate_test6 VALUES (1, 'abc'), (2, 'ABC'), (3, '123'), (4, 'ab1'),
++                                 (5, 'a1!'), (6, 'a c'), (7, '!.;'), (8, '   '),
++                                 (9, 'äbç'), (10, 'ÄBÇ');
++SELECT b,
++       b ~ '^[[:alpha:]]+$' AS is_alpha,
++       b ~ '^[[:upper:]]+$' AS is_upper,
++       b ~ '^[[:lower:]]+$' AS is_lower,
++       b ~ '^[[:digit:]]+$' AS is_digit,
++       b ~ '^[[:alnum:]]+$' AS is_alnum,
++       b ~ '^[[:graph:]]+$' AS is_graph,
++       b ~ '^[[:print:]]+$' AS is_print,
++       b ~ '^[[:punct:]]+$' AS is_punct,
++       b ~ '^[[:space:]]+$' AS is_space
++FROM collate_test6;
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~ <string>
++SELECT 'Türkiye' COLLATE "en_US" ~* 'KI' AS "true";
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> ~* <string>
++SELECT 'Türkiye' COLLATE "tr_TR" ~* 'KI' AS "false";
++ERROR:  unsupported comparison operator: <collatedstring{tr_TR}> ~* <string>
++SELECT 'bıt' ~* 'BIT' COLLATE "en_US" AS "false";
++ERROR:  unsupported comparison operator: <string> ~* <collatedstring{en_US}>
++SELECT 'bıt' ~* 'BIT' COLLATE "tr_TR" AS "true";
++ERROR:  unsupported comparison operator: <string> ~* <collatedstring{tr_TR}>
++-- The following actually exercises the selectivity estimation for ~*.
++SELECT relname FROM pg_class WHERE relname ~* '^abc';
++ relname 
++---------
++(0 rows)
++
++-- to_char
++SET lc_time TO 'tr_TR';
++ERROR:  invalid value for parameter "lc_time": "tr_TR"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: c.utf-8
++SELECT to_char(date '2010-02-01', 'DD TMMON YYYY');
++   to_char   
++-------------
++ 01 FEB 2010
++(1 row)
++
++SELECT to_char(date '2010-02-01', 'DD TMMON YYYY' COLLATE "tr_TR");
++ERROR:  unknown signature: to_char(date, collatedstring{tr_TR})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT to_char(date '2010-04-01', 'DD TMMON YYYY');
++   to_char   
++-------------
++ 01 APR 2010
++(1 row)
++
++SELECT to_char(date '2010-04-01', 'DD TMMON YYYY' COLLATE "tr_TR");
++ERROR:  unknown signature: to_char(date, collatedstring{tr_TR})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++-- to_date
++SELECT to_date('01 ŞUB 2010', 'DD TMMON YYYY');
++ERROR:  unknown function: to_date()
++SELECT to_date('01 Şub 2010', 'DD TMMON YYYY');
++ERROR:  unknown function: to_date()
++SELECT to_date('1234567890ab 2010', 'TMMONTH YYYY'); -- fail
++ERROR:  unknown function: to_date()
++-- backwards parsing
++CREATE VIEW collview1 AS SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
++CREATE VIEW collview2 AS SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";
++CREATE VIEW collview3 AS SELECT a, lower((x || x) COLLATE "C") FROM collate_test10;
++ERROR:  lower(): unsupported binary operator: <collatedstring{en_US}> || <collatedstring{en_US}> (returning <string>)
++SELECT table_name, view_definition FROM information_schema.views
++  WHERE table_name LIKE 'collview%' ORDER BY 1;
++ table_name |                                             view_definition                                              
++------------+----------------------------------------------------------------------------------------------------------
++ collview1  | SELECT collate_test1.a, collate_test1.b FROM root.collate_tests.collate_test1 WHERE b COLLATE c >= 'bbc'
++ collview2  | SELECT a, b FROM root.collate_tests.collate_test1 ORDER BY b COLLATE c
++(2 rows)
++
++-- collation propagation in various expression types
++SELECT a, coalesce(b, 'foo') FROM collate_test1 ORDER BY 2;
++ a | coalesce 
++---+----------
++ 1 | abc
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++SELECT a, coalesce(b, 'foo') FROM collate_test2 ORDER BY 2;
++ a | coalesce 
++---+----------
++ 1 | abc
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, coalesce(b, 'foo') FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, lower(coalesce(x, 'foo')), lower(coalesce(y, 'foo')) FROM collate_test10;
++ERROR:  unknown signature: lower(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a, b, greatest(b, 'CCC') FROM collate_test1 ORDER BY 3;
++ a |  b  | greatest 
++---+-----+----------
++ 1 | abc | CCC
++ 2 | äbc | CCC
++ 3 | bbc | CCC
++ 4 | ABC | CCC
++(4 rows)
++
++SELECT a, b, greatest(b, 'CCC') FROM collate_test2 ORDER BY 3;
++ a |  b  | greatest 
++---+-----+----------
++ 1 | abc | CCC
++ 3 | bbc | CCC
++ 4 | ABC | CCC
++ 2 | äbc | äbc
++(4 rows)
++
++SELECT a, b, greatest(b, 'CCC') FROM collate_test3 ORDER BY 3;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, x, y, lower(greatest(x, 'foo')), lower(greatest(y, 'foo')) FROM collate_test10;
++ERROR:  unknown signature: lower(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a, nullif(b, 'abc') FROM collate_test1 ORDER BY 2;
++ a | nullif 
++---+--------
++ 1 | 
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++SELECT a, nullif(b, 'abc') FROM collate_test2 ORDER BY 2;
++ a | nullif 
++---+--------
++ 1 | 
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, nullif(b, 'abc') FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, lower(nullif(x, 'foo')), lower(nullif(y, 'foo')) FROM collate_test10;
++ERROR:  unknown signature: lower(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test1 ORDER BY 2;
++ a |  b   
++---+------
++ 4 | ABC
++ 2 | äbc
++ 1 | abcd
++ 3 | bbc
++(4 rows)
++
++SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test2 ORDER BY 2;
++ a |  b   
++---+------
++ 4 | ABC
++ 1 | abcd
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, CASE b WHEN 'abc' THEN 'abcd' ELSE b END FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++CREATE DOMAIN testdomain AS text;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN testdomain AS text
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
++SELECT a, b::testdomain FROM collate_test1 ORDER BY 2;
++ERROR:  type "testdomain" does not exist
++SELECT a, b::testdomain FROM collate_test2 ORDER BY 2;
++ERROR:  type "testdomain" does not exist
++SELECT a, b::testdomain FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b::testdomain_sv FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, lower(x::testdomain), lower(y::testdomain) FROM collate_test10;
++ERROR:  lower(): type "testdomain" does not exist
++SELECT min(b), max(b) FROM collate_test1;
++ min | max 
++-----+-----
++ abc | bbc
++(1 row)
++
++SELECT min(b), max(b) FROM collate_test2;
++ min | max 
++-----+-----
++ abc | äbc
++(1 row)
++
++SELECT min(b), max(b) FROM collate_test3;
++ERROR:  relation "collate_test3" does not exist
++SELECT array_agg(b ORDER BY b) FROM collate_test1;
++ERROR:  unknown signature: array_agg(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT array_agg(b ORDER BY b) FROM collate_test2;
++ERROR:  unknown signature: array_agg(collatedstring{sv_SE})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT array_agg(b ORDER BY b) FROM collate_test3;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test1 ORDER BY 2;
++ a |  b  
++---+-----
++ 1 | abc
++ 1 | abc
++ 4 | ABC
++ 4 | ABC
++ 2 | äbc
++ 2 | äbc
++ 3 | bbc
++ 3 | bbc
++(8 rows)
++
++SELECT a, b FROM collate_test2 UNION SELECT a, b FROM collate_test2 ORDER BY 2;
++ a |  b  
++---+-----
++ 1 | abc
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, b FROM collate_test3 WHERE a < 4 INTERSECT SELECT a, b FROM collate_test3 WHERE a > 1 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test3 EXCEPT SELECT a, b FROM collate_test3 WHERE a < 2 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3; -- ok
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 UNION SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b COLLATE "C" FROM collate_test1 UNION SELECT a, b FROM collate_test3 ORDER BY 2; -- ok
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 INTERSECT SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
++ERROR:  relation "collate_test3" does not exist
++SELECT a, b FROM collate_test1 EXCEPT SELECT a, b FROM collate_test3 ORDER BY 2; -- fail
++ERROR:  relation "collate_test3" does not exist
++CREATE TABLE test_u AS SELECT a, b FROM collate_test1 UNION ALL SELECT a, b FROM collate_test3; -- fail
++ERROR:  relation "collate_test3" does not exist
++-- ideally this would be a parse-time error, but for now it must be run-time:
++select x < y from collate_test10; -- fail
++ERROR:  unsupported comparison operator: <collatedstring{en_US}> < <collatedstring{tr_TR}>
++select x || y from collate_test10; -- ok, because || is not collation aware
++ERROR:  unsupported binary operator: <collatedstring{en_US}> || <collatedstring{tr_TR}>
++select x, y from collate_test10 order by x || y; -- not so ok
++ERROR:  unsupported binary operator: <collatedstring{en_US}> || <collatedstring{tr_TR}>
++-- collation mismatch between recursive and non-recursive term
++WITH RECURSIVE foo(x) AS
++   (SELECT x FROM (VALUES('a' COLLATE "en_US"),('b')) t(x)
++   UNION ALL
++   SELECT (x || 'c') COLLATE "de_DE" FROM foo WHERE length(x) < 10)
++SELECT * FROM foo;
++ERROR:  VALUES types string and collatedstring{en_US} cannot be matched
++-- casting
++SELECT CAST('42' AS text COLLATE "C");
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++SELECT CAST('42' AS text COLLATE "C")
++                         ^
++SELECT a, CAST(b AS varchar) FROM collate_test1 ORDER BY 2;
++ a |  b  
++---+-----
++ 4 | ABC
++ 1 | abc
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, CAST(b AS varchar) FROM collate_test2 ORDER BY 2;
++ a |  b  
++---+-----
++ 4 | ABC
++ 1 | abc
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, CAST(b AS varchar) FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++-- propagation of collation in SQL functions (inlined and non-inlined cases)
++-- and plpgsql functions too
++CREATE FUNCTION mylt (text, text) RETURNS boolean LANGUAGE sql
++    AS $$ select $1 < $2 $$;
++CREATE FUNCTION mylt_noninline (text, text) RETURNS boolean LANGUAGE sql
++    AS $$ select $1 < $2 limit 1 $$;
++CREATE FUNCTION mylt_plpgsql (text, text) RETURNS boolean LANGUAGE plpgsql
++    AS $$ begin return $1 < $2; end $$;
++SELECT a.b AS a, b.b AS b, a.b < b.b AS lt,
++       mylt(a.b, b.b), mylt_noninline(a.b, b.b), mylt_plpgsql(a.b, b.b)
++FROM collate_test1 a, collate_test1 b
++ORDER BY a.b, b.b;
++ERROR:  unknown signature: collate_tests.mylt(collatedstring{en_US}, collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT a.b AS a, b.b AS b, a.b < b.b COLLATE "C" AS lt,
++       mylt(a.b, b.b COLLATE "C"), mylt_noninline(a.b, b.b COLLATE "C"),
++       mylt_plpgsql(a.b, b.b COLLATE "C")
++FROM collate_test1 a, collate_test1 b
++ORDER BY a.b, b.b;
++ERROR:  unknown signature: collate_tests.mylt(collatedstring{en_US}, collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++-- collation override in plpgsql
++CREATE FUNCTION mylt2 (x text, y text) RETURNS boolean LANGUAGE plpgsql AS $$
++declare
++  xx text := x;
++  yy text := y;
++begin
++  return xx < yy;
++end
++$$;
++SELECT mylt2('a', 'B' collate "en_US") as t, mylt2('a', 'B' collate "C") as f;
++ERROR:  unknown signature: collate_tests.mylt2(string, collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++CREATE OR REPLACE FUNCTION
++  mylt2 (x text, y text) RETURNS boolean LANGUAGE plpgsql AS $$
++declare
++  xx text COLLATE "POSIX" := x;
++  yy text := y;
++begin
++  return xx < yy;
++end
++$$;
++ERROR:  unimplemented: collation for PL/pgSQL variables is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105245/_version_
++SELECT mylt2('a', 'B') as f;
++ f 
++---
++ f
++(1 row)
++
++SELECT mylt2('a', 'B' collate "C") as fail; -- conflicting collations
++ fail 
++------
++ f
++(1 row)
++
++SELECT mylt2('a', 'B' collate "POSIX") as f;
++ f 
++---
++ f
++(1 row)
++
++-- polymorphism
++SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test1)) ORDER BY 1;
++ERROR:  unknown signature: array_agg(collatedstring{en_US})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test2)) ORDER BY 1;
++ERROR:  unknown signature: array_agg(collatedstring{sv_SE})
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++SELECT * FROM unnest((SELECT array_agg(b ORDER BY b) FROM collate_test3)) ORDER BY 1;
++ERROR:  relation "collate_test3" does not exist
++CREATE FUNCTION dup (anyelement) RETURNS anyelement
++    AS 'select $1' LANGUAGE sql;
++SELECT a, dup(b) FROM collate_test1 ORDER BY 2;
++ a | dup 
++---+-----
++ 1 | abc
++ 4 | ABC
++ 2 | äbc
++ 3 | bbc
++(4 rows)
++
++SELECT a, dup(b) FROM collate_test2 ORDER BY 2;
++ a | dup 
++---+-----
++ 1 | abc
++ 4 | ABC
++ 3 | bbc
++ 2 | äbc
++(4 rows)
++
++SELECT a, dup(b) FROM collate_test3 ORDER BY 2;
++ERROR:  relation "collate_test3" does not exist
++-- indexes
++CREATE INDEX collate_test1_idx1 ON collate_test1 (b);
++CREATE INDEX collate_test1_idx2 ON collate_test1 (b COLLATE "C");
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE INDEX collate_test1_idx2 ON collate_test1 (b COLLATE "C")
++                                                    ^
++HINT:  try \h CREATE INDEX
++CREATE INDEX collate_test1_idx3 ON collate_test1 ((b COLLATE "C")); -- this is different grammatically
++CREATE INDEX collate_test1_idx4 ON collate_test1 (((b||'foo') COLLATE "POSIX"));
++ERROR:  unsupported binary operator: <collatedstring{en_US}> || <string> (returning <string>)
++CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "C"); -- fail
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE INDEX collate_test1_idx5 ON collate_test1 (a COLLATE "C")
++                                                    ^
++HINT:  try \h CREATE INDEX
++CREATE INDEX collate_test1_idx6 ON collate_test1 ((a COLLATE "C")); -- fail
++SELECT relname, pg_get_indexdef(oid) FROM pg_class WHERE relname LIKE 'collate_test%_idx%' ORDER BY 1;
++      relname       |                                      pg_get_indexdef                                      
++--------------------+-------------------------------------------------------------------------------------------
++ collate_test1_idx1 | CREATE INDEX collate_test1_idx1 ON root.collate_tests.collate_test1 USING btree (b ASC)
++ collate_test1_idx3 | CREATE INDEX collate_test1_idx3 ON root.collate_tests.collate_test1 USING btree ((b) ASC)
++ collate_test1_idx6 | CREATE INDEX collate_test1_idx6 ON root.collate_tests.collate_test1 USING btree ((a) ASC)
++(3 rows)
++
++-- schema manipulation commands
++CREATE ROLE regress_test_role;
++CREATE SCHEMA test_schema;
++-- We need to do this this way to cope with varying names for encodings:
++do $$
++BEGIN
++  EXECUTE 'CREATE COLLATION test0 (locale = ' ||
++          quote_literal((SELECT datcollate FROM pg_database WHERE datname = current_database())) || ');';
++END
++$$;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++CREATE COLLATION test0 FROM "C"; -- fail, duplicate name
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION test0 FROM "C"
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION IF NOT EXISTS test0 FROM "C"; -- ok, skipped
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION IF NOT EXISTS test0 FROM "C"
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION IF NOT EXISTS test0 (locale = 'foo'); -- ok, skipped
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION IF NOT EXISTS test0 (locale = 'foo')
++       ^
++HINT:  try \h CREATE
++do $$
++BEGIN
++  EXECUTE 'CREATE COLLATION test1 (lc_collate = ' ||
++          quote_literal((SELECT datcollate FROM pg_database WHERE datname = current_database())) ||
++          ', lc_ctype = ' ||
++          quote_literal((SELECT datctype FROM pg_database WHERE datname = current_database())) || ');';
++END
++$$;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++CREATE COLLATION test3 (lc_collate = 'en_US.utf8'); -- fail, need lc_ctype
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION test3 (lc_collate = 'en_US.utf8')
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION testx (locale = 'nonsense'); -- fail
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION testx (locale = 'nonsense')
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION test4 FROM nonsense;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION test4 FROM nonsense
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION test5 FROM test0;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION test5 FROM test0
++       ^
++HINT:  try \h CREATE
++SELECT collname FROM pg_collation WHERE collname LIKE 'test%' ORDER BY 1;
++ collname 
++----------
++(0 rows)
++
++ALTER COLLATION test1 RENAME TO test11;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test1 RENAME TO test11
++      ^
++HINT:  try \h ALTER
++ALTER COLLATION test0 RENAME TO test11; -- fail
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test0 RENAME TO test11
++      ^
++HINT:  try \h ALTER
++ALTER COLLATION test1 RENAME TO test22; -- fail
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test1 RENAME TO test22
++      ^
++HINT:  try \h ALTER
++ALTER COLLATION test11 OWNER TO regress_test_role;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test11 OWNER TO regress_test_role
++      ^
++HINT:  try \h ALTER
++ALTER COLLATION test11 OWNER TO nonsense;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test11 OWNER TO nonsense
++      ^
++HINT:  try \h ALTER
++ALTER COLLATION test11 SET SCHEMA test_schema;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION test11 SET SCHEMA test_schema
++      ^
++HINT:  try \h ALTER
++COMMENT ON COLLATION test0 IS 'US English';
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++COMMENT ON COLLATION test0 IS 'US English'
++           ^
++SELECT collname, nspname, obj_description(pg_collation.oid, 'pg_collation')
++    FROM pg_collation JOIN pg_namespace ON (collnamespace = pg_namespace.oid)
++    WHERE collname LIKE 'test%'
++    ORDER BY 1;
++ collname | nspname | obj_description 
++----------+---------+-----------------
++(0 rows)
++
++DROP COLLATION test0, test_schema.test11, test5;
++ERROR:  at or near "test0": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION test0, test_schema.test11, test5
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++DROP COLLATION test0; -- fail
++ERROR:  at or near "test0": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION test0
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++DROP COLLATION IF EXISTS test0;
++ERROR:  at or near "if": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION IF EXISTS test0
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++SELECT collname FROM pg_collation WHERE collname LIKE 'test%';
++ collname 
++----------
++(0 rows)
++
++DROP SCHEMA test_schema;
++DROP ROLE regress_test_role;
++-- ALTER
++ALTER COLLATION "en_US" REFRESH VERSION;
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++ALTER COLLATION "en_US" REFRESH VERSION
++      ^
++HINT:  try \h ALTER
++-- also test for database while we are here
++SELECT current_database() AS datname \gset
++ALTER DATABASE :"datname" REFRESH COLLATION VERSION;
++ERROR:  at or near "refresh": syntax error
++DETAIL:  source SQL:
++ALTER DATABASE "root" REFRESH COLLATION VERSION
++                      ^
++HINT:  try \h ALTER DATABASE
++-- dependencies
++CREATE COLLATION test0 FROM "C";
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION test0 FROM "C"
++       ^
++HINT:  try \h CREATE
++CREATE TABLE collate_dep_test1 (a int, b text COLLATE test0);
++ERROR:  at or near ")": syntax error: invalid locale test0: language: tag is not well-formed
++DETAIL:  source SQL:
++CREATE TABLE collate_dep_test1 (a int, b text COLLATE test0)
++                                                           ^
++CREATE DOMAIN collate_dep_dom1 AS text COLLATE test0;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN collate_dep_dom1 AS text COLLATE test0
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
++CREATE TYPE collate_dep_test2 AS (x int, y text COLLATE test0);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE TYPE collate_dep_test2 AS (x int, y text COLLATE test0)
++                                                ^
++HINT:  try \h CREATE TYPE
++CREATE VIEW collate_dep_test3 AS SELECT text 'foo' COLLATE test0 AS foo;
++ERROR:  invalid locale test0: language: tag is not well-formed
++CREATE TABLE collate_dep_test4t (a int, b text);
++CREATE INDEX collate_dep_test4i ON collate_dep_test4t (b COLLATE test0);
++ERROR:  at or near "collate": syntax error
++DETAIL:  source SQL:
++CREATE INDEX collate_dep_test4i ON collate_dep_test4t (b COLLATE test0)
++                                                         ^
++HINT:  try \h CREATE INDEX
++DROP COLLATION test0 RESTRICT; -- fail
++ERROR:  at or near "test0": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION test0 RESTRICT
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++DROP COLLATION test0 CASCADE;
++ERROR:  at or near "test0": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP COLLATION test0 CASCADE
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++\d collate_dep_test1
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_dep_test1)$' COLLATE pg_catalog.default
++                                                                                 ^
++\d collate_dep_test2
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(collate_dep_test2)$' COLLATE pg_catalog.default
++                                                                                 ^
++DROP TABLE collate_dep_test1, collate_dep_test4t;
++ERROR:  relation "collate_dep_test1" does not exist
++DROP TYPE collate_dep_test2;
++ERROR:  type "collate_dep_test2" does not exist
++-- test range types and collations
++create type textrange_c as range(subtype=text, collation="C");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange_c as range(subtype=text, collation="C")
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
++create type textrange_en_us as range(subtype=text, collation="en_US");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange_en_us as range(subtype=text, collation="en_US")
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
++select textrange_c('A','Z') @> 'b'::text;
++ERROR:  unknown function: textrange_c()
++select textrange_en_us('A','Z') @> 'b'::text;
++ERROR:  unknown function: textrange_en_us()
++drop type textrange_c;
++ERROR:  type "textrange_c" does not exist
++drop type textrange_en_us;
++ERROR:  type "textrange_en_us" does not exist
++-- standard collations
++SELECT * FROM collate_test2 ORDER BY b COLLATE UCS_BASIC;
++ERROR:  invalid locale ucs_basic: language: subtag "ucs" is well-formed but unknown
++-- nondeterministic collations
++-- (not supported with libc provider)
++CREATE COLLATION ctest_det (locale = 'en_US.utf8', deterministic = true);
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION ctest_det (locale = 'en_US.utf8', deterministic = true)
++       ^
++HINT:  try \h CREATE
++CREATE COLLATION ctest_nondet (locale = 'en_US.utf8', deterministic = false);
++ERROR:  at or near "collation": syntax error
++DETAIL:  source SQL:
++CREATE COLLATION ctest_nondet (locale = 'en_US.utf8', deterministic = false)
++       ^
++HINT:  try \h CREATE
++-- cleanup
++SET client_min_messages TO warning;
++DROP SCHEMA collate_tests CASCADE;

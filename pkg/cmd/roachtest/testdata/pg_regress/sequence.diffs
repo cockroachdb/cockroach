@@ -1,0 +1,959 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sequence.out --label=/mnt/data1/postgres/src/test/regress/results/sequence.out /mnt/data1/postgres/src/test/regress/expected/sequence.out /mnt/data1/postgres/src/test/regress/results/sequence.out
+--- /mnt/data1/postgres/src/test/regress/expected/sequence.out
++++ /mnt/data1/postgres/src/test/regress/results/sequence.out
+@@ -5,9 +5,9 @@
+ CREATE SEQUENCE sequence_testx INCREMENT BY 0;
+ ERROR:  INCREMENT must not be zero
+ CREATE SEQUENCE sequence_testx INCREMENT BY -1 MINVALUE 20;
+-ERROR:  MINVALUE (20) must be less than MAXVALUE (-1)
++ERROR:  START value (-1) cannot be less than MINVALUE (20)
+ CREATE SEQUENCE sequence_testx INCREMENT BY 1 MAXVALUE -20;
+-ERROR:  MINVALUE (1) must be less than MAXVALUE (-20)
++ERROR:  START value (1) cannot be greater than MAXVALUE (-20)
+ CREATE SEQUENCE sequence_testx INCREMENT BY -1 START 10;
+ ERROR:  START value (10) cannot be greater than MAXVALUE (-1)
+ CREATE SEQUENCE sequence_testx INCREMENT BY 1 START -10;
+@@ -19,13 +19,12 @@
+ ERROR:  invalid OWNED BY option
+ HINT:  Specify OWNED BY table.column or OWNED BY NONE.
+ CREATE SEQUENCE sequence_testx OWNED BY pg_class_oid_index.oid;  -- not a table
+-ERROR:  sequence cannot be owned by relation "pg_class_oid_index"
+-DETAIL:  This operation is not supported for indexes.
++ERROR:  relation "pg_class_oid_index" does not exist
+ CREATE SEQUENCE sequence_testx OWNED BY pg_class.relname;  -- not same schema
+-ERROR:  sequence must be in same schema as table it is linked to
++ERROR:  pg_class is a system catalog
+ CREATE TABLE sequence_test_table (a int);
+ CREATE SEQUENCE sequence_testx OWNED BY sequence_test_table.b;  -- wrong column
+-ERROR:  column "b" of relation "sequence_test_table" does not exist
++ERROR:  column "b" does not exist
+ DROP TABLE sequence_test_table;
+ -- sequence data types
+ CREATE SEQUENCE sequence_test5 AS integer;
+@@ -39,22 +38,26 @@
+ CREATE SEQUENCE sequence_test13 AS smallint MINVALUE -32768;
+ CREATE SEQUENCE sequence_test14 AS smallint MAXVALUE 32767 INCREMENT -1;
+ CREATE SEQUENCE sequence_testx AS text;
+-ERROR:  sequence type must be smallint, integer, or bigint
++ERROR:  at or near "EOF": syntax error: invalid integer type: STRING
++DETAIL:  source SQL:
++CREATE SEQUENCE sequence_testx AS text
++                                      ^
+ CREATE SEQUENCE sequence_testx AS nosuchtype;
+-ERROR:  type "nosuchtype" does not exist
+-LINE 1: CREATE SEQUENCE sequence_testx AS nosuchtype;
+-                                          ^
++ERROR:  at or near "EOF": syntax error: type "nosuchtype" does not exist
++DETAIL:  source SQL:
++CREATE SEQUENCE sequence_testx AS nosuchtype
++                                            ^
+ CREATE SEQUENCE sequence_testx AS smallint MAXVALUE 100000;
+-ERROR:  MAXVALUE (100000) is out of range for sequence data type smallint
++ERROR:  MAXVALUE (100000) must be less than (32767) for type INT2
+ CREATE SEQUENCE sequence_testx AS smallint MINVALUE -100000;
+-ERROR:  MINVALUE (-100000) is out of range for sequence data type smallint
++ERROR:  MINVALUE (-100000) must be greater than (-32768) for type INT2
+ ALTER SEQUENCE sequence_test5 AS smallint;  -- success, max will be adjusted
+ ALTER SEQUENCE sequence_test8 AS smallint;  -- fail, max has to be adjusted
+-ERROR:  MAXVALUE (100000) is out of range for sequence data type smallint
++ERROR:  MAXVALUE (100000) must be less than (32767) for type INT2
+ ALTER SEQUENCE sequence_test8 AS smallint MAXVALUE 20000;  -- ok now
+ ALTER SEQUENCE sequence_test9 AS smallint;  -- success, min will be adjusted
+ ALTER SEQUENCE sequence_test10 AS smallint;  -- fail, min has to be adjusted
+-ERROR:  MINVALUE (-100000) is out of range for sequence data type smallint
++ERROR:  MINVALUE (-100000) must be greater than (-32768) for type INT2
+ ALTER SEQUENCE sequence_test10 AS smallint MINVALUE -20000;  -- ok now
+ ALTER SEQUENCE sequence_test11 AS int;  -- max will be adjusted
+ ALTER SEQUENCE sequence_test12 AS int;  -- min will be adjusted
+@@ -68,25 +71,28 @@
+ INSERT INTO serialTest1 VALUES ('bar');
+ INSERT INTO serialTest1 VALUES ('force', 100);
+ INSERT INTO serialTest1 VALUES ('wrong', NULL);
+-ERROR:  null value in column "f2" of relation "serialtest1" violates not-null constraint
+-DETAIL:  Failing row contains (wrong, null).
+-SELECT * FROM serialTest1;
+-  f1   | f2  
+--------+-----
+- foo   |   1
+- bar   |   2
+- force | 100
++ERROR:  null value in column "f2" violates not-null constraint
++SELECT f1 FROM serialTest1 ORDER BY f2;
++  f1   
++-------
++ force
++ foo
++ bar
+ (3 rows)
+ 
+ SELECT pg_get_serial_sequence('serialTest1', 'f2');
+-  pg_get_serial_sequence   
+----------------------------
+- public.serialtest1_f2_seq
++ pg_get_serial_sequence 
++------------------------
++ 
+ (1 row)
+ 
+ -- test smallserial / bigserial
+ CREATE TABLE serialTest2 (f1 text, f2 serial, f3 smallserial, f4 serial2,
+   f5 bigserial, f6 serial8);
++NOTICE:  upgrading the column f3 to INT8 to utilize the session serial_normalization setting
++HINT:  change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/_version_/serial.html
++NOTICE:  upgrading the column f4 to INT8 to utilize the session serial_normalization setting
++HINT:  change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ INSERT INTO serialTest2 (f1)
+   VALUES ('test_defaults');
+ INSERT INTO serialTest2 (f1, f2, f3, f4, f5, f6)
+@@ -97,70 +103,49 @@
+ -- All these INSERTs should fail:
+ INSERT INTO serialTest2 (f1, f3)
+   VALUES ('bogus', -32769);
+-ERROR:  smallint out of range
+ INSERT INTO serialTest2 (f1, f4)
+   VALUES ('bogus', -32769);
+-ERROR:  smallint out of range
+ INSERT INTO serialTest2 (f1, f3)
+   VALUES ('bogus', 32768);
+-ERROR:  smallint out of range
+ INSERT INTO serialTest2 (f1, f4)
+   VALUES ('bogus', 32768);
+-ERROR:  smallint out of range
+ INSERT INTO serialTest2 (f1, f5)
+   VALUES ('bogus', -9223372036854775809);
+-ERROR:  bigint out of range
++ERROR:  numeric constant out of int64 range
+ INSERT INTO serialTest2 (f1, f6)
+   VALUES ('bogus', -9223372036854775809);
+-ERROR:  bigint out of range
++ERROR:  numeric constant out of int64 range
+ INSERT INTO serialTest2 (f1, f5)
+   VALUES ('bogus', 9223372036854775808);
+-ERROR:  bigint out of range
++ERROR:  numeric constant out of int64 range
+ INSERT INTO serialTest2 (f1, f6)
+   VALUES ('bogus', 9223372036854775808);
+-ERROR:  bigint out of range
+-SELECT * FROM serialTest2 ORDER BY f2 ASC;
+-      f1       |     f2      |   f3   |   f4   |          f5          |          f6          
+----------------+-------------+--------+--------+----------------------+----------------------
+- test_min_vals | -2147483648 | -32768 | -32768 | -9223372036854775808 | -9223372036854775808
+- test_defaults |           1 |      1 |      1 |                    1 |                    1
+- test_max_vals |  2147483647 |  32767 |  32767 |  9223372036854775807 |  9223372036854775807
+-(3 rows)
++ERROR:  numeric constant out of int64 range
++SELECT f1 FROM serialTest2 ORDER BY f2 ASC;
++      f1       
++---------------
++ test_min_vals
++ test_max_vals
++ test_defaults
++ bogus
++ bogus
++ bogus
++ bogus
++(7 rows)
+ 
+ SELECT nextval('serialTest2_f2_seq');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "serialtest2_f2_seq" does not exist
+ SELECT nextval('serialTest2_f3_seq');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "serialtest2_f3_seq" does not exist
+ SELECT nextval('serialTest2_f4_seq');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "serialtest2_f4_seq" does not exist
+ SELECT nextval('serialTest2_f5_seq');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "serialtest2_f5_seq" does not exist
+ SELECT nextval('serialTest2_f6_seq');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "serialtest2_f6_seq" does not exist
+ -- basic sequence operations using both text and oid references
+ CREATE SEQUENCE sequence_test;
+ CREATE SEQUENCE IF NOT EXISTS sequence_test;
+-NOTICE:  relation "sequence_test" already exists, skipping
+ SELECT nextval('sequence_test'::text);
+  nextval 
+ ---------
+@@ -235,48 +220,35 @@
+ 
+ DISCARD SEQUENCES;
+ SELECT currval('sequence_test'::regclass);
+-ERROR:  currval of sequence "sequence_test" is not yet defined in this session
++ERROR:  currval(): currval of sequence "root.public.sequence_test" is not yet defined in this session
+ DROP SEQUENCE sequence_test;
+ -- renaming sequences
+ CREATE SEQUENCE foo_seq;
+ ALTER TABLE foo_seq RENAME TO foo_seq_new;
++ERROR:  "foo_seq" is not a table or view
+ SELECT * FROM foo_seq_new;
+- last_value | log_cnt | is_called 
+-------------+---------+-----------
+-          1 |       0 | f
+-(1 row)
+-
++ERROR:  relation "foo_seq_new" does not exist
+ SELECT nextval('foo_seq_new');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  nextval(): relation "foo_seq_new" does not exist
+ SELECT nextval('foo_seq_new');
+- nextval 
+----------
+-       2
+-(1 row)
+-
++ERROR:  nextval(): relation "foo_seq_new" does not exist
+ -- log_cnt can be higher if there is a checkpoint just at the right
+ -- time, so just test for the expected range
+ SELECT last_value, log_cnt IN (31, 32) AS log_cnt_ok, is_called FROM foo_seq_new;
+- last_value | log_cnt_ok | is_called 
+-------------+------------+-----------
+-          2 | t          | t
+-(1 row)
+-
++ERROR:  relation "foo_seq_new" does not exist
+ DROP SEQUENCE foo_seq_new;
++ERROR:  relation "foo_seq_new" does not exist
+ -- renaming serial sequences
+ ALTER TABLE serialtest1_f2_seq RENAME TO serialtest1_f2_foo;
++ERROR:  relation "serialtest1_f2_seq" does not exist
+ INSERT INTO serialTest1 VALUES ('more');
+-SELECT * FROM serialTest1;
+-  f1   | f2  
+--------+-----
+- foo   |   1
+- bar   |   2
+- force | 100
+- more  |   3
++SELECT f1 FROM serialTest1 ORDER BY f2;
++  f1   
++-------
++ force
++ foo
++ bar
++ more
+ (4 rows)
+ 
+ --
+@@ -291,19 +263,16 @@
+ );
+ -- Both drops should fail, but with different error messages:
+ DROP SEQUENCE t1_f1_seq;
+-ERROR:  cannot drop sequence t1_f1_seq because other objects depend on it
+-DETAIL:  default value for column f1 of table t1 depends on sequence t1_f1_seq
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "t1_f1_seq" does not exist
+ DROP SEQUENCE myseq2;
+ ERROR:  cannot drop sequence myseq2 because other objects depend on it
+-DETAIL:  default value for column f2 of table t1 depends on sequence myseq2
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+ -- This however will work:
+ DROP SEQUENCE myseq3;
++ERROR:  cannot drop sequence myseq3 because other objects depend on it
+ DROP TABLE t1;
+ -- Fails because no longer existent:
+ DROP SEQUENCE t1_f1_seq;
+-ERROR:  sequence "t1_f1_seq" does not exist
++ERROR:  relation "t1_f1_seq" does not exist
+ -- Now OK:
+ DROP SEQUENCE myseq2;
+ --
+@@ -311,7 +280,6 @@
+ --
+ ALTER SEQUENCE IF EXISTS sequence_test2 RESTART WITH 24
+   INCREMENT BY 4 MAXVALUE 36 MINVALUE 5 CYCLE;
+-NOTICE:  relation "sequence_test2" does not exist, skipping
+ ALTER SEQUENCE serialTest1 CYCLE;  -- error, not a sequence
+ ERROR:  "serialtest1" is not a sequence
+ CREATE SEQUENCE sequence_test2 START WITH 32;
+@@ -342,22 +310,25 @@
+ -- test CYCLE and NO CYCLE
+ ALTER SEQUENCE sequence_test2 RESTART WITH 24
+   INCREMENT BY 4 MAXVALUE 36 MINVALUE 5 CYCLE;
++ERROR:  unimplemented: CYCLE option is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/20961/_version_
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      24
++      33
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      28
++      34
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      32
++      35
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+@@ -369,7 +340,7 @@
+ SELECT nextval('sequence_test2');  -- cycled
+  nextval 
+ ---------
+-       5
++      37
+ (1 row)
+ 
+ ALTER SEQUENCE sequence_test2 RESTART WITH 24
+@@ -383,90 +354,109 @@
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      28
++      25
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      32
++      26
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-      36
++      27
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');  -- error
+-ERROR:  nextval: reached maximum value of sequence "sequence_test2" (36)
++ nextval 
++---------
++      28
++(1 row)
++
+ ALTER SEQUENCE sequence_test2 RESTART WITH -24 START WITH -24
+   INCREMENT BY -4 MINVALUE -36 MAXVALUE -5 CYCLE;
++ERROR:  unimplemented: CYCLE option is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/20961/_version_
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -24
++      29
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -28
++      30
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -32
++      31
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -36
++      32
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');  -- cycled
+  nextval 
+ ---------
+-      -5
++      33
+ (1 row)
+ 
+ ALTER SEQUENCE sequence_test2 RESTART WITH -24
+   NO CYCLE;
++ERROR:  RESTART value (-24) cannot be less than MINVALUE (1)
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -24
++      34
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -28
++      35
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -32
++      36
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');
+  nextval 
+ ---------
+-     -36
++      37
+ (1 row)
+ 
+ SELECT nextval('sequence_test2');  -- error
+-ERROR:  nextval: reached minimum value of sequence "sequence_test2" (-36)
++ nextval 
++---------
++      38
++(1 row)
++
+ -- reset
+ ALTER SEQUENCE IF EXISTS sequence_test2 RESTART WITH 32 START WITH 32
+   INCREMENT BY 4 MAXVALUE 36 MINVALUE 5 CYCLE;
++ERROR:  unimplemented: CYCLE option is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/20961/_version_
+ SELECT setval('sequence_test2', -100);  -- error
+-ERROR:  setval: value -100 is out of bounds for sequence "sequence_test2" (5..36)
++ERROR:  setval(): value -100 is out of bounds for sequence "sequence_test2" (1..9223372036854775807)
+ SELECT setval('sequence_test2', 100);  -- error
+-ERROR:  setval: value 100 is out of bounds for sequence "sequence_test2" (5..36)
++ setval 
++--------
++    100
++(1 row)
++
+ SELECT setval('sequence_test2', 5);
+  setval 
+ --------
+@@ -478,80 +468,55 @@
+ SELECT * FROM information_schema.sequences
+   WHERE sequence_name ~ ANY(ARRAY['sequence_test', 'serialtest'])
+   ORDER BY sequence_name ASC;
+- sequence_catalog | sequence_schema |   sequence_name    | data_type | numeric_precision | numeric_precision_radix | numeric_scale | start_value |    minimum_value     |    maximum_value    | increment | cycle_option 
+-------------------+-----------------+--------------------+-----------+-------------------+-------------------------+---------------+-------------+----------------------+---------------------+-----------+--------------
+- regression       | public          | sequence_test10    | smallint  |                16 |                       2 |             0 | 1           | -20000               | 32767               | 1         | NO
+- regression       | public          | sequence_test11    | integer   |                32 |                       2 |             0 | 1           | 1                    | 2147483647          | 1         | NO
+- regression       | public          | sequence_test12    | integer   |                32 |                       2 |             0 | -1          | -2147483648          | -1                  | -1        | NO
+- regression       | public          | sequence_test13    | integer   |                32 |                       2 |             0 | -32768      | -2147483648          | 2147483647          | 1         | NO
+- regression       | public          | sequence_test14    | integer   |                32 |                       2 |             0 | 32767       | -2147483648          | 2147483647          | -1        | NO
+- regression       | public          | sequence_test2     | bigint    |                64 |                       2 |             0 | 32          | 5                    | 36                  | 4         | YES
+- regression       | public          | sequence_test3     | bigint    |                64 |                       2 |             0 | 1           | 1                    | 9223372036854775807 | 1         | NO
+- regression       | public          | sequence_test4     | bigint    |                64 |                       2 |             0 | -1          | -9223372036854775808 | -1                  | -1        | NO
+- regression       | public          | sequence_test5     | smallint  |                16 |                       2 |             0 | 1           | 1                    | 32767               | 1         | NO
+- regression       | public          | sequence_test6     | smallint  |                16 |                       2 |             0 | 1           | 1                    | 32767               | 1         | NO
+- regression       | public          | sequence_test7     | bigint    |                64 |                       2 |             0 | 1           | 1                    | 9223372036854775807 | 1         | NO
+- regression       | public          | sequence_test8     | smallint  |                16 |                       2 |             0 | 1           | 1                    | 20000               | 1         | NO
+- regression       | public          | sequence_test9     | smallint  |                16 |                       2 |             0 | -1          | -32768               | -1                  | -1        | NO
+- regression       | public          | serialtest1_f2_foo | integer   |                32 |                       2 |             0 | 1           | 1                    | 2147483647          | 1         | NO
+- regression       | public          | serialtest2_f2_seq | integer   |                32 |                       2 |             0 | 1           | 1                    | 2147483647          | 1         | NO
+- regression       | public          | serialtest2_f3_seq | smallint  |                16 |                       2 |             0 | 1           | 1                    | 32767               | 1         | NO
+- regression       | public          | serialtest2_f4_seq | smallint  |                16 |                       2 |             0 | 1           | 1                    | 32767               | 1         | NO
+- regression       | public          | serialtest2_f5_seq | bigint    |                64 |                       2 |             0 | 1           | 1                    | 9223372036854775807 | 1         | NO
+- regression       | public          | serialtest2_f6_seq | bigint    |                64 |                       2 |             0 | 1           | 1                    | 9223372036854775807 | 1         | NO
+-(19 rows)
++ sequence_catalog | sequence_schema | sequence_name | data_type | numeric_precision | numeric_precision_radix | numeric_scale | start_value | minimum_value | maximum_value | increment | cycle_option 
++------------------+-----------------+---------------+-----------+-------------------+-------------------------+---------------+-------------+---------------+---------------+-----------+--------------
++(0 rows)
+ 
+ SELECT schemaname, sequencename, start_value, min_value, max_value, increment_by, cycle, cache_size, last_value
+ FROM pg_sequences
+ WHERE sequencename ~ ANY(ARRAY['sequence_test', 'serialtest'])
+   ORDER BY sequencename ASC;
+- schemaname |    sequencename    | start_value |      min_value       |      max_value      | increment_by | cycle | cache_size | last_value 
+-------------+--------------------+-------------+----------------------+---------------------+--------------+-------+------------+------------
+- public     | sequence_test10    |           1 |               -20000 |               32767 |            1 | f     |          1 |           
+- public     | sequence_test11    |           1 |                    1 |          2147483647 |            1 | f     |          1 |           
+- public     | sequence_test12    |          -1 |          -2147483648 |                  -1 |           -1 | f     |          1 |           
+- public     | sequence_test13    |      -32768 |          -2147483648 |          2147483647 |            1 | f     |          1 |           
+- public     | sequence_test14    |       32767 |          -2147483648 |          2147483647 |           -1 | f     |          1 |           
+- public     | sequence_test2     |          32 |                    5 |                  36 |            4 | t     |          1 |          5
+- public     | sequence_test3     |           1 |                    1 | 9223372036854775807 |            1 | f     |          1 |           
+- public     | sequence_test4     |          -1 | -9223372036854775808 |                  -1 |           -1 | f     |          1 |         -1
+- public     | sequence_test5     |           1 |                    1 |               32767 |            1 | f     |          1 |           
+- public     | sequence_test6     |           1 |                    1 |               32767 |            1 | f     |          1 |           
+- public     | sequence_test7     |           1 |                    1 | 9223372036854775807 |            1 | f     |          1 |           
+- public     | sequence_test8     |           1 |                    1 |               20000 |            1 | f     |          1 |           
+- public     | sequence_test9     |          -1 |               -32768 |                  -1 |           -1 | f     |          1 |           
+- public     | serialtest1_f2_foo |           1 |                    1 |          2147483647 |            1 | f     |          1 |          3
+- public     | serialtest2_f2_seq |           1 |                    1 |          2147483647 |            1 | f     |          1 |          2
+- public     | serialtest2_f3_seq |           1 |                    1 |               32767 |            1 | f     |          1 |          2
+- public     | serialtest2_f4_seq |           1 |                    1 |               32767 |            1 | f     |          1 |          2
+- public     | serialtest2_f5_seq |           1 |                    1 | 9223372036854775807 |            1 | f     |          1 |          2
+- public     | serialtest2_f6_seq |           1 |                    1 | 9223372036854775807 |            1 | f     |          1 |          2
+-(19 rows)
+-
+-SELECT * FROM pg_sequence_parameters('sequence_test4'::regclass);
+- start_value |    minimum_value     | maximum_value | increment | cycle_option | cache_size | data_type 
+--------------+----------------------+---------------+-----------+--------------+------------+-----------
+-          -1 | -9223372036854775808 |            -1 |        -1 | f            |          1 |        20
+-(1 row)
++ schemaname | sequencename | start_value | min_value | max_value | increment_by | cycle | cache_size | last_value 
++------------+--------------+-------------+-----------+-----------+--------------+-------+------------+------------
++(0 rows)
+ 
++-- SELECT * FROM pg_sequence_parameters('sequence_test4'::regclass);
+ \d sequence_test4
+-                       Sequence "public.sequence_test4"
+-  Type  | Start |       Minimum        | Maximum | Increment | Cycles? | Cache 
+---------+-------+----------------------+---------+-----------+---------+-------
+- bigint |    -1 | -9223372036854775808 |      -1 |        -1 | no      |     1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(sequence_test4)$' COLLATE pg_catalog.default
++                                                                              ^
+ \d serialtest2_f2_seq
+-                 Sequence "public.serialtest2_f2_seq"
+-  Type   | Start | Minimum |  Maximum   | Increment | Cycles? | Cache 
+----------+-------+---------+------------+-----------+---------+-------
+- integer |     1 |       1 | 2147483647 |         1 | no      |     1
+-Owned by: public.serialtest2.f2
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(serialtest2_f2_seq)$' COLLATE pg_catalog.default
++                                                                                  ^
+ -- Test comments
+ COMMENT ON SEQUENCE asdf IS 'won''t work';
+-ERROR:  relation "asdf" does not exist
++ERROR:  at or near "sequence": syntax error
++DETAIL:  source SQL:
++COMMENT ON SEQUENCE asdf IS 'won''t work'
++           ^
+ COMMENT ON SEQUENCE sequence_test2 IS 'will work';
++ERROR:  at or near "sequence": syntax error
++DETAIL:  source SQL:
++COMMENT ON SEQUENCE sequence_test2 IS 'will work'
++           ^
+ COMMENT ON SEQUENCE sequence_test2 IS NULL;
++ERROR:  at or near "sequence": syntax error
++DETAIL:  source SQL:
++COMMENT ON SEQUENCE sequence_test2 IS NULL
++           ^
+ -- Test lastval()
+ CREATE SEQUENCE seq;
+ SELECT nextval('seq');
+@@ -580,7 +545,7 @@
+ 
+ DISCARD SEQUENCES;
+ SELECT lastval();
+-ERROR:  lastval is not yet defined in this session
++ERROR:  lastval(): lastval is not yet defined in this session
+ CREATE SEQUENCE seq2;
+ SELECT nextval('seq2');
+  nextval 
+@@ -597,212 +562,263 @@
+ DROP SEQUENCE seq2;
+ -- should fail
+ SELECT lastval();
+-ERROR:  lastval is not yet defined in this session
++ lastval 
++---------
++       1
++(1 row)
++
+ -- unlogged sequences
+ -- (more tests in src/test/recovery/)
+ CREATE UNLOGGED SEQUENCE sequence_test_unlogged;
++ERROR:  at or near "sequence": syntax error
++DETAIL:  source SQL:
++CREATE UNLOGGED SEQUENCE sequence_test_unlogged
++                ^
++HINT:  try \h CREATE
+ ALTER SEQUENCE sequence_test_unlogged SET LOGGED;
++ERROR:  at or near "logged": syntax error
++DETAIL:  source SQL:
++ALTER SEQUENCE sequence_test_unlogged SET LOGGED
++                                          ^
++HINT:  try \h ALTER SEQUENCE
+ \d sequence_test_unlogged
+-                   Sequence "public.sequence_test_unlogged"
+-  Type  | Start | Minimum |       Maximum       | Increment | Cycles? | Cache 
+---------+-------+---------+---------------------+-----------+---------+-------
+- bigint |     1 |       1 | 9223372036854775807 |         1 | no      |     1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(sequence_test_unlogged)$' COLLATE pg_catalog.default
++                                                                                      ^
+ ALTER SEQUENCE sequence_test_unlogged SET UNLOGGED;
++ERROR:  at or near "unlogged": syntax error
++DETAIL:  source SQL:
++ALTER SEQUENCE sequence_test_unlogged SET UNLOGGED
++                                          ^
++HINT:  try \h ALTER SEQUENCE
+ \d sequence_test_unlogged
+-              Unlogged sequence "public.sequence_test_unlogged"
+-  Type  | Start | Minimum |       Maximum       | Increment | Cycles? | Cache 
+---------+-------+---------+---------------------+-----------+---------+-------
+- bigint |     1 |       1 | 9223372036854775807 |         1 | no      |     1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(sequence_test_unlogged)$' COLLATE pg_catalog.default
++                                                                                      ^
+ DROP SEQUENCE sequence_test_unlogged;
++ERROR:  relation "sequence_test_unlogged" does not exist
+ -- Test sequences in read-only transactions
+ CREATE TEMPORARY SEQUENCE sequence_test_temp1;
+ START TRANSACTION READ ONLY;
+ SELECT nextval('sequence_test_temp1');  -- ok
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  nextval(): cannot execute nextval() in a read-only transaction
+ SELECT nextval('sequence_test2');  -- error
+-ERROR:  cannot execute nextval() in a read-only transaction
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT setval('sequence_test_temp1', 1);  -- ok
+- setval 
+---------
+-      1
+-(1 row)
+-
++ERROR:  setval(): cannot execute setval() in a read-only transaction
+ SELECT setval('sequence_test2', 1);  -- error
+-ERROR:  cannot execute setval() in a read-only transaction
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- privileges tests
+ CREATE USER regress_seq_user;
+ -- nextval
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT SELECT ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+-ERROR:  permission denied for sequence seq3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT UPDATE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT USAGE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- currval
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT SELECT ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT currval('seq3');
+- currval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT UPDATE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT currval('seq3');
+-ERROR:  permission denied for sequence seq3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT USAGE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT currval('seq3');
+- currval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- lastval
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT SELECT ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lastval();
+- lastval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT UPDATE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lastval();
+-ERROR:  permission denied for sequence seq3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ GRANT USAGE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lastval();
+- lastval 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- setval
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ CREATE SEQUENCE seq3;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ REVOKE ALL ON seq3 FROM regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SAVEPOINT save;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT setval('seq3', 5);
+-ERROR:  permission denied for sequence seq3
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO save;
++ERROR:  savepoint "save" does not exist
+ GRANT UPDATE ON seq3 TO regress_seq_user;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT setval('seq3', 5);
+- setval 
+---------
+-      5
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT nextval('seq3');
+- nextval 
+----------
+-       6
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- ALTER SEQUENCE
+ BEGIN;
+ SET LOCAL SESSION AUTHORIZATION regress_seq_user;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++SET LOCAL SESSION AUTHORIZATION regress_seq_user
++                  ^
++HINT:  try \h SET LOCAL
+ ALTER SEQUENCE sequence_test2 START WITH 1;
+-ERROR:  must be owner of sequence sequence_test2
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- Sequences should get wiped out as well:
+ DROP TABLE serialTest1, serialTest2;
+@@ -811,9 +827,9 @@
+   ('sequence_test2', 'serialtest2_f2_seq', 'serialtest2_f3_seq',
+    'serialtest2_f4_seq', 'serialtest2_f5_seq', 'serialtest2_f6_seq')
+   ORDER BY sequence_name ASC;
+- sequence_catalog | sequence_schema | sequence_name  | data_type | numeric_precision | numeric_precision_radix | numeric_scale | start_value | minimum_value | maximum_value | increment | cycle_option 
+-------------------+-----------------+----------------+-----------+-------------------+-------------------------+---------------+-------------+---------------+---------------+-----------+--------------
+- regression       | public          | sequence_test2 | bigint    |                64 |                       2 |             0 | 32          | 5             | 36            | 4         | YES
++ sequence_catalog | sequence_schema | sequence_name  | data_type | numeric_precision | numeric_precision_radix | numeric_scale | start_value | minimum_value |    maximum_value    | increment | cycle_option 
++------------------+-----------------+----------------+-----------+-------------------+-------------------------+---------------+-------------+---------------+---------------------+-----------+--------------
++ root             | public          | sequence_test2 | INT8      |                64 |                       2 |             0 | 32          | 1             | 9223372036854775807 | 1         | NO
+ (1 row)
+ 
+ DROP USER regress_seq_user;

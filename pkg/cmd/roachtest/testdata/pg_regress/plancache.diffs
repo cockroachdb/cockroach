@@ -1,0 +1,406 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plancache.out --label=/mnt/data1/postgres/src/test/regress/results/plancache.out /mnt/data1/postgres/src/test/regress/expected/plancache.out /mnt/data1/postgres/src/test/regress/results/plancache.out
+--- /mnt/data1/postgres/src/test/regress/expected/plancache.out
++++ /mnt/data1/postgres/src/test/regress/results/plancache.out
+@@ -2,6 +2,7 @@
+ -- Tests to exercise the plan caching/invalidation mechanism
+ --
+ CREATE TEMP TABLE pcachetest AS SELECT * FROM int8_tbl;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ -- create and use a cached plan
+ PREPARE prepstmt AS SELECT * FROM pcachetest;
+ EXECUTE prepstmt;
+@@ -32,6 +33,7 @@
+ -- recreate the temp table (this demonstrates that the raw plan is
+ -- purely textual and doesn't depend on OIDs, for instance)
+ CREATE TEMP TABLE pcachetest AS SELECT * FROM int8_tbl ORDER BY 2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ EXECUTE prepstmt;
+         q1        |        q2         
+ ------------------+-------------------
+@@ -92,14 +94,15 @@
+ 
+ CREATE OR REPLACE TEMP VIEW pcacheview AS
+   SELECT q1, q2/2 AS q2 FROM pcachetest;
++ERROR:  cannot change type of view column "q2" from int to decimal
+ EXECUTE vprep;
+         q1        |        q2         
+ ------------------+-------------------
+- 4567890123456789 | -2283945061728394
+- 4567890123456789 |                61
+-              123 |               228
+-              123 |  2283945061728394
+- 4567890123456789 |  2283945061728394
++ 4567890123456789 | -4567890123456789
++ 4567890123456789 |               123
++              123 |               456
++              123 |  4567890123456789
++ 4567890123456789 |  4567890123456789
+ (5 rows)
+ 
+ -- Check basic SPI plan invalidation
+@@ -116,24 +119,15 @@
+ 	return total;
+ end
+ $$ language plpgsql;
++ERROR:  unimplemented: CREATE TABLE usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ select cache_test(1);
+- cache_test 
+-------------
+-         37
+-(1 row)
+-
++ERROR:  unknown function: cache_test()
+ select cache_test(2);
+- cache_test 
+-------------
+-         38
+-(1 row)
+-
++ERROR:  unknown function: cache_test()
+ select cache_test(3);
+- cache_test 
+-------------
+-         39
+-(1 row)
+-
++ERROR:  unknown function: cache_test()
+ -- Check invalidation of plpgsql "simple expression"
+ create temp view v1 as
+   select 2+2 as f1;
+@@ -141,67 +135,63 @@
+ begin
+ 	return f1 from v1;
+ end$$ language plpgsql;
++ERROR:  at or near ";": at or near "from": syntax error
++DETAIL:  source SQL:
++SET ROW (f1 from v1)
++            ^
++--
++source SQL:
++begin
++	return f1 from v1;
++                  ^
++HINT:  try \h SET SESSION
+ select cache_test_2();
+- cache_test_2 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: cache_test_2()
+ create or replace temp view v1 as
+   select 2+2+4 as f1;
+ select cache_test_2();
+- cache_test_2 
+---------------
+-            8
+-(1 row)
+-
++ERROR:  unknown function: cache_test_2()
+ create or replace temp view v1 as
+   select 2+2+4+(select max(unique1) from tenk1) as f1;
+ select cache_test_2();
+- cache_test_2 
+---------------
+-        10007
+-(1 row)
+-
++ERROR:  unknown function: cache_test_2()
+ --- Check that change of search_path is honored when re-using cached plan
+ create schema s1
+   create table abc (f1 int);
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++create schema s1
++  create table abc (f1 int)
++  ^
+ create schema s2
+   create table abc (f1 int);
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++create schema s2
++  create table abc (f1 int)
++  ^
+ insert into s1.abc values(123);
++ERROR:  relation "s1.abc" does not exist
+ insert into s2.abc values(456);
++ERROR:  relation "s2.abc" does not exist
+ set search_path = s1;
+ prepare p1 as select f1 from abc;
++ERROR:  relation "abc" does not exist
+ execute p1;
+- f1  
+------
+- 123
+-(1 row)
+-
++ERROR:  prepared statement "p1" does not exist
+ set search_path = s2;
+ select f1 from abc;
+- f1  
+------
+- 456
+-(1 row)
+-
++ERROR:  relation "abc" does not exist
+ execute p1;
+- f1  
+------
+- 456
+-(1 row)
+-
++ERROR:  prepared statement "p1" does not exist
+ alter table s1.abc add column f2 float8;   -- force replan
++ERROR:  relation "s1.abc" does not exist
+ execute p1;
+- f1  
+------
+- 456
+-(1 row)
+-
++ERROR:  prepared statement "p1" does not exist
+ drop schema s1 cascade;
+-NOTICE:  drop cascades to table s1.abc
++ERROR:  unknown schema "s1"
+ drop schema s2 cascade;
+-NOTICE:  drop cascades to table abc
++ERROR:  unknown schema "s2"
+ reset search_path;
+ -- Check that invalidation deals with regclass constants
+ create temp sequence seq;
+@@ -232,52 +222,89 @@
+     raise notice '%', r;
+   end loop;
+ end$$ language plpgsql;
+-select cachebug();
+-NOTICE:  table "temptable" does not exist, skipping
+-NOTICE:  1
+-NOTICE:  2
+-NOTICE:  3
+- cachebug 
+-----------
+- 
+-(1 row)
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare r int;
++begin
++  drop table if exists temptable cascade;
++  create temp table temptable as select * from generate_series(1,3) as f1;
++  create temp view vv as select * from temptable;
++  for r in select * from vv loop
++        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select cachebug();
+-NOTICE:  drop cascades to view vv
+-NOTICE:  1
+-NOTICE:  2
+-NOTICE:  3
+- cachebug 
+-----------
+- 
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++select cachebug();
++ERROR:  unknown function: cachebug()
++select cachebug();
++ERROR:  unknown function: cachebug()
+ -- Check that addition or removal of any partition is correctly dealt with by
+ -- default partition table when it is being used in prepared statement.
+ create table pc_list_parted (a int) partition by list(a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table pc_list_parted (a int) partition by list(a)
++                                                        ^
++HINT:  try \h CREATE TABLE
+ create table pc_list_part_null partition of pc_list_parted for values in (null);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table pc_list_part_null partition of pc_list_parted for values in (null)
++                               ^
++HINT:  try \h CREATE TABLE
+ create table pc_list_part_1 partition of pc_list_parted for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table pc_list_part_1 partition of pc_list_parted for values in (1)
++                            ^
++HINT:  try \h CREATE TABLE
+ create table pc_list_part_def partition of pc_list_parted default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table pc_list_part_def partition of pc_list_parted default
++                              ^
++HINT:  try \h CREATE TABLE
+ prepare pstmt_def_insert (int) as insert into pc_list_part_def values($1);
++ERROR:  relation "pc_list_part_def" does not exist
+ -- should fail
+ execute pstmt_def_insert(null);
+-ERROR:  new row for relation "pc_list_part_def" violates partition constraint
+-DETAIL:  Failing row contains (null).
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ execute pstmt_def_insert(1);
+-ERROR:  new row for relation "pc_list_part_def" violates partition constraint
+-DETAIL:  Failing row contains (1).
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ create table pc_list_part_2 partition of pc_list_parted for values in (2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table pc_list_part_2 partition of pc_list_parted for values in (2)
++                            ^
++HINT:  try \h CREATE TABLE
+ execute pstmt_def_insert(2);
+-ERROR:  new row for relation "pc_list_part_def" violates partition constraint
+-DETAIL:  Failing row contains (2).
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ alter table pc_list_parted detach partition pc_list_part_null;
++ERROR:  at or near "detach": syntax error
++DETAIL:  source SQL:
++alter table pc_list_parted detach partition pc_list_part_null
++                           ^
++HINT:  try \h ALTER TABLE
+ -- should be ok
+ execute pstmt_def_insert(null);
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ drop table pc_list_part_1;
++ERROR:  relation "pc_list_part_1" does not exist
+ -- should be ok
+ execute pstmt_def_insert(1);
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ drop table pc_list_parted, pc_list_part_null;
++ERROR:  relation "pc_list_parted" does not exist
+ deallocate pstmt_def_insert;
++ERROR:  prepared statement "pstmt_def_insert" does not exist
+ -- Test plan_cache_mode
+ create table test_mode (a int);
+ insert into test_mode select 1 from generate_series(1,1000) union all select 2;
+@@ -286,45 +313,29 @@
+ prepare test_mode_pp (int) as select count(*) from test_mode where a = $1;
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             0 |            0
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ -- up to 5 executions, custom plan is used
+ set plan_cache_mode to auto;
+ explain (costs off) execute test_mode_pp(2);
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Aggregate
+-   ->  Index Only Scan using test_mode_a_idx on test_mode
+-         Index Cond: (a = 2)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) execute test_mode_pp(2)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             0 |            1
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ -- force generic plan
+ set plan_cache_mode to force_generic_plan;
+ explain (costs off) execute test_mode_pp(2);
+-         QUERY PLAN          
+------------------------------
+- Aggregate
+-   ->  Seq Scan on test_mode
+-         Filter: (a = $1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) execute test_mode_pp(2)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             1 |            1
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ -- get to generic plan by 5 executions
+ set plan_cache_mode to auto;
+ execute test_mode_pp(1); -- 1x
+@@ -353,11 +364,7 @@
+ 
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             1 |            5
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ execute test_mode_pp(1); -- 5x
+  count 
+ -------
+@@ -366,35 +373,23 @@
+ 
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             2 |            5
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ -- we should now get a really bad plan
+ explain (costs off) execute test_mode_pp(2);
+-         QUERY PLAN          
+------------------------------
+- Aggregate
+-   ->  Seq Scan on test_mode
+-         Filter: (a = $1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) execute test_mode_pp(2)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- but we can force a custom plan
+ set plan_cache_mode to force_custom_plan;
+ explain (costs off) execute test_mode_pp(2);
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Aggregate
+-   ->  Index Only Scan using test_mode_a_idx on test_mode
+-         Index Cond: (a = 2)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) execute test_mode_pp(2)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select name, generic_plans, custom_plans from pg_prepared_statements
+   where  name = 'test_mode_pp';
+-     name     | generic_plans | custom_plans 
+---------------+---------------+--------------
+- test_mode_pp |             3 |            6
+-(1 row)
+-
++ERROR:  column "generic_plans" does not exist
+ drop table test_mode;

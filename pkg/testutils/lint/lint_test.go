@@ -251,7 +251,7 @@ func TestLint(t *testing.T) {
 
 		cmd, stderr, filter, err := dirCmd(crdbDir,
 			"git", "grep", "-nE", fmt.Sprintf(`[^_a-zA-Z](%s)\(`, strings.Join(names, "|")),
-			"--", "pkg", ":!pkg/cmd/roachtest/testdata/regression.diffs")
+			"--", "pkg", ":!pkg/cmd/roachtest/testdata/pg_regress/*")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2831,7 +2831,7 @@ func TestLint(t *testing.T) {
 			":!sql/catalog/systemschema_test/testdata/bootstrap*",  // exempt: deliberate test of bootstrap catalog.
 			":!sql/catalog/internal/catkv/testdata/",               // TODO(foundations): #137029.
 			":!cli/testdata/doctor/",                               // TODO(foundations): #137030.
-			":!cmd/roachtest/testdata/regression.diffs",            // TODO(queries): #137026.
+			":!cmd/roachtest/testdata/pg_regress/*",                // TODO(queries): #137026.
 			":!cli/testdata/zip/file-filters/testzip_file_filters", // exempt: deliberate test to fetch all tables in debug zip.
 		)
 		if err != nil {
