@@ -12,9 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
-// Enabled is true if the system has access to the internal goroutine statistics
+// Supported is true if the system has access to the internal goroutine statistics
 // (i.e. if CockroachDB was built using our Go fork).
-const Enabled = enabled
+const Supported = supported
 
 // CumulativeNormalizedRunnableGoroutines returns the sum (over all seconds
 // since the program started) of the average number of runnable goroutines per
@@ -27,7 +27,7 @@ const Enabled = enabled
 // The number of runnable goroutines is sampled frequently, and an average is
 // calculated and accumulated once per second.
 //
-// If Enabled is false, returns 0.
+// If Supported is false, returns 0.
 func CumulativeNormalizedRunnableGoroutines() float64 {
 	return cumulativeNormalizedRunnableGoroutines()
 }
@@ -48,9 +48,8 @@ func CumulativeNormalizedRunnableGoroutines() float64 {
 // This function returns a unique ID for this callback which can be un-registered
 // by passing the ID to UnregisterRunnableCountCallback.
 //
-// If Enabled is false, returns id=-1 and ok=false. The caller must handle this
-// case because the callback will never fire.
-func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
+// This must not be called if Supported is false, and will panic.
+func RegisterRunnableCountCallback(cb RunnableCountCallback) (id int64) {
 	return registerRunnableCountCallback(cb)
 }
 

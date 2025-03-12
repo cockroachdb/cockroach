@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const enabled = true
+const supported = true
 
 // See CumulativeNormalizedRunnableGoroutines.
 func cumulativeNormalizedRunnableGoroutines() float64 {
@@ -93,7 +93,7 @@ var callbackInfo struct {
 	st  *cluster.Settings
 }
 
-func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
+func registerRunnableCountCallback(cb RunnableCountCallback) (id int64) {
 	callbackInfo.mu.Lock()
 	defer callbackInfo.mu.Unlock()
 	id = callbackInfo.id
@@ -102,7 +102,7 @@ func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool)
 		RunnableCountCallback: cb,
 		id:                    id,
 	})
-	return id, true
+	return id
 }
 
 // See UnregisterRunnableCountCallback.
