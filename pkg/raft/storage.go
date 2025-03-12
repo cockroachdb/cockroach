@@ -331,9 +331,10 @@ func (ms *MemoryStorage) Append(entries []pb.Entry) error {
 func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
 	ls := ms.ls.forward(ms.ls.lastIndex())
 	return LogSnapshot{
-		first:    ms.FirstIndex(),
-		storage:  ms.LogSnapshot(),
-		unstable: LeadSlice{term: ls.lastEntryID().term, LogSlice: ls},
-		logger:   raftlogger.DiscardLogger,
+		first:     ms.FirstIndex(),
+		storage:   ms.LogSnapshot(),
+		unstable:  LeadSlice{term: ls.lastEntryID().term, LogSlice: ls},
+		termCache: NewTermCache(termCacheSize, ms.ls.lastEntryID()),
+		logger:    raftlogger.DiscardLogger,
 	}
 }
