@@ -1,15 +1,15 @@
-init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=1 sql-leaf=2 sql-root=1
+init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=2 sql-sql-tokens=4
 ----
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 0, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # No more slots.
 try-get work=kv
@@ -17,13 +17,13 @@ try-get work=kv
 kv: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # Since no more KV slots, couldn't get.
 try-get work=sql-kv-response
@@ -31,41 +31,13 @@ try-get work=sql-kv-response
 sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 set-has-waiting-requests work=sql-kv-response v=true
 ----
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Since no more KV slots, couldn't get.
-try-get work=sql-leaf-start
-----
-sql-leaf-start: tryGet(1) returned false
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-set-has-waiting-requests work=sql-leaf-start v=true
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-# Since no more KV slots, couldn't get.
-try-get work=sql-root-start
-----
-sql-root-start: tryGet(1) returned false
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
-
-set-has-waiting-requests work=sql-root-start v=true
-----
-GrantCoordinator:
-(chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 return-grant work=kv
 ----
@@ -73,19 +45,19 @@ kv: returnGrant(1)
 kv: granted in chain 1, and returning 1
 GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 set-return-value-from-granted work=kv v=0
 ----
 GrantCoordinator:
 (chain: id: 1 active: true index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # The grant chain dies out since kv slots are fully used.
 continue-grant-chain work=kv
@@ -93,7 +65,7 @@ continue-grant-chain work=kv
 kv: continueGrantChain
 GrantCoordinator:
 (chain: id: 2 active: false index: 1) kv: used: 1, total: 1 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # Grant to sql-kv-response consumes a token.
 return-grant work=kv
@@ -102,7 +74,7 @@ kv: returnGrant(1)
 sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # Grant to sql-kv-response consumes another token. None left.
 continue-grant-chain work=sql-kv-response
@@ -111,151 +83,117 @@ sql-kv-response: continueGrantChain
 sql-kv-response: granted in chain 2, and returning 1
 GrantCoordinator:
 (chain: id: 2 active: true index: 1) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 1
+sql-sql-response: avail: 4
 
 # Even though there are still waiting requests for sql-kv-response, no more
-# tokens, so the grant chain can continue past it.
+# tokens, so the grant chain terminates.
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
-sql-leaf-start: granted in chain 2, and returning 1
 GrantCoordinator:
-(chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 0, total: 1
-
-continue-grant-chain work=sql-leaf-start
-----
-sql-leaf-start: continueGrantChain
-sql-leaf-start: granted in chain 2, and returning 1
-GrantCoordinator:
-(chain: id: 2 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
-
-# Even though there are still waiting requests for sql-leaf-start, no more
-# tokens, so the grant chain can continue past it.
-continue-grant-chain work=sql-leaf-start
-----
-sql-leaf-start: continueGrantChain
-sql-root-start: granted in chain 2, and returning 1
-GrantCoordinator:
-(chain: id: 2 active: true index: 4) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# sql-root-start ran out of tokens. Grant chain dies out.
-continue-grant-chain work=sql-root-start
-----
-sql-root-start: continueGrantChain
-GrantCoordinator:
-(chain: id: 3 active: false index: 5) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Return sql-leaf-start slot. This will cause another grant chain to start
-# which will eventually find a free slot to give to sql-leaf-start.
-return-grant work=sql-leaf-start
-----
-sql-leaf-start: returnGrant(1)
-sql-leaf-start: granted in chain 3, and returning 1
-GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
-
-# Return another sql-leaf-start slot. The grant chain is already active and
-# not past this WorkKind, so no grant is done.
-return-grant work=sql-leaf-start
-----
-sql-leaf-start: returnGrant(1)
-GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 0, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
 # The kv slots are fully used after this tryGet, which succeeds.
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 3 active: true index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
-# This tryGet for kv fails and forces termination of the grant chain.
+# This tryGet for kv fails.
 try-get work=kv
 ----
 kv: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
-# The grant chain cannot continue since it was force terminated, and a new one
-# is not able to restart since there are no free kv slots.
-continue-grant-chain work=sql-leaf-start
+# Pretend that sql-sql-response has waiting requests.
+set-has-waiting-requests work=sql-sql-response v=true
 ----
-sql-leaf-start: continueGrantChain
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
+
+# The grant chain cannot continue since it was terminated, and a new one
+# is not able to restart since there are no free kv slots.
+continue-grant-chain work=sql-sql-response
+----
+sql-sql-response: continueGrantChain
+GrantCoordinator:
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
+
+# Pretend that the sql-sql-response work that was waiting is gone.
+set-has-waiting-requests work=sql-sql-response v=false
+----
+GrantCoordinator:
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
 # Pretend that the kv work that was waiting is gone.
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
 # Some other kv work takes without permission.
 took-without-permission work=kv
 ----
 kv: tookWithoutPermission(1)
 GrantCoordinator:
-(chain: id: 4 active: false index: 3) kv: used: 2, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 3) kv: used: 2, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 4
 
 # Refill the tokens and increase the kv slots to 2.
 cpu-load runnable=0 procs=1
 ----
 GrantCoordinator:
-(chain: id: 4 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
+sql-sql-response: avail: 4
 SlotAdjuster metrics: slots: 2, duration (short, long) millis: (1, 0), inc: 1, dec: 0
 
 # Tokens don't get overfull. And kv slots increased to 3. This causes a grant
 # to sql-kv-response and the grant chain is again active.
 cpu-load runnable=0 procs=1
 ----
-sql-kv-response: granted in chain 4, and returning 1
+sql-kv-response: granted in chain 3, and returning 1
 GrantCoordinator:
-(chain: id: 4 active: true index: 1) kv: used: 2, total: 3 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 3 active: true index: 1) kv: used: 2, total: 3 sql-kv-response: avail: 1
+sql-sql-response: avail: 4
 SlotAdjuster metrics: slots: 3, duration (short, long) millis: (2, 0), inc: 2, dec: 0
 
-# Overload and kv slots decreased. Forces termination of grant chain 4.
+# Overload and kv slots decreased. Forces termination of grant chain 3.
 cpu-load runnable=2 procs=1
 ----
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 4 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
+sql-sql-response: avail: 4
 SlotAdjuster metrics: slots: 2, duration (short, long) millis: (3, 0), inc: 2, dec: 1
 
-# Grant chain 4 terminates.
+# Grant chain 3 terminates.
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 1, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 4 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
+sql-sql-response: avail: 4
 
-# Return a slot for sql-leaf-start. Grant chain cannot start since KV slots
-# are full.
-return-grant work=sql-leaf-start
+# Pretend that sql-sql-response has waiting requests.
+set-has-waiting-requests work=sql-sql-response v=true
 ----
-sql-leaf-start: returnGrant(1)
 GrantCoordinator:
-(chain: id: 5 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 4 active: false index: 1) kv: used: 2, total: 2 sql-kv-response: avail: 2
+sql-sql-response: avail: 4
 
 # Underload and kv slots increased. The number of procs=4, so can grant 4 at
 # the same time. The first 3 get a chain-id=0, i.e., they are not really
@@ -264,46 +202,39 @@ cpu-load runnable=2 procs=4
 ----
 sql-kv-response: granted in chain 0, and returning 1
 sql-kv-response: granted in chain 0, and returning 1
-sql-leaf-start: granted in chain 0, and returning 1
-sql-leaf-start: granted in chain 5, and returning 1
+sql-sql-response: granted in chain 0, and returning 1
+sql-sql-response: granted in chain 4, and returning 1
 GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 4 active: true index: 2) kv: used: 2, total: 3 sql-kv-response: avail: 0
+sql-sql-response: avail: 2
 SlotAdjuster metrics: slots: 3, duration (short, long) millis: (4, 0), inc: 3, dec: 1
-
-# There is now a free sql-root-start slot, which the grant chain will get to.
-return-grant work=sql-root-start
-----
-sql-root-start: returnGrant(1)
-GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
 
 # Continuing with chain-id=0 has no effect.
 continue-grant-chain work=sql-kv-response
 ----
 sql-kv-response: continueGrantChain
 GrantCoordinator:
-(chain: id: 5 active: true index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 0, total: 1
+(chain: id: 4 active: true index: 2) kv: used: 2, total: 3 sql-kv-response: avail: 0
+sql-sql-response: avail: 2
 
-# Continuing chain-id=5 causes a grant to sql-root-start and the chain dies
-# out, since do not have a batch of 4 to grant to.
-continue-grant-chain work=sql-leaf-start
+# Continuing with chain-id=4 causes two more grants to sql-sql-response, and
+# then there are no more tokens available, so the grant chain terminates.
+continue-grant-chain work=sql-sql-response
 ----
-sql-leaf-start: continueGrantChain
-sql-root-start: granted in chain 0, and returning 1
+sql-sql-response: continueGrantChain
+sql-sql-response: granted in chain 0, and returning 1
+sql-sql-response: granted in chain 0, and returning 1
 GrantCoordinator:
-(chain: id: 6 active: false index: 5) kv: used: 2, total: 3 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 2, total: 2 sql-root-start: used: 1, total: 1
+(chain: id: 5 active: false index: 3) kv: used: 2, total: 3 sql-kv-response: avail: 0
+sql-sql-response: avail: 0
 
 #####################################################################
 # Test skipping of enforcements when CPULoad has high sampling period.
-init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=1 sql-sql-tokens=1 sql-leaf=2 sql-root=2
+init-grant-coordinator min-cpu=1 max-cpu=3 sql-kv-tokens=1 sql-sql-tokens=1
 ----
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 0, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+sql-sql-response: avail: 1
 
 # No more slots after this slot is granted.
 try-get work=kv
@@ -311,7 +242,7 @@ try-get work=kv
 kv: tryGet(1) returned true
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+sql-sql-response: avail: 1
 
 # Since no more KV slots, cannot grant token to sql-kv-response.
 try-get work=sql-kv-response
@@ -319,7 +250,7 @@ try-get work=sql-kv-response
 sql-kv-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+sql-sql-response: avail: 1
 
 # Since no more KV slots, cannot grant token to sql-sql-response.
 try-get work=sql-sql-response
@@ -327,15 +258,15 @@ try-get work=sql-sql-response
 sql-sql-response: tryGet(1) returned false
 GrantCoordinator:
 (chain: id: 1 active: false index: 0) kv: used: 1, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+sql-sql-response: avail: 1
 
 # CPULoad shows overload, so cannot increase KV slots, but since it is
 # infrequent, slot and token enforcement is disabled.
 cpu-load runnable=20 procs=1 infrequent=true
 ----
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: 1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 1
+sql-sql-response: avail: 1
 SlotAdjuster metrics: slots: 1, duration (short, long) millis: (0, 250), inc: 0, dec: 0
 
 # sql-kv-response can get a token.
@@ -343,92 +274,92 @@ try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: 0
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: 0
+sql-sql-response: avail: 1
 
 # sql-kv-response can get another token, even though tokens are exhausted.
 try-get work=sql-kv-response
 ----
 sql-kv-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
-sql-sql-response: avail: 1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: -1
+sql-sql-response: avail: 1
 
 # sql-sql-response can get a token.
 try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
-sql-sql-response: avail: 0 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: -1
+sql-sql-response: avail: 0
 
 # sql-sql-response can get another token, even though tokens are exhausted.
 try-get work=sql-sql-response
 ----
 sql-sql-response: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 1, total: 1 sql-kv-response: avail: -1
-sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 1, total: 1 sql-kv-response: avail: -1
+sql-sql-response: avail: -1
 
 # KV can get another slot even though slots are exhausted.
 try-get work=kv
 ----
 kv: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 1 active: false index: 5) kv: used: 2, total: 1 sql-kv-response: avail: -1
-sql-sql-response: avail: -1 sql-leaf-start: used: 0, total: 2 sql-root-start: used: 0, total: 2
+(chain: id: 1 active: false index: 3) kv: used: 2, total: 1 sql-kv-response: avail: -1
+sql-sql-response: avail: -1
 
 #####################################################################
 # Test store grant coordinator with a 250ms tick rate for the tokens.
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
 # Set tokens to a large value that permits all request sizes in this file.
 # Set elastic tokens to a large value that permits all request sizes.
 set-tokens io-tokens=100000 disk-write-tokens=100000 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 100000(100000), disk-write-tokens-avail: 100000, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 100000(100000), disk-write-tokens-avail: 100000, disk-read-tokens-deducted: 0
 
 # Initial tokens are effectively unlimited.
 try-get work=kv v=10000
 ----
 kv-regular: tryGet(10000) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 90000(90000), disk-write-tokens-avail: 90000, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 90000(90000), disk-write-tokens-avail: 90000, disk-read-tokens-deducted: 0
 
 # Set the io tokens to a smaller value.
 set-tokens io-tokens=500 disk-write-tokens=100000 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 500(500), disk-write-tokens-avail: 100000, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 500(500), disk-write-tokens-avail: 100000, disk-read-tokens-deducted: 0
 
 # Subtract 100 tokens for elastic work. Note that disk-write-tokens-avail also decreases by 100.
 took-without-permission work=kv-elastic v=100
 ----
 kv-elastic: tookWithoutPermission(100)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(400), disk-write-tokens-avail: 99900, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(400), disk-write-tokens-avail: 99900, disk-read-tokens-deducted: 0
 
 # Add 200 tokens.
 return-grant work=kv v=200
 ----
 kv-regular: returnGrant(200)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
 
 # Setup waiting requests that want 400 tokens each.
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv v=400
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 600(600), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
 
 # Returning tokens triggers granting and 2 requests will be granted until the
 # tokens become <= 0.
@@ -438,25 +369,25 @@ kv-regular: returnGrant(100)
 kv-regular: granted in chain 0, and returning 400
 kv-regular: granted in chain 0, and returning 400
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv v=100
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
 
 # No tokens to give.
 try-get work=kv
 ----
 kv-regular: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -100(-100), disk-write-tokens-avail: 99400, disk-read-tokens-deducted: 0
 
 # Increment by 50 tokens.
 set-tokens io-tokens=50 disk-write-tokens=99900 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -50(-50), disk-write-tokens-avail: 99900, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -50(-50), disk-write-tokens-avail: 99900, disk-read-tokens-deducted: 0
 
 # Return another 50 tokens. Since the number of tokens is 0, there is no
 # grant.
@@ -464,7 +395,7 @@ return-grant work=kv v=50
 ----
 kv-regular: returnGrant(50)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 0(0), disk-write-tokens-avail: 99950, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 0(0), disk-write-tokens-avail: 99950, disk-read-tokens-deducted: 0
 
 # As soon as the tokens > 0, it will grant.
 return-grant work=kv v=1
@@ -472,19 +403,19 @@ return-grant work=kv v=1
 kv-regular: returnGrant(1)
 kv-regular: granted in chain 0, and returning 100
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
 
 # Have waiting requests for kv-elastic too.
 set-has-waiting-requests work=kv-elastic v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
 
 # The kv-elastic waiting requests need 200 tokens each.
 set-return-value-from-granted work=kv-elastic v=200
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
 
 # Since there are regular requests waiting, those are granted first.
 return-grant work=kv-elastic v=400
@@ -495,66 +426,66 @@ kv-regular: granted in chain 0, and returning 100
 kv-regular: granted in chain 0, and returning 100
 kv-regular: granted in chain 0, and returning 100
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
 
 # No more regular requests waiting.
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: 99851, disk-read-tokens-deducted: 0
 
 # kv-elastic is granted.
 set-tokens io-tokens=100 disk-write-tokens=100300 tick-interval=250
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -199(-199), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -199(-199), disk-write-tokens-avail: 100100, disk-read-tokens-deducted: 0
 
 # Nothing is granted.
 set-tokens io-tokens=0 disk-write-tokens=50 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -199(-199), disk-write-tokens-avail: 50, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -199(-199), disk-write-tokens-avail: 50, disk-read-tokens-deducted: 0
 
 # Both kinds of tokens are decremented and become negative.
 set-tokens io-tokens=200 disk-write-tokens=50 tick-interval=250
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -199(-199), disk-write-tokens-avail: -150, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -199(-199), disk-write-tokens-avail: -150, disk-read-tokens-deducted: 0
 
 # IO tokens become positive. But no grant to elastic work since
 # elastic-disk-bw tokens are negative.
 set-tokens io-tokens=300 disk-write-tokens=0 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 101(101), disk-write-tokens-avail: -150, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 101(101), disk-write-tokens-avail: -150, disk-read-tokens-deducted: 0
 
 # Regular kv work can get tokens.
 try-get work=kv v=10
 ----
 kv-regular: tryGet(10) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 91(91), disk-write-tokens-avail: -160, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 91(91), disk-write-tokens-avail: -160, disk-read-tokens-deducted: 0
 
 # Elastic kv work cannot get tokens.
 try-get work=kv-elastic v=10
 ----
 kv-elastic: tryGet(10) returned false
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 91(91), disk-write-tokens-avail: -160, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 91(91), disk-write-tokens-avail: -160, disk-read-tokens-deducted: 0
 
 # Still negative. Add disk-write-tokens, but don't change io tokens.
 set-tokens io-tokens=91 disk-write-tokens=50 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 91(91), disk-write-tokens-avail: -110, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 91(91), disk-write-tokens-avail: -110, disk-read-tokens-deducted: 0
 
 # Add some io-tokens.
 set-tokens io-tokens=400 disk-write-tokens=0 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(400), disk-write-tokens-avail: -110, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(400), disk-write-tokens-avail: -110, disk-read-tokens-deducted: 0
 
 # Finally both tokens are positive and we grant until the elastic-disk-bw
 # tokens become negative.
@@ -562,7 +493,7 @@ set-tokens io-tokens=400 disk-write-tokens=120 tick-interval=250
 ----
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 200(200), disk-write-tokens-avail: -190, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 200(200), disk-write-tokens-avail: -190, disk-read-tokens-deducted: 0
 
 # Note that TestGranterBasic hard-codes the models to be 0.5x+50, so
 # 0.5*40+50=70. So 70-10=60 additional tokens are needed based on the write
@@ -572,12 +503,12 @@ GrantCoordinator:
 store-write-done work=kv-elastic orig-tokens=10 write-bytes=40
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 90(90), disk-write-tokens-avail: -300, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 90(90), disk-write-tokens-avail: -300, disk-read-tokens-deducted: 0
 
 store-write-done work=kv orig-tokens=400 write-bytes=40
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 370(370), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 370(370), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
 
 # Both tokens become positive, since 280 tokens are returned, so 2 work items
 # are admitted until the tokens become negative.
@@ -586,33 +517,33 @@ store-write-done work=kv-elastic orig-tokens=400 write-bytes=40
 kv-elastic: granted in chain 0, and returning 200
 kv-elastic: granted in chain 0, and returning 200
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 250(250), disk-write-tokens-avail: -140, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 250(250), disk-write-tokens-avail: -140, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=400 elastic-io-tokens=50 disk-write-tokens=120 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(50), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(50), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-elastic v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(50), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(50), disk-write-tokens-avail: -20, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=400 elastic-io-tokens=50 disk-write-tokens=120 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(50), disk-write-tokens-avail: 100, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(50), disk-write-tokens-avail: 100, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=400 elastic-io-tokens=101 disk-write-tokens=120 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 400(101), disk-write-tokens-avail: 120, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 400(101), disk-write-tokens-avail: 120, disk-read-tokens-deducted: 0
 
 try-get work=kv-elastic v=10
 ----
 kv-elastic: tryGet(10) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 390(91), disk-write-tokens-avail: 110, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 390(91), disk-write-tokens-avail: 110, disk-read-tokens-deducted: 0
 
 
 #####################################################################
@@ -626,26 +557,26 @@ GrantCoordinator:
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
 # Tokens set to 250 * 10 = 2500.
 set-tokens io-tokens=10 disk-write-tokens=10 tick-interval=1
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
 
 try-get work=kv-elastic v=2490
 ----
 kv-elastic: tryGet(2490) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 10(10), disk-write-tokens-avail: 10, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 10(10), disk-write-tokens-avail: 10, disk-read-tokens-deducted: 0
 
 # Initial tokens are effectively unlimited.
 try-get work=kv v=1
 ----
 kv-regular: tryGet(1) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 9(9), disk-write-tokens-avail: 9, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 9(9), disk-write-tokens-avail: 9, disk-read-tokens-deducted: 0
 
 # Set the io tokens to a smaller value. Note that since the IO tokens can
 # increase up to 6*250 and 10*250, we expect the tokens to increase to 15, and
@@ -653,39 +584,39 @@ GrantCoordinator:
 set-tokens io-tokens=6 disk-write-tokens=10 tick-interval=1
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 15(15), disk-write-tokens-avail: 19, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 15(15), disk-write-tokens-avail: 19, disk-read-tokens-deducted: 0
 
 # Subtract 10 tokens for elastic work. Note that disk-write-tokens-avail also decreases by 10.
 took-without-permission work=kv-elastic v=10
 ----
 kv-elastic: tookWithoutPermission(10)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 9, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 5(5), disk-write-tokens-avail: 9, disk-read-tokens-deducted: 0
 
 # Add 10 tokens.
 return-grant work=kv-elastic v=10
 ----
 kv-elastic: returnGrant(10)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 15(15), disk-write-tokens-avail: 19, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 15(15), disk-write-tokens-avail: 19, disk-read-tokens-deducted: 0
 
 # If io-tokens is 10, we expect the tokens to accumulate upto 2500. So, we call
 # set-tokens 250 times, and ensure that the tokens are capped at 2500.
 set-tokens-loop io-tokens=10 disk-write-tokens=10 loop=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
 
 # Setup waiting requests that want 1300 tokens each.
 set-has-waiting-requests work=kv-elastic v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv-elastic v=1300
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 2500(2500), disk-write-tokens-avail: 2500, disk-read-tokens-deducted: 0
 
 # Returning tokens triggers granting and 2 requests will be granted until the
 # tokens become <= 0.
@@ -695,32 +626,32 @@ kv-regular: returnGrant(1)
 kv-elastic: granted in chain 0, and returning 1300
 kv-elastic: granted in chain 0, and returning 1300
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
 
 # No tokens to give.
 try-get work=kv
 ----
 kv-regular: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-elastic v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: -99(-99), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
 
 # Negative tokens available should be respected on a subsequent call to set-tokens.
 set-tokens io-tokens=100 disk-write-tokens=0 tick-interval=1
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 1(1), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 1(1), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
 
 # No elastic tokens to give.
 try-get work=kv-elastic
 ----
 kv-elastic: tryGet(1) returned false
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 1(1), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 1(1), disk-write-tokens-avail: -99, disk-read-tokens-deducted: 0
 
 # Switch to an unloaded system which ticks at a 250ms rate. With this interval,
 # we expect the available tokens to be at most 50, 110 respectively. We see the
@@ -728,7 +659,7 @@ GrantCoordinator:
 set-tokens io-tokens=50 disk-write-tokens=110 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 11, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 11, disk-read-tokens-deducted: 0
 
 
 #####################################################################
@@ -736,50 +667,50 @@ GrantCoordinator:
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=50 disk-write-tokens=110 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 110, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 110, disk-read-tokens-deducted: 0
 
 # Try get disk write tokens for snapshots.
 try-get work=kv-snapshot v=50
 ----
 kv-snapshot: tryGet(50) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 # Set waiting requests for all store requesters. Then test priority ordering of grants.
 set-has-waiting-requests work=kv v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv v=10
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-elastic v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv-elastic v=5
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-snapshot v=true
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-return-value-from-granted work=kv-snapshot v=20
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 60, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=50 disk-write-tokens=10 tick-interval=250
 ----
@@ -789,41 +720,41 @@ kv-regular: granted in chain 0, and returning 10
 kv-regular: granted in chain 0, and returning 10
 kv-regular: granted in chain 0, and returning 10
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 0(0), disk-write-tokens-avail: -40, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 0(0), disk-write-tokens-avail: -40, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 0(0), disk-write-tokens-avail: -40, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 0(0), disk-write-tokens-avail: -40, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=50 disk-write-tokens=50 tick-interval=250
 ----
 kv-snapshot: granted in chain 0, and returning 20
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: -10, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: -10, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-snapshot v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: -10, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: -10, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=10 disk-write-tokens=15 tick-interval=250
 ----
 kv-elastic: granted in chain 0, and returning 5
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 0, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 5(5), disk-write-tokens-avail: 0, disk-read-tokens-deducted: 0
 
 set-has-waiting-requests work=kv-elastic v=false
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 0, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 5(5), disk-write-tokens-avail: 0, disk-read-tokens-deducted: 0
 
 # Return grant for snapshots, should only return disk tokens.
 return-grant work=kv-snapshot v=20
 ----
 kv-snapshot: returnGrant(20)
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 20, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 5(5), disk-write-tokens-avail: 20, disk-read-tokens-deducted: 0
 
 
 #####################################################################
@@ -831,18 +762,18 @@ GrantCoordinator:
 init-store-grant-coordinator
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
 # Tokens already deducted is 0. Any writes that occur will be considered error.
 adjust-disk-error actual-write-bytes=10 actual-read-bytes=10
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912910, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912910, disk-read-tokens-deducted: 0
 
 set-tokens io-tokens=50 disk-write-tokens=70 disk-read-tokens=20 tick-interval=250
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20
 
 # Tokens already deducted is 0. Any writes that occur will be considered error.
 # We accounted for 20B of reads, so reads in excess of that will be error. The
@@ -852,13 +783,13 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=20 actual-read-bytes=50
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 40, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 50(50), disk-write-tokens-avail: 40, disk-read-tokens-deducted: 0
 
 try-get work=kv v=10
 ----
 kv-regular: tryGet(10) returned true
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 40(40), disk-write-tokens-avail: 30, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 40(40), disk-write-tokens-avail: 30, disk-read-tokens-deducted: 0
 
 # +20B writes and +5B reads since last error accounting. Since we already
 # deducted 10B of write tokens during admission, the error here is 10B. We
@@ -866,4 +797,4 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=40 actual-read-bytes=55
 ----
 GrantCoordinator:
-(chain: id: 0 active: false index: 5) io-avail: 40(40), disk-write-tokens-avail: 15, disk-read-tokens-deducted: 0
+(chain: id: 0 active: false index: 3) io-avail: 40(40), disk-write-tokens-avail: 15, disk-read-tokens-deducted: 0

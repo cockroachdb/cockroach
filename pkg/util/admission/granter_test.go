@@ -29,7 +29,7 @@ import (
 // TestGranterBasic is a datadriven test with the following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
-// sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// sql-sql-tokens=<int>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
@@ -79,8 +79,6 @@ func TestGranterBasic(t *testing.T) {
 			opts.SQLKVResponseBurstTokens = int64(burstTokens)
 			d.ScanArgs(t, "sql-sql-tokens", &burstTokens)
 			opts.SQLSQLResponseBurstTokens = int64(burstTokens)
-			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
-			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
 				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
 				metrics *WorkQueueMetrics, opts workQueueOptions) requester {
@@ -499,10 +497,6 @@ func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
 		return int8(SQLKVResponseWork)
 	case "sql-sql-response":
 		return int8(SQLSQLResponseWork)
-	case "sql-leaf-start":
-		return int8(SQLStatementLeafStartWork)
-	case "sql-root-start":
-		return int8(SQLStatementRootStartWork)
 	case "kv-elastic":
 		return int8(numWorkKinds)
 	case "kv-snapshot":

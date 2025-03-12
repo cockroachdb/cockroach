@@ -28,13 +28,7 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 // cpuOverloadIndicator.
 type kvSlotAdjuster struct {
 	settings *cluster.Settings
-	// This is the slotGranter used for KVWork. In single-tenant settings, it
-	// is the only one we adjust using the periodic cpu overload signal. We
-	// don't adjust slots for SQLStatementLeafStartWork and
-	// SQLStatementRootStartWork using the periodic cpu overload signal since:
-	// - these are potentially long-lived work items and not CPU bound
-	// - we don't know how to coordinate adjustment of those slots and the KV
-	//   slots.
+	// This is the slotGranter used for KVWork.
 	granter     *slotGranter
 	minCPUSlots int
 	maxCPUSlots int
