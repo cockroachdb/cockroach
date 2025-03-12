@@ -2,6 +2,8 @@
 package parser
 
 import (
+  "strconv"
+
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/util/json"
@@ -126,6 +128,9 @@ func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
 
 %token <str> VARIABLE
 %token <str> TO
+
+%token <str> TRUE
+%token <str> FALSE
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -281,9 +286,25 @@ scalar_value:
   }
 | FCONST
   {
-    return unimplemented(jsonpathlex, "float consts")
+    f, err := strconv.ParseFloat($1, 64)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    j, err := json.FromFloat64(f)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarFloat, Value: j}
   }
-// TODO(normanchenn): support strings, bools, null.
+| TRUE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(true)}
+  }
+| FALSE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
+  }
+// TODO(normanchenn): support strings, null.
 ;
 
 any_identifier:
@@ -292,9 +313,11 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  LAX
+  FALSE
+| LAX
 | STRICT
 | TO
+| TRUE
 ;
 
 %%
