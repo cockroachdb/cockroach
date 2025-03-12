@@ -166,7 +166,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		`true`,
 		` true `,
 		`
-		
+
 		  true
 		  `,
 		`false`,
@@ -742,6 +742,79 @@ func TestBuildFixedKeysJSONObjectErrors(t *testing.T) {
 		_, err = b.Build()
 		require.Error(t, err)
 	})
+}
+
+func TestPartialObject(t *testing.T) {
+	base := map[string]JSON{
+		"a": mustMakeJSON(t, 1),
+		"b": mustMakeJSON(t, 2),
+	}
+	newKeys := []string{"c"}
+	po, err := NewPartialObject(base, newKeys)
+	require.NoError(t, err)
+
+	newData := map[string]JSON{"c": mustMakeJSON(t, 3)}
+	j, err := po.NewObject(newData)
+	require.NoError(t, err)
+
+	expected := mustMakeJSON(t, map[string]any{"a": 1, "b": 2, "c": 3})
+	require.JSONEq(t, expected.String(), j.String())
+
+	j2, err := po.NewObject(map[string]JSON{"c": mustMakeJSON(t, 4)})
+	require.NoError(t, err)
+	expected = mustMakeJSON(t, map[string]any{"a": 1, "b": 2, "c": 4})
+	require.JSONEq(t, expected.String(), j2.String())
+}
+
+func TestPartialObjectErrors(t *testing.T) {
+	t.Run("duplicate newKeys", func(t *testing.T) {
+		base := map[string]JSON{
+			"a": mustMakeJSON(t, 1),
+			"b": mustMakeJSON(t, 2),
+		}
+		newKeys := []string{"c", "c"}
+		_, err := NewPartialObject(base, newKeys)
+		require.Error(t, err)
+	})
+
+	t.Run("overlapping keys", func(t *testing.T) {
+		base := map[string]JSON{
+			"a": mustMakeJSON(t, 1),
+			"b": mustMakeJSON(t, 2),
+		}
+		newKeys := []string{"b"}
+		_, err := NewPartialObject(base, newKeys)
+		require.Error(t, err)
+	})
+
+	t.Run("wrong new key", func(t *testing.T) {
+		base := map[string]JSON{
+			"a": mustMakeJSON(t, 1),
+			"b": mustMakeJSON(t, 2),
+		}
+		newKeys := []string{"c"}
+		po, err := NewPartialObject(base, newKeys)
+		require.NoError(t, err)
+		_, err = po.NewObject(map[string]JSON{"d": mustMakeJSON(t, 3)})
+		require.Error(t, err)
+	})
+	t.Run("missing new key", func(t *testing.T) {
+		base := map[string]JSON{
+			"a": mustMakeJSON(t, 1),
+			"b": mustMakeJSON(t, 2),
+		}
+		newKeys := []string{"c"}
+		po, err := NewPartialObject(base, newKeys)
+		require.NoError(t, err)
+		_, err = po.NewObject(map[string]JSON{})
+		require.Error(t, err)
+	})
+}
+
+func mustMakeJSON(t *testing.T, v any) JSON {
+	j, err := MakeJSON(v)
+	require.NoError(t, err)
+	return j
 }
 
 func parseJSON(tb testing.TB, s string) JSON {

@@ -1582,8 +1582,12 @@ func getTestingEnrichedSourceData() enrichedSourceData {
 
 // getTestingEnrichedSourceProvider creates an enrichedSourceProvider
 // for use in tests.
-func getTestingEnrichedSourceProvider(opts changefeedbase.EncodingOptions) *enrichedSourceProvider {
-	return newEnrichedSourceProvider(opts, getTestingEnrichedSourceData())
+func getTestingEnrichedSourceProvider(
+	t require.TestingT, opts changefeedbase.EncodingOptions,
+) *enrichedSourceProvider {
+	esp, err := newEnrichedSourceProvider(opts, getTestingEnrichedSourceData())
+	require.NoError(t, err)
+	return esp
 }
 
 func checkSchema(actual []cdctest.TestFeedMessage) error {

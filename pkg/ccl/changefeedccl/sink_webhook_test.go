@@ -128,7 +128,7 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 
 	opts, err := getGenericWebhookSinkOptions().GetEncodingOptions()
 	require.NoError(t, err)
-	enc, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts}, getTestingEnrichedSourceProvider(opts), makeChangefeedTargets("foo"))
+	enc, err := makeJSONEncoder(ctx, jsonEncoderOptions{EncodingOptions: opts}, getTestingEnrichedSourceProvider(t, opts), makeChangefeedTargets("foo"))
 	require.NoError(t, err)
 
 	// test a resolved timestamp entry

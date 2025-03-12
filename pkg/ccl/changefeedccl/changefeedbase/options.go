@@ -943,12 +943,17 @@ func (e EncodingOptions) Validate() error {
 		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
 	}
 
-	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
+	// TODO(#140110): refactor this logic.
+	if (e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched) && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool
 		}{
 			{OptKeyInValue, e.KeyInValue},
+			// NOTE: topic_in_value is allowed for envelope=enriched, but has no
+			// effect. This is because the enriched envelope already has much of
+			// the information contained in the topic (ie table name), but this
+			// option is required for the webhook sink so we must permit it.
 			{OptTopicInValue, e.TopicInValue},
 			{OptUpdatedTimestamps, e.UpdatedTimestamps},
 			{OptMVCCTimestamps, e.MVCCTimestamps},
@@ -956,8 +961,8 @@ func (e EncodingOptions) Validate() error {
 		}
 		for _, v := range requiresWrap {
 			if v.b {
-				return errors.Errorf(`%s is only usable with %s=%s`,
-					v.k, OptEnvelope, OptEnvelopeWrapped)
+				return errors.Errorf(`%[1]s is only usable with %[2]s=%[3]s or %[2]s=%[4]s`,
+					v.k, OptEnvelope, OptEnvelopeWrapped, OptEnvelopeEnriched)
 			}
 		}
 	}
