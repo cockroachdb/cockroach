@@ -6,6 +6,9 @@
 package eval
 
 import (
+	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
@@ -28,14 +31,14 @@ func isBool(j json.JSON) bool {
 	}
 }
 
-func convertFromBool(b jsonpathBool) []json.JSON {
+func convertFromBool(b jsonpathBool) json.JSON {
 	switch b {
 	case jsonpathBoolTrue:
-		return []json.JSON{json.TrueJSONValue}
+		return json.TrueJSONValue
 	case jsonpathBoolFalse:
-		return []json.JSON{json.FalseJSONValue}
+		return json.FalseJSONValue
 	case jsonpathBoolUnknown:
-		return []json.JSON{json.NullJSONValue}
+		return json.NullJSONValue
 	default:
 		panic(errors.AssertionFailedf("unhandled jsonpath boolean type"))
 	}
@@ -54,22 +57,25 @@ func convertToBool(j json.JSON) jsonpathBool {
 
 func (ctx *jsonpathCtx) evalOperation(
 	op jsonpath.Operation, jsonValue json.JSON,
-) (jsonpathBool, error) {
+) (json.JSON, error) {
 	switch op.Type {
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
 		res, err := ctx.evalLogical(op, jsonValue)
 		if err != nil {
-			return jsonpathBoolUnknown, err
+			return convertFromBool(jsonpathBoolUnknown), err
 		}
-		return res, nil
+		return convertFromBool(res), nil
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
 		res, err := ctx.evalComparison(op, jsonValue, true /* unwrapRight */)
 		if err != nil {
-			return jsonpathBoolUnknown, err
+			return convertFromBool(jsonpathBoolUnknown), err
 		}
-		return res, nil
+		return convertFromBool(res), nil
+	case jsonpath.OpAdd, jsonpath.OpSub, jsonpath.OpMult,
+		jsonpath.OpDiv, jsonpath.OpMod:
+		return ctx.evalArithmetic(op, jsonValue)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
@@ -233,4 +239,44 @@ func execComparison(l, r json.JSON, op jsonpath.OperationType) (jsonpathBool, er
 		return jsonpathBoolTrue, nil
 	}
 	return jsonpathBoolFalse, nil
+}
+
+func (ctx *jsonpathCtx) evalArithmetic(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (json.JSON, error) {
+	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true)
+	if err != nil {
+		return nil, err
+	}
+	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(left) != 1 || left[0].Type() != json.NumberJSONType {
+		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired, "left operand of jsonpath operator %s is not a single numeric value", op.Type)
+	}
+	if len(right) != 1 || right[0].Type() != json.NumberJSONType {
+		return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired, "right operand of jsonpath operator %s is not a single numeric value", op.Type)
+	}
+
+	leftNum, _ := left[0].AsDecimal()
+	rightNum, _ := right[0].AsDecimal()
+	var res apd.Decimal
+	switch op.Type {
+	case jsonpath.OpAdd:
+		_, err = ctx.arithCtx.Add(&res, leftNum, rightNum)
+	case jsonpath.OpSub:
+		_, err = ctx.arithCtx.Sub(&res, leftNum, rightNum)
+	case jsonpath.OpMult:
+		_, err = ctx.arithCtx.Mul(&res, leftNum, rightNum)
+	case jsonpath.OpDiv:
+		_, err = ctx.arithCtx.Quo(&res, leftNum, rightNum)
+	case jsonpath.OpMod:
+		_, err = ctx.arithCtx.Rem(&res, leftNum, rightNum)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return json.FromDecimal(res), nil
 }

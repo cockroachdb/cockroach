@@ -6,6 +6,7 @@
 package eval
 
 import (
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -23,6 +24,8 @@ type jsonpathCtx struct {
 	root   json.JSON
 	vars   json.JSON
 	strict bool
+
+	arithCtx *apd.Context
 }
 
 func JsonpathQuery(
@@ -35,9 +38,10 @@ func JsonpathQuery(
 	expr := parsedPath.AST
 
 	ctx := &jsonpathCtx{
-		root:   target.JSON,
-		vars:   vars.JSON,
-		strict: expr.Strict,
+		root:     target.JSON,
+		vars:     vars.JSON,
+		strict:   expr.Strict,
+		arithCtx: tree.DecimalCtx,
 	}
 	// When silent is true, overwrite the strict mode.
 	if bool(silent) {
@@ -90,7 +94,7 @@ func (ctx *jsonpathCtx) eval(
 		if err != nil {
 			return nil, err
 		}
-		return convertFromBool(res), nil
+		return []json.JSON{res}, nil
 	case jsonpath.Filter:
 		return ctx.evalFilter(path, jsonValue, unwrap)
 	default:

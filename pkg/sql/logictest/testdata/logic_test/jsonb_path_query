@@ -701,13 +701,60 @@ SELECT jsonb_path_query('{"a": [[[[[[{"b": 1}]]]]]]}', '$.a ? (@.b == 1)');
 query empty
 SELECT jsonb_path_query('{"a": [[[{"b": 1}], [{"b": 2}]]]}', '$.a ? (@.b == 1)');
 
+query T
+SELECT jsonb_path_query('{}', '1 + 2');
+----
+3
+
+query T
+SELECT jsonb_path_query('{}', '1 - 2');
+----
+-1
+
+query T
+SELECT jsonb_path_query('{}', '1 * 2');
+----
+2
+
+query T
+SELECT jsonb_path_query('{}', '1 / 2');
+----
+0.50000000000000000000
+
+query T
+SELECT jsonb_path_query('{}', '3 % 2');
+----
+1
+
+query T
+SELECT jsonb_path_query('{"a": 4, "b": 5}', '$.a + $.b');
+----
+9
+
+query T
+SELECT jsonb_path_query('{"a": 4, "b": 5, "c": [9, 8, 7]}', '$.c[0] + $.c[1]');
+----
+17
+
+query T
+SELECT jsonb_path_query('{"a": 4, "b": 5, "c": [9, 8, 7]}', '$.c[$.b - $.a]');
+----
+8
+
+query T
+SELECT jsonb_path_query('{"a": 4, "b": 5, "c": [9, 8, 7]}', '$.c[$.b - $.a] + $var', '{"var": 10}');
+----
+18
+
+statement error pq: division by zero
+SELECT jsonb_path_query('{}', '1 / 0');
+
 # when string literals are supported
 # query T rowsort
 # SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}'::jsonb, '$.data ? (@.val == "a")'::jsonpath);
 # ----
 # {"num": 1, "val": "a"}
 # {"num": 3, "val": "a"}
-
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 

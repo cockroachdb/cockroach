@@ -194,6 +194,10 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %left AND
 %right NOT
 
+%left '+' '-'
+%left '*' '/' '%'
+%nonassoc '(' ')'
+
 %%
 
 jsonpath:
@@ -234,6 +238,30 @@ expr:
   accessor_expr
   {
     $$.val = jsonpath.Paths($1.pathArr())
+  }
+| '(' expr ')'
+  {
+    $$.val = $2.path()
+  }
+| expr '+' expr
+  {
+    $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
+  }
+| expr '-' expr
+  {
+    $$.val = binaryOp(jsonpath.OpSub, $1.path(), $3.path())
+  }
+| expr '*' expr
+  {
+    $$.val = binaryOp(jsonpath.OpMult, $1.path(), $3.path())
+  }
+| expr '/' expr
+  {
+    $$.val = binaryOp(jsonpath.OpDiv, $1.path(), $3.path())
+  }
+| expr '%' expr
+  {
+    $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
   }
 ;
 

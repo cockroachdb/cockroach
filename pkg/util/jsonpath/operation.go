@@ -19,6 +19,11 @@ const (
 	OpLogicalAnd
 	OpLogicalOr
 	OpLogicalNot
+	OpAdd
+	OpSub
+	OpMult
+	OpDiv
+	OpMod
 )
 
 var operationTypeStrings = map[OperationType]string{
@@ -31,6 +36,11 @@ var operationTypeStrings = map[OperationType]string{
 	OpLogicalAnd:       "&&",
 	OpLogicalOr:        "||",
 	OpLogicalNot:       "!",
+	OpAdd:              "+",
+	OpSub:              "-",
+	OpMult:             "*",
+	OpDiv:              "/",
+	OpMod:              "%",
 }
 
 type Operation struct {
