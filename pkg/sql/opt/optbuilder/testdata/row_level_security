@@ -624,3 +624,100 @@ upsert t1_explicit_pk
       │         └── CASE WHEN c1:9 IS NULL THEN column3:8 ELSE c3:11 END [as=upsert_c3:17]
       └── projections
            └── upsert_c3:17 != '2023-05-02' [as=rls:18]
+
+exec-ddl
+DROP POLICY p_insert ON t1_explicit_pk;
+----
+
+exec-ddl
+DROP POLICY p_update ON t1_explicit_pk;
+----
+
+# Verify multiple policies on a table
+
+exec-ddl
+CREATE POLICY p1 ON t1_explicit_pk AS PERMISSIVE USING (c1 = 1);
+----
+
+exec-ddl
+CREATE POLICY p2 ON t1_explicit_pk AS PERMISSIVE USING (c1 = 2);
+----
+
+exec-ddl
+CREATE POLICY p3 ON t1_explicit_pk AS PERMISSIVE USING (c1 = 3);
+----
+
+exec-ddl
+CREATE POLICY p4 ON t1_explicit_pk AS PERMISSIVE USING (c1 = 4);
+----
+
+exec-ddl
+CREATE POLICY p5 ON t1_explicit_pk AS RESTRICTIVE USING (c1 % 2 = 0);
+----
+
+exec-ddl
+CREATE POLICY p6 ON t1_explicit_pk AS RESTRICTIVE USING (c1 % 3 = 0);
+----
+
+build
+SELECT c2 FROM t1_explicit_pk WHERE c3 >= '2025-01-01';
+----
+project
+ ├── columns: c2:2
+ └── select
+      ├── columns: c1:1!null c2:2 c3:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── select
+      │    ├── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    ├── scan t1_explicit_pk
+      │    │    └── columns: c1:1!null c2:2 c3:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    └── filters
+      │         └── (((((c1:1 = 1) OR (c1:1 = 2)) OR (c1:1 = 3)) OR (c1:1 = 4)) AND ((c1:1 % 2) = 0)) AND ((c1:1 % 3) = 0)
+      └── filters
+           └── c3:3 >= '2025-01-01'
+
+build
+INSERT INTO t1_explicit_pk VALUES (8, 'eight', '2002-05-04');
+----
+insert t1_explicit_pk
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => c1:1
+ │    ├── column2:7 => c2:2
+ │    └── column3:8 => c3:3
+ ├── check columns: rls:9
+ └── project
+      ├── columns: rls:9!null column1:6!null column2:7!null column3:8!null
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    └── (8, 'eight', '2002-05-04')
+      └── projections
+           └── (((((column1:6 = 1) OR (column1:6 = 2)) OR (column1:6 = 3)) OR (column1:6 = 4)) AND ((column1:6 % 2) = 0)) AND ((column1:6 % 3) = 0) [as=rls:9]
+
+build
+UPDATE t1_explicit_pk SET c3 = now() WHERE c1 = 18;
+----
+update t1_explicit_pk
+ ├── columns: <none>
+ ├── fetch columns: c1:6 c2:7 c3:8
+ ├── update-mapping:
+ │    └── c3_new:11 => c3:3
+ ├── check columns: rls:12
+ └── project
+      ├── columns: rls:12!null c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10 c3_new:11
+      ├── project
+      │    ├── columns: c3_new:11 c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── select
+      │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    ├── scan t1_explicit_pk
+      │    │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    └── filters
+      │    │    │         └── (((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)
+      │    │    └── filters
+      │    │         └── c1:6 = 18
+      │    └── projections
+      │         └── now() [as=c3_new:11]
+      └── projections
+           └── (((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0) [as=rls:12]
