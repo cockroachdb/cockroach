@@ -1375,11 +1375,11 @@ type ConsistencyTestingKnobs struct {
 // that as nil.
 func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
-		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
-		sc.RaftElectionTimeoutJitterTicks > 0 && sc.RaftSchedulerConcurrency > 0 &&
-		sc.RaftSchedulerConcurrencyPriority > 0 && sc.RaftSchedulerShardSize > 0 &&
-		sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
+		sc.RaftTickInterval != 0 && sc.RaftTickSmearInterval >= 0 &&
+		sc.RaftHeartbeatIntervalTicks > 0 && sc.RaftElectionTimeoutTicks > 0 &&
+		sc.RaftReproposalTimeoutTicks > 0 && sc.RaftElectionTimeoutJitterTicks > 0 &&
+		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
+		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
 		sc.RangeFeedSchedulerConcurrency > 0 && sc.RangeFeedSchedulerShardSize > 0
 }
 
