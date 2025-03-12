@@ -3213,31 +3213,33 @@ DROP DATABASE other_db CASCADE
 query TTTT colnames,rowsort
 SELECT * FROM information_schema.user_privileges ORDER BY grantee,privilege_type
 ----
-grantee  table_catalog  privilege_type   is_grantable
-admin    test           ALL              NULL
-admin    test           BACKUP           NULL
-admin    test           CHANGEFEED       NULL
-admin    test           CREATE           NULL
-admin    test           DELETE           NULL
-admin    test           DROP             NULL
-admin    test           INSERT           NULL
-admin    test           REPLICATIONDEST  NULL
-admin    test           SELECT           NULL
-admin    test           TRIGGER          NULL
-admin    test           UPDATE           NULL
-admin    test           ZONECONFIG       NULL
-root     test           ALL              NULL
-root     test           BACKUP           NULL
-root     test           CHANGEFEED       NULL
-root     test           CREATE           NULL
-root     test           DELETE           NULL
-root     test           DROP             NULL
-root     test           INSERT           NULL
-root     test           REPLICATIONDEST  NULL
-root     test           SELECT           NULL
-root     test           TRIGGER          NULL
-root     test           UPDATE           NULL
-root     test           ZONECONFIG       NULL
+grantee  table_catalog  privilege_type     is_grantable
+admin    test           ALL                NULL
+admin    test           BACKUP             NULL
+admin    test           CHANGEFEED         NULL
+admin    test           CREATE             NULL
+admin    test           DELETE             NULL
+admin    test           DROP               NULL
+admin    test           INSERT             NULL
+admin    test           REPLICATIONDEST    NULL
+admin    test           REPLICATIONSOURCE  NULL
+admin    test           SELECT             NULL
+admin    test           TRIGGER            NULL
+admin    test           UPDATE             NULL
+admin    test           ZONECONFIG         NULL
+root     test           ALL                NULL
+root     test           BACKUP             NULL
+root     test           CHANGEFEED         NULL
+root     test           CREATE             NULL
+root     test           DELETE             NULL
+root     test           DROP               NULL
+root     test           INSERT             NULL
+root     test           REPLICATIONDEST    NULL
+root     test           REPLICATIONSOURCE  NULL
+root     test           SELECT             NULL
+root     test           TRIGGER            NULL
+root     test           UPDATE             NULL
+root     test           ZONECONFIG         NULL
 
 # information_schema.sequences
 
