@@ -178,11 +178,11 @@ type topLevelServer struct {
 	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
 	keyVisualizerServer *KeyVisualizerServer
 
-	recoveryServer         *loqrecovery.Server
-	raftTransport          *kvserver.RaftTransport
-	storelivenessTransport *storeliveness.Transport
-	stopper                *stop.Stopper
-	stopTrigger            *stopTrigger
+	recoveryServer *loqrecovery.Server
+	raftTransport  *kvserver.RaftTransport
+	storeLiveness  *storeliveness.NodeContainer
+	stopper        *stop.Stopper
+	stopTrigger    *stopTrigger
 
 	debug          *debug.Server
 	kvProber       *kvprober.Prober
@@ -657,10 +657,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
 
-	storeLivenessTransport := storeliveness.NewTransport(
-		cfg.AmbientCtx, stopper, clock, kvNodeDialer, grpcServer.Server, nil, /* knobs */
-	)
-	nodeRegistry.AddMetricStruct(storeLivenessTransport.Metrics())
+	var storeLiveness *storeliveness.NodeContainer
+	{
+		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
+		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
+		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
+		transport := storeliveness.NewTransport(
+			cfg.AmbientCtx, stopper, clock, kvNodeDialer, grpcServer.Server, nil, /* knobs */
+		)
+		nodeRegistry.AddMetricStruct(transport.Metrics())
+		var knobs *storeliveness.TestingKnobs
+		if storeKnobs := cfg.TestingKnobs.Store; storeKnobs != nil {
+			knobs = storeKnobs.(*kvserver.StoreTestingKnobs).StoreLivenessKnobs
+		}
+		storeLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
+	}
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -867,15 +878,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		DB:                           db,
 		Gossip:                       g,
 		NodeLiveness:                 nodeLiveness,
+		StoreLiveness:                storeLiveness,
+		StorePool:                    storePool,
 		Transport:                    raftTransport,
-		StoreLivenessTransport:       storeLivenessTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,
 		ScanInterval:                 cfg.ScanInterval,
 		ScanMinIdleTime:              cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
-		StorePool:                    storePool,
 		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
 		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:          tsDB,
@@ -1291,7 +1302,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tsServer:                  &sTS,
 		recoveryServer:            recoveryServer,
 		raftTransport:             raftTransport,
-		storelivenessTransport:    storeLivenessTransport,
+		storeLiveness:             storeLiveness,
 		stopper:                   stopper,
 		stopTrigger:               stopTrigger,
 		debug:                     debugServer,
