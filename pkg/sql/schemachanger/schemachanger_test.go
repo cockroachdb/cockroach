@@ -1105,3 +1105,44 @@ CREATE TABLE t2(n int);
 		})
 	}
 }
+
+// TestPreventCreateDropConcurrently confirms that objects cannot be
+// created under a schema that is being dropped.
+func TestPreventCreateDropConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This would work with secondary tenants as well, but the span config
+		// limited logic can hit transaction retries on the span_count table.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	runner.Exec(t, `
+CREATE SCHEMA other_schema;
+CREATE SCHEMA complex_drop_schema;
+CREATE TABLE complex_drop_schema.t1(n int UNIQUE);
+CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
+`)
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';`)
+	runner.ExpectErr(t, " \\d+ was paused before it completed with reason: pause point \"newschemachanger.before.exec\" hit",
+		"DROP SCHEMA complex_drop_schema CASCADE;")
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.Exec("CREATE SEQUENCE  complex_drop_schema.sc1")
+		return err
+	})
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	runner.Exec(t,
+		`RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);`)
+	require.Error(t,
+		grp.Wait(),
+		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
+}

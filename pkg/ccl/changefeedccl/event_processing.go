@@ -104,7 +104,7 @@ func newEventConsumer(
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		sourceData := enrichedSourceData{}
 		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
-			sourceData, err = newEnrichedSourceData(ctx, cfg, spec)
+			sourceData, err = newEnrichedSourceData(ctx, cfg, spec, sink.getConcreteType())
 			if err != nil {
 				return nil, err
 			}

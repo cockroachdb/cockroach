@@ -6,6 +6,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -298,6 +300,12 @@ func assertPayloadsBaseErr(
 		}
 	}
 
+	if envelopeType == changefeedbase.OptEnvelopeEnriched {
+		if err := checkSchema(actual); err != nil {
+			return err
+		}
+	}
+
 	// strip timestamps after checking per-key ordering since check uses timestamps
 	if stripTs {
 		// format again with timestamps stripped
@@ -313,6 +321,7 @@ func assertPayloadsBaseErr(
 		return errors.Newf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
 	}
+
 	return nil
 }
 
@@ -1575,4 +1584,43 @@ func getTestingEnrichedSourceData() enrichedSourceData {
 // for use in tests.
 func getTestingEnrichedSourceProvider(opts changefeedbase.EncodingOptions) *enrichedSourceProvider {
 	return newEnrichedSourceProvider(opts, getTestingEnrichedSourceData())
+}
+
+func checkSchema(actual []cdctest.TestFeedMessage) error {
+	for _, tm := range actual {
+		var msg map[string]any
+		if err := gojson.Unmarshal(tm.Value, &msg); err != nil {
+			return errors.Wrapf(err, `unmarshal: %+v`, tm)
+		}
+
+		if _, ok := msg["schema"]; !ok {
+			return nil
+		}
+		schemaMap := msg["schema"].(map[string]any)
+		schemaBs, err := gojson.Marshal(schemaMap)
+		if err != nil {
+			return errors.Wrapf(err, `marshal: %+v`, schemaMap)
+		}
+		var schema kcjsonschema.Schema
+		if err := gojson.Unmarshal(schemaBs, &schema); err != nil {
+			return errors.Wrapf(err, `unmarshal: %+v`, schema)
+		}
+
+		// Re-parse payload with UseNumber since that's what this method expects.
+		payloadBs, err := gojson.Marshal(msg["payload"])
+		if err != nil {
+			return errors.Wrapf(err, `marshal: %+v`, msg["payload"])
+		}
+		var payload any
+		dec := gojson.NewDecoder(bytes.NewReader(payloadBs))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil {
+			return errors.Wrapf(err, `decode: %+v`, payloadBs)
+		}
+
+		if err := kcjsonschema.TestingMatchesJSON(schema, payload); err != nil {
+			return err
+		}
+	}
+	return nil
 }

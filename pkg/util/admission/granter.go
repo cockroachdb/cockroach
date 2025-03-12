@@ -70,7 +70,7 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	}
 	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement ||
 		// See https://github.com/cockroachdb/cockroach/issues/142262.
-		!grunning.Supported() {
+		!grunning.Supported {
 		sg.usedSlots++
 		if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
 			sg.exhaustedStart = timeutil.Now()

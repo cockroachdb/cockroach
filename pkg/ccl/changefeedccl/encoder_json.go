@@ -202,7 +202,7 @@ func (e *jsonEncoder) EncodeKey(ctx context.Context, row cdcevent.Row) (enc []by
 			return nil, err
 		}
 	}
-	j, err := e.versionEncoder(row.EventDescriptor, false).encodeKeyRaw(ctx, keys, row.Metadata)
+	j, err := e.versionEncoder(row.EventDescriptor, false).encodeKeyRaw(ctx, keys, row.Metadata, false)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,10 @@ func (e *versionEncoder) makeKeySchema(
 		return nil, err
 	}
 
-	j := schema.AsJSON()
+	j, err := schema.AsJSON()
+	if err != nil {
+		return nil, err
+	}
 	e.keySchemaCache.Add(cacheKey, j)
 	return j, nil
 }
@@ -237,12 +240,12 @@ func (e *versionEncoder) makeKeySchema(
 // encodeKeyRawAsObject encodes the key as a JSON object. if
 // includeKeyObjectSchema is true, the key is nested under the "payload" key.
 func (e *versionEncoder) encodeKeyRawAsObject(
-	ctx context.Context, it cdcevent.Iterator, meta cdcevent.Metadata,
+	ctx context.Context, it cdcevent.Iterator, meta cdcevent.Metadata, noSchema bool,
 ) (json.JSON, error) {
 	var err error
 	var outerBuilder *json.FixedKeysObjectBuilder
 	kb := json.NewObjectBuilder(1)
-	if e.includeKeyObjectSchema {
+	if e.includeKeyObjectSchema && !noSchema {
 		outerBuilder, err = json.NewFixedKeysObjectBuilder([]string{"payload", "schema"})
 		if err != nil {
 			return nil, err
@@ -294,18 +297,18 @@ func (e *versionEncoder) encodeKeyRawAsArray(
 }
 
 func (e *versionEncoder) encodeKeyRaw(
-	ctx context.Context, it cdcevent.Iterator, meta cdcevent.Metadata,
+	ctx context.Context, it cdcevent.Iterator, meta cdcevent.Metadata, noSchema bool,
 ) (json.JSON, error) {
 	if e.encodeKeyAsObject {
-		return e.encodeKeyRawAsObject(ctx, it, meta)
+		return e.encodeKeyRawAsObject(ctx, it, meta, noSchema)
 	}
 	return e.encodeKeyRawAsArray(ctx, it)
 }
 
 func (e *versionEncoder) encodeKeyInValue(
-	ctx context.Context, updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
+	ctx context.Context, updated cdcevent.Row, b *json.FixedKeysObjectBuilder, noSchema bool,
 ) error {
-	keyJSON, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn(), updated.Metadata)
+	keyJSON, err := e.encodeKeyRaw(ctx, updated.ForEachKeyColumn(), updated.Metadata, noSchema)
 	if err != nil {
 		return err
 	}
@@ -458,7 +461,7 @@ func (e *jsonEncoder) initRawEnvelope(ctx context.Context) error {
 		}
 
 		if e.keyInValue {
-			if err := ve.encodeKeyInValue(ctx, updated, metaBuilder); err != nil {
+			if err := ve.encodeKeyInValue(ctx, updated, metaBuilder, false); err != nil {
 				return nil, err
 			}
 		}
@@ -528,7 +531,7 @@ func (e *jsonEncoder) initWrappedEnvelope(ctx context.Context) error {
 		}
 
 		if e.keyInValue {
-			if err := ve.encodeKeyInValue(ctx, updated, b); err != nil {
+			if err := ve.encodeKeyInValue(ctx, updated, b, false); err != nil {
 				return nil, err
 			}
 		}
@@ -601,7 +604,7 @@ func (e *jsonEncoder) makeValueSchema(updated, prev cdcevent.Row) (json.JSON, er
 		return nil, err
 	}
 
-	var before, after, source *kcjsonschema.Schema
+	var before, after, source, keyInValue *kcjsonschema.Schema
 	after, err = ptr(kcjsonschema.NewSchemaFromIterator(updated.ForEachColumn(), fmt.Sprintf("%s.after.value", sqlName)))
 	if err != nil {
 		return nil, err
@@ -618,7 +621,17 @@ func (e *jsonEncoder) makeValueSchema(updated, prev cdcevent.Row) (json.JSON, er
 		source, _ = ptr(e.enrichedEnvelopeSourceProvider.KafkaConnectJSONSchema(), nil)
 	}
 
-	envelope := kcjsonschema.NewEnrichedEnvelope(before, after, source).AsJSON()
+	// NOTE: this is option (2) cc @rohan-joshi
+	if e.keyInValue {
+		keyInValue, err = ptr(kcjsonschema.NewSchemaFromIterator(updated.ForEachKeyColumn(), fmt.Sprintf("%s.key", sqlName)))
+		if err != nil {
+			return nil, err
+		}
+	}
+	envelope, err := kcjsonschema.NewEnrichedEnvelope(before, after, source, keyInValue).AsJSON()
+	if err != nil {
+		return nil, err
+	}
 
 	e.valueSchemaCache.Add(ck, envelope)
 	return envelope, nil
@@ -666,7 +679,8 @@ func (e *jsonEncoder) initEnrichedEnvelope(ctx context.Context) error {
 		}
 
 		if e.keyInValue {
-			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder); err != nil {
+			// NOTE: this is option (2) cc @rohan-joshi
+			if err := ve.encodeKeyInValue(ctx, updated, payloadBuilder, true); err != nil {
 				return nil, err
 			}
 		}

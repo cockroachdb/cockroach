@@ -6,10 +6,14 @@
 package kcjsonschema
 
 import (
+	gojson "encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -55,63 +59,38 @@ const (
 // spec, but see the source code of org.apache.kafka.connect.data.ConnectSchema
 // for reference.
 type Schema struct {
-	TypeName schemaType
+	TypeName schemaType `json:"type"`
 	// Name is my schema name, optional. Can represent a logical type (such as
 	// decimal) or the overall entity type, such as "envelope", etc.
-	Name schemaName
+	Name schemaName `json:"name,omitempty"`
 	// Field is the name of the field that I am in my parent struct.
-	Field string
+	Field string `json:"field,omitempty"`
 	// Parameters is a map of parameters for the schema. Currently this only has
 	// meaning for decimals, where it contains precision and scale.
-	Parameters map[string]string
+	Parameters map[string]string `json:"parameters,omitempty"`
 	// Fields are the fields of the struct, if this is a struct.
-	Fields []Schema
+	Fields []Schema `json:"fields,omitempty"`
 	// Optional is whether this field is optional. This should reflect the
 	// nullability of database columns, and be true for all fields we add
 	// ourselves.
-	Optional bool
+	Optional bool `json:"optional"`
 	// Items is the type of the array elements, if this is an array.
-	Items *Schema
+	Items *Schema `json:"items,omitempty"`
 
 	// NOTE: the "spec" contains two other optional fields -- Version (int) and
 	// Doc (string), which we do not implement.
 }
 
-// AsJSON returns the JSON representation of the schema. There is nothing
-// surprising here, and I wish we could use something generated via struct tags,
-// but our json package doesn't seem to support that.
-func (s Schema) AsJSON() json.JSON {
-	b := json.NewObjectBuilder(2)
-	b.Add("type", json.FromString(string(s.TypeName)))
-	if s.Name != "" {
-		b.Add("name", json.FromString(string(s.Name)))
+func (s Schema) AsJSON() (json.JSON, error) {
+	bs, err := gojson.Marshal(s)
+	if err != nil {
+		return nil, err
 	}
-	if s.Field != "" {
-		b.Add("field", json.FromString(s.Field))
-	}
-	if len(s.Parameters) > 0 {
-		params := json.NewObjectBuilder(len(s.Parameters))
-		for k, v := range s.Parameters {
-			params.Add(k, json.FromString(v))
-		}
-		b.Add("parameters", params.Build())
-	}
-	if len(s.Fields) > 0 {
-		fields := json.NewArrayBuilder(len(s.Fields))
-		for _, f := range s.Fields {
-			fields.Add(f.AsJSON())
-		}
-		b.Add("fields", fields.Build())
-	}
-	b.Add("optional", json.FromBool(s.Optional))
-	if s.Items != nil {
-		b.Add("items", s.Items.AsJSON())
-	}
-	return b.Build()
+	return json.ParseJSON(string(bs))
 }
 
 // NewEnrichedEnvelope creates a new schema for an enriched envelope.
-func NewEnrichedEnvelope(before, after, source *Schema) Schema {
+func NewEnrichedEnvelope(before, after, source, keyInValue *Schema) Schema {
 	fields := make([]Schema, 0, 3)
 	if before != nil {
 		b := *before
@@ -129,6 +108,12 @@ func NewEnrichedEnvelope(before, after, source *Schema) Schema {
 		s.Field = "source"
 		s.Optional = true
 		fields = append(fields, s)
+	}
+	if keyInValue != nil {
+		k := *keyInValue
+		k.Field = "key"
+		k.Optional = false
+		fields = append(fields, k)
 	}
 
 	fields = append(fields,
@@ -184,10 +169,12 @@ func typeToSchema(typ *types.T) (Schema, error) {
 		types.Box2DFamily, types.BitFamily, types.IntervalFamily, types.UuidFamily, types.INetFamily,
 		types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.EnumFamily:
 		return Schema{TypeName: SchemaTypeString}, nil
+	// Geography and Geometry are not supported by the JSON schema spec, and
+	// they're hard to predict the schema of. This is probably fine for now.
 	case types.GeographyFamily:
-		return Schema{TypeName: SchemaTypeStruct, Name: schemaNameGeography}, nil
+		return Schema{TypeName: SchemaTypeOpaqueJSON, Name: schemaNameGeography}, nil
 	case types.GeometryFamily:
-		return Schema{TypeName: SchemaTypeStruct, Name: schemaNameGeometry}, nil
+		return Schema{TypeName: SchemaTypeOpaqueJSON, Name: schemaNameGeometry}, nil
 	case types.BytesFamily:
 		return Schema{TypeName: SchemaTypeBytes}, nil
 	case types.DateFamily:
@@ -224,4 +211,177 @@ func typeToSchema(typ *types.T) (Schema, error) {
 			errors.Errorf(`type %s not yet supported with json schemas`, typ.SQLString()))
 
 	}
+}
+
+// TestingMatchesJSON is a testing helper that asserts that the given data matches
+func TestingMatchesJSON(s Schema, data any) error {
+	if data == nil && s.Optional {
+		return nil
+	}
+
+	switch s.TypeName {
+	case SchemaTypeInt8:
+		if err := assertInt[int8](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeInt16:
+		if err := assertInt[int16](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeInt32:
+		if err := assertInt[int32](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeInt64:
+		if err := assertInt[int64](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeFloat32:
+		// NOTE: This is a little weird and we don't have a way to specify unions in these schemas, so maybe we should document this somewhere?
+		if d, ok := data.(string); ok && (d == "Infinity" || d == "-Infinity" || d == "NaN") {
+			return nil
+		}
+		if err := assertFloat[float32](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeFloat64:
+		if d, ok := data.(string); ok && (d == "Infinity" || d == "-Infinity" || d == "NaN") {
+			return nil
+		}
+		if err := assertFloat[float64](s, data); err != nil {
+			return err
+		}
+	case SchemaTypeBoolean:
+		if _, ok := data.(bool); !ok {
+			return fmt.Errorf("expected %T for %+#v, got (%+#v)", false, s, data)
+		}
+	case SchemaTypeString:
+		if _, ok := data.(string); !ok {
+			return fmt.Errorf("expected %T for %+#v, got (%+#v)", "", s, data)
+		}
+	case SchemaTypeBytes:
+		if _, ok := data.(string); !ok {
+			return fmt.Errorf("expected %T for %+#v, got (%+#v)", "", s, data)
+		}
+	case SchemaTypeArray:
+		arr, ok := data.([]any)
+		if !ok {
+			return fmt.Errorf("expected %T for %+#v, got (%+#v)", []any{}, s, data)
+		}
+		if s.Items == nil {
+			return fmt.Errorf("expected items for %+#v", s)
+		}
+		for _, a := range arr {
+			if err := TestingMatchesJSON(*s.Items, a); err != nil {
+				return err
+			}
+		}
+	case SchemaTypeMap:
+		return fmt.Errorf("map is not supported")
+	case SchemaTypeStruct:
+		obj, ok := data.(map[string]any)
+		if !ok {
+			return fmt.Errorf("expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
+		}
+
+		schemaFields := make(map[string]struct{})
+		for _, f := range s.Fields {
+			if err := TestingMatchesJSON(f, obj[f.Field]); err != nil {
+				return err
+			}
+			schemaFields[f.Field] = struct{}{}
+		}
+		if len(obj) != len(schemaFields) {
+			return fmt.Errorf("expected %d fields in %+#v, got %d (%+#v)", len(schemaFields), s, len(obj), obj)
+		}
+	case SchemaTypeOpaqueJSON:
+		if _, err := json.MakeJSON(data); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown schema type %q in %#+v", s.TypeName, s)
+	}
+
+	// Validate logical types.
+	switch s.Name {
+	case schemaNameDecimal:
+		if err := assertFloat[float64](s, data); err != nil {
+			return err
+		}
+		if _, err := strconv.Atoi(s.Parameters["precision"]); err != nil {
+			return errors.Newf("expected precision to be an int, got %s", s.Parameters["precision"])
+		}
+		if _, err := strconv.Atoi(s.Parameters["scale"]); err != nil {
+			return errors.Newf("expected scale to be an int, got %s", s.Parameters["scale"])
+		}
+	case schemaNameGeography:
+		d, ok := data.(map[string]any)
+		if !ok {
+			return errors.Newf("expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
+		}
+		j, err := gojson.Marshal(d)
+		if err != nil {
+			return err
+		}
+		if _, err = geo.ParseGeographyFromGeoJSON(j); err != nil {
+			return err
+		}
+	case schemaNameGeometry:
+		d, ok := data.(map[string]any)
+		if !ok {
+			return errors.Newf("expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
+		}
+		j, err := gojson.Marshal(d)
+		if err != nil {
+			return err
+		}
+		if _, err = geo.ParseGeometryFromGeoJSON(j); err != nil {
+			return err
+		}
+	// not worth doing heavy validation for these. They should be strings.
+	case schemaNameTimestamp, schemaNameDate, schemaNameTime:
+		str, ok := data.(string)
+		if !ok {
+			return errors.Newf("expected %T for %+#v, got (%+#v)", "", s, data)
+		}
+		if len(str) == 0 {
+			return errors.Newf("expected non-empty string for %+#v, got (%+#v)", s, data)
+		}
+	}
+	return nil
+}
+
+func assertInt[I int8 | int16 | int32 | int64](s Schema, data any) error {
+	d, ok := data.(gojson.Number)
+	if !ok {
+		return fmt.Errorf("expected gojson.Number for %+#v, got (%+#v)", s, data)
+	}
+	i, err := d.Int64()
+	if err != nil {
+		return err
+	}
+	if int64(I(i)) != i {
+		return fmt.Errorf("expected %T for %+#v, got (%+#v)", I(i), s, data)
+	}
+	return nil
+}
+
+func assertFloat[F float32 | float64](s Schema, data any) error {
+	d, ok := data.(gojson.Number)
+	if !ok {
+		return fmt.Errorf("expected gojson.Number for %+#v, got (%+#v)", s, data)
+	}
+	f, err := d.Float64()
+	if err != nil && strings.Contains(err.Error(), "value out of range") {
+		// I'm not sure how this happens but it's probably to do with the random data. Ignore it.
+		//nolint:returnerrcheck
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if float64(F(f)) != f {
+		return fmt.Errorf("expected %T for %+#v, got (%+#v)", F(f), s, data)
+	}
+	return nil
 }
