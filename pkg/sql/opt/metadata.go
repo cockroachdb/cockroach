@@ -335,7 +335,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta
-	md.rlsMeta.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	md.rlsMeta.PoliciesApplied = make(map[TableID]PoliciesApplied)
 	for id, policies := range from.rlsMeta.PoliciesApplied {
 		md.rlsMeta.PoliciesApplied[id] = policies.Copy()
 	}
