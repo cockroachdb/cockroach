@@ -232,6 +232,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.FunctionBody:
 			dropCascadeDescriptor(next, t.FunctionID)
+		case *scpb.TriggerFunctionCall:
+			dropCascadeDescriptor(next, t.FuncID)
 		case *scpb.TriggerDeps:
 			dropCascadeDescriptor(next, t.TableID)
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
