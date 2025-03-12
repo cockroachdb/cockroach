@@ -33,7 +33,7 @@ type RowLevelSecurityMeta struct {
 
 	// PoliciesApplied is the set of policies that were applied for each relation
 	// in the query.
-	PoliciesApplied map[TableID]PolicyIDSet
+	PoliciesApplied map[TableID]PoliciesApplied
 }
 
 func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole bool) {
@@ -42,7 +42,7 @@ func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole
 	}
 	r.User = user
 	r.HasAdminRole = hasAdminRole
-	r.PoliciesApplied = make(map[TableID]PolicyIDSet)
+	r.PoliciesApplied = make(map[TableID]PoliciesApplied)
 	r.IsInitialized = true
 }
 
@@ -56,15 +56,47 @@ func (r *RowLevelSecurityMeta) Clear() {
 // via the AddPolicyUse call.
 func (r *RowLevelSecurityMeta) AddTableUse(tableID TableID) {
 	if _, found := r.PoliciesApplied[tableID]; !found {
-		r.PoliciesApplied[tableID] = PolicyIDSet{}
+		r.PoliciesApplied[tableID] = PoliciesApplied{
+			Filter: PolicyIDSet{},
+			Check:  PolicyIDSet{},
+		}
 	}
 }
 
-// AddPoliciesUsed is used to indicate the given set of policyID of a table were
-// applied in the query.
-func (r *RowLevelSecurityMeta) AddPoliciesUsed(tableID TableID, policies PolicyIDSet) {
-	s := r.PoliciesApplied[tableID]
-	r.PoliciesApplied[tableID] = s.Union(policies)
+// AddPoliciesUsed indicates that the given set of policy IDs for a table were
+// applied in the query. The applyFilterExpr parameter determines if the policies
+// were used to filter existing rows. If false, it implies the policy was used
+// to build a check constraint.
+func (r *RowLevelSecurityMeta) AddPoliciesUsed(
+	tableID TableID, policies PolicyIDSet, applyFilterExpr bool,
+) {
+	a := r.PoliciesApplied[tableID]
+	if applyFilterExpr {
+		s := r.PoliciesApplied[tableID].Filter
+		a.Filter = s.Union(policies)
+	} else {
+		s := r.PoliciesApplied[tableID].Check
+		a.Check = s.Union(policies)
+	}
+	r.PoliciesApplied[tableID] = a
+}
+
+// PoliciesApplied stores the set of policies that were applied to a table.
+type PoliciesApplied struct {
+	// Filter is the set of policy IDs that were applied to filter out existing
+	// rows. The USING expression in each policy is used to derive the filter.
+	Filter PolicyIDSet
+	// Check is the set of policy IDs that were applied as check constraints to
+	// block new rows that violate the policy. The check constraint was built
+	// with the WITH CHECK expression or USING expression of each policy.
+	Check PolicyIDSet
+}
+
+func (p *PoliciesApplied) Copy() PoliciesApplied {
+	return PoliciesApplied{
+		Filter: p.Filter.Copy(),
+		Check:  p.Check.Copy(),
+	}
 }
 
 // PolicyIDSet stores an unordered set of policy ids.

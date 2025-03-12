@@ -648,32 +648,42 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 	return ep, outputCols, nil
 }
 
-// tryBuildDeleteRange attempts to construct a fast DeleteRange execution for a
-// logical Delete operator, checking all required conditions. See
-// exec.Factory.ConstructDeleteRange.
-func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool, _ error) {
+// canUseDeleteRange checks whether the memo.DeleteExpr can be built into
+// a delete range plan.
+func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 	// If rows need to be returned from the Delete operator (i.e. RETURNING
 	// clause), no fast path is possible, because row values must be fetched.
 	if del.NeedResults() {
-		return execPlan{}, false, nil
+		return false
 	}
 
 	// Check for simple Scan input operator without a limit; anything else is not
 	// supported by a range delete.
 	if scan, ok := del.Input.(*memo.ScanExpr); !ok || scan.HardLimit != 0 {
-		return execPlan{}, false, nil
+		return false
 	}
 
 	tab := b.mem.Metadata().Table(del.Table)
 	if tab.DeletableIndexCount() > 1 {
 		// Any secondary index prevents fast path, because separate delete batches
 		// must be formulated to delete rows from them.
-		return execPlan{}, false, nil
+		return false
 	}
 
 	// We can use the fast path if we don't need to buffer the input to the
 	// delete operator (for foreign key checks/cascades).
 	if del.WithID != 0 {
+		return false
+	}
+
+	return true
+}
+
+// tryBuildDeleteRange attempts to construct a fast DeleteRange execution for a
+// logical Delete operator, checking all required conditions. See
+// exec.Factory.ConstructDeleteRange.
+func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool, _ error) {
+	if !b.canUseDeleteRange(del) {
 		return execPlan{}, false, nil
 	}
 
