@@ -236,6 +236,8 @@ type JSON interface {
 	HasContainerLeaf() (bool, error)
 }
 
+var EmptyJSONValue = NewObjectBuilder(0).Build()
+
 type jsonTrue struct{}
 
 // TrueJSONValue is JSON `true`
