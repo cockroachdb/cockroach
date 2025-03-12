@@ -56,7 +56,7 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
-	return s.cfg.StoreLivenessTransport
+	return s.cfg.StoreLiveness.Transport
 }
 
 func (s *Store) FindTargetAndTransferLease(

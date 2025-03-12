@@ -45,6 +45,7 @@ type SupportManager struct {
 	settings              *clustersettings.Settings
 	stopper               *stop.Stopper
 	clock                 *hlc.Clock
+	heartbeatTicker       *timeutil.BroadcastTicker // optional
 	sender                MessageSender
 	receiveQueue          receiveQueue
 	storesToAdd           storesToAdd
@@ -68,6 +69,7 @@ func NewSupportManager(
 	settings *clustersettings.Settings,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
+	heartbeatTicker *timeutil.BroadcastTicker,
 	sender MessageSender,
 	knobs *SupportManagerKnobs,
 ) *SupportManager {
@@ -81,6 +83,7 @@ func NewSupportManager(
 		settings:              settings,
 		stopper:               stopper,
 		clock:                 clock,
+		heartbeatTicker:       heartbeatTicker,
 		sender:                sender,
 		knobs:                 knobs,
 		receiveQueue:          newReceiveQueue(),
@@ -222,7 +225,12 @@ func (sm *SupportManager) onRestart(ctx context.Context) error {
 // stores. Doing so in a single goroutine serializes these actions and
 // simplifies the concurrency model.
 func (sm *SupportManager) startLoop(ctx context.Context) {
-	heartbeatTicker := time.NewTicker(sm.options.HeartbeatInterval)
+	if sm.heartbeatTicker == nil {
+		// Tests may not supply a node-wide broadcast ticker. Create one on the fly.
+		sm.heartbeatTicker = timeutil.NewBroadcastTicker(sm.options.HeartbeatInterval)
+		defer sm.heartbeatTicker.Stop()
+	}
+	heartbeatTicker := sm.heartbeatTicker.NewTicker()
 	defer heartbeatTicker.Stop()
 
 	supportExpiryTicker := time.NewTicker(sm.options.SupportExpiryInterval)

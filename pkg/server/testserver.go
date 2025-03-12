@@ -571,7 +571,7 @@ func (ts *testServer) RaftTransport() interface{} {
 // StoreLivenessTransport is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) StoreLivenessTransport() interface{} {
 	if ts != nil {
-		return ts.storelivenessTransport
+		return ts.storeLiveness.Transport
 	}
 	return nil
 }
