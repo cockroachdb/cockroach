@@ -140,21 +140,29 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 }
 
 func (h *testHelper) waitForSuccessfulScheduledJob(t *testing.T, scheduleID jobspb.ScheduleID) {
-	query := "SELECT id FROM " + h.env.SystemJobsTableName() +
-		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
+	t.Helper()
+	query := "SELECT status FROM " + h.env.SystemJobsTableName() +
+		" WHERE created_by_type=$1 AND created_by_id=$2 ORDER BY created DESC LIMIT 1"
 
 	testutils.SucceedsSoon(t, func() error {
 		// Force newly created job to be adopted and verify it succeeds.
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-		var unused int64
-		return h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&unused)
+		var status string
+		err := h.sqlDB.DB.QueryRowContext(context.Background(),
+			query, jobs.CreatedByScheduledJobs, scheduleID).Scan(&status)
+		if err != nil {
+			return err
+		} else if status != string(jobs.StateSucceeded) {
+			return errors.Newf("expected job to succeed; found %s", status)
+		}
+		return nil
 	})
 }
 
 func (h *testHelper) waitForSuccessfulScheduledJobCount(
 	t *testing.T, scheduleID jobspb.ScheduleID, expectedCount int,
 ) {
+	t.Helper()
 	query := "SELECT count(*) FROM " + h.env.SystemJobsTableName() +
 		" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
 
