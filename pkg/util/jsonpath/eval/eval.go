@@ -8,6 +8,7 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/errors"
@@ -19,10 +20,9 @@ var errInternal = errors.New("internal error")
 type jsonpathCtx struct {
 	// Root of the given JSON object ($). We store this because we will need to
 	// support queries with multiple root elements (ex. $.a ? ($.b == "hello").
-	root   tree.DJSON
-	vars   tree.DJSON
+	root   json.JSON
+	vars   json.JSON
 	strict bool
-	a      tree.DatumAlloc
 }
 
 func JsonpathQuery(
@@ -35,8 +35,8 @@ func JsonpathQuery(
 	expr := parsedPath.AST
 
 	ctx := &jsonpathCtx{
-		root:   target,
-		vars:   vars,
+		root:   target.JSON,
+		vars:   vars.JSON,
 		strict: expr.Strict,
 	}
 
@@ -45,14 +45,19 @@ func JsonpathQuery(
 		ctx.strict = false
 	}
 
-	res, err := ctx.eval(expr.Path, []tree.DJSON{target})
+	j, err := ctx.eval(expr.Path, []json.JSON{ctx.root})
 	if err != nil {
 		return nil, err
+	}
+	var res []tree.DJSON
+	var alloc tree.DatumAlloc
+	for _, j := range j {
+		res = append(res, *alloc.NewDJSON(tree.DJSON{JSON: j}))
 	}
 	return res, nil
 }
 
-func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJSON, error) {
+func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []json.JSON) ([]json.JSON, error) {
 	switch p := jp.(type) {
 	case jsonpath.Paths:
 		// Evaluate each path within the path list, update the current JSON
@@ -66,7 +71,7 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 		}
 		return current, nil
 	case jsonpath.Root:
-		return []tree.DJSON{ctx.root}, nil
+		return []json.JSON{ctx.root}, nil
 	case jsonpath.Key:
 		return ctx.evalKey(p, current)
 	case jsonpath.Wildcard:
@@ -78,7 +83,7 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 		if err != nil {
 			return nil, err
 		}
-		return []tree.DJSON{resolved}, nil
+		return []json.JSON{resolved}, nil
 	case jsonpath.Operation:
 		return ctx.evalOperation(p, current)
 	default:
