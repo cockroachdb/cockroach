@@ -91,24 +91,15 @@ func (s Scalar) String() string {
 	}
 	return s.Value.String()
 }
-
-type ArrayIndex Scalar
-
-var _ Path = ArrayIndex{}
-
-func (a ArrayIndex) String() string {
-	return Scalar(a).String()
-}
-
 type ArrayIndexRange struct {
-	Start ArrayIndex
-	End   ArrayIndex
+	Start Path
+	End   Path
 }
 
 var _ Path = ArrayIndexRange{}
 
 func (a ArrayIndexRange) String() string {
-	return fmt.Sprintf("%s to %s", a.Start.Value, a.End.Value)
+	return fmt.Sprintf("%s to %s", a.Start, a.End)
 }
 
 type ArrayList []Path
