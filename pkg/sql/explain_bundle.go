@@ -628,19 +628,19 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			ctx,
 			b.plan.catalog,
 			mem.Metadata().AllTables(),
-			func(table cat.Table, fk cat.ForeignKeyConstraint) (exploreFKs bool) {
+			func(table cat.Table, fk cat.ForeignKeyConstraint) (recurse bool) {
 				if includeAll {
 					return true
 				}
 				if !hasMutation {
 					// For read-only queries, we don't care about any tables not
-					// referenced by metadata, so we don't want to explore any
-					// FKs.
+					// referenced by metadata, so we don't want to recursed into
+					// any FKs.
 					return false
 				}
 				if referencedByMetadata.Contains(int(table.ID())) || fk == nil {
-					// For mutations, we always want to explore FKs of tables
-					// referenced by metadata.
+					// For mutations, we always want to recurse into FKs of
+					// tables referenced by metadata.
 					//
 					// The second part of the conditional should never evaluate
 					// to 'true' since nil FK parameter is provided only for
@@ -654,31 +654,33 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				//   CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));
 				//   CREATE TABLE grandchild (pk INT PRIMARY KEY, fk INT REFERENCES child(pk));
 				if table.ID() == fk.ReferencedTableID() {
-					// The table we're considering for exploration is a
-					// referenced table of a FK constraint where the referencing
-					// (origin) table has already been visited.
+					// The table we're considering for recursion is a referenced
+					// table of a FK constraint where the referencing (origin)
+					// table has already been visited.
 					//
 					// In our example, we've already visited 'child' and are
-					// considering exploring 'parent', but we never actually
-					// want to explore it.
+					// considering recursing into 'parent', but we never
+					// actually want to do that.
 					return false
 				}
-				// The table we're considering for exploration is an origin
+				// The table we're considering for recursion is an origin
 				// table of a FK constraint where the referenced table has
 				// already been visited.
 				//
 				// In our example, we've already visited 'parent' and are
-				// considering exploring 'child'.
+				// considering recursing into 'child'.
 				if hasDelete && fk.DeleteReferenceAction() == tree.Cascade {
 					// We deleted from 'parent', and we have the ON DELETE
-					// CASCADE action of the 'child' FK, so we need to explore
-					// child's FKs in order to additionally visit 'grandchild'.
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// into child's FKs in order to additionally visit
+					// 'grandchild'.
 					return true
 				}
 				if (hasUpdate || hasUpsert) && fk.UpdateReferenceAction() == tree.Cascade {
 					// We updated the 'parent', and we have the ON UPDATE
-					// CASCADE action of the 'child' FK, so we need to explore
-					// child's FKs in order to additionally visit 'grandchild'.
+					// CASCADE action of the 'child' FK, so we need to recurse
+					// into child's FKs in order to additionally visit
+					// 'grandchild'.
 					//
 					// We don't know whether UPSERT resulted in an UPDATE or an
 					// INSERT, but we'll assume the former to be on the safer

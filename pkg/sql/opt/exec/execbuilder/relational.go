@@ -4164,7 +4164,7 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 		b.ctx,
 		b.catalog,
 		b.mem.Metadata().AllTables(),
-		func(cat.Table, cat.ForeignKeyConstraint) (exploreFKs bool) {
+		func(cat.Table, cat.ForeignKeyConstraint) (recurse bool) {
 			return true
 		},
 		func(table cat.Table, _ cat.ForeignKeyConstraint) {
