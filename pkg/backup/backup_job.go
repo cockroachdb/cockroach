@@ -535,7 +535,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	p := execCtx.(sql.JobExecContext)
 	initialDetails := b.job.Details().(jobspb.BackupDetails)
-
 	if err := maybeRelocateJobExecution(
 		ctx, b.job.ID(), p, initialDetails.ExecutionLocality, "BACKUP",
 	); err != nil {
@@ -872,9 +871,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
 	}
 
-	return b.maybeNotifyScheduledJobCompletion(
-		ctx, jobs.StateSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
-	)
+	return b.processScheduledBackupCompletion(ctx, jobs.StateSucceeded, p, details)
 }
 
 // ensureClusterIDMatches verifies that this job record matches
@@ -1675,7 +1672,9 @@ func updateBackupDetails(
 		}
 	}
 
-	details.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
+	dest := details.Destination
+	dest.Subdir = resolvedSubdir
+	details.Destination = dest
 	details.StartTime = startTime
 	details.URI = defaultURI
 	details.URIsByLocalityKV = urisByLocalityKV
@@ -1872,15 +1871,20 @@ func (b *backupResumer) readManifestOnResume(
 	return &desc, memSize, nil
 }
 
-func (b *backupResumer) maybeNotifyScheduledJobCompletion(
-	ctx context.Context, jobState jobs.State, knobs *jobs.TestingKnobs, db isql.DB,
+func (b *backupResumer) processScheduledBackupCompletion(
+	ctx context.Context,
+	jobState jobs.State,
+	execCtx sql.JobExecContext,
+	details jobspb.BackupDetails,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
+	knobs := execCtx.ExecCfg().JobsKnobs()
 	if knobs != nil && knobs.JobSchedulerEnv != nil {
 		env = knobs.JobSchedulerEnv
 	}
 
-	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	var scheduleID jobspb.ScheduleID
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumer's CreatedByInfo.
 		datums, err := txn.QueryRowEx(
@@ -1899,15 +1903,24 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 			// Not a scheduled backup.
 			return nil
 		}
-
-		scheduleID := jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
+		scheduleID = jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobState, b.job.Details(), scheduleID); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
 		return nil
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+
+	if scheduleID != 0 && jobState == jobs.StateSucceeded {
+		if _, err := maybeStartCompactionJob(
+			ctx, execCtx.ExecCfg(), execCtx.User(), details,
+		); err != nil {
+			log.Warningf(ctx, "failed to trigger backup compaction for schedule %d: %v", scheduleID, err)
+		}
+	}
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
@@ -1944,9 +1957,7 @@ func (b *backupResumer) OnFailOrCancel(
 	// This should never return an error unless resolving the schedule that the
 	// job is being run under fails. This could happen if the schedule is dropped
 	// while the job is executing.
-	if err := b.maybeNotifyScheduledJobCompletion(
-		ctx, jobs.StateFailed, cfg.JobsKnobs(), cfg.InternalDB,
-	); err != nil {
+	if err := b.processScheduledBackupCompletion(ctx, jobs.StateFailed, p, details); err != nil {
 		log.Errorf(ctx, "failed to notify job %d on completion of OnFailOrCancel: %+v",
 			b.job.ID(), err)
 	}
