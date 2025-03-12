@@ -917,7 +917,7 @@ type Store struct {
 	sstSnapshotStorage  SSTSnapshotStorage
 	protectedtsReader   spanconfig.ProtectedTSReader
 	ctSender            *sidetransport.Sender
-	latencyTracker      *multiregion.LatencyTracker
+	policyRefresher     *multiregion.PolicyRefresher
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
 	// raftTransportForFlowControl exposes the set of (remote) stores the raft
@@ -1200,12 +1200,12 @@ type StoreConfig struct {
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
 
-	// LatencyTracker is used for tracking latencies between the node and its
+	// latencyTracker is used for tracking latencies between the node and its
 	// follower nodes. It's maintained by sidetransport.Sender by periodically
 	// fetching latency information on the follower nodes. It is used for
 	// LEAD_FOR_GLOBAL_READS to determine latency between the node and its
 	// followers based on nodes' localities.
-	LatencyTracker *multiregion.LatencyTracker
+	PolicyRefresher *multiregion.PolicyRefresher
 
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
@@ -1509,7 +1509,7 @@ func NewStore(
 		nodeDesc:                          nodeDesc,
 		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender:                          cfg.ClosedTimestampSender,
-		latencyTracker:                    cfg.LatencyTracker,
+		policyRefresher:                   cfg.PolicyRefresher,
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}

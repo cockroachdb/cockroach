@@ -164,7 +164,7 @@ type topLevelServer struct {
 	promRuleExporter *metric.PrometheusRuleExporter
 	updates          *diagnostics.UpdateChecker
 	ctSender         *sidetransport.Sender
-	latencyTracker   *multiregion.LatencyTracker
+	policyRefresher  *multiregion.PolicyRefresher
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -663,10 +663,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	nodeRegistry.AddMetricStruct(storeLivenessTransport.Metrics())
 
-	latencyTracker := multiregion.NewLatencyTracker(
-		cfg.Locality, rpcContext.RemoteClocks.Latency, g.GetNodeDescriptor)
-	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer, latencyTracker)
-	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
+	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores,
+		nil /* testingKnobs */)
+	policyRefresher := multiregion.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
+		rpcContext.RemoteClocks.AllLatencies)
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -884,7 +885,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		TimeSeriesDataStore:          tsDB,
 		ClosedTimestampSender:        ctSender,
 		ClosedTimestampReceiver:      ctReceiver,
-		LatencyTracker:               latencyTracker,
+		PolicyRefresher:              policyRefresher,
 		ProtectedTimestampReader:     protectedTSReader,
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
@@ -1283,7 +1284,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		promRuleExporter:          promRuleExporter,
 		updates:                   updates,
 		ctSender:                  ctSender,
-		latencyTracker:            latencyTracker,
+		policyRefresher:           policyRefresher,
 		runtime:                   runtimeSampler,
 		http:                      sHTTP,
 		adminAuthzCheck:           adminAuthzCheck,
@@ -2114,6 +2115,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// Register the ctc debug endpoints.
 	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
+
+	s.policyRefresher.Run(workersCtx)
 
 	// Start the closed timestamp loop.
 	s.ctSender.Run(workersCtx, state.nodeID)

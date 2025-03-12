@@ -154,7 +154,7 @@ var getNodeDesc = func(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 }
 
 func newMockSender(
-	connFactory connFactory, latencyTracker *multiregion.LatencyTracker,
+	connFactory connFactory, latencyTracker *multiregion.latencyTracker,
 ) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	st := cluster.MakeTestingClusterSettings()
@@ -235,7 +235,6 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
-			s.getNetworkRTTByPolicyLocality(pol),
 			closedTimestampPolicy(pol),
 		)
 	}
@@ -254,7 +253,7 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 	}
 }
 
-func noopLatencyTracker() *multiregion.LatencyTracker {
+func noopLatencyTracker() *multiregion.latencyTracker {
 	getLatency := func(roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}

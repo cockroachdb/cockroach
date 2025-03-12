@@ -38,6 +38,7 @@ go_test(
     name = "sidetransport_test",
     srcs = [
         "receiver_test.go",
+        "sender_helper_test.go",
         "sender_test.go",
     ],
     embed = [":sidetransport"],

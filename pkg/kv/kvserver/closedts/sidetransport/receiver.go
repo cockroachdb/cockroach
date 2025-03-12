@@ -261,7 +261,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
-		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampByPolicyLocality]hlc.Timestamp, len(r.mu.lastClosed))
+		r.mu.lastClosed = make(map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
 		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
