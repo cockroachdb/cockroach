@@ -74,7 +74,11 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 	case jsonpath.ArrayList:
 		return ctx.evalArrayList(p, current)
 	case jsonpath.Scalar:
-		return nil, errors.AssertionFailedf("scalar evaluation shouldn't occur")
+		resolved, err := ctx.resolveScalar(p)
+		if err != nil {
+			return nil, err
+		}
+		return []tree.DJSON{resolved}, nil
 	default:
 		return nil, errUnimplemented
 	}
