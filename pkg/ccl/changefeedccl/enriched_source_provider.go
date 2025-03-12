@@ -35,12 +35,19 @@ type enrichedSourceData struct {
 	// TODO(#139690): Add node/cluster info support.
 }
 type enrichedSourceProvider struct {
-	opts       enrichedSourceProviderOpts
-	sourceData enrichedSourceData
+	opts              enrichedSourceProviderOpts
+	sourceData        enrichedSourceData
+	jsonPartialObject *json.PartialObject
+	// jsonNonFixedData is a reusable map for non-fixed fields, which are the inputs to jsonPartialObject.NewObject.
+	jsonNonFixedData    []json.JSON
+	jsonNonFixedDataIdx map[string]int
 }
 
 func newEnrichedSourceData(
-	ctx context.Context, cfg *execinfra.ServerConfig, spec execinfrapb.ChangeAggregatorSpec, sink sinkType,
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
+	sink sinkType,
 ) (enrichedSourceData, error) {
 	var sourceNodeLocality, nodeName, nodeID string
 	tiers := cfg.Locality.Tiers
@@ -84,27 +91,40 @@ func newEnrichedSourceData(
 
 func newEnrichedSourceProvider(
 	opts changefeedbase.EncodingOptions, sourceData enrichedSourceData,
-) *enrichedSourceProvider {
+) (*enrichedSourceProvider, error) {
+	jsonBase := map[string]json.JSON{
+		fieldNameJobID:              json.FromString(sourceData.jobID),
+		fieldNameChangefeedSink:     json.FromString(sourceData.sink),
+		fieldNameDBVersion:          json.FromString(sourceData.dbVersion),
+		fieldNameClusterName:        json.FromString(sourceData.clusterName),
+		fieldNameClusterID:          json.FromString(sourceData.clusterID),
+		fieldNameSourceNodeLocality: json.FromString(sourceData.sourceNodeLocality),
+		fieldNameNodeName:           json.FromString(sourceData.nodeName),
+		fieldNameNodeID:             json.FromString(sourceData.nodeID),
+	}
+
+	var nonFixedJSONFields []string
+	nonFixedDataIdx := map[string]int{}
+	if opts.MVCCTimestamps {
+		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameMVCCTimestamp)
+		nonFixedDataIdx[fieldNameMVCCTimestamp] = len(nonFixedJSONFields) - 1
+	}
+	// TODO(#139661): Add other non fixed fields.
+
+	jpo, err := json.NewPartialObject(jsonBase, nonFixedJSONFields)
+	if err != nil {
+		return nil, err
+	}
+
 	return &enrichedSourceProvider{
 		sourceData: sourceData,
 		opts: enrichedSourceProviderOpts{
 			mvccTimestamp: opts.MVCCTimestamps,
 			updated:       opts.UpdatedTimestamps,
 		},
-	}
-}
-
-func (p *enrichedSourceProvider) avroSourceFunction(row cdcevent.Row) (map[string]any, error) {
-	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
-	return map[string]any{
-		"job_id":               goavro.Union(avro.SchemaTypeString, p.sourceData.jobID),
-		"changefeed_sink":      goavro.Union(avro.SchemaTypeString, p.sourceData.sink),
-		"db_version":           goavro.Union(avro.SchemaTypeString, p.sourceData.dbVersion),
-		"cluster_name":         goavro.Union(avro.SchemaTypeString, p.sourceData.clusterName),
-		"cluster_id":           goavro.Union(avro.SchemaTypeString, p.sourceData.clusterID),
-		"source_node_locality": goavro.Union(avro.SchemaTypeString, p.sourceData.sourceNodeLocality),
-		"node_name":            goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName),
-		"node_id":              goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID),
+		jsonPartialObject:   jpo,
+		jsonNonFixedData:    make([]json.JSON, len(nonFixedJSONFields)),
+		jsonNonFixedDataIdx: nonFixedDataIdx,
 	}, nil
 }
 
@@ -112,48 +132,40 @@ func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 	return kafkaConnectJSONSchema
 }
 
+// GetJSON returns a json object for the source data.
 func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error) {
-	// TODO(#141798): cache this. We'll need to cache a partial object since some fields are row-dependent (eg ts_ns).
-	// TODO(various): Add fields here.
-	keys := jsonFields
-
-	b, err := json.NewFixedKeysObjectBuilder(keys)
-	if err != nil {
-		return nil, err
+	// TODO(#139661): Add other non fixed fields, in the right order.
+	clear(p.jsonNonFixedData)
+	if p.opts.mvccTimestamp {
+		p.jsonNonFixedData[p.jsonNonFixedDataIdx[fieldNameMVCCTimestamp]] = json.FromString(updated.MvccTimestamp.AsOfSystemTime())
 	}
-
-	if err := b.Set(fieldNameJobID, json.FromString(p.sourceData.jobID)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameChangefeedSink, json.FromString(p.sourceData.sink)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameDBVersion, json.FromString(p.sourceData.dbVersion)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameClusterName, json.FromString(p.sourceData.clusterName)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameClusterID, json.FromString(p.sourceData.clusterID)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameSourceNodeLocality, json.FromString(p.sourceData.sourceNodeLocality)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameNodeName, json.FromString(p.sourceData.nodeName)); err != nil {
-		return nil, err
-	}
-	if err := b.Set(fieldNameNodeID, json.FromString(p.sourceData.nodeID)); err != nil {
-		return nil, err
-	}
-
-	return b.Build()
+	// TODO(#139661): Add other non fixed fields.
+	return p.jsonPartialObject.NewObject(p.jsonNonFixedData)
 }
 
+// GetAvro returns an avro FunctionalRecord for the source data.
 func (p *enrichedSourceProvider) GetAvro(
 	row cdcevent.Row, schemaPrefix string,
 ) (*avro.FunctionalRecord, error) {
-	sourceDataSchema, err := avro.NewFunctionalRecord("source", schemaPrefix, avroFields, p.avroSourceFunction)
+	fromRow := func(row cdcevent.Row, dest map[string]any) {
+		// If this is the first use of the avro record (ie the first row the encoder processed), set the fixed fields.
+		if len(dest) == 0 {
+			dest[fieldNameJobID] = goavro.Union(avro.SchemaTypeString, p.sourceData.jobID)
+			dest[fieldNameChangefeedSink] = goavro.Union(avro.SchemaTypeString, p.sourceData.sink)
+			dest[fieldNameDBVersion] = goavro.Union(avro.SchemaTypeString, p.sourceData.dbVersion)
+			dest[fieldNameClusterName] = goavro.Union(avro.SchemaTypeString, p.sourceData.clusterName)
+			dest[fieldNameClusterID] = goavro.Union(avro.SchemaTypeString, p.sourceData.clusterID)
+			dest[fieldNameSourceNodeLocality] = goavro.Union(avro.SchemaTypeString, p.sourceData.sourceNodeLocality)
+			dest[fieldNameNodeName] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName)
+			dest[fieldNameNodeID] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID)
+		}
+
+		if p.opts.mvccTimestamp {
+			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, row.MvccTimestamp.AsOfSystemTime())
+		}
+		// TODO(#139661): Add other non fixed fields.
+	}
+	sourceDataSchema, err := avro.NewFunctionalRecord("source", schemaPrefix, avroFields, fromRow)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +181,7 @@ const (
 	fieldNameSourceNodeLocality = "source_node_locality"
 	fieldNameNodeName           = "node_name"
 	fieldNameNodeID             = "node_id"
+	fieldNameMVCCTimestamp      = "mvcc_timestamp"
 )
 
 type fieldInfo struct {
@@ -261,6 +274,17 @@ var allFieldInfo = map[string]fieldInfo{
 		},
 		kafkaConnectSchema: kcjsonschema.Schema{
 			Field:    fieldNameNodeID,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
+	fieldNameMVCCTimestamp: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameMVCCTimestamp,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameMVCCTimestamp,
 			TypeName: kcjsonschema.SchemaTypeString,
 			Optional: true,
 		},
