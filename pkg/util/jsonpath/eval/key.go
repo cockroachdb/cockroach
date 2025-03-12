@@ -8,17 +8,16 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
-func (ctx *jsonpathCtx) evalKey(k jsonpath.Key, current []tree.DJSON) ([]tree.DJSON, error) {
-	var agg []tree.DJSON
-	for _, res := range current {
-		if res.JSON.Type() == json.ObjectJSONType {
-			val, err := res.JSON.FetchValKey(string(k))
+func (ctx *jsonpathCtx) evalKey(k jsonpath.Key, current []json.JSON) ([]json.JSON, error) {
+	var agg []json.JSON
+	for _, j := range current {
+		if j.Type() == json.ObjectJSONType {
+			val, err := j.FetchValKey(string(k))
 			if err != nil {
 				return nil, err
 			}
@@ -28,14 +27,14 @@ func (ctx *jsonpathCtx) evalKey(k jsonpath.Key, current []tree.DJSON) ([]tree.DJ
 				}
 				continue
 			}
-			agg = append(agg, *ctx.a.NewDJSON(tree.DJSON{JSON: val}))
-		} else if !ctx.strict && res.JSON.Type() == json.ArrayJSONType {
-			arr, ok := res.JSON.AsArray()
+			agg = append(agg, val)
+		} else if !ctx.strict && j.Type() == json.ArrayJSONType {
+			arr, ok := j.AsArray()
 			if !ok {
 				return nil, errors.AssertionFailedf("array expected")
 			}
 			for _, elem := range arr {
-				results, err := ctx.eval(k, []tree.DJSON{*ctx.a.NewDJSON(tree.DJSON{JSON: elem})})
+				results, err := ctx.eval(k, []json.JSON{elem})
 				if err != nil {
 					return nil, err
 				}

@@ -20,10 +20,9 @@ var errInternal = errors.New("internal error")
 type jsonpathCtx struct {
 	// Root of the given JSON object ($). We store this because we will need to
 	// support queries with multiple root elements (ex. $.a ? ($.b == "hello").
-	root   tree.DJSON
-	vars   tree.DJSON
+	root   json.JSON
+	vars   json.JSON
 	strict bool
-	a      tree.DatumAlloc
 }
 
 func JsonpathQuery(
@@ -36,8 +35,8 @@ func JsonpathQuery(
 	expr := parsedPath.AST
 
 	ctx := &jsonpathCtx{
-		root:   target,
-		vars:   vars,
+		root:   target.JSON,
+		vars:   vars.JSON,
 		strict: expr.Strict,
 	}
 
@@ -46,14 +45,18 @@ func JsonpathQuery(
 		ctx.strict = false
 	}
 
-	res, err := ctx.eval(expr.Path, []tree.DJSON{target})
+	j, err := ctx.eval(expr.Path, []json.JSON{ctx.root})
 	if err != nil {
 		return nil, err
+	}
+	res := make([]tree.DJSON, len(j))
+	for i, j := range j {
+		res[i] = tree.DJSON{JSON: j}
 	}
 	return res, nil
 }
 
-func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJSON, error) {
+func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []json.JSON) ([]json.JSON, error) {
 	switch p := jp.(type) {
 	case jsonpath.Paths:
 		// Evaluate each path within the path list, update the current JSON
@@ -67,7 +70,7 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 		}
 		return current, nil
 	case jsonpath.Root:
-		return []tree.DJSON{ctx.root}, nil
+		return []json.JSON{ctx.root}, nil
 	case jsonpath.Key:
 		return ctx.evalKey(p, current)
 	case jsonpath.Wildcard:
@@ -79,7 +82,7 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 		if err != nil {
 			return nil, err
 		}
-		return []tree.DJSON{resolved}, nil
+		return []json.JSON{resolved}, nil
 	case jsonpath.Operation:
 		return ctx.evalOperation(p, current)
 	default:
@@ -87,9 +90,7 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 	}
 }
 
-func (ctx *jsonpathCtx) evalAndUnwrap(
-	path jsonpath.Path, inputs []tree.DJSON,
-) ([]tree.DJSON, error) {
+func (ctx *jsonpathCtx) evalAndUnwrap(path jsonpath.Path, inputs []json.JSON) ([]json.JSON, error) {
 	results, err := ctx.eval(path, inputs)
 	if err != nil {
 		return nil, err
@@ -97,13 +98,11 @@ func (ctx *jsonpathCtx) evalAndUnwrap(
 	if ctx.strict {
 		return results, nil
 	}
-	var unwrapped []tree.DJSON
+	var unwrapped []json.JSON
 	for _, result := range results {
-		if result.JSON.Type() == json.ArrayJSONType {
-			array, _ := result.JSON.AsArray()
-			for _, element := range array {
-				unwrapped = append(unwrapped, tree.DJSON{JSON: element})
-			}
+		if result.Type() == json.ArrayJSONType {
+			array, _ := result.AsArray()
+			unwrapped = append(unwrapped, array...)
 		} else {
 			unwrapped = append(unwrapped, result)
 		}
