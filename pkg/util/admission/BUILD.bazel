@@ -33,6 +33,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/goschedstats",
         "//pkg/util/grunning",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",

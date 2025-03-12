@@ -13,7 +13,7 @@ package goschedstats
 
 import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 
-const enabled = false
+const supported = false
 
 func cumulativeNormalizedRunnableGoroutines() float64 {
 	return 0.0

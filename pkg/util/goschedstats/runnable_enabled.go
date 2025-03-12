@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const enabled = true
+const supported = true
 
 // See CumulativeNormalizedRunnableGoroutines.
 func cumulativeNormalizedRunnableGoroutines() float64 {
