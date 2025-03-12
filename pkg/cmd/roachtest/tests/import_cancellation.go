@@ -39,6 +39,9 @@ func registerImportCancellation(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportCancellation(ctx, t, c)
 		},
+		// Disable metamorphic variables as otherwise TPCH queries might take
+		// extremely long time to complete.
+		CockroachBinary: registry.StandardCockroach,
 	})
 }
 
