@@ -1,11 +1,6 @@
 # LogicTest: local
 
 query T
-SELECT jsonb_path_query('{"a": "hello"}', '$.a[0 to 0]');
-----
-"hello"
-
-query T
 SELECT jsonb_path_query('{}', '$')
 ----
 {}
@@ -207,6 +202,11 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[4 to 4]');
 ----
 5
 
+query T
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[0 to 0]');
+----
+"hello"
+
 query T rowsort
 SELECT jsonb_path_query('{"a": [[5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][0]');
 ----
@@ -295,6 +295,9 @@ SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}, {"baz": "
 
 statement error pgcode 2203A jsonpath member accessor can only be applied to an object
 SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}]}', 'strict $.foo.bar');
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [1, 2, 3, 4, 5]}', '$.a[$.a]');
 
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
