@@ -57,6 +57,12 @@ func (ctx *jsonpathCtx) evalOperation(
 	p jsonpath.Operation, current []tree.DJSON,
 ) ([]tree.DJSON, error) {
 	switch p.Type {
+	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
+		res, err := ctx.evalLogical(p, current)
+		if err != nil {
+			return nil, err
+		}
+		return convertFromBool(res), nil
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
@@ -67,6 +73,65 @@ func (ctx *jsonpathCtx) evalOperation(
 		return convertFromBool(res), nil
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
+	}
+}
+
+func (ctx *jsonpathCtx) evalLogical(
+	op jsonpath.Operation, current []tree.DJSON,
+) (jsonpathBool, error) {
+	left, err := ctx.eval(op.Left, current)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+
+	if len(left) != 1 || !isBool(left[0]) {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+	}
+	leftBool := convertToBool(left[0].JSON)
+	switch op.Type {
+	case jsonpath.OpLogicalAnd:
+		if leftBool == jsonpathBoolFalse {
+			return jsonpathBoolFalse, nil
+		}
+	case jsonpath.OpLogicalOr:
+		if leftBool == jsonpathBoolTrue {
+			return jsonpathBoolTrue, nil
+		}
+	case jsonpath.OpLogicalNot:
+		if leftBool == jsonpathBoolUnknown {
+			return jsonpathBoolUnknown, nil
+		}
+		if leftBool == jsonpathBoolTrue {
+			return jsonpathBoolFalse, nil
+		}
+		return jsonpathBoolTrue, nil
+	default:
+		panic(errors.AssertionFailedf("unhandled logical operation type"))
+	}
+
+	right, err := ctx.eval(op.Right, current)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+
+	if len(right) != 1 || !isBool(right[0]) {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
+	}
+	rightBool := convertToBool(right[0].JSON)
+
+	switch op.Type {
+	case jsonpath.OpLogicalAnd:
+		if rightBool == jsonpathBoolTrue {
+			return leftBool, nil
+		}
+		return rightBool, nil
+	case jsonpath.OpLogicalOr:
+		if rightBool == jsonpathBoolFalse {
+			return leftBool, nil
+		}
+		return rightBool, nil
+	default:
+		panic(errors.AssertionFailedf("unhandled logical operation type"))
 	}
 }
 

@@ -116,6 +116,14 @@ func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path
   }
 }
 
+func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
+  return jsonpath.Operation{
+    Type:  op,
+    Left:  left,
+    Right: nil,
+  }
+}
+
 %}
 
 %union{
@@ -157,6 +165,10 @@ func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path
 
 %token <str> ROOT
 
+%token <str> AND
+%token <str> OR
+%token <str> NOT
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -175,6 +187,10 @@ func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path
 %type <str> any_identifier
 %type <str> unreserved_keyword
 %type <bool> mode
+
+%left OR
+%left AND
+%right NOT
 
 %%
 
@@ -312,6 +328,18 @@ predicate:
   {
     $$.val = binaryOp($2.operationType(), $1.path(), $3.path())
   }
+| predicate AND predicate
+  {
+    $$.val = binaryOp(jsonpath.OpLogicalAnd, $1.path(), $3.path())
+  }
+| predicate OR predicate
+  {
+    $$.val = binaryOp(jsonpath.OpLogicalOr, $1.path(), $3.path())
+  }
+| NOT delimited_predicate
+  {
+    $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
+  }
 ;
 
 delimited_predicate:
@@ -390,8 +418,11 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  FALSE
+  AND
+| FALSE
 | LAX
+| NOT
+| OR
 | STRICT
 | TO
 | TRUE
