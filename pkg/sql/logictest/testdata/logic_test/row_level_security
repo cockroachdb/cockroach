@@ -1677,4 +1677,162 @@ DROP FUNCTION al_only;
 statement ok
 DROP SEQUENCE seq1;
 
+subtest multiple_policies
+
+statement ok
+CREATE TABLE multip (key INT NOT NULL, value TEXT, FAMILY (key,value));
+
+statement ok
+ALTER TABLE multip ENABLE ROW LEVEL SECURITY;
+
+# The policies will be combined as: (or1 || or2 || or3) && and1 && and2
+statement ok
+CREATE POLICY or1 ON multip AS PERMISSIVE USING (key = 1);
+
+statement ok
+CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
+
+statement ok
+CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
+
+statement ok
+CREATE POLICY and1 ON multip AS RESTRICTIVE USING (value not like '%sensitive%')
+
+statement ok
+CREATE POLICY and2 ON multip AS RESTRICTIVE USING (value not like '%confidential%')
+
+statement ok
+INSERT INTO multip VALUES
+ (0, 'key out of bounds'),
+ (1, 'okay'),
+ (1, 'sensitive - filtered out'),
+ (2, 'okay'),
+ (2, 'confidential - filtered out'),
+ (3, 'okay'),
+ (2, 'sensitive - filtered out'),
+ (4, 'key out of bounds'),
+ (4, 'confidential');
+
+statement ok
+CREATE USER multi_user;
+
+statement ok
+GRANT ALL ON multip TO multi_user;
+
+statement ok
+SET ROLE multi_user;
+
+query IT
+select * from multip ORDER BY key, value;
+----
+1  okay
+2  okay
+3  okay
+
+query IT
+select * from multip where key >= 0 ORDER BY key, value;
+----
+1  okay
+2  okay
+3  okay
+
+statement ok
+SET ROLE root
+
+# Ensure that if only a restrictive policy exists that all rows will be rejected
+# regardless of the policy expression.
+statement ok
+DROP POLICY or1 ON multip;
+
+statement ok
+DROP POLICY or2 ON multip;
+
+statement ok
+DROP POLICY or3 ON multip;
+
+statement ok
+SET ROLE multi_user;
+
+query TT
+SHOW CREATE multip;
+----
+multip  CREATE TABLE public.multip (
+          key INT8 NOT NULL,
+          value STRING NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT multip_pkey PRIMARY KEY (rowid ASC),
+          FAMILY fam_0_key_value_rowid (key, value, rowid)
+        );
+        ALTER TABLE public.multip ENABLE ROW LEVEL SECURITY;
+        CREATE POLICY and1 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%sensitive%':::STRING);
+        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING)
+
+query IT
+select * from multip ORDER BY key, value;
+----
+
+statement ok
+SET ROLE root;
+
+# Setup to verify the write policies.
+statement ok
+TRUNCATE TABLE multip;
+
+statement ok
+CREATE POLICY or1 ON multip AS PERMISSIVE USING (key = 1);
+
+statement ok
+CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
+
+statement ok
+CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
+
+statement ok
+SET ROLE multi_user;
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (0, 'key out of bounds');
+
+statement ok
+INSERT INTO multip VALUES (1, 'okay');
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (1, 'sensitive - filtered out');
+
+statement ok
+INSERT INTO multip VALUES (2, 'okay')
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (2, 'confidential - filtered out')
+
+statement ok
+INSERT INTO multip VALUES (3, 'okay')
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (2, 'sensitive - filtered out')
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (4, 'key out of bounds')
+
+statement error pq: new row violates row-level security policy for table "multip"
+INSERT INTO multip VALUES (4, 'confidential');
+
+statement ok
+SET ROLE root;
+
+query IT
+select * FROM multip ORDER BY key, value;
+----
+1  okay
+2  okay
+3  okay
+
+statement ok
+DROP TABLE multip;
+
+statement ok
+DROP USER multi_user;
+
+subtest multiple_insert_policies
+
 subtest end
