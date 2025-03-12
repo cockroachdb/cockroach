@@ -5195,7 +5195,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		// Start an import job which will immediately pause after ingestion
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';")
 		go func() {
-			sqlDB.ExpectErrWithTimeout(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, dataSrv.URL)
+			sqlDB.ExpectErrWithRetry(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, `result is ambiguous`, dataSrv.URL)
 		}()
 		sqlDB.CheckQueryResultsRetry(
 			t,
