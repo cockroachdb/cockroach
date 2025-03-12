@@ -19,9 +19,14 @@ const (
 	OpLogicalAnd
 	OpLogicalOr
 	OpLogicalNot
+	OpAdd
+	OpSub
+	OpMult
+	OpDiv
+	OpMod
 )
 
-var operationTypeStrings = map[OperationType]string{
+var OperationTypeStrings = map[OperationType]string{
 	OpCompEqual:        "==",
 	OpCompNotEqual:     "!=",
 	OpCompLess:         "<",
@@ -31,6 +36,11 @@ var operationTypeStrings = map[OperationType]string{
 	OpLogicalAnd:       "&&",
 	OpLogicalOr:        "||",
 	OpLogicalNot:       "!",
+	OpAdd:              "+",
+	OpSub:              "-",
+	OpMult:             "*",
+	OpDiv:              "/",
+	OpMod:              "%",
 }
 
 type Operation struct {
@@ -46,7 +56,7 @@ func (o Operation) String() string {
 	// 1 == 1 && 1 != 1, postgres will output (1 == 1 && 1 != 1), but we output
 	// ((1 == 1) && (1 != 1)).
 	if o.Type == OpLogicalNot {
-		return fmt.Sprintf("%s(%s)", operationTypeStrings[o.Type], o.Left)
+		return fmt.Sprintf("%s(%s)", OperationTypeStrings[o.Type], o.Left)
 	}
-	return fmt.Sprintf("(%s %s %s)", o.Left, operationTypeStrings[o.Type], o.Right)
+	return fmt.Sprintf("(%s %s %s)", o.Left, OperationTypeStrings[o.Type], o.Right)
 }
