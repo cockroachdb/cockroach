@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -965,6 +966,9 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "times out under stress")
+	if !goschedstats.Supported {
+		skip.IgnoreLint(t, "goschedstats not supported")
+	}
 
 	require.True(t, buildutil.CrdbTestBuild)
 	ctx, cancel := context.WithCancel(context.Background())
