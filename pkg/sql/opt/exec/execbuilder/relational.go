@@ -458,13 +458,17 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 			return
 		}
 		// Helper to annotate a node for the given table ID.
-		annotateNodeForTable := func(tabID opt.TableID) {
+		annotateNodeForTable := func(tabID opt.TableID, applyFilterExpr bool) {
 			// Pull out the policy information for the table the node was built for.
 			policies, found := rlsMeta.PoliciesApplied[tabID]
 			if found {
 				val := exec.RLSPoliciesApplied{
 					PoliciesSkippedForRole: rlsMeta.HasAdminRole,
-					Policies:               policies,
+				}
+				if applyFilterExpr {
+					val.Policies = policies.Filter
+				} else {
+					val.Policies = policies.Check
 				}
 				ef.AnnotateNode(node, exec.PolicyInfoID, &val)
 			}
@@ -479,20 +483,36 @@ func (b *Builder) maybeAnnotatePolicyInfo(node exec.Node, e memo.RelExpr) {
 				ef.AnnotateNode(node, exec.PolicyInfoID, &exec.RLSPoliciesApplied{})
 			}
 		case *memo.ScanExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
 		case *memo.LookupJoinExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
 		case *memo.ZigzagJoinExpr:
-			annotateNodeForTable(e.LeftTable)
-			annotateNodeForTable(e.RightTable)
+			annotateNodeForTable(e.LeftTable, true /* applyFilterExpr */)
+			annotateNodeForTable(e.RightTable, true /* applyFilterExpr */)
 		case *memo.InvertedJoinExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
 		case *memo.PlaceholderScanExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
 		case *memo.IndexJoinExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
 		case *memo.VectorSearchExpr:
-			annotateNodeForTable(e.Table)
+			annotateNodeForTable(e.Table, true /* applyFilterExpr */)
+		case *memo.DeleteExpr:
+			// Typically, policy information is displayed in the scan node. However,
+			// a `DeleteExpr` built for a delete range operation does not emit a scan node,
+			// as everything is included within the `deleteRangeOp` node.
+			// To ensure policy information is included, we handle that case here.
+			if b.canUseDeleteRange(e) {
+				if scan, ok := e.Input.(*memo.ScanExpr); ok {
+					annotateNodeForTable(scan.Table, true /* applyFilterExpr */)
+				}
+			}
+		case *memo.InsertExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
+		case *memo.UpdateExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
+		case *memo.UpsertExpr:
+			annotateNodeForTable(e.Table, false /* applyFilterExpr */)
 		}
 	}
 }
