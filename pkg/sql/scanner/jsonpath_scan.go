@@ -63,6 +63,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 			lval.SetID(lexbase.NOT_EQUAL)
 			return
 		}
+		lval.SetID(lexbase.NOT)
 		return
 	case '>':
 		if s.peek() == '=' { // >=
@@ -79,6 +80,20 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 			return
 		}
 		lval.SetID(lexbase.LESS)
+		return
+	case '&':
+		if s.peek() == '&' { // &&
+			s.pos++
+			lval.SetID(lexbase.AND)
+			return
+		}
+		return
+	case '|':
+		if s.peek() == '|' { // ||
+			s.pos++
+			lval.SetID(lexbase.OR)
+			return
+		}
 		return
 	default:
 		if sqllexbase.IsDigit(ch) {

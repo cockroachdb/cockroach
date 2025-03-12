@@ -16,6 +16,9 @@ const (
 	OpCompLessEqual
 	OpCompGreater
 	OpCompGreaterEqual
+	OpLogicalAnd
+	OpLogicalOr
+	OpLogicalNot
 )
 
 var operationTypeStrings = map[OperationType]string{
@@ -25,6 +28,9 @@ var operationTypeStrings = map[OperationType]string{
 	OpCompLessEqual:    "<=",
 	OpCompGreater:      ">",
 	OpCompGreaterEqual: ">=",
+	OpLogicalAnd:       "&&",
+	OpLogicalOr:        "||",
+	OpLogicalNot:       "!",
 }
 
 type Operation struct {
@@ -36,5 +42,11 @@ type Operation struct {
 var _ Path = Operation{}
 
 func (o Operation) String() string {
+	// TODO(normanchenn): Fix recursive brackets. When there is a operation like
+	// 1 == 1 && 1 != 1, postgres will output (1 == 1 && 1 != 1), but we output
+	// ((1 == 1) && (1 != 1)).
+	if o.Type == OpLogicalNot {
+		return fmt.Sprintf("%s(%s)", operationTypeStrings[o.Type], o.Left)
+	}
 	return fmt.Sprintf("(%s %s %s)", o.Left, operationTypeStrings[o.Type], o.Right)
 }
