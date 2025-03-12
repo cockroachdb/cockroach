@@ -30,9 +30,9 @@ var (
 // minSizeDeltaHeuristic is a heuristic that selects a window of backups with the
 // smallest delta in data size between each backup.
 func minSizeDeltaHeuristic(
-	_ context.Context, execCtx sql.JobExecContext, backupChain []backuppb.BackupManifest,
+	_ context.Context, execCfg *sql.ExecutorConfig, backupChain []backuppb.BackupManifest,
 ) (int, int, error) {
-	windowSize := int(backupCompactionWindow.Get(&execCtx.ExecCfg().Settings.SV))
+	windowSize := int(backupCompactionWindow.Get(&execCfg.Settings.SV))
 	// Compaction does not compact the full backup, so windowSize must be < len(backupChain).
 	if windowSize >= len(backupChain) {
 		return 0, 0, errors.New("window size must be less than backup chain length")
