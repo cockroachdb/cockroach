@@ -1,0 +1,975 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float4.out --label=/mnt/data1/postgres/src/test/regress/results/float4.out /mnt/data1/postgres/src/test/regress/expected/float4.out /mnt/data1/postgres/src/test/regress/results/float4.out
+--- /mnt/data1/postgres/src/test/regress/expected/float4.out
++++ /mnt/data1/postgres/src/test/regress/results/float4.out
+@@ -9,103 +9,45 @@
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('1.2345678901234e-20');
+ -- test for over and under flow
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e70');
+-ERROR:  "10e70" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('10e70');
+-                                           ^
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e70');
+-ERROR:  "-10e70" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e70');
+-                                           ^
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e-70');
+-ERROR:  "10e-70" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('10e-70');
+-                                           ^
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e-70');
+-ERROR:  "-10e-70" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e-70');
+-                                           ^
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e70'::float8);
+-ERROR:  value out of range: overflow
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e70'::float8);
+-ERROR:  value out of range: overflow
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e-70'::float8);
+-ERROR:  value out of range: underflow
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e-70'::float8);
+-ERROR:  value out of range: underflow
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e400');
+-ERROR:  "10e400" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('10e400');
+-                                           ^
++ERROR:  could not parse "10e400" as type float: strconv.ParseFloat: parsing "10e400": value out of range
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e400');
+-ERROR:  "-10e400" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e400');
+-                                           ^
++ERROR:  could not parse "-10e400" as type float: strconv.ParseFloat: parsing "-10e400": value out of range
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('10e-400');
+-ERROR:  "10e-400" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('10e-400');
+-                                           ^
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e-400');
+-ERROR:  "-10e-400" is out of range for type real
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('-10e-400');
+-                                           ^
+ -- bad input
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('');
+-ERROR:  invalid input syntax for type real: ""
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('');
+-                                           ^
++ERROR:  could not parse "" as type float: strconv.ParseFloat: parsing "": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('       ');
+-ERROR:  invalid input syntax for type real: "       "
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('       ');
+-                                           ^
++ERROR:  could not parse "" as type float: strconv.ParseFloat: parsing "": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('xyz');
+-ERROR:  invalid input syntax for type real: "xyz"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('xyz');
+-                                           ^
++ERROR:  could not parse "xyz" as type float: strconv.ParseFloat: parsing "xyz": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('5.0.0');
+-ERROR:  invalid input syntax for type real: "5.0.0"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('5.0.0');
+-                                           ^
++ERROR:  could not parse "5.0.0" as type float: strconv.ParseFloat: parsing "5.0.0": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('5 . 0');
+-ERROR:  invalid input syntax for type real: "5 . 0"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('5 . 0');
+-                                           ^
++ERROR:  could not parse "5 . 0" as type float: strconv.ParseFloat: parsing "5 . 0": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('5.   0');
+-ERROR:  invalid input syntax for type real: "5.   0"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('5.   0');
+-                                           ^
++ERROR:  could not parse "5.   0" as type float: strconv.ParseFloat: parsing "5.   0": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('     - 3.0');
+-ERROR:  invalid input syntax for type real: "     - 3.0"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('     - 3.0');
+-                                           ^
++ERROR:  could not parse "- 3.0" as type float: strconv.ParseFloat: parsing "- 3.0": invalid syntax
+ INSERT INTO FLOAT4_TBL(f1) VALUES ('123            5');
+-ERROR:  invalid input syntax for type real: "123            5"
+-LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('123            5');
+-                                           ^
++ERROR:  could not parse "123            5" as type float: strconv.ParseFloat: parsing "123            5": invalid syntax
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('34.5', 'float4');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('xyz', 'float4');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('1e400', 'float4');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1e400', 'float4');
+-                message                | detail | hint | sql_error_code 
+----------------------------------------+--------+------+----------------
+- "1e400" is out of range for type real |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- special inputs
+ SELECT 'NaN'::float4;
+  float4 
+@@ -139,17 +81,11 @@
+ 
+ -- bad special inputs
+ SELECT 'N A N'::float4;
+-ERROR:  invalid input syntax for type real: "N A N"
+-LINE 1: SELECT 'N A N'::float4;
+-               ^
++ERROR:  could not parse "N A N" as type float: strconv.ParseFloat: parsing "N A N": invalid syntax
+ SELECT 'NaN x'::float4;
+-ERROR:  invalid input syntax for type real: "NaN x"
+-LINE 1: SELECT 'NaN x'::float4;
+-               ^
++ERROR:  could not parse "NaN x" as type float: strconv.ParseFloat: parsing "NaN x": invalid syntax
+ SELECT ' INFINITY    x'::float4;
+-ERROR:  invalid input syntax for type real: " INFINITY    x"
+-LINE 1: SELECT ' INFINITY    x'::float4;
+-               ^
++ERROR:  could not parse "INFINITY    x" as type float: strconv.ParseFloat: parsing "INFINITY    x": invalid syntax
+ SELECT 'Infinity'::float4 + 100.0;
+  ?column? 
+ ----------
+@@ -194,7 +130,17 @@
+         -34.84
+  1.2345679e+20
+  1.2345679e-20
+-(5 rows)
++          +Inf
++          -Inf
++             0
++            -0
++          +Inf
++          -Inf
++             0
++            -0
++             0
++            -0
++(15 rows)
+ 
+ SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 <> '1004.3';
+       f1       
+@@ -203,7 +149,17 @@
+         -34.84
+  1.2345679e+20
+  1.2345679e-20
+-(4 rows)
++          +Inf
++          -Inf
++             0
++            -0
++          +Inf
++          -Inf
++             0
++            -0
++             0
++            -0
++(14 rows)
+ 
+ SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3';
+    f1   
+@@ -217,7 +173,15 @@
+              0
+         -34.84
+  1.2345679e-20
+-(3 rows)
++          -Inf
++             0
++            -0
++          -Inf
++             0
++            -0
++             0
++            -0
++(11 rows)
+ 
+ SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 < '1004.3';
+       f1       
+@@ -225,7 +189,15 @@
+              0
+         -34.84
+  1.2345679e-20
+-(3 rows)
++          -Inf
++             0
++            -0
++          -Inf
++             0
++            -0
++             0
++            -0
++(11 rows)
+ 
+ SELECT f.* FROM FLOAT4_TBL f WHERE '1004.3' >= f.f1;
+       f1       
+@@ -234,7 +206,15 @@
+         1004.3
+         -34.84
+  1.2345679e-20
+-(4 rows)
++          -Inf
++             0
++            -0
++          -Inf
++             0
++            -0
++             0
++            -0
++(12 rows)
+ 
+ SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3';
+       f1       
+@@ -243,43 +223,67 @@
+         1004.3
+         -34.84
+  1.2345679e-20
+-(4 rows)
++          -Inf
++             0
++            -0
++          -Inf
++             0
++            -0
++             0
++            -0
++(12 rows)
+ 
+ SELECT f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
+    WHERE f.f1 > '0.0';
+-      f1       |       x        
+----------------+----------------
+-        1004.3 |         -10043
+- 1.2345679e+20 | -1.2345678e+21
+- 1.2345679e-20 | -1.2345678e-19
+-(3 rows)
++      f1       |            x            
++---------------+-------------------------
++        1004.3 |                  -10043
++ 1.2345679e+20 |    -1.2345678901234e+21
++ 1.2345679e-20 |    -1.2345678901234e-19
++          +Inf | -1.0000000000000001e+72
++             0 |  -9.999999999999999e-69
++          +Inf | -1.0000000000000001e+72
++             0 |  -9.999999999999999e-69
++(7 rows)
+ 
+ SELECT f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
+    WHERE f.f1 > '0.0';
+-      f1       |       x       
+----------------+---------------
+-        1004.3 |         994.3
+- 1.2345679e+20 | 1.2345679e+20
+- 1.2345679e-20 |           -10
+-(3 rows)
++      f1       |          x          
++---------------+---------------------
++        1004.3 |               994.3
++ 1.2345679e+20 | 1.2345678901234e+20
++ 1.2345679e-20 |                 -10
++          +Inf |               1e+71
++             0 |                 -10
++          +Inf |               1e+71
++             0 |                 -10
++(7 rows)
+ 
+ SELECT f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
+    WHERE f.f1 > '0.0';
+-      f1       |       x        
+----------------+----------------
+-        1004.3 |        -100.43
+- 1.2345679e+20 | -1.2345679e+19
+- 1.2345679e-20 | -1.2345679e-21
+-(3 rows)
++      f1       |          x           
++---------------+----------------------
++        1004.3 |  -100.42999999999999
++ 1.2345679e+20 | -1.2345678901234e+19
++ 1.2345679e-20 | -1.2345678901234e-21
++          +Inf |               -1e+70
++             0 |               -1e-70
++          +Inf |               -1e+70
++             0 |               -1e-70
++(7 rows)
+ 
+ SELECT f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
+    WHERE f.f1 > '0.0';
+-      f1       |       x       
+----------------+---------------
+-        1004.3 |        1014.3
+- 1.2345679e+20 | 1.2345679e+20
+- 1.2345679e-20 |            10
+-(3 rows)
++      f1       |          x          
++---------------+---------------------
++        1004.3 |              1014.3
++ 1.2345679e+20 | 1.2345678901234e+20
++ 1.2345679e-20 |                  10
++          +Inf |               1e+71
++             0 |                  10
++          +Inf |               1e+71
++             0 |                  10
++(7 rows)
+ 
+ -- test divide by zero
+ SELECT f.f1 / '0.0' from FLOAT4_TBL f;
+@@ -292,19 +296,24 @@
+         -34.84
+  1.2345679e+20
+  1.2345679e-20
+-(5 rows)
++          +Inf
++          -Inf
++             0
++            -0
++          +Inf
++          -Inf
++             0
++            -0
++             0
++            -0
++(15 rows)
+ 
+ -- test the unary float4abs operator
+ SELECT f.f1, @f.f1 AS abs_f1 FROM FLOAT4_TBL f;
+-      f1       |    abs_f1     
+----------------+---------------
+-             0 |             0
+-        1004.3 |        1004.3
+-        -34.84 |         34.84
+- 1.2345679e+20 | 1.2345679e+20
+- 1.2345679e-20 | 1.2345679e-20
+-(5 rows)
+-
++ERROR:  at or near "f": syntax error
++DETAIL:  source SQL:
++SELECT f.f1, @f.f1 AS abs_f1 FROM FLOAT4_TBL f
++              ^
+ UPDATE FLOAT4_TBL
+    SET f1 = FLOAT4_TBL.f1 * '-1'
+    WHERE FLOAT4_TBL.f1 > '0.0';
+@@ -312,11 +321,21 @@
+        f1       
+ ----------------
+               0
+-         -34.84
+         -1004.3
++         -34.84
+  -1.2345679e+20
+  -1.2345679e-20
+-(5 rows)
++           -Inf
++           -Inf
++             -0
++             -0
++           -Inf
++           -Inf
++             -0
++             -0
++              0
++             -0
++(15 rows)
+ 
+ -- test edge-case coercions to integer
+ SELECT '32767.4'::float4::int2;
+@@ -326,7 +345,7 @@
+ (1 row)
+ 
+ SELECT '32767.6'::float4::int2;
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT '-32768.4'::float4::int2;
+   int2  
+ --------
+@@ -334,7 +353,7 @@
+ (1 row)
+ 
+ SELECT '-32768.6'::float4::int2;
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT '2147483520'::float4::int4;
+     int4    
+ ------------
+@@ -342,7 +361,11 @@
+ (1 row)
+ 
+ SELECT '2147483647'::float4::int4;
+-ERROR:  integer out of range
++    int4    
++------------
++ 2147483647
++(1 row)
++
+ SELECT '-2147483648.5'::float4::int4;
+     int4     
+ -------------
+@@ -350,7 +373,7 @@
+ (1 row)
+ 
+ SELECT '-2147483900'::float4::int4;
+-ERROR:  integer out of range
++ERROR:  integer out of range for type int4
+ SELECT '9223369837831520256'::float4::int8;
+         int8         
+ ---------------------
+@@ -358,108 +381,44 @@
+ (1 row)
+ 
+ SELECT '9223372036854775807'::float4::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT '-9223372036854775808.5'::float4::int8;
+-         int8         
+-----------------------
+- -9223372036854775808
+-(1 row)
+-
++ERROR:  integer out of range
+ SELECT '-9223380000000000000'::float4::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ -- Test for correct input rounding in edge cases.
+ -- These lists are from Paxson 1991, excluding subnormals and
+ -- inputs of over 9 sig. digits.
+ SELECT float4send('5e-20'::float4);
+- float4send 
+-------------
+- \x1f6c1e4a
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('67e14'::float4);
+- float4send 
+-------------
+- \x59be6cea
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('985e15'::float4);
+- float4send 
+-------------
+- \x5d5ab6c4
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('55895e-16'::float4);
+- float4send 
+-------------
+- \x2cc4a9bd
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('7038531e-32'::float4);
+- float4send 
+-------------
+- \x15ae43fd
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('702990899e-20'::float4);
+- float4send 
+-------------
+- \x2cf757ca
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('3e-23'::float4);
+- float4send 
+-------------
+- \x1a111234
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('57e18'::float4);
+- float4send 
+-------------
+- \x6045c22c
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('789e-35'::float4);
+- float4send 
+-------------
+- \x0a23de70
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('2539e-18'::float4);
+- float4send 
+-------------
+- \x2736f449
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('76173e28'::float4);
+- float4send 
+-------------
+- \x7616398a
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('887745e-11'::float4);
+- float4send 
+-------------
+- \x3714f05c
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('5382571e-37'::float4);
+- float4send 
+-------------
+- \x0d2eaca7
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('82381273e-35'::float4);
+- float4send 
+-------------
+- \x128289d1
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('750486563e-38'::float4);
+- float4send 
+-------------
+- \x0f18377e
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ -- Test that the smallest possible normalized input value inputs
+ -- correctly, either in 9-significant-digit or shortest-decimal
+ -- format.
+@@ -468,33 +427,97 @@
+ -- shortest val is          1.1754944000
+ -- midpoint to next val is  1.1754944208...
+ SELECT float4send('1.17549435e-38'::float4);
+- float4send 
+-------------
+- \x00800000
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ SELECT float4send('1.1754944e-38'::float4);
+- float4send 
+-------------
+- \x00800000
+-(1 row)
+-
++ERROR:  float4send(): unimplemented
+ -- test output (and round-trip safety) of various values.
+ -- To ensure we're testing what we think we're testing, start with
+ -- float values specified by bit patterns (as a useful side effect,
+ -- this means we'll fail on non-IEEE platforms).
+ create type xfloat4;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type xfloat4
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create function xfloat4in(cstring) returns xfloat4 immutable strict
+   language internal as 'int4in';
+-NOTICE:  return type xfloat4 is only a shell
++ERROR:  language "internal" does not exist
+ create function xfloat4out(xfloat4) returns cstring immutable strict
+   language internal as 'int4out';
+-NOTICE:  argument type xfloat4 is only a shell
++ERROR:  language "internal" does not exist
+ create type xfloat4 (input = xfloat4in, output = xfloat4out, like = float4);
++ERROR:  at or near "input": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type xfloat4 (input = xfloat4in, output = xfloat4out, like = float4)
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create cast (xfloat4 as float4) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (xfloat4 as float4) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (float4 as xfloat4) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (float4 as xfloat4) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (xfloat4 as integer) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (xfloat4 as integer) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (integer as xfloat4) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (integer as xfloat4) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- float4: seeeeeee emmmmmmm mmmmmmmm mmmmmmmm
+ -- we don't care to assume the platform's strtod() handles subnormals
+ -- correctly; those are "use at your own risk". However we do test
+@@ -520,31 +543,7 @@
+   from (select bits::integer::xfloat4::float4 as flt
+           from testdata
+ 	offset 0) s;
+-   ibits    |      flt      
+-------------+---------------
+- \x00000001 |         1e-45
+- \x00000002 |         3e-45
+- \x00000003 |         4e-45
+- \x00000010 |       2.2e-44
+- \x00000011 |       2.4e-44
+- \x00000100 |      3.59e-43
+- \x00000101 |       3.6e-43
+- \x00004000 |    2.2959e-41
+- \x00004001 |     2.296e-41
+- \x00080000 |   7.34684e-40
+- \x00080001 |   7.34685e-40
+- \x0053c4f4 |     7.693e-39
+- \x006c85c4 |   9.96622e-39
+- \x0041ca76 |  6.041937e-39
+- \x004b7678 |  6.930161e-39
+- \x00000007 |         1e-44
+- \x00424fe2 |    6.0898e-39
+- \x007ffff0 | 1.1754921e-38
+- \x007ffff1 | 1.1754922e-38
+- \x007ffffe | 1.1754941e-38
+- \x007fffff | 1.1754942e-38
+-(21 rows)
+-
++ERROR:  type "xfloat4" does not exist
+ with testdata(bits) as (values
+   (x'00000000'),
+   -- smallest normal values
+@@ -710,277 +709,9 @@
+   from (select bits::integer::xfloat4::float4 as flt
+           from testdata
+ 	offset 0) s;
+-   ibits    |      flt       |     r_flt      |   obits    | correct 
+-------------+----------------+----------------+------------+---------
+- \x00000000 |              0 |              0 | \x00000000 | t
+- \x00800000 |  1.1754944e-38 |  1.1754944e-38 | \x00800000 | t
+- \x00800001 |  1.1754945e-38 |  1.1754945e-38 | \x00800001 | t
+- \x00800004 |  1.1754949e-38 |  1.1754949e-38 | \x00800004 | t
+- \x00800005 |   1.175495e-38 |   1.175495e-38 | \x00800005 | t
+- \x00800006 |  1.1754952e-38 |  1.1754952e-38 | \x00800006 | t
+- \x008002f1 |  1.1755999e-38 |  1.1755999e-38 | \x008002f1 | t
+- \x008002f2 |     1.1756e-38 |     1.1756e-38 | \x008002f2 | t
+- \x008002f3 |  1.1756001e-38 |  1.1756001e-38 | \x008002f3 | t
+- \x00800e17 |  1.1759998e-38 |  1.1759998e-38 | \x00800e17 | t
+- \x00800e18 |      1.176e-38 |      1.176e-38 | \x00800e18 | t
+- \x00800e19 |  1.1760001e-38 |  1.1760001e-38 | \x00800e19 | t
+- \x01000001 |   2.350989e-38 |   2.350989e-38 | \x01000001 | t
+- \x01102843 |   2.647751e-38 |   2.647751e-38 | \x01102843 | t
+- \x01a52c98 |  6.0675416e-38 |  6.0675416e-38 | \x01a52c98 | t
+- \x0219c229 |  1.1296386e-37 |  1.1296386e-37 | \x0219c229 | t
+- \x02e4464d |   3.354194e-37 |   3.354194e-37 | \x02e4464d | t
+- \x037343c1 |   7.148906e-37 |   7.148906e-37 | \x037343c1 | t
+- \x03a91b36 |   9.939175e-37 |   9.939175e-37 | \x03a91b36 | t
+- \x047ada65 |   2.948764e-36 |   2.948764e-36 | \x047ada65 | t
+- \x0496fe87 |  3.5498577e-36 |  3.5498577e-36 | \x0496fe87 | t
+- \x0550844f |   9.804414e-36 |   9.804414e-36 | \x0550844f | t
+- \x05999da3 |  1.4445957e-35 |  1.4445957e-35 | \x05999da3 | t
+- \x060ea5e2 |  2.6829103e-35 |  2.6829103e-35 | \x060ea5e2 | t
+- \x06e63c45 |   8.660494e-35 |   8.660494e-35 | \x06e63c45 | t
+- \x07f1e548 |   3.639641e-34 |   3.639641e-34 | \x07f1e548 | t
+- \x0fc5282b |  1.9441172e-29 |  1.9441172e-29 | \x0fc5282b | t
+- \x1f850283 |  5.6331846e-20 |  5.6331846e-20 | \x1f850283 | t
+- \x2874a9d6 |  1.3581548e-14 |  1.3581548e-14 | \x2874a9d6 | t
+- \x3356bf94 |  4.9999997e-08 |  4.9999997e-08 | \x3356bf94 | t
+- \x3356bf95 |          5e-08 |          5e-08 | \x3356bf95 | t
+- \x3356bf96 |  5.0000004e-08 |  5.0000004e-08 | \x3356bf96 | t
+- \x33d6bf94 |  9.9999994e-08 |  9.9999994e-08 | \x33d6bf94 | t
+- \x33d6bf95 |          1e-07 |          1e-07 | \x33d6bf95 | t
+- \x33d6bf96 |  1.0000001e-07 |  1.0000001e-07 | \x33d6bf96 | t
+- \x34a10faf |  2.9999998e-07 |  2.9999998e-07 | \x34a10faf | t
+- \x34a10fb0 |          3e-07 |          3e-07 | \x34a10fb0 | t
+- \x34a10fb1 |  3.0000004e-07 |  3.0000004e-07 | \x34a10fb1 | t
+- \x350637bc |  4.9999994e-07 |  4.9999994e-07 | \x350637bc | t
+- \x350637bd |          5e-07 |          5e-07 | \x350637bd | t
+- \x350637be |  5.0000006e-07 |  5.0000006e-07 | \x350637be | t
+- \x35719786 |   8.999999e-07 |   8.999999e-07 | \x35719786 | t
+- \x35719787 |          9e-07 |          9e-07 | \x35719787 | t
+- \x35719788 |  9.0000003e-07 |  9.0000003e-07 | \x35719788 | t
+- \x358637bc |   9.999999e-07 |   9.999999e-07 | \x358637bc | t
+- \x358637bd |          1e-06 |          1e-06 | \x358637bd | t
+- \x358637be |  1.0000001e-06 |  1.0000001e-06 | \x358637be | t
+- \x36a7c5ab |  4.9999994e-06 |  4.9999994e-06 | \x36a7c5ab | t
+- \x36a7c5ac |          5e-06 |          5e-06 | \x36a7c5ac | t
+- \x36a7c5ad |  5.0000003e-06 |  5.0000003e-06 | \x36a7c5ad | t
+- \x3727c5ab |   9.999999e-06 |   9.999999e-06 | \x3727c5ab | t
+- \x3727c5ac |          1e-05 |          1e-05 | \x3727c5ac | t
+- \x3727c5ad |  1.0000001e-05 |  1.0000001e-05 | \x3727c5ad | t
+- \x38d1b714 |  9.9999976e-05 |  9.9999976e-05 | \x38d1b714 | t
+- \x38d1b715 |   9.999998e-05 |   9.999998e-05 | \x38d1b715 | t
+- \x38d1b716 |   9.999999e-05 |   9.999999e-05 | \x38d1b716 | t
+- \x38d1b717 |         0.0001 |         0.0001 | \x38d1b717 | t
+- \x38d1b718 | 0.000100000005 | 0.000100000005 | \x38d1b718 | t
+- \x38d1b719 |  0.00010000001 |  0.00010000001 | \x38d1b719 | t
+- \x38d1b71a |  0.00010000002 |  0.00010000002 | \x38d1b71a | t
+- \x38d1b71b |  0.00010000003 |  0.00010000003 | \x38d1b71b | t
+- \x38d1b71c | 0.000100000034 | 0.000100000034 | \x38d1b71c | t
+- \x38d1b71d |  0.00010000004 |  0.00010000004 | \x38d1b71d | t
+- \x38dffffe |  0.00010681151 |  0.00010681151 | \x38dffffe | t
+- \x38dfffff | 0.000106811516 | 0.000106811516 | \x38dfffff | t
+- \x38e00000 |  0.00010681152 |  0.00010681152 | \x38e00000 | t
+- \x38efffff |  0.00011444091 |  0.00011444091 | \x38efffff | t
+- \x38f00000 |  0.00011444092 |  0.00011444092 | \x38f00000 | t
+- \x38f00001 | 0.000114440925 | 0.000114440925 | \x38f00001 | t
+- \x3a83126e |   0.0009999999 |   0.0009999999 | \x3a83126e | t
+- \x3a83126f |          0.001 |          0.001 | \x3a83126f | t
+- \x3a831270 |   0.0010000002 |   0.0010000002 | \x3a831270 | t
+- \x3c23d709 |    0.009999999 |    0.009999999 | \x3c23d709 | t
+- \x3c23d70a |           0.01 |           0.01 | \x3c23d70a | t
+- \x3c23d70b |    0.010000001 |    0.010000001 | \x3c23d70b | t
+- \x3dcccccc |    0.099999994 |    0.099999994 | \x3dcccccc | t
+- \x3dcccccd |            0.1 |            0.1 | \x3dcccccd | t
+- \x3dccccce |     0.10000001 |     0.10000001 | \x3dccccce | t
+- \x3dcccd6f |     0.10000121 |     0.10000121 | \x3dcccd6f | t
+- \x3dcccd70 |    0.100001216 |    0.100001216 | \x3dcccd70 | t
+- \x3dcccd71 |     0.10000122 |     0.10000122 | \x3dcccd71 | t
+- \x3effffff |     0.49999997 |     0.49999997 | \x3effffff | t
+- \x3f000000 |            0.5 |            0.5 | \x3f000000 | t
+- \x3f000001 |     0.50000006 |     0.50000006 | \x3f000001 | t
+- \x3f333332 |      0.6999999 |      0.6999999 | \x3f333332 | t
+- \x3f333333 |            0.7 |            0.7 | \x3f333333 | t
+- \x3f333334 |     0.70000005 |     0.70000005 | \x3f333334 | t
+- \x3f666665 |      0.8999999 |      0.8999999 | \x3f666665 | t
+- \x3f666666 |            0.9 |            0.9 | \x3f666666 | t
+- \x3f666667 |     0.90000004 |     0.90000004 | \x3f666667 | t
+- \x3f7d70a3 |     0.98999995 |     0.98999995 | \x3f7d70a3 | t
+- \x3f7d70a4 |           0.99 |           0.99 | \x3f7d70a4 | t
+- \x3f7d70a5 |     0.99000007 |     0.99000007 | \x3f7d70a5 | t
+- \x3f7fbe76 |     0.99899995 |     0.99899995 | \x3f7fbe76 | t
+- \x3f7fbe77 |          0.999 |          0.999 | \x3f7fbe77 | t
+- \x3f7fbe78 |      0.9990001 |      0.9990001 | \x3f7fbe78 | t
+- \x3f7ff971 |      0.9998999 |      0.9998999 | \x3f7ff971 | t
+- \x3f7ff972 |         0.9999 |         0.9999 | \x3f7ff972 | t
+- \x3f7ff973 |     0.99990004 |     0.99990004 | \x3f7ff973 | t
+- \x3f7fff57 |      0.9999899 |      0.9999899 | \x3f7fff57 | t
+- \x3f7fff58 |        0.99999 |        0.99999 | \x3f7fff58 | t
+- \x3f7fff59 |     0.99999005 |     0.99999005 | \x3f7fff59 | t
+- \x3f7fffee |      0.9999989 |      0.9999989 | \x3f7fffee | t
+- \x3f7fffef |       0.999999 |       0.999999 | \x3f7fffef | t
+- \x3f7ffff0 |     0.99999905 |     0.99999905 | \x3f7ffff0 | t
+- \x3f7ffff1 |      0.9999991 |      0.9999991 | \x3f7ffff1 | t
+- \x3f7ffff2 |     0.99999917 |     0.99999917 | \x3f7ffff2 | t
+- \x3f7ffff3 |      0.9999992 |      0.9999992 | \x3f7ffff3 | t
+- \x3f7ffff4 |      0.9999993 |      0.9999993 | \x3f7ffff4 | t
+- \x3f7ffff5 |     0.99999934 |     0.99999934 | \x3f7ffff5 | t
+- \x3f7ffff6 |      0.9999994 |      0.9999994 | \x3f7ffff6 | t
+- \x3f7ffff7 |     0.99999946 |     0.99999946 | \x3f7ffff7 | t
+- \x3f7ffff8 |      0.9999995 |      0.9999995 | \x3f7ffff8 | t
+- \x3f7ffff9 |      0.9999996 |      0.9999996 | \x3f7ffff9 | t
+- \x3f7ffffa |     0.99999964 |     0.99999964 | \x3f7ffffa | t
+- \x3f7ffffb |      0.9999997 |      0.9999997 | \x3f7ffffb | t
+- \x3f7ffffc |     0.99999976 |     0.99999976 | \x3f7ffffc | t
+- \x3f7ffffd |      0.9999998 |      0.9999998 | \x3f7ffffd | t
+- \x3f7ffffe |      0.9999999 |      0.9999999 | \x3f7ffffe | t
+- \x3f7fffff |     0.99999994 |     0.99999994 | \x3f7fffff | t
+- \x3f800000 |              1 |              1 | \x3f800000 | t
+- \x3f800001 |      1.0000001 |      1.0000001 | \x3f800001 | t
+- \x3f800002 |      1.0000002 |      1.0000002 | \x3f800002 | t
+- \x3f800003 |      1.0000004 |      1.0000004 | \x3f800003 | t
+- \x3f800004 |      1.0000005 |      1.0000005 | \x3f800004 | t
+- \x3f800005 |      1.0000006 |      1.0000006 | \x3f800005 | t
+- \x3f800006 |      1.0000007 |      1.0000007 | \x3f800006 | t
+- \x3f800007 |      1.0000008 |      1.0000008 | \x3f800007 | t
+- \x3f800008 |       1.000001 |       1.000001 | \x3f800008 | t
+- \x3f800009 |      1.0000011 |      1.0000011 | \x3f800009 | t
+- \x3f80000f |      1.0000018 |      1.0000018 | \x3f80000f | t
+- \x3f800010 |      1.0000019 |      1.0000019 | \x3f800010 | t
+- \x3f800011 |       1.000002 |       1.000002 | \x3f800011 | t
+- \x3f800012 |      1.0000021 |      1.0000021 | \x3f800012 | t
+- \x3f800013 |      1.0000023 |      1.0000023 | \x3f800013 | t
+- \x3f800014 |      1.0000024 |      1.0000024 | \x3f800014 | t
+- \x3f800017 |      1.0000027 |      1.0000027 | \x3f800017 | t
+- \x3f800018 |      1.0000029 |      1.0000029 | \x3f800018 | t
+- \x3f800019 |       1.000003 |       1.000003 | \x3f800019 | t
+- \x3f80001a |      1.0000031 |      1.0000031 | \x3f80001a | t
+- \x3f80001b |      1.0000032 |      1.0000032 | \x3f80001b | t
+- \x3f80001c |      1.0000033 |      1.0000033 | \x3f80001c | t
+- \x3f800029 |      1.0000049 |      1.0000049 | \x3f800029 | t
+- \x3f80002a |       1.000005 |       1.000005 | \x3f80002a | t
+- \x3f80002b |      1.0000051 |      1.0000051 | \x3f80002b | t
+- \x3f800053 |      1.0000099 |      1.0000099 | \x3f800053 | t
+- \x3f800054 |        1.00001 |        1.00001 | \x3f800054 | t
+- \x3f800055 |      1.0000101 |      1.0000101 | \x3f800055 | t
+- \x3f800346 |      1.0000999 |      1.0000999 | \x3f800346 | t
+- \x3f800347 |         1.0001 |         1.0001 | \x3f800347 | t
+- \x3f800348 |      1.0001001 |      1.0001001 | \x3f800348 | t
+- \x3f8020c4 |      1.0009999 |      1.0009999 | \x3f8020c4 | t
+- \x3f8020c5 |          1.001 |          1.001 | \x3f8020c5 | t
+- \x3f8020c6 |      1.0010002 |      1.0010002 | \x3f8020c6 | t
+- \x3f8147ad |      1.0099999 |      1.0099999 | \x3f8147ad | t
+- \x3f8147ae |           1.01 |           1.01 | \x3f8147ae | t
+- \x3f8147af |      1.0100001 |      1.0100001 | \x3f8147af | t
+- \x3f8ccccc |      1.0999999 |      1.0999999 | \x3f8ccccc | t
+- \x3f8ccccd |            1.1 |            1.1 | \x3f8ccccd | t
+- \x3f8cccce |      1.1000001 |      1.1000001 | \x3f8cccce | t
+- \x3fc90fdb |      1.5707964 |      1.5707964 | \x3fc90fdb | t
+- \x402df854 |      2.7182817 |      2.7182817 | \x402df854 | t
+- \x40490fdb |      3.1415927 |      3.1415927 | \x40490fdb | t
+- \x409fffff |      4.9999995 |      4.9999995 | \x409fffff | t
+- \x40a00000 |              5 |              5 | \x40a00000 | t
+- \x40a00001 |      5.0000005 |      5.0000005 | \x40a00001 | t
+- \x40afffff |      5.4999995 |      5.4999995 | \x40afffff | t
+- \x40b00000 |            5.5 |            5.5 | \x40b00000 | t
+- \x40b00001 |      5.5000005 |      5.5000005 | \x40b00001 | t
+- \x411fffff |       9.999999 |       9.999999 | \x411fffff | t
+- \x41200000 |             10 |             10 | \x41200000 | t
+- \x41200001 |      10.000001 |      10.000001 | \x41200001 | t
+- \x42c7ffff |       99.99999 |       99.99999 | \x42c7ffff | t
+- \x42c80000 |            100 |            100 | \x42c80000 | t
+- \x42c80001 |      100.00001 |      100.00001 | \x42c80001 | t
+- \x4479ffff |      999.99994 |      999.99994 | \x4479ffff | t
+- \x447a0000 |           1000 |           1000 | \x447a0000 | t
+- \x447a0001 |     1000.00006 |     1000.00006 | \x447a0001 | t
+- \x461c3fff |       9999.999 |       9999.999 | \x461c3fff | t
+- \x461c4000 |          10000 |          10000 | \x461c4000 | t
+- \x461c4001 |      10000.001 |      10000.001 | \x461c4001 | t
+- \x47c34fff |       99999.99 |       99999.99 | \x47c34fff | t
+- \x47c35000 |         100000 |         100000 | \x47c35000 | t
+- \x47c35001 |      100000.01 |      100000.01 | \x47c35001 | t
+- \x497423ff |      999999.94 |      999999.94 | \x497423ff | t
+- \x49742400 |          1e+06 |          1e+06 | \x49742400 | t
+- \x49742401 | 1.00000006e+06 | 1.00000006e+06 | \x49742401 | t
+- \x4b18967f |   9.999999e+06 |   9.999999e+06 | \x4b18967f | t
+- \x4b189680 |          1e+07 |          1e+07 | \x4b189680 | t
+- \x4b189681 |  1.0000001e+07 |  1.0000001e+07 | \x4b189681 | t
+- \x4cbebc1f |   9.999999e+07 |   9.999999e+07 | \x4cbebc1f | t
+- \x4cbebc20 |          1e+08 |          1e+08 | \x4cbebc20 | t
+- \x4cbebc21 |  1.0000001e+08 |  1.0000001e+08 | \x4cbebc21 | t
+- \x4e6e6b27 |  9.9999994e+08 |  9.9999994e+08 | \x4e6e6b27 | t
+- \x4e6e6b28 |          1e+09 |          1e+09 | \x4e6e6b28 | t
+- \x4e6e6b29 | 1.00000006e+09 | 1.00000006e+09 | \x4e6e6b29 | t
+- \x501502f8 |   9.999999e+09 |   9.999999e+09 | \x501502f8 | t
+- \x501502f9 |          1e+10 |          1e+10 | \x501502f9 | t
+- \x501502fa |  1.0000001e+10 |  1.0000001e+10 | \x501502fa | t
+- \x51ba43b6 |   9.999999e+10 |   9.999999e+10 | \x51ba43b6 | t
+- \x51ba43b7 |          1e+11 |          1e+11 | \x51ba43b7 | t
+- \x51ba43b8 |  1.0000001e+11 |  1.0000001e+11 | \x51ba43b8 | t
+- \x1f6c1e4a |          5e-20 |          5e-20 | \x1f6c1e4a | t
+- \x59be6cea |        6.7e+15 |        6.7e+15 | \x59be6cea | t
+- \x5d5ab6c4 |       9.85e+17 |       9.85e+17 | \x5d5ab6c4 | t
+- \x2cc4a9bd |     5.5895e-12 |     5.5895e-12 | \x2cc4a9bd | t
+- \x15ae43fd |   7.038531e-26 |   7.038531e-26 | \x15ae43fd | t
+- \x2cf757ca |  7.0299088e-12 |  7.0299088e-12 | \x2cf757ca | t
+- \x665ba998 |  2.5933168e+23 |  2.5933168e+23 | \x665ba998 | t
+- \x743c3324 |  5.9642887e+31 |  5.9642887e+31 | \x743c3324 | t
+- \x47f1205a |       123456.7 |       123456.7 | \x47f1205a | t
+- \x4640e6ae |       12345.67 |       12345.67 | \x4640e6ae | t
+- \x449a5225 |       1234.567 |       1234.567 | \x449a5225 | t
+- \x42f6e9d5 |       123.4567 |       123.4567 | \x42f6e9d5 | t
+- \x414587dd |       12.34567 |       12.34567 | \x414587dd | t
+- \x3f9e064b |       1.234567 |       1.234567 | \x3f9e064b | t
+- \x4c000004 |  3.3554448e+07 |  3.3554448e+07 | \x4c000004 | t
+- \x50061c46 |   8.999999e+09 |   8.999999e+09 | \x50061c46 | t
+- \x510006a8 |  3.4366718e+10 |  3.4366718e+10 | \x510006a8 | t
+- \x48951f84 |      305404.12 |      305404.12 | \x48951f84 | t
+- \x45fd1840 |      8099.0312 |      8099.0312 | \x45fd1840 | t
+- \x39800000 |  0.00024414062 |  0.00024414062 | \x39800000 | t
+- \x3b200000 |   0.0024414062 |   0.0024414062 | \x3b200000 | t
+- \x3b900000 |   0.0043945312 |   0.0043945312 | \x3b900000 | t
+- \x3bd00000 |   0.0063476562 |   0.0063476562 | \x3bd00000 | t
+- \x63800000 |  4.7223665e+21 |  4.7223665e+21 | \x63800000 | t
+- \x4b000000 |   8.388608e+06 |   8.388608e+06 | \x4b000000 | t
+- \x4b800000 |  1.6777216e+07 |  1.6777216e+07 | \x4b800000 | t
+- \x4c000001 |  3.3554436e+07 |  3.3554436e+07 | \x4c000001 | t
+- \x4c800b0d |  6.7131496e+07 |  6.7131496e+07 | \x4c800b0d | t
+- \x00d24584 |  1.9310392e-38 |  1.9310392e-38 | \x00d24584 | t
+- \x00d90b88 |   1.993244e-38 |   1.993244e-38 | \x00d90b88 | t
+- \x45803f34 |      4103.9004 |      4103.9004 | \x45803f34 | t
+- \x4f9f24f7 |  5.3399997e+09 |  5.3399997e+09 | \x4f9f24f7 | t
+- \x3a8722c3 |   0.0010310042 |   0.0010310042 | \x3a8722c3 | t
+- \x5c800041 |   2.882326e+17 |   2.882326e+17 | \x5c800041 | t
+- \x15ae43fd |   7.038531e-26 |   7.038531e-26 | \x15ae43fd | t
+- \x5d4cccfb |   9.223404e+17 |   9.223404e+17 | \x5d4cccfb | t
+- \x4c800001 |   6.710887e+07 |   6.710887e+07 | \x4c800001 | t
+- \x57800ed8 |   2.816025e+14 |   2.816025e+14 | \x57800ed8 | t
+- \x5f000000 |   9.223372e+18 |   9.223372e+18 | \x5f000000 | t
+- \x700000f0 |  1.5846086e+29 |  1.5846086e+29 | \x700000f0 | t
+- \x5f23e9ac |  1.1811161e+19 |  1.1811161e+19 | \x5f23e9ac | t
+- \x5e9502f9 |   5.368709e+18 |   5.368709e+18 | \x5e9502f9 | t
+- \x5e8012b1 |  4.6143166e+18 |  4.6143166e+18 | \x5e8012b1 | t
+- \x3c000028 |    0.007812537 |    0.007812537 | \x3c000028 | t
+- \x60cde861 | 1.18697725e+20 | 1.18697725e+20 | \x60cde861 | t
+- \x03aa2a50 | 1.00014165e-36 | 1.00014165e-36 | \x03aa2a50 | t
+- \x43480000 |            200 |            200 | \x43480000 | t
+- \x4c000000 |  3.3554432e+07 |  3.3554432e+07 | \x4c000000 | t
+- \x5d1502f9 |  6.7108864e+17 |  6.7108864e+17 | \x5d1502f9 | t
+- \x5d9502f9 |  1.3421773e+18 |  1.3421773e+18 | \x5d9502f9 | t
+- \x5e1502f9 |  2.6843546e+18 |  2.6843546e+18 | \x5e1502f9 | t
+- \x3f99999a |            1.2 |            1.2 | \x3f99999a | t
+- \x3f9d70a4 |           1.23 |           1.23 | \x3f9d70a4 | t
+- \x3f9df3b6 |          1.234 |          1.234 | \x3f9df3b6 | t
+- \x3f9e0419 |         1.2345 |         1.2345 | \x3f9e0419 | t
+- \x3f9e0610 |        1.23456 |        1.23456 | \x3f9e0610 | t
+- \x3f9e064b |       1.234567 |       1.234567 | \x3f9e064b | t
+- \x3f9e0651 |      1.2345678 |      1.2345678 | \x3f9e0651 | t
+- \x03d20cfe | 1.23456735e-36 | 1.23456735e-36 | \x03d20cfe | t
+-(261 rows)
+-
++ERROR:  type "xfloat4" does not exist
+ -- clean up, lest opr_sanity complain
+ drop type xfloat4 cascade;
+-NOTICE:  drop cascades to 6 other objects
+-DETAIL:  drop cascades to function xfloat4in(cstring)
+-drop cascades to function xfloat4out(xfloat4)
+-drop cascades to cast from xfloat4 to real
+-drop cascades to cast from real to xfloat4
+-drop cascades to cast from xfloat4 to integer
+-drop cascades to cast from integer to xfloat4
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_

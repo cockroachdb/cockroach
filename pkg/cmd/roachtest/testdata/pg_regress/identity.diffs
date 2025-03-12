@@ -1,0 +1,884 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/identity.out --label=/mnt/data1/postgres/src/test/regress/results/identity.out /mnt/data1/postgres/src/test/regress/expected/identity.out /mnt/data1/postgres/src/test/regress/results/identity.out
+--- /mnt/data1/postgres/src/test/regress/expected/identity.out
++++ /mnt/data1/postgres/src/test/regress/results/identity.out
+@@ -10,21 +10,27 @@
+ ALTER TABLE itest3 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error
+ ERROR:  column "a" of relation "itest3" is already an identity column
+ SELECT table_name, column_name, column_default, is_nullable, is_identity, identity_generation, identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle FROM information_schema.columns WHERE table_name LIKE 'itest_' ORDER BY 1, 2;
+- table_name | column_name | column_default | is_nullable | is_identity | identity_generation | identity_start | identity_increment |  identity_maximum   | identity_minimum | identity_cycle 
+-------------+-------------+----------------+-------------+-------------+---------------------+----------------+--------------------+---------------------+------------------+----------------
+- itest1     | a           |                | NO          | YES         | BY DEFAULT          | 1              | 1                  | 2147483647          | 1                | NO
+- itest1     | b           |                | YES         | NO          |                     |                |                    |                     |                  | NO
+- itest2     | a           |                | NO          | YES         | ALWAYS              | 1              | 1                  | 9223372036854775807 | 1                | NO
+- itest2     | b           |                | YES         | NO          |                     |                |                    |                     |                  | NO
+- itest3     | a           |                | NO          | YES         | BY DEFAULT          | 7              | 5                  | 32767               | 1                | NO
+- itest3     | b           |                | YES         | NO          |                     |                |                    |                     |                  | NO
+-(6 rows)
++ table_name | column_name |              column_default              | is_nullable | is_identity | identity_generation | identity_start | identity_increment |  identity_maximum   | identity_minimum | identity_cycle 
++------------+-------------+------------------------------------------+-------------+-------------+---------------------+----------------+--------------------+---------------------+------------------+----------------
++ itest1     | a           | nextval('public.itest1_a_seq'::REGCLASS) | NO          | YES         | BY DEFAULT          | 1              | 1                  | 9223372036854775807 | 1                | 
++ itest1     | b           |                                          | YES         | NO          |                     |                |                    |                     |                  | 
++ itest1     | rowid       | unique_rowid()                           | NO          | NO          |                     |                |                    |                     |                  | 
++ itest2     | a           | nextval('public.itest2_a_seq'::REGCLASS) | NO          | YES         | ALWAYS              | 1              | 1                  | 9223372036854775807 | 1                | 
++ itest2     | b           |                                          | YES         | NO          |                     |                |                    |                     |                  | 
++ itest2     | rowid       | unique_rowid()                           | NO          | NO          |                     |                |                    |                     |                  | 
++ itest3     | a           | nextval('public.itest3_a_seq'::REGCLASS) | NO          | YES         | BY DEFAULT          | 7              | 5                  | 9223372036854775807 | 1                | 
++ itest3     | b           |                                          | YES         | NO          |                     |                |                    |                     |                  | 
++ itest3     | rowid       | unique_rowid()                           | NO          | NO          |                     |                |                    |                     |                  | 
++(9 rows)
+ 
+ -- internal sequences should not be shown here
+ SELECT sequence_name FROM information_schema.sequences WHERE sequence_name LIKE 'itest%';
+  sequence_name 
+ ---------------
+-(0 rows)
++ itest1_a_seq
++ itest2_a_seq
++ itest3_a_seq
++(3 rows)
+ 
+ SELECT pg_get_serial_sequence('itest1', 'a');
+  pg_get_serial_sequence 
+@@ -33,41 +39,48 @@
+ (1 row)
+ 
+ \d itest1_a_seq
+-                    Sequence "public.itest1_a_seq"
+-  Type   | Start | Minimum |  Maximum   | Increment | Cycles? | Cache 
+----------+-------+---------+------------+-----------+---------+-------
+- integer |     1 |       1 | 2147483647 |         1 | no      |     1
+-Sequence for identity column: public.itest1.a
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest1_a_seq)$' COLLATE pg_catalog.default
++                                                                            ^
+ CREATE TABLE itest4 (a int, b text);
+ ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error, requires NOT NULL
+ ERROR:  column "a" of relation "itest4" must be declared NOT NULL before identity can be added
+ ALTER TABLE itest4 ALTER COLUMN a SET NOT NULL;
+ ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- ok
+ ALTER TABLE itest4 ALTER COLUMN a DROP NOT NULL;  -- error, disallowed
+-ERROR:  column "a" of relation "itest4" is an identity column
++ERROR:  relation "itest4" (1033): conflicting NULL/NOT NULL declarations for column "a"
+ ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error, already set
+ ERROR:  column "a" of relation "itest4" is already an identity column
+ ALTER TABLE itest4 ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY;  -- error, wrong data type
+-ERROR:  identity column type must be smallint, integer, or bigint
++ERROR:  column "b" of relation "itest4" type must be an integer type
+ -- for later
+ ALTER TABLE itest4 ALTER COLUMN b SET DEFAULT '';
+ -- invalid column type
+ CREATE TABLE itest_err_1 (a text generated by default as identity);
+-ERROR:  identity column type must be smallint, integer, or bigint
++ERROR:  at or near ")": syntax error: identity column type must be an INT
++DETAIL:  source SQL:
++CREATE TABLE itest_err_1 (a text generated by default as identity)
++                                                                 ^
+ -- duplicate identity
+ CREATE TABLE itest_err_2 (a int generated always as identity generated by default as identity);
+-ERROR:  multiple identity specifications for column "a" of table "itest_err_2"
+-LINE 1: ...E itest_err_2 (a int generated always as identity generated ...
+-                                                             ^
++ERROR:  at or near ")": syntax error: multiple identity specifications for column "a"
++DETAIL:  source SQL:
++CREATE TABLE itest_err_2 (a int generated always as identity generated by default as identity)
++                                                                                             ^
+ -- cannot have default and identity
+ CREATE TABLE itest_err_3 (a int default 5 generated by default as identity);
+-ERROR:  both default and identity specified for column "a" of table "itest_err_3"
+-LINE 1: CREATE TABLE itest_err_3 (a int default 5 generated by defau...
+-                                                  ^
++ERROR:  at or near ")": syntax error: multiple default values specified for column "a"
++DETAIL:  source SQL:
++CREATE TABLE itest_err_3 (a int default 5 generated by default as identity)
++                                                                          ^
+ -- cannot combine serial and identity
+ CREATE TABLE itest_err_4 (a serial generated by default as identity);
+-ERROR:  both default and identity specified for column "a" of table "itest_err_4"
+ INSERT INTO itest1 DEFAULT VALUES;
+ INSERT INTO itest1 DEFAULT VALUES;
+ INSERT INTO itest2 DEFAULT VALUES;
+@@ -107,58 +120,87 @@
+ -- VALUES RTEs
+ CREATE TABLE itest5 (a int generated always as identity, b text);
+ INSERT INTO itest5 VALUES (1, 'a');  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 VALUES (DEFAULT, 'a');  -- ok
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 VALUES (2, 'b'), (3, 'c');  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 VALUES (DEFAULT, 'b'), (3, 'c');  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 VALUES (2, 'b'), (DEFAULT, 'c');  -- error
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 VALUES (DEFAULT, 'b'), (DEFAULT, 'c');  -- ok
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-1, 'aa');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-1, 'aa')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-2, 'bb'), (-3, 'cc');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-2, 'bb'), (-3, 'cc')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (DEFAULT, 'dd'), (-4, 'ee');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (DEFAULT, 'dd'), (-4, 'ee')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-5, 'ff'), (DEFAULT, 'gg');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (-5, 'ff'), (DEFAULT, 'gg')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (DEFAULT, 'hh'), (DEFAULT, 'ii');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING SYSTEM VALUE VALUES (DEFAULT, 'hh'), (DEFAULT, 'ii')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-1, 'aaa');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-1, 'aaa')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-2, 'bbb'), (-3, 'ccc');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-2, 'bbb'), (-3, 'ccc')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING USER VALUE VALUES (DEFAULT, 'ddd'), (-4, 'eee');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING USER VALUE VALUES (DEFAULT, 'ddd'), (-4, 'eee')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-5, 'fff'), (DEFAULT, 'ggg');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING USER VALUE VALUES (-5, 'fff'), (DEFAULT, 'ggg')
++                   ^
++HINT:  try \h INSERT
+ INSERT INTO itest5 OVERRIDING USER VALUE VALUES (DEFAULT, 'hhh'), (DEFAULT, 'iii');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest5 OVERRIDING USER VALUE VALUES (DEFAULT, 'hhh'), (DEFAULT, 'iii')
++                   ^
++HINT:  try \h INSERT
+ SELECT * FROM itest5;
+- a  |  b  
+-----+-----
+-  1 | a
+-  2 | b
+-  3 | c
+- -1 | aa
+- -2 | bb
+- -3 | cc
+-  4 | dd
+- -4 | ee
+- -5 | ff
+-  5 | gg
+-  6 | hh
+-  7 | ii
+-  8 | aaa
+-  9 | bbb
+- 10 | ccc
+- 11 | ddd
+- 12 | eee
+- 13 | fff
+- 14 | ggg
+- 15 | hhh
+- 16 | iii
+-(21 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ DROP TABLE itest5;
+ INSERT INTO itest3 VALUES (DEFAULT, 'a');
+@@ -182,36 +224,51 @@
+ -- there are multiple identity columns in a table, which is also an
+ -- extension.
+ INSERT INTO itest1 OVERRIDING SYSTEM VALUE VALUES (20, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest1 OVERRIDING SYSTEM VALUE VALUES (20, 'xyz')
++                   ^
++HINT:  try \h INSERT
+ -- This ignores the 30 and uses the sequence value instead:
+ INSERT INTO itest1 OVERRIDING USER VALUE VALUES (30, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest1 OVERRIDING USER VALUE VALUES (30, 'xyz')
++                   ^
++HINT:  try \h INSERT
+ SELECT * FROM itest1;
+  a  |  b  
+ ----+-----
+   1 | 
+   2 | 
+  10 | xyz
+- 20 | xyz
+-  3 | xyz
+-(5 rows)
++(3 rows)
+ 
+ -- GENERATED ALWAYS
+ -- This is an error:
+ INSERT INTO itest2 VALUES (10, 'xyz');
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ -- This inserts the row as presented:
+ INSERT INTO itest2 OVERRIDING SYSTEM VALUE VALUES (20, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest2 OVERRIDING SYSTEM VALUE VALUES (20, 'xyz')
++                   ^
++HINT:  try \h INSERT
+ -- This ignores the 30 and uses the sequence value instead:
+ INSERT INTO itest2 OVERRIDING USER VALUE VALUES (30, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itest2 OVERRIDING USER VALUE VALUES (30, 'xyz')
++                   ^
++HINT:  try \h INSERT
+ SELECT * FROM itest2;
+- a  |  b  
+-----+-----
+-  1 | 
+-  2 | 
+- 20 | xyz
+-  3 | xyz
+-(4 rows)
++ a | b 
++---+---
++ 1 | 
++ 2 | 
++(2 rows)
+ 
+ -- UPDATE tests
+ -- GENERATED BY DEFAULT is not restricted.
+@@ -220,39 +277,35 @@
+ SELECT * FROM itest1;
+   a  |  b  
+ -----+-----
+-  10 | xyz
+-  20 | xyz
+-   3 | xyz
+  101 | 
+-   4 | 
+-(5 rows)
++   3 | 
++  10 | xyz
++(3 rows)
+ 
+ -- GENERATED ALWAYS allows only DEFAULT.
+ UPDATE itest2 SET a = 101 WHERE a = 1;  -- error
+ ERROR:  column "a" can only be updated to DEFAULT
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ UPDATE itest2 SET a = DEFAULT WHERE a = 2;  -- ok
+ SELECT * FROM itest2;
+- a  |  b  
+-----+-----
+-  1 | 
+- 20 | xyz
+-  3 | xyz
+-  4 | 
+-(4 rows)
++ a | b 
++---+---
++ 1 | 
++ 3 | 
++(2 rows)
+ 
+ -- COPY tests
+ CREATE TABLE itest9 (a int GENERATED ALWAYS AS IDENTITY, b text, c bigint);
+ COPY itest9 FROM stdin;
++ERROR:  cannot insert into column "a"
++DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS
+ COPY itest9 (b, c) FROM stdin;
+ SELECT * FROM itest9 ORDER BY c;
+-  a  |  b   |  c  
+------+------+-----
+- 100 | foo  | 200
+- 101 | bar  | 201
+-   1 | foo2 | 202
+-   2 | bar2 | 203
+-(4 rows)
++ a |  b   |  c  
++---+------+-----
++ 1 | foo2 | 202
++ 2 | bar2 | 203
++(2 rows)
+ 
+ -- DROP IDENTITY tests
+ ALTER TABLE itest4 ALTER COLUMN a DROP IDENTITY;
+@@ -261,8 +314,7 @@
+ ALTER TABLE itest4 ALTER COLUMN a DROP IDENTITY IF EXISTS;  -- noop
+ NOTICE:  column "a" of relation "itest4" is not an identity column, skipping
+ INSERT INTO itest4 DEFAULT VALUES;  -- fails because NOT NULL is not dropped
+-ERROR:  null value in column "a" of relation "itest4" violates not-null constraint
+-DETAIL:  Failing row contains (null, ).
++ERROR:  null value in column "a" violates not-null constraint
+ ALTER TABLE itest4 ALTER COLUMN a DROP NOT NULL;
+ INSERT INTO itest4 DEFAULT VALUES;
+ SELECT * FROM itest4;
+@@ -276,54 +328,54 @@
+ -- check that sequence is removed
+ SELECT sequence_name FROM itest4_a_seq;
+ ERROR:  relation "itest4_a_seq" does not exist
+-LINE 1: SELECT sequence_name FROM itest4_a_seq;
+-                                  ^
+ -- test views
+ CREATE TABLE itest10 (a int generated by default as identity, b text);
+ CREATE TABLE itest11 (a int generated always as identity, b text);
+ CREATE VIEW itestv10 AS SELECT * FROM itest10;
+ CREATE VIEW itestv11 AS SELECT * FROM itest11;
+ INSERT INTO itestv10 DEFAULT VALUES;
++ERROR:  "itestv10" is not a table
+ INSERT INTO itestv10 DEFAULT VALUES;
++ERROR:  "itestv10" is not a table
+ INSERT INTO itestv11 DEFAULT VALUES;
++ERROR:  "itestv11" is not a table
+ INSERT INTO itestv11 DEFAULT VALUES;
++ERROR:  "itestv11" is not a table
+ SELECT * FROM itestv10;
+  a | b 
+ ---+---
+- 1 | 
+- 2 | 
+-(2 rows)
++(0 rows)
+ 
+ SELECT * FROM itestv11;
+  a | b 
+ ---+---
+- 1 | 
+- 2 | 
+-(2 rows)
++(0 rows)
+ 
+ INSERT INTO itestv10 VALUES (10, 'xyz');
++ERROR:  "itestv10" is not a table
+ INSERT INTO itestv10 OVERRIDING USER VALUE VALUES (11, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itestv10 OVERRIDING USER VALUE VALUES (11, 'xyz')
++                     ^
++HINT:  try \h INSERT
+ SELECT * FROM itestv10;
+- a  |  b  
+-----+-----
+-  1 | 
+-  2 | 
+- 10 | xyz
+-  3 | xyz
+-(4 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ INSERT INTO itestv11 VALUES (10, 'xyz');
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  "itestv11" is not a table
+ INSERT INTO itestv11 OVERRIDING SYSTEM VALUE VALUES (11, 'xyz');
++ERROR:  at or near "overriding": syntax error
++DETAIL:  source SQL:
++INSERT INTO itestv11 OVERRIDING SYSTEM VALUE VALUES (11, 'xyz')
++                     ^
++HINT:  try \h INSERT
+ SELECT * FROM itestv11;
+- a  |  b  
+-----+-----
+-  1 | 
+-  2 | 
+- 11 | xyz
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ DROP VIEW itestv10, itestv11;
+ -- ADD COLUMN
+@@ -333,18 +385,21 @@
+ INSERT INTO itest13 VALUES (1), (2), (3);
+ -- add column to populated table
+ ALTER TABLE itest13 ADD COLUMN c int GENERATED BY DEFAULT AS IDENTITY;
++ERROR:  failed to construct index entries during backfill: nextval(): unimplemented: cannot evaluate scalar expressions containing sequence operations in this context
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/42508/_version_
+ SELECT * FROM itest13;
+- a | b | c 
+----+---+---
+- 1 | 1 | 1
+- 2 | 2 | 2
+- 3 | 3 | 3
++ a | b 
++---+---
++ 1 | 1
++ 2 | 2
++ 3 | 3
+ (3 rows)
+ 
+ -- various ALTER COLUMN tests
+ -- fail, not allowed for identity columns
+ ALTER TABLE itest1 ALTER COLUMN a SET DEFAULT 1;
+-ERROR:  column "a" of relation "itest1" is an identity column
++ERROR:  column "a" is an identity column
+ -- fail, not allowed, already has a default
+ CREATE TABLE itest5 (a serial, b text);
+ ALTER TABLE itest5 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;
+@@ -353,57 +408,68 @@
+ SELECT seqtypid::regtype FROM pg_sequence WHERE seqrelid = 'itest3_a_seq'::regclass;
+  seqtypid 
+ ----------
+- integer
++ int8
+ (1 row)
+ 
+ \d itest3
+-                           Table "public.itest3"
+- Column |  Type   | Collation | Nullable |             Default              
+---------+---------+-----------+----------+----------------------------------
+- a      | integer |           | not null | generated by default as identity
+- b      | text    |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest3)$' COLLATE pg_catalog.default
++                                                                      ^
+ ALTER TABLE itest3 ALTER COLUMN a TYPE text;  -- error
+-ERROR:  identity column type must be smallint, integer, or bigint
++ERROR:  identity column type must be INT, INT2, INT4 or INT8
+ -- kinda silly to change property in the same command, but it should work
+ ALTER TABLE itest3
+   ADD COLUMN c int GENERATED BY DEFAULT AS IDENTITY,
+   ALTER COLUMN c SET GENERATED ALWAYS;
++ERROR:  nextval(): unimplemented: cannot evaluate scalar expressions containing sequence operations in this context
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/42508/_version_
+ \d itest3
+-                           Table "public.itest3"
+- Column |  Type   | Collation | Nullable |             Default              
+---------+---------+-----------+----------+----------------------------------
+- a      | integer |           | not null | generated by default as identity
+- b      | text    |           |          | 
+- c      | integer |           | not null | generated always as identity
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest3)$' COLLATE pg_catalog.default
++                                                                      ^
+ -- ALTER COLUMN ... SET
+ CREATE TABLE itest6 (a int GENERATED ALWAYS AS IDENTITY, b text);
+ INSERT INTO itest6 DEFAULT VALUES;
+ ALTER TABLE itest6 ALTER COLUMN a SET GENERATED BY DEFAULT SET INCREMENT BY 2 SET START WITH 100 RESTART;
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++ALTER TABLE itest6 ALTER COLUMN a SET GENERATED BY DEFAULT SET INCREMENT BY 2 SET START WITH 100 RESTART
++                                                           ^
+ INSERT INTO itest6 DEFAULT VALUES;
+ INSERT INTO itest6 DEFAULT VALUES;
+ SELECT * FROM itest6;
+-  a  | b 
+------+---
+-   1 | 
+- 100 | 
+- 102 | 
++ a | b 
++---+---
++ 1 | 
++ 2 | 
++ 3 | 
+ (3 rows)
+ 
+ SELECT table_name, column_name, is_identity, identity_generation FROM information_schema.columns WHERE table_name = 'itest6' ORDER BY 1, 2;
+  table_name | column_name | is_identity | identity_generation 
+ ------------+-------------+-------------+---------------------
+- itest6     | a           | YES         | BY DEFAULT
++ itest6     | a           | YES         | ALWAYS
+  itest6     | b           | NO          | 
+-(2 rows)
++ itest6     | rowid       | NO          | 
++(3 rows)
+ 
+ ALTER TABLE itest6 ALTER COLUMN b SET INCREMENT BY 2;  -- fail, not identity
+ ERROR:  column "b" of relation "itest6" is not an identity column
+ -- prohibited direct modification of sequence
+ ALTER SEQUENCE itest6_a_seq OWNED BY NONE;
+-ERROR:  cannot change ownership of identity sequence
+-DETAIL:  Sequence "itest6_a_seq" is linked to table "itest6".
+ -- inheritance
+ CREATE TABLE itest7 (a int GENERATED ALWAYS AS IDENTITY);
+ INSERT INTO itest7 DEFAULT VALUES;
+@@ -415,32 +481,45 @@
+ 
+ -- identity property is not inherited
+ CREATE TABLE itest7a (b text) INHERITS (itest7);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE itest7a (b text) INHERITS (itest7)
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ -- make column identity in child table
+ CREATE TABLE itest7b (a int);
+ CREATE TABLE itest7c (a int GENERATED ALWAYS AS IDENTITY) INHERITS (itest7b);
+-NOTICE:  merging column "a" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE itest7c (a int GENERATED ALWAYS AS IDENTITY) INHERITS (itest7b)
++                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO itest7c DEFAULT VALUES;
++ERROR:  relation "itest7c" does not exist
+ SELECT * FROM itest7c;
+- a 
+----
+- 1
+-(1 row)
+-
++ERROR:  relation "itest7c" does not exist
+ CREATE TABLE itest7d (a int not null);
+ CREATE TABLE itest7e () INHERITS (itest7d);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE itest7e () INHERITS (itest7d)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ ALTER TABLE itest7d ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;
+ ALTER TABLE itest7d ADD COLUMN b int GENERATED ALWAYS AS IDENTITY;  -- error
+-ERROR:  cannot recursively add identity column to table that has child tables
+ SELECT table_name, column_name, is_nullable, is_identity, identity_generation FROM information_schema.columns WHERE table_name LIKE 'itest7%' ORDER BY 1, 2;
+  table_name | column_name | is_nullable | is_identity | identity_generation 
+ ------------+-------------+-------------+-------------+---------------------
+  itest7     | a           | NO          | YES         | ALWAYS
+- itest7a    | a           | NO          | NO          | 
+- itest7a    | b           | YES         | NO          | 
++ itest7     | rowid       | NO          | NO          | 
+  itest7b    | a           | YES         | NO          | 
+- itest7c    | a           | NO          | YES         | ALWAYS
++ itest7b    | rowid       | NO          | NO          | 
+  itest7d    | a           | NO          | YES         | ALWAYS
+- itest7e    | a           | NO          | NO          | 
++ itest7d    | b           | NO          | YES         | ALWAYS
++ itest7d    | rowid       | NO          | NO          | 
+ (7 rows)
+ 
+ -- These ALTER TABLE variants will not recurse.
+@@ -453,11 +532,11 @@
+ GRANT SELECT, INSERT ON itest8 TO regress_identity_user1;
+ SET ROLE regress_identity_user1;
+ INSERT INTO itest8 DEFAULT VALUES;
++ERROR:  nextval(): user regress_identity_user1 does not have UPDATE or USAGE privilege on relation itest8_a_seq
+ SELECT * FROM itest8;
+  a | b 
+ ---+---
+- 1 | 
+-(1 row)
++(0 rows)
+ 
+ RESET ROLE;
+ DROP TABLE itest8;
+@@ -471,12 +550,20 @@
+   ADD COLUMN f3 int NOT NULL,
+   ALTER COLUMN f3 ADD GENERATED ALWAYS AS IDENTITY,
+   ALTER COLUMN f3 SET GENERATED BY DEFAULT SET INCREMENT 10;
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++ALTER TABLE itest8
++  ADD COLUMN f3 int NOT NULL,
++  ALTER COLUMN f3 ADD GENERATED ALWAYS AS IDENTITY,
++  ALTER COLUMN f3 SET GENERATED BY DEFAULT SET INCREMENT 10
++                                           ^
+ ALTER TABLE itest8
+   ADD COLUMN f4 int;
+ ALTER TABLE itest8
+   ALTER COLUMN f4 SET NOT NULL,
+   ALTER COLUMN f4 ADD GENERATED ALWAYS AS IDENTITY,
+   ALTER COLUMN f4 SET DATA TYPE bigint;
++ERROR:  column "f4" of relation "itest8" must be declared NOT NULL before identity can be added
+ ALTER TABLE itest8
+   ADD COLUMN f5 int GENERATED ALWAYS AS IDENTITY;
+ ALTER TABLE itest8
+@@ -489,59 +576,94 @@
+ ALTER TABLE itest8
+   ADD COLUMN f22 int NOT NULL,
+   ALTER COLUMN f22 ADD GENERATED ALWAYS AS IDENTITY;
+-ERROR:  column "f22" of relation "itest8" contains null values
++ERROR:  null value in column "f22" violates not-null constraint
+ TABLE itest8;
+- f1 | f2 | f3 | f4 | f5 
+-----+----+----+----+----
+-  0 |  1 |  1 |  1 |   
+-  1 |  2 | 11 |  2 |   
++ f1 | f2 | f4 | f5 
++----+----+----+----
++  0 |  1 |    |   
++  1 |  2 |    |   
+ (2 rows)
+ 
+ \d+ itest8
+-                                               Table "public.itest8"
+- Column |  Type   | Collation | Nullable |             Default              | Storage | Stats target | Description 
+---------+---------+-----------+----------+----------------------------------+---------+--------------+-------------
+- f1     | integer |           |          |                                  | plain   |              | 
+- f2     | integer |           | not null | generated always as identity     | plain   |              | 
+- f3     | integer |           | not null | generated by default as identity | plain   |              | 
+- f4     | bigint  |           | not null | generated always as identity     | plain   |              | 
+- f5     | bigint  |           |          |                                  | plain   |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest8)$' COLLATE pg_catalog.default
++                                                                      ^
+ \d itest8_f2_seq
+-                   Sequence "public.itest8_f2_seq"
+-  Type   | Start | Minimum |  Maximum   | Increment | Cycles? | Cache 
+----------+-------+---------+------------+-----------+---------+-------
+- integer |     1 |       1 | 2147483647 |         1 | no      |     1
+-Sequence for identity column: public.itest8.f2
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest8_f2_seq)$' COLLATE pg_catalog.default
++                                                                             ^
+ \d itest8_f3_seq
+-                   Sequence "public.itest8_f3_seq"
+-  Type   | Start | Minimum |  Maximum   | Increment | Cycles? | Cache 
+----------+-------+---------+------------+-----------+---------+-------
+- integer |     1 |       1 | 2147483647 |        10 | no      |     1
+-Sequence for identity column: public.itest8.f3
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest8_f3_seq)$' COLLATE pg_catalog.default
++                                                                             ^
+ \d itest8_f4_seq
+-                       Sequence "public.itest8_f4_seq"
+-  Type  | Start | Minimum |       Maximum       | Increment | Cycles? | Cache 
+---------+-------+---------+---------------------+-----------+---------+-------
+- bigint |     1 |       1 | 9223372036854775807 |         1 | no      |     1
+-Sequence for identity column: public.itest8.f4
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest8_f4_seq)$' COLLATE pg_catalog.default
++                                                                             ^
+ \d itest8_f5_seq
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(itest8_f5_seq)$' COLLATE pg_catalog.default
++                                                                             ^
+ DROP TABLE itest8;
+ -- typed tables (currently not supported)
+ CREATE TYPE itest_type AS (f1 integer, f2 text, f3 bigint);
+ CREATE TABLE itest12 OF itest_type (f1 WITH OPTIONS GENERATED ALWAYS AS IDENTITY); -- error
+-ERROR:  identity columns are not supported on typed tables
++ERROR:  at or near "of": syntax error
++DETAIL:  source SQL:
++CREATE TABLE itest12 OF itest_type (f1 WITH OPTIONS GENERATED ALWAYS AS IDENTITY)
++                     ^
++HINT:  try \h CREATE TABLE
+ DROP TYPE itest_type CASCADE;
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ -- table partitions (currently not supported)
+ CREATE TABLE itest_parent (f1 date NOT NULL, f2 text, f3 bigint) PARTITION BY RANGE (f1);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE itest_parent (f1 date NOT NULL, f2 text, f3 bigint) PARTITION BY RANGE (f1)
++                                                                                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE itest_child PARTITION OF itest_parent (
+     f3 WITH OPTIONS GENERATED ALWAYS AS IDENTITY
+ ) FOR VALUES FROM ('2016-07-01') TO ('2016-08-01'); -- error
+-ERROR:  identity columns are not supported on partitions
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE itest_child PARTITION OF itest_parent (
++                         ^
++HINT:  try \h CREATE TABLE
+ DROP TABLE itest_parent;
++ERROR:  relation "itest_parent" does not exist
+ -- test that sequence of half-dropped serial column is properly ignored
+ CREATE TABLE itest14 (id serial);
+ ALTER TABLE itest14 ALTER id DROP DEFAULT;
+@@ -549,13 +671,15 @@
+ INSERT INTO itest14 (id) VALUES (DEFAULT);
+ -- Identity columns must be NOT NULL (cf bug #16913)
+ CREATE TABLE itest15 (id integer GENERATED ALWAYS AS IDENTITY NULL); -- fail
+-ERROR:  conflicting NULL/NOT NULL declarations for column "id" of table "itest15"
+-LINE 1: ...ABLE itest15 (id integer GENERATED ALWAYS AS IDENTITY NULL);
+-                                                                 ^
++ERROR:  at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "id"
++DETAIL:  source SQL:
++CREATE TABLE itest15 (id integer GENERATED ALWAYS AS IDENTITY NULL)
++                                                                  ^
+ CREATE TABLE itest15 (id integer NULL GENERATED ALWAYS AS IDENTITY); -- fail
+-ERROR:  conflicting NULL/NOT NULL declarations for column "id" of table "itest15"
+-LINE 1: CREATE TABLE itest15 (id integer NULL GENERATED ALWAYS AS ID...
+-                                              ^
++ERROR:  at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "id"
++DETAIL:  source SQL:
++CREATE TABLE itest15 (id integer NULL GENERATED ALWAYS AS IDENTITY)
++                                                                  ^
+ CREATE TABLE itest15 (id integer GENERATED ALWAYS AS IDENTITY NOT NULL);
+ DROP TABLE itest15;
+ CREATE TABLE itest15 (id integer NOT NULL GENERATED ALWAYS AS IDENTITY);
+@@ -568,49 +692,65 @@
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) VALUES (s.s_a, s.s_b);
+-ERROR:  cannot insert a non-DEFAULT value into column "a"
+-DETAIL:  Column "a" is an identity column defined as GENERATED ALWAYS.
+-HINT:  Use OVERRIDING SYSTEM VALUE to override.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest15 t
++^
+ -- Used to fail, but now it works and ignores the user supplied value
+ MERGE INTO itest15 t
+ USING (SELECT 20 AS s_a, 'inserted by merge' AS s_b) s
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) OVERRIDING USER VALUE VALUES (s.s_a, s.s_b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest15 t
++^
+ MERGE INTO itest15 t
+ USING (SELECT 30 AS s_a, 'inserted by merge' AS s_b) s
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) OVERRIDING SYSTEM VALUE VALUES (s.s_a, s.s_b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest15 t
++^
+ MERGE INTO itest16 t
+ USING (SELECT 10 AS s_a, 'inserted by merge' AS s_b) s
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) VALUES (s.s_a, s.s_b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest16 t
++^
+ MERGE INTO itest16 t
+ USING (SELECT 20 AS s_a, 'inserted by merge' AS s_b) s
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) OVERRIDING USER VALUE VALUES (s.s_a, s.s_b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest16 t
++^
+ MERGE INTO itest16 t
+ USING (SELECT 30 AS s_a, 'inserted by merge' AS s_b) s
+ ON t.a = s.s_a
+ WHEN NOT MATCHED THEN
+ 	INSERT (a, b) OVERRIDING SYSTEM VALUE VALUES (s.s_a, s.s_b);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO itest16 t
++^
+ SELECT * FROM itest15;
+- a  |         b         
+-----+-------------------
+-  1 | inserted by merge
+- 30 | inserted by merge
+-(2 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ SELECT * FROM itest16;
+- a  |         b         
+-----+-------------------
+- 10 | inserted by merge
+-  1 | inserted by merge
+- 30 | inserted by merge
+-(3 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ DROP TABLE itest15;
+ DROP TABLE itest16;

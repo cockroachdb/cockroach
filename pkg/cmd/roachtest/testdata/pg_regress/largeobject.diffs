@@ -1,0 +1,678 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/largeobject.out --label=/mnt/data1/postgres/src/test/regress/results/largeobject.out /mnt/data1/postgres/src/test/regress/expected/largeobject.out /mnt/data1/postgres/src/test/regress/results/largeobject.out
+--- /mnt/data1/postgres/src/test/regress/expected/largeobject.out
++++ /mnt/data1/postgres/src/test/regress/results/largeobject.out
+@@ -3,37 +3,43 @@
+ --
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ \getenv abs_builddir PG_ABS_BUILDDIR
++invalid command \getenv
+ -- ensure consistent test output regardless of the default bytea format
+ SET bytea_output TO escape;
+ -- Test ALTER LARGE OBJECT OWNER, GRANT, COMMENT
+ CREATE ROLE regress_lo_user;
+ SELECT lo_create(42);
+- lo_create 
+------------
+-        42
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ ALTER LARGE OBJECT 42 OWNER TO regress_lo_user;
++ERROR:  at or near "large": syntax error
++DETAIL:  source SQL:
++ALTER LARGE OBJECT 42 OWNER TO regress_lo_user
++      ^
++HINT:  try \h ALTER
+ GRANT SELECT ON LARGE OBJECT 42 TO public;
++ERROR:  at or near "object": syntax error
++DETAIL:  source SQL:
++GRANT SELECT ON LARGE OBJECT 42 TO public
++                      ^
++HINT:  try \h GRANT
+ COMMENT ON LARGE OBJECT 42 IS 'the ultimate answer';
++ERROR:  at or near "large": syntax error
++DETAIL:  source SQL:
++COMMENT ON LARGE OBJECT 42 IS 'the ultimate answer'
++           ^
+ -- Test psql's \lo_list et al (we assume no other LOs exist yet)
+ \lo_list
+-               Large objects
+- ID |      Owner      |     Description     
+-----+-----------------+---------------------
+- 42 | regress_lo_user | the ultimate answer
+-(1 row)
++      Large objects
++ ID | Owner | Description 
++----+-------+-------------
++(0 rows)
+ 
+ \lo_list+
+-                                  Large objects
+- ID |      Owner      |         Access privileges          |     Description     
+-----+-----------------+------------------------------------+---------------------
+- 42 | regress_lo_user | regress_lo_user=rw/regress_lo_user+| the ultimate answer
+-    |                 | =r/regress_lo_user                 | 
+-(1 row)
+-
++invalid command \lo_list+
+ \lo_unlink 42
++cannot determine OID of function lo_open
+ \dl
+       Large objects
+  ID | Owner | Description 
+@@ -46,6 +52,7 @@
+ -- The mode arg to lo_creat is unused, some vestigal holdover from ancient times
+ -- returns the large object id
+ INSERT INTO lotest_stash_values (loid) SELECT lo_creat(42);
++ERROR:  unknown function: lo_creat()
+ -- NOTE: large objects require transactions
+ BEGIN;
+ -- lo_open(lobjId oid, mode integer) returns integer
+@@ -55,6 +62,10 @@
+ -- The return value is a file descriptor-like value which remains valid for the
+ -- transaction.
+ UPDATE lotest_stash_values SET fd = lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++UPDATE lotest_stash_values SET fd = lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++                                                       ^
+ -- loread/lowrite names are wonky, different from other functions which are lo_*
+ -- lowrite(fd integer, data bytea) returns integer
+ -- the integer is the number of bytes written
+@@ -89,30 +100,31 @@
+ 
+          -- William Wordsworth
+ ') FROM lotest_stash_values;
+- lowrite 
+----------
+-     848
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- lo_close(fd integer) returns integer
+ -- return value is 0 for success, or <0 for error (actually only -1, but...)
+ SELECT lo_close(fd) FROM lotest_stash_values;
+- lo_close 
+-----------
+-        0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ -- Copy to another large object.
+ -- Note: we intentionally don't remove the object created here;
+ -- it's left behind to help test pg_dump.
+ SELECT lo_from_bytea(0, lo_get(loid)) AS newloid FROM lotest_stash_values
+ \gset
++ERROR:  unknown function: lo_from_bytea()
+ -- Add a comment to it, as well, for pg_dump/pg_upgrade testing.
+ COMMENT ON LARGE OBJECT :newloid IS 'I Wandered Lonely as a Cloud';
++ERROR:  at or near "large": syntax error
++DETAIL:  source SQL:
++COMMENT ON LARGE OBJECT :newloid IS 'I Wandered Lonely as a Cloud'
++           ^
+ -- Read out a portion
+ BEGIN;
+ UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++                                                     ^
+ -- lo_lseek(fd integer, offset integer, whence integer) returns integer
+ -- offset is in bytes, whence is one of three values:
+ --  SEEK_SET (= 0) meaning relative to beginning
+@@ -120,64 +132,31 @@
+ --  SEEK_END (= 2) meaning relative to end (offset better be negative)
+ -- returns current position in file
+ SELECT lo_lseek(fd, 104, 0) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-      104
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- loread/lowrite names are wonky, different from other functions which are lo_*
+ -- loread(fd integer, len integer) returns bytea
+ SELECT loread(fd, 28) FROM lotest_stash_values;
+-            loread            
+-------------------------------
+- A host, of golden daffodils;
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, -19, 1) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-      113
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lowrite(fd, 'n') FROM lotest_stash_values;
+- lowrite 
+----------
+-       1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell(fd) FROM lotest_stash_values;
+- lo_tell 
+----------
+-     114
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, -744, 2) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-      104
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT loread(fd, 28) FROM lotest_stash_values;
+-            loread            
+-------------------------------
+- A host, on golden daffodils;
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_close(fd) FROM lotest_stash_values;
+- lo_close 
+-----------
+-        0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ -- Test resource management
+ BEGIN;
+ SELECT lo_open(loid, x'40000'::int) from lotest_stash_values;
+- lo_open 
+----------
+-       0
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_open(loid, x'40000'::int) from lotest_stash_values;
++                     ^
+ ABORT;
+ \set filename :abs_builddir '/results/invalid/path'
+ \set dobody 'DECLARE loid oid; BEGIN '
+@@ -186,238 +165,131 @@
+ \set dobody :dobody 'EXCEPTION WHEN UNDEFINED_FILE THEN '
+ \set dobody :dobody 'RAISE NOTICE ''could not open file, as expected''; END'
+ DO :'dobody';
+-NOTICE:  could not open file, as expected
++ERROR:  at or near ";": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DECLARE loid oid; BEGIN SELECT tbl.loid INTO loid FROM lotest_stash_values tbl; PERFORM lo_export(loid, ':abs_builddir/results/invalid/path'); EXCEPTION WHEN UNDEFINED_FILE THEN RAISE NOTICE 'could not open file, as expected'; END
++                                                                                                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test truncation.
+ BEGIN;
+ UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++                                                     ^
+ SELECT lo_truncate(fd, 11) FROM lotest_stash_values;
+- lo_truncate 
+--------------
+-           0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT loread(fd, 15) FROM lotest_stash_values;
+-     loread     
+-----------------
+- \012I wandered
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_truncate(fd, 10000) FROM lotest_stash_values;
+- lo_truncate 
+--------------
+-           0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT loread(fd, 10) FROM lotest_stash_values;
+-                  loread                  
+-------------------------------------------
+- \000\000\000\000\000\000\000\000\000\000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, 0, 2) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-    10000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell(fd) FROM lotest_stash_values;
+- lo_tell 
+----------
+-   10000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_truncate(fd, 5000) FROM lotest_stash_values;
+- lo_truncate 
+--------------
+-           0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, 0, 2) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-     5000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell(fd) FROM lotest_stash_values;
+- lo_tell 
+----------
+-    5000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_close(fd) FROM lotest_stash_values;
+- lo_close 
+-----------
+-        0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ -- Test 64-bit large object functions.
+ BEGIN;
+ UPDATE lotest_stash_values SET fd = lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++UPDATE lotest_stash_values SET fd = lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++                                                       ^
+ SELECT lo_lseek64(fd, 4294967296, 0) FROM lotest_stash_values;
+- lo_lseek64 
+-------------
+- 4294967296
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lowrite(fd, 'offset:4GB') FROM lotest_stash_values;
+- lowrite 
+----------
+-      10
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell64(fd) FROM lotest_stash_values;
+- lo_tell64  
+-------------
+- 4294967306
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek64(fd, -10, 1) FROM lotest_stash_values;
+- lo_lseek64 
+-------------
+- 4294967296
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell64(fd) FROM lotest_stash_values;
+- lo_tell64  
+-------------
+- 4294967296
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT loread(fd, 10) FROM lotest_stash_values;
+-   loread   
+-------------
+- offset:4GB
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_truncate64(fd, 5000000000) FROM lotest_stash_values;
+- lo_truncate64 
+----------------
+-             0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek64(fd, 0, 2) FROM lotest_stash_values;
+- lo_lseek64 
+-------------
+- 5000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell64(fd) FROM lotest_stash_values;
+- lo_tell64  
+-------------
+- 5000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_truncate64(fd, 3000000000) FROM lotest_stash_values;
+- lo_truncate64 
+----------------
+-             0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek64(fd, 0, 2) FROM lotest_stash_values;
+- lo_lseek64 
+-------------
+- 3000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell64(fd) FROM lotest_stash_values;
+- lo_tell64  
+-------------
+- 3000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_close(fd) FROM lotest_stash_values;
+- lo_close 
+-----------
+-        0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ -- lo_unlink(lobjId oid) returns integer
+ -- return value appears to always be 1
+ SELECT lo_unlink(loid) from lotest_stash_values;
+- lo_unlink 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: lo_unlink()
+ TRUNCATE lotest_stash_values;
+ \set filename :abs_srcdir '/data/tenk.data'
+ INSERT INTO lotest_stash_values (loid) SELECT lo_import(:'filename');
++ERROR:  unknown function: lo_import()
+ BEGIN;
+ UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++UPDATE lotest_stash_values SET fd=lo_open(loid, CAST(x'20000' | x'40000' AS integer));
++                                                     ^
+ -- verify length of large object
+ SELECT lo_lseek(fd, 0, 2) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-   670800
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- with the default BLCKSZ, LOBLKSIZE = 2048, so this positions us for a block
+ -- edge case
+ SELECT lo_lseek(fd, 2030, 0) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-     2030
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- this should get half of the value from page 0 and half from page 1 of the
+ -- large object
+ SELECT loread(fd, 36) FROM lotest_stash_values;
+-                             loread                              
+------------------------------------------------------------------
+- AAA\011FBAAAA\011VVVVxx\0122513\01132\0111\0111\0113\01113\0111
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_tell(fd) FROM lotest_stash_values;
+- lo_tell 
+----------
+-    2066
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, -26, 1) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-     2040
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lowrite(fd, 'abcdefghijklmnop') FROM lotest_stash_values;
+- lowrite 
+----------
+-      16
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_lseek(fd, 2030, 0) FROM lotest_stash_values;
+- lo_lseek 
+-----------
+-     2030
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT loread(fd, 36) FROM lotest_stash_values;
+-                       loread                        
+------------------------------------------------------
+- AAA\011FBAAAAabcdefghijklmnop1\0111\0113\01113\0111
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT lo_close(fd) FROM lotest_stash_values;
+- lo_close 
+-----------
+-        0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ \set filename :abs_builddir '/results/lotest.txt'
+ SELECT lo_export(loid, :'filename') FROM lotest_stash_values;
+- lo_export 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: lo_export()
+ \lo_import :filename
++could not open file ":abs_builddir/results/lotest.txt": No such file or directory
+ \set newloid :LASTOID
+ -- just make sure \lo_export does not barf
+ \set filename :abs_builddir '/results/lotest2.txt'
+ \lo_export :newloid :filename
++cannot determine OID of function lo_open
+ -- This is a hack to test that export/import are reversible
+ -- This uses knowledge about the inner workings of large object mechanism
+ -- which should not be used outside it.  This makes it a HACK
+@@ -429,131 +301,106 @@
+ (0 rows)
+ 
+ SELECT lo_unlink(loid) FROM lotest_stash_values;
+- lo_unlink 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: lo_unlink()
+ TRUNCATE lotest_stash_values;
+ \lo_unlink :newloid
++cannot determine OID of function lo_open
+ \set filename :abs_builddir '/results/lotest.txt'
+ \lo_import :filename
++could not open file ":abs_builddir/results/lotest.txt": No such file or directory
+ \set newloid_1 :LASTOID
+ SELECT lo_from_bytea(0, lo_get(:newloid_1)) AS newloid_2
+ \gset
++ERROR:  unknown function: lo_from_bytea()
+ SELECT fipshash(lo_get(:newloid_1)) = fipshash(lo_get(:newloid_2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT fipshash(lo_get(0)) = fipshash(lo_get(:newloid_2))
++                                             ^
+ SELECT lo_get(:newloid_1, 0, 20);
+-                  lo_get                   
+--------------------------------------------
+- 8800\0110\0110\0110\0110\0110\0110\011800
+-(1 row)
+-
++ERROR:  unknown function: lo_get()
+ SELECT lo_get(:newloid_1, 10, 20);
+-                  lo_get                   
+--------------------------------------------
+- \0110\0110\0110\011800\011800\0113800\011
+-(1 row)
+-
++ERROR:  unknown function: lo_get()
+ SELECT lo_put(:newloid_1, 5, decode('afafafaf', 'hex'));
+- lo_put 
+---------
+- 
+-(1 row)
+-
++ERROR:  unknown function: lo_put()
+ SELECT lo_get(:newloid_1, 0, 20);
+-                     lo_get                      
+--------------------------------------------------
+- 8800\011\257\257\257\2570\0110\0110\0110\011800
+-(1 row)
+-
++ERROR:  unknown function: lo_get()
+ SELECT lo_put(:newloid_1, 4294967310, 'foo');
+- lo_put 
+---------
+- 
+-(1 row)
+-
++ERROR:  unknown function: lo_put()
+ SELECT lo_get(:newloid_1);
+-ERROR:  large object read request is too large
++ERROR:  unknown function: lo_get()
+ SELECT lo_get(:newloid_1, 4294967294, 100);
+-                               lo_get                                
+----------------------------------------------------------------------
+- \000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000foo
+-(1 row)
+-
++ERROR:  unknown function: lo_get()
+ \lo_unlink :newloid_1
++cannot determine OID of function lo_open
+ \lo_unlink :newloid_2
++cannot determine OID of function lo_open
+ -- This object is left in the database for pg_dump test purposes
+ SELECT lo_from_bytea(0, E'\\xdeadbeef') AS newloid
+ \gset
++ERROR:  unknown function: lo_from_bytea()
+ SET bytea_output TO hex;
+ SELECT lo_get(:newloid);
+-   lo_get   
+-------------
+- \xdeadbeef
+-(1 row)
+-
++ERROR:  unknown function: lo_get()
+ -- Create one more object that we leave behind for testing pg_dump/pg_upgrade;
+ -- this one intentionally has an OID in the system range
+ SELECT lo_create(2121);
+- lo_create 
+------------
+-      2121
+-(1 row)
+-
++ERROR:  unknown function: lo_create()
+ COMMENT ON LARGE OBJECT 2121 IS 'testing comments';
++ERROR:  at or near "large": syntax error
++DETAIL:  source SQL:
++COMMENT ON LARGE OBJECT 2121 IS 'testing comments'
++           ^
+ -- Test writes on large objects in read-only transactions
+ START TRANSACTION READ ONLY;
+ -- INV_READ ... ok
+ SELECT lo_open(2121, x'40000'::int);
+- lo_open 
+----------
+-       0
+-(1 row)
+-
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_open(2121, x'40000'::int);
++                     ^
+ -- INV_WRITE ... error
+ SELECT lo_open(2121, x'20000'::int);
+-ERROR:  cannot execute lo_open(INV_WRITE) in a read-only transaction
++ERROR:  lexical error: invalid hexadecimal bytes literal
++DETAIL:  source SQL:
++SELECT lo_open(2121, x'20000'::int);
++                     ^
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_create(42);
+-ERROR:  cannot execute lo_create() in a read-only transaction
++ERROR:  unknown function: lo_create()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_creat(42);
+-ERROR:  cannot execute lo_creat() in a read-only transaction
++ERROR:  unknown function: lo_creat()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_unlink(42);
+-ERROR:  cannot execute lo_unlink() in a read-only transaction
++ERROR:  unknown function: lo_unlink()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lowrite(42, 'x');
+-ERROR:  cannot execute lowrite() in a read-only transaction
++ERROR:  unknown function: lowrite()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_import(:'filename');
+-ERROR:  cannot execute lo_import() in a read-only transaction
++ERROR:  unknown function: lo_import()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_truncate(42, 0);
+-ERROR:  cannot execute lo_truncate() in a read-only transaction
++ERROR:  unknown function: lo_truncate()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_truncate64(42, 0);
+-ERROR:  cannot execute lo_truncate64() in a read-only transaction
++ERROR:  unknown function: lo_truncate64()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_from_bytea(0, 'x');
+-ERROR:  cannot execute lo_from_bytea() in a read-only transaction
++ERROR:  unknown function: lo_from_bytea()
+ ROLLBACK;
+ START TRANSACTION READ ONLY;
+ SELECT lo_put(42, 0, 'x');
+-ERROR:  cannot execute lo_put() in a read-only transaction
++ERROR:  unknown function: lo_put()
+ ROLLBACK;
+ -- Clean up
+ DROP TABLE lotest_stash_values;

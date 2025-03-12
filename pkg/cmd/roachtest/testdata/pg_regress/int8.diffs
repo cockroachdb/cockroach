@@ -1,0 +1,740 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=/mnt/data1/postgres/src/test/regress/results/int8.out /mnt/data1/postgres/src/test/regress/expected/int8.out /mnt/data1/postgres/src/test/regress/results/int8.out
+--- /mnt/data1/postgres/src/test/regress/expected/int8.out
++++ /mnt/data1/postgres/src/test/regress/results/int8.out
+@@ -5,33 +5,19 @@
+ -- int8_tbl was already created and filled in test_setup.sql.
+ -- Here we just try to insert bad values.
+ INSERT INTO INT8_TBL(q1) VALUES ('      ');
+-ERROR:  invalid input syntax for type bigint: "      "
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('      ');
+-                                         ^
++ERROR:  could not parse "" as type int: strconv.ParseInt: parsing "": invalid syntax
+ INSERT INTO INT8_TBL(q1) VALUES ('xxx');
+-ERROR:  invalid input syntax for type bigint: "xxx"
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('xxx');
+-                                         ^
++ERROR:  could not parse "xxx" as type int: strconv.ParseInt: parsing "xxx": invalid syntax
+ INSERT INTO INT8_TBL(q1) VALUES ('3908203590239580293850293850329485');
+-ERROR:  value "3908203590239580293850293850329485" is out of range for type bigint
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('39082035902395802938502938...
+-                                         ^
++ERROR:  could not parse "3908203590239580293850293850329485" as type int: strconv.ParseInt: parsing "3908203590239580293850293850329485": value out of range
+ INSERT INTO INT8_TBL(q1) VALUES ('-1204982019841029840928340329840934');
+-ERROR:  value "-1204982019841029840928340329840934" is out of range for type bigint
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('-1204982019841029840928340...
+-                                         ^
++ERROR:  could not parse "-1204982019841029840928340329840934" as type int: strconv.ParseInt: parsing "-1204982019841029840928340329840934": value out of range
+ INSERT INTO INT8_TBL(q1) VALUES ('- 123');
+-ERROR:  invalid input syntax for type bigint: "- 123"
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('- 123');
+-                                         ^
++ERROR:  could not parse "- 123" as type int: strconv.ParseInt: parsing "- 123": invalid syntax
+ INSERT INTO INT8_TBL(q1) VALUES ('  345     5');
+-ERROR:  invalid input syntax for type bigint: "  345     5"
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('  345     5');
+-                                         ^
++ERROR:  could not parse "345     5" as type int: strconv.ParseInt: parsing "345     5": invalid syntax
+ INSERT INTO INT8_TBL(q1) VALUES ('');
+-ERROR:  invalid input syntax for type bigint: ""
+-LINE 1: INSERT INTO INT8_TBL(q1) VALUES ('');
+-                                         ^
++ERROR:  could not parse "" as type int: strconv.ParseInt: parsing "": invalid syntax
+ SELECT * FROM INT8_TBL;
+         q1        |        q2         
+ ------------------+-------------------
+@@ -44,29 +30,13 @@
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('34', 'int8');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('asdf', 'int8');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('10000000000000000000', 'int8');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('10000000000000000000', 'int8');
+-                           message                            | detail | hint | sql_error_code 
+---------------------------------------------------------------+--------+------+----------------
+- value "10000000000000000000" is out of range for type bigint |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- int8/int8 cmp
+ SELECT * FROM INT8_TBL WHERE q2 = 4567890123456789;
+         q1        |        q2        
+@@ -328,7 +298,7 @@
+ (5 rows)
+ 
+ SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL
+  WHERE q1 < 1000 or (q2 > 0 and q2 < 1000);
+         q1        |        q2        |      multiply      
+@@ -339,13 +309,13 @@
+ (3 rows)
+ 
+ SELECT q1, q2, q1 / q2 AS divide, q1 % q2 AS mod FROM INT8_TBL;
+-        q1        |        q2         |     divide     | mod 
+-------------------+-------------------+----------------+-----
+-              123 |               456 |              0 | 123
+-              123 |  4567890123456789 |              0 | 123
+- 4567890123456789 |               123 | 37137318076884 |  57
+- 4567890123456789 |  4567890123456789 |              1 |   0
+- 4567890123456789 | -4567890123456789 |             -1 |   0
++        q1        |        q2         |          divide           | mod 
++------------------+-------------------+---------------------------+-----
++              123 |               456 |    0.26973684210526315789 | 123
++              123 |  4567890123456789 | 2.6927092525360203445E-14 | 123
++ 4567890123456789 |               123 |     37137318076884.463415 |  57
++ 4567890123456789 |  4567890123456789 |     1.0000000000000000000 |   0
++ 4567890123456789 | -4567890123456789 |    -1.0000000000000000000 |   0
+ (5 rows)
+ 
+ SELECT q1, float8(q1) FROM INT8_TBL;
+@@ -410,46 +380,46 @@
+ 
+ -- int8 op int4
+ SELECT q1 + 42::int4 AS "8plus4", q1 - 42::int4 AS "8minus4", q1 * 42::int4 AS "8mul4", q1 / 42::int4 AS "8div4" FROM INT8_TBL;
+-      8plus4      |     8minus4      |       8mul4        |      8div4      
+-------------------+------------------+--------------------+-----------------
+-              165 |               81 |               5166 |               2
+-              165 |               81 |               5166 |               2
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
++      8plus4      |     8minus4      |       8mul4        |         8div4         
++------------------+------------------+--------------------+-----------------------
++              165 |               81 |               5166 | 2.9285714285714285714
++              165 |               81 |               5166 | 2.9285714285714285714
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
+ (5 rows)
+ 
+ -- int4 op int8
+ SELECT 246::int4 + q1 AS "4plus8", 246::int4 - q1 AS "4minus8", 246::int4 * q1 AS "4mul8", 246::int4 / q1 AS "4div8" FROM INT8_TBL;
+-      4plus8      |      4minus8      |        4mul8        | 4div8 
+-------------------+-------------------+---------------------+-------
+-              369 |               123 |               30258 |     2
+-              369 |               123 |               30258 |     2
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
++      4plus8      |      4minus8      |        4mul8        |           4div8           
++------------------+-------------------+---------------------+---------------------------
++              369 |               123 |               30258 |     2.0000000000000000000
++              369 |               123 |               30258 |     2.0000000000000000000
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
+ (5 rows)
+ 
+ -- int8 op int2
+ SELECT q1 + 42::int2 AS "8plus2", q1 - 42::int2 AS "8minus2", q1 * 42::int2 AS "8mul2", q1 / 42::int2 AS "8div2" FROM INT8_TBL;
+-      8plus2      |     8minus2      |       8mul2        |      8div2      
+-------------------+------------------+--------------------+-----------------
+-              165 |               81 |               5166 |               2
+-              165 |               81 |               5166 |               2
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
+- 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733
++      8plus2      |     8minus2      |       8mul2        |         8div2         
++------------------+------------------+--------------------+-----------------------
++              165 |               81 |               5166 | 2.9285714285714285714
++              165 |               81 |               5166 | 2.9285714285714285714
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
++ 4567890123456831 | 4567890123456747 | 191851385185185138 | 108759288653733.07143
+ (5 rows)
+ 
+ -- int2 op int8
+ SELECT 246::int2 + q1 AS "2plus8", 246::int2 - q1 AS "2minus8", 246::int2 * q1 AS "2mul8", 246::int2 / q1 AS "2div8" FROM INT8_TBL;
+-      2plus8      |      2minus8      |        2mul8        | 2div8 
+-------------------+-------------------+---------------------+-------
+-              369 |               123 |               30258 |     2
+-              369 |               123 |               30258 |     2
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
+- 4567890123457035 | -4567890123456543 | 1123700970370370094 |     0
++      2plus8      |      2minus8      |        2mul8        |           2div8           
++------------------+-------------------+---------------------+---------------------------
++              369 |               123 |               30258 |     2.0000000000000000000
++              369 |               123 |               30258 |     2.0000000000000000000
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
++ 4567890123457035 | -4567890123456543 | 1123700970370370094 | 5.3854185050720406889E-14
+ (5 rows)
+ 
+ SELECT q2, abs(q2) FROM INT8_TBL;
+@@ -478,178 +448,59 @@
+ --
+ SELECT to_char(q1, '9G999G999G999G999G999'), to_char(q2, '9,999,999,999,999,999')
+ 	FROM INT8_TBL;
+-        to_char         |        to_char         
+-------------------------+------------------------
+-                    123 |                    456
+-                    123 |  4,567,890,123,456,789
+-  4,567,890,123,456,789 |                    123
+-  4,567,890,123,456,789 |  4,567,890,123,456,789
+-  4,567,890,123,456,789 | -4,567,890,123,456,789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
+ 	FROM INT8_TBL;
+-            to_char             |            to_char             
+---------------------------------+--------------------------------
+-                    123.000,000 |                    456.000,000
+-                    123.000,000 |  4,567,890,123,456,789.000,000
+-  4,567,890,123,456,789.000,000 |                    123.000,000
+-  4,567,890,123,456,789.000,000 |  4,567,890,123,456,789.000,000
+-  4,567,890,123,456,789.000,000 | -4,567,890,123,456,789.000,000
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
+ 	FROM INT8_TBL;
+-      to_char       |        to_char         
+---------------------+------------------------
+-              <123> |              <456.000>
+-              <123> | <4567890123456789.000>
+- <4567890123456789> |              <123.000>
+- <4567890123456789> | <4567890123456789.000>
+- <4567890123456789> |  4567890123456789.000 
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
+ 	FROM INT8_TBL;
+-      to_char      |      to_char      
+--------------------+-------------------
+-              123- |              -456
+-              123- | -4567890123456789
+- 4567890123456789- |              -123
+- 4567890123456789- | -4567890123456789
+- 4567890123456789- | +4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'MI9999999999999999')     FROM INT8_TBL;
+-      to_char      
+--------------------
+-               456
+-  4567890123456789
+-               123
+-  4567890123456789
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'FMS9999999999999999')    FROM INT8_TBL;
+-      to_char      
+--------------------
+- +456
+- +4567890123456789
+- +123
+- +4567890123456789
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'FM9999999999999999THPR') FROM INT8_TBL;
+-      to_char       
+---------------------
+- 456TH
+- 4567890123456789TH
+- 123RD
+- 4567890123456789TH
+- <4567890123456789>
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'SG9999999999999999th')   FROM INT8_TBL;
+-       to_char       
+----------------------
+- +             456th
+- +4567890123456789th
+- +             123rd
+- +4567890123456789th
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, '0999999999999999')       FROM INT8_TBL;
+-      to_char      
+--------------------
+-  0000000000000456
+-  4567890123456789
+-  0000000000000123
+-  4567890123456789
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'S0999999999999999')      FROM INT8_TBL;
+-      to_char      
+--------------------
+- +0000000000000456
+- +4567890123456789
+- +0000000000000123
+- +4567890123456789
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'FM0999999999999999')     FROM INT8_TBL;
+-      to_char      
+--------------------
+- 0000000000000456
+- 4567890123456789
+- 0000000000000123
+- 4567890123456789
+- -4567890123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'FM9999999999999999.000') FROM INT8_TBL;
+-        to_char        
+------------------------
+- 456.000
+- 4567890123456789.000
+- 123.000
+- 4567890123456789.000
+- -4567890123456789.000
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'L9999999999999999.000')  FROM INT8_TBL;
+-        to_char         
+-------------------------
+-                456.000
+-   4567890123456789.000
+-                123.000
+-   4567890123456789.000
+-  -4567890123456789.000
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'FM9999999999999999.999') FROM INT8_TBL;
+-      to_char       
+---------------------
+- 456.
+- 4567890123456789.
+- 123.
+- 4567890123456789.
+- -4567890123456789.
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9') FROM INT8_TBL;
+-                  to_char                  
+--------------------------------------------
+-                            +4 5 6 . 0 0 0
+-  +4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
+-                            +1 2 3 . 0 0 0
+-  +4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
+-  -4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM INT8_TBL;
+-                          to_char                          
+------------------------------------------------------------
+-       text      9999     "text between quote marks"   456
+-  45678 text 9012 9999 345 "text between quote marks" 6789
+-       text      9999     "text between quote marks"   123
+-  45678 text 9012 9999 345 "text between quote marks" 6789
+- -45678 text 9012 9999 345 "text between quote marks" 6789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(q2, '999999SG9999999999')     FROM INT8_TBL;
+-      to_char      
+--------------------
+-       +       456
+- 456789+0123456789
+-       +       123
+- 456789+0123456789
+- 456789-0123456789
+-(5 rows)
+-
++ERROR:  unknown signature: to_char(int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- check min/max values and overflow behavior
+ select '-9223372036854775808'::int8;
+          int8         
+@@ -658,9 +509,7 @@
+ (1 row)
+ 
+ select '-9223372036854775809'::int8;
+-ERROR:  value "-9223372036854775809" is out of range for type bigint
+-LINE 1: select '-9223372036854775809'::int8;
+-               ^
++ERROR:  could not parse "-9223372036854775809" as type int: strconv.ParseInt: parsing "-9223372036854775809": value out of range
+ select '9223372036854775807'::int8;
+         int8         
+ ---------------------
+@@ -668,9 +517,7 @@
+ (1 row)
+ 
+ select '9223372036854775808'::int8;
+-ERROR:  value "9223372036854775808" is out of range for type bigint
+-LINE 1: select '9223372036854775808'::int8;
+-               ^
++ERROR:  could not parse "9223372036854775808" as type int: strconv.ParseInt: parsing "9223372036854775808": value out of range
+ select -('-9223372036854775807'::int8);
+       ?column?       
+ ---------------------
+@@ -678,49 +525,49 @@
+ (1 row)
+ 
+ select -('-9223372036854775808'::int8);
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 + '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-9223372036854775800'::int8 + '-9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 - '-9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-9223372036854775800'::int8 - '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 * '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 / '0'::int8;
+ ERROR:  division by zero
+ select '9223372036854775800'::int8 % '0'::int8;
+ ERROR:  division by zero
+ select abs('-9223372036854775808'::int8);
+-ERROR:  bigint out of range
++ERROR:  abs(): abs of min integer value (-9223372036854775808) not defined
+ select '9223372036854775800'::int8 + '100'::int4;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-9223372036854775800'::int8 - '100'::int4;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 * '100'::int4;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '100'::int4 + '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-100'::int4 - '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '100'::int4 * '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 + '100'::int2;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-9223372036854775800'::int8 - '100'::int2;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '9223372036854775800'::int8 * '100'::int2;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-9223372036854775808'::int8 / '0'::int2;
+ ERROR:  division by zero
+ select '100'::int2 + '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '-100'::int2 - '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '100'::int2 * '9223372036854775800'::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ select '100'::int2 / '0'::int8;
+ ERROR:  division by zero
+ SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 = 456;
+@@ -730,7 +577,7 @@
+ (1 row)
+ 
+ SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 <> 456;
+-ERROR:  integer out of range
++ERROR:  integer out of range for type int4
+ SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 = 456;
+  q1  
+ -----
+@@ -738,7 +585,7 @@
+ (1 row)
+ 
+ SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 <> 456;
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT CAST('42'::int2 AS int8), CAST('-37'::int2 AS int8);
+  int8 | int8 
+ ------+------
+@@ -758,17 +605,17 @@
+ SELECT CAST('36854775807.0'::float4 AS int8);
+     int8     
+ -------------
+- 36854775808
++ 36854775807
+ (1 row)
+ 
+ SELECT CAST('922337203685477580700.0'::float8 AS int8);
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT CAST(q1 AS oid) FROM INT8_TBL;
+-ERROR:  OID out of range
++ERROR:  OID out of range: 4567890123456789
+ SELECT oid::int8 FROM pg_class WHERE relname = 'pg_class';
+- oid  
+-------
+- 1259
++    oid     
++------------
++ 4294967083
+ (1 row)
+ 
+ -- bit operations
+@@ -810,7 +657,7 @@
+ (11 rows)
+ 
+ SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 0);
+-ERROR:  step size cannot equal zero
++ERROR:  step cannot be 0
+ SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 2);
+  generate_series  
+ ------------------
+@@ -837,9 +684,13 @@
+ 
+ -- check sane handling of INT64_MIN overflow cases
+ SELECT (-9223372036854775808)::int8 * (-1)::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT (-9223372036854775808)::int8 / (-1)::int8;
+-ERROR:  bigint out of range
++       ?column?        
++-----------------------
++ 9223372036854775808.0
++(1 row)
++
+ SELECT (-9223372036854775808)::int8 % (-1)::int8;
+  ?column? 
+ ----------
+@@ -847,9 +698,13 @@
+ (1 row)
+ 
+ SELECT (-9223372036854775808)::int8 * (-1)::int4;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT (-9223372036854775808)::int8 / (-1)::int4;
+-ERROR:  bigint out of range
++       ?column?        
++-----------------------
++ 9223372036854775808.0
++(1 row)
++
+ SELECT (-9223372036854775808)::int8 % (-1)::int4;
+  ?column? 
+ ----------
+@@ -857,9 +712,13 @@
+ (1 row)
+ 
+ SELECT (-9223372036854775808)::int8 * (-1)::int2;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT (-9223372036854775808)::int8 / (-1)::int2;
+-ERROR:  bigint out of range
++       ?column?        
++-----------------------
++ 9223372036854775808.0
++(1 row)
++
+ SELECT (-9223372036854775808)::int8 % (-1)::int2;
+  ?column? 
+ ----------
+@@ -915,21 +774,11 @@
+              ((-9223372036854775808)::int8, 1::int8),
+              ((-9223372036854775808)::int8, 9223372036854775807::int8),
+              ((-9223372036854775808)::int8, 4611686018427387904::int8)) AS v(a, b);
+-          a           |          b          |         gcd         |         gcd         |         gcd         |         gcd         
+-----------------------+---------------------+---------------------+---------------------+---------------------+---------------------
+-                    0 |                   0 |                   0 |                   0 |                   0 |                   0
+-                    0 |         29893644334 |         29893644334 |         29893644334 |         29893644334 |         29893644334
+-         288484263558 |         29893644334 |             6835958 |             6835958 |             6835958 |             6835958
+-        -288484263558 |         29893644334 |             6835958 |             6835958 |             6835958 |             6835958
+- -9223372036854775808 |                   1 |                   1 |                   1 |                   1 |                   1
+- -9223372036854775808 | 9223372036854775807 |                   1 |                   1 |                   1 |                   1
+- -9223372036854775808 | 4611686018427387904 | 4611686018427387904 | 4611686018427387904 | 4611686018427387904 | 4611686018427387904
+-(7 rows)
+-
++ERROR:  unknown function: gcd()
+ SELECT gcd((-9223372036854775808)::int8, 0::int8); -- overflow
+-ERROR:  bigint out of range
++ERROR:  unknown function: gcd()
+ SELECT gcd((-9223372036854775808)::int8, (-9223372036854775808)::int8); -- overflow
+-ERROR:  bigint out of range
++ERROR:  unknown function: gcd()
+ -- test lcm()
+ SELECT a, b, lcm(a, b), lcm(a, -b), lcm(b, a), lcm(-b, a)
+ FROM (VALUES (0::int8, 0::int8),
+@@ -938,20 +787,11 @@
+              (288484263558::int8, 29893644334::int8),
+              (-288484263558::int8, 29893644334::int8),
+              ((-9223372036854775808)::int8, 0::int8)) AS v(a, b);
+-          a           |      b      |       lcm        |       lcm        |       lcm        |       lcm        
+-----------------------+-------------+------------------+------------------+------------------+------------------
+-                    0 |           0 |                0 |                0 |                0 |                0
+-                    0 | 29893644334 |                0 |                0 |                0 |                0
+-          29893644334 | 29893644334 |      29893644334 |      29893644334 |      29893644334 |      29893644334
+-         288484263558 | 29893644334 | 1261541684539134 | 1261541684539134 | 1261541684539134 | 1261541684539134
+-        -288484263558 | 29893644334 | 1261541684539134 | 1261541684539134 | 1261541684539134 | 1261541684539134
+- -9223372036854775808 |           0 |                0 |                0 |                0 |                0
+-(6 rows)
+-
++ERROR:  unknown function: lcm()
+ SELECT lcm((-9223372036854775808)::int8, 1::int8); -- overflow
+-ERROR:  bigint out of range
++ERROR:  unknown function: lcm()
+ SELECT lcm(9223372036854775807::int8, 9223372036854775806::int8); -- overflow
+-ERROR:  bigint out of range
++ERROR:  unknown function: lcm()
+ -- non-decimal literals
+ SELECT int8 '0b100101';
+  int8 
+@@ -972,17 +812,11 @@
+ (1 row)
+ 
+ SELECT int8 '0b';
+-ERROR:  invalid input syntax for type bigint: "0b"
+-LINE 1: SELECT int8 '0b';
+-                    ^
++ERROR:  could not parse "0b" as type int: strconv.ParseInt: parsing "0b": invalid syntax
+ SELECT int8 '0o';
+-ERROR:  invalid input syntax for type bigint: "0o"
+-LINE 1: SELECT int8 '0o';
+-                    ^
++ERROR:  could not parse "0o" as type int: strconv.ParseInt: parsing "0o": invalid syntax
+ SELECT int8 '0x';
+-ERROR:  invalid input syntax for type bigint: "0x"
+-LINE 1: SELECT int8 '0x';
+-                    ^
++ERROR:  could not parse "0x" as type int: strconv.ParseInt: parsing "0x": invalid syntax
+ -- cases near overflow
+ SELECT int8 '0b111111111111111111111111111111111111111111111111111111111111111';
+         int8         
+@@ -991,9 +825,7 @@
+ (1 row)
+ 
+ SELECT int8 '0b1000000000000000000000000000000000000000000000000000000000000000';
+-ERROR:  value "0b1000000000000000000000000000000000000000000000000000000000000000" is out of range for type bigint
+-LINE 1: SELECT int8 '0b100000000000000000000000000000000000000000000...
+-                    ^
++ERROR:  could not parse "0b1000000000000000000000000000000000000000000000000000000000000000" as type int: strconv.ParseInt: parsing "0b1000000000000000000000000000000000000000000000000000000000000000": value out of range
+ SELECT int8 '0o777777777777777777777';
+         int8         
+ ---------------------
+@@ -1001,9 +833,7 @@
+ (1 row)
+ 
+ SELECT int8 '0o1000000000000000000000';
+-ERROR:  value "0o1000000000000000000000" is out of range for type bigint
+-LINE 1: SELECT int8 '0o1000000000000000000000';
+-                    ^
++ERROR:  could not parse "0o1000000000000000000000" as type int: strconv.ParseInt: parsing "0o1000000000000000000000": value out of range
+ SELECT int8 '0x7FFFFFFFFFFFFFFF';
+         int8         
+ ---------------------
+@@ -1011,9 +841,7 @@
+ (1 row)
+ 
+ SELECT int8 '0x8000000000000000';
+-ERROR:  value "0x8000000000000000" is out of range for type bigint
+-LINE 1: SELECT int8 '0x8000000000000000';
+-                    ^
++ERROR:  could not parse "0x8000000000000000" as type int: strconv.ParseInt: parsing "0x8000000000000000": value out of range
+ SELECT int8 '-0b1000000000000000000000000000000000000000000000000000000000000000';
+          int8         
+ ----------------------
+@@ -1021,9 +849,7 @@
+ (1 row)
+ 
+ SELECT int8 '-0b1000000000000000000000000000000000000000000000000000000000000001';
+-ERROR:  value "-0b1000000000000000000000000000000000000000000000000000000000000001" is out of range for type bigint
+-LINE 1: SELECT int8 '-0b10000000000000000000000000000000000000000000...
+-                    ^
++ERROR:  could not parse "-0b1000000000000000000000000000000000000000000000000000000000000001" as type int: strconv.ParseInt: parsing "-0b1000000000000000000000000000000000000000000000000000000000000001": value out of range
+ SELECT int8 '-0o1000000000000000000000';
+          int8         
+ ----------------------
+@@ -1031,9 +857,7 @@
+ (1 row)
+ 
+ SELECT int8 '-0o1000000000000000000001';
+-ERROR:  value "-0o1000000000000000000001" is out of range for type bigint
+-LINE 1: SELECT int8 '-0o1000000000000000000001';
+-                    ^
++ERROR:  could not parse "-0o1000000000000000000001" as type int: strconv.ParseInt: parsing "-0o1000000000000000000001": value out of range
+ SELECT int8 '-0x8000000000000000';
+          int8         
+ ----------------------
+@@ -1041,9 +865,7 @@
+ (1 row)
+ 
+ SELECT int8 '-0x8000000000000001';
+-ERROR:  value "-0x8000000000000001" is out of range for type bigint
+-LINE 1: SELECT int8 '-0x8000000000000001';
+-                    ^
++ERROR:  could not parse "-0x8000000000000001" as type int: strconv.ParseInt: parsing "-0x8000000000000001": value out of range
+ -- underscores
+ SELECT int8 '1_000_000';
+   int8   
+@@ -1077,14 +899,8 @@
+ 
+ -- error cases
+ SELECT int8 '_100';
+-ERROR:  invalid input syntax for type bigint: "_100"
+-LINE 1: SELECT int8 '_100';
+-                    ^
++ERROR:  could not parse "_100" as type int: strconv.ParseInt: parsing "_100": invalid syntax
+ SELECT int8 '100_';
+-ERROR:  invalid input syntax for type bigint: "100_"
+-LINE 1: SELECT int8 '100_';
+-                    ^
++ERROR:  could not parse "100_" as type int: strconv.ParseInt: parsing "100_": invalid syntax
+ SELECT int8 '100__000';
+-ERROR:  invalid input syntax for type bigint: "100__000"
+-LINE 1: SELECT int8 '100__000';
+-                    ^
++ERROR:  could not parse "100__000" as type int: strconv.ParseInt: parsing "100__000": invalid syntax

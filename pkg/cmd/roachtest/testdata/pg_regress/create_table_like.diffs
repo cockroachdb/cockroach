@@ -1,0 +1,856 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_table_like.out --label=/mnt/data1/postgres/src/test/regress/results/create_table_like.out /mnt/data1/postgres/src/test/regress/expected/create_table_like.out /mnt/data1/postgres/src/test/regress/results/create_table_like.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_table_like.out
++++ /mnt/data1/postgres/src/test/regress/results/create_table_like.out
+@@ -8,37 +8,39 @@
+  */
+ CREATE TABLE ctla (aa TEXT);
+ CREATE TABLE ctlb (bb TEXT) INHERITS (ctla);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlb (bb TEXT) INHERITS (ctla)
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE foo (LIKE nonexistent);
+ ERROR:  relation "nonexistent" does not exist
+-LINE 1: CREATE TABLE foo (LIKE nonexistent);
+-                               ^
+ CREATE TABLE inhe (ee text, LIKE inhx) inherits (ctlb);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inhe (ee text, LIKE inhx) inherits (ctlb)
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO inhe VALUES ('ee-col1', 'ee-col2', DEFAULT, 'ee-col4');
++ERROR:  relation "inhe" does not exist
+ SELECT * FROM inhe; /* Columns aa, bb, xx value NULL, ee */
+-   aa    |   bb    | ee |   xx    
+----------+---------+----+---------
+- ee-col1 | ee-col2 |    | ee-col4
+-(1 row)
+-
++ERROR:  relation "inhe" does not exist
+ SELECT * FROM inhx; /* Empty set since LIKE inherits structure only */
+  xx 
+ ----
+ (0 rows)
+ 
+ SELECT * FROM ctlb; /* Has ee entry */
+-   aa    |   bb    
+----------+---------
+- ee-col1 | ee-col2
+-(1 row)
+-
++ERROR:  relation "ctlb" does not exist
+ SELECT * FROM ctla; /* Has ee entry */
+-   aa    
+----------
+- ee-col1
+-(1 row)
++ aa 
++----
++(0 rows)
+ 
+ CREATE TABLE inhf (LIKE inhx, LIKE inhx); /* Throw error */
+-ERROR:  column "xx" specified more than once
++ERROR:  relation "inhf" (1332): duplicate column name: "xx"
+ CREATE TABLE inhf (LIKE inhx INCLUDING DEFAULTS INCLUDING CONSTRAINTS);
+ INSERT INTO inhf DEFAULT VALUES;
+ SELECT * FROM inhf; /* Single entry with value 'text' */
+@@ -49,6 +51,7 @@
+ 
+ ALTER TABLE inhx add constraint foo CHECK (xx = 'text');
+ ALTER TABLE inhx ADD PRIMARY KEY (xx);
++ERROR:  cannot use nullable column "xx" in primary key
+ CREATE TABLE inhg (LIKE inhx); /* Doesn't copy constraint */
+ INSERT INTO inhg VALUES ('foo');
+ DROP TABLE inhg;
+@@ -56,8 +59,7 @@
+ INSERT INTO inhg VALUES ('x', 'text', 'y'); /* Succeeds */
+ INSERT INTO inhg VALUES ('x', 'text', 'y'); /* Succeeds -- Unique constraints not copied */
+ INSERT INTO inhg VALUES ('x', 'foo',  'y');  /* fails due to constraint */
+-ERROR:  new row for relation "inhg" violates check constraint "foo"
+-DETAIL:  Failing row contains (x, foo, y).
++ERROR:  failed to satisfy CHECK constraint (xx = 'text':::STRING)
+ SELECT * FROM inhg; /* Two records with three columns in order x=x, xx=text, y=y */
+  x |  xx  | y 
+ ---+------+---
+@@ -68,12 +70,15 @@
+ DROP TABLE inhg;
+ CREATE TABLE test_like_id_1 (a bigint GENERATED ALWAYS AS IDENTITY, b text);
+ \d test_like_id_1
+-                     Table "public.test_like_id_1"
+- Column |  Type  | Collation | Nullable |           Default            
+---------+--------+-----------+----------+------------------------------
+- a      | bigint |           | not null | generated always as identity
+- b      | text   |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_id_1)$' COLLATE pg_catalog.default
++                                                                              ^
+ INSERT INTO test_like_id_1 (b) VALUES ('b1');
+ SELECT * FROM test_like_id_1;
+  a | b  
+@@ -83,44 +88,56 @@
+ 
+ CREATE TABLE test_like_id_2 (LIKE test_like_id_1);
+ \d test_like_id_2
+-          Table "public.test_like_id_2"
+- Column |  Type  | Collation | Nullable | Default 
+---------+--------+-----------+----------+---------
+- a      | bigint |           | not null | 
+- b      | text   |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_id_2)$' COLLATE pg_catalog.default
++                                                                              ^
+ INSERT INTO test_like_id_2 (b) VALUES ('b2');
+-ERROR:  null value in column "a" of relation "test_like_id_2" violates not-null constraint
+-DETAIL:  Failing row contains (null, b2).
++ERROR:  null value in column "a" violates not-null constraint
+ SELECT * FROM test_like_id_2;  -- identity was not copied
+  a | b 
+ ---+---
+ (0 rows)
+ 
+ CREATE TABLE test_like_id_3 (LIKE test_like_id_1 INCLUDING IDENTITY);
++ERROR:  at or near "identity": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_like_id_3 (LIKE test_like_id_1 INCLUDING IDENTITY)
++                                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ \d test_like_id_3
+-                     Table "public.test_like_id_3"
+- Column |  Type  | Collation | Nullable |           Default            
+---------+--------+-----------+----------+------------------------------
+- a      | bigint |           | not null | generated always as identity
+- b      | text   |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_id_3)$' COLLATE pg_catalog.default
++                                                                              ^
+ INSERT INTO test_like_id_3 (b) VALUES ('b3');
++ERROR:  relation "test_like_id_3" does not exist
+ SELECT * FROM test_like_id_3;  -- identity was copied and applied
+- a | b  
+----+----
+- 1 | b3
+-(1 row)
+-
++ERROR:  relation "test_like_id_3" does not exist
+ DROP TABLE test_like_id_1, test_like_id_2, test_like_id_3;
++ERROR:  relation "test_like_id_3" does not exist
+ CREATE TABLE test_like_gen_1 (a int, b int GENERATED ALWAYS AS (a * 2) STORED);
+ \d test_like_gen_1
+-                        Table "public.test_like_gen_1"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- a      | integer |           |          | 
+- b      | integer |           |          | generated always as (a * 2) stored
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_gen_1)$' COLLATE pg_catalog.default
++                                                                               ^
+ INSERT INTO test_like_gen_1 (a) VALUES (1);
+ SELECT * FROM test_like_gen_1;
+  a | b 
+@@ -130,12 +147,15 @@
+ 
+ CREATE TABLE test_like_gen_2 (LIKE test_like_gen_1);
+ \d test_like_gen_2
+-          Table "public.test_like_gen_2"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_gen_2)$' COLLATE pg_catalog.default
++                                                                               ^
+ INSERT INTO test_like_gen_2 (a) VALUES (1);
+ SELECT * FROM test_like_gen_2;
+  a | b 
+@@ -145,12 +165,15 @@
+ 
+ CREATE TABLE test_like_gen_3 (LIKE test_like_gen_1 INCLUDING GENERATED);
+ \d test_like_gen_3
+-                        Table "public.test_like_gen_3"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- a      | integer |           |          | 
+- b      | integer |           |          | generated always as (a * 2) stored
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_gen_3)$' COLLATE pg_catalog.default
++                                                                               ^
+ INSERT INTO test_like_gen_3 (a) VALUES (1);
+ SELECT * FROM test_like_gen_3;
+  a | b 
+@@ -164,27 +187,29 @@
+   c int GENERATED ALWAYS AS (a * 2) STORED,
+   a int CHECK (a > 0));
+ \d test_like_4
+-                          Table "public.test_like_4"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- b      | integer |           |          | 42
+- c      | integer |           |          | generated always as (a * 2) stored
+- a      | integer |           |          | 
+-Check constraints:
+-    "test_like_4_a_check" CHECK (a > 0)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_4)$' COLLATE pg_catalog.default
++                                                                           ^
+ CREATE TABLE test_like_4a (LIKE test_like_4);
+ CREATE TABLE test_like_4b (LIKE test_like_4 INCLUDING DEFAULTS);
+ CREATE TABLE test_like_4c (LIKE test_like_4 INCLUDING GENERATED);
+ CREATE TABLE test_like_4d (LIKE test_like_4 INCLUDING DEFAULTS INCLUDING GENERATED);
+ \d test_like_4a
+-            Table "public.test_like_4a"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- b      | integer |           |          | 
+- c      | integer |           |          | 
+- a      | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_4a)$' COLLATE pg_catalog.default
++                                                                            ^
+ INSERT INTO test_like_4a (a) VALUES(11);
+ SELECT a, b, c FROM test_like_4a;
+  a  | b | c 
+@@ -193,13 +218,15 @@
+ (1 row)
+ 
+ \d test_like_4b
+-            Table "public.test_like_4b"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- b      | integer |           |          | 42
+- c      | integer |           |          | 
+- a      | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_4b)$' COLLATE pg_catalog.default
++                                                                            ^
+ INSERT INTO test_like_4b (a) VALUES(11);
+ SELECT a, b, c FROM test_like_4b;
+  a  | b  | c 
+@@ -208,13 +235,15 @@
+ (1 row)
+ 
+ \d test_like_4c
+-                         Table "public.test_like_4c"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- b      | integer |           |          | 
+- c      | integer |           |          | generated always as (a * 2) stored
+- a      | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_4c)$' COLLATE pg_catalog.default
++                                                                            ^
+ INSERT INTO test_like_4c (a) VALUES(11);
+ SELECT a, b, c FROM test_like_4c;
+  a  | b | c  
+@@ -223,13 +252,15 @@
+ (1 row)
+ 
+ \d test_like_4d
+-                         Table "public.test_like_4d"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- b      | integer |           |          | 42
+- c      | integer |           |          | generated always as (a * 2) stored
+- a      | integer |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_4d)$' COLLATE pg_catalog.default
++                                                                            ^
+ INSERT INTO test_like_4d (a) VALUES(11);
+ SELECT a, b, c FROM test_like_4d;
+  a  | b  | c  
+@@ -239,282 +270,346 @@
+ 
+ -- Test renumbering of Vars when combining LIKE with inheritance
+ CREATE TABLE test_like_5 (x point, y point, z point);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_like_5 (x point, y point, z point)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ CREATE TABLE test_like_5x (p int CHECK (p > 0),
+    q int GENERATED ALWAYS AS (p * 2) STORED);
+ CREATE TABLE test_like_5c (LIKE test_like_4 INCLUDING ALL)
+   INHERITS (test_like_5, test_like_5x);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_like_5c (LIKE test_like_4 INCLUDING ALL)
++  INHERITS (test_like_5, test_like_5x)
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d test_like_5c
+-                         Table "public.test_like_5c"
+- Column |  Type   | Collation | Nullable |              Default               
+---------+---------+-----------+----------+------------------------------------
+- x      | point   |           |          | 
+- y      | point   |           |          | 
+- z      | point   |           |          | 
+- p      | integer |           |          | 
+- q      | integer |           |          | generated always as (p * 2) stored
+- b      | integer |           |          | 42
+- c      | integer |           |          | generated always as (a * 2) stored
+- a      | integer |           |          | 
+-Check constraints:
+-    "test_like_4_a_check" CHECK (a > 0)
+-    "test_like_5x_p_check" CHECK (p > 0)
+-Inherits: test_like_5,
+-          test_like_5x
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_like_5c)$' COLLATE pg_catalog.default
++                                                                            ^
+ DROP TABLE test_like_4, test_like_4a, test_like_4b, test_like_4c, test_like_4d;
+ DROP TABLE test_like_5, test_like_5x, test_like_5c;
++ERROR:  relation "test_like_5" does not exist
+ CREATE TABLE inhg (x text, LIKE inhx INCLUDING INDEXES, y text); /* copies indexes */
+ INSERT INTO inhg VALUES (5, 10);
+ INSERT INTO inhg VALUES (20, 10); -- should fail
+-ERROR:  duplicate key value violates unique constraint "inhg_pkey"
+-DETAIL:  Key (xx)=(10) already exists.
+ DROP TABLE inhg;
+ /* Multiple primary keys creation should fail */
+ CREATE TABLE inhg (x text, LIKE inhx INCLUDING INDEXES, PRIMARY KEY(x)); /* fails */
+-ERROR:  multiple primary keys for table "inhg" are not allowed
+ CREATE TABLE inhz (xx text DEFAULT 'text', yy int UNIQUE);
+ CREATE UNIQUE INDEX inhz_xx_idx on inhz (xx) WHERE xx <> 'test';
+ /* Ok to create multiple unique indexes */
+ CREATE TABLE inhg (x text UNIQUE, LIKE inhz INCLUDING INDEXES);
++ERROR:  relation "root.public.inhg" already exists
+ INSERT INTO inhg (xx, yy, x) VALUES ('test', 5, 10);
++ERROR:  column "yy" does not exist
+ INSERT INTO inhg (xx, yy, x) VALUES ('test', 10, 15);
++ERROR:  column "yy" does not exist
+ INSERT INTO inhg (xx, yy, x) VALUES ('foo', 10, 15); -- should fail
+-ERROR:  duplicate key value violates unique constraint "inhg_x_key"
+-DETAIL:  Key (x)=(15) already exists.
++ERROR:  column "yy" does not exist
+ DROP TABLE inhg;
+ DROP TABLE inhz;
+ /* Use primary key imported by LIKE for self-referential FK constraint */
+ CREATE TABLE inhz (x text REFERENCES inhz, LIKE inhx INCLUDING INDEXES);
++ERROR:  type of "x" (string) does not match foreign key "inhz"."rowid" (int)
+ \d inhz
+-              Table "public.inhz"
+- Column | Type | Collation | Nullable | Default 
+---------+------+-----------+----------+---------
+- x      | text |           |          | 
+- xx     | text |           | not null | 
+-Indexes:
+-    "inhz_pkey" PRIMARY KEY, btree (xx)
+-Foreign-key constraints:
+-    "inhz_x_fkey" FOREIGN KEY (x) REFERENCES inhz(xx)
+-Referenced by:
+-    TABLE "inhz" CONSTRAINT "inhz_x_fkey" FOREIGN KEY (x) REFERENCES inhz(xx)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(inhz)$' COLLATE pg_catalog.default
++                                                                    ^
+ DROP TABLE inhz;
++ERROR:  relation "inhz" does not exist
+ -- including storage and comments
+ CREATE TABLE ctlt1 (a text CHECK (length(a) > 2) PRIMARY KEY, b text);
+ CREATE INDEX ctlt1_b_key ON ctlt1 (b);
+ CREATE INDEX ctlt1_fnidx ON ctlt1 ((a || b));
+ CREATE STATISTICS ctlt1_a_b_stat ON a,b FROM ctlt1;
+ CREATE STATISTICS ctlt1_expr_stat ON (a || b) FROM ctlt1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ctlt1_expr_stat ON (a || b) FROM ctlt1
++                                     ^
++HINT:  try \h CREATE STATISTICS
+ COMMENT ON STATISTICS ctlt1_a_b_stat IS 'ab stats';
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++COMMENT ON STATISTICS ctlt1_a_b_stat IS 'ab stats'
++           ^
+ COMMENT ON STATISTICS ctlt1_expr_stat IS 'ab expr stats';
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++COMMENT ON STATISTICS ctlt1_expr_stat IS 'ab expr stats'
++           ^
+ COMMENT ON COLUMN ctlt1.a IS 'A';
+ COMMENT ON COLUMN ctlt1.b IS 'B';
+ COMMENT ON CONSTRAINT ctlt1_a_check ON ctlt1 IS 't1_a_check';
++ERROR:  constraint "ctlt1_a_check" of relation "ctlt1" does not exist
+ COMMENT ON INDEX ctlt1_pkey IS 'index pkey';
+ COMMENT ON INDEX ctlt1_b_key IS 'index b_key';
+ ALTER TABLE ctlt1 ALTER COLUMN a SET STORAGE MAIN;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ctlt1 ALTER COLUMN a SET STORAGE MAIN
++                                     ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE ctlt2 (c text);
+ ALTER TABLE ctlt2 ALTER COLUMN c SET STORAGE EXTERNAL;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ctlt2 ALTER COLUMN c SET STORAGE EXTERNAL
++                                     ^
++HINT:  try \h ALTER TABLE
+ COMMENT ON COLUMN ctlt2.c IS 'C';
+ CREATE TABLE ctlt3 (a text CHECK (length(a) < 5), c text CHECK (length(c) < 7));
+ ALTER TABLE ctlt3 ALTER COLUMN c SET STORAGE EXTERNAL;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ctlt3 ALTER COLUMN c SET STORAGE EXTERNAL
++                                     ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE ctlt3 ALTER COLUMN a SET STORAGE MAIN;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ctlt3 ALTER COLUMN a SET STORAGE MAIN
++                                     ^
++HINT:  try \h ALTER TABLE
+ CREATE INDEX ctlt3_fnidx ON ctlt3 ((a || c));
+ COMMENT ON COLUMN ctlt3.a IS 'A3';
+ COMMENT ON COLUMN ctlt3.c IS 'C';
+ COMMENT ON CONSTRAINT ctlt3_a_check ON ctlt3 IS 't3_a_check';
++ERROR:  constraint "ctlt3_a_check" of relation "ctlt3" does not exist
+ CREATE TABLE ctlt4 (a text, c text);
+ ALTER TABLE ctlt4 ALTER COLUMN c SET STORAGE EXTERNAL;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ctlt4 ALTER COLUMN c SET STORAGE EXTERNAL
++                                     ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE ctlt12_storage (LIKE ctlt1 INCLUDING STORAGE, LIKE ctlt2 INCLUDING STORAGE);
++ERROR:  at or near "storage": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlt12_storage (LIKE ctlt1 INCLUDING STORAGE, LIKE ctlt2 INCLUDING STORAGE)
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ \d+ ctlt12_storage
+-                             Table "public.ctlt12_storage"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | 
+- b      | text |           |          |         | extended |              | 
+- c      | text |           |          |         | external |              | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt12_storage)$' COLLATE pg_catalog.default
++                                                                              ^
+ CREATE TABLE ctlt12_comments (LIKE ctlt1 INCLUDING COMMENTS, LIKE ctlt2 INCLUDING COMMENTS);
++ERROR:  at or near "comments": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlt12_comments (LIKE ctlt1 INCLUDING COMMENTS, LIKE ctlt2 INCLUDING COMMENTS)
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ \d+ ctlt12_comments
+-                             Table "public.ctlt12_comments"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | extended |              | A
+- b      | text |           |          |         | extended |              | B
+- c      | text |           |          |         | extended |              | C
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt12_comments)$' COLLATE pg_catalog.default
++                                                                               ^
+ CREATE TABLE ctlt1_inh (LIKE ctlt1 INCLUDING CONSTRAINTS INCLUDING COMMENTS) INHERITS (ctlt1);
+-NOTICE:  merging column "a" with inherited definition
+-NOTICE:  merging column "b" with inherited definition
+-NOTICE:  merging constraint "ctlt1_a_check" with inherited definition
++ERROR:  at or near "comments": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlt1_inh (LIKE ctlt1 INCLUDING CONSTRAINTS INCLUDING COMMENTS) INHERITS (ctlt1)
++                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ \d+ ctlt1_inh
+-                                Table "public.ctlt1_inh"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | A
+- b      | text |           |          |         | extended |              | B
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-Inherits: ctlt1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt1_inh)$' COLLATE pg_catalog.default
++                                                                         ^
+ SELECT description FROM pg_description, pg_constraint c WHERE classoid = 'pg_constraint'::regclass AND objoid = c.oid AND c.conrelid = 'ctlt1_inh'::regclass;
+  description 
+ -------------
+- t1_a_check
+-(1 row)
++(0 rows)
+ 
+ CREATE TABLE ctlt13_inh () INHERITS (ctlt1, ctlt3);
+-NOTICE:  merging multiple inherited definitions of column "a"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlt13_inh () INHERITS (ctlt1, ctlt3)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d+ ctlt13_inh
+-                               Table "public.ctlt13_inh"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | 
+- b      | text |           |          |         | extended |              | 
+- c      | text |           |          |         | external |              | 
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-    "ctlt3_a_check" CHECK (length(a) < 5)
+-    "ctlt3_c_check" CHECK (length(c) < 7)
+-Inherits: ctlt1,
+-          ctlt3
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt13_inh)$' COLLATE pg_catalog.default
++                                                                          ^
+ CREATE TABLE ctlt13_like (LIKE ctlt3 INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING COMMENTS INCLUDING STORAGE) INHERITS (ctlt1);
+-NOTICE:  merging column "a" with inherited definition
++ERROR:  at or near "comments": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctlt13_like (LIKE ctlt3 INCLUDING CONSTRAINTS INCLUDING INDEXES INCLUDING COMMENTS INCLUDING STORAGE) INHERITS (ctlt1)
++                                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ \d+ ctlt13_like
+-                               Table "public.ctlt13_like"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | A3
+- b      | text |           |          |         | extended |              | 
+- c      | text |           |          |         | external |              | C
+-Indexes:
+-    "ctlt13_like_expr_idx" btree ((a || c))
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-    "ctlt3_a_check" CHECK (length(a) < 5)
+-    "ctlt3_c_check" CHECK (length(c) < 7)
+-Inherits: ctlt1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt13_like)$' COLLATE pg_catalog.default
++                                                                           ^
+ SELECT description FROM pg_description, pg_constraint c WHERE classoid = 'pg_constraint'::regclass AND objoid = c.oid AND c.conrelid = 'ctlt13_like'::regclass;
+  description 
+ -------------
+- t3_a_check
+-(1 row)
++(0 rows)
+ 
+ CREATE TABLE ctlt_all (LIKE ctlt1 INCLUDING ALL);
+ \d+ ctlt_all
+-                                Table "public.ctlt_all"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | A
+- b      | text |           |          |         | extended |              | B
+-Indexes:
+-    "ctlt_all_pkey" PRIMARY KEY, btree (a)
+-    "ctlt_all_b_idx" btree (b)
+-    "ctlt_all_expr_idx" btree ((a || b))
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-Statistics objects:
+-    "public.ctlt_all_a_b_stat" ON a, b FROM ctlt_all
+-    "public.ctlt_all_expr_stat" ON (a || b) FROM ctlt_all
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt_all)$' COLLATE pg_catalog.default
++                                                                        ^
+ SELECT c.relname, objsubid, description FROM pg_description, pg_index i, pg_class c WHERE classoid = 'pg_class'::regclass AND objoid = i.indexrelid AND c.oid = i.indexrelid AND i.indrelid = 'ctlt_all'::regclass ORDER BY c.relname, objsubid;
+-    relname     | objsubid | description 
+-----------------+----------+-------------
+- ctlt_all_b_idx |        0 | index b_key
+- ctlt_all_pkey  |        0 | index pkey
+-(2 rows)
++ relname | objsubid | description 
++---------+----------+-------------
++(0 rows)
+ 
+ SELECT s.stxname, objsubid, description FROM pg_description, pg_statistic_ext s WHERE classoid = 'pg_statistic_ext'::regclass AND objoid = s.oid AND s.stxrelid = 'ctlt_all'::regclass ORDER BY s.stxname, objsubid;
+-      stxname       | objsubid |  description  
+---------------------+----------+---------------
+- ctlt_all_a_b_stat  |        0 | ab stats
+- ctlt_all_expr_stat |        0 | ab expr stats
+-(2 rows)
++ stxname | objsubid | description 
++---------+----------+-------------
++(0 rows)
+ 
+ CREATE TABLE inh_error1 () INHERITS (ctlt1, ctlt4);
+-NOTICE:  merging multiple inherited definitions of column "a"
+-ERROR:  inherited column "a" has a storage parameter conflict
+-DETAIL:  MAIN versus EXTENDED
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inh_error1 () INHERITS (ctlt1, ctlt4)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE inh_error2 (LIKE ctlt4 INCLUDING STORAGE) INHERITS (ctlt1);
+-NOTICE:  merging column "a" with inherited definition
+-ERROR:  column "a" has a storage parameter conflict
+-DETAIL:  MAIN versus EXTENDED
++ERROR:  at or near "storage": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inh_error2 (LIKE ctlt4 INCLUDING STORAGE) INHERITS (ctlt1)
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47071/_version_
+ -- Check that LIKE isn't confused by a system catalog of the same name
+ CREATE TABLE pg_attrdef (LIKE ctlt1 INCLUDING ALL);
+ \d+ public.pg_attrdef
+-                               Table "public.pg_attrdef"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | A
+- b      | text |           |          |         | extended |              | B
+-Indexes:
+-    "pg_attrdef_pkey" PRIMARY KEY, btree (a)
+-    "pg_attrdef_b_idx" btree (b)
+-    "pg_attrdef_expr_idx" btree ((a || b))
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-Statistics objects:
+-    "public.pg_attrdef_a_b_stat" ON a, b FROM public.pg_attrdef
+-    "public.pg_attrdef_expr_stat" ON (a || b) FROM public.pg_attrdef
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(pg_attrdef)$' COLLATE pg_catalog.default
++                                                                          ^
+ DROP TABLE public.pg_attrdef;
+ -- Check that LIKE isn't confused when new table masks the old, either
+ BEGIN;
+ CREATE SCHEMA ctl_schema;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SET LOCAL search_path = ctl_schema, public;
++WARNING:  SET LOCAL can only be used in transaction blocks
+ CREATE TABLE ctlt1 (LIKE ctlt1 INCLUDING ALL);
++ERROR:  relation "root.public.ctlt1" already exists
+ \d+ ctlt1
+-                                Table "ctl_schema.ctlt1"
+- Column | Type | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------+-----------+----------+---------+----------+--------------+-------------
+- a      | text |           | not null |         | main     |              | A
+- b      | text |           |          |         | extended |              | B
+-Indexes:
+-    "ctlt1_pkey" PRIMARY KEY, btree (a)
+-    "ctlt1_b_idx" btree (b)
+-    "ctlt1_expr_idx" btree ((a || b))
+-Check constraints:
+-    "ctlt1_a_check" CHECK (length(a) > 2)
+-Statistics objects:
+-    "ctl_schema.ctlt1_a_b_stat" ON a, b FROM ctlt1
+-    "ctl_schema.ctlt1_expr_stat" ON (a || b) FROM ctlt1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ctlt1)$' COLLATE pg_catalog.default
++                                                                     ^
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ DROP TABLE ctlt1, ctlt2, ctlt3, ctlt4, ctlt12_storage, ctlt12_comments, ctlt1_inh, ctlt13_inh, ctlt13_like, ctlt_all, ctla, ctlb CASCADE;
+-NOTICE:  drop cascades to table inhe
++ERROR:  relation "ctlt12_storage" does not exist
+ -- LIKE must respect NO INHERIT property of constraints
+ CREATE TABLE noinh_con_copy (a int CHECK (a > 0) NO INHERIT);
++ERROR:  at or near "no": syntax error
++DETAIL:  source SQL:
++CREATE TABLE noinh_con_copy (a int CHECK (a > 0) NO INHERIT)
++                                                 ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE noinh_con_copy1 (LIKE noinh_con_copy INCLUDING CONSTRAINTS);
++ERROR:  relation "noinh_con_copy" does not exist
+ \d noinh_con_copy1
+-          Table "public.noinh_con_copy1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+-Check constraints:
+-    "noinh_con_copy_a_check" CHECK (a > 0) NO INHERIT
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(noinh_con_copy1)$' COLLATE pg_catalog.default
++                                                                               ^
+ -- fail, as partitioned tables don't allow NO INHERIT constraints
+ CREATE TABLE noinh_con_copy1_parted (LIKE noinh_con_copy INCLUDING ALL)
+   PARTITION BY LIST (a);
+-ERROR:  cannot add NO INHERIT constraint to partitioned table "noinh_con_copy1_parted"
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE noinh_con_copy1_parted (LIKE noinh_con_copy INCLUDING ALL)
++  PARTITION BY LIST (a)
++                       ^
++HINT:  try \h CREATE TABLE
+ DROP TABLE noinh_con_copy, noinh_con_copy1;
++ERROR:  relation "noinh_con_copy" does not exist
+ /* LIKE with other relation kinds */
+ CREATE TABLE ctlt4 (a int, b text);
++ERROR:  relation "root.public.ctlt4" already exists
+ CREATE SEQUENCE ctlseq1;
+ CREATE TABLE ctlt10 (LIKE ctlseq1);  -- fail
+-ERROR:  relation "ctlseq1" is invalid in LIKE clause
+-LINE 1: CREATE TABLE ctlt10 (LIKE ctlseq1);
+-                                  ^
+-DETAIL:  This operation is not supported for sequences.
++ERROR:  "ctlseq1" is not a table
+ CREATE VIEW ctlv1 AS SELECT * FROM ctlt4;
+ CREATE TABLE ctlt11 (LIKE ctlv1);
++ERROR:  "ctlv1" is not a table
+ CREATE TABLE ctlt11a (LIKE ctlv1 INCLUDING ALL);
++ERROR:  "ctlv1" is not a table
+ CREATE TYPE ctlty1 AS (a int, b text);
+ CREATE TABLE ctlt12 (LIKE ctlty1);
++ERROR:  relation "ctlty1" does not exist
+ DROP SEQUENCE ctlseq1;
+ DROP TYPE ctlty1;
+ DROP VIEW ctlv1;
+ DROP TABLE IF EXISTS ctlt4, ctlt10, ctlt11, ctlt11a, ctlt12;
+-NOTICE:  table "ctlt10" does not exist, skipping
