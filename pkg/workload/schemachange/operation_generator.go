@@ -2034,6 +2034,10 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 		{pgcode.UndefinedTable, !ifExists && !viewExists},
 		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && viewHasDependencies},
 	})
+	// DROP VIEW might fail with a "failed to read descriptors" error if another
+	// worker happens to be running ALTER VIEW RENAME (using legacy schema
+	// changer) concurrently. #137868 fixed this, but is not in this branch.
+	og.potentialCommitErrors.add(pgcode.Uncategorized)
 	stmt.sql = dropView.String()
 	return stmt, nil
 }
