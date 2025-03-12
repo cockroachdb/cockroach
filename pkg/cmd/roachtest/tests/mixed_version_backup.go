@@ -2684,7 +2684,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// of concurrent steps.
 				mixedversion.DisableMutators(
 					mixedversion.ClusterSettingMutator("kv.expiration_leases_only.enabled"),
-					mixedversion.ClusterSettingMutator("kv.snapshot_receiver.excise.enabled"),
 					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
 					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
 				),
