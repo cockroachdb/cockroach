@@ -274,7 +274,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// will become false and we will recompute the size -- so this cannot cause
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.shMu.raftLogSizeTrusted
-	firstIndex := r.raftFirstIndexRLocked()
+	firstIndex := r.raftCompactedIndexRLocked() + 1 // TODO(pav-kv): use "compacted" indexing
 	r.mu.RUnlock()
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 

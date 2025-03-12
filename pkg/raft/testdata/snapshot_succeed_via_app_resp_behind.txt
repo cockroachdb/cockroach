@@ -54,7 +54,7 @@ status 1
 
 raft-log 3
 ----
-log is empty: first index=6, last index=5
+log is empty: compacted index=5, last index=5
 
 # Send a manual snapshot from 1 to 3, which will be at index 11. This snapshot
 # does not move 3 to StateSnapshot.

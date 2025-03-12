@@ -100,11 +100,11 @@ func TestStorageLastIndex(t *testing.T) {
 	require.Equal(t, uint64(6), s.LastIndex())
 }
 
-func TestStorageFirstIndex(t *testing.T) {
+func TestStorageCompacted(t *testing.T) {
 	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5).LogSlice}
-	require.Equal(t, uint64(4), s.FirstIndex())
+	require.Equal(t, uint64(3), s.Compacted())
 	require.NoError(t, s.Compact(4))
-	require.Equal(t, uint64(5), s.FirstIndex())
+	require.Equal(t, uint64(4), s.Compacted())
 }
 
 func TestStorageCompact(t *testing.T) {
@@ -236,9 +236,9 @@ func TestStorageLogSnapshot(t *testing.T) {
 	snap := s.LogSnapshot()
 	// The snapshot must be immutable regardless of mutations on the storage.
 	check := func() {
-		require.Equal(t, uint64(1), snap.FirstIndex())
+		require.Equal(t, uint64(0), snap.Compacted())
 		require.Equal(t, uint64(3), snap.LastIndex())
-		entries, err := snap.Entries(snap.FirstIndex(), snap.LastIndex()+1, math.MaxUint64)
+		entries, err := snap.Entries(1, 4, math.MaxUint64)
 		require.NoError(t, err)
 		require.Equal(t, index(1).terms(1, 2, 3), entries)
 	}
