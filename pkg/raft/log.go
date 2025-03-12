@@ -99,7 +99,7 @@ func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
 func newLogWithSize(
 	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
 ) *raftLog {
-	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
+	compacted, lastIndex := storage.Compacted(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
 		panic(err) // TODO(pav-kv): the storage should always cache the last term.
@@ -110,10 +110,15 @@ func newLogWithSize(
 		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
-		// Initialize our committed and applied pointers to the time of the last compaction.
-		committed: firstIndex - 1,
-		applying:  firstIndex - 1,
-		applied:   firstIndex - 1,
+		// Initialize our committed and applied pointers to the time of the last
+		// compaction.
+		//
+		// TODO(pav-kv): this is error-prone. The applied index gets corrected
+		// further, in newRaft initialization sequence. This should be done as a
+		// single step.
+		committed: compacted,
+		applying:  compacted,
+		applied:   compacted,
 
 		logger: logger,
 	}
@@ -352,7 +357,7 @@ func (l *raftLog) firstIndex() uint64 {
 	if i, ok := l.unstable.maybeFirstIndex(); ok {
 		return i
 	}
-	return l.storage.FirstIndex()
+	return l.storage.Compacted() + 1 // TODO(pav-kv): use "compacted" up the stack
 }
 
 func (l *raftLog) lastIndex() uint64 {
