@@ -4,8 +4,10 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import long from "long";
+import { SWRConfiguration } from "swr";
 
-import { propsToQueryString } from "../util";
+import { propsToQueryString, useSwrWithClusterId } from "../util";
 
 import { fetchData } from "./fetchData";
 
@@ -46,6 +48,18 @@ export const getJobs = (
     "30M",
   );
 };
+
+export function useJobDetails(jobId: long, opts: SWRConfiguration = {}) {
+  return useSwrWithClusterId<JobResponse>(
+    { name: "jobDetailsById", jobId },
+    () => getJob({ job_id: jobId }),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      ...opts,
+    },
+  );
+}
 
 export const getJob = (
   req: JobRequest,
