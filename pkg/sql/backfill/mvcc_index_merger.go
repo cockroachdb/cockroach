@@ -66,6 +66,17 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// indexBackfillMergeMaxKVAutoRetry is the maximum number of times a merge operation
+// will automatically retry in the KV layer before reducing the batch size to handle
+// contention.
+var indexBackfillMergeMaxKVAutoRetry = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.merge_max_kv_auto_retries",
+	"the number of times a merge operation will automatically retry in the KV layer before lowering the batch size",
+	10,
+	settings.PositiveInt,
+)
+
 // keyBatch will manage merging a batch of keys. Potentially splitting the batch
 // across multiple transactions depending on contention.
 type keyBatch struct {
@@ -362,6 +373,12 @@ func (ibm *IndexBackfillMerger) merge(
 						}
 					}
 				}
+
+				// We explicitly specify a low retry limit because this operation is
+				// wrapped with its own retry function that will also take care of
+				// adjusting the batch size on each retry.
+				maxAutoRetries := indexBackfillMergeMaxKVAutoRetry.Get(&ibm.flowCtx.Cfg.Settings.SV)
+				txn.KV().SetMaxAutoRetries(int(maxAutoRetries))
 
 				var deletedCount int
 				var keysToSkipCount int
