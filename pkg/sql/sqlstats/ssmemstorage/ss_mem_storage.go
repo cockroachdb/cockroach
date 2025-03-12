@@ -600,14 +600,13 @@ func (s *Container) clearLocked(ctx context.Context) {
 // presumed to be no longer in use and its actual allocated memory will
 // eventually be GC'd.
 func (s *Container) Free(ctx context.Context) {
-	s.acc.Clear(ctx)
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.freeLocked(ctx)
 }
 
 func (s *Container) freeLocked(ctx context.Context) {
+	s.acc.Clear(ctx)
 	if s.uniqueServerCount != nil {
 		s.uniqueServerCount.freeByCnt(int64(len(s.mu.stmts)), int64(len(s.mu.txns)))
 	}
