@@ -767,6 +767,18 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaSQLExecLatencyConsistent = metric.Metadata{
+		Name:        "sql.exec.latency.consistent",
+		Help:        "Latency of SQL statement execution of non-historical queries",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaSQLExecLatencyHistorical = metric.Metadata{
+		Name:        "sql.exec.latency.historical",
+		Help:        "Latency of SQL statement execution of historical queries",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaSQLExecLatencyDetail = metric.Metadata{
 		Name:        "sql.exec.latency.detail",
 		Help:        "Latency of SQL statement execution, by statement fingerprint",
@@ -777,6 +789,18 @@ var (
 	MetaSQLServiceLatency = metric.Metadata{
 		Name:        "sql.service.latency",
 		Help:        "Latency of SQL request execution",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaSQLServiceLatencyConsistent = metric.Metadata{
+		Name:        "sql.service.latency.consistent",
+		Help:        "Latency of SQL request execution of non-historical queries",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaSQLServiceLatencyHistorical = metric.Metadata{
+		Name:        "sql.service.latency.historical",
+		Help:        "Latency of SQL request execution of historical queries",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
