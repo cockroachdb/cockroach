@@ -244,9 +244,17 @@ func createTestStoreWithoutStart(
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
 	)
-	cfg.StoreLivenessTransport = storeliveness.NewTransport(
-		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
-	)
+
+	{
+		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
+		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
+		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
+		transport := storeliveness.NewTransport(
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
+		)
+		knobs := cfg.TestingKnobs.StoreLivenessKnobs
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
+	}
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}

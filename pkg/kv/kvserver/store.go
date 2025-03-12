@@ -1173,18 +1173,18 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig      roachpb.SpanConfig
-	Settings               *cluster.Settings
-	Clock                  *hlc.Clock
-	Gossip                 *gossip.Gossip
-	DB                     *kv.DB
-	NodeLiveness           *liveness.NodeLiveness
-	StorePool              *storepool.StorePool
-	Transport              *RaftTransport
-	StoreLivenessTransport *storeliveness.Transport
-	NodeDialer             *nodedialer.Dialer
-	RPCContext             *rpc.Context
-	RangeDescriptorCache   *rangecache.RangeCache
+	DefaultSpanConfig    roachpb.SpanConfig
+	Settings             *cluster.Settings
+	Clock                *hlc.Clock
+	Gossip               *gossip.Gossip
+	DB                   *kv.DB
+	NodeLiveness         *liveness.NodeLiveness
+	StoreLiveness        *storeliveness.NodeContainer
+	StorePool            *storepool.StorePool
+	Transport            *RaftTransport
+	NodeDialer           *nodedialer.Dialer
+	RPCContext           *rpc.Context
+	RangeDescriptorCache *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -2226,18 +2226,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
 	// Create the Store Liveness SupportManager.
-	livenessInterval, heartbeatInterval := s.cfg.StoreLivenessDurations()
-	supportGracePeriod := s.cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
-	options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
-	var knobs *storeliveness.SupportManagerKnobs
-	if s.cfg.TestingKnobs.StoreLivenessKnobs != nil {
-		knobs = &s.cfg.TestingKnobs.StoreLivenessKnobs.SupportManagerKnobs
-	}
 	sm := storeliveness.NewSupportManager(
-		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.StateEngine(), options,
-		s.cfg.Settings, s.stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport, knobs,
+		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.StateEngine(),
+		s.cfg.StoreLiveness.Options, s.cfg.Settings, s.stopper, s.cfg.Clock,
+		s.cfg.StoreLiveness.HeartbeatTicker, s.cfg.StoreLiveness.Transport,
+		s.cfg.StoreLiveness.SupportManagerKnobs(),
 	)
-	s.cfg.StoreLivenessTransport.ListenMessages(s.StoreID(), sm)
+	s.cfg.StoreLiveness.Transport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm
 	s.storeLiveness.RegisterSupportWithdrawalCallback(s.supportWithdrawnCallback)
 	s.metrics.registry.AddMetricStruct(sm.Metrics())

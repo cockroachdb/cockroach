@@ -6,6 +6,7 @@ go_library(
         "config.go",
         "fabric.go",
         "metrics.go",
+        "node_manager.go",
         "persist.go",
         "requester_state.go",
         "support_manager.go",

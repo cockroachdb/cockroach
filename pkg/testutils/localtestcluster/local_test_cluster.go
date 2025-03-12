@@ -179,11 +179,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		Stopper:      ltc.stopper,
 	}
 	ltc.DB = kv.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.dbContext)
-	transport := kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
-	storeLivenessTransport := storeliveness.NewTransport(
-		cfg.AmbientCtx, ltc.stopper, ltc.Clock,
-		nil /* dialer */, nil /* grpcServer */, nil, /* knobs */
-	)
+
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
@@ -208,6 +204,17 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		Engines:                 []storage.Engine{ltc.Eng},
 	})
 	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
+	{
+		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
+		supportGracePeriod := cfg.RPCContext.StoreLivenessWithdrawalGracePeriod()
+		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
+		transport := storeliveness.NewTransport(
+			cfg.AmbientCtx, ltc.stopper, ltc.Clock,
+			nil /* dialer */, nil /* grpcServer */, nil, /* knobs */
+		)
+		knobs := cfg.TestingKnobs.StoreLivenessKnobs
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, options, transport, knobs)
+	}
 	nodeCountFn := func() int {
 		var count int
 		for _, nv := range cfg.NodeLiveness.ScanNodeVitalityFromCache() {
@@ -226,8 +233,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)
-	cfg.Transport = transport
-	cfg.StoreLivenessTransport = storeLivenessTransport
+	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
 	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
