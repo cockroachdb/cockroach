@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -39,26 +38,26 @@ type outputFormat interface {
 // data is printed as fixed-width columns. Summary rows
 // are printed at the end.
 type textFormatter struct {
-	i      atomic.Int64
-	numErr atomic.Int64
+	i      int
+	numErr int
 }
 
 func (f *textFormatter) rampDone() {
-	f.i.Store(0)
+	f.i = 0
 }
 
 func (f *textFormatter) outputError(_ error) {
-	f.numErr.Add(1)
+	f.numErr++
 }
 
 func (f *textFormatter) outputTick(startElapsed time.Duration, t histogram.Tick) {
-	if f.i.Load()%20 == 0 {
+	if f.i%20 == 0 {
 		fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
 	}
-	f.i.Add(1)
+	f.i++
 	fmt.Printf("%7.1fs %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
 		startElapsed.Seconds(),
-		f.numErr.Load(),
+		f.numErr,
 		float64(t.Hist.TotalCount())/t.Elapsed.Seconds(),
 		float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
 		time.Duration(t.Hist.ValueAtQuantile(50)).Seconds()*1000,
@@ -91,7 +90,7 @@ func (f *textFormatter) outputFinal(
 	}
 	fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
 		startElapsed.Seconds(),
-		f.numErr.Load(),
+		f.numErr,
 		t.Cumulative.TotalCount(),
 		float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
 		time.Duration(t.Cumulative.Mean()).Seconds()*1000,
@@ -108,13 +107,13 @@ func (f *textFormatter) outputFinal(
 // end.
 type jsonFormatter struct {
 	w      io.Writer
-	numErr atomic.Int64
+	numErr int
 }
 
 func (f *jsonFormatter) rampDone() {}
 
 func (f *jsonFormatter) outputError(_ error) {
-	f.numErr.Add(1)
+	f.numErr++
 }
 
 func (f *jsonFormatter) outputTick(startElapsed time.Duration, t histogram.Tick) {
@@ -132,7 +131,7 @@ func (f *jsonFormatter) outputTick(startElapsed time.Duration, t histogram.Tick)
 		`"type":"%s"`+
 		"}\n",
 		t.Now.UTC().Format(time.RFC3339Nano),
-		f.numErr.Load(),
+		f.numErr,
 		float64(t.Hist.TotalCount())/t.Elapsed.Seconds(),
 		float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
 		time.Duration(t.Hist.ValueAtQuantile(50)).Seconds()*1000,
