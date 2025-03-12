@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // ConstructTracingAggregatorProducerMeta constructs a ProducerMetadata that
@@ -45,25 +46,37 @@ func ConstructTracingAggregatorProducerMeta(
 		}
 	})
 
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		recType := sp.RecordingType()
+		if recType != tracingpb.RecordingOff {
+			aggEvents.SpanTotals = sp.GetFullTraceRecording(recType).Root.ChildrenMetadata
+		}
+	}
 	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
 // ComponentAggregatorStats is a mapping from a component to all the Aggregator
 // Stats collected for that component.
-type ComponentAggregatorStats map[execinfrapb.ComponentID]map[string][]byte
+type ComponentAggregatorStats map[execinfrapb.ComponentID]execinfrapb.TracingAggregatorEvents
 
 // DeepCopy takes a deep copy of the component aggregator stats map.
 func (c ComponentAggregatorStats) DeepCopy() ComponentAggregatorStats {
 	mapCopy := make(ComponentAggregatorStats, len(c))
 	for k, v := range c {
-		innerMap := make(map[string][]byte, len(v))
-		for k2, v2 := range v {
+		copied := v
+		copied.Events = make(map[string][]byte, len(v.Events))
+		copied.SpanTotals = make(map[string]tracingpb.OperationMetadata, len(v.SpanTotals))
+		for k2, v2 := range v.Events {
 			// Create a copy of the byte slice to avoid modifying the original data.
 			dataCopy := make([]byte, len(v2))
 			copy(dataCopy, v2)
-			innerMap[k2] = dataCopy
+			copied.Events[k2] = dataCopy
 		}
-		mapCopy[k] = innerMap
+		for k2, v2 := range v.SpanTotals {
+			copied.SpanTotals[k2] = v2
+		}
+		mapCopy[k] = copied
 	}
 	return mapCopy
 }
@@ -84,13 +97,17 @@ func FlushTracingAggregatorStats(
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		clusterWideAggregatorStats := make(map[string]tracing.AggregatorEvent)
+		clusterWideOpMetadata := make(map[string]tracingpb.OperationMetadata)
 		asOf := timeutil.Now().Format("20060102_150405.00")
 
 		var clusterWideSummary bytes.Buffer
 		for component, nameToEvent := range perNodeAggregatorStats {
-			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
+			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n",
 				component.SQLInstanceID.String(), component.FlowID.String()))
-			for name, event := range nameToEvent {
+
+			clusterWideSummary.WriteString("### aggregated events\n\n")
+
+			for name, event := range nameToEvent.Events {
 				// Write a proto file per tag. This machine-readable file can be consumed
 				// by other places we want to display this information egs: annotated
 				// DistSQL diagrams, DBConsole etc.
@@ -121,6 +138,13 @@ func FlushTracingAggregatorStats(
 				} else {
 					clusterWideAggregatorStats[name] = aggEvent
 				}
+			}
+
+			clusterWideSummary.WriteString("### span metadata\n\n")
+
+			for name, metadata := range nameToEvent.SpanTotals {
+				fmt.Fprintf(&clusterWideSummary, " - %s (%d): %s\n", name, metadata.Count, metadata.Duration)
+				clusterWideOpMetadata[name] = clusterWideOpMetadata[name].Combine(metadata)
 			}
 		}
 
