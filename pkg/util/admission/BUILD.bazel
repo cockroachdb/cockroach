@@ -16,7 +16,6 @@ go_library(
         "scheduler_latency_listener.go",
         "sequencer.go",
         "snapshot_queue.go",
-        "sql_cpu_overload_indicator.go",
         "store_token_estimation.go",
         "testing_knobs.go",
         "tokens_linear_model.go",

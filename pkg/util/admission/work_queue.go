@@ -348,8 +348,6 @@ func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
 		return workQueueOptions{usesTokens: false, tiedToRange: true}
 	case SQLKVResponseWork, SQLSQLResponseWork:
 		return workQueueOptions{usesTokens: true, tiedToRange: false}
-	case SQLStatementLeafStartWork, SQLStatementRootStartWork:
-		return workQueueOptions{usesTokens: false, tiedToRange: false}
 	default:
 		panic(errors.AssertionFailedf("unexpected workKind %d", workKind))
 	}
@@ -859,9 +857,7 @@ func recordAdmissionWorkQueueStats(
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
 // finished. It must be called iff the WorkKind of this WorkQueue uses slots
-// (not tokens), i.e., KVWork, SQLStatementLeafStartWork,
-// SQLStatementRootStartWork. Note, there is no support for SQLStatementLeafStartWork,
-// SQLStatementRootStartWork in the code yet.
+// (not tokens), i.e., KVWork.
 func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Duration) {
 	if q.usesTokens {
 		panic(errors.AssertionFailedf("tokens should not be returned"))
