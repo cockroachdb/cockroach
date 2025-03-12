@@ -8,6 +8,7 @@ import { useEffect, useCallback, useRef, useContext } from "react";
 import useSWR, { SWRConfiguration, SWRResponse } from "swr";
 import { Arguments, Fetcher } from "swr/_internal";
 import useSWRImmutable from "swr/immutable";
+import useSWRMutation, { SWRMutationConfiguration } from "swr/mutation";
 
 import { ClusterDetailsContext } from "../contexts";
 
@@ -168,4 +169,27 @@ export const useSwrImmutableWithClusterId = <
 ): SWRResponse<Data, Error, SWROptions> => {
   const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
   return useSWRImmutable(keyWithClusterId, fetcher, config);
+};
+
+/**
+ * useSwrMutationWithClusterId is a wrapper around useSWRMutation that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWRMutation.
+ * @param fetcher The fetcher to be called by useSWRMutation.
+ * @param config the config to be provided to useSWRMutation.
+ */
+export const useSwrMutationWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRMutationConfiguration<Data, Error, SWRKey>
+    | undefined = SWRMutationConfiguration<Data, Error, SWRKey> | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+) => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWRMutation(keyWithClusterId, fetcher, config);
 };
