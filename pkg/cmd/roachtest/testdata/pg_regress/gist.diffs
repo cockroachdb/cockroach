@@ -1,0 +1,638 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/gist.out --label=/mnt/data1/postgres/src/test/regress/results/gist.out /mnt/data1/postgres/src/test/regress/expected/gist.out /mnt/data1/postgres/src/test/regress/results/gist.out
+--- /mnt/data1/postgres/src/test/regress/expected/gist.out
++++ /mnt/data1/postgres/src/test/regress/results/gist.out
+@@ -4,132 +4,169 @@
+ -- There are other tests to test different GiST opclasses. This is for
+ -- testing GiST code itself. Vacuuming in particular.
+ create table gist_point_tbl(id int4, p point);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table gist_point_tbl(id int4, p point)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ create index gist_pointidx on gist_point_tbl using gist(p);
++ERROR:  relation "gist_point_tbl" does not exist
+ -- Verify the fillfactor and buffering options
+ create index gist_pointidx2 on gist_point_tbl using gist(p) with (buffering = on, fillfactor=50);
++ERROR:  relation "gist_point_tbl" does not exist
+ create index gist_pointidx3 on gist_point_tbl using gist(p) with (buffering = off);
++ERROR:  relation "gist_point_tbl" does not exist
+ create index gist_pointidx4 on gist_point_tbl using gist(p) with (buffering = auto);
++ERROR:  relation "gist_point_tbl" does not exist
+ drop index gist_pointidx2, gist_pointidx3, gist_pointidx4;
++ERROR:  index "gist_pointidx2" does not exist
+ -- Make sure bad values are refused
+ create index gist_pointidx5 on gist_point_tbl using gist(p) with (buffering = invalid_value);
+-ERROR:  invalid value for enum option "buffering": invalid_value
+-DETAIL:  Valid values are "on", "off", and "auto".
++ERROR:  relation "gist_point_tbl" does not exist
+ create index gist_pointidx5 on gist_point_tbl using gist(p) with (fillfactor=9);
+-ERROR:  value 9 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "gist_point_tbl" does not exist
+ create index gist_pointidx5 on gist_point_tbl using gist(p) with (fillfactor=101);
+-ERROR:  value 101 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "gist_point_tbl" does not exist
+ -- Insert enough data to create a tree that's a couple of levels deep.
+ insert into gist_point_tbl (id, p)
+ select g,        point(g*10, g*10) from generate_series(1, 10000) g;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into gist_point_tbl (id, p)
++select g,        point(g*10, g*10) from generate_series(1, 10000) g
++                      ^
+ insert into gist_point_tbl (id, p)
+ select g+100000, point(g*10+1, g*10+1) from generate_series(1, 10000) g;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into gist_point_tbl (id, p)
++select g+100000, point(g*10+1, g*10+1) from generate_series(1, 10000) g
++                      ^
+ -- To test vacuum, delete some entries from all over the index.
+ delete from gist_point_tbl where id % 2 = 1;
++ERROR:  relation "gist_point_tbl" does not exist
+ -- And also delete some concentration of values.
+ delete from gist_point_tbl where id > 5000;
++ERROR:  relation "gist_point_tbl" does not exist
+ vacuum analyze gist_point_tbl;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum analyze gist_point_tbl
++^
+ -- rebuild the index with a different fillfactor
+ alter index gist_pointidx SET (fillfactor = 40);
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++alter index gist_pointidx SET (fillfactor = 40)
++                          ^
++HINT:  try \h ALTER INDEX
+ reindex index gist_pointidx;
++ERROR:  at or near "gist_pointidx": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++reindex index gist_pointidx
++              ^
++HINT:  CockroachDB does not require reindexing.
+ --
+ -- Test Index-only plans on GiST indexes
+ --
+ create table gist_tbl (b box, p point, c circle);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table gist_tbl (b box, p point, c circle)
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ insert into gist_tbl
+ select box(point(0.05*i, 0.05*i), point(0.05*i, 0.05*i)),
+        point(0.05*i, 0.05*i),
+        circle(point(0.05*i, 0.05*i), 1.0)
+ from generate_series(0,10000) as i;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into gist_tbl
++select box(point(0.05*i, 0.05*i), point(0.05*i, 0.05*i)),
++                ^
+ vacuum analyze gist_tbl;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++vacuum analyze gist_tbl
++^
+ set enable_seqscan=off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_bitmapscan=off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_indexonlyscan=on;
++ERROR:  unimplemented: the configuration setting "enable_indexonlyscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test index-only scan with point opclass
+ create index gist_tbl_point_index on gist_tbl using gist (p);
++ERROR:  relation "gist_tbl" does not exist
+ -- check that the planner chooses an index-only scan
+ explain (costs off)
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5));
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Index Only Scan using gist_tbl_point_index on gist_tbl
+-   Index Cond: (p <@ '(0.5,0.5),(0,0)'::box)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- execute the same
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5));
+-      p      
+--------------
+- (0,0)
+- (0.05,0.05)
+- (0.1,0.1)
+- (0.15,0.15)
+- (0.2,0.2)
+- (0.25,0.25)
+- (0.3,0.3)
+- (0.35,0.35)
+- (0.4,0.4)
+- (0.45,0.45)
+- (0.5,0.5)
+-(11 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
++                                           ^
+ -- Also test an index-only knn-search
+ explain (costs off)
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
+ order by p <-> point(0.201, 0.201);
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Index Only Scan using gist_tbl_point_index on gist_tbl
+-   Index Cond: (p <@ '(0.5,0.5),(0,0)'::box)
+-   Order By: (p <-> '(0.201,0.201)'::point)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
+ order by p <-> point(0.201, 0.201);
+-      p      
+--------------
+- (0.2,0.2)
+- (0.25,0.25)
+- (0.15,0.15)
+- (0.3,0.3)
+- (0.1,0.1)
+- (0.35,0.35)
+- (0.05,0.05)
+- (0.4,0.4)
+- (0,0)
+- (0.45,0.45)
+- (0.5,0.5)
+-(11 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
++                                           ^
+ -- Check commuted case as well
+ explain (costs off)
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
+ order by point(0.101, 0.101) <-> p;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Index Only Scan using gist_tbl_point_index on gist_tbl
+-   Index Cond: (p <@ '(0.5,0.5),(0,0)'::box)
+-   Order By: (p <-> '(0.101,0.101)'::point)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
+ order by point(0.101, 0.101) <-> p;
+-      p      
+--------------
+- (0.1,0.1)
+- (0.15,0.15)
+- (0.05,0.05)
+- (0.2,0.2)
+- (0,0)
+- (0.25,0.25)
+- (0.3,0.3)
+- (0.35,0.35)
+- (0.4,0.4)
+- (0.45,0.45)
+- (0.5,0.5)
+-(11 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from gist_tbl where p <@ box(point(0,0), point(0.5, 0.5))
++                                           ^
+ -- Check case with multiple rescans (bug #14641)
+ explain (costs off)
+ select p from
+@@ -138,266 +175,205 @@
+           (box(point(0.8,0.8), point(1.0,1.0)))) as v(bb)
+ cross join lateral
+   (select p from gist_tbl where p <@ bb order by p <-> bb[0] limit 2) ss;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Nested Loop
+-   ->  Values Scan on "*VALUES*"
+-   ->  Limit
+-         ->  Index Only Scan using gist_tbl_point_index on gist_tbl
+-               Index Cond: (p <@ "*VALUES*".column1)
+-               Order By: (p <-> ("*VALUES*".column1)[0])
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select p from
+   (values (box(point(0,0), point(0.5,0.5))),
+           (box(point(0.5,0.5), point(0.75,0.75))),
+           (box(point(0.8,0.8), point(1.0,1.0)))) as v(bb)
+ cross join lateral
+   (select p from gist_tbl where p <@ bb order by p <-> bb[0] limit 2) ss;
+-      p      
+--------------
+- (0.5,0.5)
+- (0.45,0.45)
+- (0.75,0.75)
+- (0.7,0.7)
+- (1,1)
+- (0.95,0.95)
+-(6 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from
++  (values (box(point(0,0), point(0.5,0.5))),
++                    ^
+ drop index gist_tbl_point_index;
++ERROR:  index "gist_tbl_point_index" does not exist
+ -- Test index-only scan with box opclass
+ create index gist_tbl_box_index on gist_tbl using gist (b);
++ERROR:  relation "gist_tbl" does not exist
+ -- check that the planner chooses an index-only scan
+ explain (costs off)
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6));
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Index Only Scan using gist_tbl_box_index on gist_tbl
+-   Index Cond: (b <@ '(6,6),(5,5)'::box)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- execute the same
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6));
+-            b            
+--------------------------
+- (5,5),(5,5)
+- (5.05,5.05),(5.05,5.05)
+- (5.1,5.1),(5.1,5.1)
+- (5.15,5.15),(5.15,5.15)
+- (5.2,5.2),(5.2,5.2)
+- (5.25,5.25),(5.25,5.25)
+- (5.3,5.3),(5.3,5.3)
+- (5.35,5.35),(5.35,5.35)
+- (5.4,5.4),(5.4,5.4)
+- (5.45,5.45),(5.45,5.45)
+- (5.5,5.5),(5.5,5.5)
+- (5.55,5.55),(5.55,5.55)
+- (5.6,5.6),(5.6,5.6)
+- (5.65,5.65),(5.65,5.65)
+- (5.7,5.7),(5.7,5.7)
+- (5.75,5.75),(5.75,5.75)
+- (5.8,5.8),(5.8,5.8)
+- (5.85,5.85),(5.85,5.85)
+- (5.9,5.9),(5.9,5.9)
+- (5.95,5.95),(5.95,5.95)
+- (6,6),(6,6)
+-(21 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select b from gist_tbl where b <@ box(point(5,5), point(6,6))
++                                           ^
+ -- Also test an index-only knn-search
+ explain (costs off)
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6))
+ order by b <-> point(5.2, 5.91);
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Index Only Scan using gist_tbl_box_index on gist_tbl
+-   Index Cond: (b <@ '(6,6),(5,5)'::box)
+-   Order By: (b <-> '(5.2,5.91)'::point)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6))
+ order by b <-> point(5.2, 5.91);
+-            b            
+--------------------------
+- (5.55,5.55),(5.55,5.55)
+- (5.6,5.6),(5.6,5.6)
+- (5.5,5.5),(5.5,5.5)
+- (5.65,5.65),(5.65,5.65)
+- (5.45,5.45),(5.45,5.45)
+- (5.7,5.7),(5.7,5.7)
+- (5.4,5.4),(5.4,5.4)
+- (5.75,5.75),(5.75,5.75)
+- (5.35,5.35),(5.35,5.35)
+- (5.8,5.8),(5.8,5.8)
+- (5.3,5.3),(5.3,5.3)
+- (5.85,5.85),(5.85,5.85)
+- (5.25,5.25),(5.25,5.25)
+- (5.9,5.9),(5.9,5.9)
+- (5.2,5.2),(5.2,5.2)
+- (5.95,5.95),(5.95,5.95)
+- (5.15,5.15),(5.15,5.15)
+- (6,6),(6,6)
+- (5.1,5.1),(5.1,5.1)
+- (5.05,5.05),(5.05,5.05)
+- (5,5),(5,5)
+-(21 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select b from gist_tbl where b <@ box(point(5,5), point(6,6))
++                                           ^
+ -- Check commuted case as well
+ explain (costs off)
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6))
+ order by point(5.2, 5.91) <-> b;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Index Only Scan using gist_tbl_box_index on gist_tbl
+-   Index Cond: (b <@ '(6,6),(5,5)'::box)
+-   Order By: (b <-> '(5.2,5.91)'::point)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select b from gist_tbl where b <@ box(point(5,5), point(6,6))
+ order by point(5.2, 5.91) <-> b;
+-            b            
+--------------------------
+- (5.55,5.55),(5.55,5.55)
+- (5.6,5.6),(5.6,5.6)
+- (5.5,5.5),(5.5,5.5)
+- (5.65,5.65),(5.65,5.65)
+- (5.45,5.45),(5.45,5.45)
+- (5.7,5.7),(5.7,5.7)
+- (5.4,5.4),(5.4,5.4)
+- (5.75,5.75),(5.75,5.75)
+- (5.35,5.35),(5.35,5.35)
+- (5.8,5.8),(5.8,5.8)
+- (5.3,5.3),(5.3,5.3)
+- (5.85,5.85),(5.85,5.85)
+- (5.25,5.25),(5.25,5.25)
+- (5.9,5.9),(5.9,5.9)
+- (5.2,5.2),(5.2,5.2)
+- (5.95,5.95),(5.95,5.95)
+- (5.15,5.15),(5.15,5.15)
+- (6,6),(6,6)
+- (5.1,5.1),(5.1,5.1)
+- (5.05,5.05),(5.05,5.05)
+- (5,5),(5,5)
+-(21 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select b from gist_tbl where b <@ box(point(5,5), point(6,6))
++                                           ^
+ drop index gist_tbl_box_index;
++ERROR:  index "gist_tbl_box_index" does not exist
+ -- Test that an index-only scan is not chosen, when the query involves the
+ -- circle column (the circle opclass does not support index-only scans).
+ create index gist_tbl_multi_index on gist_tbl using gist (p, c);
++ERROR:  relation "gist_tbl" does not exist
+ explain (costs off)
+ select p, c from gist_tbl
+ where p <@ box(point(5,5), point(6, 6));
+-                    QUERY PLAN                     
+----------------------------------------------------
+- Index Scan using gist_tbl_multi_index on gist_tbl
+-   Index Cond: (p <@ '(6,6),(5,5)'::box)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- execute the same
+ select b, p from gist_tbl
+ where b <@ box(point(4.5, 4.5), point(5.5, 5.5))
+ and p <@ box(point(5,5), point(6, 6));
+-            b            |      p      
+--------------------------+-------------
+- (5,5),(5,5)             | (5,5)
+- (5.05,5.05),(5.05,5.05) | (5.05,5.05)
+- (5.1,5.1),(5.1,5.1)     | (5.1,5.1)
+- (5.15,5.15),(5.15,5.15) | (5.15,5.15)
+- (5.2,5.2),(5.2,5.2)     | (5.2,5.2)
+- (5.25,5.25),(5.25,5.25) | (5.25,5.25)
+- (5.3,5.3),(5.3,5.3)     | (5.3,5.3)
+- (5.35,5.35),(5.35,5.35) | (5.35,5.35)
+- (5.4,5.4),(5.4,5.4)     | (5.4,5.4)
+- (5.45,5.45),(5.45,5.45) | (5.45,5.45)
+- (5.5,5.5),(5.5,5.5)     | (5.5,5.5)
+-(11 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select b, p from gist_tbl
++where b <@ box(point(4.5, 4.5), point(5.5, 5.5))
++                    ^
+ drop index gist_tbl_multi_index;
++ERROR:  index "gist_tbl_multi_index" does not exist
+ -- Test that we don't try to return the value of a non-returnable
+ -- column in an index-only scan.  (This isn't GIST-specific, but
+ -- it only applies to index AMs that can return some columns and not
+ -- others, so GIST with appropriate opclasses is a convenient test case.)
+ create index gist_tbl_multi_index on gist_tbl using gist (circle(p,1), p);
++ERROR:  relation "gist_tbl" does not exist
+ explain (verbose, costs off)
+ select circle(p,1) from gist_tbl
+ where p <@ box(point(5, 5), point(5.3, 5.3));
+-                          QUERY PLAN                           
+----------------------------------------------------------------
+- Index Only Scan using gist_tbl_multi_index on public.gist_tbl
+-   Output: circle(p, '1'::double precision)
+-   Index Cond: (gist_tbl.p <@ '(5.3,5.3),(5,5)'::box)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select circle(p,1) from gist_tbl
+ where p <@ box(point(5, 5), point(5.3, 5.3));
+-     circle      
+------------------
+- <(5,5),1>
+- <(5.05,5.05),1>
+- <(5.1,5.1),1>
+- <(5.15,5.15),1>
+- <(5.2,5.2),1>
+- <(5.25,5.25),1>
+- <(5.3,5.3),1>
+-(7 rows)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select circle(p,1) from gist_tbl
++where p <@ box(point(5, 5), point(5.3, 5.3))
++                    ^
+ -- Similarly, test that index rechecks involving a non-returnable column
+ -- are done correctly.
+ explain (verbose, costs off)
+ select p from gist_tbl where circle(p,1) @> circle(point(0,0),0.95);
+-                                      QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+- Index Only Scan using gist_tbl_multi_index on public.gist_tbl
+-   Output: p
+-   Index Cond: ((circle(gist_tbl.p, '1'::double precision)) @> '<(0,0),0.95>'::circle)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select p from gist_tbl where circle(p,1) @> circle(point(0,0),0.95);
+-   p   
+--------
+- (0,0)
+-(1 row)
+-
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from gist_tbl where circle(p,1) @> circle(point(0,0),0.95)
++                                                        ^
+ -- Also check that use_physical_tlist doesn't trigger in such cases.
+ explain (verbose, costs off)
+ select count(*) from gist_tbl;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Aggregate
+-   Output: count(*)
+-   ->  Index Only Scan using gist_tbl_multi_index on public.gist_tbl
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from gist_tbl;
+- count 
+--------
+- 10001
+-(1 row)
+-
++ERROR:  relation "gist_tbl" does not exist
+ -- This case isn't supported, but it should at least EXPLAIN correctly.
+ explain (verbose, costs off)
+ select p from gist_tbl order by circle(p,1) <-> point(0,0) limit 1;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Limit
+-   Output: p, ((circle(p, '1'::double precision) <-> '(0,0)'::point))
+-   ->  Index Only Scan using gist_tbl_multi_index on public.gist_tbl
+-         Output: p, (circle(p, '1'::double precision) <-> '(0,0)'::point)
+-         Order By: ((circle(gist_tbl.p, '1'::double precision)) <-> '(0,0)'::point)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select p from gist_tbl order by circle(p,1) <-> point(0,0) limit 1;
+-ERROR:  lossy distance functions are not supported in index-only scans
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++select p from gist_tbl order by circle(p,1) <-> point(0,0) limit 1
++                                                     ^
+ -- Force an index build using buffering.
+ create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
+   with (buffering=on, fillfactor=50);
++ERROR:  relation "gist_tbl" does not exist
+ -- Clean up
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset enable_indexonlyscan;
++ERROR:  unimplemented: the configuration setting "enable_indexonlyscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table gist_tbl;
++ERROR:  relation "gist_tbl" does not exist
+ -- test an unlogged table, mostly to get coverage of gistbuildempty
+ create unlogged table gist_tbl (b box);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create unlogged table gist_tbl (b box)
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ create index gist_tbl_box_index on gist_tbl using gist (b);
++ERROR:  relation "gist_tbl" does not exist
+ insert into gist_tbl
+   select box(point(0.05*i, 0.05*i)) from generate_series(0,10) as i;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++insert into gist_tbl
++  select box(point(0.05*i, 0.05*i)) from generate_series(0,10) as i
++                  ^
+ drop table gist_tbl;
++ERROR:  relation "gist_tbl" does not exist

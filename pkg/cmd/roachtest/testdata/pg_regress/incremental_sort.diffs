@@ -1,0 +1,1735 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/incremental_sort.out --label=/mnt/data1/postgres/src/test/regress/results/incremental_sort.out /mnt/data1/postgres/src/test/regress/expected/incremental_sort.out /mnt/data1/postgres/src/test/regress/results/incremental_sort.out
+--- /mnt/data1/postgres/src/test/regress/expected/incremental_sort.out
++++ /mnt/data1/postgres/src/test/regress/results/incremental_sort.out
+@@ -3,33 +3,46 @@
+ explain (costs off)
+ select * from (select * from tenk1 order by four) t order by four, ten
+ limit 1;
+-               QUERY PLAN                
+------------------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: tenk1.four, tenk1.ten
+-         Presorted Key: tenk1.four
+-         ->  Sort
+-               Sort Key: tenk1.four
+-               ->  Seq Scan on tenk1
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- When work_mem is not enough to sort the entire table, incremental sort
+ -- may be faster if individual groups still fit into work_mem.
+ set work_mem to '2MB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select * from (select * from tenk1 order by four) t order by four, ten;
+-            QUERY PLAN             
+------------------------------------
+- Incremental Sort
+-   Sort Key: tenk1.four, tenk1.ten
+-   Presorted Key: tenk1.four
+-   ->  Sort
+-         Sort Key: tenk1.four
+-         ->  Seq Scan on tenk1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset work_mem;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create table t(a integer, b integer);
+ create or replace function explain_analyze_without_memory(query text)
+ returns table (out_line text) language plpgsql
+@@ -46,6 +59,9 @@
+   end loop;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ create or replace function explain_analyze_inc_sort_nodes(query text)
+ returns jsonb language plpgsql
+ as
+@@ -82,6 +98,19 @@
+   return matching_nodes;
+ end;
+ $$;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create or replace function explain_analyze_inc_sort_nodes_without_memory(query text)
+ returns jsonb language plpgsql
+ as
+@@ -104,6 +133,27 @@
+   return nodes;
+ end;
+ $$;
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++  nodes jsonb := '[]'::jsonb;
++  node jsonb;
++  group_key text;
++  space_key text;
++begin
++  for node in select * from jsonb_array_elements(explain_analyze_inc_sort_nodes(query)) t loop
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create or replace function explain_analyze_inc_sort_nodes_verify_invariants(query text)
+ returns bool language plpgsql
+ as
+@@ -127,467 +177,119 @@
+   return true;
+ end;
+ $$;
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++  node jsonb;
++  group_stats jsonb;
++  group_key text;
++  space_key text;
++begin
++  for node in select * from jsonb_array_elements(explain_analyze_inc_sort_nodes(query)) t loop
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- A single large group tested around each mode transition point.
+ insert into t(a, b) select i/100 + 1, i + 1 from generate_series(0, 999) n(i);
++ERROR:  unsupported binary operator: <decimal> + <int> (returning <int>)
+ analyze t;
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 31;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 31
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 31;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+-(31 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 32;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 32
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 32;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+- 1 | 32
+-(32 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 33;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 33
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 33;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+- 1 | 32
+- 1 | 33
+-(33 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 65;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 65
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 65;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+- 1 | 32
+- 1 | 33
+- 1 | 34
+- 1 | 35
+- 1 | 36
+- 1 | 37
+- 1 | 38
+- 1 | 39
+- 1 | 40
+- 1 | 41
+- 1 | 42
+- 1 | 43
+- 1 | 44
+- 1 | 45
+- 1 | 46
+- 1 | 47
+- 1 | 48
+- 1 | 49
+- 1 | 50
+- 1 | 51
+- 1 | 52
+- 1 | 53
+- 1 | 54
+- 1 | 55
+- 1 | 56
+- 1 | 57
+- 1 | 58
+- 1 | 59
+- 1 | 60
+- 1 | 61
+- 1 | 62
+- 1 | 63
+- 1 | 64
+- 1 | 65
+-(65 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 66;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 66
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 66;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+- 1 | 32
+- 1 | 33
+- 1 | 34
+- 1 | 35
+- 1 | 36
+- 1 | 37
+- 1 | 38
+- 1 | 39
+- 1 | 40
+- 1 | 41
+- 1 | 42
+- 1 | 43
+- 1 | 44
+- 1 | 45
+- 1 | 46
+- 1 | 47
+- 1 | 48
+- 1 | 49
+- 1 | 50
+- 1 | 51
+- 1 | 52
+- 1 | 53
+- 1 | 54
+- 1 | 55
+- 1 | 56
+- 1 | 57
+- 1 | 58
+- 1 | 59
+- 1 | 60
+- 1 | 61
+- 1 | 62
+- 1 | 63
+- 1 | 64
+- 1 | 65
+- 1 | 66
+-(66 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from t;
+ -- An initial large group followed by a small group.
+ insert into t(a, b) select i/50 + 1, i + 1 from generate_series(0, 999) n(i);
++ERROR:  unsupported binary operator: <decimal> + <int> (returning <int>)
+ analyze t;
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 55;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 55
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 55;
+- a | b  
+----+----
+- 1 |  1
+- 1 |  2
+- 1 |  3
+- 1 |  4
+- 1 |  5
+- 1 |  6
+- 1 |  7
+- 1 |  8
+- 1 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 1 | 20
+- 1 | 21
+- 1 | 22
+- 1 | 23
+- 1 | 24
+- 1 | 25
+- 1 | 26
+- 1 | 27
+- 1 | 28
+- 1 | 29
+- 1 | 30
+- 1 | 31
+- 1 | 32
+- 1 | 33
+- 1 | 34
+- 1 | 35
+- 1 | 36
+- 1 | 37
+- 1 | 38
+- 1 | 39
+- 1 | 40
+- 1 | 41
+- 1 | 42
+- 1 | 43
+- 1 | 44
+- 1 | 45
+- 1 | 46
+- 1 | 47
+- 1 | 48
+- 1 | 49
+- 1 | 50
+- 2 | 51
+- 2 | 52
+- 2 | 53
+- 2 | 54
+- 2 | 55
+-(55 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ -- Test EXPLAIN ANALYZE with only a fullsort group.
+ select explain_analyze_without_memory('select * from (select * from t order by a) s order by a, b limit 55');
+-                                        explain_analyze_without_memory                                         
+----------------------------------------------------------------------------------------------------------------
+- Limit (actual rows=55 loops=1)
+-   ->  Incremental Sort (actual rows=55 loops=1)
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         Full-sort Groups: 2  Sort Methods: top-N heapsort, quicksort  Average Memory: NNkB  Peak Memory: NNkB
+-         ->  Sort (actual rows=101 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: NNkB
+-               ->  Seq Scan on t (actual rows=1000 loops=1)
+-(9 rows)
+-
++ERROR:  unknown function: explain_analyze_without_memory()
+ select jsonb_pretty(explain_analyze_inc_sort_nodes_without_memory('select * from (select * from t order by a) s order by a, b limit 55'));
+-                  jsonb_pretty                   
+--------------------------------------------------
+- [                                              +
+-     {                                          +
+-         "Sort Key": [                          +
+-             "t.a",                             +
+-             "t.b"                              +
+-         ],                                     +
+-         "Node Type": "Incremental Sort",       +
+-         "Actual Rows": 55,                     +
+-         "Actual Loops": 1,                     +
+-         "Async Capable": false,                +
+-         "Presorted Key": [                     +
+-             "t.a"                              +
+-         ],                                     +
+-         "Parallel Aware": false,               +
+-         "Full-sort Groups": {                  +
+-             "Group Count": 2,                  +
+-             "Sort Methods Used": [             +
+-                 "top-N heapsort",              +
+-                 "quicksort"                    +
+-             ],                                 +
+-             "Sort Space Memory": {             +
+-                 "Peak Sort Space Used": "NN",  +
+-                 "Average Sort Space Used": "NN"+
+-             }                                  +
+-         },                                     +
+-         "Parent Relationship": "Outer"         +
+-     }                                          +
+- ]
+-(1 row)
+-
++ERROR:  unknown function: explain_analyze_inc_sort_nodes_without_memory()
+ select explain_analyze_inc_sort_nodes_verify_invariants('select * from (select * from t order by a) s order by a, b limit 55');
+- explain_analyze_inc_sort_nodes_verify_invariants 
+---------------------------------------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: explain_analyze_inc_sort_nodes_verify_invariants()
+ delete from t;
+ -- An initial small group followed by a large group.
+ insert into t(a, b) select (case when i < 5 then i else 9 end), i from generate_series(1, 1000) n(i);
+ analyze t;
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 70;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 70
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 70;
+  a | b  
+ ---+----
+@@ -668,17 +370,11 @@
+ -- transition point) but only retain 5. Thus when we transition modes, all
+ -- tuples in the full sort state have different prefix keys.
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 5;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 5;
+  a | b 
+ ---+---
+@@ -694,429 +390,110 @@
+ -- We force the planner to choose a plan with incremental sort on the right side
+ -- of a nested loop join node. That way we trigger the rescan code path.
+ set local enable_hashjoin = off;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set local enable_mergejoin = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_material = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ set local enable_sort = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ explain (costs off) select * from t left join (select * from (select * from t order by a) v order by a, b) s on s.a = t.a where t.a in (1, 2);
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Nested Loop Left Join
+-   Join Filter: (t_1.a = t.a)
+-   ->  Seq Scan on t
+-         Filter: (a = ANY ('{1,2}'::integer[]))
+-   ->  Incremental Sort
+-         Sort Key: t_1.a, t_1.b
+-         Presorted Key: t_1.a
+-         ->  Sort
+-               Sort Key: t_1.a
+-               ->  Seq Scan on t t_1
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from t left join (select * from (select * from t order by a) v order by a, b) s on s.a = t.a where t.a in (1, 2)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from t left join (select * from (select * from t order by a) v order by a, b) s on s.a = t.a where t.a in (1, 2);
+- a | b | a | b 
+----+---+---+---
+- 1 | 1 | 1 | 1
+- 2 | 2 | 2 | 2
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;
+ -- Test EXPLAIN ANALYZE with both fullsort and presorted groups.
+ select explain_analyze_without_memory('select * from (select * from t order by a) s order by a, b limit 70');
+-                                         explain_analyze_without_memory                                         
+-----------------------------------------------------------------------------------------------------------------
+- Limit (actual rows=70 loops=1)
+-   ->  Incremental Sort (actual rows=70 loops=1)
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: NNkB  Peak Memory: NNkB
+-         Pre-sorted Groups: 5  Sort Methods: top-N heapsort, quicksort  Average Memory: NNkB  Peak Memory: NNkB
+-         ->  Sort (actual rows=1000 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: NNkB
+-               ->  Seq Scan on t (actual rows=1000 loops=1)
+-(10 rows)
+-
++ERROR:  unknown function: explain_analyze_without_memory()
+ select jsonb_pretty(explain_analyze_inc_sort_nodes_without_memory('select * from (select * from t order by a) s order by a, b limit 70'));
+-                  jsonb_pretty                   
+--------------------------------------------------
+- [                                              +
+-     {                                          +
+-         "Sort Key": [                          +
+-             "t.a",                             +
+-             "t.b"                              +
+-         ],                                     +
+-         "Node Type": "Incremental Sort",       +
+-         "Actual Rows": 70,                     +
+-         "Actual Loops": 1,                     +
+-         "Async Capable": false,                +
+-         "Presorted Key": [                     +
+-             "t.a"                              +
+-         ],                                     +
+-         "Parallel Aware": false,               +
+-         "Full-sort Groups": {                  +
+-             "Group Count": 1,                  +
+-             "Sort Methods Used": [             +
+-                 "quicksort"                    +
+-             ],                                 +
+-             "Sort Space Memory": {             +
+-                 "Peak Sort Space Used": "NN",  +
+-                 "Average Sort Space Used": "NN"+
+-             }                                  +
+-         },                                     +
+-         "Pre-sorted Groups": {                 +
+-             "Group Count": 5,                  +
+-             "Sort Methods Used": [             +
+-                 "top-N heapsort",              +
+-                 "quicksort"                    +
+-             ],                                 +
+-             "Sort Space Memory": {             +
+-                 "Peak Sort Space Used": "NN",  +
+-                 "Average Sort Space Used": "NN"+
+-             }                                  +
+-         },                                     +
+-         "Parent Relationship": "Outer"         +
+-     }                                          +
+- ]
+-(1 row)
+-
++ERROR:  unknown function: explain_analyze_inc_sort_nodes_without_memory()
+ select explain_analyze_inc_sort_nodes_verify_invariants('select * from (select * from t order by a) s order by a, b limit 70');
+- explain_analyze_inc_sort_nodes_verify_invariants 
+---------------------------------------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: explain_analyze_inc_sort_nodes_verify_invariants()
+ delete from t;
+ -- Small groups of 10 tuples each tested around each mode transition point.
+ insert into t(a, b) select i / 10, i from generate_series(1, 1000) n(i);
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ analyze t;
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 31;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 31
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 31;
+- a | b  
+----+----
+- 0 |  1
+- 0 |  2
+- 0 |  3
+- 0 |  4
+- 0 |  5
+- 0 |  6
+- 0 |  7
+- 0 |  8
+- 0 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 2 | 20
+- 2 | 21
+- 2 | 22
+- 2 | 23
+- 2 | 24
+- 2 | 25
+- 2 | 26
+- 2 | 27
+- 2 | 28
+- 2 | 29
+- 3 | 30
+- 3 | 31
+-(31 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 32;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 32
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 32;
+- a | b  
+----+----
+- 0 |  1
+- 0 |  2
+- 0 |  3
+- 0 |  4
+- 0 |  5
+- 0 |  6
+- 0 |  7
+- 0 |  8
+- 0 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 2 | 20
+- 2 | 21
+- 2 | 22
+- 2 | 23
+- 2 | 24
+- 2 | 25
+- 2 | 26
+- 2 | 27
+- 2 | 28
+- 2 | 29
+- 3 | 30
+- 3 | 31
+- 3 | 32
+-(32 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 33;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 33
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 33;
+- a | b  
+----+----
+- 0 |  1
+- 0 |  2
+- 0 |  3
+- 0 |  4
+- 0 |  5
+- 0 |  6
+- 0 |  7
+- 0 |  8
+- 0 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 2 | 20
+- 2 | 21
+- 2 | 22
+- 2 | 23
+- 2 | 24
+- 2 | 25
+- 2 | 26
+- 2 | 27
+- 2 | 28
+- 2 | 29
+- 3 | 30
+- 3 | 31
+- 3 | 32
+- 3 | 33
+-(33 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 65;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 65
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 65;
+- a | b  
+----+----
+- 0 |  1
+- 0 |  2
+- 0 |  3
+- 0 |  4
+- 0 |  5
+- 0 |  6
+- 0 |  7
+- 0 |  8
+- 0 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 2 | 20
+- 2 | 21
+- 2 | 22
+- 2 | 23
+- 2 | 24
+- 2 | 25
+- 2 | 26
+- 2 | 27
+- 2 | 28
+- 2 | 29
+- 3 | 30
+- 3 | 31
+- 3 | 32
+- 3 | 33
+- 3 | 34
+- 3 | 35
+- 3 | 36
+- 3 | 37
+- 3 | 38
+- 3 | 39
+- 4 | 40
+- 4 | 41
+- 4 | 42
+- 4 | 43
+- 4 | 44
+- 4 | 45
+- 4 | 46
+- 4 | 47
+- 4 | 48
+- 4 | 49
+- 5 | 50
+- 5 | 51
+- 5 | 52
+- 5 | 53
+- 5 | 54
+- 5 | 55
+- 5 | 56
+- 5 | 57
+- 5 | 58
+- 5 | 59
+- 6 | 60
+- 6 | 61
+- 6 | 62
+- 6 | 63
+- 6 | 64
+- 6 | 65
+-(65 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 66;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 66
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 66;
+- a | b  
+----+----
+- 0 |  1
+- 0 |  2
+- 0 |  3
+- 0 |  4
+- 0 |  5
+- 0 |  6
+- 0 |  7
+- 0 |  8
+- 0 |  9
+- 1 | 10
+- 1 | 11
+- 1 | 12
+- 1 | 13
+- 1 | 14
+- 1 | 15
+- 1 | 16
+- 1 | 17
+- 1 | 18
+- 1 | 19
+- 2 | 20
+- 2 | 21
+- 2 | 22
+- 2 | 23
+- 2 | 24
+- 2 | 25
+- 2 | 26
+- 2 | 27
+- 2 | 28
+- 2 | 29
+- 3 | 30
+- 3 | 31
+- 3 | 32
+- 3 | 33
+- 3 | 34
+- 3 | 35
+- 3 | 36
+- 3 | 37
+- 3 | 38
+- 3 | 39
+- 4 | 40
+- 4 | 41
+- 4 | 42
+- 4 | 43
+- 4 | 44
+- 4 | 45
+- 4 | 46
+- 4 | 47
+- 4 | 48
+- 4 | 49
+- 5 | 50
+- 5 | 51
+- 5 | 52
+- 5 | 53
+- 5 | 54
+- 5 | 55
+- 5 | 56
+- 5 | 57
+- 5 | 58
+- 5 | 59
+- 6 | 60
+- 6 | 61
+- 6 | 62
+- 6 | 63
+- 6 | 64
+- 6 | 65
+- 6 | 66
+-(66 rows)
++ a | b 
++---+---
++(0 rows)
+ 
+ delete from t;
+ -- Small groups of only 1 tuple each tested around each mode transition point.
+ insert into t(a, b) select i, i from generate_series(1, 1000) n(i);
+ analyze t;
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 31;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 31
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 31;
+  a  | b  
+ ----+----
+@@ -1154,17 +531,11 @@
+ (31 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 32;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 32
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 32;
+  a  | b  
+ ----+----
+@@ -1203,17 +574,11 @@
+ (32 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 33;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 33
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 33;
+  a  | b  
+ ----+----
+@@ -1253,17 +618,11 @@
+ (33 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 65;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 65
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 65;
+  a  | b  
+ ----+----
+@@ -1335,17 +694,11 @@
+ (65 rows)
+ 
+ explain (costs off) select * from (select * from t order by a) s order by a, b limit 66;
+-           QUERY PLAN            
+----------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: t.a, t.b
+-         Presorted Key: t.a
+-         ->  Sort
+-               Sort Key: t.a
+-               ->  Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from (select * from t order by a) s order by a, b limit 66
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (select * from t order by a) s order by a, b limit 66;
+  a  | b  
+ ----+----
+@@ -1421,150 +774,224 @@
+ drop table t;
+ -- Incremental sort vs. parallel queries
+ set min_parallel_table_scan_size = '1kB';
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set min_parallel_index_scan_size = '1kB';
++ERROR:  unimplemented: the configuration setting "min_parallel_index_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set parallel_setup_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set parallel_tuple_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set max_parallel_workers_per_gather = 2;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create table t (a int, b int, c int);
+ insert into t select mod(i,10),mod(i,10),i from generate_series(1,10000) s(i);
+ create index on t (a);
+ analyze t;
+ set enable_incremental_sort = off;
++ERROR:  unrecognized configuration parameter "enable_incremental_sort"
+ explain (costs off) select a,b,sum(c) from t group by 1,2 order by 1,2,3 limit 1;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Limit
+-   ->  Sort
+-         Sort Key: a, b, (sum(c))
+-         ->  Finalize HashAggregate
+-               Group Key: a, b
+-               ->  Gather
+-                     Workers Planned: 2
+-                     ->  Partial HashAggregate
+-                           Group Key: a, b
+-                           ->  Parallel Seq Scan on t
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a,b,sum(c) from t group by 1,2 order by 1,2,3 limit 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ set enable_incremental_sort = on;
++ERROR:  unrecognized configuration parameter "enable_incremental_sort"
+ explain (costs off) select a,b,sum(c) from t group by 1,2 order by 1,2,3 limit 1;
+-                              QUERY PLAN                              
+-----------------------------------------------------------------------
+- Limit
+-   ->  Incremental Sort
+-         Sort Key: a, b, (sum(c))
+-         Presorted Key: a, b
+-         ->  GroupAggregate
+-               Group Key: a, b
+-               ->  Gather Merge
+-                     Workers Planned: 2
+-                     ->  Incremental Sort
+-                           Sort Key: a, b
+-                           Presorted Key: a
+-                           ->  Parallel Index Scan using t_a_idx on t
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a,b,sum(c) from t group by 1,2 order by 1,2,3 limit 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Incremental sort vs. set operations with varno 0
+ set enable_hashagg to off;
+-explain (costs off) select * from t union select * from t order by 1,3;
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Incremental Sort
+-   Sort Key: t.a, t.c
+-   Presorted Key: t.a
+-   ->  Unique
+-         ->  Sort
+-               Sort Key: t.a, t.b, t.c
+-               ->  Gather
+-                     Workers Planned: 2
+-                     ->  Parallel Append
+-                           ->  Parallel Seq Scan on t
+-                           ->  Parallel Seq Scan on t t_1
+-(11 rows)
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++explain (costs off) select * from t union select * from t order by 1,3;
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from t union select * from t order by 1,3
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Full sort, not just incremental sort can be pushed below a gather merge path
+ -- by generate_useful_gather_paths.
+ explain (costs off) select distinct a,b from t;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Unique
+-   ->  Gather Merge
+-         Workers Planned: 2
+-         ->  Unique
+-               ->  Sort
+-                     Sort Key: a, b
+-                     ->  Parallel Seq Scan on t
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select distinct a,b from t
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table t;
+ -- Sort pushdown can't go below where expressions are part of the rel target.
+ -- In particular this is interesting for volatile expressions which have to
+ -- go above joins since otherwise we'll incorrectly use expression evaluations
+ -- across multiple rows.
+ set enable_hashagg=off;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_seqscan=off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_incremental_sort = off;
++ERROR:  unrecognized configuration parameter "enable_incremental_sort"
+ set parallel_tuple_cost=0;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set parallel_setup_cost=0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set min_parallel_table_scan_size = 0;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set min_parallel_index_scan_size = 0;
++ERROR:  unimplemented: the configuration setting "min_parallel_index_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Parallel sort below join.
+ explain (costs off) select distinct sub.unique1, stringu1
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub;
+-                                QUERY PLAN                                
+---------------------------------------------------------------------------
+- Unique
+-   ->  Nested Loop
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: tenk1.unique1, tenk1.stringu1
+-                     ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-         ->  Function Scan on generate_series
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select distinct sub.unique1, stringu1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select sub.unique1, stringu1
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub
+ order by 1, 2;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Nested Loop
+-   ->  Gather Merge
+-         Workers Planned: 2
+-         ->  Sort
+-               Sort Key: tenk1.unique1, tenk1.stringu1
+-               ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-   ->  Function Scan on generate_series
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select sub.unique1, stringu1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Parallel sort but with expression that can be safely generated at the base rel.
+ explain (costs off) select distinct sub.unique1, md5(stringu1)
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub;
+-                                       QUERY PLAN                                       
+-----------------------------------------------------------------------------------------
+- Unique
+-   ->  Nested Loop
+-         ->  Gather Merge
+-               Workers Planned: 2
+-               ->  Sort
+-                     Sort Key: tenk1.unique1, (md5((tenk1.stringu1)::text)) COLLATE "C"
+-                     ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-         ->  Function Scan on generate_series
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select distinct sub.unique1, md5(stringu1)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select sub.unique1, md5(stringu1)
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub
+ order by 1, 2;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Nested Loop
+-   ->  Gather Merge
+-         Workers Planned: 2
+-         ->  Sort
+-               Sort Key: tenk1.unique1, (md5((tenk1.stringu1)::text)) COLLATE "C"
+-               ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-   ->  Function Scan on generate_series
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select sub.unique1, md5(stringu1)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Parallel sort with an aggregate that can be safely generated in parallel,
+ -- but we can't sort by partial aggregate values.
+ explain (costs off) select count(*)
+@@ -1572,91 +999,45 @@
+ join tenk1 t2 on t1.unique1 = t2.unique2
+ join tenk1 t3 on t2.unique1 = t3.unique1
+ order by count(*);
+-                                          QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: (count(*))
+-   ->  Finalize Aggregate
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Partial Aggregate
+-                     ->  Parallel Hash Join
+-                           Hash Cond: (t2.unique1 = t3.unique1)
+-                           ->  Parallel Hash Join
+-                                 Hash Cond: (t1.unique1 = t2.unique2)
+-                                 ->  Parallel Index Only Scan using tenk1_unique1 on tenk1 t1
+-                                 ->  Parallel Hash
+-                                       ->  Parallel Index Scan using tenk1_unique2 on tenk1 t2
+-                           ->  Parallel Hash
+-                                 ->  Parallel Index Only Scan using tenk1_unique1 on tenk1 t3
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select count(*)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Parallel sort but with expression (correlated subquery) that
+ -- is prohibited in parallel plans.
+ explain (costs off) select distinct
+   unique1,
+   (select t.unique1 from tenk1 where tenk1.unique1 = t.unique1)
+ from tenk1 t, generate_series(1, 1000);
+-                                   QUERY PLAN                                    
+----------------------------------------------------------------------------------
+- Unique
+-   ->  Sort
+-         Sort Key: t.unique1, ((SubPlan 1))
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Nested Loop
+-                     ->  Parallel Index Only Scan using tenk1_unique1 on tenk1 t
+-                     ->  Function Scan on generate_series
+-               SubPlan 1
+-                 ->  Index Only Scan using tenk1_unique1 on tenk1
+-                       Index Cond: (unique1 = t.unique1)
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select distinct
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select
+   unique1,
+   (select t.unique1 from tenk1 where tenk1.unique1 = t.unique1)
+ from tenk1 t, generate_series(1, 1000)
+ order by 1, 2;
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Sort
+-   Sort Key: t.unique1, ((SubPlan 1))
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Nested Loop
+-               ->  Parallel Index Only Scan using tenk1_unique1 on tenk1 t
+-               ->  Function Scan on generate_series
+-         SubPlan 1
+-           ->  Index Only Scan using tenk1_unique1 on tenk1
+-                 Index Cond: (unique1 = t.unique1)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Parallel sort but with expression not available until the upper rel.
+ explain (costs off) select distinct sub.unique1, stringu1 || random()::text
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub;
+-                                         QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+- Unique
+-   ->  Sort
+-         Sort Key: tenk1.unique1, (((tenk1.stringu1)::text || (random())::text)) COLLATE "C"
+-         ->  Gather
+-               Workers Planned: 2
+-               ->  Nested Loop
+-                     ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-                     ->  Function Scan on generate_series
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select distinct sub.unique1, stringu1 || random()::text
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select sub.unique1, stringu1 || random()::text
+ from tenk1, lateral (select tenk1.unique1 from generate_series(1, 1000)) as sub
+ order by 1, 2;
+-                                      QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: tenk1.unique1, (((tenk1.stringu1)::text || (random())::text)) COLLATE "C"
+-   ->  Gather
+-         Workers Planned: 2
+-         ->  Nested Loop
+-               ->  Parallel Index Scan using tenk1_unique1 on tenk1
+-               ->  Function Scan on generate_series
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select sub.unique1, stringu1 || random()::text
++               ^
++HINT:  try \h <SELECTCLAUSE>

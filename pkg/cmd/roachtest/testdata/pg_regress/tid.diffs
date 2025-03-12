@@ -1,0 +1,150 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tid.out --label=/mnt/data1/postgres/src/test/regress/results/tid.out /mnt/data1/postgres/src/test/regress/expected/tid.out /mnt/data1/postgres/src/test/regress/results/tid.out
+--- /mnt/data1/postgres/src/test/regress/expected/tid.out
++++ /mnt/data1/postgres/src/test/regress/results/tid.out
+@@ -4,118 +4,83 @@
+   '(0,1)'::tid as tid01,
+   '(-1,0)'::tid as tidm10,
+   '(4294967295,65535)'::tid as tidmax;
+- tid00 | tid01 |     tidm10     |       tidmax       
+--------+-------+----------------+--------------------
+- (0,0) | (0,1) | (4294967295,0) | (4294967295,65535)
+-(1 row)
+-
++ERROR:  type "tid" does not exist
+ SELECT '(4294967296,1)'::tid;  -- error
+-ERROR:  invalid input syntax for type tid: "(4294967296,1)"
+-LINE 1: SELECT '(4294967296,1)'::tid;
+-               ^
++ERROR:  type "tid" does not exist
+ SELECT '(1,65536)'::tid;  -- error
+-ERROR:  invalid input syntax for type tid: "(1,65536)"
+-LINE 1: SELECT '(1,65536)'::tid;
+-               ^
++ERROR:  type "tid" does not exist
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('(0)', 'tid');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('(0)', 'tid');
+-                 message                  | detail | hint | sql_error_code 
+-------------------------------------------+--------+------+----------------
+- invalid input syntax for type tid: "(0)" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('(0,-1)', 'tid');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('(0,-1)', 'tid');
+-                   message                   | detail | hint | sql_error_code 
+----------------------------------------------+--------+------+----------------
+- invalid input syntax for type tid: "(0,-1)" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- tests for functions related to TID handling
+ CREATE TABLE tid_tab (a int);
+ -- min() and max() for TIDs
+ INSERT INTO tid_tab VALUES (1), (2);
+ SELECT min(ctid) FROM tid_tab;
+-  min  
+--------
+- (0,1)
+-(1 row)
+-
++ERROR:  column "ctid" does not exist
+ SELECT max(ctid) FROM tid_tab;
+-  max  
+--------
+- (0,2)
+-(1 row)
+-
++ERROR:  column "ctid" does not exist
+ TRUNCATE tid_tab;
+ -- Tests for currtid2() with various relation kinds
+ -- Materialized view
+ CREATE MATERIALIZED VIEW tid_matview AS SELECT a FROM tid_tab;
+ SELECT currtid2('tid_matview'::text, '(0,1)'::tid); -- fails
+-ERROR:  tid (0, 1) is not valid for relation "tid_matview"
++ERROR:  unknown function: currtid2()
+ INSERT INTO tid_tab VALUES (1);
+ REFRESH MATERIALIZED VIEW tid_matview;
+ SELECT currtid2('tid_matview'::text, '(0,1)'::tid); -- ok
+- currtid2 
+-----------
+- (0,1)
+-(1 row)
+-
++ERROR:  unknown function: currtid2()
+ DROP MATERIALIZED VIEW tid_matview;
+ TRUNCATE tid_tab;
+ -- Sequence
+ CREATE SEQUENCE tid_seq;
+ SELECT currtid2('tid_seq'::text, '(0,1)'::tid); -- ok
+- currtid2 
+-----------
+- (0,1)
+-(1 row)
+-
++ERROR:  unknown function: currtid2()
+ DROP SEQUENCE tid_seq;
+ -- Index, fails with incorrect relation type
+ CREATE INDEX tid_ind ON tid_tab(a);
+ SELECT currtid2('tid_ind'::text, '(0,1)'::tid); -- fails
+-ERROR:  cannot open relation "tid_ind"
+-DETAIL:  This operation is not supported for indexes.
++ERROR:  unknown function: currtid2()
+ DROP INDEX tid_ind;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ -- Partitioned table, no storage
+ CREATE TABLE tid_part (a int) PARTITION BY RANGE (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE tid_part (a int) PARTITION BY RANGE (a)
++                                                    ^
++HINT:  try \h CREATE TABLE
+ SELECT currtid2('tid_part'::text, '(0,1)'::tid); -- fails
+-ERROR:  cannot look at latest visible tid for relation "public.tid_part"
++ERROR:  unknown function: currtid2()
+ DROP TABLE tid_part;
++ERROR:  relation "tid_part" does not exist
+ -- Views
+ -- ctid not defined in the view
+ CREATE VIEW tid_view_no_ctid AS SELECT a FROM tid_tab;
+ SELECT currtid2('tid_view_no_ctid'::text, '(0,1)'::tid); -- fails
+-ERROR:  currtid cannot handle views with no CTID
++ERROR:  unknown function: currtid2()
+ DROP VIEW tid_view_no_ctid;
+ -- ctid fetched directly from the source table.
+ CREATE VIEW tid_view_with_ctid AS SELECT ctid, a FROM tid_tab;
++ERROR:  column "ctid" does not exist
+ SELECT currtid2('tid_view_with_ctid'::text, '(0,1)'::tid); -- fails
+-ERROR:  tid (0, 1) is not valid for relation "tid_tab"
++ERROR:  unknown function: currtid2()
+ INSERT INTO tid_tab VALUES (1);
+ SELECT currtid2('tid_view_with_ctid'::text, '(0,1)'::tid); -- ok
+- currtid2 
+-----------
+- (0,1)
+-(1 row)
+-
++ERROR:  unknown function: currtid2()
+ DROP VIEW tid_view_with_ctid;
++ERROR:  relation "tid_view_with_ctid" does not exist
+ TRUNCATE tid_tab;
+ -- ctid attribute with incorrect data type
+ CREATE VIEW tid_view_fake_ctid AS SELECT 1 AS ctid, 2 AS a;
+ SELECT currtid2('tid_view_fake_ctid'::text, '(0,1)'::tid); -- fails
+-ERROR:  ctid isn't of type TID
++ERROR:  unknown function: currtid2()
+ DROP VIEW tid_view_fake_ctid;
+ DROP TABLE tid_tab CASCADE;

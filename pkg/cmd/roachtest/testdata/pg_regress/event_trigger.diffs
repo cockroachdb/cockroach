@@ -1,0 +1,1014 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out --label=/mnt/data1/postgres/src/test/regress/results/event_trigger.out /mnt/data1/postgres/src/test/regress/expected/event_trigger.out /mnt/data1/postgres/src/test/regress/results/event_trigger.out
+--- /mnt/data1/postgres/src/test/regress/expected/event_trigger.out
++++ /mnt/data1/postgres/src/test/regress/results/event_trigger.out
+@@ -2,120 +2,220 @@
+ create event trigger regress_event_trigger
+    on ddl_command_start
+    execute procedure pg_backend_pid();
+-ERROR:  function pg_backend_pid must return type event_trigger
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger
++       ^
++HINT:  try \h CREATE
+ -- OK
+ create function test_event_trigger() returns event_trigger as $$
+ BEGIN
+     RAISE NOTICE 'test_event_trigger: % %', tg_event, tg_tag;
+ END
+ $$ language plpgsql;
++ERROR:  type "event_trigger" does not exist
+ -- should fail, can't call it as a plain function
+ SELECT test_event_trigger();
+-ERROR:  trigger functions can only be called as triggers
+-CONTEXT:  compilation of PL/pgSQL function "test_event_trigger" near line 1
++ERROR:  unknown function: test_event_trigger()
+ -- should fail, event triggers cannot have declared arguments
+ create function test_event_trigger_arg(name text)
+ returns event_trigger as $$ BEGIN RETURN 1; END $$ language plpgsql;
+-ERROR:  event trigger functions cannot have declared arguments
+-CONTEXT:  compilation of PL/pgSQL function "test_event_trigger_arg" near line 1
++ERROR:  type "event_trigger" does not exist
+ -- should fail, SQL functions cannot be event triggers
+ create function test_event_trigger_sql() returns event_trigger as $$
+ SELECT 1 $$ language sql;
+-ERROR:  SQL functions cannot return type event_trigger
++ERROR:  type "event_trigger" does not exist
+ -- should fail, no elephant_bootstrap entry point
+ create event trigger regress_event_trigger on elephant_bootstrap
+    execute procedure test_event_trigger();
+-ERROR:  unrecognized event name "elephant_bootstrap"
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger on elephant_bootstrap
++       ^
++HINT:  try \h CREATE
+ -- OK
+ create event trigger regress_event_trigger on ddl_command_start
+    execute procedure test_event_trigger();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- OK
+ create event trigger regress_event_trigger_end on ddl_command_end
+    execute function test_event_trigger();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger_end on ddl_command_end
++       ^
++HINT:  try \h CREATE
+ -- should fail, food is not a valid filter variable
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when food in ('sandwich')
+    execute procedure test_event_trigger();
+-ERROR:  unrecognized filter variable "food"
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, sandwich is not a valid command tag
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('sandwich')
+    execute procedure test_event_trigger();
+-ERROR:  filter value "sandwich" not recognized for filter variable "tag"
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, create skunkcabbage is not a valid command tag
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('create table', 'create skunkcabbage')
+    execute procedure test_event_trigger();
+-ERROR:  filter value "create skunkcabbage" not recognized for filter variable "tag"
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have event triggers on event triggers
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('DROP EVENT TRIGGER')
+    execute procedure test_event_trigger();
+-ERROR:  event triggers are not supported for DROP EVENT TRIGGER
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have event triggers on global objects
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('CREATE ROLE')
+    execute procedure test_event_trigger();
+-ERROR:  event triggers are not supported for CREATE ROLE
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have event triggers on global objects
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('CREATE DATABASE')
+    execute procedure test_event_trigger();
+-ERROR:  event triggers are not supported for CREATE DATABASE
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have event triggers on global objects
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('CREATE TABLESPACE')
+    execute procedure test_event_trigger();
+-ERROR:  event triggers are not supported for CREATE TABLESPACE
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have same filter variable twice
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('create table') and tag in ('CREATE FUNCTION')
+    execute procedure test_event_trigger();
+-ERROR:  filter variable "tag" specified more than once
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- should fail, can't have arguments
+ create event trigger regress_event_trigger2 on ddl_command_start
+    execute procedure test_event_trigger('argument not allowed');
+-ERROR:  syntax error at or near "'argument not allowed'"
+-LINE 2:    execute procedure test_event_trigger('argument not allowe...
+-                                                ^
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- OK
+ create event trigger regress_event_trigger2 on ddl_command_start
+    when tag in ('create table', 'CREATE FUNCTION')
+    execute procedure test_event_trigger();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger2 on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ -- OK
+ comment on event trigger regress_event_trigger is 'test comment';
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++comment on event trigger regress_event_trigger is 'test comment'
++           ^
+ -- drop as non-superuser should fail
+ create role regress_evt_user;
+ set role regress_evt_user;
+ create event trigger regress_event_trigger_noperms on ddl_command_start
+    execute procedure test_event_trigger();
+-ERROR:  permission denied to create event trigger "regress_event_trigger_noperms"
+-HINT:  Must be superuser to create an event trigger.
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger regress_event_trigger_noperms on ddl_command_start
++       ^
++HINT:  try \h CREATE
+ reset role;
+ -- test enabling and disabling
+ alter event trigger regress_event_trigger disable;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger disable
++      ^
++HINT:  try \h ALTER
+ -- fires _trigger2 and _trigger_end should fire, but not _trigger
+ create table event_trigger_fire1 (a int);
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_end CREATE TABLE
+ alter event trigger regress_event_trigger enable;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger enable
++      ^
++HINT:  try \h ALTER
+ set session_replication_role = replica;
++ERROR:  unimplemented: the configuration setting "session_replication_role" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- fires nothing
+ create table event_trigger_fire2 (a int);
+ alter event trigger regress_event_trigger enable replica;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger enable replica
++      ^
++HINT:  try \h ALTER
+ -- fires only _trigger
+ create table event_trigger_fire3 (a int);
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+ alter event trigger regress_event_trigger enable always;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger enable always
++      ^
++HINT:  try \h ALTER
+ -- fires only _trigger
+ create table event_trigger_fire4 (a int);
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+ reset session_replication_role;
++ERROR:  unimplemented: the configuration setting "session_replication_role" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- fires all three
+ create table event_trigger_fire5 (a int);
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_end CREATE TABLE
+ -- non-top-level command
+ create function f1() returns int
+ language plpgsql
+@@ -124,18 +224,11 @@
+   create table event_trigger_fire6 (a int);
+   return 0;
+ end $$;
+-NOTICE:  test_event_trigger: ddl_command_start CREATE FUNCTION
+-NOTICE:  test_event_trigger: ddl_command_start CREATE FUNCTION
+-NOTICE:  test_event_trigger: ddl_command_end CREATE FUNCTION
++ERROR:  unimplemented: CREATE TABLE usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ select f1();
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_end CREATE TABLE
+- f1 
+-----
+-  0
+-(1 row)
+-
++ERROR:  unknown function: f1()
+ -- non-top-level command
+ create procedure p1()
+ language plpgsql
+@@ -143,70 +236,158 @@
+ begin
+   create table event_trigger_fire7 (a int);
+ end $$;
+-NOTICE:  test_event_trigger: ddl_command_start CREATE PROCEDURE
+-NOTICE:  test_event_trigger: ddl_command_end CREATE PROCEDURE
++ERROR:  unimplemented: CREATE TABLE usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ call p1();
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_start CREATE TABLE
+-NOTICE:  test_event_trigger: ddl_command_end CREATE TABLE
++ERROR:  procedure p1 does not exist
++HINT:  No procedure matches the given name.
+ -- clean up
+ alter event trigger regress_event_trigger disable;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger disable
++      ^
++HINT:  try \h ALTER
+ drop table event_trigger_fire2, event_trigger_fire3, event_trigger_fire4, event_trigger_fire5, event_trigger_fire6, event_trigger_fire7;
+-NOTICE:  test_event_trigger: ddl_command_end DROP TABLE
++ERROR:  relation "event_trigger_fire6" does not exist
+ drop routine f1(), p1();
+-NOTICE:  test_event_trigger: ddl_command_end DROP ROUTINE
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++drop routine f1(), p1()
++     ^
++HINT:  try \h DROP
+ -- regress_event_trigger_end should fire on these commands
+ grant all on table event_trigger_fire1 to public;
+-NOTICE:  test_event_trigger: ddl_command_end GRANT
+ comment on table event_trigger_fire1 is 'here is a comment';
+-NOTICE:  test_event_trigger: ddl_command_end COMMENT
+ revoke all on table event_trigger_fire1 from public;
+-NOTICE:  test_event_trigger: ddl_command_end REVOKE
+ drop table event_trigger_fire1;
+-NOTICE:  test_event_trigger: ddl_command_end DROP TABLE
+ create foreign data wrapper useless;
+-NOTICE:  test_event_trigger: ddl_command_end CREATE FOREIGN DATA WRAPPER
++ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create foreign data wrapper useless
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create server useless_server foreign data wrapper useless;
+-NOTICE:  test_event_trigger: ddl_command_end CREATE SERVER
++ERROR:  at or near "useless_server": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create server useless_server foreign data wrapper useless
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create user mapping for regress_evt_user server useless_server;
+-NOTICE:  test_event_trigger: ddl_command_end CREATE USER MAPPING
++ERROR:  at or near "for": syntax error
++DETAIL:  source SQL:
++create user mapping for regress_evt_user server useless_server
++                    ^
++HINT:  try \h CREATE ROLE
+ alter default privileges for role regress_evt_user
+  revoke delete on tables from regress_evt_user;
+-NOTICE:  test_event_trigger: ddl_command_end ALTER DEFAULT PRIVILEGES
+ -- alter owner to non-superuser should fail
+ alter event trigger regress_event_trigger owner to regress_evt_user;
+-ERROR:  permission denied to change owner of event trigger "regress_event_trigger"
+-HINT:  The owner of an event trigger must be a superuser.
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger owner to regress_evt_user
++      ^
++HINT:  try \h ALTER
+ -- alter owner to superuser should work
+ alter role regress_evt_user superuser;
++ERROR:  at or near "superuser": syntax error
++DETAIL:  source SQL:
++alter role regress_evt_user superuser
++                            ^
++HINT:  try \h ALTER ROLE
+ alter event trigger regress_event_trigger owner to regress_evt_user;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger owner to regress_evt_user
++      ^
++HINT:  try \h ALTER
+ -- should fail, name collision
+ alter event trigger regress_event_trigger rename to regress_event_trigger2;
+-ERROR:  event trigger "regress_event_trigger2" already exists
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger rename to regress_event_trigger2
++      ^
++HINT:  try \h ALTER
+ -- OK
+ alter event trigger regress_event_trigger rename to regress_event_trigger3;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++alter event trigger regress_event_trigger rename to regress_event_trigger3
++      ^
++HINT:  try \h ALTER
+ -- should fail, doesn't exist any more
+ drop event trigger regress_event_trigger;
+-ERROR:  event trigger "regress_event_trigger" does not exist
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger regress_event_trigger
++     ^
++HINT:  try \h DROP
+ -- should fail, regress_evt_user owns some objects
+ drop role regress_evt_user;
+-ERROR:  role "regress_evt_user" cannot be dropped because some objects depend on it
+-DETAIL:  owner of event trigger regress_event_trigger3
+-owner of user mapping for regress_evt_user on server useless_server
+-owner of default privileges on new relations belonging to role regress_evt_user
++ERROR:  role regress_evt_user cannot be dropped because some objects depend on it
++owner of default privileges on new relations belonging to role regress_evt_user in database root
++privileges for default privileges on new relations belonging to role regress_evt_user in database root
++HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_evt_user REVOKE ALL ON TABLES FROM regress_evt_user;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_evt_user REVOKE ALL ON TABLES FROM regress_evt_user;
+ -- cleanup before next test
+ -- these are all OK; the second one should emit a NOTICE
+ drop event trigger if exists regress_event_trigger2;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger if exists regress_event_trigger2
++     ^
++HINT:  try \h DROP
+ drop event trigger if exists regress_event_trigger2;
+-NOTICE:  event trigger "regress_event_trigger2" does not exist, skipping
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger if exists regress_event_trigger2
++     ^
++HINT:  try \h DROP
+ drop event trigger regress_event_trigger3;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger regress_event_trigger3
++     ^
++HINT:  try \h DROP
+ drop event trigger regress_event_trigger_end;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger regress_event_trigger_end
++     ^
++HINT:  try \h DROP
+ -- test support for dropped objects
+ CREATE SCHEMA schema_one authorization regress_evt_user;
+ CREATE SCHEMA schema_two authorization regress_evt_user;
+ CREATE SCHEMA audit_tbls authorization regress_evt_user;
+ CREATE TEMP TABLE a_temp_tbl ();
+ SET SESSION AUTHORIZATION regress_evt_user;
++ERROR:  at or near "regress_evt_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_evt_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE schema_one.table_one(a int);
+ CREATE TABLE schema_one."table two"(a int);
+ CREATE TABLE schema_one.table_three(a int);
+@@ -219,7 +400,18 @@
+   AS $$ BEGIN RETURN coalesce($1,0) + coalesce($2,0); END; $$;
+ CREATE AGGREGATE schema_two.newton
+   (BASETYPE = int, SFUNC = schema_two.add, STYPE = int);
++ERROR:  at or near "schema_two": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE schema_two.newton
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ CREATE TABLE undroppable_objs (
+ 	object_type text,
+ 	object_identity text
+@@ -253,8 +445,14 @@
+ 	END LOOP;
+ END;
+ $$;
++ERROR:  type "event_trigger" does not exist
+ CREATE EVENT TRIGGER undroppable ON sql_drop
+ 	EXECUTE PROCEDURE undroppable();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER undroppable ON sql_drop
++       ^
++HINT:  try \h CREATE
+ CREATE OR REPLACE FUNCTION test_evtrig_dropped_objects() RETURNS event_trigger
+ LANGUAGE plpgsql AS $$
+ DECLARE
+@@ -273,99 +471,55 @@
+     END LOOP;
+ END
+ $$;
++ERROR:  type "event_trigger" does not exist
+ CREATE EVENT TRIGGER regress_event_trigger_drop_objects ON sql_drop
+ 	WHEN TAG IN ('drop table', 'drop function', 'drop view',
+ 		'drop owned', 'drop schema', 'alter table')
+ 	EXECUTE PROCEDURE test_evtrig_dropped_objects();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER regress_event_trigger_drop_objects ON sql_drop
++       ^
++HINT:  try \h CREATE
+ ALTER TABLE schema_one.table_one DROP COLUMN a;
+ DROP SCHEMA schema_one, schema_two CASCADE;
+-NOTICE:  drop cascades to 7 other objects
+-DETAIL:  drop cascades to table schema_two.table_two
+-drop cascades to table schema_two.table_three
+-drop cascades to function schema_two.add(integer,integer)
+-drop cascades to function schema_two.newton(integer)
+-drop cascades to table schema_one.table_one
+-drop cascades to table schema_one."table two"
+-drop cascades to table schema_one.table_three
+-NOTICE:  table "schema_two_table_two" does not exist, skipping
+-NOTICE:  table "audit_tbls_schema_two_table_three" does not exist, skipping
+-ERROR:  object audit_tbls.schema_two_table_three of type table cannot be dropped
+-CONTEXT:  PL/pgSQL function undroppable() line 14 at RAISE
+-SQL statement "DROP TABLE IF EXISTS audit_tbls.schema_two_table_three"
+-PL/pgSQL function test_evtrig_dropped_objects() line 8 at EXECUTE
+ DELETE FROM undroppable_objs WHERE object_identity = 'audit_tbls.schema_two_table_three';
+ DROP SCHEMA schema_one, schema_two CASCADE;
+-NOTICE:  drop cascades to 7 other objects
+-DETAIL:  drop cascades to table schema_two.table_two
+-drop cascades to table schema_two.table_three
+-drop cascades to function schema_two.add(integer,integer)
+-drop cascades to function schema_two.newton(integer)
+-drop cascades to table schema_one.table_one
+-drop cascades to table schema_one."table two"
+-drop cascades to table schema_one.table_three
+-NOTICE:  table "schema_two_table_two" does not exist, skipping
+-NOTICE:  table "audit_tbls_schema_two_table_three" does not exist, skipping
+-NOTICE:  table "schema_one_table_one" does not exist, skipping
+-NOTICE:  table "schema_one_table two" does not exist, skipping
+-NOTICE:  table "schema_one_table_three" does not exist, skipping
+-ERROR:  object schema_one.table_three of type table cannot be dropped
+-CONTEXT:  PL/pgSQL function undroppable() line 14 at RAISE
++ERROR:  unknown schema "schema_one"
+ DELETE FROM undroppable_objs WHERE object_identity = 'schema_one.table_three';
+ DROP SCHEMA schema_one, schema_two CASCADE;
+-NOTICE:  drop cascades to 7 other objects
+-DETAIL:  drop cascades to table schema_two.table_two
+-drop cascades to table schema_two.table_three
+-drop cascades to function schema_two.add(integer,integer)
+-drop cascades to function schema_two.newton(integer)
+-drop cascades to table schema_one.table_one
+-drop cascades to table schema_one."table two"
+-drop cascades to table schema_one.table_three
+-NOTICE:  table "schema_two_table_two" does not exist, skipping
+-NOTICE:  table "audit_tbls_schema_two_table_three" does not exist, skipping
+-NOTICE:  table "schema_one_table_one" does not exist, skipping
+-NOTICE:  table "schema_one_table two" does not exist, skipping
+-NOTICE:  table "schema_one_table_three" does not exist, skipping
++ERROR:  unknown schema "schema_one"
+ SELECT * FROM dropped_objects WHERE schema IS NULL OR schema <> 'pg_toast';
+-     type     |   schema   |               object                
+---------------+------------+-------------------------------------
+- table column | schema_one | schema_one.table_one.a
+- schema       |            | schema_two
+- table        | schema_two | schema_two.table_two
+- type         | schema_two | schema_two.table_two
+- type         | schema_two | schema_two.table_two[]
+- table        | audit_tbls | audit_tbls.schema_two_table_three
+- type         | audit_tbls | audit_tbls.schema_two_table_three
+- type         | audit_tbls | audit_tbls.schema_two_table_three[]
+- table        | schema_two | schema_two.table_three
+- type         | schema_two | schema_two.table_three
+- type         | schema_two | schema_two.table_three[]
+- function     | schema_two | schema_two.add(integer,integer)
+- aggregate    | schema_two | schema_two.newton(integer)
+- schema       |            | schema_one
+- table        | schema_one | schema_one.table_one
+- type         | schema_one | schema_one.table_one
+- type         | schema_one | schema_one.table_one[]
+- table        | schema_one | schema_one."table two"
+- type         | schema_one | schema_one."table two"
+- type         | schema_one | schema_one."table two"[]
+- table        | schema_one | schema_one.table_three
+- type         | schema_one | schema_one.table_three
+- type         | schema_one | schema_one.table_three[]
+-(23 rows)
++ type | schema | object 
++------+--------+--------
++(0 rows)
+ 
+ DROP OWNED BY regress_evt_user;
+-NOTICE:  schema "audit_tbls" does not exist, skipping
++ERROR:  cannot drop desired object(s) because other objects depend on them
+ SELECT * FROM dropped_objects WHERE type = 'schema';
+-  type  | schema |   object   
+---------+--------+------------
+- schema |        | schema_two
+- schema |        | schema_one
+- schema |        | audit_tbls
+-(3 rows)
++ type | schema | object 
++------+--------+--------
++(0 rows)
+ 
+ DROP ROLE regress_evt_user;
++ERROR:  role regress_evt_user cannot be dropped because some objects depend on it
++owner of default privileges on new relations belonging to role regress_evt_user in database root
++privileges for default privileges on new relations belonging to role regress_evt_user in database root
++owner of schema root.audit_tbls
++HINT:  USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_evt_user REVOKE ALL ON TABLES FROM regress_evt_user;
++USE root; ALTER DEFAULT PRIVILEGES FOR ROLE regress_evt_user REVOKE ALL ON TABLES FROM regress_evt_user;
+ DROP EVENT TRIGGER regress_event_trigger_drop_objects;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER regress_event_trigger_drop_objects
++     ^
++HINT:  try \h DROP
+ DROP EVENT TRIGGER undroppable;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER undroppable
++     ^
++HINT:  try \h DROP
+ -- Event triggers on relations.
+ CREATE OR REPLACE FUNCTION event_trigger_report_dropped()
+  RETURNS event_trigger
+@@ -383,8 +537,14 @@
+         r.object_identity, r.address_names, r.address_args;
+     END LOOP;
+ END; $$;
++ERROR:  type "event_trigger" does not exist
+ CREATE EVENT TRIGGER regress_event_trigger_report_dropped ON sql_drop
+     EXECUTE PROCEDURE event_trigger_report_dropped();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER regress_event_trigger_report_dropped ON sql_drop
++       ^
++HINT:  try \h CREATE
+ CREATE OR REPLACE FUNCTION event_trigger_report_end()
+  RETURNS event_trigger
+  LANGUAGE plpgsql
+@@ -397,95 +557,105 @@
+             r.command_tag, r.object_type, r.object_identity;
+     END LOOP;
+ END; $$;
++ERROR:  type "event_trigger" does not exist
+ CREATE EVENT TRIGGER regress_event_trigger_report_end ON ddl_command_end
+   EXECUTE PROCEDURE event_trigger_report_end();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER regress_event_trigger_report_end ON ddl_command_end
++       ^
++HINT:  try \h CREATE
+ CREATE SCHEMA evttrig
+ 	CREATE TABLE one (col_a SERIAL PRIMARY KEY, col_b text DEFAULT 'forty two', col_c SERIAL)
+ 	CREATE INDEX one_idx ON one (col_b)
+ 	CREATE TABLE two (col_c INTEGER CHECK (col_c > 0) REFERENCES one DEFAULT 42)
+ 	CREATE TABLE id (col_d int NOT NULL GENERATED ALWAYS AS IDENTITY);
+-NOTICE:  END: command_tag=CREATE SCHEMA type=schema identity=evttrig
+-NOTICE:  END: command_tag=CREATE SEQUENCE type=sequence identity=evttrig.one_col_a_seq
+-NOTICE:  END: command_tag=CREATE SEQUENCE type=sequence identity=evttrig.one_col_c_seq
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.one
+-NOTICE:  END: command_tag=CREATE INDEX type=index identity=evttrig.one_pkey
+-NOTICE:  END: command_tag=ALTER SEQUENCE type=sequence identity=evttrig.one_col_a_seq
+-NOTICE:  END: command_tag=ALTER SEQUENCE type=sequence identity=evttrig.one_col_c_seq
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.two
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.two
+-NOTICE:  END: command_tag=CREATE SEQUENCE type=sequence identity=evttrig.id_col_d_seq
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.id
+-NOTICE:  END: command_tag=ALTER SEQUENCE type=sequence identity=evttrig.id_col_d_seq
+-NOTICE:  END: command_tag=CREATE INDEX type=index identity=evttrig.one_idx
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA evttrig
++	CREATE TABLE one (col_a SERIAL PRIMARY KEY, col_b text DEFAULT 'forty two', col_c SERIAL)
++ ^
+ -- Partitioned tables with a partitioned index
+ CREATE TABLE evttrig.parted (
+     id int PRIMARY KEY)
+     PARTITION BY RANGE (id);
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.parted
+-NOTICE:  END: command_tag=CREATE INDEX type=index identity=evttrig.parted_pkey
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE evttrig.parted (
++    id int PRIMARY KEY)
++    PARTITION BY RANGE (id)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE evttrig.part_1_10 PARTITION OF evttrig.parted (id)
+   FOR VALUES FROM (1) TO (10);
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.part_1_10
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE evttrig.part_1_10 PARTITION OF evttrig.parted (id)
++                               ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE evttrig.part_10_20 PARTITION OF evttrig.parted (id)
+   FOR VALUES FROM (10) TO (20) PARTITION BY RANGE (id);
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.part_10_20
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE evttrig.part_10_20 PARTITION OF evttrig.parted (id)
++                                ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE evttrig.part_10_15 PARTITION OF evttrig.part_10_20 (id)
+   FOR VALUES FROM (10) TO (15);
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.part_10_15
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE evttrig.part_10_15 PARTITION OF evttrig.part_10_20 (id)
++                                ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE evttrig.part_15_20 PARTITION OF evttrig.part_10_20 (id)
+   FOR VALUES FROM (15) TO (20);
+-NOTICE:  END: command_tag=CREATE TABLE type=table identity=evttrig.part_15_20
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE evttrig.part_15_20 PARTITION OF evttrig.part_10_20 (id)
++                                ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE evttrig.two DROP COLUMN col_c;
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=table column identity=evttrig.two.col_c name={evttrig,two,col_c} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table constraint identity=two_col_c_check on evttrig.two name={evttrig,two,two_col_c_check} args={}
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.two
++ERROR:  relation "evttrig.two" does not exist
+ ALTER TABLE evttrig.one ALTER COLUMN col_b DROP DEFAULT;
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=default value identity=for evttrig.one.col_b name={evttrig,one,col_b} args={}
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.one
++ERROR:  relation "evttrig.one" does not exist
+ ALTER TABLE evttrig.one DROP CONSTRAINT one_pkey;
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=table constraint identity=one_pkey on evttrig.one name={evttrig,one,one_pkey} args={}
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.one
++ERROR:  relation "evttrig.one" does not exist
+ ALTER TABLE evttrig.one DROP COLUMN col_c;
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=table column identity=evttrig.one.col_c name={evttrig,one,col_c} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=default value identity=for evttrig.one.col_c name={evttrig,one,col_c} args={}
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.one
++ERROR:  relation "evttrig.one" does not exist
+ ALTER TABLE evttrig.id ALTER COLUMN col_d SET DATA TYPE bigint;
+-NOTICE:  END: command_tag=ALTER SEQUENCE type=sequence identity=evttrig.id_col_d_seq
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.id
++ERROR:  relation "evttrig.id" does not exist
+ ALTER TABLE evttrig.id ALTER COLUMN col_d DROP IDENTITY,
+   ALTER COLUMN col_d SET DATA TYPE int;
+-NOTICE:  END: command_tag=ALTER TABLE type=table identity=evttrig.id
++ERROR:  relation "evttrig.id" does not exist
+ DROP INDEX evttrig.one_idx;
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=index identity=evttrig.one_idx name={evttrig,one_idx} args={}
++ERROR:  target database or schema does not exist
+ DROP SCHEMA evttrig CASCADE;
+-NOTICE:  drop cascades to 4 other objects
+-DETAIL:  drop cascades to table evttrig.one
+-drop cascades to table evttrig.two
+-drop cascades to table evttrig.id
+-drop cascades to table evttrig.parted
+-NOTICE:  NORMAL: orig=t normal=f istemp=f type=schema identity=evttrig name={evttrig} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.one name={evttrig,one} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=sequence identity=evttrig.one_col_a_seq name={evttrig,one_col_a_seq} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=default value identity=for evttrig.one.col_a name={evttrig,one,col_a} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.two name={evttrig,two} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.id name={evttrig,id} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.parted name={evttrig,parted} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.part_1_10 name={evttrig,part_1_10} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.part_10_20 name={evttrig,part_10_20} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.part_10_15 name={evttrig,part_10_15} args={}
+-NOTICE:  NORMAL: orig=f normal=t istemp=f type=table identity=evttrig.part_15_20 name={evttrig,part_15_20} args={}
++ERROR:  unknown schema "evttrig"
+ DROP TABLE a_temp_tbl;
+-NOTICE:  NORMAL: orig=t normal=f istemp=t type=table identity=pg_temp.a_temp_tbl name={pg_temp,a_temp_tbl} args={}
+ -- CREATE OPERATOR CLASS without FAMILY clause should report
+ -- both CREATE OPERATOR FAMILY and CREATE OPERATOR CLASS
+ CREATE OPERATOR CLASS evttrigopclass FOR TYPE int USING btree AS STORAGE int;
+-NOTICE:  END: command_tag=CREATE OPERATOR FAMILY type=operator family identity=public.evttrigopclass USING btree
+-NOTICE:  END: command_tag=CREATE OPERATOR CLASS type=operator class identity=public.evttrigopclass USING btree
++ERROR:  at or near "class": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR CLASS evttrigopclass FOR TYPE int USING btree AS STORAGE int
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ DROP EVENT TRIGGER regress_event_trigger_report_dropped;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER regress_event_trigger_report_dropped
++     ^
++HINT:  try \h DROP
+ DROP EVENT TRIGGER regress_event_trigger_report_end;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER regress_event_trigger_report_end
++     ^
++HINT:  try \h DROP
+ -- only allowed from within an event trigger function, should fail
+ select pg_event_trigger_table_rewrite_oid();
+-ERROR:  pg_event_trigger_table_rewrite_oid() can only be called in a table_rewrite event trigger function
++ERROR:  unknown function: pg_event_trigger_table_rewrite_oid()
+ -- test Table Rewrite Event Trigger
+ CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
+ LANGUAGE plpgsql AS $$
+@@ -493,14 +663,19 @@
+   RAISE EXCEPTION 'rewrites not allowed';
+ END;
+ $$;
++ERROR:  type "event_trigger" does not exist
+ create event trigger no_rewrite_allowed on table_rewrite
+   execute procedure test_evtrig_no_rewrite();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++create event trigger no_rewrite_allowed on table_rewrite
++       ^
++HINT:  try \h CREATE
+ create table rewriteme (id serial primary key, foo float, bar timestamptz);
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ insert into rewriteme
+      select x * 1.001 from generate_series(1, 500) as t(x);
+ alter table rewriteme alter column foo type numeric;
+-ERROR:  rewrites not allowed
+-CONTEXT:  PL/pgSQL function test_evtrig_no_rewrite() line 3 at RAISE
+ alter table rewriteme add column baz int default 0;
+ -- test with more than one reason to rewrite a single table
+ CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
+@@ -511,27 +686,38 @@
+                pg_event_trigger_table_rewrite_reason();
+ END;
+ $$;
++ERROR:  type "event_trigger" does not exist
+ alter table rewriteme
+  add column onemore int default 0,
+  add column another int default -1,
+  alter column foo type numeric(10,4);
+-NOTICE:  Table 'rewriteme' is being rewritten (reason = 4)
+ -- matview rewrite when changing access method
+ CREATE MATERIALIZED VIEW heapmv USING heap AS SELECT 1 AS a;
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++CREATE MATERIALIZED VIEW heapmv USING heap AS SELECT 1 AS a
++                                ^
++HINT:  try \h CREATE
+ ALTER MATERIALIZED VIEW heapmv SET ACCESS METHOD heap2;
+-NOTICE:  Table 'heapmv' is being rewritten (reason = 8)
++ERROR:  at or near "access": syntax error
++DETAIL:  source SQL:
++ALTER MATERIALIZED VIEW heapmv SET ACCESS METHOD heap2
++                                   ^
++HINT:  try \h ALTER
+ DROP MATERIALIZED VIEW heapmv;
++ERROR:  relation "heapmv" does not exist
+ -- shouldn't trigger a table_rewrite event
+ alter table rewriteme alter column foo type numeric(12,4);
+ begin;
+ set timezone to 'UTC';
+ alter table rewriteme alter column bar type timestamp;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ set timezone to '0';
+ alter table rewriteme alter column bar type timestamptz;
+ set timezone to 'Europe/London';
+ alter table rewriteme alter column bar type timestamp; -- does rewrite
+-NOTICE:  Table 'rewriteme' is being rewritten (reason = 4)
+ rollback;
++WARNING:  there is no transaction in progress
+ -- typed tables are rewritten when their type changes.  Don't emit table
+ -- name, because firing order is not stable.
+ CREATE OR REPLACE FUNCTION test_evtrig_no_rewrite() RETURNS event_trigger
+@@ -541,21 +727,52 @@
+                pg_event_trigger_table_rewrite_reason();
+ END;
+ $$;
++ERROR:  type "event_trigger" does not exist
+ create type rewritetype as (a int);
+ create table rewritemetoo1 of rewritetype;
++ERROR:  at or near "of": syntax error
++DETAIL:  source SQL:
++create table rewritemetoo1 of rewritetype
++                           ^
++HINT:  try \h CREATE TABLE
+ create table rewritemetoo2 of rewritetype;
++ERROR:  at or near "of": syntax error
++DETAIL:  source SQL:
++create table rewritemetoo2 of rewritetype
++                           ^
++HINT:  try \h CREATE TABLE
+ alter type rewritetype alter attribute a type text cascade;
+-NOTICE:  Table is being rewritten (reason = 4)
+-NOTICE:  Table is being rewritten (reason = 4)
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type rewritetype alter attribute a type text cascade
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ -- but this doesn't work
+ create table rewritemetoo3 (a rewritetype);
+ alter type rewritetype alter attribute a type varchar cascade;
+-ERROR:  cannot alter type "rewritetype" because column "rewritemetoo3.a" uses it
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type rewritetype alter attribute a type varchar cascade
++                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ drop table rewriteme;
+ drop event trigger no_rewrite_allowed;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++drop event trigger no_rewrite_allowed
++     ^
++HINT:  try \h DROP
+ drop function test_evtrig_no_rewrite();
++ERROR:  unknown function: test_evtrig_no_rewrite()
+ -- test Row Security Event Trigger
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ CREATE TABLE event_trigger_test (a integer, b text);
+ CREATE OR REPLACE FUNCTION start_command()
+ RETURNS event_trigger AS $$
+@@ -563,37 +780,58 @@
+ RAISE NOTICE '% - ddl_command_start', tg_tag;
+ END;
+ $$ LANGUAGE plpgsql;
++ERROR:  type "event_trigger" does not exist
+ CREATE OR REPLACE FUNCTION end_command()
+ RETURNS event_trigger AS $$
+ BEGIN
+ RAISE NOTICE '% - ddl_command_end', tg_tag;
+ END;
+ $$ LANGUAGE plpgsql;
++ERROR:  type "event_trigger" does not exist
+ CREATE OR REPLACE FUNCTION drop_sql_command()
+ RETURNS event_trigger AS $$
+ BEGIN
+ RAISE NOTICE '% - sql_drop', tg_tag;
+ END;
+ $$ LANGUAGE plpgsql;
++ERROR:  type "event_trigger" does not exist
+ CREATE EVENT TRIGGER start_rls_command ON ddl_command_start
+     WHEN TAG IN ('CREATE POLICY', 'ALTER POLICY', 'DROP POLICY') EXECUTE PROCEDURE start_command();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER start_rls_command ON ddl_command_start
++       ^
++HINT:  try \h CREATE
+ CREATE EVENT TRIGGER end_rls_command ON ddl_command_end
+     WHEN TAG IN ('CREATE POLICY', 'ALTER POLICY', 'DROP POLICY') EXECUTE PROCEDURE end_command();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER end_rls_command ON ddl_command_end
++       ^
++HINT:  try \h CREATE
+ CREATE EVENT TRIGGER sql_drop_command ON sql_drop
+     WHEN TAG IN ('DROP POLICY') EXECUTE PROCEDURE drop_sql_command();
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++CREATE EVENT TRIGGER sql_drop_command ON sql_drop
++       ^
++HINT:  try \h CREATE
+ CREATE POLICY p1 ON event_trigger_test USING (FALSE);
+-NOTICE:  CREATE POLICY - ddl_command_start
+-NOTICE:  CREATE POLICY - ddl_command_end
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ ALTER POLICY p1 ON event_trigger_test USING (TRUE);
+-NOTICE:  ALTER POLICY - ddl_command_start
+-NOTICE:  ALTER POLICY - ddl_command_end
++ERROR:  unimplemented: ALTER POLICY is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136997/_version_
+ ALTER POLICY p1 ON event_trigger_test RENAME TO p2;
+-NOTICE:  ALTER POLICY - ddl_command_start
+-NOTICE:  ALTER POLICY - ddl_command_end
++ERROR:  unimplemented: ALTER POLICY is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/136996/_version_
+ DROP POLICY p2 ON event_trigger_test;
+-NOTICE:  DROP POLICY - ddl_command_start
+-NOTICE:  DROP POLICY - sql_drop
+-NOTICE:  DROP POLICY - ddl_command_end
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ -- Check the object addresses of all the event triggers.
+ SELECT
+     e.evtname,
+@@ -604,13 +842,22 @@
+     LATERAL pg_identify_object_as_address('pg_event_trigger'::regclass, e.oid, 0) as b,
+     LATERAL pg_get_object_address(b.type, b.object_names, b.object_args) as a
+   ORDER BY e.evtname;
+-      evtname      |              descr              |     type      |    object_names     | object_args |                         ident                          
+--------------------+---------------------------------+---------------+---------------------+-------------+--------------------------------------------------------
+- end_rls_command   | event trigger end_rls_command   | event trigger | {end_rls_command}   | {}          | ("event trigger",,end_rls_command,end_rls_command)
+- sql_drop_command  | event trigger sql_drop_command  | event trigger | {sql_drop_command}  | {}          | ("event trigger",,sql_drop_command,sql_drop_command)
+- start_rls_command | event trigger start_rls_command | event trigger | {start_rls_command} | {}          | ("event trigger",,start_rls_command,start_rls_command)
+-(3 rows)
+-
++ERROR:  unknown function: pg_identify_object_as_address()
+ DROP EVENT TRIGGER start_rls_command;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER start_rls_command
++     ^
++HINT:  try \h DROP
+ DROP EVENT TRIGGER end_rls_command;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER end_rls_command
++     ^
++HINT:  try \h DROP
+ DROP EVENT TRIGGER sql_drop_command;
++ERROR:  at or near "event": syntax error
++DETAIL:  source SQL:
++DROP EVENT TRIGGER sql_drop_command
++     ^
++HINT:  try \h DROP

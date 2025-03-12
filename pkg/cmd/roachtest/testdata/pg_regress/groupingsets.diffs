@@ -1,0 +1,3404 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/groupingsets.out --label=/mnt/data1/postgres/src/test/regress/results/groupingsets.out /mnt/data1/postgres/src/test/regress/expected/groupingsets.out /mnt/data1/postgres/src/test/regress/results/groupingsets.out
+--- /mnt/data1/postgres/src/test/regress/expected/groupingsets.out
++++ /mnt/data1/postgres/src/test/regress/results/groupingsets.out
+@@ -13,13 +13,16 @@
+ create temp table gstest3 (a integer, b integer, c integer, d integer);
+ copy gstest3 from stdin;
+ alter table gstest3 add primary key (a);
++ERROR:  cannot use nullable column "a" in primary key
+ create temp table gstest4(id integer, v integer,
+                           unhashable_col bit(4), unsortable_col xid);
++ERROR:  type "xid" does not exist
+ insert into gstest4
+ values (1,1,b'0000','1'), (2,2,b'0001','1'),
+        (3,4,b'0010','2'), (4,8,b'0011','2'),
+        (5,16,b'0000','2'), (6,32,b'0001','2'),
+        (7,64,b'0010','1'), (8,128,b'0011','1');
++ERROR:  relation "gstest4" does not exist
+ create temp table gstest_empty (a integer, b integer, v integer);
+ create function gstest_data(v integer, out a integer, out b integer)
+   returns setof record
+@@ -28,81 +31,92 @@
+       return query select v, i from generate_series(1,3) i;
+     end;
+   $f$ language plpgsql;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ -- basic functionality
+ set enable_hashagg = false;  -- test hashing explicitly later
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- simple rollup with multiple plain aggregates, with and without ordering
+ -- (and with ordering differing from grouping)
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by rollup (a,b);
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 | 1 |        0 |  21 |     2 |  11
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 1 |   |        1 |  60 |     5 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 2 |   |        1 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+- 3 |   |        1 |  33 |     2 |  17
+- 4 | 1 |        0 |  37 |     2 |  19
+- 4 |   |        1 |  37 |     2 |  19
+-   |   |        3 | 145 |    10 |  19
+-(12 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by rollup (a,b) order by a,b;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 | 1 |        0 |  21 |     2 |  11
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 1 |   |        1 |  60 |     5 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 2 |   |        1 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+- 3 |   |        1 |  33 |     2 |  17
+- 4 | 1 |        0 |  37 |     2 |  19
+- 4 |   |        1 |  37 |     2 |  19
+-   |   |        3 | 145 |    10 |  19
+-(12 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by rollup (a,b) order by b desc, a;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 |   |        1 |  60 |     5 |  14
+- 2 |   |        1 |  15 |     1 |  15
+- 3 |   |        1 |  33 |     2 |  17
+- 4 |   |        1 |  37 |     2 |  19
+-   |   |        3 | 145 |    10 |  19
+- 3 | 4 |        0 |  17 |     1 |  17
+- 1 | 3 |        0 |  14 |     1 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 1 |        0 |  21 |     2 |  11
+- 4 | 1 |        0 |  37 |     2 |  19
+-(12 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by rollup (a,b) order by coalesce(a,0)+coalesce(b,0);
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+-   |   |        3 | 145 |    10 |  19
+- 1 |   |        1 |  60 |     5 |  14
+- 1 | 1 |        0 |  21 |     2 |  11
+- 2 |   |        1 |  15 |     1 |  15
+- 3 |   |        1 |  33 |     2 |  17
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 4 |   |        1 |  37 |     2 |  19
+- 4 | 1 |        0 |  37 |     2 |  19
+- 2 | 3 |        0 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+-(12 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- various types of ordered aggs
+ select a, b, grouping(a,b),
+@@ -111,21 +125,20 @@
+        percentile_disc(0.5) within group (order by v),
+        rank(1,2,12) within group (order by a,b,v)
+   from gstest1 group by rollup (a,b) order by a,b;
+- a | b | grouping |            array_agg            |          string_agg           | percentile_disc | rank 
+----+---+----------+---------------------------------+-------------------------------+-----------------+------
+- 1 | 1 |        0 | {10,11}                         | 11:10                         |              10 |    3
+- 1 | 2 |        0 | {12,13}                         | 13:12                         |              12 |    1
+- 1 | 3 |        0 | {14}                            | 14                            |              14 |    1
+- 1 |   |        1 | {10,11,12,13,14}                | 14:13:12:11:10                |              12 |    3
+- 2 | 3 |        0 | {15}                            | 15                            |              15 |    1
+- 2 |   |        1 | {15}                            | 15                            |              15 |    1
+- 3 | 3 |        0 | {16}                            | 16                            |              16 |    1
+- 3 | 4 |        0 | {17}                            | 17                            |              17 |    1
+- 3 |   |        1 | {16,17}                         | 17:16                         |              16 |    1
+- 4 | 1 |        0 | {18,19}                         | 19:18                         |              18 |    1
+- 4 |   |        1 | {18,19}                         | 19:18                         |              18 |    1
+-   |   |        3 | {10,11,12,13,14,15,16,17,18,19} | 19:18:17:16:15:14:13:12:11:10 |              14 |    3
+-(12 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b),
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- test usage of grouped columns in direct args of aggs
+ select grouping(a), a, array_agg(b),
+@@ -133,232 +146,234 @@
+        rank(a) within group (order by b nulls last)
+   from (values (1,1),(1,4),(1,5),(3,1),(3,2)) v(a,b)
+  group by rollup (a) order by a;
+- grouping | a |  array_agg  | rank | rank 
+-----------+---+-------------+------+------
+-        0 | 1 | {1,4,5}     |    1 |    1
+-        0 | 3 | {1,2}       |    3 |    3
+-        1 |   | {1,4,5,1,2} |    1 |    6
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select grouping(a), a, array_agg(b),
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- nesting with window functions
+ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
+   from gstest2 group by rollup (a,b) order by rsum, a, b;
+- a | b | sum | rsum 
+----+---+-----+------
+- 1 | 1 |   8 |    8
+- 1 | 2 |   2 |   10
+- 1 |   |  10 |   20
+- 2 | 2 |   2 |   22
+- 2 |   |   2 |   24
+-   |   |  12 |   36
+-(6 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
++  from gstest2 group by rollup (a,b) order by rsum, a, b
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- nesting with grouping sets
+ select sum(c) from gstest2
+   group by grouping sets((), grouping sets((), grouping sets(())))
+   order by 1 desc;
+- sum 
+------
+-  12
+-  12
+-  12
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets((), grouping sets((), grouping sets(())))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets((), grouping sets((), grouping sets(((a, b)))))
+   order by 1 desc;
+- sum 
+------
+-  12
+-  12
+-   8
+-   2
+-   2
+-(5 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets((), grouping sets((), grouping sets(((a, b)))))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(grouping sets(rollup(c), grouping sets(cube(c))))
+   order by 1 desc;
+- sum 
+------
+-  12
+-  12
+-   6
+-   6
+-   6
+-   6
+-(6 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(grouping sets(rollup(c), grouping sets(cube(c))))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(a, grouping sets(a, cube(b)))
+   order by 1 desc;
+- sum 
+------
+-  12
+-  10
+-  10
+-   8
+-   4
+-   2
+-   2
+-(7 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(a, grouping sets(a, cube(b)))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(grouping sets((a, (b))))
+   order by 1 desc;
+- sum 
+------
+-   8
+-   2
+-   2
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(grouping sets((a, (b))))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(grouping sets((a, b)))
+   order by 1 desc;
+- sum 
+------
+-   8
+-   2
+-   2
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(grouping sets((a, b)))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(grouping sets(a, grouping sets(a), a))
+   order by 1 desc;
+- sum 
+------
+-  10
+-  10
+-  10
+-   2
+-   2
+-   2
+-(6 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(grouping sets(a, grouping sets(a), a))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets(grouping sets(a, grouping sets(a, grouping sets(a), ((a)), a, grouping sets(a), (a)), a))
+   order by 1 desc;
+- sum 
+------
+-  10
+-  10
+-  10
+-  10
+-  10
+-  10
+-  10
+-  10
+-   2
+-   2
+-   2
+-   2
+-   2
+-   2
+-   2
+-   2
+-(16 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets(grouping sets(a, grouping sets(a, grouping sets(a), ((a)), a, grouping sets(a), (a)), a))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(c) from gstest2
+   group by grouping sets((a,(a,b)), grouping sets((a,(a,b)),a))
+   order by 1 desc;
+- sum 
+------
+-  10
+-   8
+-   8
+-   2
+-   2
+-   2
+-   2
+-   2
+-(8 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(c) from gstest2
++  group by grouping sets((a,(a,b)), grouping sets((a,(a,b)),a))
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- empty input: first is 0 rows, second 1, third 3 etc.
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
+- a | b | sum | count 
+----+---+-----+-------
+-(0 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a)
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
+- a | b | sum | count 
+----+---+-----+-------
+-   |   |     |     0
+-(1 row)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
+- a | b | sum | count 
+----+---+-----+-------
+-   |   |     |     0
+-   |   |     |     0
+-   |   |     |     0
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
+- sum | count 
+------+-------
+-     |     0
+-     |     0
+-     |     0
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
++                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- empty input with joins tests some important code paths
+ select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
+  group by grouping sets ((t1.a,t2.b),());
+- a | b | sum | count 
+----+---+-----+-------
+-   |   |     |     0
+-(1 row)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select t1.a, t2.b, sum(t1.v), count(*) from gstest_empty t1, gstest_empty t2
++ group by grouping sets ((t1.a,t2.b),())
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- simple joins, var resolution, GROUPING on join vars
+ select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
+   from gstest1 t1, gstest2 t2
+  group by grouping sets ((t1.a, t2.b), ());
+- a | b | grouping | sum  | max 
+----+---+----------+------+-----
+- 1 | 1 |        0 |  420 |   1
+- 1 | 2 |        0 |  120 |   2
+- 2 | 1 |        0 |  105 |   1
+- 2 | 2 |        0 |   30 |   2
+- 3 | 1 |        0 |  231 |   1
+- 3 | 2 |        0 |   66 |   2
+- 4 | 1 |        0 |  259 |   1
+- 4 | 2 |        0 |   74 |   2
+-   |   |        3 | 1305 |   2
+-(9 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
+   from gstest1 t1 join gstest2 t2 on (t1.a=t2.a)
+  group by grouping sets ((t1.a, t2.b), ());
+- a | b | grouping | sum | max 
+----+---+----------+-----+-----
+- 1 | 1 |        0 | 420 |   1
+- 1 | 2 |        0 |  60 |   1
+- 2 | 2 |        0 |  15 |   2
+-   |   |        3 | 495 |   2
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select t1.a, t2.b, grouping(t1.a, t2.b), sum(t1.v), max(t2.a)
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select a, b, grouping(a, b), sum(t1.v), max(t2.c)
+   from gstest1 t1 join gstest2 t2 using (a,b)
+  group by grouping sets ((a, b), ());
+- a | b | grouping | sum | max 
+----+---+----------+-----+-----
+- 1 | 1 |        0 | 147 |   2
+- 1 | 2 |        0 |  25 |   2
+-   |   |        3 | 172 |   2
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a, b), sum(t1.v), max(t2.c)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- check that functionally dependent cols are not nulled
+ select a, d, grouping(a,b,c)
+   from gstest3
+  group by grouping sets ((a,b), (a,c));
+- a | d | grouping 
+----+---+----------
+- 1 | 1 |        1
+- 2 | 2 |        1
+- 1 | 1 |        2
+- 2 | 2 |        2
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, d, grouping(a,b,c)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- check that distinct grouping columns are kept separate
+ -- even if they are equal()
+@@ -366,74 +381,70 @@
+ select g as alias1, g as alias2
+   from generate_series(1,3) g
+  group by alias1, rollup(alias2);
+-                   QUERY PLAN                   
+-------------------------------------------------
+- GroupAggregate
+-   Group Key: g, g
+-   Group Key: g
+-   ->  Sort
+-         Sort Key: g
+-         ->  Function Scan on generate_series g
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select g as alias1, g as alias2
+   from generate_series(1,3) g
+  group by alias1, rollup(alias2);
+- alias1 | alias2 
+---------+--------
+-      1 |      1
+-      1 |       
+-      2 |      2
+-      2 |       
+-      3 |      3
+-      3 |       
+-(6 rows)
+-
++ERROR:  at or near "alias2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select g as alias1, g as alias2
++  from generate_series(1,3) g
++ group by alias1, rollup(alias2)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- check that pulled-up subquery outputs still go to null when appropriate
+ select four, x
+   from (select four, ten, 'foo'::text as x from tenk1) as t
+   group by grouping sets (four, x)
+   having x = 'foo';
+- four |  x  
+-------+-----
+-      | foo
+-(1 row)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select four, x
++  from (select four, ten, 'foo'::text as x from tenk1) as t
++  group by grouping sets (four, x)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select four, x || 'x'
+   from (select four, ten, 'foo'::text as x from tenk1) as t
+   group by grouping sets (four, x)
+   order by four;
+- four | ?column? 
+-------+----------
+-    0 | 
+-    1 | 
+-    2 | 
+-    3 | 
+-      | foox
+-(5 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select four, x || 'x'
++  from (select four, ten, 'foo'::text as x from tenk1) as t
++  group by grouping sets (four, x)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select (x+y)*1, sum(z)
+  from (select 1 as x, 2 as y, 3 as z) s
+  group by grouping sets (x+y, x);
+- ?column? | sum 
+-----------+-----
+-        3 |   3
+-          |   3
+-(2 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select (x+y)*1, sum(z)
++ from (select 1 as x, 2 as y, 3 as z) s
++ group by grouping sets (x+y, x)
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select x, not x as not_x, q2 from
+   (select *, q1 = 1 as x from int8_tbl i1) as t
+   group by grouping sets(x, q2)
+   order by x, q2;
+- x | not_x |        q2         
+----+-------+-------------------
+- f | t     |                  
+-   |       | -4567890123456789
+-   |       |               123
+-   |       |               456
+-   |       |  4567890123456789
+-(5 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select x, not x as not_x, q2 from
++  (select *, q1 = 1 as x from int8_tbl i1) as t
++  group by grouping sets(x, q2)
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- check qual push-down rules for a subquery with grouping sets
+ explain (verbose, costs off)
+ select * from (
+@@ -442,391 +453,343 @@
+   group by grouping sets(1, 2)
+ ) ss
+ where x = 1 and q1 = 123;
+-                 QUERY PLAN                 
+---------------------------------------------
+- Subquery Scan on ss
+-   Output: ss.x, ss.q1, ss.sum
+-   Filter: ((ss.x = 1) AND (ss.q1 = 123))
+-   ->  GroupAggregate
+-         Output: (1), i1.q1, sum(i1.q2)
+-         Group Key: 1
+-         Sort Key: i1.q1
+-           Group Key: i1.q1
+-         ->  Seq Scan on public.int8_tbl i1
+-               Output: 1, i1.q1, i1.q2
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from (
+   select 1 as x, q1, sum(q2)
+   from int8_tbl i1
+   group by grouping sets(1, 2)
+ ) ss
+ where x = 1 and q1 = 123;
+- x | q1 | sum 
+----+----+-----
+-(0 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from (
++  select 1 as x, q1, sum(q2)
++  from int8_tbl i1
++  group by grouping sets(1, 2)
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- check handling of pulled-up SubPlan in GROUPING() argument (bug #17479)
+ explain (verbose, costs off)
+ select grouping(ss.x)
+ from int8_tbl i1
+ cross join lateral (select (select i1.q1) as x) ss
+ group by ss.x;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- GroupAggregate
+-   Output: GROUPING((SubPlan 1)), ((SubPlan 2))
+-   Group Key: ((SubPlan 2))
+-   ->  Sort
+-         Output: ((SubPlan 2)), i1.q1
+-         Sort Key: ((SubPlan 2))
+-         ->  Seq Scan on public.int8_tbl i1
+-               Output: (SubPlan 2), i1.q1
+-               SubPlan 2
+-                 ->  Result
+-                       Output: i1.q1
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select grouping(ss.x)
+ from int8_tbl i1
+ cross join lateral (select (select i1.q1) as x) ss
+ group by ss.x;
+- grouping 
+-----------
+-        0
+-        0
+-(2 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select grouping(ss.x)
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (verbose, costs off)
+ select (select grouping(ss.x))
+ from int8_tbl i1
+ cross join lateral (select (select i1.q1) as x) ss
+ group by ss.x;
+-                 QUERY PLAN                 
+---------------------------------------------
+- GroupAggregate
+-   Output: (SubPlan 2), ((SubPlan 3))
+-   Group Key: ((SubPlan 3))
+-   ->  Sort
+-         Output: ((SubPlan 3)), i1.q1
+-         Sort Key: ((SubPlan 3))
+-         ->  Seq Scan on public.int8_tbl i1
+-               Output: (SubPlan 3), i1.q1
+-               SubPlan 3
+-                 ->  Result
+-                       Output: i1.q1
+-   SubPlan 2
+-     ->  Result
+-           Output: GROUPING((SubPlan 1))
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select (select grouping(ss.x))
+ from int8_tbl i1
+ cross join lateral (select (select i1.q1) as x) ss
+ group by ss.x;
+- grouping 
+-----------
+-        0
+-        0
+-(2 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select (select grouping(ss.x))
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- simple rescan tests
+ select a, b, sum(v.x)
+   from (values (1),(2)) v(x), gstest_data(v.x)
+  group by rollup (a,b);
+- a | b | sum 
+----+---+-----
+- 1 | 1 |   1
+- 1 | 2 |   1
+- 1 | 3 |   1
+- 1 |   |   3
+- 2 | 1 |   2
+- 2 | 2 |   2
+- 2 | 3 |   2
+- 2 |   |   6
+-   |   |   9
+-(9 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v.x)
++  from (values (1),(2)) v(x), gstest_data(v.x)
++ group by rollup (a,b)
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select *
+   from (values (1),(2)) v(x),
+        lateral (select a, b, sum(v.x) from gstest_data(v.x) group by rollup (a,b)) s;
+-ERROR:  aggregate functions are not allowed in FROM clause of their own query level
+-LINE 3:        lateral (select a, b, sum(v.x) from gstest_data(v.x) ...
+-                                     ^
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select *
++  from (values (1),(2)) v(x),
++       lateral (select a, b, sum(v.x) from gstest_data(v.x) group by rollup (a,b)) s
++                                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- min max optimization should still work with GROUP BY ()
+ explain (costs off)
+   select min(unique1) from tenk1 GROUP BY ();
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan using tenk1_unique1 on tenk1
+-                 Index Cond: (unique1 IS NOT NULL)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Views with GROUPING SET queries
+ CREATE VIEW gstest_view AS select a, b, grouping(a,b), sum(c), count(*), max(c)
+   from gstest2 group by rollup ((a,b,c),(c,d));
+-NOTICE:  view "gstest_view" will be a temporary view
+-select pg_get_viewdef('gstest_view'::regclass, true);
+-            pg_get_viewdef             
+----------------------------------------
+-  SELECT a,                           +
+-     b,                               +
+-     GROUPING(a, b) AS "grouping",    +
+-     sum(c) AS sum,                   +
+-     count(*) AS count,               +
+-     max(c) AS max                    +
+-    FROM gstest2                      +
+-   GROUP BY ROLLUP((a, b, c), (c, d));
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE VIEW gstest_view AS select a, b, grouping(a,b), sum(c), count(*), max(c)
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select pg_get_viewdef('gstest_view'::regclass, true);
++ERROR:  relation "gstest_view" does not exist
+ -- Nested queries with 3 or more levels of nesting
+ select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
+- grouping 
+-----------
+-        0
+-        0
+-        0
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select(select (select grouping(e,f) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
+- grouping 
+-----------
+-        0
+-        1
+-        3
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select(select (select grouping(e,f) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select(select (select grouping(c) from (values (1)) v2(c) GROUP BY c) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f);
+- grouping 
+-----------
+-        0
+-        0
+-        0
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select(select (select grouping(c) from (values (1)) v2(c) GROUP BY c) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP(e,f)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- Combinations of operations
+ select a, b, c, d from gstest2 group by rollup(a,b),grouping sets(c,d);
+- a | b | c | d 
+----+---+---+---
+- 1 | 1 | 1 |  
+- 1 |   | 1 |  
+-   |   | 1 |  
+- 1 | 1 | 2 |  
+- 1 | 2 | 2 |  
+- 1 |   | 2 |  
+- 2 | 2 | 2 |  
+- 2 |   | 2 |  
+-   |   | 2 |  
+- 1 | 1 |   | 1
+- 1 |   |   | 1
+-   |   |   | 1
+- 1 | 1 |   | 2
+- 1 | 2 |   | 2
+- 1 |   |   | 2
+- 2 | 2 |   | 2
+- 2 |   |   | 2
+-   |   |   | 2
+-(18 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, c, d from gstest2 group by rollup(a,b),grouping sets(c,d)
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b from (values (1,2),(2,3)) v(a,b) group by a,b, grouping sets(a);
+- a | b 
+----+---
+- 1 | 2
+- 2 | 3
+-(2 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b from (values (1,2),(2,3)) v(a,b) group by a,b, grouping sets(a)
++                                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Tests for chained aggregates
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,6;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 | 1 |        0 |  21 |     2 |  11
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+- 4 | 1 |        0 |  37 |     2 |  19
+-   |   |        3 |  21 |     2 |  11
+-   |   |        3 |  21 |     2 |  11
+-   |   |        3 |  25 |     2 |  13
+-   |   |        3 |  25 |     2 |  13
+-   |   |        3 |  14 |     1 |  14
+-   |   |        3 |  14 |     1 |  14
+-   |   |        3 |  15 |     1 |  15
+-   |   |        3 |  15 |     1 |  15
+-   |   |        3 |  16 |     1 |  16
+-   |   |        3 |  16 |     1 |  16
+-   |   |        3 |  17 |     1 |  17
+-   |   |        3 |  17 |     1 |  17
+-   |   |        3 |  37 |     2 |  19
+-   |   |        3 |  37 |     2 |  19
+-(21 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP((e+1),(f+1));
+- grouping 
+-----------
+-        0
+-        0
+-        0
+-(3 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY ROLLUP((e+1),(f+1))
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY CUBE((e+1),(f+1)) ORDER BY (e+1),(f+1);
+- grouping 
+-----------
+-        0
+-        0
+-        0
+-        0
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select(select (select grouping(a,b) from (values (1)) v2(c)) from (values (1,2)) v1(a,b) group by (a,b)) from (values(6,7)) v3(e,f) GROUP BY CUBE((e+1),(f+1)) ORDER BY (e+1),(f+1)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
+   from gstest2 group by cube (a,b) order by rsum, a, b;
+- a | b | sum | rsum 
+----+---+-----+------
+- 1 | 1 |   8 |    8
+- 1 | 2 |   2 |   10
+- 1 |   |  10 |   20
+- 2 | 2 |   2 |   22
+- 2 |   |   2 |   24
+-   | 1 |   8 |   32
+-   | 2 |   4 |   36
+-   |   |  12 |   48
+-(8 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
++  from gstest2 group by cube (a,b) order by rsum, a, b
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b, sum(c) from (values (1,1,10),(1,1,11),(1,2,12),(1,2,13),(1,3,14),(2,3,15),(3,3,16),(3,4,17),(4,1,18),(4,1,19)) v(a,b,c) group by rollup (a,b);
+- a | b | sum 
+----+---+-----
+- 1 | 1 |  21
+- 1 | 2 |  25
+- 1 | 3 |  14
+- 1 |   |  60
+- 2 | 3 |  15
+- 2 |   |  15
+- 3 | 3 |  16
+- 3 | 4 |  17
+- 3 |   |  33
+- 4 | 1 |  37
+- 4 |   |  37
+-   |   | 145
+-(12 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(c) from (values (1,1,10),(1,1,11),(1,2,12),(1,2,13),(1,3,14),(2,3,15),(3,3,16),(3,4,17),(4,1,18),(4,1,19)) v(a,b,c) group by rollup (a,b)
++                                                                                                                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b, sum(v.x)
+   from (values (1),(2)) v(x), gstest_data(v.x)
+  group by cube (a,b) order by a,b;
+- a | b | sum 
+----+---+-----
+- 1 | 1 |   1
+- 1 | 2 |   1
+- 1 | 3 |   1
+- 1 |   |   3
+- 2 | 1 |   2
+- 2 | 2 |   2
+- 2 | 3 |   2
+- 2 |   |   6
+-   | 1 |   3
+-   | 2 |   3
+-   | 3 |   3
+-   |   |   9
+-(12 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v.x)
++  from (values (1),(2)) v(x), gstest_data(v.x)
++ group by cube (a,b) order by a,b
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Test reordering of grouping sets
+ explain (costs off)
+ select * from gstest1 group by grouping sets((a,b,v),(v)) order by v,b,a;
+-                                  QUERY PLAN                                  
+-------------------------------------------------------------------------------
+- GroupAggregate
+-   Group Key: "*VALUES*".column3, "*VALUES*".column2, "*VALUES*".column1
+-   Group Key: "*VALUES*".column3
+-   ->  Sort
+-         Sort Key: "*VALUES*".column3, "*VALUES*".column2, "*VALUES*".column1
+-         ->  Values Scan on "*VALUES*"
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Agg level check. This query should error out.
+ select (select grouping(a,b) from gstest2) from gstest2 group by a,b;
+-ERROR:  arguments to GROUPING must be grouping expressions of the associated query level
+-LINE 1: select (select grouping(a,b) from gstest2) from gstest2 grou...
+-                                ^
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select (select grouping(a,b) from gstest2) from gstest2 group by a,b
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --Nested queries
+ select a, b, sum(c), count(*) from gstest2 group by grouping sets (rollup(a,b),a);
+- a | b | sum | count 
+----+---+-----+-------
+- 1 | 1 |   8 |     7
+- 1 | 2 |   2 |     1
+- 1 |   |  10 |     8
+- 1 |   |  10 |     8
+- 2 | 2 |   2 |     1
+- 2 |   |   2 |     1
+- 2 |   |   2 |     1
+-   |   |  12 |     9
+-(8 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(c), count(*) from gstest2 group by grouping sets (rollup(a,b),a)
++                                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- HAVING queries
+ select ten, sum(distinct four) from onek a
+ group by grouping sets((ten,four),(ten))
+ having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+- ten | sum 
+------+-----
+-   0 |   0
+-   0 |   2
+-   0 |   2
+-   1 |   1
+-   1 |   3
+-   2 |   0
+-   2 |   2
+-   2 |   2
+-   3 |   1
+-   3 |   3
+-   4 |   0
+-   4 |   2
+-   4 |   2
+-   5 |   1
+-   5 |   3
+-   6 |   0
+-   6 |   2
+-   6 |   2
+-   7 |   1
+-   7 |   3
+-   8 |   0
+-   8 |   2
+-   8 |   2
+-   9 |   1
+-   9 |   3
+-(25 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, sum(distinct four) from onek a
++group by grouping sets((ten,four),(ten))
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Tests around pushdown of HAVING clauses, partially testing against previous bugs
+ select a,count(*) from gstest2 group by rollup(a) order by a;
+- a | count 
+----+-------
+- 1 |     8
+- 2 |     1
+-   |     9
+-(3 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a,count(*) from gstest2 group by rollup(a) order by a
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a;
+- a | count 
+----+-------
+- 2 |     1
+-   |     9
+-(2 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a,count(*) from gstest2 group by rollup(a) having a is distinct from 1 order by a;
+-            QUERY PLAN            
+-----------------------------------
+- GroupAggregate
+-   Group Key: a
+-   Group Key: ()
+-   Filter: (a IS DISTINCT FROM 1)
+-   ->  Sort
+-         Sort Key: a
+-         ->  Seq Scan on gstest2
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select v.c, (select count(*) from gstest2 group by () having v.c)
+   from (values (false),(true)) v(c) order by v.c;
+  c | count 
+@@ -838,322 +801,261 @@
+ explain (costs off)
+   select v.c, (select count(*) from gstest2 group by () having v.c)
+     from (values (false),(true)) v(c) order by v.c;
+-                        QUERY PLAN                         
+------------------------------------------------------------
+- Sort
+-   Sort Key: "*VALUES*".column1
+-   ->  Values Scan on "*VALUES*"
+-         SubPlan 1
+-           ->  Aggregate
+-                 Group Key: ()
+-                 Filter: "*VALUES*".column1
+-                 ->  Result
+-                       One-Time Filter: "*VALUES*".column1
+-                       ->  Seq Scan on gstest2
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- HAVING with GROUPING queries
+ select ten, grouping(ten) from onek
+ group by grouping sets(ten) having grouping(ten) >= 0
+ order by 2,1;
+- ten | grouping 
+------+----------
+-   0 |        0
+-   1 |        0
+-   2 |        0
+-   3 |        0
+-   4 |        0
+-   5 |        0
+-   6 |        0
+-   7 |        0
+-   8 |        0
+-   9 |        0
+-(10 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, grouping(ten) from onek
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select ten, grouping(ten) from onek
+ group by grouping sets(ten, four) having grouping(ten) > 0
+ order by 2,1;
+- ten | grouping 
+------+----------
+-     |        1
+-     |        1
+-     |        1
+-     |        1
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, grouping(ten) from onek
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select ten, grouping(ten) from onek
+ group by rollup(ten) having grouping(ten) > 0
+ order by 2,1;
+- ten | grouping 
+------+----------
+-     |        1
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, grouping(ten) from onek
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select ten, grouping(ten) from onek
+ group by cube(ten) having grouping(ten) > 0
+ order by 2,1;
+- ten | grouping 
+------+----------
+-     |        1
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, grouping(ten) from onek
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select ten, grouping(ten) from onek
+ group by (ten) having grouping(ten) >= 0
+ order by 2,1;
+- ten | grouping 
+------+----------
+-   0 |        0
+-   1 |        0
+-   2 |        0
+-   3 |        0
+-   4 |        0
+-   5 |        0
+-   6 |        0
+-   7 |        0
+-   8 |        0
+-   9 |        0
+-(10 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, grouping(ten) from onek
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- FILTER queries
+ select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
+ group by rollup(ten);
+- ten | sum 
+------+-----
+-   0 |    
+-   1 |    
+-   2 |    
+-   3 |    
+-   4 |    
+-   5 |    
+-   6 |    
+-   7 |    
+-   8 |    
+-   9 |    
+-     |    
+-(11 rows)
+-
++ERROR:  at or near "ten": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
++group by rollup(ten)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- More rescan tests
+ select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten;
+- a | a | four | ten | count 
+----+---+------+-----+-------
+- 1 | 1 |    0 |   0 |    50
+- 1 | 1 |    0 |   2 |    50
+- 1 | 1 |    0 |   4 |    50
+- 1 | 1 |    0 |   6 |    50
+- 1 | 1 |    0 |   8 |    50
+- 1 | 1 |    0 |     |   250
+- 1 | 1 |    1 |   1 |    50
+- 1 | 1 |    1 |   3 |    50
+- 1 | 1 |    1 |   5 |    50
+- 1 | 1 |    1 |   7 |    50
+- 1 | 1 |    1 |   9 |    50
+- 1 | 1 |    1 |     |   250
+- 1 | 1 |    2 |   0 |    50
+- 1 | 1 |    2 |   2 |    50
+- 1 | 1 |    2 |   4 |    50
+- 1 | 1 |    2 |   6 |    50
+- 1 | 1 |    2 |   8 |    50
+- 1 | 1 |    2 |     |   250
+- 1 | 1 |    3 |   1 |    50
+- 1 | 1 |    3 |   3 |    50
+- 1 | 1 |    3 |   5 |    50
+- 1 | 1 |    3 |   7 |    50
+- 1 | 1 |    3 |   9 |    50
+- 1 | 1 |    3 |     |   250
+- 1 | 1 |      |   0 |   100
+- 1 | 1 |      |   1 |   100
+- 1 | 1 |      |   2 |   100
+- 1 | 1 |      |   3 |   100
+- 1 | 1 |      |   4 |   100
+- 1 | 1 |      |   5 |   100
+- 1 | 1 |      |   6 |   100
+- 1 | 1 |      |   7 |   100
+- 1 | 1 |      |   8 |   100
+- 1 | 1 |      |   9 |   100
+- 1 | 1 |      |     |  1000
+- 2 | 2 |    0 |   0 |    50
+- 2 | 2 |    0 |   2 |    50
+- 2 | 2 |    0 |   4 |    50
+- 2 | 2 |    0 |   6 |    50
+- 2 | 2 |    0 |   8 |    50
+- 2 | 2 |    0 |     |   250
+- 2 | 2 |    1 |   1 |    50
+- 2 | 2 |    1 |   3 |    50
+- 2 | 2 |    1 |   5 |    50
+- 2 | 2 |    1 |   7 |    50
+- 2 | 2 |    1 |   9 |    50
+- 2 | 2 |    1 |     |   250
+- 2 | 2 |    2 |   0 |    50
+- 2 | 2 |    2 |   2 |    50
+- 2 | 2 |    2 |   4 |    50
+- 2 | 2 |    2 |   6 |    50
+- 2 | 2 |    2 |   8 |    50
+- 2 | 2 |    2 |     |   250
+- 2 | 2 |    3 |   1 |    50
+- 2 | 2 |    3 |   3 |    50
+- 2 | 2 |    3 |   5 |    50
+- 2 | 2 |    3 |   7 |    50
+- 2 | 2 |    3 |   9 |    50
+- 2 | 2 |    3 |     |   250
+- 2 | 2 |      |   0 |   100
+- 2 | 2 |      |   1 |   100
+- 2 | 2 |      |   2 |   100
+- 2 | 2 |      |   3 |   100
+- 2 | 2 |      |   4 |   100
+- 2 | 2 |      |   5 |   100
+- 2 | 2 |      |   6 |   100
+- 2 | 2 |      |   7 |   100
+- 2 | 2 |      |   8 |   100
+- 2 | 2 |      |   9 |   100
+- 2 | 2 |      |     |  1000
+-(70 rows)
+-
++ERROR:  at or near "four": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten
++                                                                                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a);
+-                                                                        array                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+- {"(1,0,0,250)","(1,0,2,250)","(1,0,,500)","(1,1,1,250)","(1,1,3,250)","(1,1,,500)","(1,,0,250)","(1,,1,250)","(1,,2,250)","(1,,3,250)","(1,,,1000)"}
+- {"(2,0,0,250)","(2,0,2,250)","(2,0,,500)","(2,1,1,250)","(2,1,3,250)","(2,1,,500)","(2,,0,250)","(2,,1,250)","(2,,2,250)","(2,,3,250)","(2,,,1000)"}
+-(2 rows)
+-
++ERROR:  at or near "two": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a)
++                                                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Grouping on text columns
+ select sum(ten) from onek group by two, rollup(four::text) order by 1;
+- sum  
+-------
+- 1000
+- 1000
+- 1250
+- 1250
+- 2000
+- 2500
+-(6 rows)
+-
++ERROR:  at or near "four": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(ten) from onek group by two, rollup(four::text) order by 1
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select sum(ten) from onek group by rollup(four::text), two order by 1;
+- sum  
+-------
+- 1000
+- 1000
+- 1250
+- 1250
+- 2000
+- 2500
+-(6 rows)
+-
++ERROR:  at or near "four": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(ten) from onek group by rollup(four::text), two order by 1
++                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- hashing support
+ set enable_hashagg = true;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- failure cases
+ select count(*) from gstest4 group by rollup(unhashable_col,unsortable_col);
+-ERROR:  could not implement GROUP BY
+-DETAIL:  Some of the datatypes only support hashing, while others only support sorting.
++ERROR:  at or near "unhashable_col": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select count(*) from gstest4 group by rollup(unhashable_col,unsortable_col)
++                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select array_agg(v order by v) from gstest4 group by grouping sets ((id,unsortable_col),(id));
+-ERROR:  could not implement GROUP BY
+-DETAIL:  Some of the datatypes only support hashing, while others only support sorting.
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select array_agg(v order by v) from gstest4 group by grouping sets ((id,unsortable_col),(id))
++                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- simple cases
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by grouping sets ((a),(b)) order by 3,1,2;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 |   |        1 |  60 |     5 |  14
+- 2 |   |        1 |  15 |     1 |  15
+- 3 |   |        1 |  33 |     2 |  17
+- 4 |   |        1 |  37 |     2 |  19
+-   | 1 |        2 |  58 |     4 |  19
+-   | 2 |        2 |  25 |     2 |  13
+-   | 3 |        2 |  45 |     3 |  16
+-   | 4 |        2 |  17 |     1 |  17
+-(8 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off) select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by grouping sets ((a),(b)) order by 3,1,2;
+-                                               QUERY PLAN                                               
+---------------------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: (GROUPING("*VALUES*".column1, "*VALUES*".column2)), "*VALUES*".column1, "*VALUES*".column2
+-   ->  HashAggregate
+-         Hash Key: "*VALUES*".column1
+-         Hash Key: "*VALUES*".column2
+-         ->  Values Scan on "*VALUES*"
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a, b, grouping(a,b), sum(v), count(*), max(v)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by cube(a,b) order by 3,1,2;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 | 1 |        0 |  21 |     2 |  11
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+- 4 | 1 |        0 |  37 |     2 |  19
+- 1 |   |        1 |  60 |     5 |  14
+- 2 |   |        1 |  15 |     1 |  15
+- 3 |   |        1 |  33 |     2 |  17
+- 4 |   |        1 |  37 |     2 |  19
+-   | 1 |        2 |  58 |     4 |  19
+-   | 2 |        2 |  25 |     2 |  13
+-   | 3 |        2 |  45 |     3 |  16
+-   | 4 |        2 |  17 |     1 |  17
+-   |   |        3 | 145 |    10 |  19
+-(16 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off) select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by cube(a,b) order by 3,1,2;
+-                                               QUERY PLAN                                               
+---------------------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: (GROUPING("*VALUES*".column1, "*VALUES*".column2)), "*VALUES*".column1, "*VALUES*".column2
+-   ->  MixedAggregate
+-         Hash Key: "*VALUES*".column1, "*VALUES*".column2
+-         Hash Key: "*VALUES*".column1
+-         Hash Key: "*VALUES*".column2
+-         Group Key: ()
+-         ->  Values Scan on "*VALUES*"
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a, b, grouping(a,b), sum(v), count(*), max(v)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- shouldn't try and hash
+ explain (costs off)
+   select a, b, grouping(a,b), array_agg(v order by v)
+     from gstest1 group by cube(a,b);
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- GroupAggregate
+-   Group Key: "*VALUES*".column1, "*VALUES*".column2
+-   Group Key: "*VALUES*".column1
+-   Group Key: ()
+-   Sort Key: "*VALUES*".column2
+-     Group Key: "*VALUES*".column2
+-   ->  Sort
+-         Sort Key: "*VALUES*".column1, "*VALUES*".column2
+-         ->  Values Scan on "*VALUES*"
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- unsortable cases
+ select unsortable_col, count(*)
+   from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
+   order by unsortable_col::text;
+- unsortable_col | count 
+-----------------+-------
+-              1 |     4
+-              1 |     4
+-              2 |     4
+-              2 |     4
+-(4 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select unsortable_col, count(*)
++  from gstest4 group by grouping sets ((unsortable_col),(unsortable_col))
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- mixed hashable/sortable cases
+ select unhashable_col, unsortable_col,
+        grouping(unhashable_col, unsortable_col),
+        count(*), sum(v)
+   from gstest4 group by grouping sets ((unhashable_col),(unsortable_col))
+  order by 3, 5;
+- unhashable_col | unsortable_col | grouping | count | sum 
+-----------------+----------------+----------+-------+-----
+- 0000           |                |        1 |     2 |  17
+- 0001           |                |        1 |     2 |  34
+- 0010           |                |        1 |     2 |  68
+- 0011           |                |        1 |     2 | 136
+-                |              2 |        2 |     4 |  60
+-                |              1 |        2 |     4 | 195
+-(6 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select unhashable_col, unsortable_col,
++       grouping(unhashable_col, unsortable_col),
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off)
+   select unhashable_col, unsortable_col,
+@@ -1161,42 +1063,31 @@
+          count(*), sum(v)
+     from gstest4 group by grouping sets ((unhashable_col),(unsortable_col))
+    order by 3,5;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Sort
+-   Sort Key: (GROUPING(unhashable_col, unsortable_col)), (sum(v))
+-   ->  MixedAggregate
+-         Hash Key: unsortable_col
+-         Group Key: unhashable_col
+-         ->  Sort
+-               Sort Key: unhashable_col
+-               ->  Seq Scan on gstest4
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select unhashable_col, unsortable_col,
+        grouping(unhashable_col, unsortable_col),
+        count(*), sum(v)
+   from gstest4 group by grouping sets ((v,unhashable_col),(v,unsortable_col))
+  order by 3,5;
+- unhashable_col | unsortable_col | grouping | count | sum 
+-----------------+----------------+----------+-------+-----
+- 0000           |                |        1 |     1 |   1
+- 0001           |                |        1 |     1 |   2
+- 0010           |                |        1 |     1 |   4
+- 0011           |                |        1 |     1 |   8
+- 0000           |                |        1 |     1 |  16
+- 0001           |                |        1 |     1 |  32
+- 0010           |                |        1 |     1 |  64
+- 0011           |                |        1 |     1 | 128
+-                |              1 |        2 |     1 |   1
+-                |              1 |        2 |     1 |   2
+-                |              2 |        2 |     1 |   4
+-                |              2 |        2 |     1 |   8
+-                |              2 |        2 |     1 |  16
+-                |              2 |        2 |     1 |  32
+-                |              1 |        2 |     1 |  64
+-                |              1 |        2 |     1 | 128
+-(16 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select unhashable_col, unsortable_col,
++       grouping(unhashable_col, unsortable_col),
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off)
+   select unhashable_col, unsortable_col,
+@@ -1204,721 +1095,435 @@
+          count(*), sum(v)
+     from gstest4 group by grouping sets ((v,unhashable_col),(v,unsortable_col))
+    order by 3,5;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Sort
+-   Sort Key: (GROUPING(unhashable_col, unsortable_col)), (sum(v))
+-   ->  MixedAggregate
+-         Hash Key: v, unsortable_col
+-         Group Key: v, unhashable_col
+-         ->  Sort
+-               Sort Key: v, unhashable_col
+-               ->  Seq Scan on gstest4
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- empty input: first is 0 rows, second 1, third 3 etc.
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
+- a | b | sum | count 
+----+---+-----+-------
+-(0 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a)
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),a);
+-           QUERY PLAN           
+---------------------------------
+- HashAggregate
+-   Hash Key: a, b
+-   Hash Key: a
+-   ->  Seq Scan on gstest_empty
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),());
+- a | b | sum | count 
+----+---+-----+-------
+-   |   |     |     0
+-(1 row)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),())
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
+- a | b | sum | count 
+----+---+-----+-------
+-   |   |     |     0
+-   |   |     |     0
+-   |   |     |     0
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),())
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a, b, sum(v), count(*) from gstest_empty group by grouping sets ((a,b),(),(),());
+-           QUERY PLAN           
+---------------------------------
+- MixedAggregate
+-   Hash Key: a, b
+-   Group Key: ()
+-   Group Key: ()
+-   Group Key: ()
+-   ->  Seq Scan on gstest_empty
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
+- sum | count 
+------+-------
+-     |     0
+-     |     0
+-     |     0
+-(3 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select sum(v), count(*) from gstest_empty group by grouping sets ((),(),())
++                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select sum(v), count(*) from gstest_empty group by grouping sets ((),(),());
+-           QUERY PLAN           
+---------------------------------
+- Aggregate
+-   Group Key: ()
+-   Group Key: ()
+-   Group Key: ()
+-   ->  Seq Scan on gstest_empty
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check that functionally dependent cols are not nulled
+ select a, d, grouping(a,b,c)
+   from gstest3
+  group by grouping sets ((a,b), (a,c));
+- a | d | grouping 
+----+---+----------
+- 1 | 1 |        1
+- 2 | 2 |        1
+- 1 | 1 |        2
+- 2 | 2 |        2
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, d, grouping(a,b,c)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off)
+   select a, d, grouping(a,b,c)
+     from gstest3
+    group by grouping sets ((a,b), (a,c));
+-        QUERY PLAN         
+----------------------------
+- HashAggregate
+-   Hash Key: a, b
+-   Hash Key: a, c
+-   ->  Seq Scan on gstest3
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- simple rescan tests
+ select a, b, sum(v.x)
+   from (values (1),(2)) v(x), gstest_data(v.x)
+  group by grouping sets (a,b)
+  order by 1, 2, 3;
+- a | b | sum 
+----+---+-----
+- 1 |   |   3
+- 2 |   |   6
+-   | 1 |   3
+-   | 2 |   3
+-   | 3 |   3
+-(5 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v.x)
++  from (values (1),(2)) v(x), gstest_data(v.x)
++ group by grouping sets (a,b)
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a, b, sum(v.x)
+     from (values (1),(2)) v(x), gstest_data(v.x)
+    group by grouping sets (a,b)
+    order by 3, 1, 2;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Sort
+-   Sort Key: (sum("*VALUES*".column1)), gstest_data.a, gstest_data.b
+-   ->  HashAggregate
+-         Hash Key: gstest_data.a
+-         Hash Key: gstest_data.b
+-         ->  Nested Loop
+-               ->  Values Scan on "*VALUES*"
+-               ->  Function Scan on gstest_data
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select *
+   from (values (1),(2)) v(x),
+        lateral (select a, b, sum(v.x) from gstest_data(v.x) group by grouping sets (a,b)) s;
+-ERROR:  aggregate functions are not allowed in FROM clause of their own query level
+-LINE 3:        lateral (select a, b, sum(v.x) from gstest_data(v.x) ...
+-                                     ^
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select *
++  from (values (1),(2)) v(x),
++       lateral (select a, b, sum(v.x) from gstest_data(v.x) group by grouping sets (a,b)) s
++                                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select *
+     from (values (1),(2)) v(x),
+          lateral (select a, b, sum(v.x) from gstest_data(v.x) group by grouping sets (a,b)) s;
+-ERROR:  aggregate functions are not allowed in FROM clause of their own query level
+-LINE 4:          lateral (select a, b, sum(v.x) from gstest_data(v.x...
+-                                       ^
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Tests for chained aggregates
+ select a, b, grouping(a,b), sum(v), count(*), max(v)
+   from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,6;
+- a | b | grouping | sum | count | max 
+----+---+----------+-----+-------+-----
+- 1 | 1 |        0 |  21 |     2 |  11
+- 1 | 2 |        0 |  25 |     2 |  13
+- 1 | 3 |        0 |  14 |     1 |  14
+- 2 | 3 |        0 |  15 |     1 |  15
+- 3 | 3 |        0 |  16 |     1 |  16
+- 3 | 4 |        0 |  17 |     1 |  17
+- 4 | 1 |        0 |  37 |     2 |  19
+-   |   |        3 |  21 |     2 |  11
+-   |   |        3 |  21 |     2 |  11
+-   |   |        3 |  25 |     2 |  13
+-   |   |        3 |  25 |     2 |  13
+-   |   |        3 |  14 |     1 |  14
+-   |   |        3 |  14 |     1 |  14
+-   |   |        3 |  15 |     1 |  15
+-   |   |        3 |  15 |     1 |  15
+-   |   |        3 |  16 |     1 |  16
+-   |   |        3 |  16 |     1 |  16
+-   |   |        3 |  17 |     1 |  17
+-   |   |        3 |  17 |     1 |  17
+-   |   |        3 |  37 |     2 |  19
+-   |   |        3 |  37 |     2 |  19
+-(21 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, grouping(a,b), sum(v), count(*), max(v)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off)
+   select a, b, grouping(a,b), sum(v), count(*), max(v)
+     from gstest1 group by grouping sets ((a,b),(a+1,b+1),(a+2,b+2)) order by 3,6;
+-                                        QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+- Sort
+-   Sort Key: (GROUPING("*VALUES*".column1, "*VALUES*".column2)), (max("*VALUES*".column3))
+-   ->  HashAggregate
+-         Hash Key: "*VALUES*".column1, "*VALUES*".column2
+-         Hash Key: ("*VALUES*".column1 + 1), ("*VALUES*".column2 + 1)
+-         Hash Key: ("*VALUES*".column1 + 2), ("*VALUES*".column2 + 2)
+-         ->  Values Scan on "*VALUES*"
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
+   from gstest2 group by cube (a,b) order by rsum, a, b;
+- a | b | sum | rsum 
+----+---+-----+------
+- 1 | 1 |   8 |    8
+- 1 | 2 |   2 |   10
+- 1 |   |  10 |   20
+- 2 | 2 |   2 |   22
+- 2 |   |   2 |   24
+-   | 1 |   8 |   32
+-   | 2 |   4 |   36
+-   |   |  12 |   48
+-(8 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
++  from gstest2 group by cube (a,b) order by rsum, a, b
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a, b, sum(c), sum(sum(c)) over (order by a,b) as rsum
+     from gstest2 group by cube (a,b) order by rsum, a, b;
+-                 QUERY PLAN                  
+----------------------------------------------
+- Sort
+-   Sort Key: (sum((sum(c))) OVER (?)), a, b
+-   ->  WindowAgg
+-         ->  Sort
+-               Sort Key: a, b
+-               ->  MixedAggregate
+-                     Hash Key: a, b
+-                     Hash Key: a
+-                     Hash Key: b
+-                     Group Key: ()
+-                     ->  Seq Scan on gstest2
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select a, b, sum(v.x)
+   from (values (1),(2)) v(x), gstest_data(v.x)
+  group by cube (a,b) order by a,b;
+- a | b | sum 
+----+---+-----
+- 1 | 1 |   1
+- 1 | 2 |   1
+- 1 | 3 |   1
+- 1 |   |   3
+- 2 | 1 |   2
+- 2 | 2 |   2
+- 2 | 3 |   2
+- 2 |   |   6
+-   | 1 |   3
+-   | 2 |   3
+-   | 3 |   3
+-   |   |   9
+-(12 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, sum(v.x)
++  from (values (1),(2)) v(x), gstest_data(v.x)
++ group by cube (a,b) order by a,b
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ explain (costs off)
+   select a, b, sum(v.x)
+     from (values (1),(2)) v(x), gstest_data(v.x)
+    group by cube (a,b) order by a,b;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Sort
+-   Sort Key: gstest_data.a, gstest_data.b
+-   ->  MixedAggregate
+-         Hash Key: gstest_data.a, gstest_data.b
+-         Hash Key: gstest_data.a
+-         Hash Key: gstest_data.b
+-         Group Key: ()
+-         ->  Nested Loop
+-               ->  Values Scan on "*VALUES*"
+-               ->  Function Scan on gstest_data
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Verify that we correctly handle the child node returning a
+ -- non-minimal slot, which happens if the input is pre-sorted,
+ -- e.g. due to an index scan.
+ BEGIN;
+ SET LOCAL enable_hashagg = false;
+-EXPLAIN (COSTS OFF) SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
+-              QUERY PLAN               
+----------------------------------------
+- Sort
+-   Sort Key: a, b
+-   ->  GroupAggregate
+-         Group Key: a
+-         Group Key: ()
+-         Sort Key: b
+-           Group Key: b
+-         ->  Sort
+-               Sort Key: a
+-               ->  Seq Scan on gstest3
+-(10 rows)
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
+- a | b | count | max | max 
+----+---+-------+-----+-----
+- 1 |   |     1 |   1 |   1
+- 2 |   |     1 |   2 |   2
+-   | 1 |     1 |   1 |   1
+-   | 2 |     1 |   2 |   2
+-   |   |     2 |   2 |   2
+-(5 rows)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++EXPLAIN (COSTS OFF) SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b
++               ^
++HINT:  try \h <SELECTCLAUSE>
++SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b
++                                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ SET LOCAL enable_seqscan = false;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS OFF) SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Sort
+-   Sort Key: a, b
+-   ->  GroupAggregate
+-         Group Key: a
+-         Group Key: ()
+-         Sort Key: b
+-           Group Key: b
+-         ->  Index Scan using gstest3_pkey on gstest3
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b;
+- a | b | count | max | max 
+----+---+-------+-----+-----
+- 1 |   |     1 |   1 |   1
+- 2 |   |     1 |   2 |   2
+-   | 1 |     1 |   1 |   1
+-   | 2 |     1 |   2 |   2
+-   |   |     2 |   2 |   2
+-(5 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SELECT a, b, count(*), max(a), max(b) FROM gstest3 GROUP BY GROUPING SETS(a, b,()) ORDER BY a, b
++                                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ COMMIT;
+ -- More rescan tests
+ select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten;
+- a | a | four | ten | count 
+----+---+------+-----+-------
+- 1 | 1 |    0 |   0 |    50
+- 1 | 1 |    0 |   2 |    50
+- 1 | 1 |    0 |   4 |    50
+- 1 | 1 |    0 |   6 |    50
+- 1 | 1 |    0 |   8 |    50
+- 1 | 1 |    0 |     |   250
+- 1 | 1 |    1 |   1 |    50
+- 1 | 1 |    1 |   3 |    50
+- 1 | 1 |    1 |   5 |    50
+- 1 | 1 |    1 |   7 |    50
+- 1 | 1 |    1 |   9 |    50
+- 1 | 1 |    1 |     |   250
+- 1 | 1 |    2 |   0 |    50
+- 1 | 1 |    2 |   2 |    50
+- 1 | 1 |    2 |   4 |    50
+- 1 | 1 |    2 |   6 |    50
+- 1 | 1 |    2 |   8 |    50
+- 1 | 1 |    2 |     |   250
+- 1 | 1 |    3 |   1 |    50
+- 1 | 1 |    3 |   3 |    50
+- 1 | 1 |    3 |   5 |    50
+- 1 | 1 |    3 |   7 |    50
+- 1 | 1 |    3 |   9 |    50
+- 1 | 1 |    3 |     |   250
+- 1 | 1 |      |   0 |   100
+- 1 | 1 |      |   1 |   100
+- 1 | 1 |      |   2 |   100
+- 1 | 1 |      |   3 |   100
+- 1 | 1 |      |   4 |   100
+- 1 | 1 |      |   5 |   100
+- 1 | 1 |      |   6 |   100
+- 1 | 1 |      |   7 |   100
+- 1 | 1 |      |   8 |   100
+- 1 | 1 |      |   9 |   100
+- 1 | 1 |      |     |  1000
+- 2 | 2 |    0 |   0 |    50
+- 2 | 2 |    0 |   2 |    50
+- 2 | 2 |    0 |   4 |    50
+- 2 | 2 |    0 |   6 |    50
+- 2 | 2 |    0 |   8 |    50
+- 2 | 2 |    0 |     |   250
+- 2 | 2 |    1 |   1 |    50
+- 2 | 2 |    1 |   3 |    50
+- 2 | 2 |    1 |   5 |    50
+- 2 | 2 |    1 |   7 |    50
+- 2 | 2 |    1 |   9 |    50
+- 2 | 2 |    1 |     |   250
+- 2 | 2 |    2 |   0 |    50
+- 2 | 2 |    2 |   2 |    50
+- 2 | 2 |    2 |   4 |    50
+- 2 | 2 |    2 |   6 |    50
+- 2 | 2 |    2 |   8 |    50
+- 2 | 2 |    2 |     |   250
+- 2 | 2 |    3 |   1 |    50
+- 2 | 2 |    3 |   3 |    50
+- 2 | 2 |    3 |   5 |    50
+- 2 | 2 |    3 |   7 |    50
+- 2 | 2 |    3 |   9 |    50
+- 2 | 2 |    3 |     |   250
+- 2 | 2 |      |   0 |   100
+- 2 | 2 |      |   1 |   100
+- 2 | 2 |      |   2 |   100
+- 2 | 2 |      |   3 |   100
+- 2 | 2 |      |   4 |   100
+- 2 | 2 |      |   5 |   100
+- 2 | 2 |      |   6 |   100
+- 2 | 2 |      |   7 |   100
+- 2 | 2 |      |   8 |   100
+- 2 | 2 |      |   9 |   100
+- 2 | 2 |      |     |  1000
+-(70 rows)
+-
++ERROR:  at or near "four": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by cube(four,ten)) s on true order by v.a,four,ten
++                                                                                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a);
+-                                                                        array                                                                         
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+- {"(1,0,0,250)","(1,0,2,250)","(1,0,,500)","(1,1,1,250)","(1,1,3,250)","(1,1,,500)","(1,,0,250)","(1,,1,250)","(1,,2,250)","(1,,3,250)","(1,,,1000)"}
+- {"(2,0,0,250)","(2,0,2,250)","(2,0,,500)","(2,1,1,250)","(2,1,3,250)","(2,1,,500)","(2,,0,250)","(2,,1,250)","(2,,2,250)","(2,,3,250)","(2,,,1000)"}
+-(2 rows)
+-
++ERROR:  at or near "two": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by cube(two,four) order by two,four) s1) from (values (1),(2)) v(a)
++                                                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Rescan logic changes when there are no empty grouping sets, so test
+ -- that too:
+ select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by grouping sets(four,ten)) s on true order by v.a,four,ten;
+- a | a | four | ten | count 
+----+---+------+-----+-------
+- 1 | 1 |    0 |     |   250
+- 1 | 1 |    1 |     |   250
+- 1 | 1 |    2 |     |   250
+- 1 | 1 |    3 |     |   250
+- 1 | 1 |      |   0 |   100
+- 1 | 1 |      |   1 |   100
+- 1 | 1 |      |   2 |   100
+- 1 | 1 |      |   3 |   100
+- 1 | 1 |      |   4 |   100
+- 1 | 1 |      |   5 |   100
+- 1 | 1 |      |   6 |   100
+- 1 | 1 |      |   7 |   100
+- 1 | 1 |      |   8 |   100
+- 1 | 1 |      |   9 |   100
+- 2 | 2 |    0 |     |   250
+- 2 | 2 |    1 |     |   250
+- 2 | 2 |    2 |     |   250
+- 2 | 2 |    3 |     |   250
+- 2 | 2 |      |   0 |   100
+- 2 | 2 |      |   1 |   100
+- 2 | 2 |      |   2 |   100
+- 2 | 2 |      |   3 |   100
+- 2 | 2 |      |   4 |   100
+- 2 | 2 |      |   5 |   100
+- 2 | 2 |      |   6 |   100
+- 2 | 2 |      |   7 |   100
+- 2 | 2 |      |   8 |   100
+- 2 | 2 |      |   9 |   100
+-(28 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from (values (1),(2)) v(a) left join lateral (select v.a, four, ten, count(*) from onek group by grouping sets(four,ten)) s on true order by v.a,four,ten
++                                                                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by grouping sets(two,four) order by two,four) s1) from (values (1),(2)) v(a);
+-                                      array                                      
+----------------------------------------------------------------------------------
+- {"(1,0,,500)","(1,1,,500)","(1,,0,250)","(1,,1,250)","(1,,2,250)","(1,,3,250)"}
+- {"(2,0,,500)","(2,1,,500)","(2,,0,250)","(2,,1,250)","(2,,2,250)","(2,,3,250)"}
+-(2 rows)
+-
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select array(select row(v.a,s1.*) from (select two,four, count(*) from onek group by grouping sets(two,four) order by two,four) s1) from (values (1),(2)) v(a)
++                                                                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- test the knapsack
+ set enable_indexscan = false;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set hash_mem_multiplier = 1.0;
++ERROR:  unrecognized configuration parameter "hash_mem_multiplier"
+ set work_mem = '64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+   select unique1,
+          count(two), count(four), count(ten),
+          count(hundred), count(thousand), count(twothousand),
+          count(*)
+     from tenk1 group by grouping sets (unique1,twothousand,thousand,hundred,ten,four,two);
+-          QUERY PLAN           
+--------------------------------
+- MixedAggregate
+-   Hash Key: two
+-   Hash Key: four
+-   Hash Key: ten
+-   Hash Key: hundred
+-   Group Key: unique1
+-   Sort Key: twothousand
+-     Group Key: twothousand
+-   Sort Key: thousand
+-     Group Key: thousand
+-   ->  Sort
+-         Sort Key: unique1
+-         ->  Seq Scan on tenk1
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+   select unique1,
+          count(two), count(four), count(ten),
+          count(hundred), count(thousand), count(twothousand),
+          count(*)
+     from tenk1 group by grouping sets (unique1,hundred,ten,four,two);
+-          QUERY PLAN           
+--------------------------------
+- MixedAggregate
+-   Hash Key: two
+-   Hash Key: four
+-   Hash Key: ten
+-   Hash Key: hundred
+-   Group Key: unique1
+-   ->  Sort
+-         Sort Key: unique1
+-         ->  Seq Scan on tenk1
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ set work_mem = '384kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+   select unique1,
+          count(two), count(four), count(ten),
+          count(hundred), count(thousand), count(twothousand),
+          count(*)
+     from tenk1 group by grouping sets (unique1,twothousand,thousand,hundred,ten,four,two);
+-          QUERY PLAN           
+--------------------------------
+- MixedAggregate
+-   Hash Key: two
+-   Hash Key: four
+-   Hash Key: ten
+-   Hash Key: hundred
+-   Hash Key: thousand
+-   Group Key: unique1
+-   Sort Key: twothousand
+-     Group Key: twothousand
+-   ->  Sort
+-         Sort Key: unique1
+-         ->  Seq Scan on tenk1
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check collation-sensitive matching between grouping expressions
+ -- (similar to a check for aggregates, but there are additional code
+ -- paths for GROUPING, so check again here)
+ select v||'a', case grouping(v||'a') when 1 then 1 else 0 end, count(*)
+   from unnest(array[1,1], array['a','b']) u(i,v)
+  group by rollup(i, v||'a') order by 1,3;
+- ?column? | case | count 
+-----------+------+-------
+- aa       |    0 |     1
+- ba       |    0 |     1
+-          |    1 |     2
+-          |    1 |     2
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select v||'a', case grouping(v||'a') when 1 then 1 else 0 end, count(*)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select v||'a', case when grouping(v||'a') = 1 then 1 else 0 end, count(*)
+   from unnest(array[1,1], array['a','b']) u(i,v)
+  group by rollup(i, v||'a') order by 1,3;
+- ?column? | case | count 
+-----------+------+-------
+- aa       |    0 |     1
+- ba       |    0 |     1
+-          |    1 |     2
+-          |    1 |     2
+-(4 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select v||'a', case when grouping(v||'a') = 1 then 1 else 0 end, count(*)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- Bug #16784
+ create table bug_16784(i int, j int);
+ analyze bug_16784;
+ alter table bug_16784 set (autovacuum_enabled = 'false');
++NOTICE:  storage parameter "autovacuum_enabled = 'false'" is ignored
+ update pg_class set reltuples = 10 where relname='bug_16784';
++ERROR:  user test_admin does not have UPDATE privilege on relation pg_class
+ insert into bug_16784 select g/10, g from generate_series(1,40) g;
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ set work_mem='64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_sort = false;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from
+   (values (1),(2)) v(a),
+   lateral (select a, i, j, count(*) from
+              bug_16784 group by cube(i,j)) s
+   order by v.a, i, j;
+- a | a | i | j  | count 
+----+---+---+----+-------
+- 1 | 1 | 0 |  1 |     1
+- 1 | 1 | 0 |  2 |     1
+- 1 | 1 | 0 |  3 |     1
+- 1 | 1 | 0 |  4 |     1
+- 1 | 1 | 0 |  5 |     1
+- 1 | 1 | 0 |  6 |     1
+- 1 | 1 | 0 |  7 |     1
+- 1 | 1 | 0 |  8 |     1
+- 1 | 1 | 0 |  9 |     1
+- 1 | 1 | 0 |    |     9
+- 1 | 1 | 1 | 10 |     1
+- 1 | 1 | 1 | 11 |     1
+- 1 | 1 | 1 | 12 |     1
+- 1 | 1 | 1 | 13 |     1
+- 1 | 1 | 1 | 14 |     1
+- 1 | 1 | 1 | 15 |     1
+- 1 | 1 | 1 | 16 |     1
+- 1 | 1 | 1 | 17 |     1
+- 1 | 1 | 1 | 18 |     1
+- 1 | 1 | 1 | 19 |     1
+- 1 | 1 | 1 |    |    10
+- 1 | 1 | 2 | 20 |     1
+- 1 | 1 | 2 | 21 |     1
+- 1 | 1 | 2 | 22 |     1
+- 1 | 1 | 2 | 23 |     1
+- 1 | 1 | 2 | 24 |     1
+- 1 | 1 | 2 | 25 |     1
+- 1 | 1 | 2 | 26 |     1
+- 1 | 1 | 2 | 27 |     1
+- 1 | 1 | 2 | 28 |     1
+- 1 | 1 | 2 | 29 |     1
+- 1 | 1 | 2 |    |    10
+- 1 | 1 | 3 | 30 |     1
+- 1 | 1 | 3 | 31 |     1
+- 1 | 1 | 3 | 32 |     1
+- 1 | 1 | 3 | 33 |     1
+- 1 | 1 | 3 | 34 |     1
+- 1 | 1 | 3 | 35 |     1
+- 1 | 1 | 3 | 36 |     1
+- 1 | 1 | 3 | 37 |     1
+- 1 | 1 | 3 | 38 |     1
+- 1 | 1 | 3 | 39 |     1
+- 1 | 1 | 3 |    |    10
+- 1 | 1 | 4 | 40 |     1
+- 1 | 1 | 4 |    |     1
+- 1 | 1 |   |  1 |     1
+- 1 | 1 |   |  2 |     1
+- 1 | 1 |   |  3 |     1
+- 1 | 1 |   |  4 |     1
+- 1 | 1 |   |  5 |     1
+- 1 | 1 |   |  6 |     1
+- 1 | 1 |   |  7 |     1
+- 1 | 1 |   |  8 |     1
+- 1 | 1 |   |  9 |     1
+- 1 | 1 |   | 10 |     1
+- 1 | 1 |   | 11 |     1
+- 1 | 1 |   | 12 |     1
+- 1 | 1 |   | 13 |     1
+- 1 | 1 |   | 14 |     1
+- 1 | 1 |   | 15 |     1
+- 1 | 1 |   | 16 |     1
+- 1 | 1 |   | 17 |     1
+- 1 | 1 |   | 18 |     1
+- 1 | 1 |   | 19 |     1
+- 1 | 1 |   | 20 |     1
+- 1 | 1 |   | 21 |     1
+- 1 | 1 |   | 22 |     1
+- 1 | 1 |   | 23 |     1
+- 1 | 1 |   | 24 |     1
+- 1 | 1 |   | 25 |     1
+- 1 | 1 |   | 26 |     1
+- 1 | 1 |   | 27 |     1
+- 1 | 1 |   | 28 |     1
+- 1 | 1 |   | 29 |     1
+- 1 | 1 |   | 30 |     1
+- 1 | 1 |   | 31 |     1
+- 1 | 1 |   | 32 |     1
+- 1 | 1 |   | 33 |     1
+- 1 | 1 |   | 34 |     1
+- 1 | 1 |   | 35 |     1
+- 1 | 1 |   | 36 |     1
+- 1 | 1 |   | 37 |     1
+- 1 | 1 |   | 38 |     1
+- 1 | 1 |   | 39 |     1
+- 1 | 1 |   | 40 |     1
+- 1 | 1 |   |    |    40
+- 2 | 2 | 0 |  1 |     1
+- 2 | 2 | 0 |  2 |     1
+- 2 | 2 | 0 |  3 |     1
+- 2 | 2 | 0 |  4 |     1
+- 2 | 2 | 0 |  5 |     1
+- 2 | 2 | 0 |  6 |     1
+- 2 | 2 | 0 |  7 |     1
+- 2 | 2 | 0 |  8 |     1
+- 2 | 2 | 0 |  9 |     1
+- 2 | 2 | 0 |    |     9
+- 2 | 2 | 1 | 10 |     1
+- 2 | 2 | 1 | 11 |     1
+- 2 | 2 | 1 | 12 |     1
+- 2 | 2 | 1 | 13 |     1
+- 2 | 2 | 1 | 14 |     1
+- 2 | 2 | 1 | 15 |     1
+- 2 | 2 | 1 | 16 |     1
+- 2 | 2 | 1 | 17 |     1
+- 2 | 2 | 1 | 18 |     1
+- 2 | 2 | 1 | 19 |     1
+- 2 | 2 | 1 |    |    10
+- 2 | 2 | 2 | 20 |     1
+- 2 | 2 | 2 | 21 |     1
+- 2 | 2 | 2 | 22 |     1
+- 2 | 2 | 2 | 23 |     1
+- 2 | 2 | 2 | 24 |     1
+- 2 | 2 | 2 | 25 |     1
+- 2 | 2 | 2 | 26 |     1
+- 2 | 2 | 2 | 27 |     1
+- 2 | 2 | 2 | 28 |     1
+- 2 | 2 | 2 | 29 |     1
+- 2 | 2 | 2 |    |    10
+- 2 | 2 | 3 | 30 |     1
+- 2 | 2 | 3 | 31 |     1
+- 2 | 2 | 3 | 32 |     1
+- 2 | 2 | 3 | 33 |     1
+- 2 | 2 | 3 | 34 |     1
+- 2 | 2 | 3 | 35 |     1
+- 2 | 2 | 3 | 36 |     1
+- 2 | 2 | 3 | 37 |     1
+- 2 | 2 | 3 | 38 |     1
+- 2 | 2 | 3 | 39 |     1
+- 2 | 2 | 3 |    |    10
+- 2 | 2 | 4 | 40 |     1
+- 2 | 2 | 4 |    |     1
+- 2 | 2 |   |  1 |     1
+- 2 | 2 |   |  2 |     1
+- 2 | 2 |   |  3 |     1
+- 2 | 2 |   |  4 |     1
+- 2 | 2 |   |  5 |     1
+- 2 | 2 |   |  6 |     1
+- 2 | 2 |   |  7 |     1
+- 2 | 2 |   |  8 |     1
+- 2 | 2 |   |  9 |     1
+- 2 | 2 |   | 10 |     1
+- 2 | 2 |   | 11 |     1
+- 2 | 2 |   | 12 |     1
+- 2 | 2 |   | 13 |     1
+- 2 | 2 |   | 14 |     1
+- 2 | 2 |   | 15 |     1
+- 2 | 2 |   | 16 |     1
+- 2 | 2 |   | 17 |     1
+- 2 | 2 |   | 18 |     1
+- 2 | 2 |   | 19 |     1
+- 2 | 2 |   | 20 |     1
+- 2 | 2 |   | 21 |     1
+- 2 | 2 |   | 22 |     1
+- 2 | 2 |   | 23 |     1
+- 2 | 2 |   | 24 |     1
+- 2 | 2 |   | 25 |     1
+- 2 | 2 |   | 26 |     1
+- 2 | 2 |   | 27 |     1
+- 2 | 2 |   | 28 |     1
+- 2 | 2 |   | 29 |     1
+- 2 | 2 |   | 30 |     1
+- 2 | 2 |   | 31 |     1
+- 2 | 2 |   | 32 |     1
+- 2 | 2 |   | 33 |     1
+- 2 | 2 |   | 34 |     1
+- 2 | 2 |   | 35 |     1
+- 2 | 2 |   | 36 |     1
+- 2 | 2 |   | 37 |     1
+- 2 | 2 |   | 38 |     1
+- 2 | 2 |   | 39 |     1
+- 2 | 2 |   | 40 |     1
+- 2 | 2 |   |    |    40
+-(172 rows)
+-
++ERROR:  at or near "i": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select * from
++  (values (1),(2)) v(a),
++  lateral (select a, i, j, count(*) from
++             bug_16784 group by cube(i,j)) s
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ --
+ -- Compare results between plans using sorting and plans using hash
+ -- aggregation. Force spilling in both cases by setting work_mem low
+@@ -1927,227 +1532,250 @@
+ create table gs_data_1 as
+ select g%1000 as g1000, g%100 as g100, g%10 as g10, g
+    from generate_series(0,1999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ analyze gs_data_1;
+ alter table gs_data_1 set (autovacuum_enabled = 'false');
++NOTICE:  storage parameter "autovacuum_enabled = 'false'" is ignored
+ update pg_class set reltuples = 10 where relname='gs_data_1';
++ERROR:  user test_admin does not have UPDATE privilege on relation pg_class
+ set work_mem='64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Produce results with sorting.
+ set enable_sort = true;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashagg = false;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set jit_above_cost = 0;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ explain (costs off)
+ select g100, g10, sum(g::numeric), count(*), max(g::text)
+ from gs_data_1 group by cube (g1000, g100,g10);
+-             QUERY PLAN             
+-------------------------------------
+- GroupAggregate
+-   Group Key: g1000, g100, g10
+-   Group Key: g1000, g100
+-   Group Key: g1000
+-   Group Key: ()
+-   Sort Key: g100, g10
+-     Group Key: g100, g10
+-     Group Key: g100
+-   Sort Key: g10, g1000
+-     Group Key: g10, g1000
+-     Group Key: g10
+-   ->  Sort
+-         Sort Key: g1000, g100, g10
+-         ->  Seq Scan on gs_data_1
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create table gs_group_1 as
+ select g100, g10, sum(g::numeric), count(*), max(g::text)
+ from gs_data_1 group by cube (g1000, g100,g10);
++ERROR:  at or near "g1000": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table gs_group_1 as
++select g100, g10, sum(g::numeric), count(*), max(g::text)
++from gs_data_1 group by cube (g1000, g100,g10)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- Produce results with hash aggregation.
+ set enable_hashagg = true;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_sort = false;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select g100, g10, sum(g::numeric), count(*), max(g::text)
+ from gs_data_1 group by cube (g1000, g100,g10);
+-          QUERY PLAN          
+-------------------------------
+- MixedAggregate
+-   Hash Key: g1000, g100, g10
+-   Hash Key: g1000, g100
+-   Hash Key: g1000
+-   Hash Key: g100, g10
+-   Hash Key: g100
+-   Hash Key: g10, g1000
+-   Hash Key: g10
+-   Group Key: ()
+-   ->  Seq Scan on gs_data_1
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create table gs_hash_1 as
+ select g100, g10, sum(g::numeric), count(*), max(g::text)
+ from gs_data_1 group by cube (g1000, g100,g10);
++ERROR:  at or near "g1000": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table gs_hash_1 as
++select g100, g10, sum(g::numeric), count(*), max(g::text)
++from gs_data_1 group by cube (g1000, g100,g10)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ set enable_sort = true;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set work_mem to default;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set hash_mem_multiplier to default;
++ERROR:  unrecognized configuration parameter "hash_mem_multiplier"
+ -- Compare results
+ (select * from gs_hash_1 except select * from gs_group_1)
+   union all
+ (select * from gs_group_1 except select * from gs_hash_1);
+- g100 | g10 | sum | count | max 
+-------+-----+-----+-------+-----
+-(0 rows)
+-
++ERROR:  relation "gs_hash_1" does not exist
+ drop table gs_group_1;
++ERROR:  relation "gs_group_1" does not exist
+ drop table gs_hash_1;
++ERROR:  relation "gs_hash_1" does not exist
+ -- GROUP BY DISTINCT
+ -- "normal" behavior...
+ select a, b, c
+ from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
+ group by all rollup(a, b), rollup(a, c)
+ order by a, b, c;
+- a | b | c 
+----+---+---
+- 1 | 2 | 3
+- 1 | 2 |  
+- 1 | 2 |  
+- 1 |   | 3
+- 1 |   | 3
+- 1 |   |  
+- 1 |   |  
+- 1 |   |  
+- 4 |   | 6
+- 4 |   | 6
+- 4 |   | 6
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 7 | 8 | 9
+- 7 | 8 |  
+- 7 | 8 |  
+- 7 |   | 9
+- 7 |   | 9
+- 7 |   |  
+- 7 |   |  
+- 7 |   |  
+-   |   |  
+-(25 rows)
+-
++ERROR:  at or near "all": syntax error
++DETAIL:  source SQL:
++select a, b, c
++from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
++group by all rollup(a, b), rollup(a, c)
++         ^
+ -- ...which is also the default
+ select a, b, c
+ from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
+ group by rollup(a, b), rollup(a, c)
+ order by a, b, c;
+- a | b | c 
+----+---+---
+- 1 | 2 | 3
+- 1 | 2 |  
+- 1 | 2 |  
+- 1 |   | 3
+- 1 |   | 3
+- 1 |   |  
+- 1 |   |  
+- 1 |   |  
+- 4 |   | 6
+- 4 |   | 6
+- 4 |   | 6
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 4 |   |  
+- 7 | 8 | 9
+- 7 | 8 |  
+- 7 | 8 |  
+- 7 |   | 9
+- 7 |   | 9
+- 7 |   |  
+- 7 |   |  
+- 7 |   |  
+-   |   |  
+-(25 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select a, b, c
++from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
++group by rollup(a, b), rollup(a, c)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- "group by distinct" behavior...
+ select a, b, c
+ from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
+ group by distinct rollup(a, b), rollup(a, c)
+ order by a, b, c;
+- a | b | c 
+----+---+---
+- 1 | 2 | 3
+- 1 | 2 |  
+- 1 |   | 3
+- 1 |   |  
+- 4 |   | 6
+- 4 |   | 6
+- 4 |   |  
+- 4 |   |  
+- 7 | 8 | 9
+- 7 | 8 |  
+- 7 |   | 9
+- 7 |   |  
+-   |   |  
+-(13 rows)
+-
++ERROR:  at or near "distinct": syntax error
++DETAIL:  source SQL:
++select a, b, c
++from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
++group by distinct rollup(a, b), rollup(a, c)
++         ^
+ -- ...which is not the same as "select distinct"
+ select distinct a, b, c
+ from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
+ group by rollup(a, b), rollup(a, c)
+ order by a, b, c;
+- a | b | c 
+----+---+---
+- 1 | 2 | 3
+- 1 | 2 |  
+- 1 |   | 3
+- 1 |   |  
+- 4 |   | 6
+- 4 |   |  
+- 7 | 8 | 9
+- 7 | 8 |  
+- 7 |   | 9
+- 7 |   |  
+-   |   |  
+-(11 rows)
+-
++ERROR:  at or near "a": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select distinct a, b, c
++from (values (1, 2, 3), (4, null, 6), (7, 8, 9)) as t (a, b, c)
++group by rollup(a, b), rollup(a, c)
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ -- test handling of outer GroupingFunc within subqueries
+ explain (costs off)
+ select (select grouping(v1)) from (values ((select 1))) v(v1) group by cube(v1);
+-        QUERY PLAN         
+----------------------------
+- MixedAggregate
+-   Hash Key: $2
+-   Group Key: ()
+-   InitPlan 1 (returns $1)
+-     ->  Result
+-   InitPlan 3 (returns $2)
+-     ->  Result
+-   ->  Result
+-   SubPlan 2
+-     ->  Result
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select (select grouping(v1)) from (values ((select 1))) v(v1) group by cube(v1);
+- grouping 
+-----------
+-        1
+-        0
+-(2 rows)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select (select grouping(v1)) from (values ((select 1))) v(v1) group by cube(v1)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ explain (costs off)
+ select (select grouping(v1)) from (values ((select 1))) v(v1) group by v1;
+-        QUERY PLAN         
+----------------------------
+- GroupAggregate
+-   InitPlan 1 (returns $1)
+-     ->  Result
+-   InitPlan 3 (returns $2)
+-     ->  Result
+-   ->  Result
+-   SubPlan 2
+-     ->  Result
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select (select grouping(v1)) from (values ((select 1))) v(v1) group by v1;
+- grouping 
+-----------
+-        0
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select (select grouping(v1)) from (values ((select 1))) v(v1) group by v1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- end
