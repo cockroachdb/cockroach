@@ -180,6 +180,29 @@ func (opts Options) Do(ctx context.Context, fn func(ctx context.Context) error) 
 	return err
 }
 
+// DoWithRetryable invokes the closure according to the retry options until it
+// returns success or a non-retryable error. Always returns an error unless the
+// return is prompted by a successful invocation of `fn`.
+func (opts Options) DoWithRetryable(
+	ctx context.Context, fn func(ctx context.Context) (retryable bool, err error),
+) error {
+	var err error
+	for r := StartWithCtx(ctx, opts); r.Next(); {
+		var retryable bool
+		retryable, err = fn(ctx)
+		if err == nil {
+			return nil
+		}
+		if !retryable {
+			return err
+		}
+	}
+	if err == nil {
+		return errors.AssertionFailedf("never invoked function in DoWithRetryable")
+	}
+	return err
+}
+
 // WithMaxAttempts is a helper that runs fn N times and collects the last err.
 // The function will terminate early if the provided context is canceled, but it
 // guarantees that fn will run at least once.
