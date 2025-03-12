@@ -27,6 +27,11 @@ func CheckAndMaybeLog(
 		severity = ec.GetSeverity()
 		cause = ec.Unwrap()
 	}
-	logger(context.Background(), severity, "%v", cause)
+	format := "%v"
+	// For assertions, we want to see the full stack trace.
+	if errors.HasAssertionFailure(err) {
+		format = "%+v"
+	}
+	logger(context.Background(), severity, format, cause)
 	return err
 }
