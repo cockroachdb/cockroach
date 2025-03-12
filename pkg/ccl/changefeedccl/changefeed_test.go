@@ -3938,7 +3938,8 @@ func TestChangefeedEnriched(t *testing.T) {
 	// Create an enriched source provider with no data. The contents of source
 	// will be tested in another test, we just want to make sure the structure &
 	// schema is right here.
-	esp := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	require.NoError(t, err)
 	source, err := esp.GetJSON(cdcevent.Row{})
 	require.NoError(t, err)
 
@@ -4236,7 +4237,7 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
+		testutils.RunTrueAndFalse(t, "mvcc_ts", func(t *testing.T, withMVCCTS bool) {
 			clusterName := "clusterName123"
 			dbVersion := "v999.0.0"
 			defer build.TestingOverrideVersion(dbVersion)()
@@ -4248,7 +4249,11 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 
 					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
 					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-					testFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format))
+					stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+					if withMVCCTS {
+						stmt += ", mvcc_timestamp"
+					}
+					testFeed := feed(t, f, stmt)
 					defer closeFeed(t, testFeed)
 
 					var jobID int64
@@ -4276,35 +4281,50 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 							sink = sinkTypeSinklessBuffer.String()
 						}
 
+						const dummyMvccTimestamp = "1234567890.0001"
+						jobIDStr := strconv.FormatInt(jobID, 10)
+
 						var assertion string
 						if testCase.format == "avro" {
-							assertion = fmt.Sprintf(
-								`{
-								"source": {
-									"cluster_id": {"string": "%s"},
-									"cluster_name": {"string": "%s"},
-									"db_version": {"string": "%s"},
-									"job_id": {"string": "%d"},
-									"node_id": {"string": "%s"},
-									"node_name": {"string": "%s"},
-									"changefeed_sink": {"string": "%s"},
-									"source_node_locality": {"string": "%s"}
-								}
-							}`,
-								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
+							assertionMap := map[string]any{
+								"source": map[string]any{
+									"cluster_id":   map[string]any{"string": clusterID},
+									"cluster_name": map[string]any{"string": clusterName},
+									"db_version":   map[string]any{"string": dbVersion},
+									"job_id":       map[string]any{"string": jobIDStr},
+									// Note that the field is still present in the avro schema, so it appears here as nil.
+									"mvcc_timestamp":       nil,
+									"node_id":              map[string]any{"string": nodeID},
+									"node_name":            map[string]any{"string": nodeName},
+									"changefeed_sink":      map[string]any{"string": sink},
+									"source_node_locality": map[string]any{"string": sourceNodeLocality},
+								},
+							}
+							if withMVCCTS {
+								mvccTsMap := actualSource["source"].(map[string]any)["mvcc_timestamp"].(map[string]any)
+								assertReasonableMVCCTimestamp(t, mvccTsMap["string"].(string))
+
+								mvccTsMap["string"] = dummyMvccTimestamp
+								assertionMap["source"].(map[string]any)["mvcc_timestamp"] = map[string]any{"string": dummyMvccTimestamp}
+							}
+							assertion = toJSON(t, assertionMap)
 						} else {
-							assertion = fmt.Sprintf(
-								`{
-								"cluster_id": "%s",
-								"cluster_name": "%s",
-								"db_version": "%s",
-								"job_id": "%d",
-								"node_id": "%s",
-								"node_name": "%s",
-								"changefeed_sink": "%s",
-								"source_node_locality": "%s"
-							}`,
-								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
+							assertionMap := map[string]any{
+								"cluster_id":           clusterID,
+								"cluster_name":         clusterName,
+								"db_version":           dbVersion,
+								"job_id":               jobIDStr,
+								"node_id":              nodeID,
+								"node_name":            nodeName,
+								"changefeed_sink":      sink,
+								"source_node_locality": sourceNodeLocality,
+							}
+							if withMVCCTS {
+								assertReasonableMVCCTimestamp(t, actualSource["mvcc_timestamp"].(string))
+								actualSource["mvcc_timestamp"] = dummyMvccTimestamp
+								assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+							}
+							assertion = toJSON(t, assertionMap)
 						}
 
 						value, err := reformatJSON(actualSource)
@@ -10747,4 +10767,10 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	})
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+}
+
+func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
+	epochNanos := parseTimeToHLC(t, ts).WallTime
+	now := timeutil.Now()
+	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
 }

@@ -254,8 +254,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 			recordDataSchema = currentSchema
 		case changefeedbase.OptEnvelopeEnriched:
 			afterDataSchema = currentSchema
-			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, MVCCTimestampField: e.mvccTimestampField, UpdatedField: e.updatedField,
-				OpField: true, TsField: true, SourceField: e.sourceField}
+			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, OpField: true, TsField: true, SourceField: e.sourceField}
 			if e.sourceField {
 				if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix); err != nil {
 					return nil, err
