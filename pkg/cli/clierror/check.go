@@ -27,6 +27,6 @@ func CheckAndMaybeLog(
 		severity = ec.GetSeverity()
 		cause = ec.Unwrap()
 	}
-	logger(context.Background(), severity, "%v", cause)
+	logger(context.Background(), severity, "%+v", cause)
 	return err
 }
