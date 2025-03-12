@@ -227,11 +227,6 @@ var planMutators = []mutator{
 		clusterSettingMinimumVersion("v23.2.0"),
 	),
 	newClusterSettingMutator(
-		"kv.snapshot_receiver.excise.enabled",
-		[]bool{true, false},
-		clusterSettingMinimumVersion("v23.2.0"),
-	),
-	newClusterSettingMutator(
 		"storage.sstable.compression_algorithm",
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
