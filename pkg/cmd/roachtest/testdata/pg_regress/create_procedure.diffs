@@ -1,0 +1,669 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.out --label=/mnt/data1/postgres/src/test/regress/results/create_procedure.out /mnt/data1/postgres/src/test/regress/expected/create_procedure.out /mnt/data1/postgres/src/test/regress/results/create_procedure.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_procedure.out
++++ /mnt/data1/postgres/src/test/regress/results/create_procedure.out
+@@ -1,12 +1,8 @@
+ CALL nonexistent();  -- error
+-ERROR:  procedure nonexistent() does not exist
+-LINE 1: CALL nonexistent();
+-             ^
+-HINT:  No procedure matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  procedure nonexistent does not exist
++HINT:  No procedure matches the given name.
+ CALL random();  -- error
+ ERROR:  random() is not a procedure
+-LINE 1: CALL random();
+-             ^
+ HINT:  To call a function, use SELECT.
+ CREATE FUNCTION cp_testfunc1(a int) RETURNS int LANGUAGE SQL AS $$ SELECT a $$;
+ CREATE TABLE cp_test (a int, b text);
+@@ -16,47 +12,86 @@
+ INSERT INTO cp_test VALUES (1, x);
+ $$;
+ \df ptest1
+-                        List of functions
+- Schema |  Name  | Result data type | Argument data types | Type 
+---------+--------+------------------+---------------------+------
+- public | ptest1 |                  | IN x text           | proc
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest1)$' COLLATE pg_catalog.default
++                                                                      ^
+ SELECT pg_get_functiondef('ptest1'::regproc);
+-                  pg_get_functiondef                  
+-------------------------------------------------------
+- CREATE OR REPLACE PROCEDURE public.ptest1(IN x text)+
+-  LANGUAGE sql                                       +
+- AS $procedure$                                      +
+- INSERT INTO cp_test VALUES (1, x);                  +
+- $procedure$                                         +
+- 
++               pg_get_functiondef               
++------------------------------------------------
++ INSERT INTO root.public.cp_test VALUES (1, x);
+ (1 row)
+ 
+ -- show only normal functions
+ \dfn public.*test*1
+-                           List of functions
+- Schema |     Name     | Result data type | Argument data types | Type 
+---------+--------------+------------------+---------------------+------
+- public | cp_testfunc1 | integer          | a integer           | func
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.prokind <> 'a'
++      AND p.prokind <> 'p'
++      AND p.prorettype <> 'pg_catalog.trigger'::pg_catalog.regtype
++      AND p.prokind <> 'w'
++  AND p.proname OPERATOR(pg_catalog.~) '^(.*test.*1)$' COLLATE pg_catalog.default
++                                                                         ^
+ -- show only procedures
+ \dfp public.*test*1
+-                        List of functions
+- Schema |  Name  | Result data type | Argument data types | Type 
+---------+--------+------------------+---------------------+------
+- public | ptest1 |                  | IN x text           | proc
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE (
++       p.prokind = 'p'
++      )
++  AND p.proname OPERATOR(pg_catalog.~) '^(.*test.*1)$' COLLATE pg_catalog.default
++                                                                         ^
+ SELECT ptest1('x');  -- error
+-ERROR:  ptest1(unknown) is a procedure
+-LINE 1: SELECT ptest1('x');
+-               ^
++ERROR:  ptest1(x: string) is a procedure
+ HINT:  To call a procedure, use CALL.
+ CALL ptest1('a');  -- ok
++--
++(0 rows)
++
+ CALL ptest1('xy' || 'zzy');  -- ok, constant-folded arg
++--
++(0 rows)
++
+ CALL ptest1(substring(random()::numeric(20,15)::text, 1, 1));  -- ok, volatile arg
++--
++(0 rows)
++
+ SELECT * FROM cp_test ORDER BY b COLLATE "C";
+  a |   b   
+ ---+-------
+@@ -71,34 +106,47 @@
+ BEGIN ATOMIC
+   INSERT INTO cp_test VALUES (1, x);
+ END;
+-\df ptest1s
+-                        List of functions
+- Schema |  Name   | Result data type | Argument data types | Type 
+---------+---------+------------------+---------------------+------
+- public | ptest1s |                  | IN x text           | proc
+-(1 row)
++ERROR:  unimplemented: CREATE FUNCTION...sql_body unimplemented
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-SELECT pg_get_functiondef('ptest1s'::regproc);
+-                  pg_get_functiondef                   
+--------------------------------------------------------
+- CREATE OR REPLACE PROCEDURE public.ptest1s(IN x text)+
+-  LANGUAGE sql                                        +
+- BEGIN ATOMIC                                         +
+-  INSERT INTO cp_test (a, b)                          +
+-    VALUES (1, ptest1s.x);                            +
+- END                                                  +
+- 
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++\df ptest1s
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest1s)$' COLLATE pg_catalog.default
++                                                                       ^
++SELECT pg_get_functiondef('ptest1s'::regproc);
++ERROR:  unknown function: ptest1s()
+ CALL ptest1s('b');
++ERROR:  procedure ptest1s does not exist
++HINT:  No procedure matches the given name.
+ SELECT * FROM cp_test ORDER BY b COLLATE "C";
+  a |   b   
+ ---+-------
+  1 | 0
+  1 | a
+- 1 | b
+  1 | xyzzy
+-(4 rows)
++(3 rows)
+ 
+ -- utility functions currently not supported here
+ CREATE PROCEDURE ptestx()
+@@ -106,13 +154,27 @@
+ BEGIN ATOMIC
+   CREATE TABLE x (a int);
+ END;
+-ERROR:  CREATE TABLE is not yet supported in unquoted SQL function body
++ERROR:  unimplemented: CREATE FUNCTION...sql_body unimplemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE PROCEDURE ptest2()
+ LANGUAGE SQL
+ AS $$
+ SELECT 5;
+ $$;
+ CALL ptest2();
++--
++(0 rows)
++
+ -- nested CALL
+ TRUNCATE cp_test;
+ CREATE PROCEDURE ptest3(y text)
+@@ -122,6 +184,9 @@
+ CALL ptest1($1);
+ $$;
+ CALL ptest3('b');
++--
++(0 rows)
++
+ SELECT * FROM cp_test;
+  a | b 
+ ---+---
+@@ -147,7 +212,6 @@
+ CALL ptest4a(a, b);  -- error, not supported
+ $$;
+ ERROR:  calling procedures with output arguments is not supported in SQL functions
+-CONTEXT:  SQL function "ptest4b"
+ DROP PROCEDURE ptest4a;
+ -- named and default parameters
+ CREATE OR REPLACE PROCEDURE ptest5(a int, b text, c int default 100)
+@@ -158,9 +222,23 @@
+ $$;
+ TRUNCATE cp_test;
+ CALL ptest5(10, 'Hello', 20);
++--
++(0 rows)
++
+ CALL ptest5(10, 'Hello');
++--
++(0 rows)
++
+ CALL ptest5(10, b => 'Hello');
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest5(10, b => 'Hello')
++                   ^
+ CALL ptest5(b => 'Hello', a => 10);
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest5(b => 'Hello', a => 10)
++               ^
+ SELECT * FROM cp_test;
+   a  |   b   
+ -----+-------
+@@ -168,11 +246,7 @@
+   20 | Hello
+   10 | Hello
+  100 | Hello
+-  10 | Hello
+- 100 | Hello
+-  10 | Hello
+- 100 | Hello
+-(8 rows)
++(4 rows)
+ 
+ -- polymorphic types
+ CREATE PROCEDURE ptest6(a int, b anyelement)
+@@ -181,6 +255,9 @@
+ SELECT NULL::int;
+ $$;
+ CALL ptest6(1, 2);
++--
++(0 rows)
++
+ -- collation assignment
+ CREATE PROCEDURE ptest7(a text, b text)
+ LANGUAGE SQL
+@@ -188,28 +265,47 @@
+ SELECT a = b;
+ $$;
+ CALL ptest7(least('a', 'b'), 'a');
++--
++(0 rows)
++
+ -- empty body
+ CREATE PROCEDURE ptest8(x text)
+ BEGIN ATOMIC
+ END;
+-\df ptest8
+-                        List of functions
+- Schema |  Name  | Result data type | Argument data types | Type 
+---------+--------+------------------+---------------------+------
+- public | ptest8 |                  | IN x text           | proc
+-(1 row)
++ERROR:  unimplemented: CREATE FUNCTION...sql_body unimplemented
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-SELECT pg_get_functiondef('ptest8'::regproc);
+-                  pg_get_functiondef                  
+-------------------------------------------------------
+- CREATE OR REPLACE PROCEDURE public.ptest8(IN x text)+
+-  LANGUAGE sql                                       +
+- BEGIN ATOMIC                                        +
+- END                                                 +
+- 
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++\df ptest8
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest8)$' COLLATE pg_catalog.default
++                                                                      ^
++SELECT pg_get_functiondef('ptest8'::regproc);
++ERROR:  unknown function: ptest8()
+ CALL ptest8('');
++ERROR:  procedure ptest8 does not exist
++HINT:  No procedure matches the given name.
+ -- OUT parameters
+ CREATE PROCEDURE ptest9(OUT a int)
+ LANGUAGE SQL
+@@ -226,17 +322,10 @@
+ 
+ -- you can write an expression, but it's not evaluated
+ CALL ptest9(1/0);  -- no error
+- a 
+----
+- 1
+-(1 row)
+-
++ERROR:  ptest9(): unsupported binary operator: <int> / <int> (returning <int>)
+ -- ... and it had better match the type of the parameter
+ CALL ptest9(1./0.);  -- error
+-ERROR:  procedure ptest9(numeric) does not exist
+-LINE 1: CALL ptest9(1./0.);
+-             ^
+-HINT:  No procedure matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  ptest9(): unsupported binary operator: <decimal> / <decimal> (returning <int>)
+ -- check named-parameter matching
+ CREATE PROCEDURE ptest10(OUT a int, IN b int, IN c int)
+ LANGUAGE SQL AS $$ SELECT b - c $$;
+@@ -247,137 +336,222 @@
+ (1 row)
+ 
+ CALL ptest10(a => null, b => 8, c => 2);
+- a 
+----
+- 6
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest10(a => null, b => 8, c => 2)
++                ^
+ CALL ptest10(null, 7, c => 2);
+- a 
+----
+- 5
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest10(null, 7, c => 2)
++                         ^
+ CALL ptest10(null, c => 4, b => 11);
+- a 
+----
+- 7
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest10(null, c => 4, b => 11)
++                      ^
+ CALL ptest10(b => 8, c => 2, a => 0);
+- a 
+----
+- 6
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++CALL ptest10(b => 8, c => 2, a => 0)
++                ^
+ CREATE PROCEDURE ptest11(a OUT int, VARIADIC b int[]) LANGUAGE SQL
+   AS $$ SELECT b[1] + b[2] $$;
++ERROR:  at or near "variadic": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE PROCEDURE ptest11(a OUT int, VARIADIC b int[]) LANGUAGE SQL
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/88947/_version_
+ CALL ptest11(null, 11, 12, 13);
+- a  
+-----
+- 23
+-(1 row)
+-
++ERROR:  procedure ptest11 does not exist
++HINT:  No procedure matches the given name.
+ -- check resolution of ambiguous DROP commands
+ CREATE PROCEDURE ptest10(IN a int, IN b int, IN c int)
+ LANGUAGE SQL AS $$ SELECT a + b - c $$;
+ \df ptest10
+-                                   List of functions
+- Schema |  Name   | Result data type |            Argument data types            | Type 
+---------+---------+------------------+-------------------------------------------+------
+- public | ptest10 |                  | IN a integer, IN b integer, IN c integer  | proc
+- public | ptest10 |                  | OUT a integer, IN b integer, IN c integer | proc
+-(2 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest10)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop procedure ptest10;  -- fail
+ ERROR:  procedure name "ptest10" is not unique
+-HINT:  Specify the argument list to select the procedure unambiguously.
+ drop procedure ptest10(int, int, int);  -- fail
+ ERROR:  procedure name "ptest10" is not unique
+ begin;
+ drop procedure ptest10(out int, int, int);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ \df ptest10
+-                                   List of functions
+- Schema |  Name   | Result data type |           Argument data types            | Type 
+---------+---------+------------------+------------------------------------------+------
+- public | ptest10 |                  | IN a integer, IN b integer, IN c integer | proc
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest10)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop procedure ptest10(int, int, int);  -- now this would work
+ rollback;
++WARNING:  there is no transaction in progress
+ begin;
+ drop procedure ptest10(in int, int, int);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  unknown procedure: ptest10()
+ \df ptest10
+-                                   List of functions
+- Schema |  Name   | Result data type |            Argument data types            | Type 
+---------+---------+------------------+-------------------------------------------+------
+- public | ptest10 |                  | OUT a integer, IN b integer, IN c integer | proc
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT n.nspname as "Schema",
++  p.proname as "Name",
++  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
++  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
++ CASE p.prokind
++  WHEN 'a' THEN 'agg'
++  WHEN 'w' THEN 'window'
++  WHEN 'p' THEN 'proc'
++  ELSE 'func'
++ END as "Type"
++FROM pg_catalog.pg_proc p
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
++WHERE p.proname OPERATOR(pg_catalog.~) '^(ptest10)$' COLLATE pg_catalog.default
++                                                                       ^
+ drop procedure ptest10(int, int, int);  -- now this would work
++ERROR:  unknown procedure: ptest10()
+ rollback;
++WARNING:  there is no transaction in progress
+ -- various error cases
+ CALL version();  -- error: not a procedure
+ ERROR:  version() is not a procedure
+-LINE 1: CALL version();
+-             ^
+ HINT:  To call a function, use SELECT.
+ CALL sum(1);  -- error: not a procedure
+-ERROR:  sum(integer) is not a procedure
+-LINE 1: CALL sum(1);
+-             ^
+-HINT:  To call a function, use SELECT.
++ERROR:  sum is not a procedure
+ CREATE PROCEDURE ptestx() LANGUAGE SQL WINDOW AS $$ INSERT INTO cp_test VALUES (1, 'a') $$;
+-ERROR:  invalid attribute in procedure definition
+-LINE 1: CREATE PROCEDURE ptestx() LANGUAGE SQL WINDOW AS $$ INSERT I...
+-                                               ^
++ERROR:  at or near "window": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE PROCEDURE ptestx() LANGUAGE SQL WINDOW AS $$ INSERT INTO cp_test VALUES (1, 'a') $$
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE PROCEDURE ptestx() LANGUAGE SQL STRICT AS $$ INSERT INTO cp_test VALUES (1, 'a') $$;
+-ERROR:  invalid attribute in procedure definition
+-LINE 1: CREATE PROCEDURE ptestx() LANGUAGE SQL STRICT AS $$ INSERT I...
+-                                               ^
++ERROR:  null input attribute not allowed in procedure definition
+ CREATE PROCEDURE ptestx(a VARIADIC int[], b OUT int) LANGUAGE SQL
+   AS $$ SELECT a[1] $$;
+-ERROR:  VARIADIC parameter must be the last parameter
++ERROR:  at or near "variadic": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE PROCEDURE ptestx(a VARIADIC int[], b OUT int) LANGUAGE SQL
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/88947/_version_
+ CREATE PROCEDURE ptestx(a int DEFAULT 42, b OUT int) LANGUAGE SQL
+   AS $$ SELECT a $$;
+ ERROR:  procedure OUT parameters cannot appear after one with a default value
+ ALTER PROCEDURE ptest1(text) STRICT;
+-ERROR:  invalid attribute in procedure definition
+-LINE 1: ALTER PROCEDURE ptest1(text) STRICT;
+-                                     ^
++ERROR:  at or near "strict": syntax error
++DETAIL:  source SQL:
++ALTER PROCEDURE ptest1(text) STRICT
++                             ^
++HINT:  try \h ALTER PROCEDURE
+ ALTER FUNCTION ptest1(text) VOLATILE;  -- error: not a function
+-ERROR:  ptest1(text) is not a function
++ERROR:  volatility attribute not allowed in procedure definition
+ ALTER PROCEDURE cp_testfunc1(int) VOLATILE;  -- error: not a procedure
+-ERROR:  cp_testfunc1(integer) is not a procedure
++ERROR:  at or near "volatile": syntax error
++DETAIL:  source SQL:
++ALTER PROCEDURE cp_testfunc1(int) VOLATILE
++                                  ^
++HINT:  try \h ALTER PROCEDURE
+ ALTER PROCEDURE nonexistent() VOLATILE;
+-ERROR:  procedure nonexistent() does not exist
++ERROR:  at or near "volatile": syntax error
++DETAIL:  source SQL:
++ALTER PROCEDURE nonexistent() VOLATILE
++                              ^
++HINT:  try \h ALTER PROCEDURE
+ DROP FUNCTION ptest1(text);  -- error: not a function
+-ERROR:  ptest1(text) is not a function
++ERROR:  ptest1(string) is not a function
+ DROP PROCEDURE cp_testfunc1(int);  -- error: not a procedure
+-ERROR:  cp_testfunc1(integer) is not a procedure
++ERROR:  cp_testfunc1(int) is not a procedure
+ DROP PROCEDURE nonexistent();
+-ERROR:  procedure nonexistent() does not exist
++ERROR:  unknown procedure: nonexistent()
+ -- privileges
+ CREATE USER regress_cp_user1;
+ GRANT INSERT ON cp_test TO regress_cp_user1;
+ REVOKE EXECUTE ON PROCEDURE ptest1(text) FROM PUBLIC;
+ SET ROLE regress_cp_user1;
+ CALL ptest1('a');  -- error
+-ERROR:  permission denied for procedure ptest1
++ERROR:  user regress_cp_user1 does not have EXECUTE privilege on procedure ptest1
+ RESET ROLE;
+ GRANT EXECUTE ON PROCEDURE ptest1(text) TO regress_cp_user1;
+ SET ROLE regress_cp_user1;
+ CALL ptest1('a');  -- ok
++--
++(0 rows)
++
+ RESET ROLE;
+ -- ROUTINE syntax
+ ALTER ROUTINE cp_testfunc1(int) RENAME TO cp_testfunc1a;
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++ALTER ROUTINE cp_testfunc1(int) RENAME TO cp_testfunc1a
++      ^
++HINT:  try \h ALTER
+ ALTER ROUTINE cp_testfunc1a RENAME TO cp_testfunc1;
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++ALTER ROUTINE cp_testfunc1a RENAME TO cp_testfunc1
++      ^
++HINT:  try \h ALTER
+ ALTER ROUTINE ptest1(text) RENAME TO ptest1a;
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++ALTER ROUTINE ptest1(text) RENAME TO ptest1a
++      ^
++HINT:  try \h ALTER
+ ALTER ROUTINE ptest1a RENAME TO ptest1;
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++ALTER ROUTINE ptest1a RENAME TO ptest1
++      ^
++HINT:  try \h ALTER
+ DROP ROUTINE cp_testfunc1(int);
++ERROR:  at or near "routine": syntax error
++DETAIL:  source SQL:
++DROP ROUTINE cp_testfunc1(int)
++     ^
++HINT:  try \h DROP
+ -- cleanup
+ DROP PROCEDURE ptest1;
++ERROR:  cannot drop function "ptest1" because other objects ([root.public.ptest3]) still depend on it
+ DROP PROCEDURE ptest1s;
++ERROR:  unknown procedure: ptest1s()
+ DROP PROCEDURE ptest2;
+ DROP TABLE cp_test;
++ERROR:  cannot drop table cp_test because other objects depend on it
+ DROP USER regress_cp_user1;
++ERROR:  cannot drop role/user regress_cp_user1: grants still exist on root.public.cp_test, root.public.ptest1

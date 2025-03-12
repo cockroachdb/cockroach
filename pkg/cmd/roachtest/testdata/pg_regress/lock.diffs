@@ -1,0 +1,412 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=/mnt/data1/postgres/src/test/regress/results/lock.out /mnt/data1/postgres/src/test/regress/expected/lock.out /mnt/data1/postgres/src/test/regress/results/lock.out
+--- /mnt/data1/postgres/src/test/regress/expected/lock.out
++++ /mnt/data1/postgres/src/test/regress/results/lock.out
+@@ -3,7 +3,9 @@
+ --
+ -- directory paths and dlsuffix are passed to us in environment variables
+ \getenv libdir PG_LIBDIR
++invalid command \getenv
+ \getenv dlsuffix PG_DLSUFFIX
++invalid command \getenv
+ \set regresslib :libdir '/regress' :dlsuffix
+ -- Setup
+ CREATE SCHEMA lock_schema1;
+@@ -22,123 +24,201 @@
+ -- Try all valid lock options; also try omitting the optional TABLE keyword.
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_tbl1 IN ACCESS SHARE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ACCESS SHARE MODE
++^
+ LOCK lock_tbl1 IN ROW SHARE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK lock_tbl1 IN ROW SHARE MODE
++^
+ LOCK TABLE lock_tbl1 IN ROW EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ROW EXCLUSIVE MODE
++^
+ LOCK TABLE lock_tbl1 IN SHARE UPDATE EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN SHARE UPDATE EXCLUSIVE MODE
++^
+ LOCK TABLE lock_tbl1 IN SHARE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN SHARE MODE
++^
+ LOCK lock_tbl1 IN SHARE ROW EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK lock_tbl1 IN SHARE ROW EXCLUSIVE MODE
++^
+ LOCK TABLE lock_tbl1 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN EXCLUSIVE MODE
++^
+ LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE
++^
+ ROLLBACK;
+ -- Try using NOWAIT along with valid options.
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_tbl1 IN ACCESS SHARE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ACCESS SHARE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN ROW SHARE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ROW SHARE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN ROW EXCLUSIVE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ROW EXCLUSIVE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN SHARE UPDATE EXCLUSIVE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN SHARE UPDATE EXCLUSIVE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN SHARE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN SHARE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN SHARE ROW EXCLUSIVE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN SHARE ROW EXCLUSIVE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN EXCLUSIVE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN EXCLUSIVE MODE NOWAIT
++^
+ LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE NOWAIT;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 IN ACCESS EXCLUSIVE MODE NOWAIT
++^
+ ROLLBACK;
+ -- Verify that we can lock views.
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view1 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view1 IN EXCLUSIVE MODE
++^
+ -- lock_view1 and lock_tbl1 are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_view1
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view2 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view2 IN EXCLUSIVE MODE
++^
+ -- lock_view1, lock_tbl1, and lock_tbl1a are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl1a
+- lock_view2
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view3 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view3 IN EXCLUSIVE MODE
++^
+ -- lock_view3, lock_view2, lock_tbl1, and lock_tbl1a are locked recursively.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl1a
+- lock_view2
+- lock_view3
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view4 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view4 IN EXCLUSIVE MODE
++^
+ -- lock_view4, lock_tbl1, and lock_tbl1a are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl1a
+- lock_view4
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view5 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view5 IN EXCLUSIVE MODE
++^
+ -- lock_view5, lock_tbl1, and lock_tbl1a are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl1a
+- lock_view5
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view6 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view6 IN EXCLUSIVE MODE
++^
+ -- lock_view6 an lock_tbl1 are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'ExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_view6
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- Verify that we cope with infinite recursion in view definitions.
+ CREATE OR REPLACE VIEW lock_view2 AS SELECT * from lock_view3;
++ERROR:  cyclic view dependency for relation root.lock_schema1.lock_view2
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view2 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view2 IN EXCLUSIVE MODE
++^
+ ROLLBACK;
+ CREATE VIEW lock_view7 AS SELECT * from lock_view2;
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_view7 IN EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view7 IN EXCLUSIVE MODE
++^
+ ROLLBACK;
+ -- Verify that we can lock a table with inheritance children.
+ CREATE TABLE lock_tbl2 (b BIGINT) INHERITS (lock_tbl1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE lock_tbl2 (b BIGINT) INHERITS (lock_tbl1)
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE lock_tbl3 () INHERITS (lock_tbl2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE lock_tbl3 () INHERITS (lock_tbl2)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ BEGIN TRANSACTION;
+ LOCK TABLE lock_tbl1 * IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 * IN ACCESS EXCLUSIVE MODE
++^
+ ROLLBACK;
+ -- Child tables are locked without granting explicit permission to do so as
+ -- long as we have permission to lock the parent.
+@@ -147,13 +227,24 @@
+ -- fail when child locked directly
+ BEGIN;
+ LOCK TABLE lock_tbl2;
+-ERROR:  permission denied for table lock_tbl2
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl2
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE lock_tbl1 * IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_tbl1 * IN ACCESS EXCLUSIVE MODE
++^
+ ROLLBACK;
+ BEGIN;
+ LOCK TABLE ONLY lock_tbl1;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE ONLY lock_tbl1
++^
+ ROLLBACK;
+ RESET ROLE;
+ REVOKE UPDATE ON TABLE lock_tbl1 FROM regress_rol_lock1;
+@@ -163,79 +254,95 @@
+ -- fail without permissions on the view
+ BEGIN;
+ LOCK TABLE lock_view1;
+-ERROR:  permission denied for view lock_view1
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view1
++^
+ ROLLBACK;
+ RESET ROLE;
+ GRANT UPDATE ON TABLE lock_view1 TO regress_rol_lock1;
+ SET ROLE regress_rol_lock1;
+ BEGIN;
+ LOCK TABLE lock_view1 IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view1 IN ACCESS EXCLUSIVE MODE
++^
+ -- lock_view1 and lock_tbl1 (plus children lock_tbl2 and lock_tbl3) are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'AccessExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl2
+- lock_tbl3
+- lock_view1
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ RESET ROLE;
+ REVOKE UPDATE ON TABLE lock_view1 FROM regress_rol_lock1;
+ -- Tables referred to by security invoker views require explicit permission to
+ -- be locked.
+ CREATE VIEW lock_view8 WITH (security_invoker) AS SELECT * FROM lock_tbl1;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW lock_view8 WITH (security_invoker) AS SELECT * FROM lock_tbl1
++                       ^
++HINT:  try \h CREATE VIEW
+ SET ROLE regress_rol_lock1;
+ -- fail without permissions on the view
+ BEGIN;
+ LOCK TABLE lock_view8;
+-ERROR:  permission denied for view lock_view8
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view8
++^
+ ROLLBACK;
+ RESET ROLE;
+ GRANT UPDATE ON TABLE lock_view8 TO regress_rol_lock1;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "lock_view8" does not exist
+ SET ROLE regress_rol_lock1;
+ -- fail without permissions on the table referenced by the view
+ BEGIN;
+ LOCK TABLE lock_view8;
+-ERROR:  permission denied for table lock_tbl1
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view8
++^
+ ROLLBACK;
+ RESET ROLE;
+ GRANT UPDATE ON TABLE lock_tbl1 TO regress_rol_lock1;
+ BEGIN;
+ LOCK TABLE lock_view8 IN ACCESS EXCLUSIVE MODE;
++ERROR:  at or near "lock": syntax error
++DETAIL:  source SQL:
++LOCK TABLE lock_view8 IN ACCESS EXCLUSIVE MODE
++^
+ -- lock_view8 and lock_tbl1 (plus children lock_tbl2 and lock_tbl3) are locked.
+ select relname from pg_locks l, pg_class c
+  where l.relation = c.oid and relname like '%lock_%' and mode = 'AccessExclusiveLock'
+  order by relname;
+-  relname   
+-------------
+- lock_tbl1
+- lock_tbl2
+- lock_tbl3
+- lock_view8
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ RESET ROLE;
+ REVOKE UPDATE ON TABLE lock_view8 FROM regress_rol_lock1;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "lock_view8" does not exist
+ --
+ -- Clean up
+ --
+ DROP VIEW lock_view8;
++ERROR:  relation "lock_view8" does not exist
+ DROP VIEW lock_view7;
+ DROP VIEW lock_view6;
+ DROP VIEW lock_view5;
+ DROP VIEW lock_view4;
+ DROP VIEW lock_view3 CASCADE;
+-NOTICE:  drop cascades to view lock_view2
+ DROP VIEW lock_view1;
+ DROP TABLE lock_tbl3;
++ERROR:  relation "lock_tbl3" does not exist
+ DROP TABLE lock_tbl2;
++ERROR:  relation "lock_tbl2" does not exist
+ DROP TABLE lock_tbl1;
++ERROR:  cannot drop relation "lock_tbl1" because view "lock_view2" depends on it
++HINT:  consider dropping "lock_view2" first.
+ DROP TABLE lock_tbl1a;
++ERROR:  cannot drop relation "lock_tbl1a" because view "lock_view2" depends on it
++HINT:  consider dropping "lock_view2" first.
+ DROP SCHEMA lock_schema1 CASCADE;
+ DROP ROLE regress_rol_lock1;
+ -- atomic ops tests
+@@ -244,9 +351,8 @@
+     RETURNS bool
+     AS :'regresslib'
+     LANGUAGE C;
++ERROR:  unimplemented: C is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/102201/_version_
+ SELECT test_atomic_ops();
+- test_atomic_ops 
+------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: test_atomic_ops()

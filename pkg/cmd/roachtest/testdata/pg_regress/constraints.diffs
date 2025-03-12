@@ -1,0 +1,1050 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/constraints.out --label=/mnt/data1/postgres/src/test/regress/results/constraints.out /mnt/data1/postgres/src/test/regress/expected/constraints.out /mnt/data1/postgres/src/test/regress/results/constraints.out
+--- /mnt/data1/postgres/src/test/regress/expected/constraints.out
++++ /mnt/data1/postgres/src/test/regress/results/constraints.out
+@@ -9,6 +9,7 @@
+ --
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ --
+ -- DEFAULT syntax
+ --
+@@ -48,16 +49,16 @@
+ -- syntax errors
+ --  test for extraneous comma
+ CREATE TABLE error_tbl (i int DEFAULT (100, ));
+-ERROR:  syntax error at or near ")"
+-LINE 1: CREATE TABLE error_tbl (i int DEFAULT (100, ));
+-                                                    ^
++ERROR:  expected DEFAULT (in CREATE TABLE) expression to have type int, but '(100,)' has type tuple{int}
+ --  this will fail because gram.y uses b_expr not a_expr for defaults,
+ --  to avoid a shift/reduce conflict that arises from NOT NULL being
+ --  part of the column definition syntax:
+ CREATE TABLE error_tbl (b1 bool DEFAULT 1 IN (1, 2));
+-ERROR:  syntax error at or near "IN"
+-LINE 1: CREATE TABLE error_tbl (b1 bool DEFAULT 1 IN (1, 2));
+-                                                  ^
++ERROR:  at or near "in": syntax error
++DETAIL:  source SQL:
++CREATE TABLE error_tbl (b1 bool DEFAULT 1 IN (1, 2))
++                                          ^
++HINT:  try \h CREATE TABLE
+ --  this should work, however:
+ CREATE TABLE error_tbl (b1 bool DEFAULT (1 IN (1, 2)));
+ DROP TABLE error_tbl;
+@@ -69,15 +70,12 @@
+ INSERT INTO CHECK_TBL VALUES (5);
+ INSERT INTO CHECK_TBL VALUES (4);
+ INSERT INTO CHECK_TBL VALUES (3);
+-ERROR:  new row for relation "check_tbl" violates check constraint "check_con"
+-DETAIL:  Failing row contains (3).
++ERROR:  failed to satisfy CHECK constraint (x > 3:::INT8)
+ INSERT INTO CHECK_TBL VALUES (2);
+-ERROR:  new row for relation "check_tbl" violates check constraint "check_con"
+-DETAIL:  Failing row contains (2).
++ERROR:  failed to satisfy CHECK constraint (x > 3:::INT8)
+ INSERT INTO CHECK_TBL VALUES (6);
+ INSERT INTO CHECK_TBL VALUES (1);
+-ERROR:  new row for relation "check_tbl" violates check constraint "check_con"
+-DETAIL:  Failing row contains (1).
++ERROR:  failed to satisfy CHECK constraint (x > 3:::INT8)
+ SELECT * FROM CHECK_TBL;
+  x 
+ ---
+@@ -92,17 +90,13 @@
+ 	CHECK (x > 3 and y <> 'check failed' and z < 8));
+ INSERT INTO CHECK2_TBL VALUES (4, 'check ok', -2);
+ INSERT INTO CHECK2_TBL VALUES (1, 'x check failed', -2);
+-ERROR:  new row for relation "check2_tbl" violates check constraint "sequence_con"
+-DETAIL:  Failing row contains (1, x check failed, -2).
++ERROR:  failed to satisfy CHECK constraint (((x > 3:::INT8) AND (y != 'check failed':::STRING)) AND (z < 8:::INT8))
+ INSERT INTO CHECK2_TBL VALUES (5, 'z check failed', 10);
+-ERROR:  new row for relation "check2_tbl" violates check constraint "sequence_con"
+-DETAIL:  Failing row contains (5, z check failed, 10).
++ERROR:  failed to satisfy CHECK constraint (((x > 3:::INT8) AND (y != 'check failed':::STRING)) AND (z < 8:::INT8))
+ INSERT INTO CHECK2_TBL VALUES (0, 'check failed', -2);
+-ERROR:  new row for relation "check2_tbl" violates check constraint "sequence_con"
+-DETAIL:  Failing row contains (0, check failed, -2).
++ERROR:  failed to satisfy CHECK constraint (((x > 3:::INT8) AND (y != 'check failed':::STRING)) AND (z < 8:::INT8))
+ INSERT INTO CHECK2_TBL VALUES (6, 'check failed', 11);
+-ERROR:  new row for relation "check2_tbl" violates check constraint "sequence_con"
+-DETAIL:  Failing row contains (6, check failed, 11).
++ERROR:  failed to satisfy CHECK constraint (((x > 3:::INT8) AND (y != 'check failed':::STRING)) AND (z < 8:::INT8))
+ INSERT INTO CHECK2_TBL VALUES (7, 'check ok', 7);
+ SELECT * from CHECK2_TBL;
+  x |    y     | z  
+@@ -121,8 +115,7 @@
+ 	CONSTRAINT INSERT_TBL_CON CHECK (x >= 3 AND y <> 'check failed' AND x < 8),
+ 	CHECK (x + z = 0));
+ INSERT INTO INSERT_TBL(x,z) VALUES (2, -2);
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (2, -NULL-, -2).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ SELECT * FROM INSERT_TBL;
+  x | y | z 
+ ---+---+---
+@@ -135,16 +128,13 @@
+ (1 row)
+ 
+ INSERT INTO INSERT_TBL(y) VALUES ('Y');
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (2, Y, -2).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ INSERT INTO INSERT_TBL(y) VALUES ('Y');
+ INSERT INTO INSERT_TBL(x,z) VALUES (1, -2);
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_check"
+-DETAIL:  Failing row contains (1, -NULL-, -2).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ INSERT INTO INSERT_TBL(z,x) VALUES (-7,  7);
+ INSERT INTO INSERT_TBL VALUES (5, 'check failed', -5);
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (5, check failed, -5).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ INSERT INTO INSERT_TBL VALUES (7, '!check failed', -7);
+ INSERT INTO INSERT_TBL(y) VALUES ('-!NULL-');
+ SELECT * FROM INSERT_TBL;
+@@ -157,11 +147,9 @@
+ (4 rows)
+ 
+ INSERT INTO INSERT_TBL(y,z) VALUES ('check failed', 4);
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_check"
+-DETAIL:  Failing row contains (5, check failed, 4).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ INSERT INTO INSERT_TBL(x,y) VALUES (5, 'check failed');
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (5, check failed, -5).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ INSERT INTO INSERT_TBL(x,y) VALUES (5, '!check failed');
+ INSERT INTO INSERT_TBL(y) VALUES ('-!NULL-');
+ SELECT * FROM INSERT_TBL;
+@@ -182,8 +170,7 @@
+ (1 row)
+ 
+ INSERT INTO INSERT_TBL(y) VALUES ('Y');
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (8, Y, -8).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ SELECT 'eight' AS one, currval('insert_seq');
+   one  | currval 
+ -------+---------
+@@ -212,82 +199,103 @@
+ CREATE TABLE SYS_COL_CHECK_TBL (city text, state text, is_capital bool,
+                   altitude int,
+                   CHECK (NOT (is_capital AND tableoid::regclass::text = 'sys_col_check_tbl')));
++ERROR:  column "tableoid" does not exist
+ INSERT INTO SYS_COL_CHECK_TBL VALUES ('Seattle', 'Washington', false, 100);
++ERROR:  relation "sys_col_check_tbl" does not exist
+ INSERT INTO SYS_COL_CHECK_TBL VALUES ('Olympia', 'Washington', true, 100);
+-ERROR:  new row for relation "sys_col_check_tbl" violates check constraint "sys_col_check_tbl_check"
+-DETAIL:  Failing row contains (Olympia, Washington, t, 100).
++ERROR:  relation "sys_col_check_tbl" does not exist
+ SELECT *, tableoid::regclass::text FROM SYS_COL_CHECK_TBL;
+-  city   |   state    | is_capital | altitude |     tableoid      
+----------+------------+------------+----------+-------------------
+- Seattle | Washington | f          |      100 | sys_col_check_tbl
+-(1 row)
+-
++ERROR:  relation "sys_col_check_tbl" does not exist
+ DROP TABLE SYS_COL_CHECK_TBL;
++ERROR:  relation "sys_col_check_tbl" does not exist
+ --
+ -- Check constraints on system columns other then TableOid should return error
+ --
+ CREATE TABLE SYS_COL_CHECK_TBL (city text, state text, is_capital bool,
+                   altitude int,
+ 				  CHECK (NOT (is_capital AND ctid::text = 'sys_col_check_tbl')));
+-ERROR:  system column "ctid" reference in check constraint is invalid
+-LINE 3:       CHECK (NOT (is_capital AND ctid::text = 'sys_col_check...
+-                                         ^
++ERROR:  column "ctid" does not exist, referenced in "NOT (is_capital AND (ctid::STRING = 'sys_col_check_tbl'))"
+ --
+ -- Check inheritance of defaults and constraints
+ --
+ CREATE TABLE INSERT_CHILD (cx INT default 42,
+ 	cy INT CHECK (cy > x))
+ 	INHERITS (INSERT_TBL);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE INSERT_CHILD (cx INT default 42,
++	cy INT CHECK (cy > x))
++	INHERITS (INSERT_TBL)
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO INSERT_CHILD(x,z,cy) VALUES (7,-7,11);
++ERROR:  relation "insert_child" does not exist
+ INSERT INTO INSERT_CHILD(x,z,cy) VALUES (7,-7,6);
+-ERROR:  new row for relation "insert_child" violates check constraint "insert_child_check"
+-DETAIL:  Failing row contains (7, -NULL-, -7, 42, 6).
++ERROR:  relation "insert_child" does not exist
+ INSERT INTO INSERT_CHILD(x,z,cy) VALUES (6,-7,7);
+-ERROR:  new row for relation "insert_child" violates check constraint "insert_tbl_check"
+-DETAIL:  Failing row contains (6, -NULL-, -7, 42, 7).
++ERROR:  relation "insert_child" does not exist
+ INSERT INTO INSERT_CHILD(x,y,z,cy) VALUES (6,'check failed',-6,7);
+-ERROR:  new row for relation "insert_child" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (6, check failed, -6, 42, 7).
++ERROR:  relation "insert_child" does not exist
+ SELECT * FROM INSERT_CHILD;
+- x |   y    | z  | cx | cy 
+----+--------+----+----+----
+- 7 | -NULL- | -7 | 42 | 11
+-(1 row)
+-
++ERROR:  relation "insert_child" does not exist
+ DROP TABLE INSERT_CHILD;
++ERROR:  relation "insert_child" does not exist
+ --
+ -- Check NO INHERIT type of constraints and inheritance
+ --
+ CREATE TABLE ATACC1 (TEST INT
+ 	CHECK (TEST > 0) NO INHERIT);
++ERROR:  at or near "no": syntax error
++DETAIL:  source SQL:
++CREATE TABLE ATACC1 (TEST INT
++	CHECK (TEST > 0) NO INHERIT)
++                  ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE ATACC2 (TEST2 INT) INHERITS (ATACC1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ATACC2 (TEST2 INT) INHERITS (ATACC1)
++                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ -- check constraint is not there on child
+ INSERT INTO ATACC2 (TEST) VALUES (-3);
++ERROR:  relation "atacc2" does not exist
+ -- check constraint is there on parent
+ INSERT INTO ATACC1 (TEST) VALUES (-3);
+-ERROR:  new row for relation "atacc1" violates check constraint "atacc1_test_check"
+-DETAIL:  Failing row contains (-3).
++ERROR:  relation "atacc1" does not exist
+ DROP TABLE ATACC1 CASCADE;
+-NOTICE:  drop cascades to table atacc2
++ERROR:  relation "atacc1" does not exist
+ CREATE TABLE ATACC1 (TEST INT, TEST2 INT
+ 	CHECK (TEST > 0), CHECK (TEST2 > 10) NO INHERIT);
++ERROR:  at or near "no": syntax error
++DETAIL:  source SQL:
++CREATE TABLE ATACC1 (TEST INT, TEST2 INT
++	CHECK (TEST > 0), CHECK (TEST2 > 10) NO INHERIT)
++                                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE ATACC2 () INHERITS (ATACC1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ATACC2 () INHERITS (ATACC1)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ -- check constraint is there on child
+ INSERT INTO ATACC2 (TEST) VALUES (-3);
+-ERROR:  new row for relation "atacc2" violates check constraint "atacc1_test_check"
+-DETAIL:  Failing row contains (-3, null).
++ERROR:  relation "atacc2" does not exist
+ -- check constraint is there on parent
+ INSERT INTO ATACC1 (TEST) VALUES (-3);
+-ERROR:  new row for relation "atacc1" violates check constraint "atacc1_test_check"
+-DETAIL:  Failing row contains (-3, null).
++ERROR:  relation "atacc1" does not exist
+ -- check constraint is not there on child
+ INSERT INTO ATACC2 (TEST2) VALUES (3);
++ERROR:  relation "atacc2" does not exist
+ -- check constraint is there on parent
+ INSERT INTO ATACC1 (TEST2) VALUES (3);
+-ERROR:  new row for relation "atacc1" violates check constraint "atacc1_test2_check"
+-DETAIL:  Failing row contains (null, 3).
++ERROR:  relation "atacc1" does not exist
+ DROP TABLE ATACC1 CASCADE;
+-NOTICE:  drop cascades to table atacc2
++ERROR:  relation "atacc1" does not exist
+ --
+ -- Check constraints on INSERT INTO
+ --
+@@ -298,28 +306,22 @@
+ INSERT INTO tmp VALUES (5, '!check failed', null);
+ INSERT INTO tmp VALUES (null, 'try again', null);
+ INSERT INTO INSERT_TBL(y) select yd from tmp;
++ERROR:  failed to satisfy CHECK constraint ((x + z) = 0:::INT8)
+ SELECT * FROM INSERT_TBL;
+- x |       y       | z  
+----+---------------+----
+- 4 | Y             | -4
+- 5 | !check failed | -5
+- 6 | try again     | -6
+-(3 rows)
++ x | y | z 
++---+---+---
++(0 rows)
+ 
+ INSERT INTO INSERT_TBL SELECT * FROM tmp WHERE yd = 'try again';
+ INSERT INTO INSERT_TBL(y,z) SELECT yd, -7 FROM tmp WHERE yd = 'try again';
+ INSERT INTO INSERT_TBL(y,z) SELECT yd, -8 FROM tmp WHERE yd = 'try again';
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (8, try again, -8).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ SELECT * FROM INSERT_TBL;
+- x |       y       | z  
+----+---------------+----
+- 4 | Y             | -4
+- 5 | !check failed | -5
+- 6 | try again     | -6
+-   | try again     |   
+- 7 | try again     | -7
+-(5 rows)
++ x |     y     | z  
++---+-----------+----
++   | try again |   
++ 7 | try again | -7
++(2 rows)
+ 
+ DROP TABLE tmp;
+ --
+@@ -329,17 +331,13 @@
+ UPDATE INSERT_TBL SET x = 6 WHERE x = 6;
+ UPDATE INSERT_TBL SET x = -z, z = -x;
+ UPDATE INSERT_TBL SET x = z, z = x;
+-ERROR:  new row for relation "insert_tbl" violates check constraint "insert_tbl_con"
+-DETAIL:  Failing row contains (-4, Y, 4).
++ERROR:  failed to satisfy CHECK constraint (((x >= 3:::INT8) AND (y != 'check failed':::STRING)) AND (x < 8:::INT8))
+ SELECT * FROM INSERT_TBL;
+- x |       y       | z  
+----+---------------+----
+- 4 | Y             | -4
+-   | try again     |   
+- 7 | try again     | -7
+- 5 | !check failed |   
+- 6 | try again     | -6
+-(5 rows)
++ x |     y     | z  
++---+-----------+----
++   | try again |   
++ 7 | try again | -7
++(2 rows)
+ 
+ -- DROP TABLE INSERT_TBL;
+ --
+@@ -350,24 +348,47 @@
+ 	CHECK (x > 3 AND y <> 'check failed' AND x < 7 ));
+ \set filename :abs_srcdir '/data/constro.data'
+ COPY COPY_TBL FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/constro.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY COPY_TBL FROM ':abs_srcdir/data/constro.data'
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT * FROM COPY_TBL;
+- x |       y       | z 
+----+---------------+---
+- 4 | !check failed | 5
+- 6 | OK            | 4
+-(2 rows)
++ x | y | z 
++---+---+---
++(0 rows)
+ 
+ \set filename :abs_srcdir '/data/constrf.data'
+ COPY COPY_TBL FROM :'filename';
+-ERROR:  new row for relation "copy_tbl" violates check constraint "copy_con"
+-DETAIL:  Failing row contains (7, check failed, 6).
+-CONTEXT:  COPY copy_tbl, line 2: "7	check failed	6"
++ERROR:  at or near ":abs_srcdir/data/constrf.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY COPY_TBL FROM ':abs_srcdir/data/constrf.data'
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT * FROM COPY_TBL;
+- x |       y       | z 
+----+---------------+---
+- 4 | !check failed | 5
+- 6 | OK            | 4
+-(2 rows)
++ x | y | z 
++---+---+---
++(0 rows)
+ 
+ --
+ -- Primary keys
+@@ -381,8 +402,7 @@
+ INSERT INTO PRIMARY_TBL VALUES (4, 'three');
+ INSERT INTO PRIMARY_TBL VALUES (5, 'one');
+ INSERT INTO PRIMARY_TBL (t) VALUES ('six');
+-ERROR:  null value in column "i" of relation "primary_tbl" violates not-null constraint
+-DETAIL:  Failing row contains (null, six).
++ERROR:  missing "i" primary key column
+ SELECT * FROM PRIMARY_TBL;
+  i |   t   
+ ---+-------
+@@ -401,14 +421,13 @@
+ INSERT INTO PRIMARY_TBL VALUES (4, 'three');
+ INSERT INTO PRIMARY_TBL VALUES (5, 'one');
+ INSERT INTO PRIMARY_TBL (t) VALUES ('six');
+-ERROR:  null value in column "i" of relation "primary_tbl" violates not-null constraint
+-DETAIL:  Failing row contains (null, six).
++ERROR:  missing "i" primary key column
+ SELECT * FROM PRIMARY_TBL;
+  i |   t   
+ ---+-------
+  1 | one
+- 2 | two
+  1 | three
++ 2 | two
+  4 | three
+  5 | one
+ (5 rows)
+@@ -431,45 +450,46 @@
+ INSERT INTO UNIQUE_TBL VALUES (6, 'six-upsert-insert') ON CONFLICT (i) DO UPDATE SET t = 'six-upsert-update';
+ -- should fail
+ INSERT INTO UNIQUE_TBL VALUES (1, 'a'), (2, 'b'), (2, 'b') ON CONFLICT (i) DO UPDATE SET t = 'fails';
+-ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+-HINT:  Ensure that no rows proposed for insertion within the same command have duplicate constrained values.
++ERROR:  UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+ SELECT * FROM UNIQUE_TBL;
+  i |         t          
+ ---+--------------------
+  1 | one
+  2 | two
+  4 | four
++ 5 | five-upsert-update
+    | six
+    | seven
+- 5 | five-upsert-update
+  6 | six-upsert-insert
+ (7 rows)
+ 
+ DROP TABLE UNIQUE_TBL;
+ CREATE TABLE UNIQUE_TBL (i int UNIQUE NULLS NOT DISTINCT, t text);
++ERROR:  at or near "nulls": syntax error
++DETAIL:  source SQL:
++CREATE TABLE UNIQUE_TBL (i int UNIQUE NULLS NOT DISTINCT, t text)
++                                      ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO UNIQUE_TBL VALUES (1, 'one');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL VALUES (2, 'two');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL VALUES (1, 'three');  -- fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(1) already exists.
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL VALUES (4, 'four');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL VALUES (5, 'one');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL (t) VALUES ('six');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL (t) VALUES ('seven');  -- fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(null) already exists.
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO UNIQUE_TBL (t) VALUES ('eight') ON CONFLICT DO NOTHING;  -- no-op
++ERROR:  relation "unique_tbl" does not exist
+ SELECT * FROM UNIQUE_TBL;
+- i |  t   
+----+------
+- 1 | one
+- 2 | two
+- 4 | four
+- 5 | one
+-   | six
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ DROP TABLE UNIQUE_TBL;
++ERROR:  relation "unique_tbl" does not exist
+ CREATE TABLE UNIQUE_TBL (i int, t text,
+ 	UNIQUE(i,t));
+ INSERT INTO UNIQUE_TBL VALUES (1, 'one');
+@@ -477,7 +497,7 @@
+ INSERT INTO UNIQUE_TBL VALUES (1, 'three');
+ INSERT INTO UNIQUE_TBL VALUES (1, 'one');
+ ERROR:  duplicate key value violates unique constraint "unique_tbl_i_t_key"
+-DETAIL:  Key (i, t)=(1, one) already exists.
++DETAIL:  Key (i, t)=(1, 'one') already exists.
+ INSERT INTO UNIQUE_TBL VALUES (5, 'one');
+ INSERT INTO UNIQUE_TBL (t) VALUES ('six');
+ SELECT * FROM UNIQUE_TBL;
+@@ -495,114 +515,202 @@
+ -- Deferrable unique constraints
+ --
+ CREATE TABLE unique_tbl (i int UNIQUE DEFERRABLE, t text);
++ERROR:  at or near "deferrable": syntax error
++DETAIL:  source SQL:
++CREATE TABLE unique_tbl (i int UNIQUE DEFERRABLE, t text)
++                                      ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO unique_tbl VALUES (0, 'one');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO unique_tbl VALUES (1, 'two');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO unique_tbl VALUES (2, 'tree');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO unique_tbl VALUES (3, 'four');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO unique_tbl VALUES (4, 'five');
++ERROR:  relation "unique_tbl" does not exist
+ BEGIN;
+ -- default is immediate so this should fail right away
+ UPDATE unique_tbl SET i = 1 WHERE i = 0;
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(1) already exists.
++ERROR:  relation "unique_tbl" does not exist
+ ROLLBACK;
+ -- check is done at end of statement, so this should succeed
+ UPDATE unique_tbl SET i = i+1;
++ERROR:  relation "unique_tbl" does not exist
+ SELECT * FROM unique_tbl;
+- i |  t   
+----+------
+- 1 | one
+- 2 | two
+- 3 | tree
+- 4 | four
+- 5 | five
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ -- explicitly defer the constraint
+ BEGIN;
+ SET CONSTRAINTS unique_tbl_i_key DEFERRED;
++ERROR:  at or near "unique_tbl_i_key": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS unique_tbl_i_key DEFERRED
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO unique_tbl VALUES (3, 'three');
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DELETE FROM unique_tbl WHERE t = 'tree'; -- makes constraint valid again
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT; -- should succeed
+ SELECT * FROM unique_tbl;
+- i |   t   
+----+-------
+- 1 | one
+- 2 | two
+- 4 | four
+- 5 | five
+- 3 | three
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ -- try adding an initially deferred constraint
+ ALTER TABLE unique_tbl DROP CONSTRAINT unique_tbl_i_key;
++ERROR:  relation "unique_tbl" does not exist
+ ALTER TABLE unique_tbl ADD CONSTRAINT unique_tbl_i_key
+ 	UNIQUE (i) DEFERRABLE INITIALLY DEFERRED;
++ERROR:  at or near "deferred": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TABLE unique_tbl ADD CONSTRAINT unique_tbl_i_key
++	UNIQUE (i) DEFERRABLE INITIALLY DEFERRED
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/31632/_version_
+ BEGIN;
+ INSERT INTO unique_tbl VALUES (1, 'five');
++ERROR:  relation "unique_tbl" does not exist
+ INSERT INTO unique_tbl VALUES (5, 'one');
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE unique_tbl SET i = 4 WHERE i = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE unique_tbl SET i = 2 WHERE i = 4 AND t = 'four';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DELETE FROM unique_tbl WHERE i = 1 AND t = 'one';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DELETE FROM unique_tbl WHERE i = 5 AND t = 'five';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT * FROM unique_tbl;
+- i |   t   
+----+-------
+- 3 | three
+- 1 | five
+- 5 | one
+- 4 | two
+- 2 | four
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ -- should fail at commit-time
+ BEGIN;
+ INSERT INTO unique_tbl VALUES (3, 'Three'); -- should succeed for now
++ERROR:  relation "unique_tbl" does not exist
+ COMMIT; -- should fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(3) already exists.
+ -- make constraint check immediate
+ BEGIN;
+ SET CONSTRAINTS ALL IMMEDIATE;
++ERROR:  at or near "all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS ALL IMMEDIATE
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO unique_tbl VALUES (3, 'Three'); -- should fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(3) already exists.
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- forced check when SET CONSTRAINTS is called
+ BEGIN;
+ SET CONSTRAINTS ALL DEFERRED;
++ERROR:  at or near "all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS ALL DEFERRED
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO unique_tbl VALUES (3, 'Three'); -- should succeed for now
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET CONSTRAINTS ALL IMMEDIATE; -- should fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(3) already exists.
++ERROR:  at or near "all": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS ALL IMMEDIATE
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ COMMIT;
+ -- test deferrable UNIQUE with a partitioned table
+ CREATE TABLE parted_uniq_tbl (i int UNIQUE DEFERRABLE) partition by range (i);
++ERROR:  at or near "deferrable": syntax error
++DETAIL:  source SQL:
++CREATE TABLE parted_uniq_tbl (i int UNIQUE DEFERRABLE) partition by range (i)
++                                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE parted_uniq_tbl_1 PARTITION OF parted_uniq_tbl FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE parted_uniq_tbl_1 PARTITION OF parted_uniq_tbl FOR VALUES FROM (0) TO (10)
++                               ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE parted_uniq_tbl_2 PARTITION OF parted_uniq_tbl FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE parted_uniq_tbl_2 PARTITION OF parted_uniq_tbl FOR VALUES FROM (20) TO (30)
++                               ^
++HINT:  try \h CREATE TABLE
+ SELECT conname, conrelid::regclass FROM pg_constraint
+   WHERE conname LIKE 'parted_uniq%' ORDER BY conname;
+-         conname         |     conrelid      
+--------------------------+-------------------
+- parted_uniq_tbl_1_i_key | parted_uniq_tbl_1
+- parted_uniq_tbl_2_i_key | parted_uniq_tbl_2
+- parted_uniq_tbl_i_key   | parted_uniq_tbl
+-(3 rows)
++ conname | conrelid 
++---------+----------
++(0 rows)
+ 
+ BEGIN;
+ INSERT INTO parted_uniq_tbl VALUES (1);
++ERROR:  relation "parted_uniq_tbl" does not exist
+ SAVEPOINT f;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ INSERT INTO parted_uniq_tbl VALUES (1);	-- unique violation
+-ERROR:  duplicate key value violates unique constraint "parted_uniq_tbl_1_i_key"
+-DETAIL:  Key (i)=(1) already exists.
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO f;
++ERROR:  savepoint "f" does not exist
+ SET CONSTRAINTS parted_uniq_tbl_i_key DEFERRED;
++ERROR:  at or near "parted_uniq_tbl_i_key": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET CONSTRAINTS parted_uniq_tbl_i_key DEFERRED
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO parted_uniq_tbl VALUES (1);	-- OK now, fail at commit
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+-ERROR:  duplicate key value violates unique constraint "parted_uniq_tbl_1_i_key"
+-DETAIL:  Key (i)=(1) already exists.
+ DROP TABLE parted_uniq_tbl;
++ERROR:  relation "parted_uniq_tbl" does not exist
+ -- test naming a constraint in a partition when a conflict exists
+ CREATE TABLE parted_fk_naming (
+     id bigint NOT NULL default 1,
+@@ -612,6 +720,18 @@
+     PRIMARY KEY (id)
+ )
+ PARTITION BY LIST (id);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE parted_fk_naming (
++    id bigint NOT NULL default 1,
++    id_abc bigint,
++    CONSTRAINT dummy_constr FOREIGN KEY (id_abc)
++        REFERENCES parted_fk_naming (id),
++    PRIMARY KEY (id)
++)
++PARTITION BY LIST (id)
++                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE parted_fk_naming_1 (
+     id bigint NOT NULL default 1,
+     id_abc bigint,
+@@ -619,59 +739,44 @@
+     CONSTRAINT dummy_constr CHECK (true)
+ );
+ ALTER TABLE parted_fk_naming ATTACH PARTITION parted_fk_naming_1 FOR VALUES IN ('1');
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE parted_fk_naming ATTACH PARTITION parted_fk_naming_1 FOR VALUES IN ('1')
++                             ^
++HINT:  try \h ALTER TABLE
+ SELECT conname FROM pg_constraint WHERE conrelid = 'parted_fk_naming_1'::regclass AND contype = 'f';
+-            conname             
+---------------------------------
+- parted_fk_naming_1_id_abc_fkey
+-(1 row)
++ conname 
++---------
++(0 rows)
+ 
+ DROP TABLE parted_fk_naming;
++ERROR:  relation "parted_fk_naming" does not exist
+ -- test a HOT update that invalidates the conflicting tuple.
+ -- the trigger should still fire and catch the violation
+ BEGIN;
+ INSERT INTO unique_tbl VALUES (3, 'Three'); -- should succeed for now
++ERROR:  relation "unique_tbl" does not exist
+ UPDATE unique_tbl SET t = 'THREE' WHERE i = 3 AND t = 'Three';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT; -- should fail
+-ERROR:  duplicate key value violates unique constraint "unique_tbl_i_key"
+-DETAIL:  Key (i)=(3) already exists.
+ SELECT * FROM unique_tbl;
+- i |   t   
+----+-------
+- 3 | three
+- 1 | five
+- 5 | one
+- 4 | two
+- 2 | four
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ -- test a HOT update that modifies the newly inserted tuple,
+ -- but should succeed because we then remove the other conflicting tuple.
+ BEGIN;
+ INSERT INTO unique_tbl VALUES(3, 'tree'); -- should succeed for now
++ERROR:  relation "unique_tbl" does not exist
+ UPDATE unique_tbl SET t = 'threex' WHERE t = 'tree';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DELETE FROM unique_tbl WHERE t = 'three';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM unique_tbl;
+- i |   t    
+----+--------
+- 1 | five
+- 5 | one
+- 4 | two
+- 2 | four
+- 3 | threex
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT * FROM unique_tbl;
+- i |   t    
+----+--------
+- 1 | five
+- 5 | one
+- 4 | two
+- 2 | four
+- 3 | threex
+-(5 rows)
+-
++ERROR:  relation "unique_tbl" does not exist
+ DROP TABLE unique_tbl;
++ERROR:  relation "unique_tbl" does not exist
+ --
+ -- EXCLUDE constraints
+ --
+@@ -682,108 +787,192 @@
+     (c1 WITH &&, (c2::circle) WITH &&)
+     WHERE (circle_center(c1) <> '(0,0)')
+ );
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE circles (
++  c1 CIRCLE,
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ -- these should succeed because they don't match the index predicate
+ INSERT INTO circles VALUES('<(0,0), 5>', '<(0,0), 5>');
++ERROR:  relation "circles" does not exist
+ INSERT INTO circles VALUES('<(0,0), 5>', '<(0,0), 4>');
++ERROR:  relation "circles" does not exist
+ -- succeed
+ INSERT INTO circles VALUES('<(10,10), 10>', '<(0,0), 5>');
++ERROR:  relation "circles" does not exist
+ -- fail, overlaps
+ INSERT INTO circles VALUES('<(20,20), 10>', '<(0,0), 4>');
+-ERROR:  conflicting key value violates exclusion constraint "circles_c1_c2_excl"
+-DETAIL:  Key (c1, (c2::circle))=(<(20,20),10>, <(0,0),4>) conflicts with existing key (c1, (c2::circle))=(<(10,10),10>, <(0,0),5>).
++ERROR:  relation "circles" does not exist
+ -- succeed, because violation is ignored
+ INSERT INTO circles VALUES('<(20,20), 10>', '<(0,0), 4>')
+   ON CONFLICT ON CONSTRAINT circles_c1_c2_excl DO NOTHING;
++ERROR:  relation "circles" does not exist
+ -- fail, because DO UPDATE variant requires unique index
+ INSERT INTO circles VALUES('<(20,20), 10>', '<(0,0), 4>')
+   ON CONFLICT ON CONSTRAINT circles_c1_c2_excl DO UPDATE SET c2 = EXCLUDED.c2;
+-ERROR:  ON CONFLICT DO UPDATE not supported with exclusion constraints
++ERROR:  relation "circles" does not exist
+ -- succeed because c1 doesn't overlap
+ INSERT INTO circles VALUES('<(20,20), 1>', '<(0,0), 5>');
++ERROR:  relation "circles" does not exist
+ -- succeed because c2 doesn't overlap
+ INSERT INTO circles VALUES('<(20,20), 10>', '<(10,10), 5>');
++ERROR:  relation "circles" does not exist
+ -- should fail on existing data without the WHERE clause
+ ALTER TABLE circles ADD EXCLUDE USING gist
+   (c1 WITH &&, (c2::circle) WITH &&);
+-ERROR:  could not create exclusion constraint "circles_c1_c2_excl1"
+-DETAIL:  Key (c1, (c2::circle))=(<(0,0),5>, <(0,0),5>) conflicts with key (c1, (c2::circle))=(<(0,0),5>, <(0,0),4>).
++ERROR:  at or near "gist": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER TABLE circles ADD EXCLUDE USING gist
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46657/_version_
+ -- try reindexing an existing constraint
+ REINDEX INDEX circles_c1_c2_excl;
++ERROR:  at or near "circles_c1_c2_excl": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX INDEX circles_c1_c2_excl
++              ^
++HINT:  CockroachDB does not require reindexing.
+ DROP TABLE circles;
++ERROR:  relation "circles" does not exist
+ -- Check deferred exclusion constraint
+ CREATE TABLE deferred_excl (
+   f1 int,
+   f2 int,
+   CONSTRAINT deferred_excl_con EXCLUDE (f1 WITH =) INITIALLY DEFERRED
+ );
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE TABLE deferred_excl (
++  f1 int,
++  f2 int,
++  CONSTRAINT deferred_excl_con EXCLUDE (f1 WITH =) INITIALLY DEFERRED
++                                       ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO deferred_excl VALUES(1);
++ERROR:  relation "deferred_excl" does not exist
+ INSERT INTO deferred_excl VALUES(2);
++ERROR:  relation "deferred_excl" does not exist
+ INSERT INTO deferred_excl VALUES(1); -- fail
+-ERROR:  conflicting key value violates exclusion constraint "deferred_excl_con"
+-DETAIL:  Key (f1)=(1) conflicts with existing key (f1)=(1).
++ERROR:  relation "deferred_excl" does not exist
+ INSERT INTO deferred_excl VALUES(1) ON CONFLICT ON CONSTRAINT deferred_excl_con DO NOTHING; -- fail
+-ERROR:  ON CONFLICT does not support deferrable unique constraints/exclusion constraints as arbiters
++ERROR:  relation "deferred_excl" does not exist
+ BEGIN;
+ INSERT INTO deferred_excl VALUES(2); -- no fail here
++ERROR:  relation "deferred_excl" does not exist
+ COMMIT; -- should fail here
+-ERROR:  conflicting key value violates exclusion constraint "deferred_excl_con"
+-DETAIL:  Key (f1)=(2) conflicts with existing key (f1)=(2).
+ BEGIN;
+ INSERT INTO deferred_excl VALUES(3);
++ERROR:  relation "deferred_excl" does not exist
+ INSERT INTO deferred_excl VALUES(3); -- no fail here
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT; -- should fail here
+-ERROR:  conflicting key value violates exclusion constraint "deferred_excl_con"
+-DETAIL:  Key (f1)=(3) conflicts with existing key (f1)=(3).
+ -- bug #13148: deferred constraint versus HOT update
+ BEGIN;
+ INSERT INTO deferred_excl VALUES(2, 1); -- no fail here
++ERROR:  relation "deferred_excl" does not exist
+ DELETE FROM deferred_excl WHERE f1 = 2 AND f2 IS NULL; -- remove old row
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE deferred_excl SET f2 = 2 WHERE f1 = 2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT; -- should not fail
+ SELECT * FROM deferred_excl;
+- f1 | f2 
+-----+----
+-  1 |   
+-  2 |  2
+-(2 rows)
+-
++ERROR:  relation "deferred_excl" does not exist
+ ALTER TABLE deferred_excl DROP CONSTRAINT deferred_excl_con;
++ERROR:  relation "deferred_excl" does not exist
+ -- This should fail, but worth testing because of HOT updates
+ UPDATE deferred_excl SET f1 = 3;
++ERROR:  relation "deferred_excl" does not exist
+ ALTER TABLE deferred_excl ADD EXCLUDE (f1 WITH =);
+-ERROR:  could not create exclusion constraint "deferred_excl_f1_excl"
+-DETAIL:  Key (f1)=(3) conflicts with key (f1)=(3).
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ALTER TABLE deferred_excl ADD EXCLUDE (f1 WITH =)
++                                      ^
++HINT:  try \h ALTER TABLE
+ DROP TABLE deferred_excl;
++ERROR:  relation "deferred_excl" does not exist
+ -- Comments
+ -- Setup a low-level role to enforce non-superuser checks.
+ CREATE ROLE regress_constraint_comments;
+ SET SESSION AUTHORIZATION regress_constraint_comments;
++ERROR:  at or near "regress_constraint_comments": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_constraint_comments
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ CREATE TABLE constraint_comments_tbl (a int CONSTRAINT the_constraint CHECK (a > 0));
+ CREATE DOMAIN constraint_comments_dom AS int CONSTRAINT the_constraint CHECK (value > 0);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE DOMAIN constraint_comments_dom AS int CONSTRAINT the_constraint CHECK (value > 0)
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ COMMENT ON CONSTRAINT the_constraint ON constraint_comments_tbl IS 'yes, the comment';
+ COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS 'yes, another comment';
++ERROR:  at or near "constraint_comments_dom": syntax error
++DETAIL:  source SQL:
++COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS 'yes, another comment'
++                                               ^
+ -- no such constraint
+ COMMENT ON CONSTRAINT no_constraint ON constraint_comments_tbl IS 'yes, the comment';
+-ERROR:  constraint "no_constraint" for table "constraint_comments_tbl" does not exist
++ERROR:  constraint "no_constraint" of relation "constraint_comments_tbl" does not exist
+ COMMENT ON CONSTRAINT no_constraint ON DOMAIN constraint_comments_dom IS 'yes, another comment';
+-ERROR:  constraint "no_constraint" for domain constraint_comments_dom does not exist
++ERROR:  at or near "constraint_comments_dom": syntax error
++DETAIL:  source SQL:
++COMMENT ON CONSTRAINT no_constraint ON DOMAIN constraint_comments_dom IS 'yes, another comment'
++                                              ^
+ -- no such table/domain
+ COMMENT ON CONSTRAINT the_constraint ON no_comments_tbl IS 'bad comment';
+ ERROR:  relation "no_comments_tbl" does not exist
+ COMMENT ON CONSTRAINT the_constraint ON DOMAIN no_comments_dom IS 'another bad comment';
+-ERROR:  type "no_comments_dom" does not exist
++ERROR:  at or near "no_comments_dom": syntax error
++DETAIL:  source SQL:
++COMMENT ON CONSTRAINT the_constraint ON DOMAIN no_comments_dom IS 'another bad comment'
++                                               ^
+ COMMENT ON CONSTRAINT the_constraint ON constraint_comments_tbl IS NULL;
+ COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS NULL;
++ERROR:  at or near "constraint_comments_dom": syntax error
++DETAIL:  source SQL:
++COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS NULL
++                                               ^
+ -- unauthorized user
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ CREATE ROLE regress_constraint_comments_noaccess;
+ SET SESSION AUTHORIZATION regress_constraint_comments_noaccess;
++ERROR:  at or near "regress_constraint_comments_noaccess": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_constraint_comments_noaccess
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ COMMENT ON CONSTRAINT the_constraint ON constraint_comments_tbl IS 'no, the comment';
+-ERROR:  must be owner of relation constraint_comments_tbl
+ COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS 'no, another comment';
+-ERROR:  must be owner of type constraint_comments_dom
++ERROR:  at or near "constraint_comments_dom": syntax error
++DETAIL:  source SQL:
++COMMENT ON CONSTRAINT the_constraint ON DOMAIN constraint_comments_dom IS 'no, another comment'
++                                               ^
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE constraint_comments_tbl;
+ DROP DOMAIN constraint_comments_dom;
++ERROR:  at or near "constraint_comments_dom": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP DOMAIN constraint_comments_dom
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ DROP ROLE regress_constraint_comments;
+ DROP ROLE regress_constraint_comments_noaccess;

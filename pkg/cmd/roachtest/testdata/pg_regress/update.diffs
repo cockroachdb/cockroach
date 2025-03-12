@@ -1,0 +1,1404 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --label=/mnt/data1/postgres/src/test/regress/results/update.out /mnt/data1/postgres/src/test/regress/expected/update.out /mnt/data1/postgres/src/test/regress/results/update.out
+--- /mnt/data1/postgres/src/test/regress/expected/update.out
++++ /mnt/data1/postgres/src/test/regress/results/update.out
+@@ -59,10 +59,8 @@
+ -- fail, wrong data type:
+ UPDATE update_test SET a = v.* FROM (VALUES(100, 20)) AS v(i, j)
+   WHERE update_test.b = v.j;
+-ERROR:  column "a" is of type integer but expression is of type record
+-LINE 1: UPDATE update_test SET a = v.* FROM (VALUES(100, 20)) AS v(i...
+-                                   ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  value type tuple{int AS i, int AS j} doesn't match type int of column "a"
++HINT:  you will need to rewrite or cast the expression
+ --
+ -- Test multiple-set-clause syntax
+ --
+@@ -80,25 +78,25 @@
+ SELECT * FROM update_test;
+   a  | b  |   c   
+ -----+----+-------
+- 100 | 20 | 
+- 100 | 21 | 
+   10 | 31 | bugle
++ 100 | 20 | 
+   10 | 32 | bugle
++ 100 | 21 | 
+ (4 rows)
+ 
+ UPDATE update_test SET (c,b) = ('car', a+b), a = a + 1 WHERE a = 10;
+ SELECT * FROM update_test;
+   a  | b  |  c  
+ -----+----+-----
+- 100 | 20 | 
+- 100 | 21 | 
+   11 | 41 | car
++ 100 | 20 | 
+   11 | 42 | car
++ 100 | 21 | 
+ (4 rows)
+ 
+ -- fail, multi assignment to same column:
+ UPDATE update_test SET (c,b) = ('car', a+b), b = a + 1 WHERE a = 10;
+-ERROR:  multiple assignments to same column "b"
++ERROR:  multiple assignments to the same column "b"
+ -- uncorrelated sub-select:
+ UPDATE update_test
+   SET (b,a) = (select a,b from update_test where b = 41 and c = 'car')
+@@ -106,10 +104,10 @@
+ SELECT * FROM update_test;
+   a  | b  |  c  
+ -----+----+-----
+- 100 | 21 | 
+   11 | 41 | car
+-  11 | 42 | car
+   41 | 11 | 
++  11 | 42 | car
++ 100 | 21 | 
+ (4 rows)
+ 
+ -- correlated sub-select:
+@@ -119,10 +117,10 @@
+ SELECT * FROM update_test;
+  a  |  b  |  c  
+ ----+-----+-----
+- 21 | 101 | 
+  41 |  12 | car
+- 42 |  12 | car
+  11 |  42 | 
++ 42 |  12 | car
++ 21 | 101 | 
+ (4 rows)
+ 
+ -- fail, multiple rows supplied:
+@@ -134,37 +132,37 @@
+ SELECT * FROM update_test;
+  a  |  b  |  c  
+ ----+-----+-----
+- 21 | 101 | 
+  41 |  12 | car
+- 42 |  12 | car
+     |     | 
++ 42 |  12 | car
++ 21 | 101 | 
+ (4 rows)
+ 
+ -- *-expansion should work in this context:
+ UPDATE update_test SET (a,b) = ROW(v.*) FROM (VALUES(21, 100)) AS v(i, j)
+   WHERE update_test.a = v.i;
++ERROR:  at or near "row": syntax error
++DETAIL:  source SQL:
++UPDATE update_test SET (a,b) = ROW(v.*) FROM (VALUES(21, 100)) AS v(i, j)
++                               ^
++HINT:  try \h UPDATE
+ -- you might expect this to work, but syntactically it's not a RowExpr:
+ UPDATE update_test SET (a,b) = (v.*) FROM (VALUES(21, 101)) AS v(i, j)
+   WHERE update_test.a = v.i;
+-ERROR:  source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression
+-LINE 1: UPDATE update_test SET (a,b) = (v.*) FROM (VALUES(21, 101)) ...
+-                                        ^
++ERROR:  number of columns (2) does not match number of values (1)
+ -- if an alias for the target table is specified, don't allow references
+ -- to the original table name
+ UPDATE update_test AS t SET b = update_test.b + 10 WHERE t.a = 10;
+-ERROR:  invalid reference to FROM-clause entry for table "update_test"
+-LINE 1: UPDATE update_test AS t SET b = update_test.b + 10 WHERE t.a...
+-                                        ^
+-HINT:  Perhaps you meant to reference the table alias "t".
++ERROR:  no data source matches prefix: update_test in this context
+ -- Make sure that we can update to a TOASTed value.
+ UPDATE update_test SET c = repeat('x', 10000) WHERE c = 'car';
+ SELECT a, b, char_length(c) FROM update_test;
+  a  |  b  | char_length 
+ ----+-----+-------------
+-    |     |            
+- 21 | 100 |            
+  41 |  12 |       10000
++    |     |            
+  42 |  12 |       10000
++ 21 | 101 |            
+ (4 rows)
+ 
+ -- Check multi-assignment with a Result node to handle a one-time filter.
+@@ -172,30 +170,21 @@
+ UPDATE update_test t
+   SET (a, b) = (SELECT b, a FROM update_test s WHERE s.a = t.a)
+   WHERE CURRENT_USER = SESSION_USER;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Update on public.update_test t
+-   ->  Result
+-         Output: $1, $2, (SubPlan 1 (returns $1,$2)), t.ctid
+-         One-Time Filter: (CURRENT_USER = SESSION_USER)
+-         ->  Seq Scan on public.update_test t
+-               Output: t.a, t.ctid
+-         SubPlan 1 (returns $1,$2)
+-           ->  Seq Scan on public.update_test s
+-                 Output: s.b, s.a
+-                 Filter: (s.a = t.a)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ UPDATE update_test t
+   SET (a, b) = (SELECT b, a FROM update_test s WHERE s.a = t.a)
+   WHERE CURRENT_USER = SESSION_USER;
+ SELECT a, b, char_length(c) FROM update_test;
+   a  | b  | char_length 
+ -----+----+-------------
+-     |    |            
+- 100 | 21 |            
+   12 | 41 |       10000
++     |    |            
+   12 | 42 |       10000
++ 101 | 21 |            
+ (4 rows)
+ 
+ -- Test ON CONFLICT DO UPDATE
+@@ -235,21 +224,13 @@
+ INSERT INTO upsert_test VALUES (2, 'Beeble') ON CONFLICT(a)
+   DO UPDATE SET (b, a) = (SELECT b || ', Excluded', a from upsert_test i WHERE i.a = excluded.a)
+   RETURNING tableoid::regclass, xmin = pg_current_xact_id()::xid AS xmin_correct, xmax = 0 AS xmax_correct;
+-  tableoid   | xmin_correct | xmax_correct 
+--------------+--------------+--------------
+- upsert_test | t            | t
+-(1 row)
+-
++ERROR:  column "tableoid" does not exist
+ -- currently xmax is set after a conflict - that's probably not good,
+ -- but it seems worthwhile to have to be explicit if that changes.
+ INSERT INTO upsert_test VALUES (2, 'Brox') ON CONFLICT(a)
+   DO UPDATE SET (b, a) = (SELECT b || ', Excluded', a from upsert_test i WHERE i.a = excluded.a)
+   RETURNING tableoid::regclass, xmin = pg_current_xact_id()::xid AS xmin_correct, xmax = pg_current_xact_id()::xid AS xmax_correct;
+-  tableoid   | xmin_correct | xmax_correct 
+--------------+--------------+--------------
+- upsert_test | t            | t
+-(1 row)
+-
++ERROR:  column "tableoid" does not exist
+ DROP TABLE update_test;
+ DROP TABLE upsert_test;
+ -- Test ON CONFLICT DO UPDATE with partitioned table and non-identical children
+@@ -257,30 +238,41 @@
+     a   INT PRIMARY KEY,
+     b   TEXT
+ ) PARTITION BY LIST (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE upsert_test (
++    a   INT PRIMARY KEY,
++    b   TEXT
++) PARTITION BY LIST (a)
++                       ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE upsert_test_1 PARTITION OF upsert_test FOR VALUES IN (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE upsert_test_1 PARTITION OF upsert_test FOR VALUES IN (1)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE upsert_test_2 (b TEXT, a INT PRIMARY KEY);
+ ALTER TABLE upsert_test ATTACH PARTITION upsert_test_2 FOR VALUES IN (2);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE upsert_test ATTACH PARTITION upsert_test_2 FOR VALUES IN (2)
++                        ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO upsert_test VALUES(1, 'Boo'), (2, 'Zoo');
++ERROR:  relation "upsert_test" does not exist
+ -- uncorrelated sub-select:
+ WITH aaa AS (SELECT 1 AS a, 'Foo' AS b) INSERT INTO upsert_test
+   VALUES (1, 'Bar') ON CONFLICT(a)
+   DO UPDATE SET (b, a) = (SELECT b, a FROM aaa) RETURNING *;
+- a |  b  
+----+-----
+- 1 | Foo
+-(1 row)
+-
++ERROR:  relation "upsert_test" does not exist
+ -- correlated sub-select:
+ WITH aaa AS (SELECT 1 AS ctea, ' Foo' AS cteb) INSERT INTO upsert_test
+   VALUES (1, 'Bar'), (2, 'Baz') ON CONFLICT(a)
+   DO UPDATE SET (b, a) = (SELECT upsert_test.b||cteb, upsert_test.a FROM aaa) RETURNING *;
+- a |    b    
+----+---------
+- 1 | Foo Foo
+- 2 | Zoo Foo
+-(2 rows)
+-
++ERROR:  relation "upsert_test" does not exist
+ DROP TABLE upsert_test;
++ERROR:  relation "upsert_test" does not exist
+ ---------------------------
+ -- UPDATE with row movement
+ ---------------------------
+@@ -298,187 +290,182 @@
+ 	d int,
+ 	e varchar
+ ) PARTITION BY RANGE (a, b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE range_parted (
++	a text,
++	b bigint,
++	c numeric,
++	d int,
++	e varchar
++) PARTITION BY RANGE (a, b)
++                           ^
++HINT:  try \h CREATE TABLE
+ -- Create partitions intentionally in descending bound order, so as to test
+ -- that update-row-movement works with the leaf partitions not in bound order.
+ CREATE TABLE part_b_20_b_30 (e varchar, c numeric, a text, b bigint, d int);
+ ALTER TABLE range_parted ATTACH PARTITION part_b_20_b_30 FOR VALUES FROM ('b', 20) TO ('b', 30);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE range_parted ATTACH PARTITION part_b_20_b_30 FOR VALUES FROM ('b', 20) TO ('b', 30)
++                         ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE part_b_10_b_20 (e varchar, c numeric, a text, b bigint, d int) PARTITION BY RANGE (c);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_b_10_b_20 (e varchar, c numeric, a text, b bigint, d int) PARTITION BY RANGE (c)
++                                                                                                  ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_b_1_b_10 PARTITION OF range_parted FOR VALUES FROM ('b', 1) TO ('b', 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_b_1_b_10 PARTITION OF range_parted FOR VALUES FROM ('b', 1) TO ('b', 10)
++                           ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE range_parted ATTACH PARTITION part_b_10_b_20 FOR VALUES FROM ('b', 10) TO ('b', 20);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE range_parted ATTACH PARTITION part_b_10_b_20 FOR VALUES FROM ('b', 10) TO ('b', 20)
++                         ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE part_a_10_a_20 PARTITION OF range_parted FOR VALUES FROM ('a', 10) TO ('a', 20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_a_10_a_20 PARTITION OF range_parted FOR VALUES FROM ('a', 10) TO ('a', 20)
++                            ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_a_1_a_10 PARTITION OF range_parted FOR VALUES FROM ('a', 1) TO ('a', 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_a_1_a_10 PARTITION OF range_parted FOR VALUES FROM ('a', 1) TO ('a', 10)
++                           ^
++HINT:  try \h CREATE TABLE
+ -- Check that partition-key UPDATE works sanely on a partitioned table that
+ -- does not have any child partitions.
+ UPDATE part_b_10_b_20 set b = b - 6;
++ERROR:  relation "part_b_10_b_20" does not exist
+ -- Create some more partitions following the above pattern of descending bound
+ -- order, but let's make the situation a bit more complex by having the
+ -- attribute numbers of the columns vary from their parent partition.
+ CREATE TABLE part_c_100_200 (e varchar, c numeric, a text, b bigint, d int) PARTITION BY range (abs(d));
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_c_100_200 (e varchar, c numeric, a text, b bigint, d int) PARTITION BY range (abs(d))
++                                                                                                   ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE part_c_100_200 DROP COLUMN e, DROP COLUMN c, DROP COLUMN a;
++ERROR:  relation "part_c_100_200" does not exist
+ ALTER TABLE part_c_100_200 ADD COLUMN c numeric, ADD COLUMN e varchar, ADD COLUMN a text;
++ERROR:  relation "part_c_100_200" does not exist
+ ALTER TABLE part_c_100_200 DROP COLUMN b;
++ERROR:  relation "part_c_100_200" does not exist
+ ALTER TABLE part_c_100_200 ADD COLUMN b bigint;
++ERROR:  relation "part_c_100_200" does not exist
+ CREATE TABLE part_d_1_15 PARTITION OF part_c_100_200 FOR VALUES FROM (1) TO (15);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_d_1_15 PARTITION OF part_c_100_200 FOR VALUES FROM (1) TO (15)
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_d_15_20 PARTITION OF part_c_100_200 FOR VALUES FROM (15) TO (20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_d_15_20 PARTITION OF part_c_100_200 FOR VALUES FROM (15) TO (20)
++                          ^
++HINT:  try \h CREATE TABLE
+ ALTER TABLE part_b_10_b_20 ATTACH PARTITION part_c_100_200 FOR VALUES FROM (100) TO (200);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE part_b_10_b_20 ATTACH PARTITION part_c_100_200 FOR VALUES FROM (100) TO (200)
++                           ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE part_c_1_100 (e varchar, d int, c numeric, b bigint, a text);
+ ALTER TABLE part_b_10_b_20 ATTACH PARTITION part_c_1_100 FOR VALUES FROM (1) TO (100);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE part_b_10_b_20 ATTACH PARTITION part_c_1_100 FOR VALUES FROM (1) TO (100)
++                           ^
++HINT:  try \h ALTER TABLE
+ \set init_range_parted 'truncate range_parted; insert into range_parted VALUES (''a'', 1, 1, 1), (''a'', 10, 200, 1), (''b'', 12, 96, 1), (''b'', 13, 97, 2), (''b'', 15, 105, 16), (''b'', 17, 105, 19)'
+ \set show_data 'select tableoid::regclass::text COLLATE "C" partname, * from range_parted ORDER BY 1, 2, 3, 4, 5, 6'
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_d_15_20   | b | 15 | 105 | 16 | 
+- part_d_15_20   | b | 17 | 105 | 19 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- The order of subplans should be in bound order
+ EXPLAIN (costs off) UPDATE range_parted set c = c - 50 WHERE c > 97;
+-                      QUERY PLAN                       
+--------------------------------------------------------
+- Update on range_parted
+-   Update on part_a_1_a_10 range_parted_1
+-   Update on part_a_10_a_20 range_parted_2
+-   Update on part_b_1_b_10 range_parted_3
+-   Update on part_c_1_100 range_parted_4
+-   Update on part_d_1_15 range_parted_5
+-   Update on part_d_15_20 range_parted_6
+-   Update on part_b_20_b_30 range_parted_7
+-   ->  Append
+-         ->  Seq Scan on part_a_1_a_10 range_parted_1
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_a_10_a_20 range_parted_2
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_b_1_b_10 range_parted_3
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_c_1_100 range_parted_4
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_d_1_15 range_parted_5
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_d_15_20 range_parted_6
+-               Filter: (c > '97'::numeric)
+-         ->  Seq Scan on part_b_20_b_30 range_parted_7
+-               Filter: (c > '97'::numeric)
+-(23 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (costs off) UPDATE range_parted set c = c - 50 WHERE c > 97
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- fail, row movement happens only within the partition subtree.
+ UPDATE part_c_100_200 set c = c - 20, d = c WHERE c = 105;
+-ERROR:  new row for relation "part_c_100_200" violates partition constraint
+-DETAIL:  Failing row contains (105, 85, null, b, 15).
++ERROR:  relation "part_c_100_200" does not exist
+ -- fail, no partition key update, so no attempt to move tuple,
+ -- but "a = 'a'" violates partition constraint enforced by root partition)
+ UPDATE part_b_10_b_20 set a = 'a';
+-ERROR:  new row for relation "part_b_10_b_20" violates partition constraint
+-DETAIL:  Failing row contains (null, 96, a, 12, 1).
++ERROR:  relation "part_b_10_b_20" does not exist
+ -- ok, partition key update, no constraint violation
+ UPDATE range_parted set d = d - 10 WHERE d > 10;
++ERROR:  relation "range_parted" does not exist
+ -- ok, no partition key update, no constraint violation
+ UPDATE range_parted set e = d;
++ERROR:  relation "range_parted" does not exist
+ -- No row found
+ UPDATE part_c_1_100 set c = c + 20 WHERE c = 98;
+ -- ok, row movement
+ UPDATE part_b_10_b_20 set c = c + 20 returning c, b, a;
+-  c  | b  | a 
+------+----+---
+- 116 | 12 | b
+- 117 | 13 | b
+- 125 | 15 | b
+- 125 | 17 | b
+-(4 rows)
+-
++ERROR:  relation "part_b_10_b_20" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d | e 
+-----------------+---+----+-----+---+---
+- part_a_10_a_20 | a | 10 | 200 | 1 | 1
+- part_a_1_a_10  | a |  1 |   1 | 1 | 1
+- part_d_1_15    | b | 12 | 116 | 1 | 1
+- part_d_1_15    | b | 13 | 117 | 2 | 2
+- part_d_1_15    | b | 15 | 125 | 6 | 6
+- part_d_1_15    | b | 17 | 125 | 9 | 9
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- fail, row movement happens only within the partition subtree.
+ UPDATE part_b_10_b_20 set b = b - 6 WHERE c > 116 returning *;
+-ERROR:  new row for relation "part_b_10_b_20" violates partition constraint
+-DETAIL:  Failing row contains (2, 117, b, 7, 2).
++ERROR:  relation "part_b_10_b_20" does not exist
+ -- ok, row movement, with subset of rows moved into different partition.
+ UPDATE range_parted set b = b - 6 WHERE c > 116 returning a, b + c;
+- a | ?column? 
+----+----------
+- a |      204
+- b |      124
+- b |      134
+- b |      136
+-(4 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-   partname    | a | b  |  c  | d | e 
+----------------+---+----+-----+---+---
+- part_a_1_a_10 | a |  1 |   1 | 1 | 1
+- part_a_1_a_10 | a |  4 | 200 | 1 | 1
+- part_b_1_b_10 | b |  7 | 117 | 2 | 2
+- part_b_1_b_10 | b |  9 | 125 | 6 | 6
+- part_d_1_15   | b | 11 | 125 | 9 | 9
+- part_d_1_15   | b | 12 | 116 | 1 | 1
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Common table needed for multiple test scenarios.
+ CREATE TABLE mintab(c1 int);
+ INSERT into mintab VALUES (120);
+ -- update partition key using updatable view.
+ CREATE VIEW upview AS SELECT * FROM range_parted WHERE (select c > c1 FROM mintab) WITH CHECK OPTION;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW upview AS SELECT * FROM range_parted WHERE (select c > c1 FROM mintab) WITH CHECK OPTION
++                                                                                   ^
+ -- ok
+ UPDATE upview set c = 199 WHERE b = 4;
++ERROR:  relation "upview" does not exist
+ -- fail, check option violation
+ UPDATE upview set c = 120 WHERE b = 4;
+-ERROR:  new row violates check option for view "upview"
+-DETAIL:  Failing row contains (a, 4, 120, 1, 1).
++ERROR:  relation "upview" does not exist
+ -- fail, row movement with check option violation
+ UPDATE upview set a = 'b', b = 15, c = 120 WHERE b = 4;
+-ERROR:  new row violates check option for view "upview"
+-DETAIL:  Failing row contains (b, 15, 120, 1, 1).
++ERROR:  relation "upview" does not exist
+ -- ok, row movement, check option passes
+ UPDATE upview set a = 'b', b = 15 WHERE b = 4;
++ERROR:  relation "upview" does not exist
+ :show_data;
+-   partname    | a | b  |  c  | d | e 
+----------------+---+----+-----+---+---
+- part_a_1_a_10 | a |  1 |   1 | 1 | 1
+- part_b_1_b_10 | b |  7 | 117 | 2 | 2
+- part_b_1_b_10 | b |  9 | 125 | 6 | 6
+- part_d_1_15   | b | 11 | 125 | 9 | 9
+- part_d_1_15   | b | 12 | 116 | 1 | 1
+- part_d_1_15   | b | 15 | 199 | 1 | 1
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- cleanup
+ DROP VIEW upview;
++ERROR:  relation "upview" does not exist
+ -- RETURNING having whole-row vars.
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set c = 95 WHERE a = 'b' and b > 10 and c > 100 returning (range_parted), *;
+- range_parted  | a | b  | c  | d  | e 
+----------------+---+----+----+----+---
+- (b,15,95,16,) | b | 15 | 95 | 16 | 
+- (b,17,95,19,) | b | 17 | 95 | 19 | 
+-(2 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_c_1_100   | b | 15 |  95 | 16 | 
+- part_c_1_100   | b | 17 |  95 | 19 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Transition tables with update row movement
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ CREATE FUNCTION trans_updatetrigfunc() RETURNS trigger LANGUAGE plpgsql AS
+ $$
+   begin
+@@ -492,44 +479,33 @@
+ CREATE TRIGGER trans_updatetrig
+   AFTER UPDATE ON range_parted REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
+   FOR EACH STATEMENT EXECUTE PROCEDURE trans_updatetrigfunc();
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set c = (case when c = 96 then 110 else c + 1 end ) WHERE a = 'b' and b > 10 and c >= 96;
+-NOTICE:  trigger = trans_updatetrig, old table = (b,12,96,1,), (b,13,97,2,), (b,15,105,16,), (b,17,105,19,), new table = (b,12,110,1,), (b,13,98,2,), (b,15,106,16,), (b,17,106,19,)
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 13 |  98 |  2 | 
+- part_d_15_20   | b | 15 | 106 | 16 | 
+- part_d_15_20   | b | 17 | 106 | 19 | 
+- part_d_1_15    | b | 12 | 110 |  1 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ -- Enabling OLD TABLE capture for both DELETE as well as UPDATE stmt triggers
+ -- should not cause DELETEd rows to be captured twice. Similar thing for
+ -- INSERT triggers and inserted rows.
+ CREATE TRIGGER trans_deletetrig
+   AFTER DELETE ON range_parted REFERENCING OLD TABLE AS old_table
+   FOR EACH STATEMENT EXECUTE PROCEDURE trans_updatetrigfunc();
++ERROR:  relation "range_parted" does not exist
+ CREATE TRIGGER trans_inserttrig
+   AFTER INSERT ON range_parted REFERENCING NEW TABLE AS new_table
+   FOR EACH STATEMENT EXECUTE PROCEDURE trans_updatetrigfunc();
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set c = c + 50 WHERE a = 'b' and b > 10 and c >= 96;
+-NOTICE:  trigger = trans_updatetrig, old table = (b,12,96,1,), (b,13,97,2,), (b,15,105,16,), (b,17,105,19,), new table = (b,12,146,1,), (b,13,147,2,), (b,15,155,16,), (b,17,155,19,)
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_d_15_20   | b | 15 | 155 | 16 | 
+- part_d_15_20   | b | 17 | 155 | 19 | 
+- part_d_1_15    | b | 12 | 146 |  1 | 
+- part_d_1_15    | b | 13 | 147 |  2 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER trans_deletetrig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER trans_inserttrig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ -- Don't drop trans_updatetrig yet. It is required below.
+ -- Test with transition tuple conversion happening for rows moved into the
+ -- new partition. This requires a trigger that references transition table
+@@ -545,74 +521,84 @@
+ END $$ language plpgsql;
+ CREATE TRIGGER trig_c1_100 BEFORE UPDATE OR INSERT ON part_c_1_100
+    FOR EACH ROW EXECUTE PROCEDURE func_parted_mod_b();
++ERROR:  no data source matches prefix: new in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ CREATE TRIGGER trig_d1_15 BEFORE UPDATE OR INSERT ON part_d_1_15
+    FOR EACH ROW EXECUTE PROCEDURE func_parted_mod_b();
++ERROR:  relation "part_d_1_15" does not exist
+ CREATE TRIGGER trig_d15_20 BEFORE UPDATE OR INSERT ON part_d_15_20
+    FOR EACH ROW EXECUTE PROCEDURE func_parted_mod_b();
++ERROR:  relation "part_d_15_20" does not exist
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set c = (case when c = 96 then 110 else c + 1 end) WHERE a = 'b' and b > 10 and c >= 96;
+-NOTICE:  trigger = trans_updatetrig, old table = (b,13,96,1,), (b,14,97,2,), (b,16,105,16,), (b,18,105,19,), new table = (b,15,110,1,), (b,15,98,2,), (b,17,106,16,), (b,19,106,19,)
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 15 |  98 |  2 | 
+- part_d_15_20   | b | 17 | 106 | 16 | 
+- part_d_15_20   | b | 19 | 106 | 19 | 
+- part_d_1_15    | b | 15 | 110 |  1 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set c = c + 50 WHERE a = 'b' and b > 10 and c >= 96;
+-NOTICE:  trigger = trans_updatetrig, old table = (b,13,96,1,), (b,14,97,2,), (b,16,105,16,), (b,18,105,19,), new table = (b,15,146,1,), (b,16,147,2,), (b,17,155,16,), (b,19,155,19,)
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_d_15_20   | b | 17 | 155 | 16 | 
+- part_d_15_20   | b | 19 | 155 | 19 | 
+- part_d_1_15    | b | 15 | 146 |  1 | 
+- part_d_1_15    | b | 16 | 147 |  2 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Case where per-partition tuple conversion map array is allocated, but the
+ -- map is not required for the particular tuple that is routed, thanks to
+ -- matching table attributes of the partition and the target table.
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set b = 15 WHERE b = 1;
+-NOTICE:  trigger = trans_updatetrig, old table = (a,1,1,1,), new table = (a,15,1,1,)
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_10_a_20 | a | 15 |   1 |  1 | 
+- part_c_1_100   | b | 13 |  96 |  1 | 
+- part_c_1_100   | b | 14 |  97 |  2 | 
+- part_d_15_20   | b | 16 | 105 | 16 | 
+- part_d_15_20   | b | 18 | 105 | 19 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER trans_updatetrig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER trig_c1_100 ON part_c_1_100;
++ERROR:  trigger "trig_c1_100" for table "part_c_1_100" does not exist
+ DROP TRIGGER trig_d1_15 ON part_d_1_15;
++ERROR:  relation "part_d_1_15" does not exist
+ DROP TRIGGER trig_d15_20 ON part_d_15_20;
++ERROR:  relation "part_d_15_20" does not exist
+ DROP FUNCTION func_parted_mod_b();
+ -- RLS policies with update-row-movement
+ -----------------------------------------
+ ALTER TABLE range_parted ENABLE ROW LEVEL SECURITY;
++ERROR:  relation "range_parted" does not exist
+ CREATE USER regress_range_parted_user;
+ GRANT ALL ON range_parted, mintab TO regress_range_parted_user;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "range_parted" does not exist
+ CREATE POLICY seeall ON range_parted AS PERMISSIVE FOR SELECT USING (true);
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ CREATE POLICY policy_range_parted ON range_parted for UPDATE USING (true) WITH CHECK (c % 2 = 0);
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- This should fail with RLS violation error while moving row from
+ -- part_a_10_a_20 to part_d_1_15, because we are setting 'c' to an odd number.
+ UPDATE range_parted set a = 'b', c = 151 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy for table "range_parted"
++ERROR:  relation "range_parted" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ -- Create a trigger on part_d_1_15
+ CREATE FUNCTION func_d_1_15() RETURNS trigger AS $$
+ BEGIN
+@@ -621,61 +607,154 @@
+ END $$ LANGUAGE plpgsql;
+ CREATE TRIGGER trig_d_1_15 BEFORE INSERT ON part_d_1_15
+    FOR EACH ROW EXECUTE PROCEDURE func_d_1_15();
++ERROR:  relation "part_d_1_15" does not exist
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- Here, RLS checks should succeed while moving row from part_a_10_a_20 to
+ -- part_d_1_15. Even though the UPDATE is setting 'c' to an odd number, the
+ -- trigger at the destination partition again makes it an even number.
+ UPDATE range_parted set a = 'b', c = 151 WHERE a = 'a' and c = 200;
++ERROR:  relation "range_parted" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- This should fail with RLS violation error. Even though the UPDATE is setting
+ -- 'c' to an even number, the trigger at the destination partition again makes
+ -- it an odd number.
+ UPDATE range_parted set a = 'b', c = 150 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy for table "range_parted"
++ERROR:  relation "range_parted" does not exist
+ -- Cleanup
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TRIGGER trig_d_1_15 ON part_d_1_15;
++ERROR:  relation "part_d_1_15" does not exist
+ DROP FUNCTION func_d_1_15();
+ -- Policy expression contains SubPlan
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ CREATE POLICY policy_range_parted_subplan on range_parted
+     AS RESTRICTIVE for UPDATE USING (true)
+     WITH CHECK ((SELECT range_parted.c <= c1 FROM mintab));
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- fail, mintab has row with c1 = 120
+ UPDATE range_parted set a = 'b', c = 122 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy "policy_range_parted_subplan" for table "range_parted"
++ERROR:  relation "range_parted" does not exist
+ -- ok
+ UPDATE range_parted set a = 'b', c = 120 WHERE a = 'a' and c = 200;
++ERROR:  relation "range_parted" does not exist
+ -- RLS policy expression contains whole row.
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ CREATE POLICY policy_range_parted_wholerow on range_parted AS RESTRICTIVE for UPDATE USING (true)
+    WITH CHECK (range_parted = row('b', 10, 112, 1, NULL)::range_parted);
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- ok, should pass the RLS check
+ UPDATE range_parted set a = 'b', c = 112 WHERE a = 'a' and c = 200;
++ERROR:  relation "range_parted" does not exist
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ SET SESSION AUTHORIZATION regress_range_parted_user;
++ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_range_parted_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- fail, the whole row RLS check should fail
+ UPDATE range_parted set a = 'b', c = 116 WHERE a = 'a' and c = 200;
+-ERROR:  new row violates row-level security policy "policy_range_parted_wholerow" for table "range_parted"
++ERROR:  relation "range_parted" does not exist
+ -- Cleanup
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP POLICY policy_range_parted ON range_parted;
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ DROP POLICY policy_range_parted_subplan ON range_parted;
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ DROP POLICY policy_range_parted_wholerow ON range_parted;
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ REVOKE ALL ON range_parted, mintab FROM regress_range_parted_user;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "range_parted" does not exist
+ DROP USER regress_range_parted_user;
+ DROP TABLE mintab;
+ -- statement triggers with update row movement
+ ---------------------------------------------------
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ CREATE FUNCTION trigfunc() returns trigger language plpgsql as
+ $$
+   begin
+@@ -687,235 +766,271 @@
+ -- Triggers on root partition
+ CREATE TRIGGER parent_delete_trig
+   AFTER DELETE ON range_parted for each statement execute procedure trigfunc();
++ERROR:  relation "range_parted" does not exist
+ CREATE TRIGGER parent_update_trig
+   AFTER UPDATE ON range_parted for each statement execute procedure trigfunc();
++ERROR:  relation "range_parted" does not exist
+ CREATE TRIGGER parent_insert_trig
+   AFTER INSERT ON range_parted for each statement execute procedure trigfunc();
++ERROR:  relation "range_parted" does not exist
+ -- Triggers on leaf partition part_c_1_100
+ CREATE TRIGGER c1_delete_trig
+   AFTER DELETE ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER c1_update_trig
+   AFTER UPDATE ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER c1_insert_trig
+   AFTER INSERT ON part_c_1_100 for each statement execute procedure trigfunc();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ -- Triggers on leaf partition part_d_1_15
+ CREATE TRIGGER d1_delete_trig
+   AFTER DELETE ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_1_15" does not exist
+ CREATE TRIGGER d1_update_trig
+   AFTER UPDATE ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_1_15" does not exist
+ CREATE TRIGGER d1_insert_trig
+   AFTER INSERT ON part_d_1_15 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_1_15" does not exist
+ -- Triggers on leaf partition part_d_15_20
+ CREATE TRIGGER d15_delete_trig
+   AFTER DELETE ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_15_20" does not exist
+ CREATE TRIGGER d15_update_trig
+   AFTER UPDATE ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_15_20" does not exist
+ CREATE TRIGGER d15_insert_trig
+   AFTER INSERT ON part_d_15_20 for each statement execute procedure trigfunc();
++ERROR:  relation "part_d_15_20" does not exist
+ -- Move all rows from part_c_100_200 to part_c_1_100. None of the delete or
+ -- insert statement triggers should be fired.
+ UPDATE range_parted set c = c - 50 WHERE c > 97;
+-NOTICE:  trigger = parent_update_trig fired on table range_parted during UPDATE
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 150 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_c_1_100   | b | 15 |  55 | 16 | 
+- part_c_1_100   | b | 17 |  55 | 19 | 
+-(6 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER parent_delete_trig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER parent_update_trig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER parent_insert_trig ON range_parted;
++ERROR:  relation "range_parted" does not exist
+ DROP TRIGGER c1_delete_trig ON part_c_1_100;
++ERROR:  trigger "c1_delete_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER c1_update_trig ON part_c_1_100;
++ERROR:  trigger "c1_update_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER c1_insert_trig ON part_c_1_100;
++ERROR:  trigger "c1_insert_trig" for table "part_c_1_100" does not exist
+ DROP TRIGGER d1_delete_trig ON part_d_1_15;
++ERROR:  relation "part_d_1_15" does not exist
+ DROP TRIGGER d1_update_trig ON part_d_1_15;
++ERROR:  relation "part_d_1_15" does not exist
+ DROP TRIGGER d1_insert_trig ON part_d_1_15;
++ERROR:  relation "part_d_1_15" does not exist
+ DROP TRIGGER d15_delete_trig ON part_d_15_20;
++ERROR:  relation "part_d_15_20" does not exist
+ DROP TRIGGER d15_update_trig ON part_d_15_20;
++ERROR:  relation "part_d_15_20" does not exist
+ DROP TRIGGER d15_insert_trig ON part_d_15_20;
++ERROR:  relation "part_d_15_20" does not exist
+ -- Creating default partition for range
+ :init_range_parted;
++ERROR:  relation "range_parted" does not exist
++ERROR:  relation "range_parted" does not exist
+ create table part_def partition of range_parted default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_def partition of range_parted default
++                      ^
++HINT:  try \h CREATE TABLE
+ \d+ part_def
+-                                       Table "public.part_def"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+--------------+-------------
+- a      | text              |           |          |         | extended |              | 
+- b      | bigint            |           |          |         | plain    |              | 
+- c      | numeric           |           |          |         | main     |              | 
+- d      | integer           |           |          |         | plain    |              | 
+- e      | character varying |           |          |         | extended |              | 
+-Partition of: range_parted DEFAULT
+-Partition constraint: (NOT ((a IS NOT NULL) AND (b IS NOT NULL) AND (((a = 'a'::text) AND (b >= '1'::bigint) AND (b < '10'::bigint)) OR ((a = 'a'::text) AND (b >= '10'::bigint) AND (b < '20'::bigint)) OR ((a = 'b'::text) AND (b >= '1'::bigint) AND (b < '10'::bigint)) OR ((a = 'b'::text) AND (b >= '10'::bigint) AND (b < '20'::bigint)) OR ((a = 'b'::text) AND (b >= '20'::bigint) AND (b < '30'::bigint)))))
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(part_def)$' COLLATE pg_catalog.default
++                                                                        ^
+ insert into range_parted values ('c', 9);
++ERROR:  relation "range_parted" does not exist
+ -- ok
+ update part_def set a = 'd' where a = 'c';
++ERROR:  relation "part_def" does not exist
+ -- fail
+ update part_def set a = 'a' where a = 'd';
+-ERROR:  new row for relation "part_def" violates partition constraint
+-DETAIL:  Failing row contains (a, 9, null, null, null).
++ERROR:  relation "part_def" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_d_15_20   | b | 15 | 105 | 16 | 
+- part_d_15_20   | b | 17 | 105 | 19 | 
+- part_def       | d |  9 |     |    | 
+-(7 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Update row movement from non-default to default partition.
+ -- fail, default partition is not under part_a_10_a_20;
+ UPDATE part_a_10_a_20 set a = 'ad' WHERE a = 'a';
+-ERROR:  new row for relation "part_a_10_a_20" violates partition constraint
+-DETAIL:  Failing row contains (ad, 10, 200, 1, null).
++ERROR:  relation "part_a_10_a_20" does not exist
+ -- ok
+ UPDATE range_parted set a = 'ad' WHERE a = 'a';
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set a = 'bd' WHERE a = 'b';
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+- partname | a  | b  |  c  | d  | e 
+-----------+----+----+-----+----+---
+- part_def | ad |  1 |   1 |  1 | 
+- part_def | ad | 10 | 200 |  1 | 
+- part_def | bd | 12 |  96 |  1 | 
+- part_def | bd | 13 |  97 |  2 | 
+- part_def | bd | 15 | 105 | 16 | 
+- part_def | bd | 17 | 105 | 19 | 
+- part_def | d  |  9 |     |    | 
+-(7 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Update row movement from default to non-default partitions.
+ -- ok
+ UPDATE range_parted set a = 'a' WHERE a = 'ad';
++ERROR:  relation "range_parted" does not exist
+ UPDATE range_parted set a = 'b' WHERE a = 'bd';
++ERROR:  relation "range_parted" does not exist
+ :show_data;
+-    partname    | a | b  |  c  | d  | e 
+-----------------+---+----+-----+----+---
+- part_a_10_a_20 | a | 10 | 200 |  1 | 
+- part_a_1_a_10  | a |  1 |   1 |  1 | 
+- part_c_1_100   | b | 12 |  96 |  1 | 
+- part_c_1_100   | b | 13 |  97 |  2 | 
+- part_d_15_20   | b | 15 | 105 | 16 | 
+- part_d_15_20   | b | 17 | 105 | 19 | 
+- part_def       | d |  9 |     |    | 
+-(7 rows)
+-
++ERROR:  relation "range_parted" does not exist
+ -- Cleanup: range_parted no longer needed.
+ DROP TABLE range_parted;
++ERROR:  relation "range_parted" does not exist
+ CREATE TABLE list_parted (
+ 	a text,
+ 	b int
+ ) PARTITION BY list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE list_parted (
++	a text,
++	b int
++) PARTITION BY list (a)
++                       ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE list_part1  PARTITION OF list_parted for VALUES in ('a', 'b');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE list_part1  PARTITION OF list_parted for VALUES in ('a', 'b')
++                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE list_default PARTITION OF list_parted default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE list_default PARTITION OF list_parted default
++                          ^
++HINT:  try \h CREATE TABLE
+ INSERT into list_part1 VALUES ('a', 1);
++ERROR:  relation "list_part1" does not exist
+ INSERT into list_default VALUES ('d', 10);
++ERROR:  relation "list_default" does not exist
+ -- fail
+ UPDATE list_default set a = 'a' WHERE a = 'd';
+-ERROR:  new row for relation "list_default" violates partition constraint
+-DETAIL:  Failing row contains (a, 10).
++ERROR:  relation "list_default" does not exist
+ -- ok
+ UPDATE list_default set a = 'x' WHERE a = 'd';
++ERROR:  relation "list_default" does not exist
+ DROP TABLE list_parted;
++ERROR:  relation "list_parted" does not exist
+ -- Test retrieval of system columns with non-consistent partition row types.
+ -- This is only partially supported, as seen in the results.
+ create table utrtest (a int, b text) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table utrtest (a int, b text) partition by list (a)
++                                                          ^
++HINT:  try \h CREATE TABLE
+ create table utr1 (a int check (a in (1)), q text, b text);
+ create table utr2 (a int check (a in (2)), b text);
+ alter table utr1 drop column q;
+ alter table utrtest attach partition utr1 for values in (1);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table utrtest attach partition utr1 for values in (1)
++                    ^
++HINT:  try \h ALTER TABLE
+ alter table utrtest attach partition utr2 for values in (2);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table utrtest attach partition utr2 for values in (2)
++                    ^
++HINT:  try \h ALTER TABLE
+ insert into utrtest values (1, 'foo')
+   returning *, tableoid::regclass, xmin = pg_current_xact_id()::xid as xmin_ok;
+- a |  b  | tableoid | xmin_ok 
+----+-----+----------+---------
+- 1 | foo | utr1     | t
+-(1 row)
+-
++ERROR:  relation "utrtest" does not exist
+ insert into utrtest values (2, 'bar')
+   returning *, tableoid::regclass, xmin = pg_current_xact_id()::xid as xmin_ok;  -- fails
+-ERROR:  cannot retrieve a system column in this context
++ERROR:  relation "utrtest" does not exist
+ insert into utrtest values (2, 'bar')
+   returning *, tableoid::regclass;
+- a |  b  | tableoid 
+----+-----+----------
+- 2 | bar | utr2
+-(1 row)
+-
++ERROR:  relation "utrtest" does not exist
+ update utrtest set b = b || b from (values (1), (2)) s(x) where a = s.x
+   returning *, tableoid::regclass, xmin = pg_current_xact_id()::xid as xmin_ok;
+- a |   b    | x | tableoid | xmin_ok 
+----+--------+---+----------+---------
+- 1 | foofoo | 1 | utr1     | t
+- 2 | barbar | 2 | utr2     | t
+-(2 rows)
+-
++ERROR:  relation "utrtest" does not exist
+ update utrtest set a = 3 - a from (values (1), (2)) s(x) where a = s.x
+   returning *, tableoid::regclass, xmin = pg_current_xact_id()::xid as xmin_ok;  -- fails
+-ERROR:  cannot retrieve a system column in this context
++ERROR:  relation "utrtest" does not exist
+ update utrtest set a = 3 - a from (values (1), (2)) s(x) where a = s.x
+   returning *, tableoid::regclass;
+- a |   b    | x | tableoid 
+----+--------+---+----------
+- 2 | foofoo | 1 | utr2
+- 1 | barbar | 2 | utr1
+-(2 rows)
+-
++ERROR:  relation "utrtest" does not exist
+ delete from utrtest
+   returning *, tableoid::regclass, xmax = pg_current_xact_id()::xid as xmax_ok;
+- a |   b    | tableoid | xmax_ok 
+----+--------+----------+---------
+- 1 | barbar | utr1     | t
+- 2 | foofoo | utr2     | t
+-(2 rows)
+-
++ERROR:  relation "utrtest" does not exist
+ drop table utrtest;
++ERROR:  relation "utrtest" does not exist
+ --------------
+ -- Some more update-partition-key test scenarios below. This time use list
+ -- partitions.
+ --------------
+ -- Setup for list partitions
+ CREATE TABLE list_parted (a numeric, b int, c int8) PARTITION BY list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE list_parted (a numeric, b int, c int8) PARTITION BY list (a)
++                                                                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE sub_parted PARTITION OF list_parted for VALUES in (1) PARTITION BY list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE sub_parted PARTITION OF list_parted for VALUES in (1) PARTITION BY list (b)
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE sub_part1(b int, c int8, a numeric);
+ ALTER TABLE sub_parted ATTACH PARTITION sub_part1 for VALUES in (1);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE sub_parted ATTACH PARTITION sub_part1 for VALUES in (1)
++                       ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE sub_part2(b int, c int8, a numeric);
+ ALTER TABLE sub_parted ATTACH PARTITION sub_part2 for VALUES in (2);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE sub_parted ATTACH PARTITION sub_part2 for VALUES in (2)
++                       ^
++HINT:  try \h ALTER TABLE
+ CREATE TABLE list_part1(a numeric, b int, c int8);
+ ALTER TABLE list_parted ATTACH PARTITION list_part1 for VALUES in (2,3);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE list_parted ATTACH PARTITION list_part1 for VALUES in (2,3)
++                        ^
++HINT:  try \h ALTER TABLE
+ INSERT into list_parted VALUES (2,5,50);
++ERROR:  relation "list_parted" does not exist
+ INSERT into list_parted VALUES (3,6,60);
++ERROR:  relation "list_parted" does not exist
+ INSERT into sub_parted VALUES (1,1,60);
++ERROR:  relation "sub_parted" does not exist
+ INSERT into sub_parted VALUES (1,2,10);
++ERROR:  relation "sub_parted" does not exist
+ -- Test partition constraint violation when intermediate ancestor is used and
+ -- constraint is inherited from upper root.
+ UPDATE sub_parted set a = 2 WHERE c = 10;
+-ERROR:  new row for relation "sub_parted" violates partition constraint
+-DETAIL:  Failing row contains (2, 2, 10).
++ERROR:  relation "sub_parted" does not exist
+ -- Test update-partition-key, where the unpruned partitions do not have their
+ -- partition keys updated.
+ SELECT tableoid::regclass::text, * FROM list_parted WHERE a = 2 ORDER BY 1;
+-  tableoid  | a | b | c  
+-------------+---+---+----
+- list_part1 | 2 | 5 | 50
+-(1 row)
+-
++ERROR:  relation "list_parted" does not exist
+ UPDATE list_parted set b = c + a WHERE a = 2;
++ERROR:  relation "list_parted" does not exist
+ SELECT tableoid::regclass::text, * FROM list_parted WHERE a = 2 ORDER BY 1;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 | 52 | 50
+-(1 row)
+-
++ERROR:  relation "list_parted" does not exist
+ -- Test the case where BR UPDATE triggers change the partition key.
+ CREATE FUNCTION func_parted_mod_b() returns trigger as $$
+ BEGIN
+@@ -925,26 +1040,13 @@
+ CREATE TRIGGER parted_mod_b before update on sub_part1
+    for each row execute procedure func_parted_mod_b();
+ SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 | 52 | 50
+- list_part1 | 3 |  6 | 60
+- sub_part1  | 1 |  1 | 60
+- sub_part2  | 1 |  2 | 10
+-(4 rows)
+-
++ERROR:  relation "list_parted" does not exist
+ -- This should do the tuple routing even though there is no explicit
+ -- partition-key update, because there is a trigger on sub_part1.
+ UPDATE list_parted set c = 70 WHERE b  = 1;
++ERROR:  relation "list_parted" does not exist
+ SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 | 52 | 50
+- list_part1 | 3 |  6 | 60
+- sub_part2  | 1 |  2 | 10
+- sub_part2  | 1 |  2 | 70
+-(4 rows)
+-
++ERROR:  relation "list_parted" does not exist
+ DROP TRIGGER parted_mod_b ON sub_part1;
+ -- If BR DELETE trigger prevented DELETE from happening, we should also skip
+ -- the INSERT if that delete is part of UPDATE=>DELETE+INSERT.
+@@ -956,28 +1058,15 @@
+ CREATE TRIGGER trig_skip_delete before delete on sub_part2
+    for each row execute procedure func_parted_mod_b();
+ UPDATE list_parted set b = 1 WHERE c = 70;
+-NOTICE:  Trigger: Got OLD row (2,70,1), but returning NULL
++ERROR:  relation "list_parted" does not exist
+ SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 | 52 | 50
+- list_part1 | 3 |  6 | 60
+- sub_part2  | 1 |  2 | 10
+- sub_part2  | 1 |  2 | 70
+-(4 rows)
+-
++ERROR:  relation "list_parted" does not exist
+ -- Drop the trigger. Now the row should be moved.
+ DROP TRIGGER trig_skip_delete ON sub_part2;
+ UPDATE list_parted set b = 1 WHERE c = 70;
++ERROR:  relation "list_parted" does not exist
+ SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 | 52 | 50
+- list_part1 | 3 |  6 | 60
+- sub_part1  | 1 |  1 | 70
+- sub_part2  | 1 |  2 | 10
+-(4 rows)
+-
++ERROR:  relation "list_parted" does not exist
+ DROP FUNCTION func_parted_mod_b();
+ -- UPDATE partition-key with FROM clause. If join produces multiple output
+ -- rows for the same row to be modified, we should tuple-route the row only
+@@ -985,44 +1074,93 @@
+ CREATE TABLE non_parted (id int);
+ INSERT into non_parted VALUES (1), (1), (1), (2), (2), (2), (3), (3), (3);
+ UPDATE list_parted t1 set a = 2 FROM non_parted t2 WHERE t1.a = t2.id and a = 1;
++ERROR:  relation "list_parted" does not exist
+ SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
+-  tableoid  | a | b  | c  
+-------------+---+----+----
+- list_part1 | 2 |  1 | 70
+- list_part1 | 2 |  2 | 10
+- list_part1 | 2 | 52 | 50
+- list_part1 | 3 |  6 | 60
+-(4 rows)
+-
++ERROR:  relation "list_parted" does not exist
+ DROP TABLE non_parted;
+ -- Cleanup: list_parted no longer needed.
+ DROP TABLE list_parted;
++ERROR:  relation "list_parted" does not exist
+ -- create custom operator class and hash function, for the same reason
+ -- explained in alter_table.sql
+ create or replace function dummy_hashint4(a int4, seed int8) returns int8 as
+ $$ begin return (a + seed); end; $$ language 'plpgsql' immutable;
+ create operator class custom_opclass for type int4 using hash as
+ operator 1 = , function 2 dummy_hashint4(int4, int8);
++ERROR:  at or near "class": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create operator class custom_opclass for type int4 using hash as
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ create table hash_parted (
+ 	a int,
+ 	b int
+ ) partition by hash (a custom_opclass, b custom_opclass);
++ERROR:  at or near "hash": syntax error
++DETAIL:  source SQL:
++create table hash_parted (
++	a int,
++	b int
++) partition by hash (a custom_opclass, b custom_opclass)
++               ^
++HINT:  try \h CREATE TABLE
+ create table hpart1 partition of hash_parted for values with (modulus 2, remainder 1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table hpart1 partition of hash_parted for values with (modulus 2, remainder 1)
++                    ^
++HINT:  try \h CREATE TABLE
+ create table hpart2 partition of hash_parted for values with (modulus 4, remainder 2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table hpart2 partition of hash_parted for values with (modulus 4, remainder 2)
++                    ^
++HINT:  try \h CREATE TABLE
+ create table hpart3 partition of hash_parted for values with (modulus 8, remainder 0);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table hpart3 partition of hash_parted for values with (modulus 8, remainder 0)
++                    ^
++HINT:  try \h CREATE TABLE
+ create table hpart4 partition of hash_parted for values with (modulus 8, remainder 4);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table hpart4 partition of hash_parted for values with (modulus 8, remainder 4)
++                    ^
++HINT:  try \h CREATE TABLE
+ insert into hpart1 values (1, 1);
++ERROR:  relation "hpart1" does not exist
+ insert into hpart2 values (2, 5);
++ERROR:  relation "hpart2" does not exist
+ insert into hpart4 values (3, 4);
++ERROR:  relation "hpart4" does not exist
+ -- fail
+ update hpart1 set a = 3, b=4 where a = 1;
+-ERROR:  new row for relation "hpart1" violates partition constraint
+-DETAIL:  Failing row contains (3, 4).
++ERROR:  relation "hpart1" does not exist
+ -- ok, row movement
+ update hash_parted set b = b - 1 where b = 1;
++ERROR:  relation "hash_parted" does not exist
+ -- ok
+ update hash_parted set b = b + 8 where b = 1;
++ERROR:  relation "hash_parted" does not exist
+ -- cleanup
+ drop table hash_parted;
++ERROR:  relation "hash_parted" does not exist
+ drop operator class custom_opclass using hash;
++ERROR:  at or near "class": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator class custom_opclass using hash
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop function dummy_hashint4(a int4, seed int8);

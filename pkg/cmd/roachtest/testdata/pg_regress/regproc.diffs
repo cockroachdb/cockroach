@@ -1,0 +1,493 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/regproc.out --label=/mnt/data1/postgres/src/test/regress/results/regproc.out /mnt/data1/postgres/src/test/regress/expected/regproc.out /mnt/data1/postgres/src/test/regress/results/regproc.out
+--- /mnt/data1/postgres/src/test/regress/expected/regproc.out
++++ /mnt/data1/postgres/src/test/regress/results/regproc.out
+@@ -5,27 +5,15 @@
+ CREATE ROLE regress_regrole_test;
+ -- without schemaname
+ SELECT regoper('||/');
+- regoper 
+----------
+- ||/
+-(1 row)
+-
++ERROR:  unknown function: regoper()
+ SELECT regoperator('+(int4,int4)');
+-    regoperator     
+---------------------
+- +(integer,integer)
+-(1 row)
+-
++ERROR:  unknown function: regoperator()
+ SELECT regproc('now');
+- regproc 
+----------
+- now
+-(1 row)
+-
++ERROR:  regproc(): more than one function named 'now'
+ SELECT regprocedure('abs(numeric)');
+  regprocedure 
+ --------------
+- abs(numeric)
++ abs
+ (1 row)
+ 
+ SELECT regclass('pg_class');
+@@ -41,33 +29,21 @@
+ (1 row)
+ 
+ SELECT regcollation('"POSIX"');
+- regcollation 
+---------------
+- "POSIX"
+-(1 row)
+-
++ERROR:  unknown function: regcollation()
+ SELECT to_regoper('||/');
+- to_regoper 
+-------------
+- ||/
+-(1 row)
+-
++ERROR:  unknown function: to_regoper()
+ SELECT to_regoperator('+(int4,int4)');
+-   to_regoperator   
+---------------------
+- +(integer,integer)
+-(1 row)
+-
++ERROR:  unknown function: to_regoperator()
+ SELECT to_regproc('now');
+  to_regproc 
+ ------------
+- now
++ 
+ (1 row)
+ 
+ SELECT to_regprocedure('abs(numeric)');
+  to_regprocedure 
+ -----------------
+- abs(numeric)
++ abs
+ (1 row)
+ 
+ SELECT to_regclass('pg_class');
+@@ -83,34 +59,18 @@
+ (1 row)
+ 
+ SELECT to_regcollation('"POSIX"');
+- to_regcollation 
+------------------
+- "POSIX"
+-(1 row)
+-
++ERROR:  unknown function: to_regcollation()
+ -- with schemaname
+ SELECT regoper('pg_catalog.||/');
+- regoper 
+----------
+- ||/
+-(1 row)
+-
++ERROR:  unknown function: regoper()
+ SELECT regoperator('pg_catalog.+(int4,int4)');
+-    regoperator     
+---------------------
+- +(integer,integer)
+-(1 row)
+-
++ERROR:  unknown function: regoperator()
+ SELECT regproc('pg_catalog.now');
+- regproc 
+----------
+- now
+-(1 row)
+-
++ERROR:  regproc(): more than one function named 'now'
+ SELECT regprocedure('pg_catalog.abs(numeric)');
+  regprocedure 
+ --------------
+- abs(numeric)
++ abs
+ (1 row)
+ 
+ SELECT regclass('pg_catalog.pg_class');
+@@ -126,27 +86,19 @@
+ (1 row)
+ 
+ SELECT regcollation('pg_catalog."POSIX"');
+- regcollation 
+---------------
+- "POSIX"
+-(1 row)
+-
++ERROR:  unknown function: regcollation()
+ SELECT to_regoper('pg_catalog.||/');
+- to_regoper 
+-------------
+- ||/
+-(1 row)
+-
++ERROR:  unknown function: to_regoper()
+ SELECT to_regproc('pg_catalog.now');
+  to_regproc 
+ ------------
+- now
++ 
+ (1 row)
+ 
+ SELECT to_regprocedure('pg_catalog.abs(numeric)');
+  to_regprocedure 
+ -----------------
+- abs(numeric)
++ abs
+ (1 row)
+ 
+ SELECT to_regclass('pg_catalog.pg_class');
+@@ -162,11 +114,7 @@
+ (1 row)
+ 
+ SELECT to_regcollation('pg_catalog."POSIX"');
+- to_regcollation 
+------------------
+- "POSIX"
+-(1 row)
+-
++ERROR:  unknown function: to_regcollation()
+ -- schemaname not applicable
+ SELECT regrole('regress_regrole_test');
+        regrole        
+@@ -175,11 +123,7 @@
+ (1 row)
+ 
+ SELECT regrole('"regress_regrole_test"');
+-       regrole        
+-----------------------
+- regress_regrole_test
+-(1 row)
+-
++ERROR:  regrole(): role '"regress_regrole_test"' does not exist
+ SELECT regnamespace('pg_catalog');
+  regnamespace 
+ --------------
+@@ -187,11 +131,7 @@
+ (1 row)
+ 
+ SELECT regnamespace('"pg_catalog"');
+- regnamespace 
+---------------
+- pg_catalog
+-(1 row)
+-
++ERROR:  regnamespace(): namespace '"pg_catalog"' does not exist
+ SELECT to_regrole('regress_regrole_test');
+       to_regrole      
+ ----------------------
+@@ -199,9 +139,9 @@
+ (1 row)
+ 
+ SELECT to_regrole('"regress_regrole_test"');
+-      to_regrole      
+-----------------------
+- regress_regrole_test
++ to_regrole 
++------------
++ 
+ (1 row)
+ 
+ SELECT to_regnamespace('pg_catalog');
+@@ -213,112 +153,64 @@
+ SELECT to_regnamespace('"pg_catalog"');
+  to_regnamespace 
+ -----------------
+- pg_catalog
++ 
+ (1 row)
+ 
+ /* If objects don't exist, raise errors. */
+ DROP ROLE regress_regrole_test;
+ -- without schemaname
+ SELECT regoper('||//');
+-ERROR:  operator does not exist: ||//
+-LINE 1: SELECT regoper('||//');
+-                       ^
++ERROR:  unknown function: regoper()
+ SELECT regoperator('++(int4,int4)');
+-ERROR:  operator does not exist: ++(int4,int4)
+-LINE 1: SELECT regoperator('++(int4,int4)');
+-                           ^
++ERROR:  unknown function: regoperator()
+ SELECT regproc('know');
+-ERROR:  function "know" does not exist
+-LINE 1: SELECT regproc('know');
+-                       ^
++ERROR:  regproc(): unknown function: know()
+ SELECT regprocedure('absinthe(numeric)');
+-ERROR:  function "absinthe(numeric)" does not exist
+-LINE 1: SELECT regprocedure('absinthe(numeric)');
+-                            ^
++ERROR:  regprocedure(): unknown function: absinthe()
+ SELECT regclass('pg_classes');
+-ERROR:  relation "pg_classes" does not exist
+-LINE 1: SELECT regclass('pg_classes');
+-                        ^
++ERROR:  regclass(): relation "pg_classes" does not exist
+ SELECT regtype('int3');
+-ERROR:  type "int3" does not exist
+-LINE 1: SELECT regtype('int3');
+-                       ^
++ERROR:  regtype(): type 'int3' does not exist
+ -- with schemaname
+ SELECT regoper('ng_catalog.||/');
+-ERROR:  operator does not exist: ng_catalog.||/
+-LINE 1: SELECT regoper('ng_catalog.||/');
+-                       ^
++ERROR:  unknown function: regoper()
+ SELECT regoperator('ng_catalog.+(int4,int4)');
+-ERROR:  operator does not exist: ng_catalog.+(int4,int4)
+-LINE 1: SELECT regoperator('ng_catalog.+(int4,int4)');
+-                           ^
++ERROR:  unknown function: regoperator()
+ SELECT regproc('ng_catalog.now');
+-ERROR:  function "ng_catalog.now" does not exist
+-LINE 1: SELECT regproc('ng_catalog.now');
+-                       ^
++ERROR:  regproc(): schema "ng_catalog" does not exist
+ SELECT regprocedure('ng_catalog.abs(numeric)');
+-ERROR:  function "ng_catalog.abs(numeric)" does not exist
+-LINE 1: SELECT regprocedure('ng_catalog.abs(numeric)');
+-                            ^
++ERROR:  regprocedure(): schema "ng_catalog" does not exist
+ SELECT regclass('ng_catalog.pg_class');
+-ERROR:  relation "ng_catalog.pg_class" does not exist
+-LINE 1: SELECT regclass('ng_catalog.pg_class');
+-                        ^
++ERROR:  regclass(): relation "ng_catalog.pg_class" does not exist
+ SELECT regtype('ng_catalog.int4');
+-ERROR:  schema "ng_catalog" does not exist
+-LINE 1: SELECT regtype('ng_catalog.int4');
+-                       ^
++ERROR:  regtype(): type 'ng_catalog.int4' does not exist
+ \set VERBOSITY sqlstate \\ -- error message is encoding-dependent
+ SELECT regcollation('ng_catalog."POSIX"');
+-ERROR:  42704
++ERROR:  42883
+ \set VERBOSITY default
+ -- schemaname not applicable
+ SELECT regrole('regress_regrole_test');
+-ERROR:  role "regress_regrole_test" does not exist
+-LINE 1: SELECT regrole('regress_regrole_test');
+-                       ^
++ERROR:  regrole(): role 'regress_regrole_test' does not exist
+ SELECT regrole('"regress_regrole_test"');
+-ERROR:  role "regress_regrole_test" does not exist
+-LINE 1: SELECT regrole('"regress_regrole_test"');
+-                       ^
++ERROR:  regrole(): role '"regress_regrole_test"' does not exist
+ SELECT regrole('Nonexistent');
+-ERROR:  role "nonexistent" does not exist
+-LINE 1: SELECT regrole('Nonexistent');
+-                       ^
++ERROR:  regrole(): role 'Nonexistent' does not exist
+ SELECT regrole('"Nonexistent"');
+-ERROR:  role "Nonexistent" does not exist
+-LINE 1: SELECT regrole('"Nonexistent"');
+-                       ^
++ERROR:  regrole(): role '"Nonexistent"' does not exist
+ SELECT regrole('foo.bar');
+-ERROR:  invalid name syntax
+-LINE 1: SELECT regrole('foo.bar');
+-                       ^
++ERROR:  regrole(): role 'foo.bar' does not exist
+ SELECT regnamespace('Nonexistent');
+-ERROR:  schema "nonexistent" does not exist
+-LINE 1: SELECT regnamespace('Nonexistent');
+-                            ^
++ERROR:  regnamespace(): namespace 'Nonexistent' does not exist
+ SELECT regnamespace('"Nonexistent"');
+-ERROR:  schema "Nonexistent" does not exist
+-LINE 1: SELECT regnamespace('"Nonexistent"');
+-                            ^
++ERROR:  regnamespace(): namespace '"Nonexistent"' does not exist
+ SELECT regnamespace('foo.bar');
+-ERROR:  invalid name syntax
+-LINE 1: SELECT regnamespace('foo.bar');
+-                            ^
++ERROR:  regnamespace(): namespace 'foo.bar' does not exist
+ /* If objects don't exist, return NULL with no error. */
+ -- without schemaname
+ SELECT to_regoper('||//');
+- to_regoper 
+-------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regoper()
+ SELECT to_regoperator('++(int4,int4)');
+- to_regoperator 
+-----------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regoperator()
+ SELECT to_regproc('know');
+  to_regproc 
+ ------------
+@@ -344,24 +236,12 @@
+ (1 row)
+ 
+ SELECT to_regcollation('notacollation');
+- to_regcollation 
+------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regcollation()
+ -- with schemaname
+ SELECT to_regoper('ng_catalog.||/');
+- to_regoper 
+-------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regoper()
+ SELECT to_regoperator('ng_catalog.+(int4,int4)');
+- to_regoperator 
+-----------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regoperator()
+ SELECT to_regproc('ng_catalog.now');
+  to_regproc 
+ ------------
+@@ -387,11 +267,7 @@
+ (1 row)
+ 
+ SELECT to_regcollation('ng_catalog."POSIX"');
+- to_regcollation 
+------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: to_regcollation()
+ -- schemaname not applicable
+ SELECT to_regrole('regress_regrole_test');
+  to_regrole 
+@@ -449,98 +325,39 @@
+ 
+ -- Test soft-error API
+ SELECT * FROM pg_input_error_info('ng_catalog.pg_class', 'regclass');
+-                    message                    | detail | hint | sql_error_code 
+------------------------------------------------+--------+------+----------------
+- relation "ng_catalog.pg_class" does not exist |        |      | 42P01
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('ng_catalog."POSIX"', 'regcollation');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('no_such_config', 'regconfig');
+-                          message                          | detail | hint | sql_error_code 
+------------------------------------------------------------+--------+------+----------------
+- text search configuration "no_such_config" does not exist |        |      | 42704
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('no_such_dictionary', 'regdictionary');
+-                          message                           | detail | hint | sql_error_code 
+-------------------------------------------------------------+--------+------+----------------
+- text search dictionary "no_such_dictionary" does not exist |        |      | 42704
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('Nonexistent', 'regnamespace');
+-               message               | detail | hint | sql_error_code 
+--------------------------------------+--------+------+----------------
+- schema "nonexistent" does not exist |        |      | 3F000
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('ng_catalog.||/', 'regoper');
+-                 message                 | detail | hint | sql_error_code 
+------------------------------------------+--------+------+----------------
+- operator does not exist: ng_catalog.||/ |        |      | 42883
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('-', 'regoper');
+-            message             | detail | hint | sql_error_code 
+---------------------------------+--------+------+----------------
+- more than one operator named - |        |      | 42725
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('ng_catalog.+(int4,int4)', 'regoperator');
+-                     message                      | detail | hint | sql_error_code 
+---------------------------------------------------+--------+------+----------------
+- operator does not exist: ng_catalog.+(int4,int4) |        |      | 42883
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('-', 'regoperator');
+-           message           | detail | hint | sql_error_code 
+------------------------------+--------+------+----------------
+- expected a left parenthesis |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('ng_catalog.now', 'regproc');
+-                 message                  | detail | hint | sql_error_code 
+-------------------------------------------+--------+------+----------------
+- function "ng_catalog.now" does not exist |        |      | 42883
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('ng_catalog.abs(numeric)', 'regprocedure');
+-                      message                      | detail | hint | sql_error_code 
+----------------------------------------------------+--------+------+----------------
+- function "ng_catalog.abs(numeric)" does not exist |        |      | 42883
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('ng_catalog.abs(numeric', 'regprocedure');
+-           message            | detail | hint | sql_error_code 
+-------------------------------+--------+------+----------------
+- expected a right parenthesis |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('regress_regrole_test', 'regrole');
+-                  message                   | detail | hint | sql_error_code 
+---------------------------------------------+--------+------+----------------
+- role "regress_regrole_test" does not exist |        |      | 42704
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('no_such_type', 'regtype');
+-              message               | detail | hint | sql_error_code 
+-------------------------------------+--------+------+----------------
+- type "no_such_type" does not exist |        |      | 42704
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- Some cases that should be soft errors, but are not yet
+ SELECT * FROM pg_input_error_info('incorrect type name syntax', 'regtype');
+-ERROR:  syntax error at or near "type"
+-LINE 1: SELECT * FROM pg_input_error_info('incorrect type name synta...
+-                  ^
+-CONTEXT:  invalid type name "incorrect type name syntax"
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('numeric(1,2,3)', 'regtype');  -- bogus typmod
+-ERROR:  invalid NUMERIC type modifier
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('way.too.many.names', 'regtype');
+-ERROR:  improper qualified name (too many dotted names): way.too.many.names
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('no_such_catalog.schema.name', 'regtype');
+-ERROR:  cross-database references are not implemented: no_such_catalog.schema.name
++ERROR:  unknown function: pg_input_error_info()

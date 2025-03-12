@@ -1,0 +1,165 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sysviews.out --label=/mnt/data1/postgres/src/test/regress/results/sysviews.out /mnt/data1/postgres/src/test/regress/expected/sysviews.out /mnt/data1/postgres/src/test/regress/results/sysviews.out
+--- /mnt/data1/postgres/src/test/regress/expected/sysviews.out
++++ /mnt/data1/postgres/src/test/regress/results/sysviews.out
+@@ -23,16 +23,12 @@
+ -- we test only the existence and basic condition of TopMemoryContext.
+ select name, ident, parent, level, total_bytes >= free_bytes
+   from pg_backend_memory_contexts where level = 0;
+-       name       | ident | parent | level | ?column? 
+-------------------+-------+--------+-------+----------
+- TopMemoryContext |       |        |     0 | t
+-(1 row)
+-
++ERROR:  relation "pg_backend_memory_contexts" does not exist
+ -- At introduction, pg_config had 23 entries; it may grow
+ select count(*) > 20 as ok from pg_config;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 
+ -- We expect no cursors in this test; see also portals.sql
+@@ -53,22 +49,18 @@
+   from pg_hba_file_rules;
+  ok | no_err 
+ ----+--------
+- t  | t
++ f  | t
+ (1 row)
+ 
+ -- There may be no rules, and there should be no errors.
+ select count(*) >= 0 as ok, count(*) FILTER (WHERE error IS NOT NULL) = 0 AS no_err
+   from pg_ident_file_mappings;
+- ok | no_err 
+-----+--------
+- t  | t
+-(1 row)
+-
++ERROR:  relation "pg_ident_file_mappings" does not exist
+ -- There will surely be at least one active lock
+ select count(*) > 0 as ok from pg_locks;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 
+ -- We expect no prepared statements in this test; see also prepare.sql
+@@ -89,16 +81,12 @@
+ select count(*) > 0 as ok from pg_stat_slru;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 
+ -- There must be only one record
+ select count(*) = 1 as ok from pg_stat_wal;
+- ok 
+-----
+- t
+-(1 row)
+-
++ERROR:  relation "pg_stat_wal" does not exist
+ -- We expect no walreceiver running in this test
+ select count(*) = 0 as ok from pg_stat_wal_receiver;
+  ok 
+@@ -109,30 +97,24 @@
+ -- This is to record the prevailing planner enable_foo settings during
+ -- a regression test run.
+ select name, setting from pg_settings where name like 'enable%';
+-              name              | setting 
+---------------------------------+---------
+- enable_async_append            | on
+- enable_bitmapscan              | on
+- enable_gathermerge             | on
+- enable_hashagg                 | on
+- enable_hashjoin                | on
+- enable_incremental_sort        | on
+- enable_indexonlyscan           | on
+- enable_indexscan               | on
+- enable_material                | on
+- enable_memoize                 | on
+- enable_mergejoin               | on
+- enable_nestloop                | on
+- enable_parallel_append         | on
+- enable_parallel_hash           | on
+- enable_partition_pruning       | on
+- enable_partitionwise_aggregate | off
+- enable_partitionwise_join      | off
+- enable_presorted_aggregate     | on
+- enable_seqscan                 | on
+- enable_sort                    | on
+- enable_tidscan                 | on
+-(21 rows)
++                       name                       | setting 
++--------------------------------------------------+---------
++ enable_auto_rehoming                             | off
++ enable_create_stats_using_extremes               | on
++ enable_create_stats_using_extremes_bool_enum     | off
++ enable_durable_locking_for_serializable          | off
++ enable_experimental_alter_column_type_general    | off
++ enable_implicit_fk_locking_for_serializable      | off
++ enable_implicit_select_for_update                | on
++ enable_implicit_transaction_for_batch_statements | on
++ enable_insert_fast_path                          | on
++ enable_multiple_modifications_of_table           | off
++ enable_multiregion_placement_policy              | off
++ enable_seqscan                                   | on
++ enable_shared_locking_for_serializable           | off
++ enable_super_regions                             | off
++ enable_zigzag_join                               | off
++(15 rows)
+ 
+ -- Test that the pg_timezone_names and pg_timezone_abbrevs views are
+ -- more-or-less working.  We can't test their contents in any great detail
+@@ -149,21 +131,45 @@
+ select count(distinct utc_offset) >= 24 as ok from pg_timezone_abbrevs;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 
+ -- Let's check the non-default timezone abbreviation sets, too
+ set timezone_abbreviations = 'Australia';
++ERROR:  unimplemented: the configuration setting "timezone_abbreviations" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select count(distinct utc_offset) >= 24 as ok from pg_timezone_abbrevs;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 
+ set timezone_abbreviations = 'India';
++ERROR:  unimplemented: the configuration setting "timezone_abbreviations" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select count(distinct utc_offset) >= 24 as ok from pg_timezone_abbrevs;
+  ok 
+ ----
+- t
++ f
+ (1 row)
+ 

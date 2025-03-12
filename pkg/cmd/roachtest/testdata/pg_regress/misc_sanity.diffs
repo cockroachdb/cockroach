@@ -1,0 +1,189 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/misc_sanity.out --label=/mnt/data1/postgres/src/test/regress/results/misc_sanity.out /mnt/data1/postgres/src/test/regress/expected/misc_sanity.out /mnt/data1/postgres/src/test/regress/results/misc_sanity.out
+--- /mnt/data1/postgres/src/test/regress/expected/misc_sanity.out
++++ /mnt/data1/postgres/src/test/regress/results/misc_sanity.out
+@@ -22,15 +22,12 @@
+ 
+ -- **************** pg_shdepend ****************
+ -- Look for illegal values in pg_shdepend fields.
+-SELECT *
+-FROM pg_shdepend as d1
+-WHERE refclassid = 0 OR refobjid = 0 OR
+-      classid = 0 OR objid = 0 OR
+-      deptype NOT IN ('a', 'o', 'r', 't');
+- dbid | classid | objid | objsubid | refclassid | refobjid | deptype 
+-------+---------+-------+----------+------------+----------+---------
+-(0 rows)
+-
++-- CRDB still supports deptype 'p'.
++-- SELECT *
++-- FROM pg_shdepend as d1
++-- WHERE refclassid = 0 OR refobjid = 0 OR
++--       classid = 0 OR objid = 0 OR
++--       deptype NOT IN ('a', 'o', 'r', 't');
+ -- **************** pg_class ****************
+ -- Look for system tables with varlena columns but no toast table. All
+ -- system tables with toastable columns should have toast tables, with
+@@ -47,20 +44,9 @@
+       relkind = 'r' AND
+       attstorage != 'p'
+ ORDER BY 1, 2;
+-         relname         |    attname    |   atttypid   
+--------------------------+---------------+--------------
+- pg_attribute            | attacl        | aclitem[]
+- pg_attribute            | attfdwoptions | text[]
+- pg_attribute            | attmissingval | anyarray
+- pg_attribute            | attoptions    | text[]
+- pg_class                | relacl        | aclitem[]
+- pg_class                | reloptions    | text[]
+- pg_class                | relpartbound  | pg_node_tree
+- pg_index                | indexprs      | pg_node_tree
+- pg_index                | indpred       | pg_node_tree
+- pg_largeobject          | data          | bytea
+- pg_largeobject_metadata | lomacl        | aclitem[]
+-(11 rows)
++ relname | attname | atttypid 
++---------+---------+----------
++(0 rows)
+ 
+ -- system catalogs without primary keys
+ --
+@@ -71,11 +57,136 @@
+ WHERE relnamespace = 'pg_catalog'::regnamespace AND relkind = 'r'
+       AND pg_class.oid NOT IN (SELECT indrelid FROM pg_index WHERE indisprimary)
+ ORDER BY 1;
+-   relname   
+--------------
++             relname             
++---------------------------------
++ pg_aggregate
++ pg_am
++ pg_amop
++ pg_amproc
++ pg_attrdef
++ pg_attribute
++ pg_auth_members
++ pg_authid
++ pg_available_extension_versions
++ pg_available_extensions
++ pg_cast
++ pg_class
++ pg_collation
++ pg_config
++ pg_constraint
++ pg_conversion
++ pg_cursors
++ pg_database
++ pg_db_role_setting
++ pg_default_acl
+  pg_depend
++ pg_enum
++ pg_event_trigger
++ pg_extension
++ pg_file_settings
++ pg_foreign_data_wrapper
++ pg_foreign_server
++ pg_foreign_table
++ pg_group
++ pg_hba_file_rules
++ pg_index
++ pg_indexes
++ pg_inherits
++ pg_init_privs
++ pg_language
++ pg_largeobject
++ pg_largeobject_metadata
++ pg_locks
++ pg_matviews
++ pg_namespace
++ pg_opclass
++ pg_operator
++ pg_opfamily
++ pg_partitioned_table
++ pg_policies
++ pg_policy
++ pg_prepared_statements
++ pg_prepared_xacts
++ pg_proc
++ pg_publication
++ pg_publication_rel
++ pg_publication_tables
++ pg_range
++ pg_replication_origin
++ pg_replication_origin_status
++ pg_replication_slots
++ pg_rewrite
++ pg_roles
++ pg_rules
++ pg_seclabel
++ pg_seclabels
++ pg_sequence
++ pg_sequences
++ pg_settings
++ pg_shadow
+  pg_shdepend
+-(2 rows)
++ pg_shmem_allocations
++ pg_shseclabel
++ pg_stat_activity
++ pg_stat_all_indexes
++ pg_stat_all_tables
++ pg_stat_archiver
++ pg_stat_bgwriter
++ pg_stat_database
++ pg_stat_database_conflicts
++ pg_stat_gssapi
++ pg_stat_progress_analyze
++ pg_stat_progress_basebackup
++ pg_stat_progress_cluster
++ pg_stat_progress_create_index
++ pg_stat_progress_vacuum
++ pg_stat_replication
++ pg_stat_slru
++ pg_stat_ssl
++ pg_stat_subscription
++ pg_stat_sys_indexes
++ pg_stat_sys_tables
++ pg_stat_user_functions
++ pg_stat_user_indexes
++ pg_stat_user_tables
++ pg_stat_wal_receiver
++ pg_stat_xact_all_tables
++ pg_stat_xact_sys_tables
++ pg_stat_xact_user_functions
++ pg_stat_xact_user_tables
++ pg_statio_all_indexes
++ pg_statio_all_sequences
++ pg_statio_all_tables
++ pg_statio_sys_indexes
++ pg_statio_sys_sequences
++ pg_statio_sys_tables
++ pg_statio_user_indexes
++ pg_statio_user_sequences
++ pg_statio_user_tables
++ pg_statistic
++ pg_statistic_ext
++ pg_statistic_ext_data
++ pg_stats
++ pg_stats_ext
++ pg_subscription
++ pg_subscription_rel
++ pg_tables
++ pg_tablespace
++ pg_timezone_abbrevs
++ pg_timezone_names
++ pg_transform
++ pg_trigger
++ pg_ts_config
++ pg_ts_config_map
++ pg_ts_dict
++ pg_ts_parser
++ pg_ts_template
++ pg_type
++ pg_user
++ pg_user_mapping
++ pg_user_mappings
++ pg_views
++(127 rows)
+ 
+ -- system catalog unique indexes not wrapped in a constraint
+ -- (There should be none.)

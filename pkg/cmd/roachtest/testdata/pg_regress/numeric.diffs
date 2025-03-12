@@ -1,0 +1,3367 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --label=/mnt/data1/postgres/src/test/regress/results/numeric.out /mnt/data1/postgres/src/test/regress/expected/numeric.out /mnt/data1/postgres/src/test/regress/results/numeric.out
+--- /mnt/data1/postgres/src/test/regress/expected/numeric.out
++++ /mnt/data1/postgres/src/test/regress/results/numeric.out
+@@ -489,13 +489,45 @@
+ CREATE UNIQUE INDEX num_exp_log10_idx ON num_exp_log10 (id);
+ CREATE UNIQUE INDEX num_exp_power_10_ln_idx ON num_exp_power_10_ln (id);
+ VACUUM ANALYZE num_exp_add;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_add
++^
+ VACUUM ANALYZE num_exp_sub;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_sub
++^
+ VACUUM ANALYZE num_exp_div;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_div
++^
+ VACUUM ANALYZE num_exp_mul;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_mul
++^
+ VACUUM ANALYZE num_exp_sqrt;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_sqrt
++^
+ VACUUM ANALYZE num_exp_ln;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_ln
++^
+ VACUUM ANALYZE num_exp_log10;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_log10
++^
+ VACUUM ANALYZE num_exp_power_10_ln;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE num_exp_power_10_ln
++^
+ -- ******************************
+ -- * Now check the behaviour of the NUMERIC type
+ -- ******************************
+@@ -656,9 +688,16 @@
+     FROM num_result t1, num_exp_power_10_ln t2
+     WHERE t1.id1 = t2.id
+     AND t1.result != t2.expected;
+- id1 | result | expected 
+------+--------+----------
+-(0 rows)
++ id1 |             result             |            expected            
++-----+--------------------------------+--------------------------------
++   2 |  224790267919917955.0600000000 |  224790267919917955.1326161858
++   4 |    7405685069594999.0834000000 |    7405685069594999.0773399947
++   5 |          5068226527.3212726542 |          5068226527.3212726541
++   6 |        281839893606.9937232600 |        281839893606.9937234336
++   7 | 1716699575118597095.8000000000 | 1716699575118597095.4233081991
++   8 |        167361463828.0749133200 |        167361463828.0749132007
++   9 |  107511333880052007.1400000000 |  107511333880052007.0414112467
++(7 rows)
+ 
+ -- ******************************
+ -- * Check behavior with Inf and NaN inputs.  It's easiest to handle these
+@@ -672,59 +711,7 @@
+   x1 - x2 AS diff,
+   x1 * x2 AS prod
+ FROM v AS v1(x1), v AS v2(x2);
+-    x1     |    x2     |    sum    |   diff    |   prod    
+------------+-----------+-----------+-----------+-----------
+-         0 |         0 |         0 |         0 |         0
+-         0 |         1 |         1 |        -1 |         0
+-         0 |        -1 |        -1 |         1 |         0
+-         0 |       4.2 |       4.2 |      -4.2 |       0.0
+-         0 |  Infinity |  Infinity | -Infinity |       NaN
+-         0 | -Infinity | -Infinity |  Infinity |       NaN
+-         0 |       NaN |       NaN |       NaN |       NaN
+-         1 |         0 |         1 |         1 |         0
+-         1 |         1 |         2 |         0 |         1
+-         1 |        -1 |         0 |         2 |        -1
+-         1 |       4.2 |       5.2 |      -3.2 |       4.2
+-         1 |  Infinity |  Infinity | -Infinity |  Infinity
+-         1 | -Infinity | -Infinity |  Infinity | -Infinity
+-         1 |       NaN |       NaN |       NaN |       NaN
+-        -1 |         0 |        -1 |        -1 |         0
+-        -1 |         1 |         0 |        -2 |        -1
+-        -1 |        -1 |        -2 |         0 |         1
+-        -1 |       4.2 |       3.2 |      -5.2 |      -4.2
+-        -1 |  Infinity |  Infinity | -Infinity | -Infinity
+-        -1 | -Infinity | -Infinity |  Infinity |  Infinity
+-        -1 |       NaN |       NaN |       NaN |       NaN
+-       4.2 |         0 |       4.2 |       4.2 |       0.0
+-       4.2 |         1 |       5.2 |       3.2 |       4.2
+-       4.2 |        -1 |       3.2 |       5.2 |      -4.2
+-       4.2 |       4.2 |       8.4 |       0.0 |     17.64
+-       4.2 |  Infinity |  Infinity | -Infinity |  Infinity
+-       4.2 | -Infinity | -Infinity |  Infinity | -Infinity
+-       4.2 |       NaN |       NaN |       NaN |       NaN
+-  Infinity |         0 |  Infinity |  Infinity |       NaN
+-  Infinity |         1 |  Infinity |  Infinity |  Infinity
+-  Infinity |        -1 |  Infinity |  Infinity | -Infinity
+-  Infinity |       4.2 |  Infinity |  Infinity |  Infinity
+-  Infinity |  Infinity |  Infinity |       NaN |  Infinity
+-  Infinity | -Infinity |       NaN |  Infinity | -Infinity
+-  Infinity |       NaN |       NaN |       NaN |       NaN
+- -Infinity |         0 | -Infinity | -Infinity |       NaN
+- -Infinity |         1 | -Infinity | -Infinity | -Infinity
+- -Infinity |        -1 | -Infinity | -Infinity |  Infinity
+- -Infinity |       4.2 | -Infinity | -Infinity | -Infinity
+- -Infinity |  Infinity |       NaN | -Infinity | -Infinity
+- -Infinity | -Infinity | -Infinity |       NaN |  Infinity
+- -Infinity |       NaN |       NaN |       NaN |       NaN
+-       NaN |         0 |       NaN |       NaN |       NaN
+-       NaN |         1 |       NaN |       NaN |       NaN
+-       NaN |        -1 |       NaN |       NaN |       NaN
+-       NaN |       4.2 |       NaN |       NaN |       NaN
+-       NaN |  Infinity |       NaN |       NaN |       NaN
+-       NaN | -Infinity |       NaN |       NaN |       NaN
+-       NaN |       NaN |       NaN |       NaN |       NaN
+-(49 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('-1'),('4.2'),('inf'),('-inf'),('nan'))
+ SELECT x1, x2,
+@@ -732,52 +719,7 @@
+   x1 % x2 AS mod,
+   div(x1, x2) AS div
+ FROM v AS v1(x1), v AS v2(x2) WHERE x2 != 0;
+-    x1     |    x2     |          quot           | mod  |    div    
+------------+-----------+-------------------------+------+-----------
+-         0 |         1 |  0.00000000000000000000 |    0 |         0
+-         1 |         1 |  1.00000000000000000000 |    0 |         1
+-        -1 |         1 | -1.00000000000000000000 |    0 |        -1
+-       4.2 |         1 |      4.2000000000000000 |  0.2 |         4
+-  Infinity |         1 |                Infinity |  NaN |  Infinity
+- -Infinity |         1 |               -Infinity |  NaN | -Infinity
+-       NaN |         1 |                     NaN |  NaN |       NaN
+-         0 |        -1 |  0.00000000000000000000 |    0 |         0
+-         1 |        -1 | -1.00000000000000000000 |    0 |        -1
+-        -1 |        -1 |  1.00000000000000000000 |    0 |         1
+-       4.2 |        -1 |     -4.2000000000000000 |  0.2 |        -4
+-  Infinity |        -1 |               -Infinity |  NaN | -Infinity
+- -Infinity |        -1 |                Infinity |  NaN |  Infinity
+-       NaN |        -1 |                     NaN |  NaN |       NaN
+-         0 |       4.2 |  0.00000000000000000000 |  0.0 |         0
+-         1 |       4.2 |  0.23809523809523809524 |  1.0 |         0
+-        -1 |       4.2 | -0.23809523809523809524 | -1.0 |         0
+-       4.2 |       4.2 |  1.00000000000000000000 |  0.0 |         1
+-  Infinity |       4.2 |                Infinity |  NaN |  Infinity
+- -Infinity |       4.2 |               -Infinity |  NaN | -Infinity
+-       NaN |       4.2 |                     NaN |  NaN |       NaN
+-         0 |  Infinity |                       0 |    0 |         0
+-         1 |  Infinity |                       0 |    1 |         0
+-        -1 |  Infinity |                       0 |   -1 |         0
+-       4.2 |  Infinity |                       0 |  4.2 |         0
+-  Infinity |  Infinity |                     NaN |  NaN |       NaN
+- -Infinity |  Infinity |                     NaN |  NaN |       NaN
+-       NaN |  Infinity |                     NaN |  NaN |       NaN
+-         0 | -Infinity |                       0 |    0 |         0
+-         1 | -Infinity |                       0 |    1 |         0
+-        -1 | -Infinity |                       0 |   -1 |         0
+-       4.2 | -Infinity |                       0 |  4.2 |         0
+-  Infinity | -Infinity |                     NaN |  NaN |       NaN
+- -Infinity | -Infinity |                     NaN |  NaN |       NaN
+-       NaN | -Infinity |                     NaN |  NaN |       NaN
+-         0 |       NaN |                     NaN |  NaN |       NaN
+-         1 |       NaN |                     NaN |  NaN |       NaN
+-        -1 |       NaN |                     NaN |  NaN |       NaN
+-       4.2 |       NaN |                     NaN |  NaN |       NaN
+-  Infinity |       NaN |                     NaN |  NaN |       NaN
+- -Infinity |       NaN |                     NaN |  NaN |       NaN
+-       NaN |       NaN |                     NaN |  NaN |       NaN
+-(42 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT 'inf'::numeric / '0';
+ ERROR:  division by zero
+ SELECT '-inf'::numeric / '0';
+@@ -803,49 +745,23 @@
+ SELECT '0'::numeric % '0';
+ ERROR:  division by zero
+ SELECT div('inf'::numeric, '0');
+-ERROR:  division by zero
++ERROR:  div(): division by zero
+ SELECT div('-inf'::numeric, '0');
+-ERROR:  division by zero
++ERROR:  div(): division by zero
+ SELECT div('nan'::numeric, '0');
+- div 
+------
+- NaN
+-(1 row)
+-
++ERROR:  div(): division by zero
+ SELECT div('0'::numeric, '0');
+-ERROR:  division by zero
++ERROR:  div(): division by zero
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('inf'),('-inf'),('nan'))
+ SELECT x, -x as minusx, abs(x), floor(x), ceil(x), sign(x), numeric_inc(x) as inc
+ FROM v;
+-     x     |  minusx   |   abs    |   floor   |   ceil    | sign |    inc    
+------------+-----------+----------+-----------+-----------+------+-----------
+-         0 |         0 |        0 |         0 |         0 |    0 |         1
+-         1 |        -1 |        1 |         1 |         1 |    1 |         2
+-        -1 |         1 |        1 |        -1 |        -1 |   -1 |         0
+-       4.2 |      -4.2 |      4.2 |         4 |         5 |    1 |       5.2
+-    -7.777 |     7.777 |    7.777 |        -8 |        -7 |   -1 |    -6.777
+-  Infinity | -Infinity | Infinity |  Infinity |  Infinity |    1 |  Infinity
+- -Infinity |  Infinity | Infinity | -Infinity | -Infinity |   -1 | -Infinity
+-       NaN |       NaN |      NaN |       NaN |       NaN |  NaN |       NaN
+-(8 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('inf'),('-inf'),('nan'))
+ SELECT x, round(x), round(x,1) as round1, trunc(x), trunc(x,1) as trunc1
+ FROM v;
+-     x     |   round   |  round1   |   trunc   |  trunc1   
+------------+-----------+-----------+-----------+-----------
+-         0 |         0 |       0.0 |         0 |       0.0
+-         1 |         1 |       1.0 |         1 |       1.0
+-        -1 |        -1 |      -1.0 |        -1 |      -1.0
+-       4.2 |         4 |       4.2 |         4 |       4.2
+-    -7.777 |        -8 |      -7.8 |        -7 |      -7.7
+-  Infinity |  Infinity |  Infinity |  Infinity |  Infinity
+- -Infinity | -Infinity | -Infinity | -Infinity | -Infinity
+-       NaN |       NaN |       NaN |       NaN |       NaN
+-(8 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ -- the large values fall into the numeric abbreviation code's maximal classes
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('1e340'),('-1e340'),
+@@ -853,40 +769,16 @@
+          ('inf'),('-inf'),('nan'))
+ SELECT substring(x::text, 1, 32)
+ FROM v ORDER BY x;
+-            substring             
+-----------------------------------
+- -Infinity
+- -Infinity
+- -1000000000000000000000000000000
+- -7.777
+- -1
+- 0
+- 1
+- 4.2
+- 10000000000000000000000000000000
+- Infinity
+- Infinity
+- NaN
+- NaN
+-(13 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('4.2'),('inf'),('nan'))
+ SELECT x, sqrt(x)
+ FROM v;
+-    x     |       sqrt        
+-----------+-------------------
+-        0 | 0.000000000000000
+-        1 | 1.000000000000000
+-      4.2 | 2.049390153191920
+- Infinity |          Infinity
+-      NaN |               NaN
+-(5 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT sqrt('-1'::numeric);
+-ERROR:  cannot take square root of a negative number
++ERROR:  sqrt(): cannot take square root of a negative number
+ SELECT sqrt('-inf'::numeric);
+-ERROR:  cannot take square root of a negative number
++ERROR:  sqrt(): cannot take square root of a negative number
+ WITH v(x) AS
+   (VALUES('1'::numeric),('4.2'),('inf'),('nan'))
+ SELECT x,
+@@ -894,108 +786,51 @@
+   log10(x),
+   ln(x)
+ FROM v;
+-    x     |        log         |       log10        |         ln         
+-----------+--------------------+--------------------+--------------------
+-        1 | 0.0000000000000000 | 0.0000000000000000 | 0.0000000000000000
+-      4.2 | 0.6232492903979005 | 0.6232492903979005 | 1.4350845252893226
+- Infinity |           Infinity |           Infinity |           Infinity
+-      NaN |                NaN |                NaN |                NaN
+-(4 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT ln('0'::numeric);
+-ERROR:  cannot take logarithm of zero
++ERROR:  ln(): cannot take logarithm of zero
+ SELECT ln('-1'::numeric);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  ln(): cannot take logarithm of a negative number
+ SELECT ln('-inf'::numeric);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  ln(): cannot take logarithm of a negative number
+ WITH v(x) AS
+   (VALUES('2'::numeric),('4.2'),('inf'),('nan'))
+ SELECT x1, x2,
+   log(x1, x2)
+ FROM v AS v1(x1), v AS v2(x2);
+-    x1    |    x2    |        log         
+-----------+----------+--------------------
+-        2 |        2 | 1.0000000000000000
+-        2 |      4.2 | 2.0703893278913979
+-        2 | Infinity |           Infinity
+-        2 |      NaN |                NaN
+-      4.2 |        2 | 0.4830009440873890
+-      4.2 |      4.2 | 1.0000000000000000
+-      4.2 | Infinity |           Infinity
+-      4.2 |      NaN |                NaN
+- Infinity |        2 |                  0
+- Infinity |      4.2 |                  0
+- Infinity | Infinity |                NaN
+- Infinity |      NaN |                NaN
+-      NaN |        2 |                NaN
+-      NaN |      4.2 |                NaN
+-      NaN | Infinity |                NaN
+-      NaN |      NaN |                NaN
+-(16 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT log('0'::numeric, '10');
+-ERROR:  cannot take logarithm of zero
++ERROR:  log(): cannot take logarithm of zero
+ SELECT log('10'::numeric, '0');
+-ERROR:  cannot take logarithm of zero
++ERROR:  log(): cannot take logarithm of zero
+ SELECT log('-inf'::numeric, '10');
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ SELECT log('10'::numeric, '-inf');
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ SELECT log('inf'::numeric, '0');
+-ERROR:  cannot take logarithm of zero
++ERROR:  log(): cannot take logarithm of zero
+ SELECT log('inf'::numeric, '-inf');
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ SELECT log('-inf'::numeric, 'inf');
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ WITH v(x) AS
+   (VALUES('0'::numeric),('1'),('2'),('4.2'),('inf'),('nan'))
+ SELECT x1, x2,
+   power(x1, x2)
+ FROM v AS v1(x1), v AS v2(x2) WHERE x1 != 0 OR x2 >= 0;
+-    x1    |    x2    |       power        
+-----------+----------+--------------------
+-        0 |        0 | 1.0000000000000000
+-        0 |        1 | 0.0000000000000000
+-        0 |        2 | 0.0000000000000000
+-        0 |      4.2 | 0.0000000000000000
+-        0 | Infinity |                  0
+-        0 |      NaN |                NaN
+-        1 |        0 | 1.0000000000000000
+-        1 |        1 | 1.0000000000000000
+-        1 |        2 | 1.0000000000000000
+-        1 |      4.2 | 1.0000000000000000
+-        1 | Infinity |                  1
+-        1 |      NaN |                  1
+-        2 |        0 | 1.0000000000000000
+-        2 |        1 | 2.0000000000000000
+-        2 |        2 | 4.0000000000000000
+-        2 |      4.2 | 18.379173679952560
+-        2 | Infinity |           Infinity
+-        2 |      NaN |                NaN
+-      4.2 |        0 | 1.0000000000000000
+-      4.2 |        1 | 4.2000000000000000
+-      4.2 |        2 | 17.640000000000000
+-      4.2 |      4.2 | 414.61691860129675
+-      4.2 | Infinity |           Infinity
+-      4.2 |      NaN |                NaN
+- Infinity |        0 |                  1
+- Infinity |        1 |           Infinity
+- Infinity |        2 |           Infinity
+- Infinity |      4.2 |           Infinity
+- Infinity | Infinity |           Infinity
+- Infinity |      NaN |                NaN
+-      NaN |        0 |                  1
+-      NaN |        1 |                NaN
+-      NaN |        2 |                NaN
+-      NaN |      4.2 |                NaN
+-      NaN | Infinity |                NaN
+-      NaN |      NaN |                NaN
+-(36 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT power('0'::numeric, '-1');
+-ERROR:  zero raised to a negative power is undefined
++  power   
++----------
++ Infinity
++(1 row)
++
+ SELECT power('0'::numeric, '-inf');
+-ERROR:  zero raised to a negative power is undefined
++  power   
++----------
++ Infinity
++(1 row)
++
+ SELECT power('-1'::numeric, 'inf');
+  power 
+ -------
+@@ -1003,31 +838,39 @@
+ (1 row)
+ 
+ SELECT power('-2'::numeric, '3');
+-        power        
+----------------------
+- -8.0000000000000000
++ power 
++-------
++    -8
+ (1 row)
+ 
+ SELECT power('-2'::numeric, '3.3');
+-ERROR:  a negative number raised to a non-integer power yields a complex result
++ power 
++-------
++   NaN
++(1 row)
++
+ SELECT power('-2'::numeric, '-1');
+-        power        
+----------------------
+- -0.5000000000000000
++          power          
++-------------------------
++ -0.50000000000000000000
+ (1 row)
+ 
+ SELECT power('-2'::numeric, '-1.5');
+-ERROR:  a negative number raised to a non-integer power yields a complex result
+-SELECT power('-2'::numeric, 'inf');
+-  power   
+-----------
+- Infinity
++ power 
++-------
++   NaN
+ (1 row)
+ 
+-SELECT power('-2'::numeric, '-inf');
++SELECT power('-2'::numeric, 'inf');
+  power 
+ -------
+-     0
++     1
++(1 row)
++
++SELECT power('-2'::numeric, '-inf');
++         power         
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ SELECT power('inf'::numeric, '-2');
+@@ -1055,7 +898,11 @@
+ (1 row)
+ 
+ SELECT power('-inf'::numeric, '4.5');
+-ERROR:  a negative number raised to a non-integer power yields a complex result
++ power 
++-------
++   NaN
++(1 row)
++
+ SELECT power('-inf'::numeric, '-2');
+  power 
+ -------
+@@ -1065,7 +912,7 @@
+ SELECT power('-inf'::numeric, '-3');
+  power 
+ -------
+-     0
++    -0
+ (1 row)
+ 
+ SELECT power('-inf'::numeric, '0');
+@@ -1075,15 +922,15 @@
+ (1 row)
+ 
+ SELECT power('-inf'::numeric, 'inf');
+-  power   
+-----------
+- Infinity
++ power 
++-------
++   NaN
+ (1 row)
+ 
+ SELECT power('-inf'::numeric, '-inf');
+  power 
+ -------
+-     0
++   NaN
+ (1 row)
+ 
+ -- ******************************
+@@ -1109,15 +956,15 @@
+ (1 row)
+ 
+ SELECT STDDEV(val) FROM num_data;
+-            stddev             
+--------------------------------
+- 27791203.28758835329805617386
++        stddev         
++-----------------------
++ 27791203.287588353298
+ (1 row)
+ 
+ SELECT VARIANCE(val) FROM num_data;
+-               variance               
+---------------------------------------
+- 772350980172061.69659105821915863601
++       variance        
++-----------------------
++ 772350980172061.69659
+ (1 row)
+ 
+ -- Check for appropriate rounding and overflow
+@@ -1125,38 +972,34 @@
+ INSERT INTO fract_only VALUES (1, '0.0');
+ INSERT INTO fract_only VALUES (2, '0.1');
+ INSERT INTO fract_only VALUES (3, '1.0');	-- should fail
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 4 must round to an absolute value less than 1.
++ERROR:  type DECIMAL(4,4): value with precision 4, scale 4 must round to an absolute value less than 1
+ INSERT INTO fract_only VALUES (4, '-0.9999');
+ INSERT INTO fract_only VALUES (5, '0.99994');
+ INSERT INTO fract_only VALUES (6, '0.99995');  -- should fail
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 4 must round to an absolute value less than 1.
++ERROR:  type DECIMAL(4,4): value with precision 4, scale 4 must round to an absolute value less than 1
+ INSERT INTO fract_only VALUES (7, '0.00001');
+ INSERT INTO fract_only VALUES (8, '0.00017');
+ INSERT INTO fract_only VALUES (9, 'NaN');
+ INSERT INTO fract_only VALUES (10, 'Inf');	-- should fail
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 4 cannot hold an infinite value.
+ INSERT INTO fract_only VALUES (11, '-Inf');	-- should fail
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 4 cannot hold an infinite value.
+ SELECT * FROM fract_only;
+- id |   val   
+-----+---------
+-  1 |  0.0000
+-  2 |  0.1000
+-  4 | -0.9999
+-  5 |  0.9999
+-  7 |  0.0000
+-  8 |  0.0002
+-  9 |     NaN
+-(7 rows)
++ id |    val    
++----+-----------
++  1 |    0.0000
++  2 |    0.1000
++  4 |   -0.9999
++  5 |    0.9999
++  7 |    0.0000
++  8 |    0.0002
++  9 |       NaN
++ 10 |  Infinity
++ 11 | -Infinity
++(9 rows)
+ 
+ DROP TABLE fract_only;
+ -- Check conversion to integers
+ SELECT (-9223372036854775808.5)::int8; -- should fail
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT (-9223372036854775808.4)::int8; -- ok
+          int8         
+ ----------------------
+@@ -1170,9 +1013,9 @@
+ (1 row)
+ 
+ SELECT 9223372036854775807.5::int8; -- should fail
+-ERROR:  bigint out of range
+-SELECT (-2147483648.5)::int4; -- should fail
+ ERROR:  integer out of range
++SELECT (-2147483648.5)::int4; -- should fail
++ERROR:  integer out of range for type int4
+ SELECT (-2147483648.4)::int4; -- ok
+     int4     
+ -------------
+@@ -1186,9 +1029,9 @@
+ (1 row)
+ 
+ SELECT 2147483647.5::int4; -- should fail
+-ERROR:  integer out of range
++ERROR:  integer out of range for type int4
+ SELECT (-32768.5)::int2; -- should fail
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT (-32768.4)::int2; -- ok
+   int2  
+ --------
+@@ -1202,7 +1045,7 @@
+ (1 row)
+ 
+ SELECT 32767.5::int2; -- should fail
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ -- Check inf/nan conversion behavior
+ SELECT 'NaN'::float8::numeric;
+  numeric 
+@@ -1283,23 +1126,23 @@
+ (1 row)
+ 
+ SELECT 'NaN'::numeric::int2;
+-ERROR:  cannot convert NaN to smallint
++ERROR:  integer out of range
+ SELECT 'Infinity'::numeric::int2;
+-ERROR:  cannot convert infinity to smallint
++ERROR:  integer out of range
+ SELECT '-Infinity'::numeric::int2;
+-ERROR:  cannot convert infinity to smallint
++ERROR:  integer out of range
+ SELECT 'NaN'::numeric::int4;
+-ERROR:  cannot convert NaN to integer
++ERROR:  integer out of range
+ SELECT 'Infinity'::numeric::int4;
+-ERROR:  cannot convert infinity to integer
++ERROR:  integer out of range
+ SELECT '-Infinity'::numeric::int4;
+-ERROR:  cannot convert infinity to integer
++ERROR:  integer out of range
+ SELECT 'NaN'::numeric::int8;
+-ERROR:  cannot convert NaN to bigint
++ERROR:  integer out of range
+ SELECT 'Infinity'::numeric::int8;
+-ERROR:  cannot convert infinity to bigint
++ERROR:  integer out of range
+ SELECT '-Infinity'::numeric::int8;
+-ERROR:  cannot convert infinity to bigint
++ERROR:  integer out of range
+ -- Simple check that ceil(), floor(), and round() work correctly
+ CREATE TABLE ceil_floor_round (a numeric);
+ INSERT INTO ceil_floor_round VALUES ('-5.5');
+@@ -1317,7 +1160,7 @@
+        9.5 |   10 |      10 |     9 |    10
+  9.4999999 |   10 |      10 |     9 |     9
+        0.0 |    0 |       0 |     0 |     0
+- 0.0000001 |    1 |       1 |     0 |     0
++      1E-7 |    1 |       1 |     0 |     0
+  -0.000001 |    0 |       0 |    -1 |     0
+ (7 rows)
+ 
+@@ -1331,44 +1174,51 @@
+ 	round((1.5 * 10 ^ i)::numeric, -i),
+ 	round((2.5 * 10 ^ i)::numeric, -i)
+ FROM generate_series(-5,5) AS t(i);
+- pow |  round   |  round   |  round   |  round  |  round  |  round  
+------+----------+----------+----------+---------+---------+---------
+-  -5 | -0.00003 | -0.00002 | -0.00001 | 0.00001 | 0.00002 | 0.00003
+-  -4 |  -0.0003 |  -0.0002 |  -0.0001 |  0.0001 |  0.0002 |  0.0003
+-  -3 |   -0.003 |   -0.002 |   -0.001 |   0.001 |   0.002 |   0.003
+-  -2 |    -0.03 |    -0.02 |    -0.01 |    0.01 |    0.02 |    0.03
+-  -1 |     -0.3 |     -0.2 |     -0.1 |     0.1 |     0.2 |     0.3
+-   0 |       -3 |       -2 |       -1 |       1 |       2 |       3
+-   1 |      -30 |      -20 |      -10 |      10 |      20 |      30
+-   2 |     -300 |     -200 |     -100 |     100 |     200 |     300
+-   3 |    -3000 |    -2000 |    -1000 |    1000 |    2000 |    3000
+-   4 |   -30000 |   -20000 |   -10000 |   10000 |   20000 |   30000
+-   5 |  -300000 |  -200000 |  -100000 |  100000 |  200000 |  300000
+-(11 rows)
+-
++ERROR:  integer out of range
+ -- Testing for width_bucket(). For convenience, we test both the
+ -- numeric and float8 versions of the function in this file.
+ -- errors
+ SELECT width_bucket(5.0, 3.0, 4.0, 0);
+-ERROR:  count must be greater than zero
++ width_bucket 
++--------------
++            1
++(1 row)
++
+ SELECT width_bucket(5.0, 3.0, 4.0, -5);
+-ERROR:  count must be greater than zero
++ width_bucket 
++--------------
++           -4
++(1 row)
++
+ SELECT width_bucket(3.5, 3.0, 3.0, 888);
+-ERROR:  lower bound cannot equal upper bound
++     width_bucket     
++----------------------
++ -9223372036854775808
++(1 row)
++
+ SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+-ERROR:  count must be greater than zero
++ERROR:  unknown signature: width_bucket(float, float, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+-ERROR:  count must be greater than zero
++ERROR:  unknown signature: width_bucket(float, float, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+-ERROR:  lower bound cannot equal upper bound
++ERROR:  unknown signature: width_bucket(float, float, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket('NaN', 3.0, 4.0, 888);
+-ERROR:  operand, lower bound, and upper bound cannot be NaN
++     width_bucket     
++----------------------
++ -9223372036854775808
++(1 row)
++
+ SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+-ERROR:  operand, lower bound, and upper bound cannot be NaN
++ERROR:  unknown signature: width_bucket(float, string, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(2.0, 3.0, '-inf', 888);
+-ERROR:  lower and upper bounds must be finite
++ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
+ SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+-ERROR:  lower and upper bounds must be finite
++ERROR:  unknown signature: width_bucket(float, string, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- normal operation
+ CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+ COPY width_bucket_test (operand_num) FROM stdin;
+@@ -1386,118 +1236,58 @@
+     width_bucket(operand_num, -25, 25, 10) AS wb_5,
+     width_bucket(operand_f8, -25, 25, 10) AS wb_5f
+     FROM width_bucket_test;
+-   operand_num    | wb_1 | wb_1f | wb_2 | wb_2f | wb_3 | wb_3f | wb_4 | wb_4f | wb_5 | wb_5f 
+-------------------+------+-------+------+-------+------+-------+------+-------+------+-------
+-             -5.2 |    0 |     0 |    6 |     6 |    0 |     0 |    0 |     0 |    4 |     4
+-    -0.0000000001 |    0 |     0 |    6 |     6 |    0 |     0 |    0 |     0 |    5 |     5
+-   0.000000000001 |    1 |     1 |    5 |     5 |    0 |     0 |    0 |     0 |    6 |     6
+-                1 |    1 |     1 |    5 |     5 |    0 |     0 |    0 |     0 |    6 |     6
+- 1.99999999999999 |    1 |     1 |    5 |     5 |    0 |     0 |    0 |     0 |    6 |     6
+-                2 |    2 |     2 |    5 |     5 |    1 |     1 |    0 |     0 |    6 |     6
+- 2.00000000000001 |    2 |     2 |    4 |     4 |    1 |     1 |    0 |     0 |    6 |     6
+-                3 |    2 |     2 |    4 |     4 |    1 |     1 |    0 |     0 |    6 |     6
+-                4 |    3 |     3 |    4 |     4 |    2 |     2 |    0 |     0 |    6 |     6
+-              4.5 |    3 |     3 |    3 |     3 |    2 |     2 |    0 |     0 |    6 |     6
+-                5 |    3 |     3 |    3 |     3 |    3 |     3 |    1 |     1 |    7 |     7
+-              5.5 |    3 |     3 |    3 |     3 |    3 |     3 |   21 |    21 |    7 |     7
+-                6 |    4 |     4 |    3 |     3 |    3 |     3 |   21 |    21 |    7 |     7
+-                7 |    4 |     4 |    2 |     2 |    4 |     4 |   21 |    21 |    7 |     7
+-                8 |    5 |     5 |    2 |     2 |    5 |     5 |   21 |    21 |    7 |     7
+-                9 |    5 |     5 |    1 |     1 |    5 |     5 |   21 |    21 |    7 |     7
+- 9.99999999999999 |    5 |     5 |    1 |     1 |    5 |     5 |   21 |    21 |    7 |     7
+-               10 |    6 |     6 |    1 |     1 |    5 |     5 |   21 |    21 |    8 |     8
+- 10.0000000000001 |    6 |     6 |    0 |     0 |    5 |     5 |   21 |    21 |    8 |     8
+-(19 rows)
+-
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Check positive and negative infinity: we require
+ -- finite bucket bounds, but allow an infinite operand
+ SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
+-ERROR:  lower and upper bounds must be finite
++ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
+ SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+-ERROR:  lower and upper bounds must be finite
++ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
+ SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+        width_bucket('-Infinity'::numeric, 1, 10, 10);
+- width_bucket | width_bucket 
+---------------+--------------
+-           11 |            0
+-(1 row)
+-
++ERROR:  width_bucket(): operand, lower bound, and upper bound cannot be infinity
+ SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+-ERROR:  lower and upper bounds must be finite
++ERROR:  unknown signature: width_bucket(float, float, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+-ERROR:  lower and upper bounds must be finite
++ERROR:  unknown signature: width_bucket(float, int, float, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+        width_bucket('-Infinity'::float8, 1, 10, 10);
+- width_bucket | width_bucket 
+---------------+--------------
+-           11 |            0
+-(1 row)
+-
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ DROP TABLE width_bucket_test;
+ -- Simple test for roundoff error when results should be exact
+ SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
+        width_bucket(x::numeric, 10, 100, 9) as num
+ FROM generate_series(0, 110, 10) x;
+-  x  | flt | num 
+------+-----+-----
+-   0 |   0 |   0
+-  10 |   1 |   1
+-  20 |   2 |   2
+-  30 |   3 |   3
+-  40 |   4 |   4
+-  50 |   5 |   5
+-  60 |   6 |   6
+-  70 |   7 |   7
+-  80 |   8 |   8
+-  90 |   9 |   9
+- 100 |  10 |  10
+- 110 |  10 |  10
+-(12 rows)
+-
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
+        width_bucket(x::numeric, 100, 10, 9) as num
+ FROM generate_series(0, 110, 10) x;
+-  x  | flt | num 
+------+-----+-----
+-   0 |  10 |  10
+-  10 |  10 |  10
+-  20 |   9 |   9
+-  30 |   8 |   8
+-  40 |   7 |   7
+-  50 |   6 |   6
+-  60 |   5 |   5
+-  70 |   4 |   4
+-  80 |   3 |   3
+-  90 |   2 |   2
+- 100 |   1 |   1
+- 110 |   0 |   0
+-(12 rows)
+-
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Another roundoff-error hazard
+ SELECT width_bucket(0, -1e100::numeric, 1, 10);
+  width_bucket 
+ --------------
+-           10
++           11
+ (1 row)
+ 
+ SELECT width_bucket(0, -1e100::float8, 1, 10);
+- width_bucket 
+---------------
+-           10
+-(1 row)
+-
++ERROR:  unknown signature: width_bucket(int, float, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(1, 1e100::numeric, 0, 10);
+  width_bucket 
+ --------------
+-           10
++           11
+ (1 row)
+ 
+ SELECT width_bucket(1, 1e100::float8, 0, 10);
+- width_bucket 
+---------------
+-           10
+-(1 row)
+-
++ERROR:  unknown signature: width_bucket(int, float, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Check cases that could trigger overflow or underflow within the calculation
+ SELECT oper, low, high, cnt, width_bucket(oper, low, high, cnt)
+ FROM
+@@ -1516,379 +1306,90 @@
+     (0, 0, 1, 2147483647),
+     (1, 1, 0, 2147483647)
+   ) as sample(oper, low, high, cnt);
+-    oper     |     low     |    high     |    cnt     | width_bucket 
+--------------+-------------+-------------+------------+--------------
+-        10.5 | -1.797e+308 |  1.797e+308 |          1 |            1
+-        10.5 | -1.797e+308 |  1.797e+308 |          2 |            2
+-        10.5 | -1.797e+308 |  1.797e+308 |          3 |            2
+- 4.4925e+307 | -8.985e+307 |  8.985e+307 |         10 |            8
+-        10.5 |  1.797e+308 | -1.797e+308 |          1 |            1
+-        10.5 |  1.797e+308 | -1.797e+308 |          2 |            2
+-        10.5 |  1.797e+308 | -1.797e+308 |          3 |            2
+- 4.4925e+307 |  8.985e+307 | -8.985e+307 |         10 |            3
+-           0 |           0 |      5e-324 |          4 |            1
+-      5e-324 |           0 |      5e-324 |          4 |            5
+-           0 |           0 |           1 | 2147483647 |            1
+-           1 |           1 |           0 | 2147483647 |            1
+-(12 rows)
+-
++ERROR:  VALUES types int and float cannot be matched
+ -- These fail because the result would be out of int32 range:
+ SELECT width_bucket(1::float8, 0, 1, 2147483647);
+-ERROR:  integer out of range
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT width_bucket(0::float8, 1, 0, 2147483647);
+-ERROR:  integer out of range
++ERROR:  unknown signature: width_bucket(float, int, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- TO_CHAR()
+ --
+ SELECT to_char(val, '9G999G999G999G999G999')
+ 	FROM num_data;
+-        to_char         
+-------------------------
+-                      0
+-                      0
+-            -34,338,492
+-                      4
+-              7,799,461
+-                 16,397
+-                 93,902
+-            -83,028,485
+-                 74,881
+-            -24,926,804
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+ 	FROM num_data;
+-                  to_char                   
+---------------------------------------------
+-                       .000,000,000,000,000
+-                       .000,000,000,000,000
+-            -34,338,492.215,397,047,000,000
+-                      4.310,000,000,000,000
+-              7,799,461.411,900,000,000,000
+-                 16,397.038,491,000,000,000
+-                 93,901.577,630,260,000,000
+-            -83,028,485.000,000,000,000,000
+-                 74,881.000,000,000,000,000
+-            -24,926,804.045,047,420,000,000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '9999999999999999.999999999999999PR')
+ 	FROM num_data;
+-              to_char               
+-------------------------------------
+-                  .000000000000000 
+-                  .000000000000000 
+-         <34338492.215397047000000>
+-                 4.310000000000000 
+-           7799461.411900000000000 
+-             16397.038491000000000 
+-             93901.577630260000000 
+-         <83028485.000000000000000>
+-             74881.000000000000000 
+-         <24926804.045047420000000>
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '9999999999999999.999999999999999S')
+ 	FROM num_data;
+-              to_char              
+------------------------------------
+-                 .000000000000000+
+-                 .000000000000000+
+-         34338492.215397047000000-
+-                4.310000000000000+
+-          7799461.411900000000000+
+-            16397.038491000000000+
+-            93901.577630260000000+
+-         83028485.000000000000000-
+-            74881.000000000000000+
+-         24926804.045047420000000-
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+-              to_char              
+------------------------------------
+-                  .000000000000000
+-                  .000000000000000
+- -        34338492.215397047000000
+-                 4.310000000000000
+-           7799461.411900000000000
+-             16397.038491000000000
+-             93901.577630260000000
+- -        83028485.000000000000000
+-             74881.000000000000000
+- -        24926804.045047420000000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+-       to_char       
+----------------------
+- +0.
+- +0.
+- -34338492.215397047
+- +4.31
+- +7799461.4119
+- +16397.038491
+- +93901.57763026
+- -83028485.
+- +74881.
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+-       to_char        
+-----------------------
+- 0.
+- 0.
+- <34338492.215397047>
+- 4.31
+- 7799461.4119
+- 16397.038491
+- 93901.57763026
+- <83028485.>
+- 74881.
+- <24926804.04504742>
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+-              to_char              
+------------------------------------
+- +                .000000000000000
+- +                .000000000000000
+- -        34338492.215397047000000
+- +               4.310000000000000
+- +         7799461.411900000000000
+- +           16397.038491000000000
+- +           93901.577630260000000
+- -        83028485.000000000000000
+- +           74881.000000000000000
+- -        24926804.045047420000000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+-              to_char              
+------------------------------------
+-  0000000000000000.000000000000000
+-  0000000000000000.000000000000000
+- -0000000034338492.215397047000000
+-  0000000000000004.310000000000000
+-  0000000007799461.411900000000000
+-  0000000000016397.038491000000000
+-  0000000000093901.577630260000000
+- -0000000083028485.000000000000000
+-  0000000000074881.000000000000000
+- -0000000024926804.045047420000000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+-              to_char              
+------------------------------------
+- +0000000000000000.000000000000000
+- +0000000000000000.000000000000000
+- -0000000034338492.215397047000000
+- +0000000000000004.310000000000000
+- +0000000007799461.411900000000000
+- +0000000000016397.038491000000000
+- +0000000000093901.577630260000000
+- -0000000083028485.000000000000000
+- +0000000000074881.000000000000000
+- -0000000024926804.045047420000000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+-           to_char           
+------------------------------
+- 0000000000000000.
+- 0000000000000000.
+- -0000000034338492.215397047
+- 0000000000000004.31
+- 0000000007799461.4119
+- 0000000000016397.038491
+- 0000000000093901.57763026
+- -0000000083028485.
+- 0000000000074881.
+- -0000000024926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+-       to_char       
+----------------------
+- .0
+- .0
+- -34338492.215397047
+- 4.31
+- 7799461.4119
+- 16397.038491
+- 93901.57763026
+- -83028485.0
+- 74881.0
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+-       to_char       
+----------------------
+- 0000.000
+- 0000.000
+- -34338492.215397047
+- 0004.310
+- 7799461.4119
+- 16397.038491
+- 93901.57763026
+- -83028485.000
+- 74881.000
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+-           to_char           
+------------------------------
+- 0000000000000000.00000
+- 0000000000000000.00000
+- -0000000034338492.215397047
+- 0000000000000004.31000
+- 0000000007799461.41190
+- 0000000000016397.038491
+- 0000000000093901.57763026
+- -0000000083028485.00000
+- 0000000000074881.00000
+- -0000000024926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+-       to_char       
+----------------------
+- 0000000.0
+- 0000000.0
+- -34338492.215397047
+- 0000004.31
+- 7799461.4119
+- 0016397.038491
+- 0093901.57763026
+- -83028485.0
+- 0074881.0
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+-              to_char               
+-------------------------------------
+-                   .000000000000000
+-                   .000000000000000
+-          -34338492.215397047000000
+-                  4.310000000000000
+-            7799461.411900000000000
+-              16397.038491000000000
+-              93901.577630260000000
+-          -83028485.000000000000000
+-              74881.000000000000000
+-          -24926804.045047420000000
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+-       to_char       
+----------------------
+- 0.
+- 0.
+- -34338492.215397047
+- 4.31
+- 7799461.4119
+- 16397.038491
+- 93901.57763026
+- -83028485.
+- 74881.
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+-                                to_char                                
+------------------------------------------------------------------------
+-                                  +. 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                                  +. 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                  -3 4 3 3 8 4 9 2 . 2 1 5 3 9 7 0 4 7 0 0 0 0 0 0 0 0
+-                                +4 . 3 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                    +7 7 9 9 4 6 1 . 4 1 1 9 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                        +1 6 3 9 7 . 0 3 8 4 9 1 0 0 0 0 0 0 0 0 0 0 0
+-                        +9 3 9 0 1 . 5 7 7 6 3 0 2 6 0 0 0 0 0 0 0 0 0
+-                  -8 3 0 2 8 4 8 5 . 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                        +7 4 8 8 1 . 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+-                  -2 4 9 2 6 8 0 4 . 0 4 5 0 4 7 4 2 0 0 0 0 0 0 0 0 0
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+-                        to_char                        
+--------------------------------------------------------
+-                 +0 .                 
+-                 +0 .                 
+-          -3 4 3 3 8 4 9 2 . 2 1 5 3 9 7 0 4 7        
+-                 +4 . 3 1               
+-           +7 7 9 9 4 6 1 . 4 1 1 9             
+-             +1 6 3 9 7 . 0 3 8 4 9 1           
+-             +9 3 9 0 1 . 5 7 7 6 3 0 2 6         
+-          -8 3 0 2 8 4 8 5 .                 
+-             +7 4 8 8 1 .                 
+-          -2 4 9 2 6 8 0 4 . 0 4 5 0 4 7 4 2         
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+-                          to_char                          
+------------------------------------------------------------
+-       text      9999     "text between quote marks"     0
+-       text      9999     "text between quote marks"     0
+-       text    -3 9999 433 "text between quote marks" 8492
+-       text      9999     "text between quote marks"     4
+-       text      9999  779 "text between quote marks" 9461
+-       text      9999    1 "text between quote marks" 6397
+-       text      9999    9 "text between quote marks" 3902
+-       text    -8 9999 302 "text between quote marks" 8485
+-       text      9999    7 "text between quote marks" 4881
+-       text    -2 9999 492 "text between quote marks" 6804
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '999999SG9999999999')			FROM num_data;
+-      to_char      
+--------------------
+-       +         0
+-       +         0
+-       -  34338492
+-       +         4
+-       +   7799461
+-       +     16397
+-       +     93902
+-       -  83028485
+-       +     74881
+-       -  24926804
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+-       to_char       
+----------------------
+- 0.
+- 0.
+- -34338492.215397047
+- 4.31
+- 7799461.4119
+- 16397.038491
+- 93901.57763026
+- -83028485.
+- 74881.
+- -24926804.04504742
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char(val, '9.999EEEE')				FROM num_data;
+-  to_char   
+-------------
+-  0.000e+00
+-  0.000e+00
+- -3.434e+07
+-  4.310e+00
+-  7.799e+06
+-  1.640e+04
+-  9.390e+04
+- -8.303e+07
+-  7.488e+04
+- -2.493e+07
+-(10 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ WITH v(val) AS
+   (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+ SELECT val,
+@@ -1896,49 +1397,15 @@
+   to_char(val::float8, '9.999EEEE') as float8,
+   to_char(val::float4, '9.999EEEE') as float4
+ FROM v;
+-    val     |  numeric   |   float8   |   float4   
+-------------+------------+------------+------------
+-          0 |  0.000e+00 |  0.000e+00 |  0.000e+00
+-       -4.2 | -4.200e+00 | -4.200e+00 | -4.200e+00
+- 4200000000 |  4.200e+09 |  4.200e+09 |  4.200e+09
+-   0.000012 |  1.200e-05 |  1.200e-05 |  1.200e-05
+-   Infinity |  #.####### |  #.####### |  #.#######
+-  -Infinity |  #.####### |  #.####### |  #.#######
+-        NaN |  #.####### |  #.####### |  #.#######
+-(7 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ WITH v(exp) AS
+   (VALUES(-16379),(-16378),(-1234),(-789),(-45),(-5),(-4),(-3),(-2),(-1),(0),
+          (1),(2),(3),(4),(5),(38),(275),(2345),(45678),(131070),(131071))
+ SELECT exp,
+   to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+ FROM v;
+-  exp   |    numeric     
+---------+----------------
+- -16379 |  1.235e-16379
+- -16378 |  1.235e-16378
+-  -1234 |  1.235e-1234
+-   -789 |  1.235e-789
+-    -45 |  1.235e-45
+-     -5 |  1.235e-05
+-     -4 |  1.235e-04
+-     -3 |  1.235e-03
+-     -2 |  1.235e-02
+-     -1 |  1.235e-01
+-      0 |  1.235e+00
+-      1 |  1.235e+01
+-      2 |  1.235e+02
+-      3 |  1.235e+03
+-      4 |  1.235e+04
+-      5 |  1.235e+05
+-     38 |  1.235e+38
+-    275 |  1.235e+275
+-   2345 |  1.235e+2345
+-  45678 |  1.235e+45678
+- 131070 |  1.235e+131070
+- 131071 |  1.235e+131071
+-(22 rows)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ WITH v(val) AS
+   (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+ SELECT val,
+@@ -1946,17 +1413,7 @@
+   to_char(val::float8, 'MI9999999999.99') as float8,
+   to_char(val::float4, 'MI9999999999.99') as float4
+ FROM v;
+-    val     |    numeric     |     float8     |     float4     
+-------------+----------------+----------------+----------------
+-          0 |            .00 |            .00 |            .00
+-       -4.2 | -         4.20 | -         4.20 | -         4.20
+- 4200000000 |  4200000000.00 |  4200000000.00 |  4200000000
+-   0.000012 |            .00 |            .00 |            .00
+-   Infinity |    Infinity    |    Infinity    |    Infinity
+-  -Infinity | -  Infinity    | -  Infinity    | -  Infinity
+-        NaN |         NaN    |         NaN    |         NaN
+-(7 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ WITH v(val) AS
+   (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+ SELECT val,
+@@ -1964,237 +1421,100 @@
+   to_char(val::float8, 'MI99.99') as float8,
+   to_char(val::float4, 'MI99.99') as float4
+ FROM v;
+-    val     | numeric | float8 | float4 
+-------------+---------+--------+--------
+-          0 |    .00  |    .00 |    .00
+-       -4.2 | - 4.20  | - 4.20 | - 4.20
+- 4200000000 |  ##.##  |  ##.## |  ##.
+-   0.000012 |    .00  |    .00 |    .00
+-   Infinity |  ##.##  |  ##.## |  ##.
+-  -Infinity | -##.##  | -##.## | -##.
+-        NaN |  ##.##  |  ##.## |  ##.##
+-(7 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT to_char('100'::numeric, 'FM999.9');
+- to_char 
+----------
+- 100.
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'FM999.');
+- to_char 
+----------
+- 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'FM999');
+- to_char 
+----------
+- 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('12345678901'::float8, 'FM9999999999D9999900000000000000000');
+-     to_char     
+------------------
+- ##########.####
+-(1 row)
+-
++ERROR:  unknown signature: to_char(float, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Check parsing of literal text in a format string
+ SELECT to_char('100'::numeric, 'foo999');
+- to_char 
+----------
+- foo 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f\oo999');
+- to_char  
+-----------
+- f\oo 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f\\oo999');
+-  to_char  
+------------
+- f\\oo 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f\"oo999');
+- to_char  
+-----------
+- f"oo 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f\\"oo999');
+-  to_char  
+------------
+- f\"oo 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f"ool"999');
+- to_char  
+-----------
+- fool 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f"\ool"999');
+- to_char  
+-----------
+- fool 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f"\\ool"999');
+-  to_char  
+------------
+- f\ool 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f"ool\"999');
+- to_char  
+-----------
+- fool"999
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT to_char('100'::numeric, 'f"ool\\"999');
+-  to_char  
+------------
+- fool\ 100
+-(1 row)
+-
++ERROR:  unknown signature: to_char(decimal, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- TO_NUMBER()
+ --
+ SET lc_numeric = 'C';
++ERROR:  invalid value for parameter "lc_numeric": "C"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: c.utf-8
+ SELECT to_number('-34,338,492', '99G999G999');
+- to_number 
+------------
+- -34338492
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+-    to_number     
+-------------------
+- -34338492.654878
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('<564646.654564>', '999999.999999PR');
+-   to_number    
+-----------------
+- -564646.654564
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('0.00001-', '9.999999S');
+- to_number 
+------------
+-  -0.00001
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('5.01-', 'FM9.999999S');
+- to_number 
+------------
+-     -5.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('5.01-', 'FM9.999999MI');
+- to_number 
+------------
+-     -5.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+- to_number 
+------------
+- 544448.78
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('.01', 'FM9.99');
+- to_number 
+------------
+-      0.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('.0', '99999999.99999999');
+- to_number 
+------------
+-       0.0
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('0', '99.99');
+- to_number 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('.-01', 'S99.99');
+- to_number 
+------------
+-     -0.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('.01-', '99.99S');
+- to_number 
+------------
+-     -0.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+- to_number 
+------------
+-     -0.01
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('34,50','999,99');
+- to_number 
+------------
+-      3450
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('123,000','999G');
+- to_number 
+------------
+-       123
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('123456','999G999');
+- to_number 
+------------
+-    123456
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('$1234.56','L9,999.99');
+- to_number 
+------------
+-   1234.56
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('$1234.56','L99,999.99');
+- to_number 
+------------
+-   1234.56
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('$1,234.56','L99,999.99');
+- to_number 
+------------
+-   1234.56
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('1234.56','L99,999.99');
+- to_number 
+------------
+-   1234.56
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('1,234.56','L99,999.99');
+- to_number 
+------------
+-   1234.56
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ SELECT to_number('42nd', '99th');
+- to_number 
+------------
+-        42
+-(1 row)
+-
++ERROR:  unknown function: to_number()
+ RESET lc_numeric;
+ --
+ -- Input syntax
+@@ -2215,203 +1535,117 @@
+ INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
+ INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
+ INSERT INTO num_input_test(n1) VALUES ('12_000_000_000');
++ERROR:  could not parse "12_000_000_000" as type decimal: parse mantissa: 12_000_000_000
+ INSERT INTO num_input_test(n1) VALUES ('12_000.123_456');
++ERROR:  could not parse "12_000.123_456" as type decimal: parse mantissa: 12_000123_456
+ INSERT INTO num_input_test(n1) VALUES ('23_000_000_000e-1_0');
++ERROR:  could not parse "23_000_000_000e-1_0" as type decimal: parse exponent: -1_0: strconv.ParseInt: parsing "-1_0": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('.000_000_000_123e1_0');
++ERROR:  could not parse ".000_000_000_123e1_0" as type decimal: parse exponent: 1_0: strconv.ParseInt: parsing "1_0": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('.000_000_000_123e+1_1');
++ERROR:  could not parse ".000_000_000_123e+1_1" as type decimal: parse exponent: +1_1: strconv.ParseInt: parsing "+1_1": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('0b10001110111100111100001001010');
++ERROR:  could not parse "0b10001110111100111100001001010" as type decimal: parse mantissa: 0b10001110111100111100001001010
+ INSERT INTO num_input_test(n1) VALUES ('  -0B_1010_1011_0101_0100_1010_1001_1000_1100_1110_1011_0001_1111_0000_1010_1101_0010  ');
++ERROR:  could not parse "-0B_1010_1011_0101_0100_1010_1001_1000_1100_1110_1011_0001_1111_0000_1010_1101_0010" as type decimal: parse mantissa: 0b_1010_1011_0101_0100_1010_1001_1000_1100_1110_1011_0001_1111_0000_1010_1101_0010
+ INSERT INTO num_input_test(n1) VALUES ('  +0o112402761777 ');
++ERROR:  could not parse "+0o112402761777" as type decimal: parse mantissa: 0o112402761777
+ INSERT INTO num_input_test(n1) VALUES ('-0O0012_5524_5230_6334_3167_0261');
++ERROR:  could not parse "-0O0012_5524_5230_6334_3167_0261" as type decimal: parse mantissa: 0o0012_5524_5230_6334_3167_0261
+ INSERT INTO num_input_test(n1) VALUES ('-0x0000000000000000000000000deadbeef');
++ERROR:  could not parse "-0x0000000000000000000000000deadbeef" as type decimal: parse exponent: adbeef: strconv.ParseInt: parsing "adbeef": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES (' 0X_30b1_F33a_6DF0_bD4E_64DF_9BdA_7D15 ');
++ERROR:  could not parse "0X_30b1_F33a_6DF0_bD4E_64DF_9BdA_7D15" as type decimal: parse exponent: _64df_9bda_7d15: strconv.ParseInt: parsing "_64df_9bda_7d15": invalid syntax
+ -- bad inputs
+ INSERT INTO num_input_test(n1) VALUES ('     ');
+-ERROR:  invalid input syntax for type numeric: "     "
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('     ');
+-                                               ^
++ERROR:  could not parse "" as type decimal: parse mantissa: 
+ INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+-ERROR:  invalid input syntax for type numeric: "   1234   %"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+-                                               ^
++ERROR:  could not parse "1234   %" as type decimal: parse mantissa: 1234   %
+ INSERT INTO num_input_test(n1) VALUES ('xyz');
+-ERROR:  invalid input syntax for type numeric: "xyz"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('xyz');
+-                                               ^
++ERROR:  could not parse "xyz" as type decimal: parse mantissa: xyz
+ INSERT INTO num_input_test(n1) VALUES ('- 1234');
+-ERROR:  invalid input syntax for type numeric: "- 1234"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('- 1234');
+-                                               ^
++ERROR:  could not parse "- 1234" as type decimal: parse mantissa:  1234
+ INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+-ERROR:  invalid input syntax for type numeric: "5 . 0"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+-                                               ^
++ERROR:  could not parse "5 . 0" as type decimal: parse mantissa: 5  0
+ INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+-ERROR:  invalid input syntax for type numeric: "5. 0   "
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+-                                               ^
++ERROR:  could not parse "5. 0" as type decimal: parse mantissa: 5 0
+ INSERT INTO num_input_test(n1) VALUES ('');
+-ERROR:  invalid input syntax for type numeric: ""
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('');
+-                                               ^
++ERROR:  could not parse "" as type decimal: parse mantissa: 
+ INSERT INTO num_input_test(n1) VALUES (' N aN ');
+-ERROR:  invalid input syntax for type numeric: " N aN "
+-LINE 1: INSERT INTO num_input_test(n1) VALUES (' N aN ');
+-                                               ^
++ERROR:  could not parse "N aN" as type decimal: parse mantissa: n an
+ INSERT INTO num_input_test(n1) VALUES ('+NaN');
+-ERROR:  invalid input syntax for type numeric: "+NaN"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('+NaN');
+-                                               ^
+ INSERT INTO num_input_test(n1) VALUES ('-NaN');
+-ERROR:  invalid input syntax for type numeric: "-NaN"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('-NaN');
+-                                               ^
+ INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+-ERROR:  invalid input syntax for type numeric: "+ infinity"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+-                                               ^
++ERROR:  could not parse "+ infinity" as type decimal: parse mantissa:  infinity
+ INSERT INTO num_input_test(n1) VALUES ('_123');
+-ERROR:  invalid input syntax for type numeric: "_123"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('_123');
+-                                               ^
++ERROR:  could not parse "_123" as type decimal: parse mantissa: _123
+ INSERT INTO num_input_test(n1) VALUES ('123_');
+-ERROR:  invalid input syntax for type numeric: "123_"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('123_');
+-                                               ^
++ERROR:  could not parse "123_" as type decimal: parse mantissa: 123_
+ INSERT INTO num_input_test(n1) VALUES ('12__34');
+-ERROR:  invalid input syntax for type numeric: "12__34"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('12__34');
+-                                               ^
++ERROR:  could not parse "12__34" as type decimal: parse mantissa: 12__34
+ INSERT INTO num_input_test(n1) VALUES ('123_.456');
+-ERROR:  invalid input syntax for type numeric: "123_.456"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('123_.456');
+-                                               ^
++ERROR:  could not parse "123_.456" as type decimal: parse mantissa: 123_456
+ INSERT INTO num_input_test(n1) VALUES ('123._456');
+-ERROR:  invalid input syntax for type numeric: "123._456"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('123._456');
+-                                               ^
++ERROR:  could not parse "123._456" as type decimal: parse mantissa: 123_456
+ INSERT INTO num_input_test(n1) VALUES ('1.2e_34');
+-ERROR:  invalid input syntax for type numeric: "1.2e_34"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('1.2e_34');
+-                                               ^
++ERROR:  could not parse "1.2e_34" as type decimal: parse exponent: _34: strconv.ParseInt: parsing "_34": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('1.2e34_');
+-ERROR:  invalid input syntax for type numeric: "1.2e34_"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('1.2e34_');
+-                                               ^
++ERROR:  could not parse "1.2e34_" as type decimal: parse exponent: 34_: strconv.ParseInt: parsing "34_": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('1.2e3__4');
+-ERROR:  invalid input syntax for type numeric: "1.2e3__4"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('1.2e3__4');
+-                                               ^
++ERROR:  could not parse "1.2e3__4" as type decimal: parse exponent: 3__4: strconv.ParseInt: parsing "3__4": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('0b1112');
+-ERROR:  invalid input syntax for type numeric: "0b1112"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0b1112');
+-                                               ^
++ERROR:  could not parse "0b1112" as type decimal: parse mantissa: 0b1112
+ INSERT INTO num_input_test(n1) VALUES ('0c1112');
+-ERROR:  invalid input syntax for type numeric: "0c1112"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0c1112');
+-                                               ^
++ERROR:  could not parse "0c1112" as type decimal: parse mantissa: 0c1112
+ INSERT INTO num_input_test(n1) VALUES ('0o12345678');
+-ERROR:  invalid input syntax for type numeric: "0o12345678"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0o12345678');
+-                                               ^
++ERROR:  could not parse "0o12345678" as type decimal: parse mantissa: 0o12345678
+ INSERT INTO num_input_test(n1) VALUES ('0x1eg');
+-ERROR:  invalid input syntax for type numeric: "0x1eg"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0x1eg');
+-                                               ^
++ERROR:  could not parse "0x1eg" as type decimal: parse exponent: g: strconv.ParseInt: parsing "g": invalid syntax
+ INSERT INTO num_input_test(n1) VALUES ('0x12.34');
+-ERROR:  invalid input syntax for type numeric: "0x12.34"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0x12.34');
+-                                               ^
++ERROR:  could not parse "0x12.34" as type decimal: parse mantissa: 0x1234
+ INSERT INTO num_input_test(n1) VALUES ('0x__1234');
+-ERROR:  invalid input syntax for type numeric: "0x__1234"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0x__1234');
+-                                               ^
++ERROR:  could not parse "0x__1234" as type decimal: parse mantissa: 0x__1234
+ INSERT INTO num_input_test(n1) VALUES ('0x1234_');
+-ERROR:  invalid input syntax for type numeric: "0x1234_"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0x1234_');
+-                                               ^
++ERROR:  could not parse "0x1234_" as type decimal: parse mantissa: 0x1234_
+ INSERT INTO num_input_test(n1) VALUES ('0x12__34');
+-ERROR:  invalid input syntax for type numeric: "0x12__34"
+-LINE 1: INSERT INTO num_input_test(n1) VALUES ('0x12__34');
+-                                               ^
++ERROR:  could not parse "0x12__34" as type decimal: parse mantissa: 0x12__34
+ SELECT * FROM num_input_test;
+-                n1                 
+------------------------------------
+-                               123
+-                           3245874
+-                            -93853
+-                            555.50
+-                           -555.50
+-                               NaN
+-                               NaN
+-                          Infinity
+-                          Infinity
+-                         -Infinity
+-                          Infinity
+-                          Infinity
+-                         -Infinity
+-                       12000000000
+-                      12000.123456
+-                      2.3000000000
+-                              1.23
+-                              12.3
+-                         299792458
+-             -12345678901234567890
+-                        9999999999
+-             -12345678900987654321
+-                       -3735928559
+- 987654321234567898765432123456789
+-(24 rows)
++    n1     
++-----------
++       123
++   3245874
++    -93853
++    555.50
++   -555.50
++       NaN
++       NaN
++  Infinity
++  Infinity
++ -Infinity
++  Infinity
++  Infinity
++ -Infinity
++       NaN
++       NaN
++(15 rows)
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('34.5', 'numeric');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('34xyz', 'numeric');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('1e400000', 'numeric');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1e400000', 'numeric');
+-            message             | detail | hint | sql_error_code 
+---------------------------------+--------+------+----------------
+- value overflows numeric format |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT pg_input_is_valid('1234.567', 'numeric(8,4)');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('1234.567', 'numeric(7,4)');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1234.567', 'numeric(7,4)');
+-        message         |                                      detail                                       | hint | sql_error_code 
+-------------------------+-----------------------------------------------------------------------------------+------+----------------
+- numeric field overflow | A field with precision 7, scale 4 must round to an absolute value less than 10^3. |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('0x1234.567', 'numeric');
+-                       message                       | detail | hint | sql_error_code 
+------------------------------------------------------+--------+------+----------------
+- invalid input syntax for type numeric: "0x1234.567" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- Test precision and scale typemods
+ --
+@@ -2422,59 +1656,56 @@
+   thousandths numeric(3, 3),
+   millionths numeric(3, 6)
+ );
++ERROR:  at or near "-": syntax error
++DETAIL:  source SQL:
++CREATE TABLE num_typemod_test (
++  millions numeric(3, -6),
++                      ^
++HINT:  try \h CREATE TABLE
+ \d num_typemod_test
+-               Table "public.num_typemod_test"
+-   Column    |     Type      | Collation | Nullable | Default 
+--------------+---------------+-----------+----------+---------
+- millions    | numeric(3,-6) |           |          | 
+- thousands   | numeric(3,-3) |           |          | 
+- units       | numeric(3,0)  |           |          | 
+- thousandths | numeric(3,3)  |           |          | 
+- millionths  | numeric(3,6)  |           |          | 
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(num_typemod_test)$' COLLATE pg_catalog.default
++                                                                                ^
+ -- rounding of valid inputs
+ INSERT INTO num_typemod_test VALUES (123456, 123, 0.123, 0.000123, 0.000000123);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (654321, 654, 0.654, 0.000654, 0.000000654);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (2345678, 2345, 2.345, 0.002345, 0.000002345);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (7654321, 7654, 7.654, 0.007654, 0.000007654);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (12345678, 12345, 12.345, 0.012345, 0.000012345);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (87654321, 87654, 87.654, 0.087654, 0.000087654);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (123456789, 123456, 123.456, 0.123456, 0.000123456);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES (987654321, 987654, 987.654, 0.987654, 0.000987654);
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test VALUES ('NaN', 'NaN', 'NaN', 'NaN', 'NaN');
++ERROR:  relation "num_typemod_test" does not exist
+ SELECT scale(millions), * FROM num_typemod_test ORDER BY millions;
+- scale | millions  | thousands | units | thousandths | millionths 
+--------+-----------+-----------+-------+-------------+------------
+-     0 |         0 |         0 |     0 |       0.000 |   0.000000
+-     0 |   1000000 |      1000 |     1 |       0.001 |   0.000001
+-     0 |   2000000 |      2000 |     2 |       0.002 |   0.000002
+-     0 |   8000000 |      8000 |     8 |       0.008 |   0.000008
+-     0 |  12000000 |     12000 |    12 |       0.012 |   0.000012
+-     0 |  88000000 |     88000 |    88 |       0.088 |   0.000088
+-     0 | 123000000 |    123000 |   123 |       0.123 |   0.000123
+-     0 | 988000000 |    988000 |   988 |       0.988 |   0.000988
+-       |       NaN |       NaN |   NaN |         NaN |        NaN
+-(9 rows)
+-
++ERROR:  relation "num_typemod_test" does not exist
+ -- invalid inputs
+ INSERT INTO num_typemod_test (millions) VALUES ('inf');
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale -6 cannot hold an infinite value.
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test (millions) VALUES (999500000);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale -6 must round to an absolute value less than 10^9.
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test (thousands) VALUES (999500);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale -3 must round to an absolute value less than 10^6.
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test (units) VALUES (999.5);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale 0 must round to an absolute value less than 10^3.
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test (thousandths) VALUES (0.9995);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale 3 must round to an absolute value less than 1.
++ERROR:  relation "num_typemod_test" does not exist
+ INSERT INTO num_typemod_test (millionths) VALUES (0.0009995);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 3, scale 6 must round to an absolute value less than 10^-3.
++ERROR:  relation "num_typemod_test" does not exist
+ --
+ -- Test some corner cases for multiplication
+ --
+@@ -2503,11 +1734,7 @@
+ (1 row)
+ 
+ select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
+- trim_scale 
+-------------
+-       0.01
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ --
+ -- Test some corner cases for division
+ --
+@@ -2560,9 +1787,9 @@
+ (1 row)
+ 
+ select 70.0 / 70 ;
+-        ?column?        
+-------------------------
+- 1.00000000000000000000
++       ?column?        
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ select 12345678901234567890 % 123;
+@@ -2572,9 +1799,9 @@
+ (1 row)
+ 
+ select 12345678901234567890 / 123;
+-      ?column?      
+---------------------
+- 100371373180768845
++       ?column?        
++-----------------------
++ 100371373180768844.63
+ (1 row)
+ 
+ select div(12345678901234567890, 123);
+@@ -2593,239 +1820,183 @@
+ -- Test some corner cases for square root
+ --
+ select sqrt(1.000000000000003::numeric);
+-       sqrt        
+--------------------
+- 1.000000000000001
++         sqrt          
++-----------------------
++ 1.0000000000000015000
+ (1 row)
+ 
+ select sqrt(1.000000000000004::numeric);
+-       sqrt        
+--------------------
+- 1.000000000000002
++         sqrt          
++-----------------------
++ 1.0000000000000020000
+ (1 row)
+ 
+ select sqrt(96627521408608.56340355805::numeric);
+-        sqrt         
+----------------------
+- 9829929.87811248648
++         sqrt          
++-----------------------
++ 9829929.8781124864850
+ (1 row)
+ 
+ select sqrt(96627521408608.56340355806::numeric);
+-        sqrt         
+----------------------
+- 9829929.87811248649
++         sqrt          
++-----------------------
++ 9829929.8781124864850
+ (1 row)
+ 
+ select sqrt(515549506212297735.073688290367::numeric);
+-          sqrt          
+-------------------------
+- 718017761.766585921184
++         sqrt          
++-----------------------
++ 718017761.76658592118
+ (1 row)
+ 
+ select sqrt(515549506212297735.073688290368::numeric);
+-          sqrt          
+-------------------------
+- 718017761.766585921185
++         sqrt          
++-----------------------
++ 718017761.76658592118
+ (1 row)
+ 
+ select sqrt(8015491789940783531003294973900306::numeric);
+-       sqrt        
+--------------------
+- 89529278953540017
++         sqrt          
++-----------------------
++ 89529278953540017.500
+ (1 row)
+ 
+ select sqrt(8015491789940783531003294973900307::numeric);
+-       sqrt        
+--------------------
+- 89529278953540018
++         sqrt          
++-----------------------
++ 89529278953540017.500
+ (1 row)
+ 
+ --
+ -- Test code path for raising to integer powers
+ --
+ select 10.0 ^ -2147483648 as rounds_to_zero;
+-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               rounds_to_zero                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-(1 row)
+-
++ERROR:  exponent out of range
+ select 10.0 ^ -2147483647 as rounds_to_zero;
+-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               rounds_to_zero                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-(1 row)
+-
++ERROR:  exponent out of range
+ select 10.0 ^ 2147483647 as overflows;
+-ERROR:  value overflows numeric format
++ERROR:  exponent out of range
+ select 117743296169.0 ^ 1000000000 as overflows;
+-ERROR:  value overflows numeric format
++ERROR:  exponent out of range
+ -- cases that used to return inaccurate results
+ select 3.789 ^ 21.0000000000000000;
+-            ?column?            
+---------------------------------
+- 1409343026052.8716016316022141
++       ?column?        
++-----------------------
++ 1409343026052.8716016
+ (1 row)
+ 
+ select 3.789 ^ 35.0000000000000000;
+-                ?column?                
+-----------------------------------------
+- 177158169650516670809.3820586142670135
++         ?column?          
++---------------------------
++ 1.7715816965051667081E+20
+ (1 row)
+ 
+ select 1.2 ^ 345;
+-            ?column?            
+---------------------------------
+- 2077446682327378559843444695.6
++         ?column?          
++---------------------------
++ 2.0774466823273785598E+27
+ (1 row)
+ 
+ select 0.12 ^ (-20);
+-        ?column?        
+-------------------------
+- 2608405330458882702.55
++       ?column?        
++-----------------------
++ 2608405330458882702.6
+ (1 row)
+ 
+ select 1.000000000123 ^ (-2147483648);
+-      ?column?      
+---------------------
+- 0.7678656556403084
++        ?column?        
++------------------------
++ 0.76786565564030835357
+ (1 row)
+ 
+ select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
+- rounds_to_zero 
+-----------------
+-              0
++       rounds_to_zero        
++-----------------------------
++ 1.2412438646367982827E-1012
+ (1 row)
+ 
+ select round(((1 - 1.500012345678e-1000) ^ 1.45e1003) * 1e1000);
+                           round                           
+ ----------------------------------------------------------
+- 25218976308958387188077465658068501556514992509509282366
++ 25218976308958387188000000000000000000000000000000000000
+ (1 row)
+ 
+ -- cases that used to error out
+ select 0.12 ^ (-25);
+-          ?column?           
+------------------------------
+- 104825960103961013959336.50
++         ?column?          
++---------------------------
++ 1.0482596010396101396E+23
+ (1 row)
+ 
+ select 0.5678 ^ (-85);
+-          ?column?          
+-----------------------------
+- 782333637740774446257.7719
++         ?column?          
++---------------------------
++ 7.8233363774077444626E+20
+ (1 row)
+ 
+ select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
+- underflows 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  underflow, subnormal
+ -- negative base to integer powers
+ select (-1.0) ^ 2147483646;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++       ?column?        
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ select (-1.0) ^ 2147483647;
+-      ?column?       
+----------------------
+- -1.0000000000000000
++        ?column?        
++------------------------
++ -1.0000000000000000000
+ (1 row)
+ 
+ select (-1.0) ^ 2147483648;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++       ?column?        
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ select (-1.0) ^ 1000000000000000;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++       ?column?        
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ select (-1.0) ^ 1000000000000001;
+-      ?column?       
+----------------------
+- -1.0000000000000000
++        ?column?        
++------------------------
++ -1.0000000000000000000
+ (1 row)
+ 
+ -- integer powers of 10
+ select n, 10.0 ^ n as "10^n", (10.0 ^ n) * (10.0 ^ (-n)) = 1 as ok
+ from generate_series(-20, 20) n;
+-  n  |                  10^n                  | ok 
+------+----------------------------------------+----
+- -20 | 0.000000000000000000010000000000000000 | t
+- -19 |  0.00000000000000000010000000000000000 | t
+- -18 |   0.0000000000000000010000000000000000 | t
+- -17 |    0.000000000000000010000000000000000 | t
+- -16 |     0.00000000000000010000000000000000 | t
+- -15 |      0.0000000000000010000000000000000 | t
+- -14 |       0.000000000000010000000000000000 | t
+- -13 |        0.00000000000010000000000000000 | t
+- -12 |         0.0000000000010000000000000000 | t
+- -11 |          0.000000000010000000000000000 | t
+- -10 |           0.00000000010000000000000000 | t
+-  -9 |            0.0000000010000000000000000 | t
+-  -8 |             0.000000010000000000000000 | t
+-  -7 |              0.00000010000000000000000 | t
+-  -6 |               0.0000010000000000000000 | t
+-  -5 |                0.000010000000000000000 | t
+-  -4 |                 0.00010000000000000000 | t
+-  -3 |                  0.0010000000000000000 | t
+-  -2 |                   0.010000000000000000 | t
+-  -1 |                    0.10000000000000000 | t
+-   0 |                     1.0000000000000000 | t
+-   1 |                     10.000000000000000 | t
+-   2 |                     100.00000000000000 | t
+-   3 |                     1000.0000000000000 | t
+-   4 |                     10000.000000000000 | t
+-   5 |                     100000.00000000000 | t
+-   6 |                     1000000.0000000000 | t
+-   7 |                     10000000.000000000 | t
+-   8 |                     100000000.00000000 | t
+-   9 |                     1000000000.0000000 | t
+-  10 |                     10000000000.000000 | t
+-  11 |                     100000000000.00000 | t
+-  12 |                     1000000000000.0000 | t
+-  13 |                     10000000000000.000 | t
+-  14 |                     100000000000000.00 | t
+-  15 |                     1000000000000000.0 | t
+-  16 |                    10000000000000000.0 | t
+-  17 |                   100000000000000000.0 | t
+-  18 |                  1000000000000000000.0 | t
+-  19 |                 10000000000000000000.0 | t
+-  20 |                100000000000000000000.0 | t
+-(41 rows)
+-
++ERROR:  integer out of range
+ --
+ -- Tests for raising to non-integer powers
+ --
+ -- special cases
+ select 0.0 ^ 0.0;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++ ?column? 
++----------
++      NaN
+ (1 row)
+ 
+ select (-12.34) ^ 0.0;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++ ?column? 
++----------
++        1
+ (1 row)
+ 
+ select 12.34 ^ 0.0;
+-      ?column?      
+---------------------
+- 1.0000000000000000
++ ?column? 
++----------
++        1
+ (1 row)
+ 
+ select 0.0 ^ 12.34;
+-      ?column?      
+---------------------
+- 0.0000000000000000
++ ?column? 
++----------
++        0
+ (1 row)
+ 
+ -- NaNs
+@@ -2838,7 +2009,7 @@
+ select 'NaN'::numeric ^ 0;
+  ?column? 
+ ----------
+-        1
++      NaN
+ (1 row)
+ 
+ select 'NaN'::numeric ^ 1;
+@@ -2856,44 +2027,52 @@
+ select 1 ^ 'NaN'::numeric;
+  ?column? 
+ ----------
+-        1
++      NaN
+ (1 row)
+ 
+ -- invalid inputs
+ select 0.0 ^ (-12.34);
+-ERROR:  zero raised to a negative power is undefined
++ ?column? 
++----------
++ Infinity
++(1 row)
++
+ select (-12.34) ^ 1.2;
+-ERROR:  a negative number raised to a non-integer power yields a complex result
++ ?column? 
++----------
++      NaN
++(1 row)
++
+ -- cases that used to generate inaccurate results
+ select 32.1 ^ 9.8;
+-      ?column?      
+---------------------
+- 580429286790711.10
++       ?column?        
++-----------------------
++ 580429286790711.10122
+ (1 row)
+ 
+ select 32.1 ^ (-9.8);
+-             ?column?             
+-----------------------------------
+- 0.000000000000001722862754788209
++         ?column?          
++---------------------------
++ 1.7228627547882091082E-15
+ (1 row)
+ 
+ select 12.3 ^ 45.6;
+-                       ?column?                       
+-------------------------------------------------------
+- 50081010321492803393171165777624533697036806969694.9
++         ?column?          
++---------------------------
++ 5.0081010321492803393E+49
+ (1 row)
+ 
+ select 12.3 ^ (-45.6);
+-                              ?column?                               
+----------------------------------------------------------------------
+- 0.00000000000000000000000000000000000000000000000001996764828785491
++         ?column?          
++---------------------------
++ 1.9967648287854912965E-50
+ (1 row)
+ 
+ -- big test
+ select 1.234 ^ 5678;
+-                                                                                                                                                                                                                                                                  ?column?                                                                                                                                                                                                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- 307239295662090741644584872593956173493568238595074141254349565406661439636598896798876823220904084953233015553994854875890890858118656468658643918169805277399402542281777901029346337707622181574346585989613344285010764501017625366742865066948856161360224801370482171458030533346309750557140549621313515752078638620714732831815297168231790779296290266207315344008883935010274044001522606235576584215999260117523114297033944018699691024106823438431754073086813382242140602291215149759520833200152654884259619588924545324.597
++          ?column?          
++----------------------------
++ 3.0723929566209074164E+518
+ (1 row)
+ 
+ --
+@@ -2901,21 +2080,21 @@
+ --
+ -- special cases
+ select exp(0.0);
+-        exp         
+---------------------
+- 1.0000000000000000
++ exp 
++-----
++   1
+ (1 row)
+ 
+ select exp(1.0);
+-        exp         
+---------------------
+- 2.7182818284590452
++          exp          
++-----------------------
++ 2.7182818284590452354
+ (1 row)
+ 
+ select exp(1.0::numeric(71,70));
+-                                   exp                                    
+---------------------------------------------------------------------------
+- 2.7182818284590452353602874713526624977572470936999595749669676277240766
++          exp          
++-----------------------
++ 2.7182818284590452354
+ (1 row)
+ 
+ select exp('nan'::numeric);
+@@ -2937,200 +2116,147 @@
+ (1 row)
+ 
+ select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
+- rounds_to_zero 
+-----------------
+-              0
+-(1 row)
+-
++ERROR:  exp(): integer power: underflow, subnormal
+ select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
+- underflows 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  exp(): integer power: underflow, subnormal
+ -- cases that used to generate inaccurate results
+ select exp(32.999);
+-         exp         
+----------------------
+- 214429043492155.053
++          exp          
++-----------------------
++ 214429043492155.05325
+ (1 row)
+ 
+ select exp(-32.999);
+-               exp                
+-----------------------------------
+- 0.000000000000004663547361468248
++            exp            
++---------------------------
++ 4.6635473614682484965E-15
+ (1 row)
+ 
+ select exp(123.456);
+-                            exp                             
+-------------------------------------------------------------
+- 413294435277809344957685441227343146614594393746575438.725
++            exp            
++---------------------------
++ 4.1329443527780934496E+53
+ (1 row)
+ 
+ select exp(-123.456);
+-                                   exp                                   
+--------------------------------------------------------------------------
+- 0.000000000000000000000000000000000000000000000000000002419582541264601
++            exp            
++---------------------------
++ 2.4195825412646007661E-54
+ (1 row)
+ 
+ -- big test
+ select exp(1234.5678);
+-                                                                                                                                                                                                                                                                              exp                                                                                                                                                                                                                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- 146549072930959479983482138503979804217622199675223653966270157446954995433819741094410764947112047906012815540251009949604426069672532417736057033099274204598385314594846509975629046864798765888104789074984927709616261452461385220475510438783429612447831614003668421849727379202555580791042606170523016207262965336641214601082882495255771621327088265411334088968112458492660609809762865582162764292604697957813514621259353683899630997077707406305730694385703091201347848855199354307506425820147289848677003277208302716466011827836279231.9667
++            exp             
++----------------------------
++ 1.4654907293095947998E+536
+ (1 row)
+ 
+ --
+ -- Tests for generate_series
+ --
+ select * from generate_series(0.0::numeric, 4.0::numeric);
+- generate_series 
+------------------
+-             0.0
+-             1.0
+-             2.0
+-             3.0
+-             4.0
+-(5 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+- generate_series 
+------------------
+-             0.1
+-             1.4
+-             2.7
+-             4.0
+-(4 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+- generate_series 
+------------------
+-             4.0
+-             1.8
+-            -0.4
+-(3 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Trigger errors
+ select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
+-ERROR:  step size cannot equal zero
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+-ERROR:  step size cannot be NaN
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+-ERROR:  start value cannot be NaN
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+-ERROR:  stop value cannot be NaN
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series('inf'::numeric, 'inf'::numeric, 10::numeric);
+-ERROR:  start value cannot be infinity
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(0::numeric, 'inf'::numeric, 10::numeric);
+-ERROR:  stop value cannot be infinity
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(0::numeric, '42'::numeric, '-inf'::numeric);
+-ERROR:  step size cannot be infinity
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Checks maximum, output is truncated
+ select (i / (10::numeric ^ 131071))::numeric(1,0)
+ 	from generate_series(6 * (10::numeric ^ 131071),
+ 			     9 * (10::numeric ^ 131071),
+ 			     10::numeric ^ 131071) as a(i);
+- numeric 
+----------
+-       6
+-       7
+-       8
+-       9
+-(4 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Check usage with variables
+ select * from generate_series(1::numeric, 3::numeric) i, generate_series(i,3) j;
+- i | j 
+----+---
+- 1 | 1
+- 1 | 2
+- 1 | 3
+- 2 | 2
+- 2 | 3
+- 3 | 3
+-(6 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,i) j;
+- i | j 
+----+---
+- 1 | 1
+- 2 | 1
+- 2 | 2
+- 3 | 1
+- 3 | 2
+- 3 | 3
+-(6 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,5,i) j;
+- i | j 
+----+---
+- 1 | 1
+- 1 | 2
+- 1 | 3
+- 1 | 4
+- 1 | 5
+- 2 | 1
+- 2 | 3
+- 2 | 5
+- 3 | 1
+- 3 | 4
+-(10 rows)
+-
++ERROR:  unknown signature: generate_series(decimal, decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- Tests for LN()
+ --
+ -- Invalid inputs
+ select ln(-12.34);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  ln(): cannot take logarithm of a negative number
+ select ln(0.0);
+-ERROR:  cannot take logarithm of zero
++ERROR:  ln(): cannot take logarithm of zero
+ -- Some random tests
+ select ln(1.2345678e-28);
+-                   ln                    
+------------------------------------------
+- -64.26166165451762991204894255882820859
++           ln           
++------------------------
++ -64.261661654517629912
+ (1 row)
+ 
+ select ln(0.0456789);
+-         ln          
+----------------------
+- -3.0861187944847439
++           ln           
++------------------------
++ -3.0861187944847439401
+ (1 row)
+ 
+ select ln(0.349873948359354029493948309745709580730482050975);
+-                         ln                          
+------------------------------------------------------
+- -1.050182336912082775693991697979750253056317885460
++           ln           
++------------------------
++ -1.0501823369120827757
+ (1 row)
+ 
+ select ln(0.99949452);
+-           ln            
+--------------------------
+- -0.00050560779808326467
++             ln             
++----------------------------
++ -0.00050560779808326466898
+ (1 row)
+ 
+ select ln(1.00049687395);
+-           ln           
+-------------------------
+- 0.00049675054901370394
++            ln             
++---------------------------
++ 0.00049675054901370393841
+ (1 row)
+ 
+ select ln(1234.567890123456789);
+-         ln         
+---------------------
+- 7.1184763012977896
++          ln           
++-----------------------
++ 7.1184763012977896131
+ (1 row)
+ 
+ select ln(5.80397490724e5);
+-         ln         
+---------------------
+- 13.271468476626518
++          ln           
++-----------------------
++ 13.271468476626518106
+ (1 row)
+ 
+ select ln(9.342536355e34);
+-         ln         
+---------------------
+- 80.522470935524187
++          ln           
++-----------------------
++ 80.522470935524187094
+ (1 row)
+ 
+ --
+@@ -3138,46 +2264,44 @@
+ --
+ -- invalid inputs
+ select log(-12.34);
+-ERROR:  cannot take logarithm of a negative number
+-CONTEXT:  SQL function "log" statement 1
++ERROR:  log(): cannot take logarithm of a negative number
+ select log(0.0);
+-ERROR:  cannot take logarithm of zero
+-CONTEXT:  SQL function "log" statement 1
++ERROR:  log(): cannot take logarithm of zero
+ -- some random tests
+ select log(1.234567e-89);
+-                                                 log                                                 
+------------------------------------------------------------------------------------------------------
+- -88.90848533591373725637496492944925187293052336306443143312825869985819779294142441287021741054275
++          log           
++------------------------
++ -88.908485335913737256
+ (1 row)
+ 
+ select log(3.4634998359873254962349856073435545);
+-                 log                  
+---------------------------------------
+- 0.5395151714070134409152404011959981
++          log           
++------------------------
++ 0.53951517140701344092
+ (1 row)
+ 
+ select log(9.999999999999999999);
+-         log          
+-----------------------
+- 1.000000000000000000
++          log           
++------------------------
++ 0.99999999999999999996
+ (1 row)
+ 
+ select log(10.00000000000000000);
+-         log         
+----------------------
+- 1.00000000000000000
++          log          
++-----------------------
++ 1.0000000000000000000
+ (1 row)
+ 
+ select log(10.00000000000000001);
+-         log         
+----------------------
+- 1.00000000000000000
++          log          
++-----------------------
++ 1.0000000000000000004
+ (1 row)
+ 
+ select log(590489.45235237);
+-        log        
+--------------------
+- 5.771212144411727
++          log          
++-----------------------
++ 5.7712121444117270360
+ (1 row)
+ 
+ --
+@@ -3185,243 +2309,115 @@
+ --
+ -- invalid inputs
+ select log(-12.34, 56.78);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ select log(-12.34, -56.78);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ select log(12.34, -56.78);
+-ERROR:  cannot take logarithm of a negative number
++ERROR:  log(): cannot take logarithm of a negative number
+ select log(0.0, 12.34);
+-ERROR:  cannot take logarithm of zero
++ERROR:  log(): cannot take logarithm of zero
+ select log(12.34, 0.0);
+-ERROR:  cannot take logarithm of zero
++ERROR:  log(): cannot take logarithm of zero
+ select log(1.0, 12.34);
+-ERROR:  division by zero
++ERROR:  log(): division by zero
+ -- some random tests
+ select log(1.23e-89, 6.4689e45);
+-                                              log                                               
+-------------------------------------------------------------------------------------------------
+- -0.5152489207781856983977054971756484879653568168479201885425588841094788842469115325262329756
++           log           
++-------------------------
++ -0.51524892077818569840
+ (1 row)
+ 
+ select log(0.99923, 4.58934e34);
+-         log         
+----------------------
+- -103611.55579544132
++          log           
++------------------------
++ -103611.55579544131613
+ (1 row)
+ 
+ select log(1.000016, 8.452010e18);
+-        log         
+---------------------
+- 2723830.2877097365
++          log          
++-----------------------
++ 2723830.2877097365342
+ (1 row)
+ 
+ select log(3.1954752e47, 9.4792021e-73);
+-                                         log                                         
+--------------------------------------------------------------------------------------
+- -1.51613372350688302142917386143459361608600157692779164475351842333265418126982165
++          log           
++------------------------
++ -1.5161337235068830214
+ (1 row)
+ 
+ --
+ -- Tests for scale()
+ --
+ select scale(numeric 'NaN');
+- scale 
+--------
+-      
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(numeric 'inf');
+- scale 
+--------
+-      
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(NULL::numeric);
+- scale 
+--------
+-      
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(1.12);
+- scale 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(0);
+- scale 
+--------
+-     0
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(0.00);
+- scale 
+--------
+-     2
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(1.12345);
+- scale 
+--------
+-     5
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(110123.12475871856128);
+- scale 
+--------
+-    14
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(-1123.12471856128);
+- scale 
+--------
+-    11
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ select scale(-13.000000000000000);
+- scale 
+--------
+-    15
+-(1 row)
+-
++ERROR:  unknown function: scale()
+ --
+ -- Tests for min_scale()
+ --
+ select min_scale(numeric 'NaN') is NULL; -- should be true
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(numeric 'inf') is NULL; -- should be true
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(0);                     -- no digits
+- min_scale 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(0.00);                  -- no digits again
+- min_scale 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.0);                   -- no scale
+- min_scale 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.1);                   -- scale 1
+- min_scale 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.12);                  -- scale 2
+- min_scale 
+------------
+-         2
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.123);                 -- scale 3
+- min_scale 
+------------
+-         3
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.1234);                -- scale 4, filled digit
+- min_scale 
+------------
+-         4
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.12345);               -- scale 5, 2 NDIGITS
+- min_scale 
+------------
+-         5
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1.1000);                -- 1 pos in NDIGITS
+- min_scale 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ select min_scale(1e100);                 -- very big number
+- min_scale 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: min_scale()
+ --
+ -- Tests for trim_scale()
+ --
+ select trim_scale(numeric 'NaN');
+- trim_scale 
+-------------
+-        NaN
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(numeric 'inf');
+- trim_scale 
+-------------
+-   Infinity
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(1.120);
+- trim_scale 
+-------------
+-       1.12
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(0);
+- trim_scale 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(0.00);
+- trim_scale 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(1.1234500);
+- trim_scale 
+-------------
+-    1.12345
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(110123.12475871856128000);
+-      trim_scale       
+------------------------
+- 110123.12475871856128
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(-1123.124718561280000000);
+-    trim_scale     
+--------------------
+- -1123.12471856128
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(-13.00000000000000000000);
+- trim_scale 
+-------------
+-        -13
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ select trim_scale(1e100);
+-                                              trim_scale                                               
+--------------------------------------------------------------------------------------------------------
+- 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ --
+ -- Tests for SUM()
+ --
+@@ -3446,47 +2442,100 @@
+ INSERT INTO num_variance VALUES (3e-500);
+ INSERT INTO num_variance VALUES (-3e-500);
+ INSERT INTO num_variance VALUES (4e-500 - 1e-16383);
++ERROR:  error type checking constant value: could not evaluate 1e-16383 as Datum type DDecimal from string "1e-16383": could not parse "1e-16383" as type decimal: underflow, subnormal
+ INSERT INTO num_variance VALUES (-4e-500 + 1e-16383);
++ERROR:  error type checking constant value: could not evaluate 1e-16383 as Datum type DDecimal from string "1e-16383": could not parse "1e-16383" as type decimal: underflow, subnormal
+ -- variance is just under 12.5e-1000 and so should round down to 12e-1000
+ SELECT trim_scale(variance(a) * 1e1000) FROM num_variance;
+- trim_scale 
+-------------
+-         12
+-(1 row)
+-
++ERROR:  unknown function: trim_scale()
+ -- check that parallel execution produces the same result
+ BEGIN;
+ ALTER TABLE num_variance SET (parallel_workers = 4);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  unimplemented: storage parameter "parallel_workers"
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/43299/_version_
+ SET LOCAL parallel_setup_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL max_parallel_workers_per_gather = 4;
+-SELECT trim_scale(variance(a) * 1e1000) FROM num_variance;
+- trim_scale 
+-------------
+-         12
+-(1 row)
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++SELECT trim_scale(variance(a) * 1e1000) FROM num_variance;
++ERROR:  unknown function: trim_scale()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- case where sum of squares would overflow but variance does not
+ DELETE FROM num_variance;
+ INSERT INTO num_variance SELECT 9e131071 + x FROM generate_series(1, 5) x;
++ERROR:  error type checking constant value: could not evaluate 9e131071 as Datum type DDecimal from string "9e131071": could not parse "9e131071" as type decimal: exponent out of range
+ SELECT variance(a) FROM num_variance;
+-      variance      
+---------------------
+- 2.5000000000000000
++ variance 
++----------
++         
+ (1 row)
+ 
+ -- check that parallel execution produces the same result
+ BEGIN;
+ ALTER TABLE num_variance SET (parallel_workers = 4);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  unimplemented: storage parameter "parallel_workers"
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/43299/_version_
+ SET LOCAL parallel_setup_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL max_parallel_workers_per_gather = 4;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT variance(a) FROM num_variance;
+-      variance      
+---------------------
+- 2.5000000000000000
++ variance 
++----------
++         
+ (1 row)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ DROP TABLE num_variance;
+ --
+ -- Tests for GCD()
+@@ -3502,19 +2551,7 @@
+              ('inf', '42'),
+              ('inf', 'inf')
+      ) AS v(a, b);
+-    a     |     b     |   gcd   |   gcd   |   gcd   |   gcd   
+-----------+-----------+---------+---------+---------+---------
+-        0 |         0 |       0 |       0 |       0 |       0
+-        0 |       NaN |     NaN |     NaN |     NaN |     NaN
+-        0 |     46375 |   46375 |   46375 |   46375 |   46375
+-   433125 |     46375 |     875 |     875 |     875 |     875
+-  43312.5 |    4637.5 |    87.5 |    87.5 |    87.5 |    87.5
+- 4331.250 | 463.75000 | 8.75000 | 8.75000 | 8.75000 | 8.75000
+- Infinity |         0 |     NaN |     NaN |     NaN |     NaN
+- Infinity |        42 |     NaN |     NaN |     NaN |     NaN
+- Infinity |  Infinity |     NaN |     NaN |     NaN |     NaN
+-(9 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ --
+ -- Tests for LCM()
+ --
+@@ -3530,71 +2567,40 @@
+              ('inf', '42'),
+              ('inf', 'inf')
+      ) AS v(a, b);
+-    a     |     b     |     lcm      |     lcm      |     lcm      |     lcm      
+-----------+-----------+--------------+--------------+--------------+--------------
+-        0 |         0 |            0 |            0 |            0 |            0
+-        0 |       NaN |          NaN |          NaN |          NaN |          NaN
+-        0 |     13272 |            0 |            0 |            0 |            0
+-    13272 |     13272 |        13272 |        13272 |        13272 |        13272
+-   423282 |     13272 |     11851896 |     11851896 |     11851896 |     11851896
+-  42328.2 |    1327.2 |    1185189.6 |    1185189.6 |    1185189.6 |    1185189.6
+- 4232.820 | 132.72000 | 118518.96000 | 118518.96000 | 118518.96000 | 118518.96000
+- Infinity |         0 |          NaN |          NaN |          NaN |          NaN
+- Infinity |        42 |          NaN |          NaN |          NaN |          NaN
+- Infinity |  Infinity |          NaN |          NaN |          NaN |          NaN
+-(10 rows)
+-
++ERROR:  VALUES types string and decimal cannot be matched
+ SELECT lcm(9999 * (10::numeric)^131068 + (10::numeric^131068 - 1), 2); -- overflow
+-ERROR:  value overflows numeric format
++ERROR:  unknown function: lcm()
+ --
+ -- Tests for factorial
+ --
+ SELECT factorial(4);
+- factorial 
+------------
+-        24
+-(1 row)
+-
++ERROR:  unknown function: factorial()
+ SELECT factorial(15);
+-   factorial   
+----------------
+- 1307674368000
+-(1 row)
+-
++ERROR:  unknown function: factorial()
+ SELECT factorial(100000);
+-ERROR:  value overflows numeric format
++ERROR:  unknown function: factorial()
+ SELECT factorial(0);
+- factorial 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: factorial()
+ SELECT factorial(-4);
+-ERROR:  factorial of a negative number is undefined
++ERROR:  unknown function: factorial()
+ --
+ -- Tests for pg_lsn()
+ --
+ SELECT pg_lsn(23783416::numeric);
+-  pg_lsn   
+------------
+- 0/16AE7F8
+-(1 row)
+-
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT pg_lsn(0::numeric);
+- pg_lsn 
+---------
+- 0/0
+-(1 row)
+-
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT pg_lsn(18446744073709551615::numeric);
+-      pg_lsn       
+--------------------
+- FFFFFFFF/FFFFFFFF
+-(1 row)
+-
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT pg_lsn(-1::numeric);
+-ERROR:  pg_lsn out of range
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT pg_lsn(18446744073709551616::numeric);
+-ERROR:  pg_lsn out of range
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT pg_lsn('NaN'::numeric);
+-ERROR:  cannot convert NaN to pg_lsn
++ERROR:  unknown signature: pg_lsn(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
