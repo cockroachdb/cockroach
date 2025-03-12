@@ -5,9 +5,13 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-import { propsToQueryString } from "../util";
+import { SWRConfiguration, SWRResponse } from "swr";
+import { propsToQueryString, useSwrWithClusterId } from "../util";
 
 import { fetchData } from "./fetchData";
+import Long from "long";
+
+import { isTerminalState } from "src/jobs";
 
 const JOBS_PATH = "_admin/v1/jobs";
 
@@ -46,6 +50,18 @@ export const getJobs = (
     "30M",
   );
 };
+
+export function useJobDetails(jobId: Long, opts: SWRConfiguration = {}) {
+  return useSwrWithClusterId<JobResponse>(
+    { name: "jobDetailsById", jobId },
+    () => getJob({ job_id: jobId }),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      ...opts,
+    },
+  );
+}
 
 export const getJob = (
   req: JobRequest,
