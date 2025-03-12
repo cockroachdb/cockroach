@@ -379,4 +379,6 @@ message TracingAggregatorEvents {
     (gogoproto.customname) = "FlowID",
     (gogoproto.customtype) = "FlowID"];
   map<string, bytes> events = 3;
+
+  map<string, util.tracing.tracingpb.OperationMetadata> span_totals = 4 [(gogoproto.nullable) = false];
 }
