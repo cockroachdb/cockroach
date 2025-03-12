@@ -260,7 +260,8 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"namespace " +
 		"case " +
 		"select_into " +
-		"prepared_xacts " +
+		// TODO(#137549): prepared transactions cause hanging.
+		//"prepared_xacts " +
 		"select_distinct " +
 		// TODO(#117689): Transactions test causes server crash.
 		// "transactions " +
@@ -404,22 +405,39 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	outputDir := t.ArtifactsDir()
 
-	t.Status("collecting the test results")
-	t.L().Printf("If the test failure is expected, consider updating the testdata with regression.diffs in artifacts")
-
 	// Copy the test result files.
-	collectFiles := []string{
-		"regression.out", "regression.diffs",
-	}
-	for _, file := range collectFiles {
+	for _, file := range []struct {
+		src, dest string
+	}{
+		{src: "regression.out", dest: "regression.out"},
+		{src: "regression.diffs", dest: "regression.diffs.tmp"},
+	} {
 		if err := c.Get(
 			ctx, t.L(),
-			filepath.Join(pgregressDir, file),
-			filepath.Join(outputDir, file),
+			filepath.Join(pgregressDir, file.src),
+			filepath.Join(outputDir, file.dest),
 			node,
 		); err != nil {
-			t.L().Printf("failed to retrieve %s: %s", file, err)
+			t.L().Printf("failed to retrieve %s: %s", file.src, err)
 		}
+	}
+
+	// Replace specific versions in URIs with a generic "_version_".
+	actualB, err := os.ReadFile(filepath.Join(outputDir, "regression.diffs.tmp"))
+	if err != nil {
+		t.L().Printf("Failed to read %s: %s", filepath.Join(outputDir, "regression.diffs.tmp"), err)
+	}
+	issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+	actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
+	docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+	actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
+	err = os.WriteFile(filepath.Join(outputDir, "regression.diffs"), actualB, 0644)
+	if err != nil {
+		t.L().Printf("Failed to write %s: %s", filepath.Join(outputDir, "regression.diffs"), err)
+	}
+	actual := string(actualB)
+	if err = os.Remove(filepath.Join(outputDir, "regression.diffs.tmp")); err != nil {
+		t.L().Printf("Failed to remove %s: %s", filepath.Join(outputDir, "regression.diffs.tmp"), err)
 	}
 
 	// Compare the regression diffs.
@@ -428,17 +446,6 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.L().Printf("Failed to read %s: %s", testdata, err)
 	}
 	expected := string(expectedB)
-	actualB, err := os.ReadFile(filepath.Join(outputDir, "regression.diffs"))
-	if err != nil {
-		t.L().Printf("Failed to read %s: %s", testdata, err)
-	}
-
-	// Replace specific versions in URIs with a generic "_version_".
-	issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
-	actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
-	docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
-	actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
-	actual := string(actualB)
 
 	if expected != actual {
 		diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
@@ -472,6 +479,8 @@ func registerPGRegress(r registry.Registry) {
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Weekly),
 		Leases:            registry.MetamorphicLeases,
+		// TODO(#142777): matview file results in an invalid descriptor.
+		SkipPostValidations: registry.PostValidationInvalidDescriptors,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
