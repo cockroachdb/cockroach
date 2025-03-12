@@ -9,6 +9,7 @@ go_library(
         "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
     ],
 )
 

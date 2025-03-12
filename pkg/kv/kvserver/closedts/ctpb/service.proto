@@ -81,8 +81,15 @@ message Update {
     uint64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
     uint64 lai = 2 [(gogoproto.customname) = "LAI", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.LeaseAppliedIndex"];
     roachpb.RangeClosedTimestampPolicy policy = 3;
+    int32 node_id = 4 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
   repeated RangeUpdate added_or_updated = 6 [(gogoproto.nullable) = false];
+
+  message GroupUpdateByNode {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    util.hlc.Timestamp closed_timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  repeated GroupUpdateByNode closed_timestamps_by_node_id = 7 [(gogoproto.nullable) = false];
 }
 
 message Response {}

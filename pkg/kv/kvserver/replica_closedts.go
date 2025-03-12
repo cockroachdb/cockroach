@@ -33,6 +33,7 @@ func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	lastClosedByNodeID map[roachpb.NodeID]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -52,6 +53,22 @@ func (r *Replica) BumpSideTransportClosed(
 	lai := r.shMu.state.LeaseAppliedIndex
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
+
+	maxLatency := hlc.MinTimestamp
+	furthestNodeID := roachpb.NodeID(0)
+	for _, peer := range res.Desc.InternalReplicas {
+		if val, ok := lastClosedByNodeID[peer.NodeID]; ok {
+			if maxLatency.Less(val) {
+				val = maxLatency
+				furthestNodeID = peer.NodeID
+			}
+		}
+	}
+	if maxLatency != hlc.MinTimestamp {
+		target = maxLatency
+		r.mu.cachedFurthestNodeID = furthestNodeID
+	}
+
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
@@ -105,6 +122,7 @@ func (r *Replica) BumpSideTransportClosed(
 	res.OK = true
 	res.LAI = lai
 	res.Policy = policy
+	res.NodeID = furthestNodeID
 	return res
 }
 
@@ -118,7 +136,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedts.DefaultMaxNetworkRTT,
+		r.store.latencyTracker.GetLatencyByLocalityProximity(r.mu.cachedFurthestNodeID),
 		r.closedTimestampPolicyRLocked(),
 	)
 }

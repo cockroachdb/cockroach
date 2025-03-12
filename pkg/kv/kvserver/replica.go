@@ -498,6 +498,7 @@ type Replica struct {
 	}
 
 	mu struct {
+		cachedFurthestNodeID roachpb.NodeID
 		// Protects all fields in the mu struct.
 		ReplicaMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,

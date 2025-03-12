@@ -212,6 +212,9 @@ func (r *incomingStream) GetClosedTimestamp(
 	if !ok {
 		return hlc.Timestamp{}, 0
 	}
+	if v, ok := r.mu.lastClosedByNodeID[info.nodeID]; ok {
+		return v, info.lai
+	}
 	return r.mu.lastClosed[info.policy], info.lai
 }
 
@@ -246,8 +249,12 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			if !ok {
 				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
+			lastClosed := r.mu.lastClosed[info.policy]
+			if ts, ok := r.mu.lastClosedByNodeID[info.nodeID]; ok {
+				lastClosed = ts
+			}
 			r.stores.ForwardSideTransportClosedTimestampForRange(
-				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
+				ctx, rangeID, lastClosed, info.lai)
 		}
 		r.mu.RUnlock()
 	}
@@ -262,6 +269,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			r.mu.lastClosed[i] = hlc.Timestamp{}
 		}
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
+		r.mu.lastClosedByNodeID = make(map[roachpb.NodeID]hlc.Timestamp, len(r.mu.lastClosedByNodeID))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
 		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
 			"%d, got %d", r.mu.lastSeqNum+1, msg.SeqNum)
@@ -272,6 +280,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		r.mu.tracked[rng.RangeID] = trackedRange{
 			lai:    rng.LAI,
 			policy: rng.Policy,
+			nodeID: rng.NodeID,
 		}
 	}
 	for _, rangeID := range msg.Removed {
@@ -279,6 +288,9 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 	}
 	for _, update := range msg.ClosedTimestamps {
 		r.mu.lastClosed[update.Policy] = update.ClosedTimestamp
+	}
+	for _, update := range msg.ClosedTimestampsByNodeId {
+		r.mu.lastClosedByNodeID[update.NodeID] = update.ClosedTimestamp
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const maxLocalityComparisonType = roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE + 1
@@ -22,20 +23,11 @@ const maxLocalityComparisonType = roachpb.LocalityComparisonType_SAME_REGION_SAM
 // takes for closed timestamp updates to propagate and determine lead time for
 // global reads.
 type LatencyTracker struct {
-	// enabled is set to true if the latency tracker is enabled and has been refreshed.
-	enabled atomic.Bool
-	// nodeLocality represents the locality information of the current node.
+	enabled      atomic.Bool
 	nodeLocality roachpb.Locality
-	// getNodeDesc is a function that returns the descriptor for a given node ID.
-	getNodeDesc func(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-	// getLatency is a function that returns the network latency to a given node ID.
-	getLatency func(roachpb.NodeID) (time.Duration, bool)
-	// rtt stores round-trip times for each locality comparison type (e.g.
-	// cross-region, cross-zone). We leave LocalityComparisonType_UNDEFINED in
-	// this slice to avoid the complexity with one-off indices. But
-	// LocalityComparisonType_UNDEFINED should always correspond to
-	// DefaultMaxNetworkRTT.
-	rtt [maxLocalityComparisonType]atomic.Int64
+	getNodeDesc  func(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error)
+	getLatency   func(roachpb.NodeID) (time.Duration, bool)
+	rtt          syncutil.Map[roachpb.NodeID, int64]
 }
 
 func NewLatencyTracker(
@@ -53,11 +45,6 @@ func NewLatencyTracker(
 		getNodeDesc:  getNodeDesc,
 	}
 	l.enabled.Store(false)
-	// Initialize all locality comparison types with default latency including UNDEFINED.
-	// UNDEFINED should never be updated after initialization.
-	for i := 0; i < len(l.rtt); i++ {
-		l.rtt[roachpb.LocalityComparisonType(i)].Store(int64(closedts.DefaultMaxNetworkRTT))
-	}
 	return l
 }
 
@@ -66,27 +53,19 @@ func NewLatencyTracker(
 // DefaultMaxNetworkRTT. If lead_for_global_reads_auto_tune_interval is 0, the
 // latency tracker returns closedts.DefaultMaxNetworkRTT for all locality
 // comparison types.
-func (l *LatencyTracker) GetLatencyByLocalityProximity(
-	lct roachpb.LocalityComparisonType,
-) time.Duration {
-	if lct == roachpb.LocalityComparisonType_UNDEFINED || !l.enabled.Load() {
+func (l *LatencyTracker) GetLatencyByLocalityProximity(nodeID roachpb.NodeID) time.Duration {
+	if !l.enabled.Load() {
 		return closedts.DefaultMaxNetworkRTT
 	}
-	return time.Duration(l.rtt[lct].Load())
+
+	if rtt, ok := l.rtt.Load(nodeID); ok {
+		return time.Duration(*rtt)
+	}
+	return closedts.DefaultMaxNetworkRTT
 }
 
 func (l *LatencyTracker) Enabled() bool {
 	return l.enabled.Load()
-}
-
-// updateLatencyForLocalityProximity updates latency for given locality comparison type.
-func (l *LatencyTracker) updateLatencyForLocalityProximity(
-	lct roachpb.LocalityComparisonType, updatedLatency time.Duration,
-) {
-	if lct == roachpb.LocalityComparisonType_UNDEFINED {
-		return
-	}
-	l.rtt[lct].Store(int64(updatedLatency))
 }
 
 // Disable disables the latency tracker. All future calls to
@@ -100,7 +79,6 @@ func (l *LatencyTracker) Disable() {
 // given node IDs.
 func (l *LatencyTracker) RefreshLatency(nodeIDs roachpb.NodeIDSlice) {
 	l.enabled.Store(true)
-	maxLatencies := map[roachpb.LocalityComparisonType]time.Duration{}
 	for _, nodeID := range nodeIDs {
 		// nodeID might be the same as the current node. It is fine since we're
 		// taking max latency for each locality comparison type.
@@ -108,16 +86,11 @@ func (l *LatencyTracker) RefreshLatency(nodeIDs roachpb.NodeIDSlice) {
 		if err != nil {
 			continue
 		}
-		comparisonResult, _, _ := l.nodeLocality.CompareWithLocality(toNodeDesc.Locality)
-		if latency, ok := l.getLatency(nodeID); ok {
-			maxLatencies[comparisonResult] = max(maxLatencies[comparisonResult], latency)
+		latency, ok := l.getLatency(toNodeDesc.NodeID)
+		if !ok {
+			continue
 		}
-	}
-	// Skip LocalityComparisonType_UNDEFINED since it should always be
-	// DefaultMaxNetworkRTT.
-	for i := roachpb.LocalityComparisonType_CROSS_REGION; i < maxLocalityComparisonType; i++ {
-		if maxLatency, ok := maxLatencies[i]; ok {
-			l.updateLatencyForLocalityProximity(i, maxLatency)
-		}
+		latencyAsInt := int64(latency)
+		l.rtt.Store(nodeID, &latencyAsInt)
 	}
 }
