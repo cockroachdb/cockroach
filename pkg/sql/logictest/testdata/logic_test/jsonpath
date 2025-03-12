@@ -78,6 +78,12 @@ SELECT '$.ABC[*].DEF.GHI[*]'::JSONPATH
 ----
 $."ABC"[*]."DEF"."GHI"[*]
 
+statement error pgcode 42883 could not identify an ordering operator for type jsonpath
+SELECT '$'::JSONPATH AS col ORDER BY col DESC NULLS FIRST;
+
+statement error pgcode 42883 could not identify an ordering operator for type jsonpath
+SELECT '$'::JSONPATH ORDER BY 1 ASC;
+
 ## When we allow table creation
 
 # statement ok
