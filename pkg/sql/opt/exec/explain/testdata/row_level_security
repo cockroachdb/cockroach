@@ -171,3 +171,203 @@ select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c1 = 1;
           table: t2@t2_pkey
           spans: FULL SCAN
           policies: t2_pol_1
+
+# Show policy information for insert
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE writer (key int not null primary key, value text);
+----
+
+exec-ddl
+ALTER TABLE writer ENABLE ROW LEVEL SECURITY;
+----
+
+plan
+INSERT INTO writer VALUES (0, 'zero')
+----
+• insert fast path
+  into: writer(key, value)
+  auto commit
+  size: 3 columns, 1 row
+  policies: row-level security enabled, no policies applied.
+
+exec-ddl
+CREATE POLICY p_insert on writer FOR INSERT WITH CHECK (value like 'inserted: %');
+----
+
+plan
+INSERT INTO writer VALUES (1, 'one'), (2, 'two');
+----
+• insert
+│ into: writer(key, value)
+│ auto commit
+│ policies: p_insert
+│
+└── • render
+    │
+    └── • values
+          size: 2 columns, 2 rows
+
+plan
+INSERT INTO writer VALUES (3, 'three');
+----
+• insert fast path
+  into: writer(key, value)
+  auto commit
+  size: 3 columns, 1 row
+  policies: p_insert
+
+exec-ddl
+CREATE TABLE populator (key int not null primary key, value text);
+----
+
+plan
+INSERT INTO writer SELECT * from populator
+----
+• insert
+│ into: writer(key, value)
+│ auto commit
+│ policies: p_insert
+│
+└── • render
+    │
+    └── • scan
+          table: populator@populator_pkey
+          spans: FULL SCAN
+
+# Show policy information for update
+# ----------------------------------------------------------------------
+
+plan
+UPDATE writer SET key = key * 10;
+----
+• update
+│ table: writer
+│ set: key
+│ auto commit
+│ policies: row-level security enabled, no policies applied.
+│
+└── • render
+    │
+    └── • norows
+          policies: row-level security enabled, no policies applied.
+
+exec-ddl
+CREATE POLICY p_update1 ON writer FOR UPDATE USING (key = 5)  WITH CHECK (value like 'updater: %')
+----
+
+exec-ddl
+CREATE POLICY p_update2 ON writer FOR UPDATE WITH CHECK (value IN ('updater: a', 'updater: b', 'updater: c'))
+----
+
+plan
+UPDATE writer SET key = key * 11;
+----
+• update
+│ table: writer
+│ set: key
+│ auto commit
+│ policies: p_update1
+│
+└── • render
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          locking strength: for update
+          policies: p_update1
+
+plan
+UPDATE writer SET key = key * 15 WHERE value = 'some-val' or value = 'other-val';
+----
+• update
+│ table: writer
+│ set: key
+│ auto commit
+│ policies: p_update1
+│
+└── • render
+    │
+    └── • filter
+        │ filter: (value = _) OR (value = _)
+        │
+        └── • scan
+              table: writer@writer_pkey
+              spans: 1+ spans
+              policies: p_update1
+
+plan
+UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
+----
+• update
+│ table: writer
+│ set: value
+│ auto commit
+│ policies: p_update1
+│
+└── • render
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          locking strength: for update
+          policies: p_update1
+
+plan
+UPDATE writer SET value = value WHERE key = 5;
+----
+• update
+│ table: writer
+│ set: value
+│ auto commit
+│ policies: p_update1
+│
+└── • render
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          locking strength: for update
+          policies: p_update1
+
+# Show policy information for delete
+# ----------------------------------------------------------------------
+
+plan
+DELETE FROM writer WHERE key = 1;
+----
+• delete
+│ from: writer
+│ auto commit
+│
+└── • norows
+      policies: row-level security enabled, no policies applied.
+
+exec-ddl
+CREATE POLICY p_delete ON writer FOR DELETE USING (key = 1);
+----
+
+plan
+DELETE FROM writer WHERE key = 1;
+----
+• delete range
+  from: writer
+  auto commit
+  spans: 1+ spans
+  policies: p_delete
+
+plan
+DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';
+----
+• delete
+│ from: writer
+│ auto commit
+│
+└── • filter
+    │ filter: (value = _) OR (value = _)
+    │
+    └── • scan
+          table: writer@writer_pkey
+          spans: 1+ spans
+          policies: p_delete
