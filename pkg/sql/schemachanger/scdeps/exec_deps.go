@@ -258,7 +258,8 @@ func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb
 	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, newZc)
 }
 
-// UpdateSubzoneConfig implements the scexec.Catalog interface.
+// UpdateSubzoneConfig implements the scexec.Catalog interface. Note that this
+// function does not add the subzone config to uncommitted.
 func (d *txnDeps) UpdateSubzoneConfig(
 	ctx context.Context,
 	parentZone catalog.ZoneConfig,
