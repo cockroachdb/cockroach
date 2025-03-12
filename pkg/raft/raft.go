@@ -787,7 +787,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	}
 	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
 	r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
-		r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
+		r.id, r.raftLog.compacted()+1, r.raftLog.committed, sindex, sterm, to, pr)
 	r.becomeSnapshot(pr, sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
@@ -2081,7 +2081,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				switch {
 				case pr.State == tracker.StateProbe:
 					r.becomeReplicate(pr)
-				case pr.State == tracker.StateSnapshot && pr.Match+1 >= r.raftLog.firstIndex():
+				case pr.State == tracker.StateSnapshot && pr.Match >= r.raftLog.compacted():
 					// Note that we don't take into account PendingSnapshot to
 					// enter this branch. No matter at which index a snapshot
 					// was actually applied, as long as this allows catching up
