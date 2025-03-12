@@ -142,13 +142,13 @@ func TestEncoders(t *testing.T) {
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
 		`format=avro,envelope=key_only,updated`: {
-			err: `updated is only usable with envelope=wrapped`,
+			err: `updated is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=key_only,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			err: `diff is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=key_only,updated,diff`: {
-			err: `updated is only usable with envelope=wrapped`,
+			err: `updated is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=row`: {
 			err: `envelope=row is not supported with format=avro`,
@@ -241,7 +241,7 @@ func TestEncoders(t *testing.T) {
 				return
 			}
 			require.NoError(t, o.Validate())
-			e, err := getEncoder(context.Background(), o, targets, false, nil, nil, getTestingEnrichedSourceProvider(o))
+			e, err := getEncoder(context.Background(), o, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, o))
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -387,7 +387,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
-			e, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(opts))
+			e, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -419,7 +419,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer noCertReg.Close()
 			opts.SchemaRegistryURI = noCertReg.URL()
 
-			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(opts))
+			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, "x509", err)
@@ -432,7 +432,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer wrongCertReg.Close()
 			opts.SchemaRegistryURI = wrongCertReg.URL()
 
-			enc, err = getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(opts))
+			enc, err = getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
@@ -974,7 +974,7 @@ func BenchmarkEncoders(b *testing.B) {
 		b.StopTimer()
 
 		encoder, err := getEncoder(context.Background(), opts, targets, false, nil, nil,
-			getTestingEnrichedSourceProvider(opts))
+			getTestingEnrichedSourceProvider(b, opts))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1248,7 +1248,7 @@ func TestJsonRountrip(t *testing.T) {
 
 			// TODO(#139660): test this with other envelopes.
 			opts := jsonEncoderOptions{EncodingOptions: changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}}
-			encoder, err := makeJSONEncoder(context.Background(), opts, getTestingEnrichedSourceProvider(opts.EncodingOptions), makeChangefeedTargets(test.name))
+			encoder, err := makeJSONEncoder(context.Background(), opts, getTestingEnrichedSourceProvider(t, opts.EncodingOptions), makeChangefeedTargets(test.name))
 			require.NoError(t, err)
 
 			// Encode the value to a string and parse it. Assert that the parsed json matches the
