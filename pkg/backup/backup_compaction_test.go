@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -339,6 +342,46 @@ crdb_internal.json_to_pb(
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, opts,
 		)
+	})
+
+	t.Run("maybeStartCompactionJob", func(t *testing.T) {
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 0")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		db.Exec(t, "BACKUP INTO 'nodelocal://1/backup/10'")
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 10))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		var incJobID jobspb.JobID
+		db.QueryRow(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup/10' WITH detached").Scan(&incJobID)
+		waitForSuccessfulJob(t, tc, incJobID)
+		var jobPayload jobspb.Payload
+		var payloadBytes []byte
+		db.QueryRow(
+			t,
+			fmt.Sprintf(
+				`SELECT payload FROM crdb_internal.system_jobs WHERE id = %d`,
+				incJobID,
+			),
+		).Scan(&payloadBytes)
+		require.NoError(t, protoutil.Unmarshal(payloadBytes, &jobPayload))
+		backupDetails, ok := jobPayload.UnwrapDetails().(jobspb.BackupDetails)
+		require.True(t, ok, "expected job details to be of type jobspb.BackupDetails")
+		execCfg, _ := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+		jobID, err := maybeStartCompactionJob(
+			ctx,
+			&execCfg,
+			username.RootUserName(),
+			backupDetails,
+			fmt.Sprintf(incBackupCmd, 10),
+		)
+		require.NoError(t, err)
+		waitForSuccessfulJob(t, tc, jobID)
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
