@@ -3938,7 +3938,8 @@ func TestChangefeedEnriched(t *testing.T) {
 	// Create an enriched source provider with no data. The contents of source
 	// will be tested in another test, we just want to make sure the structure &
 	// schema is right here.
-	esp := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	esp, err := newEnrichedSourceProvider(changefeedbase.EncodingOptions{}, enrichedSourceData{})
+	require.NoError(t, err)
 	source, err := esp.GetJSON(cdcevent.Row{})
 	require.NoError(t, err)
 
@@ -4236,96 +4237,117 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			clusterName := "clusterName123"
-			dbVersion := "v999.0.0"
-			defer build.TestingOverrideVersion(dbVersion)()
-			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+		for _, withMVCCTs := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/mvcc_ts=%v", testCase.name, withMVCCTs), func(t *testing.T) {
+				clusterName := "clusterName123"
+				dbVersion := "v999.0.0"
+				defer build.TestingOverrideVersion(dbVersion)()
+				mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+						clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
 
-					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+						sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
-					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
-					testFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format))
-					defer closeFeed(t, testFeed)
-
-					var jobID int64
-					var nodeName string
-					var sourceAssertion func(actualSource map[string]any)
-					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
-						jobID = int64(ef.JobID())
-					}
-					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
-
-					sourceAssertion = func(actualSource map[string]any) {
-						var nodeID any
-						if testCase.format == "avro" {
-							actualSourceValue := actualSource["source"].(map[string]any)
-							nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
-						} else {
-							nodeID = actualSource["node_id"]
+						sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+						sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+						stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+						if withMVCCTs {
+							stmt += ", mvcc_timestamp"
 						}
-						require.NotNil(t, nodeID)
+						testFeed := feed(t, f, stmt)
+						defer closeFeed(t, testFeed)
 
-						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
-
-						// There are some differences between how we specify sinks here and their actual names.
-						if sink == "sinkless" {
-							sink = sinkTypeSinklessBuffer.String()
+						var jobID int64
+						var nodeName string
+						var sourceAssertion func(actualSource map[string]any)
+						if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+							jobID = int64(ef.JobID())
 						}
+						sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
 
-						var assertion string
-						if testCase.format == "avro" {
-							assertion = fmt.Sprintf(
-								`{
-								"source": {
-									"cluster_id": {"string": "%s"},
-									"cluster_name": {"string": "%s"},
-									"db_version": {"string": "%s"},
-									"job_id": {"string": "%d"},
-									"node_id": {"string": "%s"},
-									"node_name": {"string": "%s"},
-									"changefeed_sink": {"string": "%s"},
-									"source_node_locality": {"string": "%s"}
+						sourceAssertion = func(actualSource map[string]any) {
+							var nodeID any
+							if testCase.format == "avro" {
+								actualSourceValue := actualSource["source"].(map[string]any)
+								nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
+							} else {
+								nodeID = actualSource["node_id"]
+							}
+							require.NotNil(t, nodeID)
+
+							sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+							// There are some differences between how we specify sinks here and their actual names.
+							if sink == "sinkless" {
+								sink = sinkTypeSinklessBuffer.String()
+							}
+
+							const dummyMvccTimestamp = "1234567890.0001"
+							jobIDStr := strconv.FormatInt(jobID, 10)
+
+							var assertion string
+							if testCase.format == "avro" {
+								assertionMap := map[string]any{
+									"source": map[string]any{
+										"cluster_id":   map[string]any{"string": clusterID},
+										"cluster_name": map[string]any{"string": clusterName},
+										"db_version":   map[string]any{"string": dbVersion},
+										"job_id":       map[string]any{"string": jobIDStr},
+										// Note that the field is still present in the avro schema, so it appears here as nil.
+										"mvcc_timestamp":       nil,
+										"node_id":              map[string]any{"string": nodeID},
+										"node_name":            map[string]any{"string": nodeName},
+										"changefeed_sink":      map[string]any{"string": sink},
+										"source_node_locality": map[string]any{"string": sourceNodeLocality},
+									},
 								}
-							}`,
-								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
-						} else {
-							assertion = fmt.Sprintf(
-								`{
-								"cluster_id": "%s",
-								"cluster_name": "%s",
-								"db_version": "%s",
-								"job_id": "%d",
-								"node_id": "%s",
-								"node_name": "%s",
-								"changefeed_sink": "%s",
-								"source_node_locality": "%s"
-							}`,
-								clusterID, clusterName, dbVersion, jobID, nodeID, nodeName, sink, sourceNodeLocality)
+								if withMVCCTs {
+									mvccTsMap := actualSource["source"].(map[string]any)["mvcc_timestamp"].(map[string]any)
+									assertReasonableMVCCTs(t, mvccTsMap["string"].(string))
+
+									mvccTsMap["string"] = dummyMvccTimestamp
+									assertionMap["source"].(map[string]any)["mvcc_timestamp"] = map[string]any{"string": dummyMvccTimestamp}
+								}
+								assertion = toJSON(t, assertionMap)
+							} else {
+								assertionMap := map[string]any{
+									"cluster_id":           clusterID,
+									"cluster_name":         clusterName,
+									"db_version":           dbVersion,
+									"job_id":               jobIDStr,
+									"node_id":              nodeID,
+									"node_name":            nodeName,
+									"changefeed_sink":      sink,
+									"source_node_locality": sourceNodeLocality,
+								}
+								if withMVCCTs {
+									assertReasonableMVCCTs(t, actualSource["mvcc_timestamp"].(string))
+									actualSource["mvcc_timestamp"] = dummyMvccTimestamp
+									assertionMap["mvcc_timestamp"] = dummyMvccTimestamp
+								}
+								assertion = toJSON(t, assertionMap)
+							}
+
+							value, err := reformatJSON(actualSource)
+							require.NoError(t, err)
+							require.JSONEq(t, assertion, string(value))
 						}
 
-						value, err := reformatJSON(actualSource)
-						require.NoError(t, err)
-						require.JSONEq(t, assertion, string(value))
+						assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
 					}
-
-					assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
 				}
-			}
 
-			for _, sink := range testCase.supportedSinks {
-				testLocality := roachpb.Locality{
-					Tiers: []roachpb.Tier{{
-						Key:   "region",
-						Value: testServerRegion,
-					}}}
-				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
-					feedTestUseLocality(testLocality))
-			}
-		})
+				for _, sink := range testCase.supportedSinks {
+					testLocality := roachpb.Locality{
+						Tiers: []roachpb.Tier{{
+							Key:   "region",
+							Value: testServerRegion,
+						}}}
+					cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
+						feedTestUseLocality(testLocality))
+				}
+			})
+		}
 	}
 }
 
@@ -10747,4 +10769,10 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	})
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+}
+
+func assertReasonableMVCCTs(t *testing.T, ts string) {
+	epochNanos := parseTimeToHLC(t, ts).WallTime
+	now := timeutil.Now()
+	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
 }
