@@ -592,12 +592,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.Elastic
 	goschedstats.RegisterSettings(st)
-	if cbID, ok := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad); ok {
+	if goschedstats.Supported {
+		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
 		stopper.AddCloser(stop.CloserFn(func() {
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
 	} else {
-		log.Warning(ctx, "goschedstats not available; admission control will be impaired")
+		log.Warning(ctx, "goschedstats not supported; admission control will be impaired")
 	}
 	stopper.AddCloser(gcoords)
 

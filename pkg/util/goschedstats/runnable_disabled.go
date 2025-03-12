@@ -13,14 +13,14 @@ package goschedstats
 
 import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 
-const enabled = false
+const supported = false
 
 func cumulativeNormalizedRunnableGoroutines() float64 {
 	return 0.0
 }
 
-func registerRunnableCountCallback(cb RunnableCountCallback) (id int64, ok bool) {
-	return -1, false
+func registerRunnableCountCallback(cb RunnableCountCallback) (id int64) {
+	panic("registerRunnableCountCallback must not be called when goschedstats.Supported is false")
 }
 
 func unregisterRunnableCountCallback(id int64) {}

@@ -926,6 +926,7 @@ go_test(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/fsm",
+        "//pkg/util/goschedstats",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/intsets",

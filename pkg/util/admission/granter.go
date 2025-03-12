@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -29,11 +28,14 @@ type requesterClose interface {
 
 // slotGranter implements granterWithLockedCalls.
 type slotGranter struct {
-	coord               *GrantCoordinator
-	workKind            WorkKind
-	requester           requester
-	usedSlots           int
-	totalSlots          int
+	coord      *GrantCoordinator
+	workKind   WorkKind
+	requester  requester
+	usedSlots  int
+	totalSlots int
+	// skipSlotEnforcement is a dynamic value that changes based on the sampling
+	// period of cpu load. It is always true when !goschedstats.Supported (see
+	// https://github.com/cockroachdb/cockroach/issues/142262).
 	skipSlotEnforcement bool
 
 	usedSlotsMetric              *metric.Gauge
@@ -59,9 +61,7 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
-	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement ||
-		// See https://github.com/cockroachdb/cockroach/issues/142262.
-		!grunning.Supported {
+	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement {
 		sg.usedSlots++
 		if sg.usedSlots == sg.totalSlots {
 			sg.exhaustedStart = timeutil.Now()

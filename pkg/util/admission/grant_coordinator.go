@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -346,7 +347,7 @@ type GrantCoordinator struct {
 	// and turns off admission control enforcement when the sampling frequency
 	// is too low. For testing queueing behavior, we do not want the enforcement
 	// to be turned off in a non-deterministic manner so add a testing flag to
-	// disable that feature.
+	// disable that feature. False in production.
 	//
 	// TODO(irfansharif): Fold into the testing knobs struct below.
 	testingDisableSkipEnforcement bool
@@ -533,6 +534,7 @@ func makeRegularGrantCoordinator(
 		coord:                        coord,
 		workKind:                     KVWork,
 		totalSlots:                   opts.MinCPUSlots,
+		skipSlotEnforcement:          !goschedstats.Supported,
 		usedSlotsMetric:              metrics.KVUsedSlots,
 		slotsExhaustedDurationMetric: metrics.KVSlotsExhaustedDuration,
 	}
@@ -657,15 +659,16 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 	// request processing when we are in this slow CPULoad ticks regime since we
 	// can't adjust slots or refill tokens fast enough. So we explicitly tell
 	// the granters to not do token or slot enforcement.
-	skipEnforcement := samplePeriod > time.Millisecond
+	skipEnforcement := samplePeriod > time.Millisecond || !goschedstats.Supported
 	coord.granters[SQLKVResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
 	coord.granters[SQLSQLResponseWork].(*tokenGranter).refillBurstTokens(skipEnforcement)
-	if coord.granters[KVWork] != nil {
-		if !coord.testingDisableSkipEnforcement {
-			kvg := coord.granters[KVWork].(*slotGranter)
-			kvg.skipSlotEnforcement = skipEnforcement
-		}
+	if coord.testingDisableSkipEnforcement {
+		// This testing option only applies to KV work.
+		skipEnforcement = false
 	}
+	kvg := coord.granters[KVWork].(*slotGranter)
+	kvg.skipSlotEnforcement = skipEnforcement
+
 	if coord.mu.grantChainActive && !coord.tryTerminateGrantChain() {
 		return
 	}
