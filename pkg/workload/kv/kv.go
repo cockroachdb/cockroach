@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -85,6 +86,7 @@ type kv struct {
 	writeSeq                             string
 	sequential                           bool
 	zipfian                              bool
+	zipfianMode                          string
 	zipfianS                             float64
 	zipfianV                             float64
 	sfuDelay                             time.Duration
@@ -109,7 +111,14 @@ var (
 		once       sync.Once
 		chaChaSeed [32]byte
 	}
+
+	zipfianPrintWrapping bool
+	zipfianLastWrapped   time.Time
 )
+
+func init() {
+	zipfianPrintWrapping = envutil.EnvOrDefaultBool("COCKROACH_WORKLOAD_ZIPFIAN_PRINT_WRAP", false)
+}
 
 func randSeedGet() [32]byte {
 	randSeed.once.Do(func() {
@@ -173,7 +182,12 @@ var kvMeta = workload.Meta{
 		g.flags.BoolVar(&g.writesUseSelectForUpdate, `sfu-writes`, false,
 			`Use SFU and transactional writes with a sleep after SFU.`)
 		g.flags.BoolVar(&g.zipfian, "zipfian", false,
-			"Allocate keys using a Zipfian distribution (non-uniform random keys).")
+			"Allocate keys using a Zipfian distribution (see --zipfian-mode).")
+		g.flags.StringVar(&g.zipfianMode, "zipfian-mode", "static",
+			`Selects the Zipfian distribution mode. Use 'static' (default) for fixed-cycle hotspots, `+
+				`where the sequence wraps after --cycle-length operations, or 'sliding' for a rotating `+
+				`window that continuously shifts the key range, mimicking more realistic, evolving `+
+				`customer workloads.`)
 		g.flags.Float64Var(&g.zipfianS, "zipfian-s", 1.1,
 			"Zipf exponent s (>1): controls decay rate (higher → steeper drop-off).")
 		g.flags.Float64Var(&g.zipfianV, "zipfian-v", 1.0,
@@ -266,6 +280,11 @@ func (w *kv) validateConfig() (err error) {
 	if w.sequential && w.zipfian {
 		return errors.New("'sequential' and 'zipfian' cannot both be enabled")
 	}
+	if w.zipfian {
+		if w.zipfianMode != "" && w.zipfianMode != "static" && w.zipfianMode != "sliding" {
+			return errors.New("Value of `--zipfian-mode` must be either 'static' or 'sliding'")
+		}
+	}
 	if w.shards > 0 && !(w.sequential || w.zipfian) {
 		return errors.New("'num-shards' only work with 'sequential' or 'zipfian' key distributions")
 	}
@@ -342,7 +361,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	switch {
 	case w.zipfian:
 		gen = func() keyGenerator {
-			return newZipfianGenerator(seq, rand.New(rand.NewChaCha8(randSeedGet())), w.zipfianS, w.zipfianV)
+			return newZipfianGenerator(w.zipfianMode, seq, rand.New(rand.NewChaCha8(randSeedGet())), w.zipfianS, w.zipfianV)
 		}
 		kr = keyRange{
 			min: 0,
@@ -783,7 +802,21 @@ type sequence struct {
 
 // write increments the sequence
 func (s *sequence) write() int64 {
-	return (s.val.Add(1) - 1) % s.max
+	for {
+		current := s.val.Load()
+		var next int64
+		// Wrap on integer overflow
+		if current == math.MaxInt64 || current < 0 {
+			next = 0
+		} else {
+			next = current + 1
+		}
+		// Try to atomically set the counter.
+		if s.val.CompareAndSwap(current, next) {
+			return next % s.max
+		}
+		// If the CAS fails, loop and try again.
+	}
 }
 
 // read returns the last key index that has been written. Note that the returned
@@ -974,14 +1007,27 @@ type writeSequenceSource struct {
 }
 
 func (wss writeSequenceSource) Int63() int64 {
-	return int64(wss.Uint64() & 0x7fffffffffffffff) // Masks high bit
+	return int64(wss.Uint64() & 0x7fffffffffffffff) // Mask high bit
 }
 
 func (wss writeSequenceSource) Uint64() uint64 {
+	// Hash the effective key to further randomize it.
 	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
 	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
-	// NOTE: the sequence is incremented by wss.write() call
-	binary.BigEndian.PutUint64(buf[:8], uint64(wss.write()))
+
+	seq := wss.write() // NOTE: the sequence is incremented by wss.write() call
+	if zipfianPrintWrapping {
+		if seq%wss.max == 0 {
+			now := timeutil.Now()
+			if !zipfianLastWrapped.IsZero() {
+				wrappedTimes := int(wss.val.Load() / wss.max)
+				fmt.Printf("%s: zipfian static sequence wrapped %d times (%s)\n", now, wrappedTimes, now.Sub(zipfianLastWrapped))
+			}
+			zipfianLastWrapped = now
+		}
+	}
+
+	binary.BigEndian.PutUint64(buf[:8], uint64(seq))
 	_, _ = hasher.Write(buf[:8])
 	return hasher.Sum64()
 }
@@ -1019,6 +1065,98 @@ func (rss readSequenceSource) Seed(seed int64) {
 	// noop
 }
 
+// writeSlidingSource implements a sliding window for write operations.  It uses
+// an underlying monotonically increasing sequence. When the sequence is less
+// than sequence.max, it returns the sequence value. Once the window is full, it
+// picks an effective key from the current sliding window.
+type writeSlidingSource struct {
+	*sequence
+	random *rand.Rand // used to pick an offset within the window
+}
+
+func (wss writeSlidingSource) Int63() int64 {
+	return int64(wss.Uint64() & 0x7fffffffffffffff) // mask the high bit
+}
+
+func (wss writeSlidingSource) Uint64() uint64 {
+	// Hash the effective key to further randomize it.
+	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
+	buf := []byte{0, 0, 0, 0, 0, 0, 0, 0}
+
+	seq := wss.write() // NOTE: the sequence is incremented by wss.write() call
+	var effective int64
+	if zipfianPrintWrapping {
+		if seq%wss.max == 0 {
+			now := timeutil.Now()
+			if !zipfianLastWrapped.IsZero() {
+				wrappedTimes := int(wss.val.Load() / wss.max)
+				fmt.Printf("%s: zipfian sliding sequence wrapped %d times (%s)\n", now, wrappedTimes, now.Sub(zipfianLastWrapped))
+			}
+			zipfianLastWrapped = now
+		}
+	}
+
+	if seq < wss.max {
+		// Haven't filled the window yet.
+		effective = seq
+	} else {
+		// The active window is [seq.value-seq.max, seq.value).
+		// Pick a random offset within the window.
+		effective = (seq - wss.max) + wss.random.Int64N(wss.max)
+	}
+
+	binary.BigEndian.PutUint64(buf, uint64(effective))
+	_, _ = hasher.Write(buf)
+	return hasher.Sum64()
+}
+
+func (wss writeSlidingSource) Seed(seed int64) {
+	wss.val.Store(seed)
+}
+
+// readSlidingSource implements a sliding window for read operations.
+// It uses the current sequence value without incrementing it, and then chooses
+// an effective key from the active window. For a not-yet–full window, it picks
+// a random key from [0, seq); once full, it picks from [seq.value-seq.max, seq.value).
+type readSlidingSource struct {
+	*sequence
+	random *rand.Rand // used to pick an offset within the window
+}
+
+func (rss readSlidingSource) Int63() int64 {
+	return int64(rss.Uint64() & 0x7fffffffffffffff) // mask high bit
+}
+
+func (rss readSlidingSource) Uint64() uint64 {
+	// Get the current (last written) sequence value without incrementing.
+	seq := rss.read()
+
+	var effective int64
+	if seq < rss.max {
+		// If we haven't reached the window size, pick uniformly in [0, seq)
+		if seq > 0 {
+			effective = rss.random.Int64N(seq)
+		} else {
+			effective = 0
+		}
+	} else {
+		// Once the window is full, choose a key from the sliding window:
+		// active keys are in [seq.value-seq.max, seq.value)
+		effective = (seq - rss.max) + rss.random.Int64N(rss.max)
+	}
+
+	// Hash the effective key to produce the final random number.
+	hasher := crc64.New(crc64.MakeTable(crc64.ECMA))
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(effective))
+	_, _ = hasher.Write(buf)
+	return hasher.Sum64()
+}
+
+func (rss readSlidingSource) Seed(seed int64) {
+	// no-op
+}
+
 type zipfGenerator struct {
 	writeZipf *rand.Zipf
 	readZipf  *rand.Zipf
@@ -1027,19 +1165,8 @@ type zipfGenerator struct {
 }
 
 func newZipfianGenerator(
-	seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64,
+	zipfianMode string, seq *sequence, rng *rand.Rand, zipfianS float64, zipfianV float64,
 ) *zipfGenerator {
-	// {read,write}SequenceSources share the same sequence.  readSequenceSource
-	// never mutates the sequence, whereas writeSequenceSource does increments the
-	// sequence.
-	readSS := readSequenceSource{
-		sequence: seq,
-		random:   rng,
-	}
-	writeSS := writeSequenceSource{
-		sequence: seq,
-	}
-
 	// rand.NewZipf returns a Zipf variate generator.
 	// The generator produces integer values k in the range [0, imax] according to a Zipf-like distribution,
 	// where the probability mass function is proportional to:
@@ -1077,9 +1204,38 @@ func newZipfianGenerator(
 	//
 	// This design gives you control over both the skewness (via s) and the starting offset (via v) of the distribution.
 
+	var readRand *rand.Rand
+	var writeRand *rand.Rand
+	switch zipfianMode {
+	case "", "static":
+		// {read,write}SequenceSources share the same sequence.  readSequenceSource
+		// never mutates the sequence, whereas writeSequenceSource does increments the
+		// sequence.
+		readRand = rand.New(readSequenceSource{
+			sequence: seq,
+			random:   rng,
+		})
+		writeRand = rand.New(writeSequenceSource{
+			sequence: seq,
+		})
+	case "sliding":
+		// {read,write}SequenceSources share the same sequence.  readSequenceSource
+		// never mutates the sequence, whereas writeSequenceSource does increments the
+		// sequence.
+		readRand = rand.New(readSlidingSource{
+			sequence: seq,
+			random:   rng,
+		})
+		writeRand = rand.New(writeSlidingSource{
+			sequence: seq,
+		})
+	default:
+		panic(fmt.Sprintf("unsupported zipfian mode: %q", zipfianMode))
+	}
+
 	return &zipfGenerator{
-		writeZipf: rand.NewZipf(rand.New(writeSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
-		readZipf:  rand.NewZipf(rand.New(readSS), zipfianS, zipfianV, uint64(math.MaxInt64)),
+		writeZipf: rand.NewZipf(writeRand, zipfianS, zipfianV, uint64(math.MaxInt64)),
+		readZipf:  rand.NewZipf(readRand, zipfianS, zipfianV, uint64(math.MaxInt64)),
 		random:    rng,
 		seq:       seq,
 	}
