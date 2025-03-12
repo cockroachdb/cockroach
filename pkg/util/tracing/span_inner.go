@@ -65,6 +65,12 @@ func (s *spanInner) GetTraceRecording(recType tracingpb.RecordingType, finishing
 	return s.crdb.GetRecording(recType, finishing)
 }
 
+// GetFullTraceRecording returns the span's full recording, including detached
+// children, as a Trace. See GetTraceRecording and WithDetachedRecording.
+func (s *spanInner) GetFullTraceRecording(recType tracingpb.RecordingType) Trace {
+	return s.crdb.GetFullRecording(recType)
+}
+
 // GetRecording returns the span's recording.
 //
 // finishing indicates whether s is in the process of finishing. If it isn't,
