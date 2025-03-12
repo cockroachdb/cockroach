@@ -127,7 +127,7 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 			&in,
 			expfmt.FmtText,
 			func(ex *metric.PrometheusExporter) {
-				ex.ScrapeRegistry(r, true /* includeChildMetrics */)
+				ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
 			},
 		)
 		require.NoError(t, err)
