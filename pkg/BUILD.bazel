@@ -2589,6 +2589,7 @@ GO_TARGETS = [
     "//pkg/util/json:json",
     "//pkg/util/json:json_test",
     "//pkg/util/jsonbytes:jsonbytes",
+    "//pkg/util/jsonpath/eval:eval",
     "//pkg/util/jsonpath/parser/lexbase:lexbase",
     "//pkg/util/jsonpath/parser:parser",
     "//pkg/util/jsonpath/parser:parser_test",
