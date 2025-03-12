@@ -235,6 +235,7 @@ go_test(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeedpb",
         "//pkg/ccl/changefeedccl/checkpoint",
+        "//pkg/ccl/changefeedccl/kcjsonschema",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/mocks",
         "//pkg/ccl/changefeedccl/resolvedspan",

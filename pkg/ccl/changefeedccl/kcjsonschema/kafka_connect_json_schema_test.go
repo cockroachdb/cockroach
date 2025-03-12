@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,7 +83,9 @@ func TestSchema_AsJSON(t *testing.T) {
 		}
 	}`
 
-	require.JSONEq(t, expectedJSON, schema.AsJSON().String())
+	j, err := schema.AsJSON()
+	require.NoError(t, err)
+	require.JSONEq(t, expectedJSON, j.String())
 }
 
 // Much of this test is adapted from avro_test.go/TestAvroSchema.
@@ -275,110 +275,5 @@ func validateSchema(t *testing.T, dataJ json.JSON, schema Schema) {
 	dec.UseNumber()
 	require.NoError(t, dec.Decode(&data))
 	require.Equal(t, dec.InputOffset(), int64(len(dataJ.String())), "didn't consume all of the input")
-	schema.matchesJSON(t, data)
-}
-
-func (s Schema) matchesJSON(t *testing.T, data any) {
-	if data == nil && s.Optional {
-		return
-	}
-	require.NotNil(t, data)
-
-	switch s.TypeName {
-	case SchemaTypeInt8:
-		assertInt[int8](t, s, data)
-	case SchemaTypeInt16:
-		assertInt[int16](t, s, data)
-	case SchemaTypeInt32:
-		assertInt[int32](t, s, data)
-	case SchemaTypeInt64:
-		assertInt[int64](t, s, data)
-	case SchemaTypeFloat32:
-		// NOTE: This is a little weird and we don't have a way to specify unions in these schemas, so maybe we should document this somewhere?
-		if d, ok := data.(string); ok && (d == "Infinity" || d == "-Infinity" || d == "NaN") {
-			return
-		}
-		assertFloat[float32](t, s, data)
-	case SchemaTypeFloat64:
-		if d, ok := data.(string); ok && (d == "Infinity" || d == "-Infinity" || d == "NaN") {
-			return
-		}
-		assertFloat[float64](t, s, data)
-	case SchemaTypeBoolean:
-		_, ok := data.(bool)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", false, s, data)
-	case SchemaTypeString:
-		_, ok := data.(string)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", "", s, data)
-	case SchemaTypeBytes:
-		_, ok := data.(string)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", "", s, data)
-	case SchemaTypeArray:
-		arr, ok := data.([]any)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", []any{}, s, data)
-		require.NotNil(t, s.Items)
-		for _, a := range arr {
-			s.Items.matchesJSON(t, a)
-		}
-	case SchemaTypeMap:
-		t.Fatalf("map is not supported")
-	case SchemaTypeStruct:
-		obj, ok := data.(map[string]any)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
-		for _, f := range s.Fields {
-			f.matchesJSON(t, obj[f.Field])
-		}
-	case SchemaTypeOpaqueJSON:
-		_, err := json.MakeJSON(data)
-		require.NoError(t, err)
-	default:
-		t.Fatalf("unknown schema type %q in %#+v", s.TypeName, s)
-	}
-
-	// Validate logical types.
-	switch s.Name {
-	case schemaNameDecimal:
-		assertFloat[float64](t, s, data)
-		assert.NotZero(t, s.Parameters["precision"])
-		assert.NotZero(t, s.Parameters["scale"])
-	case schemaNameGeography:
-		d, ok := data.(map[string]any)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
-		j, err := gojson.Marshal(d)
-		require.NoError(t, err)
-		_, err = geo.ParseGeographyFromGeoJSON(j)
-		require.NoError(t, err)
-	case schemaNameGeometry:
-		d, ok := data.(map[string]any)
-		require.True(t, ok, "expected %T for %+#v, got (%+#v)", map[string]any{}, s, data)
-		j, err := gojson.Marshal(d)
-		require.NoError(t, err)
-		_, err = geo.ParseGeometryFromGeoJSON(j)
-		require.NoError(t, err)
-	// not worth doing heavy validation for these. They should be strings.
-	case schemaNameTimestamp, schemaNameDate, schemaNameTime:
-		str, ok := data.(string)
-		assert.True(t, ok, "expected %T for %+#v, got (%+#v)", "", str, data)
-		assert.NotEmpty(t, s)
-	}
-}
-
-func assertInt[I int8 | int16 | int32 | int64](t *testing.T, s Schema, data any) {
-	d, ok := data.(gojson.Number)
-	require.True(t, ok, "expected %T for %+#v, got (%+#v)", gojson.Number(""), s, data)
-	i, err := d.Int64()
-	require.NoError(t, err)
-	assert.Equal(t, I(i), i)
-}
-
-func assertFloat[F float32 | float64](t *testing.T, s Schema, data any) {
-	d, ok := data.(gojson.Number)
-	require.True(t, ok, "expected %T for %+#v, got (%+#v)", gojson.Number(""), s, data)
-	f, err := d.Float64()
-	if err != nil && strings.Contains(err.Error(), "value out of range") {
-		// I'm not sure how this happens but it's probably to do with the random data. Ignore it.
-		return
-	}
-	require.NoError(t, err)
-	assert.Equal(t, F(f), f)
+	require.NoError(t, TestingMatchesJSON(schema, data))
 }
