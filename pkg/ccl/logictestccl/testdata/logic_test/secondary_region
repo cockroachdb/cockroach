@@ -212,7 +212,7 @@ TABLE db.public.rbt_in_primary  ALTER TABLE db.public.rbt_in_primary CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 5,
                                   num_voters = 5,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                   voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
@@ -225,7 +225,7 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 5,
                                   num_voters = 5,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                   voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
                                   lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
@@ -238,7 +238,7 @@ TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFI
                                      gc.ttlseconds = 14400,
                                      num_replicas = 5,
                                      num_voters = 5,
-                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                      voter_constraints = '{+region=ca-central-1: 2}',
                                      lease_preferences = '[[+region=ca-central-1]]'
 
@@ -252,7 +252,7 @@ PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 5,
                                                 num_voters = 5,
-                                                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                 voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
                                                 lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
@@ -265,7 +265,7 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 5,
                                                      num_voters = 5,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                      voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
                                                      lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
@@ -278,7 +278,7 @@ PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                    voter_constraints = '{+region=ca-central-1: 2}',
                                                    lease_preferences = '[[+region=ca-central-1]]'
 
@@ -312,7 +312,7 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 5,
                                   num_voters = 5,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                   voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
                                   lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
@@ -325,7 +325,7 @@ TABLE db.public.rbt_in_ca_central  ALTER TABLE db.public.rbt_in_ca_central CONFI
                                      gc.ttlseconds = 14400,
                                      num_replicas = 5,
                                      num_voters = 5,
-                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                      voter_constraints = '{+region=ca-central-1: 2}',
                                      lease_preferences = '[[+region=ca-central-1]]'
 
@@ -339,7 +339,7 @@ PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 5,
                                                 num_voters = 5,
-                                                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                 voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
                                                 lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
@@ -352,7 +352,7 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 5,
                                                      num_voters = 5,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                      voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
                                                      lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
@@ -365,7 +365,7 @@ PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                    voter_constraints = '{+region=ca-central-1: 2}',
                                                    lease_preferences = '[[+region=ca-central-1]]'
 
@@ -397,7 +397,7 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 5,
                                   num_voters = 5,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                   voter_constraints = '{+region=us-east-1: 2}',
                                   lease_preferences = '[[+region=us-east-1]]'
 
@@ -410,7 +410,7 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 5,
                                                      num_voters = 5,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
                                                      voter_constraints = '{+region=ap-southeast-2: 2}',
                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -423,7 +423,7 @@ PARTITION "ca-central-1" OF TABLE db.public.rbr  ALTER PARTITION "ca-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                    voter_constraints = '{+region=ca-central-1: 2}',
                                                    lease_preferences = '[[+region=ca-central-1]]'
 
