@@ -83,26 +83,31 @@ func TestComputeTruncateDecision(t *testing.T) {
 	}{
 		{
 			// Nothing to truncate.
+			1, []uint64{1, 1}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
+		},
+		{
+			// Truncate the latest entry.
 			1, []uint64{1, 2}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: last index)]",
 		},
 		{
 			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
 			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
 			// own log asynchronously.
-			1, []uint64{1, 5, 5}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			1, []uint64{1, 5, 5}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
 		},
 		{
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
 			2, []uint64{1, 5, 5}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers)]",
 		},
 		{
 			// The happy case.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 0,
-			"should truncate: false [truncate 3 entries to first index 5 (chosen via: last index)]",
+			"should truncate: false [truncate 4 entries to first index 6 (chosen via: last index)]",
 		},
 		{
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
@@ -122,10 +127,10 @@ func TestComputeTruncateDecision(t *testing.T) {
 			"should truncate: false [truncate 1 entries to first index 2 (chosen via: followers)]",
 		},
 		{
-			// Truncating since local log starts at 2. One follower is already cut off without a pending
-			// snapshot.
-			2, []uint64{1, 2, 3, 4}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
+			// Truncating since local log starts at 3. One follower is already cut off
+			// without a pending snapshot.
+			3, []uint64{1, 3, 3, 4}, 100, 3, 3, 0,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 		// Don't truncate off active followers, even if over targetSize.
 		{
@@ -158,7 +163,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 		// Never truncate past the last index.
 		{
 			3, []uint64{5}, 100, 1, 3, 0,
-			"should truncate: false [truncate 2 entries to first index 3 (chosen via: last index)]",
+			"should truncate: false [truncate 3 entries to first index 4 (chosen via: last index)]",
 		},
 		// Never truncate "before the first index".
 		{
