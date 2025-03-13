@@ -878,10 +878,25 @@ ElementState:
     seqNum: 0
     tableId: 109
     zoneConfig:
-      constraints: []
+      constraints:
+      - constraints:
+        - key: region
+          type: REQUIRED
+          value: us-east1
+        numReplicas: 2
+      - constraints:
+        - key: region
+          type: REQUIRED
+          value: us-east2
+        numReplicas: 1
+      - constraints:
+        - key: region
+          type: REQUIRED
+          value: us-east3
+        numReplicas: 1
       gc: null
       globalReads: null
-      inheritedConstraints: true
+      inheritedConstraints: false
       inheritedLeasePreferences: false
       leasePreferences:
       - constraints:
@@ -889,7 +904,7 @@ ElementState:
           type: REQUIRED
           value: us-east2
       nullVoterConstraintsIsEmpty: true
-      numReplicas: null
+      numReplicas: 5
       numVoters: 5
       rangeMaxBytes: null
       rangeMinBytes: null
@@ -1364,10 +1379,25 @@ ElementState:
     seqNum: 0
     subzone:
       config:
-        constraints: []
+        constraints:
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east1
+          numReplicas: 1
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east2
+          numReplicas: 2
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east3
+          numReplicas: 1
         gc: null
         globalReads: null
-        inheritedConstraints: true
+        inheritedConstraints: false
         inheritedLeasePreferences: false
         leasePreferences:
         - constraints:
@@ -1375,7 +1405,7 @@ ElementState:
             type: REQUIRED
             value: us-east1
         nullVoterConstraintsIsEmpty: true
-        numReplicas: null
+        numReplicas: 5
         numVoters: 5
         rangeMaxBytes: null
         rangeMinBytes: null
@@ -1402,10 +1432,25 @@ ElementState:
     seqNum: 0
     subzone:
       config:
-        constraints: []
+        constraints:
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east1
+          numReplicas: 2
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east2
+          numReplicas: 1
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east3
+          numReplicas: 1
         gc: null
         globalReads: null
-        inheritedConstraints: true
+        inheritedConstraints: false
         inheritedLeasePreferences: false
         leasePreferences:
         - constraints:
@@ -1413,7 +1458,7 @@ ElementState:
             type: REQUIRED
             value: us-east2
         nullVoterConstraintsIsEmpty: true
-        numReplicas: null
+        numReplicas: 5
         numVoters: 5
         rangeMaxBytes: null
         rangeMinBytes: null
@@ -1440,10 +1485,25 @@ ElementState:
     seqNum: 0
     subzone:
       config:
-        constraints: []
+        constraints:
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east1
+          numReplicas: 2
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east2
+          numReplicas: 1
+        - constraints:
+          - key: region
+            type: REQUIRED
+            value: us-east3
+          numReplicas: 1
         gc: null
         globalReads: null
-        inheritedConstraints: true
+        inheritedConstraints: false
         inheritedLeasePreferences: false
         leasePreferences:
         - constraints:
@@ -1451,7 +1511,7 @@ ElementState:
             type: REQUIRED
             value: us-east3
         nullVoterConstraintsIsEmpty: true
-        numReplicas: null
+        numReplicas: 5
         numVoters: 5
         rangeMaxBytes: null
         rangeMinBytes: null
@@ -1538,10 +1598,25 @@ ElementState:
         subzoneIndex: 2
       subzones:
       - config:
-          constraints: []
+          constraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east1
+            numReplicas: 1
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east2
+            numReplicas: 2
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east3
+            numReplicas: 1
           gc: null
           globalReads: null
-          inheritedConstraints: true
+          inheritedConstraints: false
           inheritedLeasePreferences: false
           leasePreferences:
           - constraints:
@@ -1549,7 +1624,7 @@ ElementState:
               type: REQUIRED
               value: us-east1
           nullVoterConstraintsIsEmpty: true
-          numReplicas: null
+          numReplicas: 5
           numVoters: 5
           rangeMaxBytes: null
           rangeMinBytes: null
@@ -1564,10 +1639,25 @@ ElementState:
         indexId: 1
         partitionName: us-east1
       - config:
-          constraints: []
+          constraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east1
+            numReplicas: 2
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east2
+            numReplicas: 1
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east3
+            numReplicas: 1
           gc: null
           globalReads: null
-          inheritedConstraints: true
+          inheritedConstraints: false
           inheritedLeasePreferences: false
           leasePreferences:
           - constraints:
@@ -1575,7 +1665,7 @@ ElementState:
               type: REQUIRED
               value: us-east2
           nullVoterConstraintsIsEmpty: true
-          numReplicas: null
+          numReplicas: 5
           numVoters: 5
           rangeMaxBytes: null
           rangeMinBytes: null
@@ -1590,10 +1680,25 @@ ElementState:
         indexId: 1
         partitionName: us-east2
       - config:
-          constraints: []
+          constraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east1
+            numReplicas: 2
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east2
+            numReplicas: 1
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east3
+            numReplicas: 1
           gc: null
           globalReads: null
-          inheritedConstraints: true
+          inheritedConstraints: false
           inheritedLeasePreferences: false
           leasePreferences:
           - constraints:
@@ -1601,7 +1706,7 @@ ElementState:
               type: REQUIRED
               value: us-east3
           nullVoterConstraintsIsEmpty: true
-          numReplicas: null
+          numReplicas: 5
           numVoters: 5
           rangeMaxBytes: null
           rangeMinBytes: null

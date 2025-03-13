@@ -398,15 +398,15 @@ CREATE TABLE public.regional_primary_region_table (
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_primary_region_table
 ----
-DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 14400,
-                                 num_replicas = 5,
-                                 num_voters = 5,
-                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                 voter_constraints = '{+region=ca-central-1: 2}',
-                                 lease_preferences = '[[+region=ca-central-1]]'
+TABLE regional_primary_region_table  ALTER TABLE regional_primary_region_table CONFIGURE ZONE USING
+                                       range_min_bytes = 134217728,
+                                       range_max_bytes = 536870912,
+                                       gc.ttlseconds = 14400,
+                                       num_replicas = 5,
+                                       num_voters = 5,
+                                       constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                       voter_constraints = '{+region=ca-central-1: 2}',
+                                       lease_preferences = '[[+region=ca-central-1]]'
 
 statement error cannot set PARTITION BY on a table in a multi-region enabled database
 ALTER TABLE regional_primary_region_table PARTITION BY LIST (id) (
@@ -433,15 +433,15 @@ CREATE TABLE public.regional_implicit_primary_region_table (
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_implicit_primary_region_table
 ----
-DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZONE USING
-                                 range_min_bytes = 134217728,
-                                 range_max_bytes = 536870912,
-                                 gc.ttlseconds = 14400,
-                                 num_replicas = 5,
-                                 num_voters = 5,
-                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                 voter_constraints = '{+region=ca-central-1: 2}',
-                                 lease_preferences = '[[+region=ca-central-1]]'
+TABLE regional_implicit_primary_region_table  ALTER TABLE regional_implicit_primary_region_table CONFIGURE ZONE USING
+                                                range_min_bytes = 134217728,
+                                                range_max_bytes = 536870912,
+                                                gc.ttlseconds = 14400,
+                                                num_replicas = 5,
+                                                num_voters = 5,
+                                                constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                                voter_constraints = '{+region=ca-central-1: 2}',
+                                                lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
 CREATE TABLE "regional_us-east-1_table" (a int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
@@ -464,7 +464,7 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
                                     gc.ttlseconds = 14400,
                                     num_replicas = 5,
                                     num_voters = 5,
-                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                     voter_constraints = '{+region=us-east-1: 2}',
                                     lease_preferences = '[[+region=us-east-1]]'
 
@@ -919,15 +919,15 @@ DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE t_no_locality
 ----
-DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
-                             range_min_bytes = 134217728,
-                             range_max_bytes = 536870912,
-                             gc.ttlseconds = 14400,
-                             num_replicas = 5,
-                             num_voters = 5,
-                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                             voter_constraints = '{+region=ca-central-1: 2}',
-                             lease_preferences = '[[+region=ca-central-1]]'
+TABLE t_no_locality  ALTER TABLE t_no_locality CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 14400,
+                       num_replicas = 5,
+                       num_voters = 5,
+                       constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '{+region=ca-central-1: 2}',
+                       lease_preferences = '[[+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE t_global
