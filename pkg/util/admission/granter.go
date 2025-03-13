@@ -36,13 +36,7 @@ type slotGranter struct {
 	totalSlots          int
 	skipSlotEnforcement bool
 
-	// Optional. Nil for a slotGranter used for KVWork since the slots for that
-	// slotGranter are directly adjusted by the kvSlotAdjuster (using the
-	// kvSlotAdjuster here would provide a redundant identical signal).
-	cpuOverload cpuOverloadIndicator
-
-	usedSlotsMetric *metric.Gauge
-	// Non-nil for KV slots.
+	usedSlotsMetric              *metric.Gauge
 	slotsExhaustedDurationMetric *metric.Counter
 	exhaustedStart               time.Time
 }
@@ -65,14 +59,11 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
-	if sg.cpuOverload != nil && sg.cpuOverload.isOverloaded() {
-		return grantFailDueToSharedResource
-	}
 	if sg.usedSlots < sg.totalSlots || sg.skipSlotEnforcement ||
 		// See https://github.com/cockroachdb/cockroach/issues/142262.
 		!grunning.Supported {
 		sg.usedSlots++
-		if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
+		if sg.usedSlots == sg.totalSlots {
 			sg.exhaustedStart = timeutil.Now()
 		}
 		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
@@ -94,7 +85,7 @@ func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
-	if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
+	if sg.usedSlots == sg.totalSlots {
 		now := timeutil.Now()
 		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
 		sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
@@ -117,7 +108,7 @@ func (sg *slotGranter) tookWithoutPermissionLocked(count int64, _ int8) {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
 	sg.usedSlots++
-	if sg.usedSlots == sg.totalSlots && sg.slotsExhaustedDurationMetric != nil {
+	if sg.usedSlots == sg.totalSlots {
 		sg.exhaustedStart = timeutil.Now()
 	}
 	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
@@ -159,19 +150,18 @@ func (sg *slotGranter) setTotalSlotsLocked(totalSlots int) {
 }
 
 func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
-	if sg.slotsExhaustedDurationMetric != nil {
-		if totalSlots > sg.totalSlots {
-			if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
-				now := timeutil.Now()
-				exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-				sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
-			}
-		} else if totalSlots < sg.totalSlots {
-			if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
-				sg.exhaustedStart = timeutil.Now()
-			}
+	if totalSlots > sg.totalSlots {
+		if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
+			now := timeutil.Now()
+			exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
+			sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+		}
+	} else if totalSlots < sg.totalSlots {
+		if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
+			sg.exhaustedStart = timeutil.Now()
 		}
 	}
+
 	sg.totalSlots = totalSlots
 }
 
@@ -183,11 +173,8 @@ type tokenGranter struct {
 	availableBurstTokens int64
 	maxBurstTokens       int64
 	skipTokenEnforcement bool
-	// Optional. Practically, both uses of tokenGranter, for SQLKVResponseWork
-	// and SQLSQLResponseWork have a non-nil value. We don't expect to use
-	// memory overload indicators here since memory accounting and disk spilling
-	// is what should be tasked with preventing OOMs, and we want to finish
-	// processing this lower-level work.
+	// Non-nil for all uses of tokenGranter (SQLKVResponseWork and
+	// SQLSQLResponseWork).
 	cpuOverload cpuOverloadIndicator
 }
 
@@ -211,7 +198,7 @@ func (tg *tokenGranter) tryGet(count int64) bool {
 
 // tryGetLocked implements granterWithLockedCalls.
 func (tg *tokenGranter) tryGetLocked(count int64, _ int8) grantResult {
-	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
+	if tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
 	if tg.availableBurstTokens > 0 || tg.skipTokenEnforcement {
@@ -945,13 +932,3 @@ var (
 // used to construct the per-store GrantCoordinator. These metrics should be
 // embedded in kvserver.StoreMetrics. We should also separate the metrics
 // related to cpu slots from the IO metrics.
-
-// TODO(sumeer): experiment with approaches to adjust slots for
-// SQLStatementLeafStartWork and SQLStatementRootStartWork for SQL nodes. Note
-// that for these WorkKinds we are currently setting very high slot counts
-// since we rely on other signals like memory and cpuOverloadIndicator to gate
-// admission. One could debate whether we should be using rate limiting
-// instead of counting slots for such work. The only reason the above code
-// uses the term "slot" for these is that we have a completion indicator, and
-// when we do have such an indicator it can be beneficial to be able to keep
-// track of how many ongoing work items we have.
