@@ -555,15 +555,19 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 			if progress.State == tracker.StateProbe {
 				decision.ProtectIndex(input.FirstIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
-				decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+				// NB: since the Match index is already replicated, we don't need to
+				// "protect" it. Only the next entry needs to be replicated. For the
+				// entry before it, the log storage remembers the term, which suffices
+				// for constructing a MsgApp.
+				decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
 			}
 			continue
 		}
 
-		// Second, if the follower has not been recently active, we don't
-		// truncate it off as long as the raft log is not too large.
+		// Second, if the follower has not been recently active, we don't truncate
+		// it off as long as the raft log is not too large.
 		if !input.LogTooLarge() {
-			decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+			decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
 		}
 
 		// Otherwise, we let it truncate to the committed index.

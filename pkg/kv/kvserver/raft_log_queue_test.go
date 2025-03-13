@@ -97,7 +97,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
 			2, []uint64{1, 5, 5}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
 		},
 		{
 			// The happy case.
@@ -119,18 +119,18 @@ func TestComputeTruncateDecision(t *testing.T) {
 		{
 			// Log is below target size, so respecting the slowest follower.
 			3, []uint64{1, 2, 3, 4}, 100, 1, 5, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: followers)]",
 		},
 		{
 			// Truncating since local log starts at 2. One follower is already cut off without a pending
 			// snapshot.
 			2, []uint64{1, 2, 3, 4}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
 		},
 		// Don't truncate off active followers, even if over targetSize.
 		{
-			3, []uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
+			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
@@ -139,7 +139,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
@@ -235,7 +235,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 		},
 		true: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
+			false: "should truncate: true [truncate 191 entries to first index 201 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
 		},
 	}
 
