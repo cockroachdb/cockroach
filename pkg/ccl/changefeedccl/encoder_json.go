@@ -784,7 +784,10 @@ func EncodeAsJSONChangefeedWithFlags(
 	}
 	// This encoder is not used in the context of a real changefeed so make an empty
 	// source provider.
-	sourceProvider := newEnrichedSourceProvider(opts, enrichedSourceData{})
+	sourceProvider, err := newEnrichedSourceProvider(opts, enrichedSourceData{})
+	if err != nil {
+		return nil, err
+	}
 
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different

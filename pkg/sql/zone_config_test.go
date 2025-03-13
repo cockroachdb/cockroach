@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,12 +37,14 @@ import (
 )
 
 var configID = descpb.ID(1)
-var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(bootstrap.TestingUserDescID(0)))
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
 func forceNewConfig(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
+	var configDescKey = catalogkeys.MakeDescMetadataKey(
+		s.Codec(), descpb.ID(bootstrap.TestingUserDescID(0)))
+
 	configID++
 	configDesc := &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
@@ -59,15 +62,12 @@ func forceNewConfig(t testing.TB, s serverutils.TestServerInterface) *config.Sys
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return waitForConfigChange(t, s)
-}
 
-func waitForConfigChange(t testing.TB, s serverutils.TestServerInterface) *config.SystemConfig {
-	var foundDesc descpb.Descriptor
 	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		if cfg = s.SystemConfigProvider().GetSystemConfig(); cfg != nil {
+		if cfg = s.ApplicationLayer().SystemConfigProvider().GetSystemConfig(); cfg != nil {
 			if val := cfg.GetValue(configDescKey); val != nil {
+				var foundDesc descpb.Descriptor
 				if err := val.GetProto(&foundDesc); err != nil {
 					t.Fatal(err)
 				}
@@ -86,7 +86,7 @@ func waitForConfigChange(t testing.TB, s serverutils.TestServerInterface) *confi
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
 	defaultZoneConfig.RangeMinBytes = proto.Int64(1 << 20)
@@ -101,10 +101,12 @@ func TestGetZoneConfig(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
+
+	codec := s.Codec()
 
 	type testCase struct {
 		objectID uint32
@@ -119,9 +121,10 @@ func TestGetZoneConfig(t *testing.T) {
 		cfg := forceNewConfig(t, s)
 
 		for tcNum, tc := range testCases {
-			// Verify SystemConfig.GetZoneConfigForKey.
-			{
-				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
+			// Verify SystemConfig.GetZoneConfigForKey. GetZoneConfigForKey is
+			// exclusive to the system tenant.
+			if !s.StartedDefaultTestTenant() {
+				key := append(roachpb.RKey(codec.TablePrefix(tc.objectID)), tc.keySuffix...)
 				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
@@ -203,10 +206,10 @@ func TestGetZoneConfig(t *testing.T) {
 	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
 	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
-	// We have no custom zone configs.
+	t.Logf("Verifying with no custom zone configs")
 	verifyZoneConfigs([]testCase{
-		{0, nil, "", defaultZoneConfig},
-		{1, nil, "", defaultZoneConfig},
+		{keys.RootNamespaceID, nil, "", defaultZoneConfig},
+		{keys.SystemDatabaseID, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -287,9 +290,10 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
+	t.Logf("Verifying with custom zone configs")
 	verifyZoneConfigs([]testCase{
-		{0, nil, "", defaultZoneConfig},
-		{1, nil, "", defaultZoneConfig},
+		{keys.RootNamespaceID, nil, "", defaultZoneConfig},
+		{keys.SystemDatabaseID, nil, "", defaultZoneConfig},
 		{db1, nil, "", db1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", tb11Cfg},
@@ -319,7 +323,7 @@ func TestGetZoneConfig(t *testing.T) {
 func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 
 	defaultZoneConfig := zonepb.DefaultZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
@@ -335,10 +339,12 @@ func TestCascadingZoneConfig(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
+
+	codec := s.Codec()
 
 	type testCase struct {
 		objectID uint32
@@ -353,9 +359,10 @@ func TestCascadingZoneConfig(t *testing.T) {
 		cfg := forceNewConfig(t, s)
 
 		for tcNum, tc := range testCases {
-			// Verify SystemConfig.GetZoneConfigForKey.
-			{
-				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
+			// Verify SystemConfig.GetZoneConfigForKey. GetZoneConfigForKey is
+			// exclusive to the system tenant.
+			if !s.StartedDefaultTestTenant() {
+				key := append(roachpb.RKey(codec.TablePrefix(tc.objectID)), tc.keySuffix...)
 				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
@@ -438,10 +445,10 @@ func TestCascadingZoneConfig(t *testing.T) {
 	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
 	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
-	// We have no custom zone configs.
+	t.Logf("Verifying with no custom zone configs")
 	verifyZoneConfigs([]testCase{
-		{0, nil, "", defaultZoneConfig},
-		{1, nil, "", defaultZoneConfig},
+		{keys.RootNamespaceID, nil, "", defaultZoneConfig},
+		{keys.SystemDatabaseID, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -567,9 +574,10 @@ func TestCascadingZoneConfig(t *testing.T) {
 		}
 	}
 
+	t.Logf("Verifying with custom zone configs")
 	verifyZoneConfigs([]testCase{
-		{0, nil, "", defaultZoneConfig},
-		{1, nil, "", defaultZoneConfig},
+		{keys.RootNamespaceID, nil, "", defaultZoneConfig},
+		{keys.SystemDatabaseID, nil, "", defaultZoneConfig},
 		{db1, nil, "", expectedDb1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", expectedTb11Cfg},
@@ -641,7 +649,9 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
+	// GetZoneConfigForKey is exclusive to the system tenant.
+	params.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
 	s, sqlDB, _ := serverutils.StartServer(b, params)
 	defer s.Stopper().Stop(context.Background())
 	// Set the closed_timestamp interval to be short to shorten the test duration.
@@ -651,7 +661,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	tdb.Exec(b, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
 	cfg := forceNewConfig(b, s)
 
-	key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
+	key := roachpb.RKey(s.Codec().TablePrefix(bootstrap.TestingUserDescID(0)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key)

@@ -1178,7 +1178,17 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			// allocator on server 0 may see everyone as temporarily dead due to the
 			// clock move above.
 			for _, i := range []int{0, 3, 4} {
-				require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
+				testutils.SucceedsSoon(t, func() error {
+					err := tc.Servers[i].HeartbeatNodeLiveness()
+					if err != nil {
+						if errors.Is(err, liveness.ErrEpochIncremented) {
+							t.Logf("retrying heartbeat after err %s", err)
+							return err
+						}
+						t.Fatalf("unexpected error heartbeating liveness record for server %d: %s", i, err)
+					}
+					return nil
+				})
 				require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
 			}
 		}

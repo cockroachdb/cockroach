@@ -1258,7 +1258,10 @@ func newChangeFrontierProcessor(
 
 	// This changeFrontier's encoder will only be used for resolved events which
 	// never have a source field, so we pass an empty enriched source provider.
-	sourceProvider := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{})
+	sourceProvider, err := newEnrichedSourceProvider(encodingOpts, enrichedSourceData{})
+	if err != nil {
+		return nil, err
+	}
 	if cf.encoder, err = getEncoder(
 		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
 		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,

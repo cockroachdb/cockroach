@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -458,6 +460,78 @@ func (b *FixedKeysObjectBuilder) Build() (JSON, error) {
 	b.updated = intsets.Fast{}
 	// Must copy b.pairs in case builder is reused.
 	return jsonObject(append([]jsonKeyValuePair(nil), b.pairs...)), nil
+}
+
+// PartialObject is a JSON object builder that builds an object using a set of
+// fixed key-values (supplied at construction) and a set of keys which are
+// settable when building the final JSON object.
+type PartialObject struct {
+	basePairs      []jsonKeyValuePair
+	keyOrd         map[string]int
+	allowedNewKeys map[string]struct{}
+}
+
+// NewPartialObject creates a PartialObject with the specified base key-value
+// pairs, and allows for setting the values of newKeys when building the final
+// JSON object.
+func NewPartialObject(base map[string]JSON, newKeys []string) (*PartialObject, error) {
+	// Check that newKeys are unique and disjoint from base keys.
+	newKeySet := make(map[string]struct{}, len(newKeys))
+	for _, k := range newKeys {
+		if _, ok := newKeySet[k]; ok {
+			return nil, errors.AssertionFailedf("expected unique keys, found %v", newKeys)
+		}
+		if _, ok := base[k]; ok {
+			return nil, errors.AssertionFailedf("expected new keys to be disjoint from base keys, found %v in both", k)
+		}
+		newKeySet[k] = struct{}{}
+	}
+
+	keys := slices.Collect(maps.Keys(base))
+	keys = append(keys, newKeys...)
+	sort.Strings(keys)
+
+	pairs := make([]jsonKeyValuePair, 0, len(base))
+	keyOrd := make(map[string]int, len(keys))
+
+	for i, k := range keys {
+		keyOrd[k] = i
+		if _, ok := base[k]; !ok {
+			continue
+		}
+		pairs = append(pairs, jsonKeyValuePair{k: jsonString(k), v: base[k]})
+	}
+
+	return &PartialObject{basePairs: pairs, keyOrd: keyOrd, allowedNewKeys: newKeySet}, nil
+}
+
+// NewObject creates a new JSON object with the specified new key-values. The
+// keys of newData must be exactly the same as the newKeys supplied to the
+// constructor.
+func (po *PartialObject) NewObject(newData map[string]JSON) (JSON, error) {
+	if len(newData) != len(po.allowedNewKeys) {
+		return nil, errors.AssertionFailedf(
+			"expected all %d keys to be updated, %d updated",
+			len(po.allowedNewKeys), len(newData))
+	}
+
+	pairs := make([]jsonKeyValuePair, len(po.basePairs)+len(newData))
+
+	for _, p := range po.basePairs {
+		pairs[po.keyOrd[string(p.k)]] = p
+	}
+
+	for k, v := range newData {
+		if _, ok := po.allowedNewKeys[k]; !ok {
+			return nil, errors.AssertionFailedf("unknown new key %s", k)
+		}
+		if _, ok := po.keyOrd[k]; !ok {
+			return nil, errors.AssertionFailedf("unknown key %s", k)
+		}
+		pairs[po.keyOrd[k]] = jsonKeyValuePair{k: jsonString(k), v: v}
+	}
+
+	return jsonObject(pairs), nil
 }
 
 // pairSorter sorts and uniqueifies JSON pairs. In order to keep
