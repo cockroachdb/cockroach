@@ -291,7 +291,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	msstw, err := newMultiSSTWriter(
 		ctx, st, scratch, localSpans, mvccSpan, 0,
-		false /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
+		false, /* rangeKeysInOrder */
 	)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
@@ -362,7 +362,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 	mvccSpan := keySpans[len(keySpans)-1]
 
 	// Make a reference msstw with the default size.
-	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0, true /* rangeKeysInOrder */)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), referenceMsstw.dataSize)
 	now := timeutil.Now().UnixNano()
@@ -394,7 +394,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 
 	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
 
-	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), multiSSTWriter.dataSize)
 
@@ -476,10 +476,7 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 	localSpans := keySpans[:len(keySpans)-1]
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
-		true /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
-	)
+	msstw, err := newMultiSSTWriter(ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0, false)
 	require.NoError(t, err)
 	testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 	testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))
