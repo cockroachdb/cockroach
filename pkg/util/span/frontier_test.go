@@ -24,13 +24,12 @@ import (
 
 func entriesStr(f Frontier) string {
 	var buf strings.Builder
-	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
+	for sp, ts := range f.Entries() {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
 		fmt.Fprintf(&buf, `%s@%d`, sp, ts.WallTime)
-		return ContinueMatch
-	})
+	}
 	return buf.String()
 }
 
@@ -321,13 +320,12 @@ func TestSpanEntries(t *testing.T) {
 
 	spanEntries := func(f Frontier, sp roachpb.Span) string {
 		var buf strings.Builder
-		f.SpanEntries(sp, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
+		for s, ts := range f.SpanEntries(sp) {
 			if buf.Len() != 0 {
 				buf.WriteString(` `)
 			}
 			fmt.Fprintf(&buf, `%s@%d`, s, ts.WallTime)
-			return ContinueMatch
-		})
+		}
 		return buf.String()
 	}
 

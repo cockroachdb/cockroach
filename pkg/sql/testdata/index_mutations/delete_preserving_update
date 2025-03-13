@@ -23,7 +23,7 @@ UPDATE ti SET b = b + 1, c = c + 1
 ----
 Scan /Table/106/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
-Put (delete) /Table/106/2/2/100/1/0
+Put (delete) (locking) /Table/106/2/2/100/1/0
 Put /Table/106/2/3/101/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
@@ -78,7 +78,7 @@ UPDATE tpi SET b = b + 1, c = 'foobar'
 ----
 Scan /Table/107/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
-Put (delete) /Table/107/2/"foo"/3/0
+Put (delete) (locking) /Table/107/2/"foo"/3/0
 Put /Table/107/2/"foobar"/3/0 -> /BYTES/0x0a0103
 
 # Update a row that matches the partial index before but not after.
@@ -87,7 +87,7 @@ UPDATE tpi SET c = 'baz'
 ----
 Scan /Table/107/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/baz
-Put (delete) /Table/107/2/"foobar"/3/0
+Put (delete) (locking) /Table/107/2/"foobar"/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -115,7 +115,7 @@ UPDATE tei SET a = a + 1, b = b + 100
 ----
 Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/108/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
-Put (delete) /Table/108/2/102/1/0
+Put (delete) (locking) /Table/108/2/102/1/0
 Put /Table/108/2/203/1/0 -> /BYTES/0x0a0103
 
 # Update a row with different values without changing the expected index entry.
@@ -153,10 +153,10 @@ UPDATE tii SET b = ARRAY[1, 2, 2, NULL, 4, 4]
 ----
 Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/109/1/1/0 -> /TUPLE/2:2:Array/ARRAY[1,2,2,NULL,4,4]
-Put (delete) /Table/109/2/NULL/1/0
-Put (delete) /Table/109/2/1/1/0
-Put (delete) /Table/109/2/2/1/0
-Put (delete) /Table/109/2/3/1/0
+Put (delete) (locking) /Table/109/2/NULL/1/0
+Put (delete) (locking) /Table/109/2/1/1/0
+Put (delete) (locking) /Table/109/2/2/1/0
+Put (delete) (locking) /Table/109/2/3/1/0
 Put /Table/109/2/NULL/1/0 -> /BYTES/0x0a0103
 Put /Table/109/2/1/1/0 -> /BYTES/0x0a0103
 Put /Table/109/2/2/1/0 -> /BYTES/0x0a0103
@@ -188,7 +188,7 @@ UPDATE tmi SET b = 3, c = '{"a": "foobar", "c": "baz"}'::json
 ----
 Scan /Table/110/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/110/1/1/0 -> /TUPLE/2:2:Int/3/1:3:SentinelType/{"a": "foobar", "c": "baz"}
-Put (delete) /Table/110/2/2/"a"/"foo"/1/0
-Put (delete) /Table/110/2/2/"b"/"bar"/1/0
+Put (delete) (locking) /Table/110/2/2/"a"/"foo"/1/0
+Put (delete) (locking) /Table/110/2/2/"b"/"bar"/1/0
 Put /Table/110/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
 Put /Table/110/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103

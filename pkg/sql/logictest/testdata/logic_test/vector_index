@@ -161,7 +161,7 @@ statement error column c has type vector, which is only allowed as the last colu
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c VECTOR(3), VECTOR INDEX (c, b))
 
 # Try to use inverted indexable type in vector index.
-statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column b has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE TABLE t (a INT PRIMARY KEY, b TSVECTOR, c VECTOR(3), VECTOR INDEX (b, c))
 
 statement error the last column in a vector index cannot have the DESC option
@@ -192,7 +192,7 @@ statement error column vec1 has type vector, which is only allowed as the last c
 CREATE VECTOR INDEX ON vec_errors (vec1, b)
 
 # Try to use inverted indexable type in vector index.
-statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column c has type tsvector, which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.2/inverted-indexes.html
 CREATE VECTOR INDEX ON vec_errors (c, vec1)
 
 statement error the last column in a vector index cannot have the DESC option

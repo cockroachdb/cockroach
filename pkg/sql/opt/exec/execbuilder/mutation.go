@@ -26,10 +26,10 @@ import (
 
 func (b *Builder) buildMutationInput(
 	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
-) (_ execPlan, err error) {
-	toLock, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
+) (_ execPlan, lockedIndexes cat.IndexOrdinals, err error) {
+	toLock, toLockIndexes, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, nil, err
 	}
 	if toLock != 0 {
 		if b.forceForUpdateLocking != 0 {
@@ -38,7 +38,7 @@ func (b *Builder) buildMutationInput(
 				// assertion failure in test builds. Additionally, we will rely
 				// on forceForUpdateLocking set properly when buffered writes
 				// are enabled for correctness.
-				return execPlan{}, errors.AssertionFailedf(
+				return execPlan{}, nil, errors.AssertionFailedf(
 					"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
 				)
 			}
@@ -51,7 +51,7 @@ func (b *Builder) buildMutationInput(
 
 	input, inputCols, err := b.buildRelational(inputExpr)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, nil, err
 	}
 
 	// TODO(mgartner/radu): This can incorrectly append columns in a FK cascade
@@ -85,14 +85,14 @@ func (b *Builder) buildMutationInput(
 		inputExpr.ProvidedPhysical().Ordering, true, /* reuseInputCols */
 	)
 	if err != nil {
-		return execPlan{}, err
+		return execPlan{}, nil, err
 	}
 
 	if p.WithID != 0 {
 		label := fmt.Sprintf("buffer %d", p.WithID)
 		bufferNode, err := b.factory.ConstructBuffer(input.root, label)
 		if err != nil {
-			return execPlan{}, err
+			return execPlan{}, nil, err
 		}
 
 		b.addBuiltWithExpr(p.WithID, inputCols, bufferNode)
@@ -100,7 +100,7 @@ func (b *Builder) buildMutationInput(
 	} else {
 		b.colOrdsAlloc.Free(inputCols)
 	}
-	return input, nil
+	return input, toLockIndexes, nil
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colOrdMap, err error) {
@@ -113,7 +113,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
 		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
-	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
+	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -433,7 +433,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		upd.VectorIndexDelPartitionCols,
 	)
 
-	input, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
+	// TODO(yuzefovich): use lockedIndexes to optimize locking behavior.
+	input, _, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -507,7 +508,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		ups.VectorIndexDelPartitionCols,
 	)
 
-	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
+	// TODO(yuzefovich): use lockedIndexes to optimize locking behavior.
+	input, _, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -594,7 +596,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		del.FetchCols, neededPassThroughCols, del.PartialIndexDelCols, del.VectorIndexDelPartitionCols,
 	)
 
-	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
+	input, lockedIndexes, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -620,6 +622,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		fetchColOrds,
 		returnColOrds,
 		passthroughCols,
+		lockedIndexes,
 		b.allowAutoCommit && len(del.FKChecks) == 0 &&
 			len(del.FKCascades) == 0 && del.AfterTriggers == nil,
 	)
@@ -1143,12 +1146,21 @@ var forUpdateLocking = opt.Locking{
 // shouldApplyImplicitLockingToMutationInput determines whether or not the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row
 // scan of a mutation expression. If the builder should lock the initial row
-// scan, it returns the TableID of the scan, otherwise it returns 0.
+// scan, it returns the TableID of the scan (as well as ordinals of indexes to
+// lock), otherwise it returns 0.
 func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 	mutExpr memo.RelExpr,
-) (opt.TableID, error) {
+) (_ opt.TableID, retIndexes cat.IndexOrdinals, _ error) {
 	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return 0, nil
+		return 0, nil, nil
+	}
+
+	if buildutil.CrdbTestBuild {
+		defer func() {
+			if len(retIndexes) > 2 {
+				panic(errors.AssertionFailedf("attempt to lock %d indexes: %v", len(retIndexes), retIndexes))
+			}
+		}()
 	}
 
 	switch t := mutExpr.(type) {
@@ -1157,28 +1169,32 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		// sense to apply implicit row-level locking to the input of an INSERT
 		// expression because any contention results in unique constraint
 		// violations.
-		return 0, nil
+		return 0, nil, nil
 
 	case *memo.UpdateExpr:
 		md := b.mem.Metadata()
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
+		tableID, toLockIndexes := shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table)
+		return tableID, toLockIndexes.Ordered(), nil
 
 	case *memo.UpsertExpr:
-		return shouldApplyImplicitLockingToUpsertInput(t), nil
+		tableID, toLockIndexes := shouldApplyImplicitLockingToUpsertInput(t)
+		return tableID, toLockIndexes.Ordered(), nil
 
 	case *memo.DeleteExpr:
 		md := b.mem.Metadata()
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table), nil
+		tableID, toLockIndexes := shouldApplyImplicitLockingToUpdateOrDeleteInput(md, t.Input, t.Table)
+		return tableID, toLockIndexes.Ordered(), nil
 
 	default:
-		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
+		return 0, nil, errors.AssertionFailedf("unexpected mutation expression %T", t)
 	}
 }
 
 // shouldApplyImplicitLockingToUpdateOrDeleteInput determines whether the
 // builder should apply a FOR UPDATE row-level locking mode to the initial row
 // scan of an UPDATE statement or a DELETE. If the builder should lock the
-// initial row scan, it returns the TableID of the scan, otherwise it returns 0.
+// initial row scan, it returns the TableID of the scan (as well as ordinals of
+// indexes to lock), otherwise it returns 0.
 //
 // Conceptually, if we picture an UPDATE statement as the composition of a
 // SELECT statement and an INSERT statement (with loosened semantics around
@@ -1203,7 +1219,8 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 // reuse this function for both.
 func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 	md *opt.Metadata, input memo.RelExpr, tabID opt.TableID,
-) opt.TableID {
+) (opt.TableID, intsets.Fast) {
+	var toLockIndexes intsets.Fast
 	// Try to match the mutation's input expression against the pattern:
 	//
 	//   [Project]* [IndexJoin] (Scan | LookupJoin [LookupJoin] Values)
@@ -1213,13 +1230,21 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 	input = unwrapProjectExprs(input)
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
+		toLockIndexes.Add(cat.PrimaryIndex)
 	}
 	switch t := input.(type) {
 	case *memo.ScanExpr:
-		return t.Table
+		toLockIndexes.Add(t.Index)
+		return t.Table, toLockIndexes
 	case *memo.LookupJoinExpr:
+		toLockIndexes.Add(t.Index)
 		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {
+			// When a generic query plan reads from a secondary index first,
+			// then performs a lookup into the primary index, the plan has a
+			// double lookup join pattern. We add implicit locks in this case
+			// where both lookup joins have the same table.
 			t = innerJoin
+			toLockIndexes.Add(t.Index)
 		}
 		mutStableID := md.Table(tabID).ID()
 		lookupStableID := md.Table(t.Table).ID()
@@ -1227,17 +1252,19 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 		// same as the table being updated. Also, don't lock rows if there is an
 		// ON condition so that we don't lock rows that won't be updated.
 		if mutStableID == lookupStableID && t.On.IsTrue() && t.Input.Op() == opt.ValuesOp {
-			return t.Table
+			return t.Table, toLockIndexes
 		}
 	}
-	return 0
+	return 0, intsets.Fast{}
 }
 
 // tryApplyImplicitLockingToUpsertInput determines whether or not the builder
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
 // an UPSERT statement. If the builder should lock the initial row scan, it
-// returns the TableID of the scan, otherwise it returns 0.
-func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
+// returns the TableID of the scan (as well as ordinals of indexes to lock),
+// otherwise it returns 0.
+func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) (opt.TableID, intsets.Fast) {
+	var toLockIndexes intsets.Fast
 	// Try to match the Upsert's input expression against the pattern:
 	//
 	//   [Project]* (LeftJoin Scan | LookupJoin [LookupJoin]) [Project]* Values
@@ -1249,30 +1276,33 @@ func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
 	case *memo.LeftJoinExpr:
 		scan, ok := join.Right.(*memo.ScanExpr)
 		if !ok {
-			return 0
+			return 0, intsets.Fast{}
 		}
 		input = join.Left
 		toLock = scan.Table
+		toLockIndexes.Add(scan.Index)
 
 	case *memo.LookupJoinExpr:
 		input = join.Input
+		toLockIndexes.Add(join.Index)
 		if inner, ok := input.(*memo.LookupJoinExpr); ok && inner.Table == join.Table {
 			// When a generic query plan reads from a secondary index first,
 			// then performs a lookup into the primary index, the plan has a
 			// double lookup join pattern. We add implicit locks in this case
 			// where both lookup joins have the same table.
 			input = inner.Input
+			toLockIndexes.Add(inner.Index)
 		}
 		toLock = join.Table
 
 	default:
-		return 0
+		return 0, intsets.Fast{}
 	}
 	input = unwrapProjectExprs(input)
 	if _, ok := input.(*memo.ValuesExpr); ok {
-		return toLock
+		return toLock, toLockIndexes
 	}
-	return 0
+	return 0, intsets.Fast{}
 }
 
 // unwrapProjectExprs unwraps zero or more nested ProjectExprs. It returns the

@@ -782,10 +782,9 @@ func TestFrontierQuantization(t *testing.T) {
 				_, err := frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
 				require.NoError(t, err)
 			}
-			frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			for sp, ts := range frontier.Entries() {
 				t.Logf("span: %v, ts: %v\n", sp, ts)
-				return false
-			})
+			}
 			require.Equal(t, tc.expectedFrontierEntries, frontier.Len())
 			require.Equal(t, tc.expectedFrontier, frontier.Frontier())
 		})

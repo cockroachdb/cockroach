@@ -173,7 +173,9 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	if tableID == catid.InvalidDescID {
 		return nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
 	}
-	tzo := tableZoneConfigObj{tableID: tableID}
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	dbzco := databaseZoneConfigObj{databaseID: dbID}
+	tzo := tableZoneConfigObj{tableID: tableID, databaseZoneConfigObj: dbzco}
 
 	// We are a table object.
 	if zs.TargetsTable() && !zs.TargetsIndex() && !zs.TargetsPartition() {

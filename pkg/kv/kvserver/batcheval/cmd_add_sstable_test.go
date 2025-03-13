@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -1078,7 +1079,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								require.NoError(t, err)
 								v.LocalTimestamp.WallTime *= 1e9
 								kv.RangeKey.Timestamp.WallTime *= 1e9
-								kv.RangeKey.EncodedTimestampSuffix = storage.EncodeMVCCTimestampSuffix(kv.RangeKey.Timestamp)
+								kv.RangeKey.EncodedTimestampSuffix = mvccencoding.EncodeMVCCTimestampSuffix(kv.RangeKey.Timestamp)
 								vBytes, err := storage.EncodeMVCCValue(v)
 								require.NoError(t, err)
 								expect = append(expect, storage.MVCCRangeKeyValue{RangeKey: kv.RangeKey, Value: vBytes})

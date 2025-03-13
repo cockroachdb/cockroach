@@ -103,8 +103,8 @@ UPDATE t SET j = NULL WHERE k = 4
 ----
 Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo
-Del /Table/106/2/333/Arr/1/4/0
-Del /Table/106/3/333/"foo"/Arr/1/4/0
+Del (locking) /Table/106/2/333/Arr/1/4/0
+Del (locking) /Table/106/3/333/"foo"/Arr/1/4/0
 
 # Deleting a NULL shouldn't remove anything from the inv idx.
 query T kvtrace
@@ -127,9 +127,9 @@ UPDATE t SET i = 333 WHERE k = 5
 ----
 Scan /Table/106/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/5/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
-Del /Table/106/2/NULL/"a"/"b"/5/0
+Del (locking) /Table/106/2/NULL/"a"/"b"/5/0
 CPut /Table/106/2/333/"a"/"b"/5/0 -> /BYTES/
-Del /Table/106/3/NULL/"foo"/"a"/"b"/5/0
+Del (locking) /Table/106/3/NULL/"foo"/"a"/"b"/5/0
 CPut /Table/106/3/333/"foo"/"a"/"b"/5/0 -> /BYTES/
 
 # Update back to NULL.
@@ -138,9 +138,9 @@ UPDATE t SET i = NULL WHERE k = 5
 ----
 Scan /Table/106/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/5/0 -> /TUPLE/3:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
-Del /Table/106/2/333/"a"/"b"/5/0
+Del (locking) /Table/106/2/333/"a"/"b"/5/0
 CPut /Table/106/2/NULL/"a"/"b"/5/0 -> /BYTES/
-Del /Table/106/3/333/"foo"/"a"/"b"/5/0
+Del (locking) /Table/106/3/333/"foo"/"a"/"b"/5/0
 CPut /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 
 # Delete row with NULL non-inverted row.
