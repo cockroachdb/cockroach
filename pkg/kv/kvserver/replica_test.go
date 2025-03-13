@@ -15400,3 +15400,43 @@ func TestLockAcquisitions1PCInteractions(t *testing.T) {
 		})
 	})
 }
+
+// TestLeaderlessWatcherInit tests that the leaderless watcher is initialized
+// correctly.
+func TestLeaderlessWatcherInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Set the leaderless threshold to 10 second.
+	tsc := TestStoreConfig(nil /* clock */)
+	ReplicaLeaderlessUnavailableThreshold.Override(ctx, &tsc.Settings.SV, 10*time.Second)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+	repl, err := tc.store.GetReplica(1)
+	require.NoError(t, err)
+
+	repl.LeaderlessWatcher.mu.RLock()
+	defer repl.LeaderlessWatcher.mu.RUnlock()
+
+	// Initially, the leaderWatcher doesn't consider the replica as unavailable.
+	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+
+	// The leaderless timestamp is not set.
+	require.Equal(t, time.Time{}, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
+
+	// The error is always loaded.
+	require.Regexp(t, "replica has been leaderless for 10s", repl.LeaderlessWatcher.Err())
+
+	// The channel is closed.
+	c := repl.LeaderlessWatcher.C()
+	select {
+	case <-c:
+		// Channel is closed, which is expected
+	default:
+		t.Fatalf("expected LeaderlessWatcher channel to be closed")
+	}
+}
