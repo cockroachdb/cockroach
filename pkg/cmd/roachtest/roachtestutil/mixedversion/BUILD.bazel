@@ -45,6 +45,7 @@ go_test(
     name = "mixedversion_test",
     srcs = [
         "context_test.go",
+        "float_test.go",
         "helper_test.go",
         "main_test.go",
         "mixedversion_test.go",
