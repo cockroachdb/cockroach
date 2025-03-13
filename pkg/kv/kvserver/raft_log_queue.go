@@ -522,7 +522,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	// TODO(pav-kv): source everything from raft.LogSnapshot, and there will be no
 	// discrepancy between commit index and last index.
-	decision.ProtectIndex(decision.CommitIndex, truncatableIndexChosenViaCommitIndex)
+	decision.ProtectIndex(decision.CommitIndex+1, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
 		// Snapshots are expensive, so we try our best to avoid truncating past
@@ -609,7 +609,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//         FirstIndex    <= LastIndex                                    (0)
 	//         NewFirstIndex >= FirstIndex                                   (1)
 	//         NewFirstIndex <= LastIndex                                    (2)
-	//         NewFirstIndex <= CommitIndex                                  (3)
+	//         NewFirstIndex <= CommitIndex + 1                              (3)
 	//
 	// (1) asserts that we're not regressing our FirstIndex
 	// (2) asserts that our we don't truncate past the last index we can
@@ -633,7 +633,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	logIndexValid := logEmpty ||
 		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex)
 	commitIndexValid := noCommittedEntries ||
-		(decision.NewFirstIndex <= decision.CommitIndex)
+		(decision.NewFirstIndex <= decision.CommitIndex+1)
 	valid := logIndexValid && commitIndexValid
 	if !valid {
 		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
