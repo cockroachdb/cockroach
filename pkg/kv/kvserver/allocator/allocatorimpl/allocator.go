@@ -2079,7 +2079,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
-			ctx, status, leaseRepl.GetCompactedIndex()+1, candidates)...)
+			ctx, status, leaseRepl.GetCompactedIndex(), candidates)...)
 		candidates = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, candidates)
 	}
@@ -2222,7 +2222,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
-			ctx, leaseRepl.RaftStatus(), leaseRepl.GetCompactedIndex()+1, preferred)
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetCompactedIndex(), preferred)
 		preferred = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, preferred)
 	}
@@ -3033,12 +3033,12 @@ func FilterBehindReplicas(
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context,
 	st *raft.Status,
-	firstIndex kvpb.RaftIndex,
+	compacted kvpb.RaftIndex,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID)
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, compacted, repl.ReplicaID)
 		if snapStatus != raftutil.NoSnapshotNeeded {
 			log.KvDistribution.VEventf(
 				ctx,
