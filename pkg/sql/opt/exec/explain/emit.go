@@ -1404,14 +1404,14 @@ func (e *emitter) emitPolicies(ob *OutputBuilder, table cat.Table, n *Node) {
 	} else {
 		var sb strings.Builder
 		policies := table.Policies()
-		// TODO(136742): Add support for restrictive policies.
-		for i := range policies.Permissive {
-			policy := policies.Permissive[i]
-			if applied.Policies.Contains(policy.ID) {
-				if sb.Len() > 0 {
-					sb.WriteString(", ")
+		for _, grp := range [][]cat.Policy{policies.Permissive, policies.Restrictive} {
+			for _, policy := range grp {
+				if applied.Policies.Contains(policy.ID) {
+					if sb.Len() > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(policy.Name.Normalize())
 				}
-				sb.WriteString(policy.Name.Normalize())
 			}
 		}
 		ob.AddField("policies", sb.String())
