@@ -8,6 +8,7 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/errors"
@@ -79,7 +80,33 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 			return nil, err
 		}
 		return []tree.DJSON{resolved}, nil
+	case jsonpath.Operation:
+		return ctx.evalOperation(p, current)
 	default:
 		return nil, errUnimplemented
 	}
+}
+
+func (ctx *jsonpathCtx) evalAndUnwrap(
+	path jsonpath.Path, inputs []tree.DJSON,
+) ([]tree.DJSON, error) {
+	results, err := ctx.eval(path, inputs)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.strict {
+		return results, nil
+	}
+	var unwrapped []tree.DJSON
+	for _, result := range results {
+		if result.JSON.Type() == json.ArrayJSONType {
+			array, _ := result.JSON.AsArray()
+			for _, element := range array {
+				unwrapped = append(unwrapped, tree.DJSON{JSON: element})
+			}
+		} else {
+			unwrapped = append(unwrapped, result)
+		}
+	}
+	return unwrapped, nil
 }
