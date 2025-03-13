@@ -398,7 +398,7 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	if err := msstw.rolloverSST(ctx, storage.EngineKey{Key: start}, storage.EngineKey{Key: end}); err != nil {
 		return err
 	}
-	if msstw.skipClearForMVCCSpan {
+	if msstw.currSpanIsMVCCSpan() && msstw.skipClearForMVCCSpan {
 		prevWriteBytes := msstw.currSST.EstimatedSize()
 		// Skip the fragmenter. See the comment in skipClearForMVCCSpan.
 		if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
