@@ -221,10 +221,10 @@ func prepareRightReplicaForSplit(
 	// was not able to use its current lease because of a restart or lease
 	// transfer, the RHS will also not be able to. minValidObservedTS ensures that
 	// the bounds for uncertainty interval are preserved.
-	r.mu.RLock()
+	token := r.mu.RLock()
 	minLeaseProposedTS := r.mu.minLeaseProposedTS
 	minValidObservedTS := r.mu.minValidObservedTimestamp
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 
 	// If the RHS replica of the split is not removed, then it has been obtained
 	// (and its raftMu acquired) in Replica.acquireSplitLock.

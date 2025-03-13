@@ -106,10 +106,10 @@ func (r *Replica) executeWriteBatch(
 	// Raft execution, use the local. Upon unlocking, the local must be zeroed
 	// out.
 	readOnlyCmdMu := &r.readOnlyCmdMu
-	readOnlyCmdMu.RLock()
+	token := readOnlyCmdMu.RLock()
 	defer func() {
 		if readOnlyCmdMu != nil {
-			readOnlyCmdMu.RUnlock()
+			readOnlyCmdMu.RUnlock(token)
 		}
 	}()
 
@@ -189,7 +189,7 @@ func (r *Replica) executeWriteBatch(
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
-			readOnlyCmdMu.RUnlock()
+			readOnlyCmdMu.RUnlock(token)
 			readOnlyCmdMu = nil
 
 			r.raftMu.Lock()
@@ -203,7 +203,7 @@ func (r *Replica) executeWriteBatch(
 
 	// We are done with pre-Raft evaluation at this point, and have to release the
 	// read-only command lock to avoid deadlocks during Raft evaluation.
-	readOnlyCmdMu.RUnlock()
+	readOnlyCmdMu.RUnlock(token)
 	readOnlyCmdMu = nil
 
 	// If the command was accepted by raft, wait for the range to apply it.

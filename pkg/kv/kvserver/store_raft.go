@@ -803,10 +803,10 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
+		token := r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
-		r.mu.RUnlock()
+		r.mu.RUnlock(token)
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
@@ -828,8 +828,8 @@ func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb
 	// function, we need to lock the new data structure first before we even know
 	// which replicas' Replica.mu to lock.
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
+		token := r.mu.RLock()
+		defer r.mu.RUnlock(token)
 		leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
 		// If we couldn't locate the leader, wake up the replica.
 		if err != nil || leader.StoreID == 0 {

@@ -103,18 +103,18 @@ func (s *Store) tryGetReplica(
 	}
 
 	repl.raftMu.Lock() // not unlocked on success
-	repl.mu.RLock()
+	token := repl.mu.RLock()
 
 	// The current replica is removed, go back around.
 	if repl.mu.destroyStatus.Removed() {
-		repl.mu.RUnlock()
+		repl.mu.RUnlock(token)
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
 
 	// Drop messages from replicas we know to be too old.
 	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-		repl.mu.RUnlock()
+		repl.mu.RUnlock(token)
 		repl.raftMu.Unlock()
 		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
@@ -126,7 +126,7 @@ func (s *Store) tryGetReplica(
 				replicaID, repl)
 		}
 
-		repl.mu.RUnlock()
+		repl.mu.RUnlock(token)
 		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
@@ -135,7 +135,7 @@ func (s *Store) tryGetReplica(
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
-	defer repl.mu.RUnlock()
+	defer repl.mu.RUnlock(token)
 
 	if repl.replicaID > replicaID {
 		// The sender is behind and is sending to an old replica.

@@ -46,8 +46,8 @@ func (r *Replica) executeReadOnlyBatch(
 	_ *kvadmission.StoreWriteBytes,
 	pErr *kvpb.Error,
 ) {
-	r.readOnlyCmdMu.RLock()
-	defer r.readOnlyCmdMu.RUnlock()
+	token := r.readOnlyCmdMu.RLock()
+	defer r.readOnlyCmdMu.RUnlock(token)
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
