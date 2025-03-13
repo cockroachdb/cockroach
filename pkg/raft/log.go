@@ -36,8 +36,8 @@ import (
 // This gives the application direct control on resource allocation, and
 // flexibility to do raft log IO without blocking RawNode operation.
 type LogSnapshot struct {
-	// first is the first available log index.
-	first uint64
+	// compacted is the compacted log index.
+	compacted uint64
 	// storage contains the stable log entries.
 	storage LogStorage
 	// unstable contains the unstable log entries.
@@ -99,7 +99,7 @@ func newLog(storage Storage, logger raftlogger.Logger) *raftLog {
 func newLogWithSize(
 	storage Storage, logger raftlogger.Logger, maxApplyingEntsSize entryEncodingSize,
 ) *raftLog {
-	firstIndex, lastIndex := storage.FirstIndex(), storage.LastIndex()
+	compacted, lastIndex := storage.Compacted(), storage.LastIndex()
 	lastTerm, err := storage.Term(lastIndex)
 	if err != nil {
 		panic(err) // TODO(pav-kv): the storage should always cache the last term.
@@ -110,10 +110,15 @@ func newLogWithSize(
 		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
-		// Initialize our committed and applied pointers to the time of the last compaction.
-		committed: firstIndex - 1,
-		applying:  firstIndex - 1,
-		applied:   firstIndex - 1,
+		// Initialize our committed and applied pointers to the time of the last
+		// compaction.
+		//
+		// TODO(pav-kv): this is error-prone. The applied index gets corrected
+		// further, in newRaft initialization sequence. This should be done as a
+		// single step.
+		committed: compacted,
+		applying:  compacted,
+		applied:   compacted,
 
 		logger: logger,
 	}
@@ -348,11 +353,11 @@ func (l *raftLog) snapshot() (pb.Snapshot, error) {
 	return l.storage.Snapshot()
 }
 
-func (l *raftLog) firstIndex() uint64 {
-	if i, ok := l.unstable.maybeFirstIndex(); ok {
-		return i
+func (l *raftLog) compacted() uint64 {
+	if index, ok := l.unstable.maybeCompacted(); ok {
+		return index
 	}
-	return l.storage.FirstIndex()
+	return l.storage.Compacted()
 }
 
 func (l *raftLog) lastIndex() uint64 {
@@ -440,7 +445,7 @@ func (l LogSnapshot) term(index uint64) (uint64, error) {
 		return 0, ErrUnavailable
 	} else if index >= l.unstable.prev.index {
 		return l.unstable.termAt(index), nil
-	} else if index+1 < l.first {
+	} else if index < l.compacted {
 		return 0, ErrCompacted
 	}
 
@@ -474,7 +479,7 @@ func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, 
 
 // allEntries returns all entries in the log. For testing only.
 func (l *raftLog) allEntries() []pb.Entry {
-	ents, err := l.entries(l.firstIndex()-1, noLimit)
+	ents, err := l.entries(l.compacted(), noLimit)
 	if err == nil {
 		return ents
 	}
@@ -635,15 +640,15 @@ func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry
 }
 
 // mustCheckOutOfBounds checks that the (lo, hi] interval is within the bounds
-// of this raft log: l.firstIndex()-1 <= lo <= hi <= l.lastIndex().
+// of this raft log: l.compacted() <= lo <= hi <= l.lastIndex().
 func (l LogSnapshot) mustCheckOutOfBounds(lo, hi uint64) error {
 	if lo > hi {
 		l.logger.Panicf("invalid slice %d > %d", lo, hi)
 	}
-	if fi := l.first; lo+1 < fi {
+	if ci := l.compacted; lo < ci {
 		return ErrCompacted
 	} else if li := l.unstable.lastIndex(); hi > li {
-		l.logger.Panicf("slice(%d,%d] out of bound [%d,%d]", lo, hi, fi, li)
+		l.logger.Panicf("slice(%d,%d] out of bound (%d,%d]", lo, hi, ci, li)
 	}
 	return nil
 }
@@ -663,9 +668,9 @@ func (l *raftLog) zeroTermOnOutOfBounds(t uint64, err error) uint64 {
 // read from while the underlying storage is not mutated.
 func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	return LogSnapshot{
-		first:    l.firstIndex(),
-		storage:  storage,
-		unstable: l.unstable.LeadSlice,
-		logger:   l.logger,
+		compacted: l.compacted(),
+		storage:   storage,
+		unstable:  l.unstable.LeadSlice,
+		logger:    l.logger,
 	}
 }

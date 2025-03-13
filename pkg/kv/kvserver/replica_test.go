@@ -7547,6 +7547,7 @@ func TestEntries(t *testing.T) {
 	})
 }
 
+// TODO(pav-kv): this test belongs to logstore. And requires a cleanup.
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -7587,7 +7588,7 @@ func TestTerm(t *testing.T) {
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
 
-		firstIndex := repl.raftFirstIndexRLocked()
+		firstIndex := repl.raftCompactedIndexRLocked() + 1
 		if firstIndex != indexes[5] {
 			t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
 		}
@@ -7600,7 +7601,6 @@ func TestTerm(t *testing.T) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
 
-		// FirstIndex-1 should return the term of firstIndex.
 		firstIndexTerm, err := tc.repl.raftTermLocked(firstIndex)
 		if err != nil {
 			t.Errorf("expect no error, got %s", err)
