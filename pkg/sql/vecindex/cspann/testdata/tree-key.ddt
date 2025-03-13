@@ -63,7 +63,7 @@ vec6
     └───• vec5 (14, 1)
 
 # Merge partition in tree #2.
-force-merge partition-key=3 parent-partition-key=1 tree=2
+force-split-or-merge partition-key=3 parent-partition-key=1 tree=2
 ----
 • 1 (4.5, 4.0833)
 │

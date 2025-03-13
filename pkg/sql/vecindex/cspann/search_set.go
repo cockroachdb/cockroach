@@ -201,6 +201,18 @@ type SearchSet struct {
 	extraResults searchResultHeap
 }
 
+// RemoveResults removes all results that are in the given parent partition.
+func (ss *SearchSet) RemoveResults(parentPartitionKey PartitionKey) {
+	// Remove all results, and then add back all but excluded results.
+	results := ss.PopUnsortedResults()
+	for i := range results {
+		res := &results[i]
+		if res.ParentPartitionKey != parentPartitionKey {
+			ss.Add(res)
+		}
+	}
+}
+
 // Add includes a new candidate in the search set. If set limits have been
 // reached, then the candidate with the farthest distance will be discarded.
 func (ss *SearchSet) Add(candidate *SearchResult) {

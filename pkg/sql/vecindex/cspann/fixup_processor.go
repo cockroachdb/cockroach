@@ -23,9 +23,9 @@ import (
 type fixupType int
 
 const (
-	// splitOrMergeFixup is a fixup that includes the key of a partition to
-	// split or merge as well as the key of its parent partition (if it exists).
-	// Whether a partition is split or merged depends on its size.
+	// splitOrMergeFixup is a fixup that includes the key of a partition that
+	// may need to be split or merged, as well as the key of its parent partition
+	// (if it exists). Whether a partition is split or merged depends on its size.
 	splitOrMergeFixup fixupType = iota + 1
 	// vectorDeleteFixup is a fixup that includes the primary key of a vector to
 	// delete from the index, as well as the key of the partition that contains
@@ -266,20 +266,9 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 	return nil
 }
 
-// AddSplit enqueues a split fixup for later processing.
-func (fp *FixupProcessor) AddSplit(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) {
-	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
-		Type:               splitOrMergeFixup,
-		ParentPartitionKey: parentPartitionKey,
-		PartitionKey:       partitionKey,
-	})
-}
-
-// AddMerge enqueues a merge fixup for later processing.
-func (fp *FixupProcessor) AddMerge(
+// AddSplitOrMergeCheck enqueues a fixup to check whether a split or merge is
+// needed for the given partition.
+func (fp *FixupProcessor) AddSplitOrMergeCheck(
 	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{

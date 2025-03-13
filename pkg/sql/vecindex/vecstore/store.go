@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -37,6 +38,10 @@ type Store struct {
 	rootQuantizer quantize.Quantizer
 	quantizer     quantize.Quantizer
 
+	// minConsistency can override default INCONSISTENCY usage when estimating
+	// the size of a partition. This is used for testing.
+	minConsistency kvpb.ReadConsistencyType
+
 	prefix    roachpb.Key            // KV prefix for the vector index.
 	pkPrefix  roachpb.Key            // KV prefix for the primary key.
 	fetchSpec fetchpb.IndexFetchSpec // A pre-built fetch spec for this index.
@@ -59,13 +64,14 @@ func NewWithColumnID(
 	vectorColumnID descpb.ColumnID,
 ) (ps *Store, err error) {
 	ps = &Store{
-		db:            db,
-		codec:         codec,
-		tableID:       tableDesc.GetID(),
-		indexID:       indexID,
-		rootQuantizer: quantize.NewUnQuantizer(quantizer.GetDims()),
-		quantizer:     quantizer,
-		emptyVec:      make(vector.T, quantizer.GetDims()),
+		db:             db,
+		codec:          codec,
+		tableID:        tableDesc.GetID(),
+		indexID:        indexID,
+		rootQuantizer:  quantize.NewUnQuantizer(quantizer.GetDims()),
+		quantizer:      quantizer,
+		minConsistency: kvpb.INCONSISTENT,
+		emptyVec:       make(vector.T, quantizer.GetDims()),
 	}
 
 	pk := tableDesc.GetPrimaryIndex()
@@ -119,6 +125,12 @@ func New(
 	return NewWithColumnID(db, quantizer, codec, tableDesc, indexID, vectorColumnID)
 }
 
+// SetConsistency sets the minimum consistency level to use when reading
+// partitions. This is set to a higher level for deterministic tests.
+func (s *Store) SetMinimumConsistency(consistency kvpb.ReadConsistencyType) {
+	s.minConsistency = consistency
+}
+
 // BeginTransaction is part of the cspann.Store interface. Begin creates a new
 // KV transaction on behalf of the user and prepares it to operate on the vector
 // store.
@@ -140,9 +152,47 @@ func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
 	return txn.(*Txn).kv.Rollback(ctx)
 }
 
+// EstimatePartitionCount is part of the cspann.Store interface. It returns an
+// estimate of the number of vectors in the given partition.
+func (s *Store) EstimatePartitionCount(
+	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (int, error) {
+	// Create a batch with INCONSISTENT read consistency to avoid updating the
+	// timestamp cache or blocking on locks.
+	b := s.db.KV().NewBatch()
+	b.Header.ReadConsistency = s.minConsistency
+
+	// Count the number of rows in the partition after the metadata row.
+	metadataKey := s.encodePartitionKey(treeKey, partitionKey)
+	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
+
+	// Execute the batch and count the rows in the response.
+	if err := s.db.KV().Run(ctx, b); err != nil {
+		return 0, errors.Wrap(err, "estimating partition count")
+	}
+	if err := b.Results[0].Err; err != nil {
+		return 0, errors.Wrap(err, "extracting Scan rows for partition count")
+	}
+	return len(b.Results[0].Rows), nil
+}
+
 // MergeStats is part of the cspann.Store interface.
 func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMerge bool) error {
 	// TODO(mw5h): Implement MergeStats. We're not panicking here because some tested
 	// functionality needs to call this function but does not depend on the results.
 	return nil
+}
+
+// encodePartitionKey takes a partition key and creates a KV key to read that
+// partition's metadata. Vector data can be read by scanning from the metadata
+// to the next partition's metadata.
+func (s *Store) encodePartitionKey(
+	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) roachpb.Key {
+	capacity := len(s.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
+	keyBuffer := make(roachpb.Key, 0, capacity)
+	keyBuffer = append(keyBuffer, s.prefix...)
+	keyBuffer = append(keyBuffer, treeKey...)
+	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
+	return keyBuffer
 }

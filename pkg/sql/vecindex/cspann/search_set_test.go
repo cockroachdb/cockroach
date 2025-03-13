@@ -148,4 +148,14 @@ func TestSearchSet(t *testing.T) {
 	otherSet = SearchSet{MaxResults: 2, MatchKey: []byte{60}}
 	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
 	require.Equal(t, SearchResults{result6}, otherSet.PopResults())
+
+	// Remove results.
+	searchSet = SearchSet{MaxResults: 4, MaxExtraResults: 2}
+	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+	searchSet.RemoveResults(100)
+	require.Equal(t, SearchResults{result3, result4, result6, result2, result5}, searchSet.PopResults())
+
+	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
+	searchSet.RemoveResults(200)
+	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
 }
