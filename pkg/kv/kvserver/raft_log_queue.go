@@ -274,9 +274,9 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// will become false and we will recompute the size -- so this cannot cause
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.shMu.raftLogSizeTrusted
-	firstIndex := r.raftCompactedIndexRLocked() + 1 // TODO(pav-kv): use "compacted" indexing
+	compIndex := r.raftCompactedIndexRLocked()
 	r.mu.RUnlock()
-	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
+	compIndex = r.pendingLogTruncations.nextCompactedIndex(compIndex)
 
 	if raftStatus == nil {
 		if log.V(6) {
@@ -310,7 +310,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		LogSize:              raftLogSize,
 		MaxLogSize:           targetSize,
 		LogSizeTrusted:       logSizeTrusted,
-		FirstIndex:           firstIndex,
+		FirstIndex:           compIndex + 1, // TODO(pav-kv): use "compacted" directly
 		LastIndex:            lastIndex,
 		PendingSnapshotIndex: pendingSnapshotIndex,
 	}
