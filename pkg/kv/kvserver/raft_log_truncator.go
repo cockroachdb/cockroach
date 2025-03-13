@@ -256,7 +256,7 @@ type replicaForTruncator interface {
 	// Returns the sideloaded bytes that would be freed if we were to truncate
 	// (from, to].
 	sideloadedBytesIfTruncatedFromTo(
-		_ context.Context, from, to kvpb.RaftIndex) (freed int64, _ error)
+		_ context.Context, _ kvpb.RaftSpan) (freed int64, _ error)
 	getStateLoader() stateloader.StateLoader
 	// NB: Setting the persistent raft state is via the Engine exposed by
 	// storeForTruncator.
@@ -318,8 +318,9 @@ func (t *raftLogTruncator) addPendingTruncation(
 	// In the common case of alreadyTruncIndex+1 == raftExpectedFirstIndex, the
 	// computation returns the same result regardless of which is plugged in as
 	// the lower bound.
-	sideloadedFreed, err := r.sideloadedBytesIfTruncatedFromTo(
-		ctx, alreadyTruncIndex, pendingTrunc.compactedIndex())
+	sideloadedFreed, err := r.sideloadedBytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{
+		After: alreadyTruncIndex, Last: pendingTrunc.compactedIndex(),
+	})
 	if err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
 		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)

@@ -200,3 +200,19 @@ type RaftIndex uint64
 
 // SafeValue implements the redact.SafeValue interface.
 func (s RaftIndex) SafeValue() {}
+
+// RaftSpan represents a (begin, end] span of indices in a raft log. The choice
+// of excluding the left bound and including the right bound is deliberate and
+// principled. When working with raft logs, it almost always helps to avoid
+// off-by-one errors and risk of integer underflow.
+type RaftSpan struct {
+	// After is the left bound of the log indices span. Exclusive.
+	After RaftIndex
+	// Last is the right bound of the log indices span. Inclusive.
+	Last RaftIndex
+}
+
+// Contains returns true iff the given index is within the span.
+func (s RaftSpan) Contains(index RaftIndex) bool {
+	return index > s.After && index <= s.Last
+}

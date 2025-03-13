@@ -221,10 +221,10 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	for n := range payloads {
 		index := payloads[n] // (0, index] + (index, ...]
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, index)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: index})
 		require.NoError(t, err)
 		freedWhatWasRetained, retainedNothing, err :=
-			ss.BytesIfTruncatedFromTo(ctx, index, math.MaxUint64)
+			ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{After: index, Last: math.MaxUint64})
 		require.NoError(t, err)
 		require.Zero(t, retainedNothing)
 		require.Equal(t, freedWhatWasRetained, retained)
@@ -282,7 +282,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 		// Ensure HasAnyEntry doesn't find anything.
-		found, err := ss.HasAnyEntry(ctx, 0, 10000)
+		found, err := ss.HasAnyEntry(ctx, kvpb.RaftSpan{Last: 10000})
 		require.NoError(t, err)
 		require.False(t, found)
 
@@ -306,11 +306,11 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			{from: 49, to: 59, want: false},
 			{from: 0, to: 9, want: true},
 		} {
-			found, err := ss.HasAnyEntry(ctx, check.from, check.to)
+			found, err := ss.HasAnyEntry(ctx, kvpb.RaftSpan{After: check.from, Last: check.to})
 			require.NoError(t, err)
 			require.Equal(t, check.want, found)
 		}
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 		require.NoError(t, err)
 		require.Zero(t, retained)
 		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
@@ -328,7 +328,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
 	// without the directory existing.
-	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 0)
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{})
 	require.NoError(t, err)
 	require.Zero(t, freed)
 	require.Zero(t, retained)
