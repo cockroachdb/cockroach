@@ -515,6 +515,13 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// RaftStatus.Progress.Match is updated on the leader when a command is
 	// proposed and in a single replica Raft group this also means that
 	// RaftStatus.Commit is updated at propose time.
+	//
+	// TODO(pav-kv): the above is not true. The match index is updated after a
+	// durable exchange with the acceptor. The commit index is updated after doing
+	// so with a quorum of acceptors, and single-replica groups are no exception.
+	//
+	// TODO(pav-kv): source everything from raft.LogSnapshot, and there will be no
+	// discrepancy between commit index and last index.
 	decision.ProtectIndex(decision.CommitIndex, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
@@ -617,6 +624,9 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// consider the empty case. Something like
 	// https://github.com/nvanbenschoten/optional could help us emulate an
 	// `option<uint64>` type if we care enough.
+	//
+	// TODO(pav-kv): eliminate all the above complexity by using Compacted index
+	// instead of FirstIndex.
 	logEmpty := input.FirstIndex > input.LastIndex
 	noCommittedEntries := input.FirstIndex > kvpb.RaftIndex(input.RaftStatus.Commit)
 
