@@ -8,36 +8,36 @@
 package checkpoint
 
 import (
+	"iter"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
-
-// SpanIter is an iterator over a collection of spans.
-type SpanIter func(forEachSpan span.Operation)
 
 // Make creates a checkpoint with as many spans that should be checkpointed (are
 // above the highwater mark) as can fit in maxBytes, along with the earliest
 // timestamp of the checkpointed spans. Adjacent spans at the same timestamp
 // are merged together to reduce checkpoint size.
 func Make(
-	overallResolved hlc.Timestamp, forEachSpan SpanIter, maxBytes int64, metrics *Metrics,
+	overallResolved hlc.Timestamp,
+	spans iter.Seq2[roachpb.Span, hlc.Timestamp],
+	maxBytes int64,
+	metrics *Metrics,
 ) *jobspb.TimestampSpansMap {
 	start := timeutil.Now()
 
 	spanGroupMap := make(map[hlc.Timestamp]*roachpb.SpanGroup)
-	forEachSpan(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
+	for s, ts := range spans {
 		if ts.After(overallResolved) {
 			if spanGroupMap[ts] == nil {
 				spanGroupMap[ts] = new(roachpb.SpanGroup)
 			}
 			spanGroupMap[ts].Add(s)
 		}
-		return span.ContinueMatch
-	})
+	}
 	if len(spanGroupMap) == 0 {
 		return nil
 	}

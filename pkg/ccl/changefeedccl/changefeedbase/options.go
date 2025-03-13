@@ -1178,6 +1178,11 @@ func (s StatementOptions) SetDefaultEnvelope(t EnvelopeType) {
 	}
 }
 
+// Unset unsets an option.
+func (s StatementOptions) Unset(opt string) {
+	delete(s.m, opt)
+}
+
 // GetOnError validates and returns the desired behavior when a non-retriable error is encountered.
 func (s StatementOptions) GetOnError() (OnErrorType, error) {
 	v, err := s.getEnumValue(OptOnError)
