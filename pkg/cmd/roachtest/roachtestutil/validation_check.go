@@ -44,7 +44,7 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 	// Speed up consistency checks. The test is done, so let's go full throttle.
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
 	if err != nil {
-		return err
+		return errors.Wrap(err, "unable to set 'server.consistency_check.max_rate'")
 	}
 
 	// NB: we set a statement_timeout since context cancellation won't work here.
