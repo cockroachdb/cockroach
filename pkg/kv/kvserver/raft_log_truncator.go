@@ -86,18 +86,15 @@ func (p *pendingLogTruncations) computePostTruncLogSize(raftLogSize int64) int64
 	return raftLogSize
 }
 
-// computePostTruncFirstIndex computes the first log index that is not
-// truncated, under the pretense that the pending truncations have been
-// enacted.
-func (p *pendingLogTruncations) computePostTruncFirstIndex(
-	firstIndex kvpb.RaftIndex,
-) kvpb.RaftIndex {
+// nextCompactedIndex computes the new compacted index, under the pretense
+// that all pending truncations have been enacted.
+func (p *pendingLogTruncations) nextCompactedIndex(compIndex kvpb.RaftIndex) kvpb.RaftIndex {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.iterateLocked(func(_ int, trunc pendingTruncation) {
-		firstIndex = max(firstIndex, trunc.compactedIndex()+1)
+		compIndex = max(compIndex, trunc.compactedIndex())
 	})
-	return firstIndex
+	return compIndex
 }
 
 func (p *pendingLogTruncations) isEmptyLocked() bool {
