@@ -1037,14 +1037,7 @@ type Engine interface {
 	// NB: It is the caller's responsibility to ensure if
 	// sstsContainExciseTombstone is set to true, the ingestion sstables must
 	// contain a tombstone for the exciseSpan.
-	IngestAndExciseFiles(
-		ctx context.Context,
-		paths []string,
-		shared []pebble.SharedSSTMeta,
-		external []pebble.ExternalFile,
-		exciseSpan roachpb.Span,
-		sstsContainExciseTombstone bool, // TODO(tbg): remove
-	) (pebble.IngestOperationStats, error)
+	IngestAndExciseFiles(ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, external []pebble.ExternalFile, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.

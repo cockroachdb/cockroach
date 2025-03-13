@@ -581,28 +581,14 @@ func (r *Replica) applySnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/93251
 	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-			ctx,
-			inSnap.SSTStorageScratch.SSTs(),
-			inSnap.sharedSSTs,
-			inSnap.externalSSTs,
-			exciseSpan,
-			false,
-		); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
 			exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-				ctx,
-				inSnap.SSTStorageScratch.SSTs(),
-				nil, /* sharedSSTs */
-				nil, /* externalSSTs */
-				exciseSpan,
-				false,
-			); err != nil {
+			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), nil, nil, exciseSpan); err != nil {
 				return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 					inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 			}
