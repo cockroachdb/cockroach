@@ -24,13 +24,12 @@ import (
 
 func entriesStr(f Frontier) string {
 	var buf strings.Builder
-	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
+	for sp, ts := range f.All() {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
 		fmt.Fprintf(&buf, `%s@%d`, sp, ts.WallTime)
-		return ContinueMatch
-	})
+	}
 	return buf.String()
 }
 

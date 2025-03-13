@@ -50,11 +50,9 @@ type Frontier interface {
 	// but it will prevent frontier nodes from being efficiently re-used.
 	Release()
 
-	// Entries invokes the given callback with the current timestamp for each
-	// component span in the tracked span set.
-	// The fn may not mutate this frontier while iterating.
-	// TODO(yang): Delete this function and replace usages with All.
-	Entries(fn Operation)
+	// All returns an iterator over the entries in the frontier.
+	// Updates to the frontier are restricted until iteration is stopped.
+	All() iter.Seq2[roachpb.Span, hlc.Timestamp]
 
 	// SpanEntries invokes op for each sub-span of the specified span with the
 	// timestamp as observed by this frontier.
@@ -75,6 +73,7 @@ type Frontier interface {
 	// Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
 	// tracked by this frontier.
 	// The fn may not mutate this frontier while iterating.
+	// TODO(yang): Change this function to return an iterator.
 	SpanEntries(span roachpb.Span, op Operation)
 
 	// Len returns the number of spans tracked by the frontier.
@@ -82,10 +81,6 @@ type Frontier interface {
 
 	// String returns string representation of this fFrontier.
 	String() string
-
-	// All returns an iterator over the entries in the frontier.
-	// Updates to the frontier are restricted until iteration is stopped.
-	All() iter.Seq2[roachpb.Span, hlc.Timestamp]
 }
 
 // OpResult is the result of the Operation callback.
@@ -563,15 +558,16 @@ func (f *btreeFrontier) disallowMutations() func() {
 	}
 }
 
-// Entries invokes the given callback with the current timestamp for each
-// component span in the tracked span set.
-func (f *btreeFrontier) Entries(fn Operation) {
-	defer f.disallowMutations()()
+// All implements Frontier.
+func (f *btreeFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.disallowMutations()()
 
-	it := f.tree.MakeIter()
-	for it.First(); it.Valid(); it.Next() {
-		if fn(it.Cur().span(), it.Cur().ts) == StopMatch {
-			break
+		it := f.tree.MakeIter()
+		for it.First(); it.Valid(); it.Next() {
+			if !yield(it.Cur().span(), it.Cur().ts) {
+				return
+			}
 		}
 	}
 }
@@ -634,20 +630,6 @@ func (f *btreeFrontier) String() string {
 		buf.WriteString(it.Cur().String())
 	}
 	return buf.String()
-}
-
-// All implements Frontier.
-func (f *btreeFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		defer f.disallowMutations()()
-
-		it := f.tree.MakeIter()
-		for it.First(); it.Valid(); it.Next() {
-			if !yield(it.Cur().span(), it.Cur().ts) {
-				return
-			}
-		}
-	}
 }
 
 // Len implements Frontier.
@@ -883,11 +865,17 @@ func (f *concurrentFrontier) Release() {
 	f.f.Release()
 }
 
-// Entries implements Frontier.
-func (f *concurrentFrontier) Entries(fn Operation) {
+// All implements Frontier.
+func (f *concurrentFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	f.Lock()
-	defer f.Unlock()
-	f.f.Entries(fn)
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		defer f.Unlock()
+		for sp, ts := range f.f.All() {
+			if !yield(sp, ts) {
+				return
+			}
+		}
+	}
 }
 
 // SpanEntries implements Frontier.
@@ -909,11 +897,4 @@ func (f *concurrentFrontier) String() string {
 	f.Lock()
 	defer f.Unlock()
 	return f.f.String()
-}
-
-// All implements Frontier.
-func (f *concurrentFrontier) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	f.Lock()
-	defer f.Unlock()
-	return f.f.All()
 }

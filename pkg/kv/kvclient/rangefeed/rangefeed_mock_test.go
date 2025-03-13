@@ -508,11 +508,10 @@ func TestRangeFeedMock(t *testing.T) {
 			initFrontier, err := span.MakeFrontier(fullSpan)
 			require.NoError(t, err)
 
-			externalFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			for sp, ts := range externalFrontier.All() {
 				_, err := initFrontier.Forward(sp, ts)
 				require.NoError(t, err)
-				return span.ContinueMatch
-			})
+			}
 			require.NoError(t, err)
 
 			onCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {

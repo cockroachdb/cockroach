@@ -599,10 +599,9 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	}
 
 	var stps []kvcoord.SpanTimePair
-	resumeFrontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for s, ts := range resumeFrontier.All() {
 		stps = append(stps, kvcoord.SpanTimePair{Span: s, StartAfter: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
