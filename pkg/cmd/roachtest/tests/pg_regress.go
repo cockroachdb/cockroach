@@ -380,8 +380,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"partition_prune",
 		"tuplesort",
 		"stats",
-		// TODO(#107345): Reenable oidjoins when DO statements are supported.
-		// "oidjoins",
+		"oidjoins",
 		"event_trigger",
 	}
 
