@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +89,8 @@ func TestEngineComparer(t *testing.T) {
 	ts5 := hlc.Timestamp{WallTime: 1}
 
 	syntheticBit := []byte{1}
-	var zeroLogical [mvccEncodedTimeLogicalLen]byte
+	// mvccencoding.mvccEncodedTimeLogicalLen = 4
+	var zeroLogical [4]byte
 	ts2a := appendBytesToTimestamp(ts2, syntheticBit)
 	ts3a := appendBytesToTimestamp(ts3, zeroLogical[:])
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
@@ -734,14 +736,14 @@ func TestPebbleMVCCBlockIntervalSuffixReplacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r := MVCCBlockIntervalSuffixReplacer{}
-	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
+	suffix := mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
 	before := sstable.BlockInterval{Lower: 10, Upper: 15}
 	after, err := r.ApplySuffixReplacement(before, suffix)
 	require.NoError(t, err)
 	require.Equal(t, sstable.BlockInterval{Lower: 42, Upper: 43}, after)
 
 	// An invalid suffix (too short) results in an error.
-	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
+	suffix = mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
 	_, err = r.ApplySuffixReplacement(sstable.BlockInterval{Lower: 1, Upper: 2}, suffix)
 	require.Error(t, err)
 }

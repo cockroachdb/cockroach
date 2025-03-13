@@ -8,6 +8,7 @@ package storageutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -86,7 +87,7 @@ func RangeKeyWithTS(start, end string, ts hlc.Timestamp) storage.MVCCRangeKey {
 		StartKey:               roachpb.Key(start),
 		EndKey:                 roachpb.Key(end),
 		Timestamp:              ts,
-		EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(ts),
+		EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(ts),
 	}
 }
 

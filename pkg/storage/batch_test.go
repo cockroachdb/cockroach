@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -961,7 +962,7 @@ func TestBatchReader(t *testing.T) {
 
 		{pebble.InternalKeyKindDelete, "mvccKey", 9, "", nil, nil},
 		{pebble.InternalKeyKindRangeKeyUnset, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
-			{Version: EncodeMVCCTimestampSuffix(wallTS(9)), Value: nil},
+			{Version: mvccencoding.EncodeMVCCTimestampSuffix(wallTS(9)), Value: nil},
 		}},
 		{pebble.InternalKeyKindRangeDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
 		{pebble.InternalKeyKindRangeKeyDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},

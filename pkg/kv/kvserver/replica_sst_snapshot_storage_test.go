@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -380,7 +381,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
 			require.NoError(t, referenceMsstw.PutRangeKey(
-				ctx, key, endKey, storage.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
+				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
 		require.NoError(t, referenceMsstw.Put(ctx, engineKey, []byte("foobarbaz")))
 	}
@@ -410,7 +411,7 @@ func TestMultiSSTWriterSize(t *testing.T) {
 			// Add a range key.
 			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
 			require.NoError(t, multiSSTWriter.PutRangeKey(
-				ctx, key, endKey, storage.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
+				ctx, key, endKey, mvccencoding.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
 		}
 		require.NoError(t, multiSSTWriter.Put(ctx, engineKey, []byte("foobarbaz")))
 	}

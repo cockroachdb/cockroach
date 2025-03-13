@@ -172,6 +172,7 @@ go_test(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/storage/mvccencoding",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

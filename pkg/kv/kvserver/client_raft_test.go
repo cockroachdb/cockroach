@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -6002,7 +6003,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 					EndKey: append(prefix.Clone(), 'z'),
 				}, bounds)
 				require.Equal(t, []storage.EngineRangeKeyValue{{
-					Version: storage.EncodeMVCCTimestampSuffix(now),
+					Version: mvccencoding.EncodeMVCCTimestampSuffix(now),
 					Value:   valueLocalTSRaw,
 				}}, iter.EngineRangeKeys())
 
