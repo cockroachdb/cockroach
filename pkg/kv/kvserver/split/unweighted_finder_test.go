@@ -8,6 +8,7 @@ package split
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -381,23 +382,25 @@ func TestFinderPopularKeyFrequency(t *testing.T) {
 		}
 	}
 
-	testCases := []struct {
+	randSource := rand.New(rand.NewSource(2022))
+	for i, test := range []struct {
 		samples                     [splitKeySampleSize]sample
+		expectedPopularKey          roachpb.Key
 		expectedPopularKeyFrequency float64
 	}{
-		{uniqueKeySample, 0.05},
-		{twentyPercentPopularKeySample, 0.2},
-		{twentyFivePercentPopularKeySample, 0.25},
-		{fiftyPercentPopularKeySample, 0.5},
-		{fiftyFivePercentPopularKeySample, 0.55},
-		{sameKeySample, 1},
-	}
-
-	randSource := rand.New(rand.NewSource(2022))
-	for i, test := range testCases {
-		finder := NewUnweightedFinder(timeutil.Now(), randSource)
-		finder.samples = test.samples
-		popularKeyFrequency := finder.PopularKeyFrequency()
-		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
+		{uniqueKeySample, keys.SystemSQLCodec.TablePrefix(1), 0.05},
+		{twentyPercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(6), 0.2},
+		{twentyFivePercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(2), 0.25},
+		{fiftyPercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(0), 0.5},
+		{fiftyFivePercentPopularKeySample, keys.SystemSQLCodec.TablePrefix(0), 0.55},
+		{sameKeySample, keys.SystemSQLCodec.TablePrefix(0), 1},
+	} {
+		t.Run(fmt.Sprintf("popular key test %d", i), func(t *testing.T) {
+			finder := NewUnweightedFinder(timeutil.Now(), randSource)
+			finder.samples = test.samples
+			popularKey := finder.PopularKey()
+			assert.Equal(t, test.expectedPopularKey, popularKey.Key, "unexpected popular key in test %d", i)
+			assert.Equal(t, test.expectedPopularKeyFrequency, popularKey.Frequency, "unexpected popular key frequency in test %d", i)
+		})
 	}
 }
