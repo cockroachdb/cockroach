@@ -1222,6 +1222,12 @@ func (cs *clusterState) undoChangeLoadDelta(change replicaChange) {
 	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[CPURate]
 }
 
+// setStore updates the store descriptor in the cluster state. If the store
+// hasn't been seen before, it is also added to the cluster state.
+//
+// TODO: We currently assume that the locality and attributes associated with a
+// store/node are fixed. This is a reasonable assumption for the locality,
+// however it is not for the attributes.
 func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 	ns, ok := cs.nodes[desc.Node.NodeID]
 	if !ok {
@@ -1229,7 +1235,6 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 		ns = newNodeState(desc.Node.NodeID)
 		cs.nodes[desc.Node.NodeID] = ns
 	}
-	ns.stores = append(ns.stores, desc.StoreID)
 	ss, ok := cs.stores[desc.StoreID]
 	if !ok {
 		// This is the first time seeing this store.
@@ -1237,6 +1242,7 @@ func (cs *clusterState) setStore(desc roachpb.StoreDescriptor) {
 		ss.localityTiers = cs.localityTierInterner.intern(desc.Locality())
 		cs.constraintMatcher.setStore(desc)
 		cs.stores[desc.StoreID] = ss
+		ns.stores = append(ns.stores, desc.StoreID)
 	}
 	ss.StoreDescriptor = desc
 }
