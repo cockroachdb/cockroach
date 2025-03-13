@@ -279,14 +279,13 @@ type IncomingSnapshot struct {
 	// Size of the key-value pairs.
 	DataSize int64
 	// Size of the ssts containing these key-value pairs.
-	SSTSize                     int64
-	SharedSize                  int64
-	placeholder                 *ReplicaPlaceholder
-	raftAppliedIndex            kvpb.RaftIndex      // logging only
-	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs                  []pebble.SharedSSTMeta
-	externalSSTs                []pebble.ExternalFile
-	includesRangeDelForLastSpan bool
+	SSTSize          int64
+	SharedSize       int64
+	placeholder      *ReplicaPlaceholder
+	raftAppliedIndex kvpb.RaftIndex      // logging only
+	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs       []pebble.SharedSSTMeta
+	externalSSTs     []pebble.ExternalFile
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -588,7 +587,7 @@ func (r *Replica) applySnapshot(
 			inSnap.sharedSSTs,
 			inSnap.externalSSTs,
 			exciseSpan,
-			inSnap.includesRangeDelForLastSpan,
+			false,
 		); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
@@ -602,7 +601,7 @@ func (r *Replica) applySnapshot(
 				nil, /* sharedSSTs */
 				nil, /* externalSSTs */
 				exciseSpan,
-				inSnap.includesRangeDelForLastSpan,
+				false,
 			); err != nil {
 				return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 					inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)

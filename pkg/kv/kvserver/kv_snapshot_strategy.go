@@ -263,19 +263,18 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:                    snapUUID,
-				SSTStorageScratch:           kvSS.scratch,
-				FromReplica:                 header.RaftMessageRequest.FromReplica,
-				Desc:                        header.State.Desc,
-				DataSize:                    dataSize,
-				SSTSize:                     sstSize,
-				SharedSize:                  sharedSize,
-				raftAppliedIndex:            header.State.RaftAppliedIndex,
-				msgAppRespCh:                make(chan raftpb.Message, 1),
-				sharedSSTs:                  sharedSSTs,
-				externalSSTs:                externalSSTs,
-				includesRangeDelForLastSpan: false, // TODO(tbg): next commit
-				clearedSpans:                keyRanges,
+				SnapUUID:          snapUUID,
+				SSTStorageScratch: kvSS.scratch,
+				FromReplica:       header.RaftMessageRequest.FromReplica,
+				Desc:              header.State.Desc,
+				DataSize:          dataSize,
+				SSTSize:           sstSize,
+				SharedSize:        sharedSize,
+				raftAppliedIndex:  header.State.RaftAppliedIndex,
+				msgAppRespCh:      make(chan raftpb.Message, 1),
+				sharedSSTs:        sharedSSTs,
+				externalSSTs:      externalSSTs,
+				clearedSpans:      keyRanges,
 			}
 
 			timingTag.stop("totalTime")
