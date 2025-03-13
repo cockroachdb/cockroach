@@ -152,8 +152,8 @@ func TestComputeTruncateDecision(t *testing.T) {
 		},
 		// Never truncate past the commit index.
 		{
-			3, []uint64{3, 3, 6}, 100, 2, 7, 0,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: commit)]",
+			3, []uint64{4, 4, 6}, 100, 2, 7, 0,
+			"should truncate: false [truncate 2 entries to first index 4 (chosen via: commit)]",
 		},
 		// Never truncate past the last index.
 		{
