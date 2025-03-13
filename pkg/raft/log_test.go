@@ -670,7 +670,7 @@ func TestLogRestore(t *testing.T) {
 	raftLog := newLog(storage, raftlogger.DiscardLogger)
 
 	require.Zero(t, len(raftLog.allEntries()))
-	require.Equal(t, index+1, raftLog.firstIndex())
+	require.Equal(t, index, raftLog.compacted())
 	require.Equal(t, index, raftLog.committed)
 	require.Equal(t, index, raftLog.unstable.prev.index)
 	require.Equal(t, term, mustTerm(raftLog.term(index)))

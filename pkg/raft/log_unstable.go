@@ -125,11 +125,10 @@ func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	}
 }
 
-// maybeFirstIndex returns the index of the first possible entry in entries
-// if it has a snapshot.
-func (u *unstable) maybeFirstIndex() (uint64, bool) {
+// maybeCompacted returns the pending compacted index if there is a snapshot.
+func (u *unstable) maybeCompacted() (uint64, bool) {
 	if u.snapshot != nil {
-		return u.snapshot.Metadata.Index + 1, true
+		return u.snapshot.Metadata.Index, true
 	}
 	return 0, false
 }

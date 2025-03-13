@@ -570,11 +570,11 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
 		require.NotEmpty(t, cs.Voters, "no voters specified")
-		fi, li := storage.FirstIndex(), storage.LastIndex()
-		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
-		require.Equal(t, fi, li+1, "the log must be empty")
+		ci, li := storage.Compacted(), storage.LastIndex()
+		require.GreaterOrEqual(t, ci, uint64(1), "Compacted >= 1 is prerequisite for bootstrap")
+		require.Equal(t, ci, li, "the log must be empty")
 
-		entries, err := storage.Entries(fi, li+1, math.MaxUint64)
+		entries, err := storage.Entries(ci+1, li+1, math.MaxUint64)
 		require.NoError(t, err)
 		require.Empty(t, entries, "should not have been able to load any entries")
 
@@ -1109,7 +1109,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 		b.Fatalf("did not apply everything: %d < %d", applied, b.N)
 	}
 	b.ReportAllocs()
-	b.ReportMetric(float64(s.callStats.firstIndex)/float64(b.N), "firstIndex/op")
+	b.ReportMetric(float64(s.callStats.compacted)/float64(b.N), "compacted/op")
 	b.ReportMetric(float64(s.callStats.lastIndex)/float64(b.N), "lastIndex/op")
 	b.ReportMetric(float64(s.callStats.term)/float64(b.N), "term/op")
 	b.ReportMetric(float64(numReady)/float64(b.N), "ready/op")
