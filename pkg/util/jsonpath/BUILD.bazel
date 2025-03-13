@@ -4,6 +4,7 @@ go_library(
     name = "jsonpath",
     srcs = [
         "expr.go",
+        "operation.go",
         "scalar.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath",
