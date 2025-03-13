@@ -68,7 +68,8 @@ type propBuf struct {
 	// proposals coming out of the propBuf don't carry closed timestamps below
 	// currently-evaluating requests.
 	evalTracker tracker.Tracker
-	full        sync.Cond
+	// full        sync.Cond
+	full chan struct{}
 
 	// arr contains the buffered proposals.
 	arr propBufArray
@@ -180,7 +181,8 @@ func (b *propBuf) Init(
 	b.p = p
 	// NB: It would be possible to use a read lock here, but p.rlocker() does not
 	// currently implement sync.Locker.
-	b.full.L = p.locker()
+	// b.full.L = p.locker()
+	b.full = make(chan struct{})
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
@@ -333,15 +335,20 @@ func (b *propBuf) allocateIndex(
 			// The flush will require the read lock to be upgraded to a write lock,
 			// then downgraded back to a read lock. The token of the new read lock
 			// is returned.
-			if newToken, err := b.flushRLocked(ctx, token); err != nil {
+			newToken, err := b.flushRLocked(ctx, token)
+			if err != nil {
 				return 0, newToken, err
 			}
+			token = newToken
 		} else {
 			// The buffer is full and we were not the first request to notice
 			// out of potentially many requests holding the shared lock and
 			// trying to insert concurrently. Wait for the buffer to be flushed
 			// by someone else before trying again.
-			b.full.Wait()
+			// b.full.Wait()
+			b.p.rlocker().RUnlock(token)
+			<-b.full
+			token = b.p.rlocker().RLock()
 		}
 	}
 }
@@ -374,7 +381,9 @@ func (b *propBuf) flushRLocked(
 	b.p.locker().Lock()
 	defer b.p.locker().Unlock()
 	if status := b.p.destroyed(); !status.IsAlive() {
-		b.full.Broadcast()
+		// b.full.Broadcast()
+		close(b.full)
+		b.full = make(chan struct{})
 		return nil, status.err
 	}
 	return nil, b.flushLocked(ctx)
@@ -418,7 +427,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// The buffer is full and at least one writer has tried to allocate
 		// on top of the full buffer, so notify them to try again.
 		used = b.arr.len()
-		defer b.full.Broadcast()
+		// defer b.full.Broadcast()
+		defer close(b.full)
+		b.full = make(chan struct{})
 	}
 
 	// Iterate through the proposals in the buffer and propose them to Raft.
