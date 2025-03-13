@@ -233,6 +233,89 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
+// TestAlterChangefeedAddTargetAfterInitialScan tests adding a new target
+// after the changefeed has already completed its initial scan.
+func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "initial_scan", []string{"yes", "no", "only"}, func(t *testing.T, initialScan string) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b INT)`)
+
+			testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, testFeed)
+
+			feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+
+			checkHighwaterAdvance := func(ts hlc.Timestamp) func() error {
+				return func() error {
+					hw, err := feed.HighWaterMark()
+					if err != nil {
+						return err
+					}
+					if hw.After(ts) {
+						return nil
+					}
+					return errors.Newf("waiting for highwater to advance past %s", ts)
+				}
+			}
+
+			// Insert and update row into new table after changefeed was already created.
+			sqlDB.Exec(t, `INSERT INTO bar VALUES(2, 2)`)
+			sqlDB.Exec(t, `UPDATE bar SET b = 9 WHERE a = 2`)
+
+			var tsStr string
+			sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1) RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
+			assertPayloads(t, testFeed, []string{
+				`foo: [1]->{"after": {"a": 1}}`,
+			})
+			ts := parseTimeToHLC(t, tsStr)
+			testutils.SucceedsSoon(t, checkHighwaterAdvance(ts))
+
+			sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+			waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+
+			sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan = '%s'`, feed.JobID(), initialScan))
+
+			sqlDB.Exec(t, `RESUME JOB $1`, feed.JobID())
+			waitForJobState(sqlDB, t, feed.JobID(), `running`)
+
+			// Updates for the new table only start at the changefeed's current
+			// highwater at the time of the ALTER CHANGEFEED.
+			switch initialScan {
+			case "yes":
+				assertPayloads(t, testFeed, []string{
+					// There is no `bar: [2]->{"after": {"a": 2, "b": 2}}` message
+					// because it was inserted before the highwater.
+					`bar: [2]->{"after": {"a": 2, "b": 9}}`,
+				})
+			case "only":
+				// Strangely, when initial_scan = 'only', we don't do an initial
+				// scan unless the original changefeed was initial_scan = 'only'.
+			case "no":
+			default:
+				t.Fatalf("unknown initial scan type %q", initialScan)
+			}
+
+			sqlDB.QueryRow(t, `INSERT INTO foo VALUES(2)`)
+			assertPayloads(t, testFeed, []string{
+				`foo: [2]->{"after": {"a": 2}}`,
+			})
+
+			sqlDB.Exec(t, `UPDATE bar SET b = 25 WHERE a = 2`)
+			assertPayloads(t, testFeed, []string{
+				`bar: [2]->{"after": {"a": 2, "b": 25}}`,
+			})
+		}
+
+		cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	})
+}
+
 func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1524,7 +1607,7 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 			waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
-			expectPayloads := (initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan")
+			expectPayloads := initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan"
 			if expectPayloads {
 				assertPayloads(t, testFeed, []string{
 					`bar: [1]->{"after": {"a": 1}}`,
@@ -1543,8 +1626,10 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 	for _, initialScanOpt := range []string{
 		"initial_scan = 'yes'",
 		"initial_scan = 'no'",
+		"initial_scan = 'only'",
 		"initial_scan",
-		"no_initial_scan"} {
+		"no_initial_scan",
+	} {
 		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"), feedTestNoExternalConnection)
 	}
 }

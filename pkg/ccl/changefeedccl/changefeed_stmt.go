@@ -1517,8 +1517,8 @@ func reconcileJobStateWithLocalState(
 		return err
 	}
 	// Advance frontier based on the information received from the aggregators.
-	for _, s := range localState.aggregatorFrontier {
-		_, err := sf.Forward(s.Span, s.Timestamp)
+	for sp, ts := range localState.AggregatorFrontierSpans() {
+		_, err := sf.Forward(sp, ts)
 		if err != nil {
 			return err
 		}
@@ -1527,11 +1527,7 @@ func reconcileJobStateWithLocalState(
 	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
 	checkpoint := checkpoint.Make(
 		sf.Frontier(),
-		func(forEachSpan span.Operation) {
-			for _, fs := range localState.aggregatorFrontier {
-				forEachSpan(fs.Span, fs.Timestamp)
-			}
-		},
+		localState.AggregatorFrontierSpans(),
 		maxBytes,
 		nil, /* metrics */
 	)

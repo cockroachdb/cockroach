@@ -6,6 +6,7 @@
 package checkpoint_test
 
 import (
+	"iter"
 	"math"
 	"sort"
 	"testing"
@@ -43,6 +44,16 @@ func (rs checkpointSpans) Less(i int, j int) bool {
 
 func (rs checkpointSpans) Swap(i int, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
+}
+
+func (rs checkpointSpans) All() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		for _, checkpointSpan := range rs {
+			if !yield(checkpointSpan.span, checkpointSpan.ts) {
+				return
+			}
+		}
+	}
 }
 
 func TestCheckpointMake(t *testing.T) {
@@ -136,11 +147,7 @@ func TestCheckpointMake(t *testing.T) {
 
 			actualCheckpoint := checkpoint.Make(
 				tc.frontier,
-				func(fn span.Operation) {
-					for _, sp := range tc.spans {
-						fn(sp.span, sp.ts)
-					}
-				},
+				tc.spans.All(),
 				tc.maxBytes,
 				aggMetrics.AddChild(),
 			)
@@ -301,11 +308,7 @@ func TestCheckpointMakeRestoreRoundTrip(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cp := checkpoint.Make(
 				tc.frontier,
-				func(fn span.Operation) {
-					for _, sp := range tc.spans {
-						fn(sp.span, sp.ts)
-					}
-				},
+				tc.spans.All(),
 				changefeedbase.SpanCheckpointMaxBytes.Default(),
 				nil, /* metrics */
 			)
@@ -493,14 +496,8 @@ func TestLegacyCheckpointCatchupTime(t *testing.T) {
 	}
 	shuffle.Shuffle(spans)
 
-	forEachSpan := func(fn span.Operation) {
-		for _, s := range spans {
-			fn(s.span, s.ts)
-		}
-	}
-
 	// Compute the checkpoint.
-	cp := checkpoint.ConvertToLegacyCheckpoint(checkpoint.Make(hwm, forEachSpan, maxBytes, nil /* metrics */))
+	cp := checkpoint.ConvertToLegacyCheckpoint(checkpoint.Make(hwm, spans.All(), maxBytes, nil /* metrics */))
 	cpSpans, cpTS := roachpb.Spans(cp.Spans), cp.Timestamp
 	require.Less(t, len(cpSpans), numSpans)
 	require.True(t, hwm.Less(cpTS))

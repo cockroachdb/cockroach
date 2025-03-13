@@ -8,7 +8,9 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"iter"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -608,7 +610,7 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 	// can ignore it from this point on.
 	if !ca.spec.Checkpoint.IsEmpty() {
 		if ca.spec.SpanLevelCheckpoint != nil {
-			return nil, errors.New("both legacy and current checkpoint set on change aggregator spec")
+			return nil, errors.AssertionFailedf("both legacy and current checkpoint set on change aggregator spec")
 		}
 
 		// This conversion undoes an unnecessary conversion when the spec
@@ -929,15 +931,9 @@ func (ca *changeAggregator) flushFrontier() error {
 	}
 
 	// Iterate frontier spans and build a list of spans to emit.
-	var batch jobspb.ResolvedSpans
-	ca.frontier.EntriesWithBoundaryType(func(s roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType) (done span.OpResult) {
-		batch.ResolvedSpans = append(batch.ResolvedSpans, jobspb.ResolvedSpan{
-			Span:         s,
-			Timestamp:    ts,
-			BoundaryType: boundaryType,
-		})
-		return span.ContinueMatch
-	})
+	batch := jobspb.ResolvedSpans{
+		ResolvedSpans: slices.Collect(ca.frontier.All()),
+	}
 	return ca.emitResolved(batch)
 }
 
@@ -1103,6 +1099,18 @@ func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
 	// copy of the checkpoint is only used in-memory on a coordinator node that
 	// knows about the new field.
 	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
+}
+
+// AggregatorFrontierSpans returns an iterator over the spans in the aggregator
+// frontier collected during shutdown.
+func (cs *cachedState) AggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		for _, entry := range cs.aggregatorFrontier {
+			if !yield(entry.Span, entry.Timestamp) {
+				return
+			}
+		}
+	}
 }
 
 func newJobState(
@@ -1929,12 +1937,17 @@ func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {
 	return timeutil.Since(frontier.GoTime()) > slownessThreshold(sv)
 }
 
+type behindSpanFrontier interface {
+	Frontier() hlc.Timestamp
+	PeekFrontierSpan() roachpb.Span
+}
+
 // Potentially log the most behind span in the frontier for debugging if the
 // frontier is behind
 func maybeLogBehindSpan(
 	ctx context.Context,
 	description string,
-	frontier span.Frontier,
+	frontier behindSpanFrontier,
 	frontierChanged bool,
 	sv *settings.Values,
 ) {
