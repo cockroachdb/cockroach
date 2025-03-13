@@ -160,25 +160,28 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 // NB: when nextKey is non-nil, do not do anything in this function to cause
 // nextKey at the caller to escape to the heap.
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.EngineKey) error {
-	currSpan := msstw.currentSpan()
+	var currEngineSpan storage.EngineKeyRange
+	doClear := true
 	if msstw.currSpanIsMVCCSpan() {
+		currEngineSpan = msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)]
 		// We're in the MVCC span (ie. MVCC / user keys). If skipClearForMVCCSpan
 		// is true, we don't write a clearRange for the last span at all. Otherwise,
 		// we need to write a clearRange for all keys leading up to the current key
 		// we're writing.
-		currEngineSpan := msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)]
-		if !msstw.skipClearForMVCCSpan {
-			if err := msstw.currSST.ClearEngineRange(
-				currEngineSpan.Start, currEngineSpan.End,
-			); err != nil {
-				msstw.currSST.Close()
-				return errors.Wrap(err, "failed to clear range on sst file writer")
-			}
+		if msstw.skipClearForMVCCSpan {
+			doClear = false
 		}
 	} else {
-		if err := msstw.currSST.ClearRawRange(
-			currSpan.Key, currSpan.EndKey,
-			true /* pointKeys */, false, /* rangeKeys */
+		cur := msstw.currentSpan()
+		currEngineSpan = storage.EngineKeyRange{
+			Start: storage.EngineKey{Key: cur.Key},
+			End:   storage.EngineKey{Key: cur.EndKey},
+		}
+	}
+
+	if doClear {
+		if err := msstw.currSST.ClearEngineRange(
+			currEngineSpan.Start, currEngineSpan.End,
 		); err != nil {
 			msstw.currSST.Close()
 			return errors.Wrap(err, "failed to clear range on sst file writer")
@@ -190,11 +193,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	if msstw.currSpan == len(msstw.localKeySpans)+len(msstw.mvccSSTSpans)-1 {
 		msstw.rangeKeyFrag.Finish()
 	} else {
-		endKey := storage.EngineKey{Key: currSpan.EndKey}
-		if msstw.currSpanIsMVCCSpan() {
-			endKey = msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)].End
-		}
-		msstw.rangeKeyFrag.Truncate(endKey.Encode())
+		msstw.rangeKeyFrag.Truncate(currEngineSpan.End.Encode())
 	}
 
 	err := msstw.currSST.Finish()
