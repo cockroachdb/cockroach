@@ -41,14 +41,14 @@ vec13: (1, 7)
     ├───• 5 (6.5, 4.5)
     │   │
     │   ├───• vec7 (6, 5)
-    │   ├───• vec2 (7, 4)
-    │   └───• vec8 (8, 3)
+    │   └───• vec2 (7, 4)
     │
     └───• 3 (3.3333, 2)
         │
         ├───• vec3 (4, 3)
         ├───• vec5 (5, 1)
-        └───• vec1 (1, 2)
+        ├───• vec1 (1, 2)
+        └───• vec8 (8, 3)
 
 # Search for vector that exists.
 search-for-delete
@@ -103,14 +103,14 @@ vec1
     ├───• 5 (6.5, 4.5)
     │   │
     │   ├───• vec7 (6, 5)
-    │   ├───• vec2 (7, 4)
-    │   └───• vec8 (8, 3)
+    │   └───• vec2 (7, 4)
     │
     └───• 3 (3.3333, 2)
         │
         ├───• vec3 (4, 3)
         ├───• vec5 (5, 1)
-        └───• vec1 (MISSING)
+        ├───• vec1 (MISSING)
+        └───• vec8 (8, 3)
 
 # Try to find the missing vector. Since it's in the index, it should be found,
 # even though it's missing from the primary index.
@@ -148,11 +148,11 @@ format-tree
     ├───• 5 (6.5, 4.5)
     │   │
     │   ├───• vec7 (6, 5)
-    │   ├───• vec2 (7, 4)
-    │   └───• vec8 (8, 3)
+    │   └───• vec2 (7, 4)
     │
     └───• 3 (3.3333, 2)
         │
         ├───• vec3 (4, 3)
         ├───• vec5 (5, 1)
-        └───• vec1 (MISSING)
+        ├───• vec1 (MISSING)
+        └───• vec8 (8, 3)

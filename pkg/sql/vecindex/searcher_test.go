@@ -95,7 +95,7 @@ func TestSearcher(t *testing.T) {
 		keyBytes := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, key), 0 /* famID */)
 		randomizedVec := make(vector.T, len(vec))
 		idx.RandomizeVector(vec, randomizedVec)
-		_, err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey,
+		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey,
 			randomizedVec, cspann.ChildKey{KeyBytes: keyBytes}, val)
 		require.NoError(t, err)
 		return randomizedVec

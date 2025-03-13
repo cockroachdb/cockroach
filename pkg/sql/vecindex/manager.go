@@ -130,7 +130,13 @@ func (m *Manager) Get(
 		// of the Get call. The fixup process gets a child context from the context
 		// passed to cspann.NewIndex, and we don't want that to be the context of
 		// the Get call.
-		return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		idx, err := cspann.NewIndex(
+			m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		if err != nil {
+			return nil, err
+		}
+
+		return idx, nil
 	}()
 	e.mustWait = false
 	e.idx, e.err = idx, err

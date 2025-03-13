@@ -100,7 +100,7 @@ func makeFixupKey(f fixup) fixupKey {
 // All entry methods (i.e. capitalized methods) in fixupProcess are thread-safe.
 type FixupProcessor struct {
 	// --------------------------------------------------
-	// These read-only fields can be read on any goroutine.
+	// These read-only fields can be read on any goroutine after initialization.
 	// --------------------------------------------------
 
 	// initCtx is the context provided to the Init method. It is passed to fixup
@@ -234,20 +234,9 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 	return nil
 }
 
-// AddSplit enqueues a split fixup for later processing.
-func (fp *FixupProcessor) AddSplit(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) {
-	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
-		Type:               splitOrMergeFixup,
-		ParentPartitionKey: parentPartitionKey,
-		PartitionKey:       partitionKey,
-	})
-}
-
-// AddMerge enqueues a merge fixup for later processing.
-func (fp *FixupProcessor) AddMerge(
+// AddSplitOrMerge enqueues a fixup to check whether a split or merge is needed
+// for the given partition.
+func (fp *FixupProcessor) AddSplitOrMerge(
 	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
 	fp.addFixup(ctx, fixup{

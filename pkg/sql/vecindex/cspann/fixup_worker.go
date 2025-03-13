@@ -105,6 +105,18 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 func (fw *fixupWorker) splitOrMergePartition(
 	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) (err error) {
+	// Do a quick, inconsistent scan of the partition, in order to see if it may
+	// need to be split or merged.
+	count, err := fw.index.store.EstimatePartitionCount(ctx, fw.treeKey, partitionKey)
+	if err != nil {
+		return errors.Wrapf(err, "counting vectors in partition %d", partitionKey)
+	}
+	split := count > fw.index.options.MaxPartitionSize
+	merge := partitionKey != RootKey && count < fw.index.options.MinPartitionSize
+	if !split && !merge {
+		return nil
+	}
+
 	// Run the split or merge within a transaction.
 	fw.txn, err = fw.index.store.BeginTransaction(ctx)
 	if err != nil {
@@ -128,9 +140,10 @@ func (fw *fixupWorker) splitOrMergePartition(
 		return errors.Wrapf(err, "getting partition %d to split or merge", partitionKey)
 	}
 
-	// Don't split or merge the partition if its size is within bounds.
-	split := partition.Count() > fw.index.options.MaxPartitionSize
-	merge := partition.Count() < fw.index.options.MinPartitionSize
+	// Re-check the size of the partition now that it's locked, using a consistent
+	// scan, so that we are not acting based on stale information.
+	split = partition.Count() > fw.index.options.MaxPartitionSize
+	merge = partitionKey != RootKey && partition.Count() < fw.index.options.MinPartitionSize
 	if !split && !merge {
 		log.VEventf(ctx, 2, "partition %d size is within bounds, do not split or merge", partitionKey)
 		return nil
@@ -213,14 +226,14 @@ func (fw *fixupWorker) splitPartition(
 				partitionKey, parentPartitionKey)
 		}
 
-		metadata, err := fw.index.removeFromPartition(
-			ctx, fw.txn, fw.treeKey, parentPartitionKey, childKey)
+		err := fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, parentPartitionKey, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "removing splitting partition %d from its parent %d",
 				partitionKey, parentPartitionKey)
 		}
 
-		if metadata.Count != 0 {
+		// Only attempt to move vectors if there are siblings.
+		if parentPartition.Count() > 1 {
 			// Move any vectors to sibling partitions that have closer centroids.
 			// Lazily get parent vectors only if they're actually needed.
 			var parentVectors vector.Set
@@ -469,8 +482,8 @@ func (fw *fixupWorker) moveVectorsToSiblings(
 		// there instead.
 		childKey := split.Partition.ChildKeys()[i]
 		valueBytes := split.Partition.ValueBytes()[i]
-		err = fw.index.addToPartition(ctx, fw.txn, fw.treeKey,
-			parentPartitionKey, siblingPartitionKey, vector, childKey, valueBytes)
+		err = fw.index.addToPartition(
+			ctx, fw.txn, fw.treeKey, siblingPartitionKey, vector, childKey, valueBytes)
 		if err != nil {
 			return errors.Wrapf(err, "moving vector to partition %d", siblingPartitionKey)
 		}
@@ -498,6 +511,11 @@ func (fw *fixupWorker) linkNearbyVectors(
 	idxCtx.options = SearchOptions{ReturnVectors: true}
 	idxCtx.level = partition.Level()
 	idxCtx.randomized = partition.Centroid()
+
+	// Ensure that the search never returns the last vector in a non-leaf
+	// partition, in order to avoid moving it and creating an empty non-leaf
+	// partition, which is not allowed by a balanced K-means tree.
+	idxCtx.ignoreLonelyVector = partition.Level() != LeafLevel
 
 	// Don't link more vectors than the number of remaining slots in the split
 	// partition, to avoid triggering another split.
@@ -537,23 +555,11 @@ func (fw *fixupWorker) linkNearbyVectors(
 		}
 
 		// Remove the vector from the other partition.
-		metadata, err := fw.index.removeFromPartition(
+		err = fw.index.removeFromPartition(
 			ctx, fw.txn, fw.treeKey, result.ParentPartitionKey, result.ChildKey)
 		if err != nil {
 			return errors.Wrapf(err, "removing vector from nearby partition %d during split of %d",
 				result.ParentPartitionKey, oldPartitionKey)
-		}
-		if metadata.Count == 0 && partition.Level() > LeafLevel {
-			// Removing the vector will result in an empty non-leaf partition, which
-			// is not allowed, as the K-means tree would not be fully balanced. Add
-			// the vector back to the partition. This is a very rare case and that
-			// partition is likely to be merged away regardless.
-			_, err = fw.txn.AddToPartition(
-				ctx, fw.treeKey, result.ParentPartitionKey, vector, result.ChildKey, result.ValueBytes)
-			if err != nil {
-				return errors.Wrapf(err, "adding vector to splitting partition %d", oldPartitionKey)
-			}
-			continue
 		}
 
 		// Add the vector to the split partition.
@@ -622,7 +628,7 @@ func (fw *fixupWorker) mergePartition(
 			partitionKey, parentPartitionKey)
 		return nil
 	}
-	_, err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, parentPartitionKey, childKey)
+	err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, parentPartitionKey, childKey)
 	if err != nil {
 		return errors.Wrapf(err, "remove partition %d from parent partition %d",
 			partitionKey, parentPartitionKey)
@@ -682,7 +688,7 @@ func (fw *fixupWorker) deleteVector(
 		return nil
 	}
 
-	_, err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, partitionKey, childKey)
+	err = fw.index.removeFromPartition(ctx, fw.txn, fw.treeKey, partitionKey, childKey)
 	if errors.Is(err, ErrPartitionNotFound) {
 		log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
 		return nil

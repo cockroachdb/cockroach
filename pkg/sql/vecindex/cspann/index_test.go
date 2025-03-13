@@ -77,7 +77,7 @@ func TestIndex(t *testing.T) {
 			case "delete":
 				return state.Delete(d)
 
-			case "force-split", "force-merge":
+			case "force-split-or-merge":
 				return state.ForceSplitOrMerge(d)
 
 			case "recall":
@@ -454,10 +454,8 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 		}
 	}
 
-	if d.Cmd == "force-split" {
-		s.Index.ForceSplit(s.Ctx, treeKey, parentPartitionKey, partitionKey)
-	} else {
-		s.Index.ForceMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey)
+	if d.Cmd == "force-split-or-merge" {
+		s.Index.ForceSplitOrMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey)
 	}
 
 	// Ensure the fixup runs.
