@@ -52,7 +52,7 @@ func TestStartTenantWithDelayedID(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	baseCfg := makeTestBaseConfig(st, s.Stopper().Tracer())
 	require.Equal(t, roachpb.Locality{}, baseCfg.Locality)
-	sqlCfg := makeTestSQLConfig(st, roachpb.TenantID{})
+	sqlCfg := makeTestSQLConfig(st, roachpb.TenantID{}, "")
 	sqlCfg.TenantLoopbackAddr = s.AdvRPCAddr()
 
 	var tenantIDSet, listenerReady sync.WaitGroup

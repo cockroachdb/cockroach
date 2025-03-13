@@ -1114,6 +1114,7 @@ func makeTenantSQLServerArgs(
 
 	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(baseCfg.Config)
 	rpcCtxOpts.TenantID = sqlCfg.TenantID
+	rpcCtxOpts.TenantName = sqlCfg.TenantName
 	rpcCtxOpts.UseNodeAuth = sqlCfg.LocalKVServerInfo != nil
 	rpcCtxOpts.NodeID = baseCfg.IDContainer
 	rpcCtxOpts.StorageClusterID = baseCfg.ClusterIDContainer
