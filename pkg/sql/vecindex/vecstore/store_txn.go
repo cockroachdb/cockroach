@@ -214,7 +214,7 @@ func (tx *Txn) GetPartition(
 
 	// GetPartition is used by fixup to split and merge partitions, so we want to
 	// block concurrent writes.
-	metadataKey := tx.encodePartitionKey(treeKey, partitionKey)
+	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
 	b.GetForUpdate(metadataKey, tx.lockDurability)
 	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
 	err := tx.kv.Run(ctx, b)
@@ -242,7 +242,7 @@ func (tx *Txn) insertPartition(
 ) error {
 	b := tx.kv.NewBatch()
 
-	key := tx.encodePartitionKey(treeKey, partitionKey)
+	key := tx.store.encodePartitionKey(treeKey, partitionKey)
 	meta, err := EncodePartitionMetadata(partition.Level(), partition.QuantizedSet().GetCentroid())
 	if err != nil {
 		return err
@@ -293,7 +293,7 @@ func (tx *Txn) DeletePartition(
 ) error {
 	b := tx.kv.NewBatch()
 
-	startKey := tx.encodePartitionKey(treeKey, partitionKey)
+	startKey := tx.store.encodePartitionKey(treeKey, partitionKey)
 	endKey := startKey.PrefixEnd()
 
 	b.DelRange(startKey, endKey, false /* returnKeys */)
@@ -307,7 +307,7 @@ func (tx *Txn) GetPartitionMetadata(
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
-	metadataKey := tx.encodePartitionKey(treeKey, partitionKey)
+	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
 	if forUpdate {
 		// By acquiring a shared lock on metadata key, we prevent splits/merges of
 		// this partition from conflicting with the add operation.
@@ -316,19 +316,16 @@ func (tx *Txn) GetPartitionMetadata(
 		b.Get(metadataKey)
 	}
 
-	// This scan is purely for returning partition cardinality.
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
-
 	// Run the batch and extract the partition metadata from results.
 	if err := tx.kv.Run(ctx, b); err != nil {
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
+
 	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
 	}
-	metadata.Count = len(b.Results[1].Rows)
 	return metadata, nil
 }
 
@@ -340,25 +337,20 @@ func (tx *Txn) AddToPartition(
 	vec vector.T,
 	childKey cspann.ChildKey,
 	valueBytes cspann.ValueBytes,
-) (cspann.PartitionMetadata, error) {
+) error {
 	// TODO(mw5h): Add to an existing batch instead of starting a new one.
 	b := tx.kv.NewBatch()
 
-	metadataKey := tx.encodePartitionKey(treeKey, partitionKey)
-
-	// By acquiring a shared lock on metadata key, we prevent splits/merges of
-	// this partition from conflicting with the add operation.
-	b.GetForShare(metadataKey, tx.lockDurability)
-
-	// Run the batch and extract the partition metadata from results.
+	// Get partition metadata, needed to quantize the vector.
+	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
+	b.Get(metadataKey)
 	err := tx.kv.Run(ctx, b)
 	if err != nil {
-		return cspann.PartitionMetadata{},
-			errors.Wrapf(err, "locking partition %d for add", partitionKey)
+		return errors.Wrapf(err, "locking partition %d for add", partitionKey)
 	}
 	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
-		return cspann.PartitionMetadata{}, err
+		return err
 	}
 
 	// Cap the metadata key so that the append allocates a new slice for the
@@ -366,30 +358,21 @@ func (tx *Txn) AddToPartition(
 	prefix := slices.Clip(metadataKey)
 	entryKey := EncodeChildKey(prefix, childKey)
 
+	// Quantize the vector and add it to the partition with a Put command.
 	b = tx.kv.NewBatch()
-
-	// Add the Put command to the batch.
 	codec := tx.getCodecForPartitionKey(partitionKey)
 	encodedValue, err := codec.encodeVector(&tx.workspace, vec, metadata.Centroid)
 	if err != nil {
-		return cspann.PartitionMetadata{}, err
+		return err
 	}
 	encodedValue = append(encodedValue, valueBytes...)
 	b.Put(entryKey, encodedValue)
 
-	// This scan is purely for returning partition cardinality.
-	// NOTE: If stepping mode is enabled, this scan will not see the new entry.
-	// Currently, AddToPartition is only called by the fixup processor, which
-	// does not enable stepping.
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
-
-	// Run the batch and set the metadata Count field from the results.
+	// Run the batch.
 	if err = tx.kv.Run(ctx, b); err != nil {
-		return cspann.PartitionMetadata{},
-			errors.Wrapf(err, "adding vector to partition %d", partitionKey)
+		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
-	metadata.Count = len(b.Results[1].Rows)
-	return metadata, nil
+	return nil
 }
 
 // RemoveFromPartition implements the cspann.Txn interface.
@@ -398,40 +381,20 @@ func (tx *Txn) RemoveFromPartition(
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
 	childKey cspann.ChildKey,
-) (cspann.PartitionMetadata, error) {
+) error {
 	b := tx.kv.NewBatch()
 
-	// Lock metadata for partition in shared mode to block concurrent fixups.
-	metadataKey := tx.encodePartitionKey(treeKey, partitionKey)
-	b.GetForShare(metadataKey, tx.lockDurability)
-
 	// Cap the metadata key so that the append allocates a new slice for the child key.
+	metadataKey := tx.store.encodePartitionKey(treeKey, partitionKey)
 	prefix := slices.Clip(metadataKey)
 	entryKey := EncodeChildKey(prefix, childKey)
 	b.Del(entryKey)
-
-	// Scan to get current cardinality.
-	// NOTE: If stepping mode is enabled, this scan will not see the deletion.
-	// Currently, RemoveToPartition is only called by the fixup processor, which
-	// does not enable stepping.
-	b.Scan(metadataKey.Next(), metadataKey.PrefixEnd())
-
 	if err := tx.kv.Run(ctx, b); err != nil {
-		return cspann.PartitionMetadata{}, err
-	}
-	if len(b.Results[0].Rows) == 0 {
-		return cspann.PartitionMetadata{}, cspann.ErrPartitionNotFound
+		return err
 	}
 	// We ignore key not found for the deleted child.
 
-	// Extract the partition metadata from the results.
-	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
-	if err != nil {
-		return cspann.PartitionMetadata{},
-			errors.Wrapf(err, "removing vector from partition %d", partitionKey)
-	}
-	metadata.Count = len(b.Results[2].Rows)
-	return metadata, nil
+	return nil
 }
 
 // SearchPartitions implements the cspann.Txn interface.
@@ -446,7 +409,7 @@ func (tx *Txn) SearchPartitions(
 	b := tx.kv.NewBatch()
 
 	for _, pk := range partitionKeys {
-		startKey := tx.encodePartitionKey(treeKey, pk)
+		startKey := tx.store.encodePartitionKey(treeKey, pk)
 		endKey := startKey.PrefixEnd()
 		b.Scan(startKey, endKey)
 	}
@@ -558,7 +521,7 @@ func (tx *Txn) getFullVectorsFromPartitionMetadata(
 			numPKLookups++
 			continue
 		}
-		key := tx.encodePartitionKey(treeKey, ref.Key.PartitionKey)
+		key := tx.store.encodePartitionKey(treeKey, ref.Key.PartitionKey)
 		if b == nil {
 			b = tx.kv.NewBatch()
 		}
@@ -610,20 +573,6 @@ func (tx *Txn) GetFullVectors(
 		err = tx.getFullVectorsFromPK(ctx, refs, numPKLookups)
 	}
 	return err
-}
-
-// encodePartitionKey takes a partition key and creates a KV key to read that
-// partition's metadata. Vector data can be read by scanning from the metadata to
-// the next partition's metadata.
-func (tx *Txn) encodePartitionKey(
-	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
-) roachpb.Key {
-	capacity := len(tx.store.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
-	keyBuffer := make(roachpb.Key, 0, capacity)
-	keyBuffer = append(keyBuffer, tx.store.prefix...)
-	keyBuffer = append(keyBuffer, treeKey...)
-	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
-	return keyBuffer
 }
 
 // QuantizeAndEncode quantizes the given vector (which has already been

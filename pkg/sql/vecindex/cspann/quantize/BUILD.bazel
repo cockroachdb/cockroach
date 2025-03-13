@@ -54,7 +54,7 @@ go_test(
         "unquantizedpb_test.go",
         "unquantizer_test.go",
     ],
-    data = ["//pkg/sql/vecindex/cspann:testdata"],
+    data = ["//pkg/sql/vecindex/cspann:features_10000"],
     embed = [":quantize"],
     deps = [
         "//pkg/sql/vecindex/cspann/testutils",

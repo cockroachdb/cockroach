@@ -18,11 +18,24 @@ import (
 
 // CheckPartitionMetadata tests the correctness of the given metadata's fields.
 func CheckPartitionMetadata(
-	t *testing.T, metadata cspann.PartitionMetadata, level cspann.Level, centroid vector.T, count int,
+	t *testing.T, metadata cspann.PartitionMetadata, level cspann.Level, centroid vector.T,
 ) {
 	require.Equal(t, level, metadata.Level)
 	require.Equal(t, []float32(centroid), testutils.RoundFloats(metadata.Centroid, 2))
-	require.Equal(t, count, metadata.Count)
+}
+
+// CheckPartitionCount tests the size of a partition.
+func CheckPartitionCount(
+	ctx context.Context,
+	t *testing.T,
+	store cspann.Store,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	expectedCount int,
+) {
+	count, err := store.EstimatePartitionCount(ctx, treeKey, partitionKey)
+	require.NoError(t, err)
+	require.Equal(t, expectedCount, count)
 }
 
 // BeginTransaction starts a new transaction for the given store and returns it.
