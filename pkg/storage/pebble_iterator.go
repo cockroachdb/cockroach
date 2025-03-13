@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -246,7 +247,7 @@ func (p *pebbleIterator) setOptions(
 		p.options.UpperBound = p.upperBoundBuf
 	}
 	if opts.RangeKeyMaskingBelow.IsSet() {
-		p.rangeKeyMaskingBuf = encodeMVCCTimestampSuffixToBuf(
+		p.rangeKeyMaskingBuf = mvccencoding.EncodeMVCCTimestampSuffixToBuf(
 			p.rangeKeyMaskingBuf, opts.RangeKeyMaskingBelow)
 		p.options.RangeKeyMasking.Suffix = p.rangeKeyMaskingBuf
 		p.maskFilter.BlockIntervalFilter.Init(mvccWallTimeIntervalCollector, 0, math.MaxUint64, MVCCBlockIntervalSuffixReplacer{})
@@ -725,7 +726,7 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	}
 
 	for _, rangeKey := range rangeKeys {
-		timestamp, err := DecodeMVCCTimestampSuffix(rangeKey.Suffix)
+		timestamp, err := mvccencoding.DecodeMVCCTimestampSuffix(rangeKey.Suffix)
 		if err != nil {
 			// TODO(erikgrinaker): We should surface this error somehow, but for now
 			// we follow UnsafeKey()'s example and silently skip them.

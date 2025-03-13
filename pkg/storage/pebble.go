@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -351,7 +352,7 @@ type MVCCBlockIntervalSuffixReplacer struct{}
 func (MVCCBlockIntervalSuffixReplacer) ApplySuffixReplacement(
 	interval sstable.BlockInterval, newSuffix []byte,
 ) (sstable.BlockInterval, error) {
-	synthDecoded, err := DecodeMVCCTimestampSuffix(newSuffix)
+	synthDecoded, err := mvccencoding.DecodeMVCCTimestampSuffix(newSuffix)
 	if err != nil {
 		return sstable.BlockInterval{}, errors.AssertionFailedf("could not decode synthetic suffix")
 	}
@@ -435,7 +436,7 @@ func (m *mvccWallTimeIntervalRangeKeyMask) SetSuffix(suffix []byte) error {
 		// writes today is the MVCC Delete Range that's always suffixed.
 		return nil
 	}
-	ts, err := DecodeMVCCTimestampSuffix(suffix)
+	ts, err := mvccencoding.DecodeMVCCTimestampSuffix(suffix)
 	if err != nil {
 		return err
 	}
@@ -1550,7 +1551,7 @@ func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
 	}
 	return p.ClearEngineRangeKey(
-		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
+		rangeKey.StartKey, rangeKey.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutMVCCRangeKey implements the Engine interface.
@@ -1572,7 +1573,7 @@ func (p *Pebble) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
 		return err
 	}
 	return p.PutEngineRangeKey(
-		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
+		rangeKey.StartKey, rangeKey.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // Merge implements the Engine interface.
