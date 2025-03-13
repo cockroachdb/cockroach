@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
@@ -45,10 +44,6 @@ func alterTableAddColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t *tree.AlterTableAddColumn,
 ) {
 	d := t.ColumnDef
-	if t.ColumnDef.Unique.IsUnique {
-		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
-	}
-	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 
 	// Check column non-existence.
 	elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
@@ -100,13 +95,6 @@ func alterTableAddColumn(
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
-	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
-	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		panic(err)
@@ -132,6 +120,17 @@ func alterTableAddColumn(
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
 	}
+
+	idx := cdd.PrimaryKeyOrUniqueIndexDescriptor
+	isRBR := b.QueryByID(tbl.TableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement() != nil
+	if idx != nil {
+		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
+		*idx, err = configureIndexDescForNewIndexPartitioning(b, tbl.TableID, *idx, nil /* partitionByIndex */)
+		if err != nil {
+			return
+		}
+	}
+
 	// Only set PgAttributeNum if it differs from ColumnID.
 	if pgAttNum := desc.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(desc.ID) {
 		spec.col.PgAttributeNum = pgAttNum
@@ -281,7 +280,7 @@ func alterTableAddColumn(
 	}
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
-	if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
+	if idx != nil {
 		// TODO (xiang): Think it through whether this (i.e. backing is usually
 		// final and sometimes old) is okay.
 		idx.ID = b.NextTableIndexID(tbl.TableID)
@@ -299,6 +298,20 @@ func alterTableAddColumn(
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
 	default:
 		b.IncrementSchemaChangeAddColumnTypeCounter(spec.colType.Type.TelemetryName())
+	}
+
+	// Zone configuration logic is only required for REGIONAL BY ROW tables
+	// with newly created indexes.
+	if isRBR && idx != nil {
+		// Configure zone configuration if required. This must happen after
+		// all the IDs have been allocated.
+		if err = configureZoneConfigForNewIndexPartitioning(
+			b,
+			tbl.TableID,
+			*idx,
+		); err != nil {
+			panic(err)
+		}
 	}
 }
 
