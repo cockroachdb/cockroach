@@ -1195,7 +1195,7 @@ func TestInputToVerifyInput(t *testing.T) {
 		LocalReplicaID: 1,
 		Desc:           &roachpb.RangeDescriptor{},
 		RaftStatus:     &raft.Status{},
-		RaftFirstIndex: 1,
+		RaftCompacted:  1,
 		PrevLease: roachpb.Lease{
 			Start:      cts,
 			Expiration: &ts,
