@@ -28,7 +28,7 @@ func ZoneConfigForMultiRegionPartition(
 	numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
 	zc.NumVoters = &numVoters
 
-	if regionConfig.IsMemberOfExplicitSuperRegion(partitionRegion) {
+	if regionConfig.IsMemberOfSuperRegion(partitionRegion) {
 		err := AddConstraintsForSuperRegion(&zc, regionConfig, partitionRegion)
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
@@ -308,7 +308,7 @@ func MakeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 // AddConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
 // that every replica is guaranteed to be constrained to a region within the
 // super region.
-// If !regionConfig.IsMemberOfExplicitSuperRegion(affinityRegion), and error
+// If !regionConfig.IsMemberOfSuperRegion(affinityRegion), and error
 // will be returned.
 func AddConstraintsForSuperRegion(
 	zc *zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, affinityRegion catpb.RegionName,

@@ -2011,7 +2011,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	}
 
 	regions, ok := prevRegionConfig.GetSuperRegionRegionsForRegion(prevRegionConfig.PrimaryRegion())
-	if !ok && prevRegionConfig.IsMemberOfExplicitSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
+	if !ok && prevRegionConfig.IsMemberOfSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
 		return pgerror.New(pgcode.InvalidDatabaseDefinition,
 			"the secondary region can not be in a super region, unless the primary is also "+
 				"within a super region",
