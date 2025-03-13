@@ -1,0 +1,247 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/oidjoins.out --label=/mnt/data1/postgres/src/test/regress/results/oidjoins.out /mnt/data1/postgres/src/test/regress/expected/oidjoins.out /mnt/data1/postgres/src/test/regress/results/oidjoins.out
+--- /mnt/data1/postgres/src/test/regress/expected/oidjoins.out
++++ /mnt/data1/postgres/src/test/regress/results/oidjoins.out
+@@ -47,222 +47,24 @@
+   end loop;
+ end
+ $doblock$;
+-NOTICE:  checking pg_proc {pronamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_proc {proowner} => pg_authid {oid}
+-NOTICE:  checking pg_proc {prolang} => pg_language {oid}
+-NOTICE:  checking pg_proc {provariadic} => pg_type {oid}
+-NOTICE:  checking pg_proc {prosupport} => pg_proc {oid}
+-NOTICE:  checking pg_proc {prorettype} => pg_type {oid}
+-NOTICE:  checking pg_proc {proargtypes} => pg_type {oid}
+-NOTICE:  checking pg_proc {proallargtypes} => pg_type {oid}
+-NOTICE:  checking pg_proc {protrftypes} => pg_type {oid}
+-NOTICE:  checking pg_type {typnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_type {typowner} => pg_authid {oid}
+-NOTICE:  checking pg_type {typrelid} => pg_class {oid}
+-NOTICE:  checking pg_type {typsubscript} => pg_proc {oid}
+-NOTICE:  checking pg_type {typelem} => pg_type {oid}
+-NOTICE:  checking pg_type {typarray} => pg_type {oid}
+-NOTICE:  checking pg_type {typinput} => pg_proc {oid}
+-NOTICE:  checking pg_type {typoutput} => pg_proc {oid}
+-NOTICE:  checking pg_type {typreceive} => pg_proc {oid}
+-NOTICE:  checking pg_type {typsend} => pg_proc {oid}
+-NOTICE:  checking pg_type {typmodin} => pg_proc {oid}
+-NOTICE:  checking pg_type {typmodout} => pg_proc {oid}
+-NOTICE:  checking pg_type {typanalyze} => pg_proc {oid}
+-NOTICE:  checking pg_type {typbasetype} => pg_type {oid}
+-NOTICE:  checking pg_type {typcollation} => pg_collation {oid}
+-NOTICE:  checking pg_attribute {attrelid} => pg_class {oid}
+-NOTICE:  checking pg_attribute {atttypid} => pg_type {oid}
+-NOTICE:  checking pg_attribute {attcollation} => pg_collation {oid}
+-NOTICE:  checking pg_class {relnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_class {reltype} => pg_type {oid}
+-NOTICE:  checking pg_class {reloftype} => pg_type {oid}
+-NOTICE:  checking pg_class {relowner} => pg_authid {oid}
+-NOTICE:  checking pg_class {relam} => pg_am {oid}
+-NOTICE:  checking pg_class {reltablespace} => pg_tablespace {oid}
+-NOTICE:  checking pg_class {reltoastrelid} => pg_class {oid}
+-NOTICE:  checking pg_class {relrewrite} => pg_class {oid}
+-NOTICE:  checking pg_attrdef {adrelid} => pg_class {oid}
+-NOTICE:  checking pg_attrdef {adrelid,adnum} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_constraint {connamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_constraint {conrelid} => pg_class {oid}
+-NOTICE:  checking pg_constraint {contypid} => pg_type {oid}
+-NOTICE:  checking pg_constraint {conindid} => pg_class {oid}
+-NOTICE:  checking pg_constraint {conparentid} => pg_constraint {oid}
+-NOTICE:  checking pg_constraint {confrelid} => pg_class {oid}
+-NOTICE:  checking pg_constraint {conpfeqop} => pg_operator {oid}
+-NOTICE:  checking pg_constraint {conppeqop} => pg_operator {oid}
+-NOTICE:  checking pg_constraint {conffeqop} => pg_operator {oid}
+-NOTICE:  checking pg_constraint {conexclop} => pg_operator {oid}
+-NOTICE:  checking pg_constraint {conrelid,conkey} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_constraint {confrelid,confkey} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_inherits {inhrelid} => pg_class {oid}
+-NOTICE:  checking pg_inherits {inhparent} => pg_class {oid}
+-NOTICE:  checking pg_index {indexrelid} => pg_class {oid}
+-NOTICE:  checking pg_index {indrelid} => pg_class {oid}
+-NOTICE:  checking pg_index {indcollation} => pg_collation {oid}
+-NOTICE:  checking pg_index {indclass} => pg_opclass {oid}
+-NOTICE:  checking pg_index {indrelid,indkey} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_operator {oprnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_operator {oprowner} => pg_authid {oid}
+-NOTICE:  checking pg_operator {oprleft} => pg_type {oid}
+-NOTICE:  checking pg_operator {oprright} => pg_type {oid}
+-NOTICE:  checking pg_operator {oprresult} => pg_type {oid}
+-NOTICE:  checking pg_operator {oprcom} => pg_operator {oid}
+-NOTICE:  checking pg_operator {oprnegate} => pg_operator {oid}
+-NOTICE:  checking pg_operator {oprcode} => pg_proc {oid}
+-NOTICE:  checking pg_operator {oprrest} => pg_proc {oid}
+-NOTICE:  checking pg_operator {oprjoin} => pg_proc {oid}
+-NOTICE:  checking pg_opfamily {opfmethod} => pg_am {oid}
+-NOTICE:  checking pg_opfamily {opfnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_opfamily {opfowner} => pg_authid {oid}
+-NOTICE:  checking pg_opclass {opcmethod} => pg_am {oid}
+-NOTICE:  checking pg_opclass {opcnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_opclass {opcowner} => pg_authid {oid}
+-NOTICE:  checking pg_opclass {opcfamily} => pg_opfamily {oid}
+-NOTICE:  checking pg_opclass {opcintype} => pg_type {oid}
+-NOTICE:  checking pg_opclass {opckeytype} => pg_type {oid}
+-NOTICE:  checking pg_am {amhandler} => pg_proc {oid}
+-NOTICE:  checking pg_amop {amopfamily} => pg_opfamily {oid}
+-NOTICE:  checking pg_amop {amoplefttype} => pg_type {oid}
+-NOTICE:  checking pg_amop {amoprighttype} => pg_type {oid}
+-NOTICE:  checking pg_amop {amopopr} => pg_operator {oid}
+-NOTICE:  checking pg_amop {amopmethod} => pg_am {oid}
+-NOTICE:  checking pg_amop {amopsortfamily} => pg_opfamily {oid}
+-NOTICE:  checking pg_amproc {amprocfamily} => pg_opfamily {oid}
+-NOTICE:  checking pg_amproc {amproclefttype} => pg_type {oid}
+-NOTICE:  checking pg_amproc {amprocrighttype} => pg_type {oid}
+-NOTICE:  checking pg_amproc {amproc} => pg_proc {oid}
+-NOTICE:  checking pg_language {lanowner} => pg_authid {oid}
+-NOTICE:  checking pg_language {lanplcallfoid} => pg_proc {oid}
+-NOTICE:  checking pg_language {laninline} => pg_proc {oid}
+-NOTICE:  checking pg_language {lanvalidator} => pg_proc {oid}
+-NOTICE:  checking pg_largeobject_metadata {lomowner} => pg_authid {oid}
+-NOTICE:  checking pg_largeobject {loid} => pg_largeobject_metadata {oid}
+-NOTICE:  checking pg_aggregate {aggfnoid} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggtransfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggfinalfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggcombinefn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggserialfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggdeserialfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggmtransfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggminvtransfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggmfinalfn} => pg_proc {oid}
+-NOTICE:  checking pg_aggregate {aggsortop} => pg_operator {oid}
+-NOTICE:  checking pg_aggregate {aggtranstype} => pg_type {oid}
+-NOTICE:  checking pg_aggregate {aggmtranstype} => pg_type {oid}
+-NOTICE:  checking pg_statistic {starelid} => pg_class {oid}
+-NOTICE:  checking pg_statistic {staop1} => pg_operator {oid}
+-NOTICE:  checking pg_statistic {staop2} => pg_operator {oid}
+-NOTICE:  checking pg_statistic {staop3} => pg_operator {oid}
+-NOTICE:  checking pg_statistic {staop4} => pg_operator {oid}
+-NOTICE:  checking pg_statistic {staop5} => pg_operator {oid}
+-NOTICE:  checking pg_statistic {stacoll1} => pg_collation {oid}
+-NOTICE:  checking pg_statistic {stacoll2} => pg_collation {oid}
+-NOTICE:  checking pg_statistic {stacoll3} => pg_collation {oid}
+-NOTICE:  checking pg_statistic {stacoll4} => pg_collation {oid}
+-NOTICE:  checking pg_statistic {stacoll5} => pg_collation {oid}
+-NOTICE:  checking pg_statistic {starelid,staattnum} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_statistic_ext {stxrelid} => pg_class {oid}
+-NOTICE:  checking pg_statistic_ext {stxnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_statistic_ext {stxowner} => pg_authid {oid}
+-NOTICE:  checking pg_statistic_ext {stxrelid,stxkeys} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_statistic_ext_data {stxoid} => pg_statistic_ext {oid}
+-NOTICE:  checking pg_rewrite {ev_class} => pg_class {oid}
+-NOTICE:  checking pg_trigger {tgrelid} => pg_class {oid}
+-NOTICE:  checking pg_trigger {tgparentid} => pg_trigger {oid}
+-NOTICE:  checking pg_trigger {tgfoid} => pg_proc {oid}
+-NOTICE:  checking pg_trigger {tgconstrrelid} => pg_class {oid}
+-NOTICE:  checking pg_trigger {tgconstrindid} => pg_class {oid}
+-NOTICE:  checking pg_trigger {tgconstraint} => pg_constraint {oid}
+-NOTICE:  checking pg_trigger {tgrelid,tgattr} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_event_trigger {evtowner} => pg_authid {oid}
+-NOTICE:  checking pg_event_trigger {evtfoid} => pg_proc {oid}
+-NOTICE:  checking pg_description {classoid} => pg_class {oid}
+-NOTICE:  checking pg_cast {castsource} => pg_type {oid}
+-NOTICE:  checking pg_cast {casttarget} => pg_type {oid}
+-NOTICE:  checking pg_cast {castfunc} => pg_proc {oid}
+-NOTICE:  checking pg_enum {enumtypid} => pg_type {oid}
+-NOTICE:  checking pg_namespace {nspowner} => pg_authid {oid}
+-NOTICE:  checking pg_conversion {connamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_conversion {conowner} => pg_authid {oid}
+-NOTICE:  checking pg_conversion {conproc} => pg_proc {oid}
+-NOTICE:  checking pg_depend {classid} => pg_class {oid}
+-NOTICE:  checking pg_depend {refclassid} => pg_class {oid}
+-NOTICE:  checking pg_database {datdba} => pg_authid {oid}
+-NOTICE:  checking pg_database {dattablespace} => pg_tablespace {oid}
+-NOTICE:  checking pg_db_role_setting {setdatabase} => pg_database {oid}
+-NOTICE:  checking pg_db_role_setting {setrole} => pg_authid {oid}
+-NOTICE:  checking pg_tablespace {spcowner} => pg_authid {oid}
+-NOTICE:  checking pg_auth_members {roleid} => pg_authid {oid}
+-NOTICE:  checking pg_auth_members {member} => pg_authid {oid}
+-NOTICE:  checking pg_auth_members {grantor} => pg_authid {oid}
+-NOTICE:  checking pg_shdepend {dbid} => pg_database {oid}
+-NOTICE:  checking pg_shdepend {classid} => pg_class {oid}
+-NOTICE:  checking pg_shdepend {refclassid} => pg_class {oid}
+-NOTICE:  checking pg_shdescription {classoid} => pg_class {oid}
+-NOTICE:  checking pg_ts_config {cfgnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_ts_config {cfgowner} => pg_authid {oid}
+-NOTICE:  checking pg_ts_config {cfgparser} => pg_ts_parser {oid}
+-NOTICE:  checking pg_ts_config_map {mapcfg} => pg_ts_config {oid}
+-NOTICE:  checking pg_ts_config_map {mapdict} => pg_ts_dict {oid}
+-NOTICE:  checking pg_ts_dict {dictnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_ts_dict {dictowner} => pg_authid {oid}
+-NOTICE:  checking pg_ts_dict {dicttemplate} => pg_ts_template {oid}
+-NOTICE:  checking pg_ts_parser {prsnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_ts_parser {prsstart} => pg_proc {oid}
+-NOTICE:  checking pg_ts_parser {prstoken} => pg_proc {oid}
+-NOTICE:  checking pg_ts_parser {prsend} => pg_proc {oid}
+-NOTICE:  checking pg_ts_parser {prsheadline} => pg_proc {oid}
+-NOTICE:  checking pg_ts_parser {prslextype} => pg_proc {oid}
+-NOTICE:  checking pg_ts_template {tmplnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_ts_template {tmplinit} => pg_proc {oid}
+-NOTICE:  checking pg_ts_template {tmpllexize} => pg_proc {oid}
+-NOTICE:  checking pg_extension {extowner} => pg_authid {oid}
+-NOTICE:  checking pg_extension {extnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_extension {extconfig} => pg_class {oid}
+-NOTICE:  checking pg_foreign_data_wrapper {fdwowner} => pg_authid {oid}
+-NOTICE:  checking pg_foreign_data_wrapper {fdwhandler} => pg_proc {oid}
+-NOTICE:  checking pg_foreign_data_wrapper {fdwvalidator} => pg_proc {oid}
+-NOTICE:  checking pg_foreign_server {srvowner} => pg_authid {oid}
+-NOTICE:  checking pg_foreign_server {srvfdw} => pg_foreign_data_wrapper {oid}
+-NOTICE:  checking pg_user_mapping {umuser} => pg_authid {oid}
+-NOTICE:  checking pg_user_mapping {umserver} => pg_foreign_server {oid}
+-NOTICE:  checking pg_foreign_table {ftrelid} => pg_class {oid}
+-NOTICE:  checking pg_foreign_table {ftserver} => pg_foreign_server {oid}
+-NOTICE:  checking pg_policy {polrelid} => pg_class {oid}
+-NOTICE:  checking pg_policy {polroles} => pg_authid {oid}
+-NOTICE:  checking pg_default_acl {defaclrole} => pg_authid {oid}
+-NOTICE:  checking pg_default_acl {defaclnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_init_privs {classoid} => pg_class {oid}
+-NOTICE:  checking pg_seclabel {classoid} => pg_class {oid}
+-NOTICE:  checking pg_shseclabel {classoid} => pg_class {oid}
+-NOTICE:  checking pg_collation {collnamespace} => pg_namespace {oid}
+-NOTICE:  checking pg_collation {collowner} => pg_authid {oid}
+-NOTICE:  checking pg_partitioned_table {partrelid} => pg_class {oid}
+-NOTICE:  checking pg_partitioned_table {partdefid} => pg_class {oid}
+-NOTICE:  checking pg_partitioned_table {partclass} => pg_opclass {oid}
+-NOTICE:  checking pg_partitioned_table {partcollation} => pg_collation {oid}
+-NOTICE:  checking pg_partitioned_table {partrelid,partattrs} => pg_attribute {attrelid,attnum}
+-NOTICE:  checking pg_range {rngtypid} => pg_type {oid}
+-NOTICE:  checking pg_range {rngsubtype} => pg_type {oid}
+-NOTICE:  checking pg_range {rngmultitypid} => pg_type {oid}
+-NOTICE:  checking pg_range {rngcollation} => pg_collation {oid}
+-NOTICE:  checking pg_range {rngsubopc} => pg_opclass {oid}
+-NOTICE:  checking pg_range {rngcanonical} => pg_proc {oid}
+-NOTICE:  checking pg_range {rngsubdiff} => pg_proc {oid}
+-NOTICE:  checking pg_transform {trftype} => pg_type {oid}
+-NOTICE:  checking pg_transform {trflang} => pg_language {oid}
+-NOTICE:  checking pg_transform {trffromsql} => pg_proc {oid}
+-NOTICE:  checking pg_transform {trftosql} => pg_proc {oid}
+-NOTICE:  checking pg_sequence {seqrelid} => pg_class {oid}
+-NOTICE:  checking pg_sequence {seqtypid} => pg_type {oid}
+-NOTICE:  checking pg_publication {pubowner} => pg_authid {oid}
+-NOTICE:  checking pg_publication_namespace {pnpubid} => pg_publication {oid}
+-NOTICE:  checking pg_publication_namespace {pnnspid} => pg_namespace {oid}
+-NOTICE:  checking pg_publication_rel {prpubid} => pg_publication {oid}
+-NOTICE:  checking pg_publication_rel {prrelid} => pg_class {oid}
+-NOTICE:  checking pg_subscription {subdbid} => pg_database {oid}
+-NOTICE:  checking pg_subscription {subowner} => pg_authid {oid}
+-NOTICE:  checking pg_subscription_rel {srsubid} => pg_subscription {oid}
+-NOTICE:  checking pg_subscription_rel {srrelid} => pg_class {oid}
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++declare
++  fk record;
++  nkeys integer;
++  cmd text;
++  err record;
++begin
++  for fk in select * from pg_get_catalog_foreign_keys()
++         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
