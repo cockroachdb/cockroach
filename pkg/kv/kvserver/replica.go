@@ -176,6 +176,67 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
+// leaderlessWatcher is a lightweight implementation of the signaller interface
+// that is used to signal when a replica doesn't know who the leader is for an
+// extended period of time. This is used to signal that the range in
+// unavailable.
+type leaderlessWatcher struct {
+	mu struct {
+		syncutil.RWMutex
+
+		// leaderlessTimestamp records the timestamp captured when the replica
+		// didn't know who the leader was. This is reset on every tick if the
+		// replica knows who the leader is.
+		leaderlessTimestamp time.Time
+
+		// unavailable is set to true if the replica is leaderless for a long time
+		// (longer than ReplicaLeaderlessUnavailableThreshold).
+		unavailable bool
+	}
+
+	// err is the error returned when the replica is leaderless for a long time.
+	err error
+
+	// closedChannel is an already closed channel. Requests will use it to know
+	// that the replica is leaderless, and can be considered unavailable. This
+	// is primarily due to implementation details of the request path, where
+	// the request grabs a signaller in signallerForBatch() and then checks if
+	// the channel is closed to determine if the replica is available.
+	closedChannel chan struct{}
+}
+
+// NewLeaderlessWatcher initializes a new leaderlessWatcher with the default
+// values.
+func NewLeaderlessWatcher(r *Replica) *leaderlessWatcher {
+	closedCh := make(chan struct{})
+	close(closedCh)
+	return &leaderlessWatcher{
+		err: r.replicaUnavailableError(
+			errors.Errorf("replica has been leaderless for %s",
+				ReplicaLeaderlessUnavailableThreshold.Get(&r.store.cfg.Settings.SV))),
+		closedChannel: closedCh,
+	}
+}
+
+func (lw *leaderlessWatcher) Err() error {
+	return lw.err
+}
+
+func (lw *leaderlessWatcher) C() <-chan struct{} {
+	return lw.closedChannel
+}
+
+func (lw *leaderlessWatcher) IsUnavailable() bool {
+	lw.mu.RLock()
+	defer lw.mu.RUnlock()
+	return lw.mu.unavailable
+}
+
+func (lw *leaderlessWatcher) resetLocked() {
+	lw.mu.leaderlessTimestamp = time.Time{}
+	lw.mu.unavailable = false
+}
+
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
 // usages specific to the replica mutex.
 type ReplicaMutex syncutil.RWMutex
@@ -940,6 +1001,10 @@ type Replica struct {
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
 	}
+
+	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
+	// time.
+	LeaderlessWatcher *leaderlessWatcher
 
 	// The raft log truncations that are pending. Access is protected by its own
 	// mutex. All implementation details should be considered hidden except to
