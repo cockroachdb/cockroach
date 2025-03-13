@@ -146,12 +146,19 @@ target_file_size=2097152`
 		{"path=/mnt/hda1,type=other", "other is not a valid store type", StoreSpec{}},
 		{"path=/mnt/hda1,type=mem,size=20GiB", "path specified for in memory store", StoreSpec{}},
 
-		// provisioned rate
+		// provisioned rate bandwidth
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB/s", "",
 			StoreSpec{Path: "/mnt/hda1", ProvisionedRateSpec: base.ProvisionedRateSpec{ProvisionedBandwidth: 200 << 20}}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB", "provisioned-rate field does not have bandwidth sub-field 200MiB ending in /s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=200MiB/s", "provisioned-rate field has invalid value 200MiB/s", StoreSpec{}},
 		{"path=/mnt/hda1,provisioned-rate=bandwidth=0B/s", "provisioned-rate field is trying to set bandwidth to 0", StoreSpec{}},
+
+		// provisioned rate iops
+		{"path=/mnt/hda1,provisioned-rate=bandwidth=200MiB/s:iops=3000", "",
+			StoreSpec{Path: "/mnt/hda1", ProvisionedRateSpec: base.ProvisionedRateSpec{ProvisionedBandwidth: 200 << 20, ProvisionedIOPS: 3000}}},
+		{"path=/mnt/hda1,provisioned-rate=iops=3000", "",
+			StoreSpec{Path: "/mnt/hda1", ProvisionedRateSpec: base.ProvisionedRateSpec{ProvisionedIOPS: 3000}}},
+		{"path=/mnt/hda1,provisioned-rate=iops=0", "provisioned-rate field is trying to set iops to 0", StoreSpec{}},
 
 		// Pebble
 		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",

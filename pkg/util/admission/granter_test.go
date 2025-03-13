@@ -38,8 +38,8 @@ import (
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
-// set-tokens io-tokens=<int> disk-write-tokens=<int>
-// adjust-disk-error actual-write-bytes=<int> actual-read-bytes=<int>
+// set-tokens io-tokens=<int> disk-write-tokens=<int> disk-write-iops-tokens=<int>
+// adjust-disk-error actual-write-bytes=<int> actual-read-bytes=<int> actual-write-iops=<int> actual-read-iops=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -163,7 +163,9 @@ func TestGranterBasic(t *testing.T) {
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
 			// Use w-amp of 1 for the purpose of this test.
 			wamplm := tokensLinearModel{multiplier: 1, constant: 0}
-			kvStoreGranter.setLinearModels(tlm, tlm, tlm, wamplm)
+			// Use 0.1 multiplier for bytes to IOPS model.
+			iopsLM := tokensLinearModel{multiplier: 0.1, constant: 0}
+			kvStoreGranter.setLinearModels(tlm, tlm, tlm, wamplm, iopsLM)
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -236,13 +238,26 @@ func TestGranterBasic(t *testing.T) {
 			var ioTokens int
 			var elasticDiskWriteTokens int
 			var elasticDiskReadTokens int
+			var elasticDiskWriteIOPS int
+			var elasticDiskReadIOPS int
 			var loop int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
 			if d.HasArg("disk-read-tokens") {
 				d.ScanArgs(t, "disk-read-tokens", &elasticDiskReadTokens)
 			}
+			d.ScanArgs(t, "disk-write-iops-tokens", &elasticDiskWriteIOPS)
+			if d.HasArg("disk-read-iops-tokens") {
+				d.ScanArgs(t, "disk-read-iops-tokens", &elasticDiskReadIOPS)
+			}
 			d.ScanArgs(t, "loop", &loop)
+
+			dt := diskTokens{
+				readByteTokens:  int64(elasticDiskReadTokens),
+				writeByteTokens: int64(elasticDiskWriteTokens),
+				readIOPSTokens:  int64(elasticDiskReadIOPS),
+				writeIOPSTokens: int64(elasticDiskWriteIOPS),
+			}
 
 			for loop > 0 {
 				loop--
@@ -251,11 +266,11 @@ func TestGranterBasic(t *testing.T) {
 				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
 					int64(ioTokens),
 					int64(ioTokens),
-					int64(elasticDiskWriteTokens),
-					int64(elasticDiskReadTokens),
+					dt,
 					int64(ioTokens*250),
 					int64(ioTokens*250),
 					int64(elasticDiskWriteTokens*250),
+					dt.writeIOPSTokens*250,
 					false, // lastTick
 				)
 			}
@@ -266,11 +281,17 @@ func TestGranterBasic(t *testing.T) {
 			var ioTokens int
 			var elasticDiskWriteTokens int
 			var elasticDiskReadTokens int
+			var elasticDiskWriteIOPS int
+			var elasticDiskReadIOPS int
 			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
 			if d.HasArg("disk-read-tokens") {
 				d.ScanArgs(t, "disk-read-tokens", &elasticDiskReadTokens)
+			}
+			d.ScanArgs(t, "disk-write-iops-tokens", &elasticDiskWriteIOPS)
+			if d.HasArg("disk-read-iops-tokens") {
+				d.ScanArgs(t, "disk-read-iops-tokens", &elasticDiskReadIOPS)
 			}
 			elasticIOTokens := ioTokens
 			if d.HasArg("elastic-io-tokens") {
@@ -287,16 +308,23 @@ func TestGranterBasic(t *testing.T) {
 				return "unsupported tick rate"
 			}
 
+			dt := diskTokens{
+				readByteTokens:  int64(elasticDiskReadTokens),
+				writeByteTokens: int64(elasticDiskWriteTokens),
+				readIOPSTokens:  int64(elasticDiskReadIOPS),
+				writeIOPSTokens: int64(elasticDiskWriteIOPS),
+			}
+
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
 				int64(ioTokens),
 				int64(elasticIOTokens),
-				int64(elasticDiskWriteTokens),
-				int64(elasticDiskReadTokens),
+				dt,
 				int64(ioTokens*burstMultiplier),
 				int64(elasticIOTokens*burstMultiplier),
 				int64(elasticDiskWriteTokens*burstMultiplier),
+				dt.writeIOPSTokens*int64(burstMultiplier),
 				false, // lastTick
 			)
 			coord.testingTryGrant()
@@ -312,12 +340,16 @@ func TestGranterBasic(t *testing.T) {
 			return flushAndReset()
 
 		case "adjust-disk-error":
-			var readBytes, writeBytes int
+			var readBytes, writeBytes, readIOPS, writeIOPS int
 			d.ScanArgs(t, "actual-write-bytes", &writeBytes)
 			d.ScanArgs(t, "actual-read-bytes", &readBytes)
+			d.ScanArgs(t, "actual-write-iops", &writeIOPS)
+			d.ScanArgs(t, "actual-read-iops", &readIOPS)
 			m := StoreMetrics{DiskStats: DiskStats{
 				BytesRead:    uint64(readBytes),
 				BytesWritten: uint64(writeBytes),
+				ReadCount:    uint64(readIOPS),
+				WriteCount:   uint64(writeIOPS),
 			}}
 			coord.adjustDiskTokenError(m)
 			return flushAndReset()
