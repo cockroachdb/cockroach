@@ -302,7 +302,8 @@ func (c *Context) StoreLivenessWithdrawalGracePeriod() time.Duration {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID roachpb.TenantID
+	TenantID   roachpb.TenantID
+	TenantName roachpb.TenantName
 
 	Clock                  hlc.WallClock
 	ToleratedOffset        time.Duration

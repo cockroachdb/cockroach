@@ -745,12 +745,18 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 			RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
 			ScanFormat:    kvpb.KEY_VALUES,
 		}
+		reverseScan := &kvpb.ReverseScanRequest{
+			RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+			ScanFormat:    kvpb.KEY_VALUES,
+		}
 		ba.Add(scan)
+		ba.Add(reverseScan)
 
 		numCalled = mockSender.NumCalled()
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 1)
+			require.Len(t, ba.Requests, 2)
 			require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+			require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[1].GetInner())
 
 			br = ba.CreateReply()
 			br.Txn = ba.Txn
@@ -760,11 +766,14 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 		br, pErr = twb.SendLocked(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotNil(t, br)
-		require.Len(t, br.Responses, 1)
+		require.Len(t, br.Responses, 2)
 		// There should only be a single response, for Key A, as Key B was deleted.
 		require.Len(t, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows, 1)
+		require.Len(t, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows, 1)
 		require.Equal(t, keyA, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows[0].Key)
 		require.Equal(t, roachpb.MakeValueFromString(expVal), br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows[0].Value)
+		require.Equal(t, keyA, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows[0].Key)
+		require.Equal(t, roachpb.MakeValueFromString(expVal), br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows[0].Value)
 		// Assert that the request was sent to the KV layer.
 		require.Equal(t, mockSender.NumCalled(), numCalled+1)
 	}
@@ -779,12 +788,18 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
 		ScanFormat:    kvpb.KEY_VALUES,
 	}
+	reverseScan := &kvpb.ReverseScanRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+		ScanFormat:    kvpb.KEY_VALUES,
+	}
 	ba.Add(scan)
+	ba.Add(reverseScan)
 
 	numCalled = mockSender.NumCalled()
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 1)
+		require.Len(t, ba.Requests, 2)
 		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[1].GetInner())
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -793,9 +808,10 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 	br, pErr = twb.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-	require.Len(t, br.Responses, 1)
+	require.Len(t, br.Responses, 2)
 	// Assert that no buffered write was returned.
 	require.Len(t, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows, 0)
+	require.Len(t, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows, 0)
 	// Assert that the request was sent to the KV layer.
 	require.Equal(t, mockSender.NumCalled(), numCalled+1)
 

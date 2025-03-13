@@ -667,7 +667,7 @@ func init() {
 		if cmd == createClientCertCmd {
 			cliflagcfg.VarFlag(f, &tenantIDSetter{tenantIDs: &certCtx.tenantScope}, cliflags.TenantScope)
 			cliflagcfg.VarFlag(f, &tenantNameSetter{tenantNames: &certCtx.tenantNameScope}, cliflags.TenantScopeByNames)
-			_ = f.MarkHidden(cliflags.TenantScopeByNames.Name)
+			_ = f.MarkDeprecated(cliflags.TenantScope.Name, fmt.Sprintf("use %s instead", cliflags.TenantScopeByNames.Name))
 
 			// PKCS8 key format is only available for the client cert command.
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
