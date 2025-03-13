@@ -1524,6 +1524,11 @@ func (r *testRunner) postTestAssertions(
 		}
 
 		validationNode := 0
+		// Shuffle node statuses so that we don't always pick the same node for validation checks.
+		prng.Shuffle(len(statuses), func(i, j int) {
+			statuses[i], statuses[j] = statuses[j], statuses[i]
+		})
+
 		for _, s := range statuses {
 			if s.Err != nil {
 				t.L().Printf("n%d: %s error=%s", s.Node, s.URL, s.Err)
