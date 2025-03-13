@@ -48,7 +48,7 @@ type testProposer struct {
 	syncutil.RWMutex
 	clock      *hlc.Clock
 	ds         destroyStatus
-	fi         kvpb.RaftIndex
+	ci         kvpb.RaftIndex
 	lai        kvpb.LeaseAppliedIndex
 	enqueued   int
 	registered int
@@ -253,7 +253,7 @@ func (t *testProposer) verifyLeaseRequestSafetyRLocked(
 		LocalReplicaID:     t.getReplicaID(),
 		Desc:               desc,
 		RaftStatus:         &raftStatus,
-		RaftFirstIndex:     t.fi,
+		RaftCompacted:      t.ci,
 		PrevLease:          prevLease,
 		PrevLeaseExpired:   !t.validLease,
 		NextLeaseHolder:    nextLease.Replica,
@@ -683,7 +683,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	ctx := context.Background()
 
 	proposer := raftpb.PeerID(1)
-	proposerFirstIndex := kvpb.RaftIndex(5)
+	proposerCompactedIndex := kvpb.RaftIndex(4)
 	target := raftpb.PeerID(2)
 
 	// Each subtest will try to propose a lease transfer in a different Raft
@@ -735,7 +735,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			name:               "leader, target state replicate, match+1 < firstIndex",
 			proposerState:      raftpb.StateLeader,
 			targetState:        rafttracker.StateReplicate,
-			targetMatch:        proposerFirstIndex - 2,
+			targetMatch:        proposerCompactedIndex - 1,
 			expRejection:       true,
 			expRejectionReason: raftutil.ReplicaMatchBelowLeadersFirstIndex,
 		},
@@ -743,14 +743,14 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			name:          "leader, target state replicate, match+1 == firstIndex",
 			proposerState: raftpb.StateLeader,
 			targetState:   rafttracker.StateReplicate,
-			targetMatch:   proposerFirstIndex - 1,
+			targetMatch:   proposerCompactedIndex,
 			expRejection:  false,
 		},
 		{
 			name:          "leader, target state replicate, match+1 > firstIndex",
 			proposerState: raftpb.StateLeader,
 			targetState:   rafttracker.StateReplicate,
-			targetMatch:   proposerFirstIndex,
+			targetMatch:   proposerCompactedIndex + 1,
 			expRejection:  false,
 		},
 	} {
@@ -780,7 +780,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			if tc.proposerState == raftpb.StateLeader {
 				raftStatus.Lead = proposer
 				raftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
-					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
+					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerCompactedIndex)},
 				}
 				if tc.targetState != math.MaxUint64 {
 					raftStatus.Progress[target] = rafttracker.Progress{
@@ -792,7 +792,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 				status: raftStatus,
 			}
 			p.raftGroup = r
-			p.fi = proposerFirstIndex
+			p.ci = proposerCompactedIndex
 
 			var b propBuf
 			clock := hlc.NewClockForTesting(nil)
@@ -831,7 +831,7 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 	ctx := context.Background()
 
 	proposer := uint64(1)
-	proposerFirstIndex := kvpb.RaftIndex(5)
+	proposerCompactedIndex := kvpb.RaftIndex(4)
 
 	var matchingDroppedProposalsSeen int
 	p := testProposer{
@@ -856,7 +856,7 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 		return raft.ErrProposalDropped
 	}}
 	p.raftGroup = r
-	p.fi = proposerFirstIndex
+	p.ci = proposerCompactedIndex
 
 	var b propBuf
 	// Make the proposal buffer large so that all the proposals we're putting in
