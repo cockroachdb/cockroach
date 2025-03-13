@@ -747,12 +747,11 @@ func copyFromSourceToDestUntilTableEvent(
 		// finding the minimum timestamp of its subspans in the frontier.
 		spanFrontier = func(sp roachpb.Span) hlc.Timestamp {
 			minTs := hlc.MaxTimestamp
-			frontier.SpanEntries(sp, func(_ roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			for _, ts := range frontier.SpanEntries(sp) {
 				if ts.Less(minTs) {
 					minTs = ts
 				}
-				return span.ContinueMatch
-			})
+			}
 			if minTs == hlc.MaxTimestamp {
 				return hlc.Timestamp{}
 			}
