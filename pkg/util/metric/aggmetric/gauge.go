@@ -9,9 +9,9 @@ import (
 	"math"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gogo/protobuf/proto"
-	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -46,10 +46,9 @@ func NewFunctionalGauge(
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()
-		g.childSet.mu.tree.Ascend(func(item btree.Item) (wantMore bool) {
-			cg := item.(*Gauge)
+		g.childSet.mu.children.Do(func(e *cache.Entry) {
+			cg := e.Value.(*Gauge)
 			values = append(values, cg.Value())
-			return true
 		})
 		return f(values)
 	}
