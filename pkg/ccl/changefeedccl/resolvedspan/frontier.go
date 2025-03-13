@@ -179,7 +179,7 @@ func (f *CoordinatorFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 func (f *CoordinatorFrontier) MakeCheckpoint(
 	maxBytes int64, metrics *checkpoint.Metrics,
 ) *jobspb.TimestampSpansMap {
-	return checkpoint.Make(f.Frontier(), f.Spans(), maxBytes, metrics)
+	return checkpoint.Make(f.Frontier(), f.Entries(), maxBytes, metrics)
 }
 
 // spanFrontier is a type alias to make it possible to embed and forward calls
@@ -323,7 +323,7 @@ func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
 // All returns an iterator over the resolved spans in the frontier.
 func (f *resolvedSpanFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 	return func(yield func(jobspb.ResolvedSpan) bool) {
-		for sp, ts := range f.spanFrontier.All() {
+		for sp, ts := range f.spanFrontier.Entries() {
 			var boundaryType jobspb.ResolvedSpan_BoundaryType
 			if ok, bt := f.boundary.At(ts); ok {
 				boundaryType = bt
@@ -337,11 +337,6 @@ func (f *resolvedSpanFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 			}
 		}
 	}
-}
-
-// Spans returns an iterator over the spans in the frontier.
-func (f *resolvedSpanFrontier) Spans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	return f.spanFrontier.All()
 }
 
 // resolvedSpanBoundary encapsulates a resolved span boundary, which is

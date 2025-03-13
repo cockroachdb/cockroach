@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
 
@@ -278,10 +277,9 @@ func TestSetupSpansAndFrontierWithNewSpec(t *testing.T) {
 			_, err := ca.setupSpansAndFrontier()
 			require.NoError(t, err)
 			actualFrontierSpan := checkpointSpans{}
-			ca.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			for sp, ts := range ca.frontier.Entries() {
 				actualFrontierSpan = append(actualFrontierSpan, checkpointSpan{span: sp, ts: ts})
-				return span.ContinueMatch
-			})
+			}
 
 			require.Equal(t, tc.expectedFrontierSpan, actualFrontierSpan)
 			require.Equal(t, tc.expectedFrontierTs, ca.frontier.Frontier())

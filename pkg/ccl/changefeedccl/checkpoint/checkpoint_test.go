@@ -238,10 +238,9 @@ func TestCheckpointRestore(t *testing.T) {
 			require.NoError(t, err)
 
 			actualFrontierSpans := checkpointSpans{}
-			actualFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			for sp, ts := range actualFrontier.Entries() {
 				actualFrontierSpans = append(actualFrontierSpans, checkpointSpan{span: sp, ts: ts})
-				return span.ContinueMatch
-			})
+			}
 
 			expectedFrontierSpans := checkpointSpans{}
 			expectedFrontier, err := span.MakeFrontierAt(tc.initialHighWater, tc.trackedSpans...)
@@ -250,10 +249,9 @@ func TestCheckpointRestore(t *testing.T) {
 				_, err = expectedFrontier.Forward(s.span, s.ts)
 				require.NoError(t, err)
 			}
-			expectedFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			for sp, ts := range expectedFrontier.Entries() {
 				expectedFrontierSpans = append(expectedFrontierSpans, checkpointSpan{span: sp, ts: ts})
-				return span.ContinueMatch
-			})
+			}
 			require.Equal(t, expectedFrontierSpans, actualFrontierSpans)
 		})
 	}
@@ -318,10 +316,9 @@ func TestCheckpointMakeRestoreRoundTrip(t *testing.T) {
 				restoredFrontier, err := span.MakeFrontierAt(tc.frontier, tc.trackedSpans...)
 				require.NoError(t, err)
 				require.NoError(t, checkpoint.Restore(restoredFrontier, cp))
-				restoredFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				for sp, ts := range restoredFrontier.Entries() {
 					spans = append(spans, checkpointSpan{span: sp, ts: ts})
-					return span.ContinueMatch
-				})
+				}
 				return spans
 			}()
 
