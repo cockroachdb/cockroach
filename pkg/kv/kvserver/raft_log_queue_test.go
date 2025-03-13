@@ -806,12 +806,12 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	_ = rlq
 
 	// NB: Cases for which decision.ShouldTruncate() is true are tested in
-	// TestComputeTruncateDecision, so here the decision itself is never
-	// positive.
+	// TestComputeTruncateDecision, so here the decision itself is never positive.
 	var decision truncateDecision
 	decision.Input.LogSizeTrusted = true
 	decision.Input.LogSize = 12
 	decision.Input.MaxLogSize = 1000
+	decision.Input.FirstIndex = 1 // LastIndex == 0, so it's an empty log
 
 	verify := func(shouldQ bool, recompute bool, prio float64) {
 		t.Helper()
@@ -835,7 +835,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	// Check all boxes except that log is empty.
 	decision = golden
-	decision.Input.LastIndex = decision.Input.FirstIndex
+	decision.Input.LastIndex = decision.Input.FirstIndex - 1
 	verify(false, false, 0)
 }
 

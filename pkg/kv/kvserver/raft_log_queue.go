@@ -679,11 +679,11 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 		return true, !decision.Input.LogSizeTrusted, float64(decision.Input.LogSize)
 	}
 	if decision.Input.LogSizeTrusted ||
-		decision.Input.LastIndex == decision.Input.FirstIndex {
+		decision.Input.FirstIndex > decision.Input.LastIndex {
 
 		return false, false, 0
 	}
-	// We have a nonempty log (first index != last index) and can't vouch that
+	// We have a nonempty log (first index <= last index) and can't vouch that
 	// the bytes in the log are known. Queue the replica; processing it will
 	// force a recomputation. For the priority, we have to pick one as we
 	// usually use the log size which is not available here. Going half-way
