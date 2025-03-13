@@ -296,8 +296,7 @@ func verifyTransfer(ctx context.Context, st Settings, i VerifyInput) error {
 	if i.BypassSafetyChecks {
 		return nil
 	}
-	// TODO(pav-kv): propagate "compacted" down the stack.
-	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftCompacted+1, i.NextLeaseHolder.ReplicaID)
+	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftCompacted, i.NextLeaseHolder.ReplicaID)
 	if snapStatus != raftutil.NoSnapshotNeeded {
 		log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 			"need a snapshot: %s", i.NextLeaseHolder, snapStatus)
