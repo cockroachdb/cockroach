@@ -2015,7 +2015,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2079,7 +2079,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
-			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
+			ctx, status, leaseRepl.GetCompactedIndex()+1, candidates)...)
 		candidates = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, candidates)
 	}
@@ -2189,7 +2189,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
@@ -2222,7 +2222,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
-			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetCompactedIndex()+1, preferred)
 		preferred = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, preferred)
 	}
@@ -2282,7 +2282,7 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2651,7 +2651,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,

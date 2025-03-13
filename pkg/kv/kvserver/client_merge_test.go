@@ -760,8 +760,7 @@ func mergeCheckingTimestampCaches(
 					// Loosely-coupled truncation requires an engine flush to advance
 					// guaranteed durability.
 					require.NoError(t, r.Store().TODOEngine().Flush())
-					firstIndex := r.GetFirstIndex()
-					if firstIndex < truncIndex {
+					if firstIndex := r.GetCompactedIndex() + 1; firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
 					}
 				}

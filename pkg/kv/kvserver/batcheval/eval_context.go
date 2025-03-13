@@ -59,7 +59,7 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetFirstIndex() kvpb.RaftIndex
+	GetCompactedIndex() kvpb.RaftIndex
 	GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error)
 	GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex
 
@@ -174,7 +174,7 @@ type MockEvalCtx struct {
 	AbortSpan              *abortspan.AbortSpan
 	GCThreshold            hlc.Timestamp
 	Term                   kvpb.RaftTerm
-	FirstIndex             kvpb.RaftIndex
+	CompactedIndex         kvpb.RaftIndex
 	CanCreateTxnRecordFn   func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn       func() hlc.Timestamp
 	LastReplicaGCTimestamp hlc.Timestamp
@@ -238,8 +238,8 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFirstIndex() kvpb.RaftIndex {
-	return m.FirstIndex
+func (m *mockEvalCtxImpl) GetCompactedIndex() kvpb.RaftIndex {
+	return m.CompactedIndex
 }
 func (m *mockEvalCtxImpl) GetTerm(kvpb.RaftIndex) (kvpb.RaftTerm, error) {
 	return m.Term, nil
