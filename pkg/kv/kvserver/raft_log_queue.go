@@ -388,7 +388,7 @@ type truncateDecision struct {
 	ChosenVia     string
 }
 
-func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
+func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
 		if p.State != tracker.StateReplicate {
@@ -400,20 +400,27 @@ func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
 			continue
 		}
 
-		// When a log truncation happens at the "current log index" (i.e. the
-		// most recently committed index), it is often still in flight to the
-		// followers not required for quorum, and it is likely that they won't
-		// need a truncation to catch up. A follower in that state will have a
-		// Match equaling committed-1, but a Next of committed+1 (indicating that
-		// an append at 'committed' is already ongoing).
-		if kvpb.RaftIndex(p.Match) < index && kvpb.RaftIndex(p.Next) <= index {
+		// TODO(pav-kv): pass "compacted" index instead of "firstIndex". The below
+		// comment is proactively written assuming compacted index, which is equal
+		// to firstIndex-1.
+		//
+		// When a log truncation happens at the "current log index" (i.e. the most
+		// recently committed index), it is often still in flight to the followers
+		// not required for quorum, and it is likely that they won't need a
+		// truncation to catch up. If Match < compact, but Next > compact, appends
+		// containing this index are already in flight.
+		//
+		// Next <= compact means there is at least one entry that is not yet in
+		// flight to this follower, so truncating now would trigger a snapshot.
+		if kvpb.RaftIndex(p.Next)+1 <= firstIndex {
 			n++
 		}
 	}
-	if td.Input.PendingSnapshotIndex != 0 && td.Input.PendingSnapshotIndex < index {
+	// If there is a pending snapshot at some index, compacting beyond this index
+	// might cause a subsequent snapshot.
+	if snap := td.Input.PendingSnapshotIndex; snap != 0 && firstIndex > snap+1 {
 		n++
 	}
-
 	return n
 }
 
@@ -559,8 +566,10 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// about to be added to the range (or is in Raft recovery). We don't want to
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
-	if input.PendingSnapshotIndex > 0 {
-		decision.ProtectIndex(input.PendingSnapshotIndex, truncatableIndexChosenViaPendingSnap)
+	if snap := input.PendingSnapshotIndex; snap > 0 {
+		// NB: the last index of the snapshot does not need to be "protected"
+		// because it is already incorporated into the snapshot.
+		decision.ProtectIndex(snap+1, truncatableIndexChosenViaPendingSnap)
 	}
 
 	// If new first index dropped below first index, make them equal (resulting

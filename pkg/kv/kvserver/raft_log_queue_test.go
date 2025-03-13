@@ -108,13 +108,13 @@ func TestComputeTruncateDecision(t *testing.T) {
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
 			// it was already obsolete before. (This example is also not one you could manufacture in
 			// a real system).
-			2, []uint64{5, 5, 5}, 100, 2, 2, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			3, []uint64{5, 5, 5}, 100, 3, 3, 1,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 		{
 			// Respecting the pending snapshot.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 3,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: pending snapshot)]",
+			"should truncate: false [truncate 2 entries to first index 4 (chosen via: pending snapshot)]",
 		},
 		{
 			// Log is below target size, so respecting the slowest follower.
@@ -135,7 +135,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 		// Don't truncate away pending snapshot, even when log too large.
 		{
 			100, []uint64{100, 100}, 2000, 1, 100, 50,
-			"should truncate: false [truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 50 entries to first index 51 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
@@ -148,7 +148,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 		// Respecting the pending snapshot.
 		{
 			7, []uint64{4}, 2000, 1, 7, 1,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Never truncate past the commit index.
 		{
@@ -162,8 +162,8 @@ func TestComputeTruncateDecision(t *testing.T) {
 		},
 		// Never truncate "before the first index".
 		{
-			3, []uint64{5}, 100, 2, 3, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			4, []uint64{5}, 100, 3, 4, 1,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 	}
 	for i, c := range testCases {
@@ -320,8 +320,8 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 
 	decision := truncateDecision{Input: truncateDecisionInput{RaftStatus: status}}
 	assert.Equal(t, 0, decision.raftSnapshotsForIndex(10))
-	assert.Equal(t, 1, decision.raftSnapshotsForIndex(11))
-	assert.Equal(t, 3, decision.raftSnapshotsForIndex(12))
+	assert.Equal(t, 0, decision.raftSnapshotsForIndex(11))
+	assert.Equal(t, 1, decision.raftSnapshotsForIndex(12))
 	assert.Equal(t, 3, decision.raftSnapshotsForIndex(13))
 }
 
