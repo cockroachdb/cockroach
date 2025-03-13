@@ -257,7 +257,7 @@ func zoneConfigForMultiRegionPartition(
 	numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
 	zc.NumVoters = &numVoters
 
-	if regionConfig.IsMemberOfExplicitSuperRegion(partitionRegion) {
+	if regionConfig.IsMemberOfSuperRegion(partitionRegion) {
 		err := addConstraintsForSuperRegion(&zc, regionConfig, partitionRegion)
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
@@ -575,7 +575,7 @@ func zoneConfigForMultiRegionTable(
 		if l.RegionalByTable.Region != nil {
 			affinityRegion = *l.RegionalByTable.Region
 		}
-		if l.RegionalByTable.Region == nil && !regionConfig.IsMemberOfExplicitSuperRegion(affinityRegion) {
+		if l.RegionalByTable.Region == nil && !regionConfig.IsMemberOfSuperRegion(affinityRegion) {
 			// If we don't have an explicit affinity region, use the same
 			// configuration as the database and return a blank zcfg here.
 			return zc, nil
@@ -584,7 +584,7 @@ func zoneConfigForMultiRegionTable(
 		numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
 		zc.NumVoters = &numVoters
 
-		if regionConfig.IsMemberOfExplicitSuperRegion(affinityRegion) {
+		if regionConfig.IsMemberOfSuperRegion(affinityRegion) {
 			err := addConstraintsForSuperRegion(&zc, regionConfig, affinityRegion)
 			if err != nil {
 				return zonepb.ZoneConfig{}, err

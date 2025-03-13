@@ -72,9 +72,13 @@ func (r *RegionConfig) WithPrimaryRegion(primaryRegion catpb.RegionName) RegionC
 	return cpy
 }
 
-// IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
-// member of a super region.
-func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bool {
+// IsMemberOfSuperRegion returns true if the region is either:
+// - an explicit member of a super region; or
+// - the survival goal is SURVIVE_REGION_FAILURE and we have 3 regions configured.
+//
+// The reason for this is to make sure that when using SURVIVE_REGION_FAILURE
+// replicas are not placed outside of the known regions.
+func (r *RegionConfig) IsMemberOfSuperRegion(region catpb.RegionName) bool {
 	for _, superRegion := range r.SuperRegions() {
 		for _, regionOfSuperRegion := range superRegion.Regions {
 			if region == regionOfSuperRegion {
@@ -82,13 +86,18 @@ func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bo
 			}
 		}
 	}
+
+	if len(r.regions) == 3 && r.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return true
+	}
+
 	return false
 }
 
 // GetSuperRegionRegionsForRegion returns the members of the super region the
-// specified region is part of.
-// If the region is not a member of any super regions, the function returns an
-// error.
+// specified region is part of. Note that if SURVIVE_REGION_FAILURE is being used
+// then we compute an implicit super region. If the region is not a member of any
+// explicit or implicit super regions, the function returns false.
 func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 	region catpb.RegionName,
 ) (catpb.RegionNames, bool) {
@@ -99,6 +108,12 @@ func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 			}
 		}
 	}
+
+	// Compute implicit super region if SURVIVE REGION FAILURE is set and we have 3 regions.
+	if len(r.regions) == 3 && r.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return r.regions, true
+	}
+
 	return nil, false
 }
 
