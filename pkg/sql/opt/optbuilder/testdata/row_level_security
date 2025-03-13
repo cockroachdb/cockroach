@@ -721,3 +721,102 @@ update t1_explicit_pk
       │         └── now() [as=c3_new:11]
       └── projections
            └── (((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0) [as=rls:12]
+
+# Show that the owner, who is not admin, is exempt from policies unless FORCE
+# option is set.
+
+exec-ddl
+ALTER TABLE t1 OWNER TO fred;
+----
+
+exec-ddl
+CREATE POLICY p_read on t1 FOR SELECT TO fred USING (c2 != 'out of policy');
+----
+
+exec-ddl
+CREATE POLICY p_write on t1 FOR INSERT TO fred WITH CHECK (c3 >= '2025-01-01');
+----
+
+# Show that querying and inserting into the table won't have the policy filter.
+build
+SELECT c1 FROM t1 where C1 between 0 and 9;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── scan t1
+      │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── filters
+           └── (c1:1 >= 0) AND (c1:1 <= 9)
+
+build
+INSERT INTO t1(c1) VALUES (23);
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => c1:1
+ │    ├── c2_default:8 => c2:2
+ │    ├── c3_default:9 => c3:3
+ │    └── rowid_default:10 => rowid:4
+ ├── check columns: rls:11
+ └── project
+      ├── columns: rls:11!null column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── project
+      │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null
+      │    │    └── (23,)
+      │    └── projections
+      │         ├── NULL::STRING [as=c2_default:8]
+      │         ├── NULL::DATE [as=c3_default:9]
+      │         └── unique_rowid() [as=rowid_default:10]
+      └── projections
+           └── true [as=rls:11]
+
+exec-ddl
+ALTER TABLE t1 FORCE ROW LEVEL SECURITY
+----
+
+# Repeat the above DML, but this time with FORCE enabled. The policies will show up.
+build
+SELECT c1 FROM t1 where C1 between 0 and 9;
+----
+project
+ ├── columns: c1:1!null
+ └── select
+      ├── columns: c1:1!null c2:2!null c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── select
+      │    ├── columns: c1:1 c2:2!null c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    ├── scan t1
+      │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── filters
+      │         └── c2:2 != 'out of policy'
+      └── filters
+           └── (c1:1 >= 0) AND (c1:1 <= 9)
+
+build
+INSERT INTO t1(c1) VALUES (23);
+----
+insert t1
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => c1:1
+ │    ├── c2_default:8 => c2:2
+ │    ├── c3_default:9 => c3:3
+ │    └── rowid_default:10 => rowid:4
+ ├── check columns: rls:11
+ └── project
+      ├── columns: rls:11 column1:7!null c2_default:8 c3_default:9 rowid_default:10
+      ├── project
+      │    ├── columns: c2_default:8 c3_default:9 rowid_default:10 column1:7!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null
+      │    │    └── (23,)
+      │    └── projections
+      │         ├── NULL::STRING [as=c2_default:8]
+      │         ├── NULL::DATE [as=c3_default:9]
+      │         └── unique_rowid() [as=rowid_default:10]
+      └── projections
+           └── c3_default:9 >= '2025-01-01' [as=rls:11]
