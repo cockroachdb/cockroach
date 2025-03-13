@@ -115,14 +115,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		return noSnap, errors.AssertionFailedf("last span in multiSSTWriter did not equal the user key span: %s", keyRanges[len(keyRanges)-1].String())
 	}
 
-	// TODO(tbg): remove this bool and the parameter to newMultiSSTWriter
-	// altogether.
-	const skipClearForMVCCSpan = true
-
 	// The last key range is the user key span.
 	localRanges := keyRanges[:len(keyRanges)-1]
 	mvccRange := keyRanges[len(keyRanges)-1]
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, skipClearForMVCCSpan, header.RangeKeysInOrder)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, localRanges, mvccRange, kvSS.sstChunkSize, header.RangeKeysInOrder)
 	if err != nil {
 		return noSnap, err
 	}
@@ -278,7 +274,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				msgAppRespCh:                make(chan raftpb.Message, 1),
 				sharedSSTs:                  sharedSSTs,
 				externalSSTs:                externalSSTs,
-				includesRangeDelForLastSpan: !skipClearForMVCCSpan,
+				includesRangeDelForLastSpan: false, // TODO(tbg): next commit
 				clearedSpans:                keyRanges,
 			}
 
