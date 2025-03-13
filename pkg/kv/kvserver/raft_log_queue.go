@@ -381,9 +381,7 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 // so that it is guaranteed to not contain any PII or confidential
 // cluster data.
 type truncateDecision struct {
-	Input       truncateDecisionInput
-	CommitIndex kvpb.RaftIndex
-
+	Input         truncateDecisionInput
 	NewFirstIndex kvpb.RaftIndex // first index of the resulting log after truncation
 	ChosenVia     string
 }
@@ -503,7 +501,7 @@ func (td *truncateDecision) ProtectIndex(index kvpb.RaftIndex, chosenVia string)
 // snapshots. See #8629.
 func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
-	decision.CommitIndex = kvpb.RaftIndex(input.RaftStatus.Commit)
+	commitIndex := kvpb.RaftIndex(input.RaftStatus.Commit)
 
 	// The most aggressive possible truncation deletes the entire log. Everything
 	// else in this method makes the truncation less aggressive.
@@ -526,7 +524,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	// TODO(pav-kv): source everything from raft.LogSnapshot, and there will be no
 	// discrepancy between commit index and last index.
-	decision.ProtectIndex(decision.CommitIndex+1, truncatableIndexChosenViaCommitIndex)
+	decision.ProtectIndex(commitIndex+1, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
 		// Snapshots are expensive, so we try our best to avoid truncating past
@@ -641,11 +639,11 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	logIndexValid := logEmpty ||
 		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex+1)
 	commitIndexValid := noCommittedEntries ||
-		(decision.NewFirstIndex <= decision.CommitIndex+1)
+		(decision.NewFirstIndex <= commitIndex+1)
 	valid := logIndexValid && commitIndexValid
 	if !valid {
 		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
-			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, decision.CommitIndex)
+			decision.NewFirstIndex, input.FirstIndex, input.LastIndex, commitIndex)
 		panic(err)
 	}
 
