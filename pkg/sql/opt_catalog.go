@@ -418,6 +418,19 @@ func (oc *optCatalog) CheckPrivilege(
 	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, user)
 }
 
+func (oc *optCatalog) IsOwner(
+	ctx context.Context, o cat.Object, user username.SQLUsername,
+) (bool, error) {
+	if o.ID() == cat.DefaultStableID {
+		return oc.planner.UserHasOwnership(ctx, syntheticprivilege.GlobalPrivilegeObject, user)
+	}
+	desc, err := getDescFromCatalogObjectForPermissions(o)
+	if err != nil {
+		return false, err
+	}
+	return oc.planner.UserHasOwnership(ctx, desc, user)
+}
+
 // CheckAnyPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	desc, err := getDescFromCatalogObjectForPermissions(o)
@@ -855,6 +868,7 @@ type optTable struct {
 
 	// Row-level security (RLS) fields
 	rlsEnabled bool
+	rlsForced  bool
 	policies   cat.Policies
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
@@ -1134,6 +1148,7 @@ func newOptTable(
 
 	// Store row-level security information
 	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
+	ot.rlsForced = desc.IsRowLevelSecurityForced()
 	ot.policies = getOptPolicies(desc.GetPolicies())
 
 	// Synthesize any check constraints for user defined types.
@@ -1518,6 +1533,9 @@ func (ot *optTable) Trigger(i int) cat.Trigger {
 
 // IsRowLevelSecurityEnabled is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
+
+// IsRowLevelSecurityForced is part of the cat.Table interface.
+func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
 
 // Policies is part of the cat.Table interface.
 func (ot *optTable) Policies() *cat.Policies {
@@ -2642,6 +2660,9 @@ func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
 
 // IsRowLevelSecurityEnabled is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
+
+// IsRowLevelSecurityForced is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
 
 // Policies is part of the cat.Table interface.
 func (ot *optVirtualTable) Policies() *cat.Policies { return nil }
