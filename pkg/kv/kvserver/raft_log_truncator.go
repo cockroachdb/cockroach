@@ -95,10 +95,7 @@ func (p *pendingLogTruncations) computePostTruncFirstIndex(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.iterateLocked(func(_ int, trunc pendingTruncation) {
-		firstIndexAfterTrunc := trunc.firstIndexAfterTrunc()
-		if firstIndex < firstIndexAfterTrunc {
-			firstIndex = firstIndexAfterTrunc
-		}
+		firstIndex = max(firstIndex, trunc.compactedIndex()+1)
 	})
 	return firstIndex
 }
@@ -173,9 +170,9 @@ type pendingTruncation struct {
 	isDeltaTrusted bool
 }
 
-func (pt *pendingTruncation) firstIndexAfterTrunc() kvpb.RaftIndex {
+func (pt *pendingTruncation) compactedIndex() kvpb.RaftIndex {
 	// Reminder: RaftTruncatedState.Index is inclusive.
-	return pt.Index + 1
+	return pt.Index
 }
 
 // raftLogTruncator is responsible for actually enacting truncations.
@@ -322,7 +319,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 	// computation returns the same result regardless of which is plugged in as
 	// the lower bound.
 	sideloadedFreed, err := r.sideloadedBytesIfTruncatedFromTo(
-		ctx, alreadyTruncIndex+1, pendingTrunc.firstIndexAfterTrunc())
+		ctx, alreadyTruncIndex+1, pendingTrunc.compactedIndex()+1)
 	if err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
 		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
@@ -334,7 +331,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 		// No need to acquire pendingTruncs.mu for read in this case.
 		pendingTrunc.isDeltaTrusted = pendingTrunc.isDeltaTrusted &&
 			pendingTruncs.mu.truncs[pos].isDeltaTrusted
-		if pendingTruncs.mu.truncs[pos].firstIndexAfterTrunc() != pendingTrunc.expectedFirstIndex {
+		if pendingTruncs.mu.truncs[pos].compactedIndex()+1 != pendingTrunc.expectedFirstIndex {
 			pendingTrunc.isDeltaTrusted = false
 		}
 		pendingTrunc.logDeltaBytes += pendingTruncs.mu.truncs[pos].logDeltaBytes
