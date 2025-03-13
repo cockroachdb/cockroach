@@ -1043,7 +1043,7 @@ type Engine interface {
 		shared []pebble.SharedSSTMeta,
 		external []pebble.ExternalFile,
 		exciseSpan roachpb.Span,
-		sstsContainExciseTombstone bool,
+		sstsContainExciseTombstone bool, // TODO(tbg): remove
 	) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
