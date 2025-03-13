@@ -131,18 +131,25 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
 	msstw.currSST = newSST
 
-	// Add a RangeKeyDel for the entire bounds of the SST, meaning upon ingestion
-	// any range keys existing in the span will be deleted.
+	// Add a RangeKeyDel as well as a range del for the entire bounds of the SST,
+	// meaning upon ingestion any range and point keys existing in the span will
+	// be deleted.
 	// Note that the MVCC span will be excised on ingest, so this step is skipped
 	// for it.
-	// We'll add a range deletion (i.e. remove all existing point keys on
-	// ingestion) when the SST is finished.
 	if !msstw.currSpanIsMVCCSpan() {
-		startKey := storage.EngineKey{Key: msstw.currentSpan().Key}.Encode()
-		endKey := storage.EngineKey{Key: msstw.currentSpan().EndKey}.Encode()
+		sp := msstw.currentSpan()
+		startKey := storage.EngineKey{Key: sp.Key}
+		endKey := storage.EngineKey{Key: sp.EndKey}
 		trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-		s := rangekey.Span{Start: startKey, End: endKey, Keys: []rangekey.Key{{Trailer: trailer}}}
+		s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
 		msstw.rangeKeyFrag.Add(s)
+
+		if err := msstw.currSST.ClearEngineRange(
+			startKey, endKey,
+		); err != nil {
+			msstw.currSST.Close()
+			return errors.Wrap(err, "failed to clear range on sst file writer")
+		}
 	}
 	return nil
 }
@@ -160,12 +167,6 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 			End:   storage.EngineKey{Key: cur.EndKey},
 		}
 
-		if err := msstw.currSST.ClearEngineRange(
-			currEngineSpan.Start, currEngineSpan.End,
-		); err != nil {
-			msstw.currSST.Close()
-			return errors.Wrap(err, "failed to clear range on sst file writer")
-		}
 	}
 
 	// If we're at the last span, call Finish on the fragmenter. If we're not at the
