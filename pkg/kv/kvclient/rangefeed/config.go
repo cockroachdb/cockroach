@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -14,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 // Option configures a RangeFeed.
@@ -280,7 +280,7 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 // VisitableFrontier is the subset of the span.Frontier interface required to
 // inspect the content of the frontier.
 type VisitableFrontier interface {
-	Entries(span.Operation)
+	Entries() iter.Seq2[roachpb.Span, hlc.Timestamp]
 }
 
 // FrontierSpanVisitor is called when the frontier is updated by a checkpoint,

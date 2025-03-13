@@ -330,10 +330,9 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 	}
 
 	spans := make([]jobspb.ResolvedSpan, 0, s.lastCheckpointLen)
-	frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for sp, ts := range frontier.Entries() {
 		spans = append(spans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	}
 	s.lastCheckpointLen = len(spans)
 
 	s.seqNum++

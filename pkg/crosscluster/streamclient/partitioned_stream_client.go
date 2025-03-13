@@ -254,10 +254,9 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.InitialScanTimestamp = initialScanTime
 	if previousReplicatedTimes != nil {
 		sps.PreviousReplicatedTimestamp = previousReplicatedTimes.Frontier()
-		previousReplicatedTimes.Entries(func(s roachpb.Span, t hlc.Timestamp) (done span.OpResult) {
+		for s, t := range previousReplicatedTimes.Entries() {
 			sps.Progress = append(sps.Progress, jobspb.ResolvedSpan{Span: s, Timestamp: t})
-			return span.ContinueMatch
-		})
+		}
 	}
 	sps.Spans = sourcePartition.Spans
 	sps.ConsumerNode = consumerNode

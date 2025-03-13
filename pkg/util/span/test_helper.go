@@ -27,7 +27,7 @@ func checkContiguousFrontier(f Frontier) (startKey, endKey []byte, retErr error)
 	frontierTS := f.Frontier()
 	sawFrontierSpan := false
 
-	f.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done OpResult) {
+	for s, ts := range f.Entries() {
 		if s.Equal(frontierSpan) && ts.Equal(frontierTS) {
 			sawFrontierSpan = true
 		}
@@ -37,26 +37,25 @@ func checkContiguousFrontier(f Frontier) (startKey, endKey []byte, retErr error)
 			prev.ts = ts
 			startKey = s.Key
 			endKey = s.EndKey
-			return ContinueMatch
+			continue
 		}
 
 		if s.Key.Equal(prev.s.EndKey) {
 			// Contiguous spans with the same timestamps are expected to be merged.
 			if ts.Equal(prev.ts) {
 				retErr = errors.Newf("expected ranges with equal timestamp to be merged, found %s and %s: %s", prev.s, s, f)
-				return StopMatch
+				break
 			}
 		} else {
 			// We expect frontier entries to be contiguous.
 			retErr = errors.Newf("expected contiguous entries, found gap between %s and %s: %s", prev.s, s, f)
-			return StopMatch
+			break
 		}
 
 		endKey = s.EndKey
 		prev.s = s
 		prev.ts = ts
-		return ContinueMatch
-	})
+	}
 
 	if !sawFrontierSpan {
 		return startKey, endKey, errors.Newf("expected to find frontier span %s@%s: %s", frontierSpan, frontierTS, f)
