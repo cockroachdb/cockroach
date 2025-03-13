@@ -79,6 +79,8 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []tree.DJSON) ([]tree.DJS
 			return nil, err
 		}
 		return []tree.DJSON{resolved}, nil
+	case jsonpath.Operation:
+		return ctx.evalOperation(p, current)
 	default:
 		return nil, errUnimplemented
 	}

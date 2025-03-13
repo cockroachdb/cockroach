@@ -1,0 +1,171 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package eval
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/errors"
+)
+
+type jsonpathBool int
+
+const (
+	jsonpathBoolTrue jsonpathBool = iota
+	jsonpathBoolFalse
+	jsonpathBoolUnknown
+)
+
+func isBool(j tree.DJSON) bool {
+	switch j.JSON.Type() {
+	case json.TrueJSONType, json.FalseJSONType:
+		return true
+	default:
+		return false
+	}
+}
+
+func convertFromBool(b jsonpathBool) []tree.DJSON {
+	switch b {
+	case jsonpathBoolTrue:
+		return []tree.DJSON{{JSON: json.TrueJSONValue}}
+	case jsonpathBoolFalse:
+		return []tree.DJSON{{JSON: json.FalseJSONValue}}
+	case jsonpathBoolUnknown:
+		return []tree.DJSON{{JSON: json.NullJSONValue}}
+	default:
+		panic(errors.AssertionFailedf("unhandled jsonpath boolean type"))
+	}
+}
+
+func convertToBool(j json.JSON) jsonpathBool {
+	b, ok := j.AsBool()
+	if !ok {
+		return jsonpathBoolUnknown
+	}
+	if b {
+		return jsonpathBoolTrue
+	}
+	return jsonpathBoolFalse
+}
+
+func (ctx *jsonpathCtx) evalOperation(
+	p jsonpath.Operation, current []tree.DJSON,
+) ([]tree.DJSON, error) {
+	switch p.Type {
+	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
+		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
+		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
+		res, err := ctx.evalComparison(p, current)
+		if err != nil {
+			return nil, err
+		}
+		return convertFromBool(res), nil
+	default:
+		panic(errors.AssertionFailedf("unhandled operation type"))
+	}
+}
+
+// evalComparison evaluates a comparison operation predicate. Predicates have
+// existence semantics. True is returned if any pair of items from the left and
+// right paths satisfy the condition. In strict mode, even if a pair has been
+// found, all pairs need to be checked for errors.
+func (ctx *jsonpathCtx) evalComparison(
+	p jsonpath.Operation, current []tree.DJSON,
+) (jsonpathBool, error) {
+	left, err := ctx.eval(p.Left, current)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	right, err := ctx.eval(p.Right, current)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+
+	errored := false
+	found := false
+	for _, l := range left {
+		for _, r := range right {
+			res, err := execComparison(l, r, p.Type)
+			if err != nil {
+				return jsonpathBoolUnknown, err
+			}
+			if res == jsonpathBoolUnknown {
+				if ctx.strict {
+					return jsonpathBoolUnknown, nil
+				}
+				errored = true
+			} else if res == jsonpathBoolTrue {
+				if !ctx.strict {
+					return jsonpathBoolTrue, nil
+				}
+				found = true
+			}
+		}
+	}
+	if found {
+		return jsonpathBoolTrue, nil
+	}
+	// Lax mode.
+	if errored {
+		return jsonpathBoolUnknown, nil
+	}
+	return jsonpathBoolFalse, nil
+}
+
+func execComparison(l, r tree.DJSON, op jsonpath.OperationType) (jsonpathBool, error) {
+	if l.JSON.Type() != r.JSON.Type() && !(isBool(l) && isBool(r)) {
+		// Inequality comparison of nulls to non-nulls is true. Everything else
+		// is false.
+		if l.JSON.Type() == json.NullJSONType || r.JSON.Type() == json.NullJSONType {
+			if op == jsonpath.OpCompNotEqual {
+				return jsonpathBoolTrue, nil
+			}
+			return jsonpathBoolFalse, nil
+		}
+		// Non-null items of different types are not comparable.
+		return jsonpathBoolUnknown, nil
+	}
+
+	var cmp int
+	var err error
+	switch l.JSON.Type() {
+	case json.NullJSONType, json.TrueJSONType, json.FalseJSONType,
+		json.NumberJSONType, json.StringJSONType:
+		cmp, err = l.JSON.Compare(r.JSON)
+		if err != nil {
+			return jsonpathBoolUnknown, err
+		}
+	case json.ArrayJSONType, json.ObjectJSONType:
+		// Don't evaluate non-scalar types.
+		return jsonpathBoolUnknown, nil
+	default:
+		panic(errors.AssertionFailedf("unhandled json type"))
+	}
+
+	var res bool
+	switch op {
+	case jsonpath.OpCompEqual:
+		res = cmp == 0
+	case jsonpath.OpCompNotEqual:
+		res = cmp != 0
+	case jsonpath.OpCompLess:
+		res = cmp < 0
+	case jsonpath.OpCompLessEqual:
+		res = cmp <= 0
+	case jsonpath.OpCompGreater:
+		res = cmp > 0
+	case jsonpath.OpCompGreaterEqual:
+		res = cmp >= 0
+	default:
+		panic(errors.AssertionFailedf("unhandled jsonpath comparison type"))
+	}
+	if res {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
+}
