@@ -505,9 +505,13 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
 	decision.CommitIndex = kvpb.RaftIndex(input.RaftStatus.Commit)
 
-	// The last index is most aggressive possible truncation that we could do.
-	// Everything else in this method makes the truncation less aggressive.
-	decision.NewFirstIndex = input.LastIndex
+	// The most aggressive possible truncation deletes the entire log. Everything
+	// else in this method makes the truncation less aggressive.
+	//
+	// TODO(pav-kv): this makes use of the fact that FirstIndex == LastIndex + 1
+	// for an empty log. We should convert to using "compacted index", which
+	// renders in a more intuitive Compacted == LastIndex.
+	decision.NewFirstIndex = input.LastIndex + 1
 	decision.ChosenVia = truncatableIndexChosenViaLastIndex
 
 	// Start by trying to truncate at the commit index. Naively, you would expect
@@ -612,7 +616,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	//         FirstIndex    <= LastIndex                                    (0)
 	//         NewFirstIndex >= FirstIndex                                   (1)
-	//         NewFirstIndex <= LastIndex                                    (2)
+	//         NewFirstIndex <= LastIndex + 1                                (2)
 	//         NewFirstIndex <= CommitIndex + 1                              (3)
 	//
 	// (1) asserts that we're not regressing our FirstIndex
@@ -635,7 +639,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	noCommittedEntries := input.FirstIndex > kvpb.RaftIndex(input.RaftStatus.Commit)
 
 	logIndexValid := logEmpty ||
-		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex)
+		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex+1)
 	commitIndexValid := noCommittedEntries ||
 		(decision.NewFirstIndex <= decision.CommitIndex+1)
 	valid := logIndexValid && commitIndexValid
