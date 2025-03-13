@@ -194,7 +194,21 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 	return buf.String()
 }
 
-func testingGetStoreList(cs *clusterState) (member, removed storeIDPostingList) {
+func testingGetStoreList(t *testing.T, cs *clusterState) (member, removed storeIDPostingList) {
+	var clusterStoreList, nodeStoreList storeIDPostingList
+	// Ensure that the storeIDs in the cluster store map and the stores listed
+	// under each node are the same.
+	for storeID := range cs.stores {
+		clusterStoreList.insert(storeID)
+	}
+	for _, node := range cs.nodes {
+		for _, storeID := range node.stores {
+			nodeStoreList.insert(storeID)
+		}
+	}
+	require.True(t, clusterStoreList.isEqual(nodeStoreList),
+		"expected store lists to be equal %v != %v", clusterStoreList, nodeStoreList)
+
 	for storeID, ss := range cs.stores {
 		switch ss.storeMembership {
 		case storeMembershipMember, storeMembershipRemoving:
@@ -290,7 +304,7 @@ func TestClusterState(t *testing.T) {
 
 				case "get-load-info":
 					var buf strings.Builder
-					memberStores, _ := testingGetStoreList(cs)
+					memberStores, _ := testingGetStoreList(t, cs)
 					for _, storeID := range memberStores {
 						ss := cs.stores[storeID]
 						ns := cs.nodes[ss.NodeID]
@@ -336,7 +350,7 @@ func TestClusterState(t *testing.T) {
 					cs.setStoreMembership(roachpb.StoreID(storeID), storeMembershipVal)
 
 					var buf strings.Builder
-					nonRemovedStores, removedStores := testingGetStoreList(cs)
+					nonRemovedStores, removedStores := testingGetStoreList(t, cs)
 					buf.WriteString("member store-ids: ")
 					printPostingList(&buf, nonRemovedStores)
 					buf.WriteString("\nremoved store-ids: ")
