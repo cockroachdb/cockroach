@@ -464,7 +464,8 @@ CREATE TABLE t137352 (
   a INT,
   b INT,
   INDEX (a),
-  INDEX (b)
+  INDEX (b),
+  FAMILY (k, a, b)
 )
 
 statement ok
@@ -516,6 +517,17 @@ quality of service: regular
           regions: <hidden>
           actual row count: 1
           size: 1 column, 1 row
+
+statement ok
+INSERT INTO t137352 VALUES (1, 10, 100);
+
+query T kvtrace
+EXECUTE p(1)
+----
+Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/114/2/10/1/0
+Del /Table/114/3/100/1/0
+Del /Table/114/1/1/0
 
 statement ok
 DEALLOCATE p
@@ -580,3 +592,206 @@ quality of service: regular
               regions: <hidden>
               actual row count: 1
               size: 1 column, 1 row
+
+statement ok
+INSERT INTO t137352 VALUES (1, 10, 100);
+
+query T kvtrace
+EXECUTE p(10)
+----
+Scan /Table/114/2/1{0-1} lock Exclusive (Block, Unreplicated)
+Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/114/2/10/1/0
+Del /Table/114/3/100/1/0
+Del /Table/114/1/1/0
+
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  FAMILY (k, i, u, v)
+);
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+# The PK is scanned and locked.
+query T
+EXPLAIN DELETE FROM t139160 WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: t139160@t139160_pkey
+      spans: [/1 - /1]
+      locking strength: for update
+
+query T kvtrace
+DELETE FROM t139160 WHERE k = 1
+----
+Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/115/2/2/1/0
+Del (locking) /Table/115/3/3/0
+Del /Table/115/1/1/0
+
+# Only non-unique secondary index is scanned and locked.
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+query T
+EXPLAIN DELETE FROM t139160 WHERE i = 2
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: t139160@t139160_i_idx
+      spans: [/2 - /2]
+      locking strength: for update
+
+query T kvtrace
+DELETE FROM t139160 WHERE i = 2
+----
+Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
+Del /Table/115/2/2/1/0
+Del (locking) /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+# Both primary and non-unique secondary indexes are scanned and locked.
+query T
+EXPLAIN DELETE FROM t139160 WHERE i = 2 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • index join
+    │ table: t139160@t139160_pkey
+    │ locking strength: for update
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_i_idx
+          spans: [/2 - /2]
+          locking strength: for update
+
+query T kvtrace
+DELETE FROM t139160 WHERE i = 2 RETURNING v
+----
+Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/115/2/2/1/0
+Del (locking) /Table/115/3/3/0
+Del /Table/115/1/1/0
+
+# Only unique secondary index is scanned and locked.
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+query T
+EXPLAIN DELETE FROM t139160 WHERE u = 3
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: t139160@t139160_u_key
+      spans: [/3 - /3]
+      locking strength: for update
+
+query T kvtrace
+DELETE FROM t139160 WHERE u = 3
+----
+Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
+Del /Table/115/2/2/1/0
+Del /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+# Both primary and unique secondary indexes are scanned and locked.
+query T
+EXPLAIN DELETE FROM t139160 WHERE u = 3 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • index join
+    │ table: t139160@t139160_pkey
+    │ locking strength: for update
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_u_key
+          spans: [/3 - /3]
+          locking strength: for update
+
+query T kvtrace
+DELETE FROM t139160 WHERE u = 3 RETURNING v
+----
+Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/115/2/2/1/0
+Del /Table/115/3/3/0
+Del /Table/115/1/1/0
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4);
+
+# The filter is not pushed down into the scan, so no index is locked.
+query T
+EXPLAIN DELETE FROM t139160 WHERE v = 4
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: t139160
+│ auto commit
+│
+└── • filter
+    │ filter: v = 4
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_pkey
+          spans: FULL SCAN
+
+query T kvtrace
+DELETE FROM t139160 WHERE v = 4
+----
+Scan /Table/115/{1-2}
+Del /Table/115/2/2/1/0
+Del (locking) /Table/115/3/3/0
+Del (locking) /Table/115/1/1/0

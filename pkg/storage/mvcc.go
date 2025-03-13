@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -853,11 +854,11 @@ func updateStatsOnRangeKeyPut(rangeKeys MVCCRangeKeyStack) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	ms.AgeTo(rangeKeys.Newest().WallTime)
 	ms.RangeKeyCount++
-	ms.RangeKeyBytes += int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
-		int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
+	ms.RangeKeyBytes += int64(mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
+		int64(mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
 	for _, v := range rangeKeys.Versions {
 		ms.AgeTo(v.Timestamp.WallTime)
-		ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+		ms.RangeKeyBytes += int64(mvccencoding.EncodedMVCCTimestampSuffixLength(v.Timestamp))
 		ms.RangeValCount++
 		ms.RangeValBytes += int64(len(v.Value))
 	}
@@ -876,8 +877,8 @@ func updateStatsOnRangeKeyPutVersion(
 	// have to move the GCBytesAge contribution of the key up from the latest
 	// version to the new version if it's written at the top.
 	if rangeKeys.Newest().Less(version.Timestamp) {
-		keyBytes := int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
-			int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
+		keyBytes := int64(mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key)) +
+			int64(mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
 		ms.AgeTo(rangeKeys.Newest().WallTime)
 		ms.RangeKeyBytes -= keyBytes
 		ms.AgeTo(version.Timestamp.WallTime)
@@ -886,7 +887,7 @@ func updateStatsOnRangeKeyPutVersion(
 
 	// Account for the new version.
 	ms.AgeTo(version.Timestamp.WallTime)
-	ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(version.Timestamp))
+	ms.RangeKeyBytes += int64(mvccencoding.EncodedMVCCTimestampSuffixLength(version.Timestamp))
 	ms.RangeValCount++
 	ms.RangeValBytes += int64(len(version.Value))
 
@@ -943,13 +944,13 @@ func UpdateStatsOnRangeKeySplit(
 	// contribution of the end and start keys of the split stacks.
 	ms.AgeTo(versions[0].Timestamp.WallTime)
 	ms.RangeKeyCount++
-	ms.RangeKeyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
+	ms.RangeKeyBytes += 2 * int64(mvccencoding.EncodedMVCCKeyPrefixLength(splitKey))
 
 	// Account for the creation of all versions in new new stack.
 	for _, v := range versions {
 		ms.AgeTo(v.Timestamp.WallTime)
 		ms.RangeValCount++
-		ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+		ms.RangeKeyBytes += int64(mvccencoding.EncodedMVCCTimestampSuffixLength(v.Timestamp))
 		ms.RangeValBytes += int64(len(v.Value))
 	}
 
@@ -1738,7 +1739,7 @@ func mvccGetMetadata(
 			if isTombstone {
 				keyLastSeen = unsafeKey.Timestamp
 			}
-			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, keyLastSeen, nil
+			return true, int64(mvccencoding.EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, keyLastSeen, nil
 		}
 	}
 
@@ -1747,7 +1748,7 @@ func mvccGetMetadata(
 	meta.Deleted = isTombstone
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
-	return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, unsafeKey.Timestamp, nil
+	return true, int64(mvccencoding.EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, unsafeKey.Timestamp, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -7094,7 +7095,7 @@ func MVCCGarbageCollectPointsWithClearRange(
 
 		if ms != nil {
 			if newKey {
-				ms.Add(updateStatsOnGC(unsafeKey.Key, int64(EncodedMVCCKeyPrefixLength(unsafeKey.Key)), 0,
+				ms.Add(updateStatsOnGC(unsafeKey.Key, int64(mvccencoding.EncodedMVCCKeyPrefixLength(unsafeKey.Key)), 0,
 					true /* metaKey */, validTill.WallTime))
 			}
 			ms.Add(updateStatsOnGC(unsafeKey.Key, MVCCVersionTimestampSize, int64(valueLen), false, /* metaKey */
@@ -7411,12 +7412,12 @@ func computeStatsForIterWithVisitors(
 					// though it is actually variable-length, likely for historical
 					// reasons. But for range keys we may as well use the actual
 					// variable-length encoded size.
-					keyBytes := int64(EncodedMVCCTimestampSuffixLength(v.Timestamp))
+					keyBytes := int64(mvccencoding.EncodedMVCCTimestampSuffixLength(v.Timestamp))
 					valBytes := int64(len(v.Value))
 					if i == 0 {
 						ms.RangeKeyCount++
-						keyBytes += int64(EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key) +
-							EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
+						keyBytes += int64(mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.Key) +
+							mvccencoding.EncodedMVCCKeyPrefixLength(rangeKeys.Bounds.EndKey))
 					}
 					ms.RangeKeyBytes += keyBytes
 					ms.RangeValCount++
@@ -8487,7 +8488,7 @@ func ReplacePointTombstonesWithRangeTombstones(
 		}
 		clearedKey.Key = append(clearedKey.Key[:0], key.Key...)
 		clearedKey.Timestamp = key.Timestamp
-		clearedKeySize := int64(EncodedMVCCKeyPrefixLength(clearedKey.Key))
+		clearedKeySize := int64(mvccencoding.EncodedMVCCKeyPrefixLength(clearedKey.Key))
 		if err := rw.ClearMVCC(key, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(valueLen),

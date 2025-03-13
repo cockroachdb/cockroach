@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -64,7 +65,7 @@ func SprintEngineKey(key storage.EngineKey) string {
 // keys are currently MVCC range keys, so it will utilize SprintMVCCRangeKey for
 // proper MVCC formatting.
 func SprintEngineRangeKey(s roachpb.Span, suffix []byte) string {
-	if ts, err := storage.DecodeMVCCTimestampSuffix(suffix); err == nil {
+	if ts, err := mvccencoding.DecodeMVCCTimestampSuffix(suffix); err == nil {
 		rk := storage.MVCCRangeKey{StartKey: s.Key, EndKey: s.EndKey, Timestamp: ts}
 		return SprintMVCCRangeKey(rk)
 	}
@@ -111,7 +112,7 @@ func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
 // string. All range keys are currently MVCC range keys, so it will utilize
 // SprintMVCCRangeKeyValue for proper MVCC formatting.
 func SprintEngineRangeKeyValue(s roachpb.Span, v storage.EngineRangeKeyValue) string {
-	if ts, err := storage.DecodeMVCCTimestampSuffix(v.Version); err == nil {
+	if ts, err := mvccencoding.DecodeMVCCTimestampSuffix(v.Version); err == nil {
 		rkv := storage.MVCCRangeKeyValue{
 			RangeKey: storage.MVCCRangeKey{StartKey: s.Key, EndKey: s.EndKey, Timestamp: ts},
 			Value:    v.Value,

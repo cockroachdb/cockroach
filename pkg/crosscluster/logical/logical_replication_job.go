@@ -798,10 +798,9 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	}
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
-	rh.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for sp, ts := range rh.frontier.Entries() {
 		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	rh.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -1128,7 +1129,7 @@ func (v *validator) checkAtomicCommitted(
 			} else { // ranged write
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
+				suffix := mvccencoding.EncodeMVCCTimestampSuffix(o.Timestamp)
 				if err := batch.RangeKeyUnset(key, endKey, suffix, nil); err != nil {
 					panic(err)
 				}
@@ -1205,7 +1206,7 @@ func (v *validator) checkAtomicCommitted(
 			} else {
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
+				suffix := mvccencoding.EncodeMVCCTimestampSuffix(writeTS)
 				if err := batch.RangeKeySet(key, endKey, suffix, o.Value.RawBytes, nil); err != nil {
 					panic(err)
 				}
@@ -1550,7 +1551,7 @@ func validReadTimes(
 			// Range key contains the key. Emit a point deletion on the key
 			// at the tombstone's timestamp for each active range key.
 			for _, rk := range iter.RangeKeys() {
-				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					panic(err)
 				}

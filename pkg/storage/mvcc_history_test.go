@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -341,7 +342,7 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 						if len(k.Suffix) > 0 {
-							ts, err := storage.DecodeMVCCTimestampSuffix(k.Suffix)
+							ts, err := mvccencoding.DecodeMVCCTimestampSuffix(k.Suffix)
 							if err != nil {
 								return err
 							}
@@ -1940,7 +1941,7 @@ func cmdPutRangeKey(e *evalCtx) error {
 	// range key writes will use and we want to exercise it. See #129592.
 	if e.hasArg("syntheticBit") {
 		return e.withWriter("put_rangekey", func(rw storage.ReadWriter) error {
-			suffix := storage.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
+			suffix := mvccencoding.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
 			valueRaw, err := storage.EncodeMVCCValue(value)
 			if err != nil {
 				return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)

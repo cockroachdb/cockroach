@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
         "//pkg/storage",
+        "//pkg/storage/mvccencoding",
         "//pkg/testutils/fingerprintutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",

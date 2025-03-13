@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -263,7 +264,7 @@ func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) err
 		return err
 	}
 	return fw.PutEngineRangeKey(
-		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
+		rangeKey.StartKey, rangeKey.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
 
 // ClearMVCCRangeKey implements the Writer interface.
@@ -279,7 +280,7 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 			rangeKey.EncodedTimestampSuffix)
 	}
 	return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
-		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
+		mvccencoding.EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // PutEngineRangeKey implements the Writer interface.

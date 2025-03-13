@@ -1,0 +1,70 @@
+# LogicTest: 5node
+
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TABLE d.t (
+    i INT NOT NULL,
+    INDEX idx (i) PARTITION BY LIST (i) (
+        PARTITION p1 VALUES IN (1, 5)
+    )
+);
+
+# Ensure objects inherit from its direct parent correctly; since we are
+# exercising num_voters/num_replicas changes, we also test that validation
+# of zone configs inherits properly.
+statement error pq: could not validate zone config: num_voters cannot be greater than num_replicas
+ALTER DATABASE d CONFIGURE ZONE USING num_voters = 6;
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7;
+
+# Database direct-inheritance checks.
+statement ok
+ALTER DATABASE d CONFIGURE ZONE USING num_voters = 6;
+
+query I
+SELECT regexp_extract(raw_config_sql, 'num_replicas = (\d+)')::INT
+FROM [SHOW ZONE CONFIGURATION FOR DATABASE d];
+----
+7
+
+statement ok
+ALTER DATABASE d CONFIGURE ZONE USING num_replicas = 7;
+
+# Table direct-inheritance checks.
+statement ok
+ALTER TABLE d.t CONFIGURE ZONE USING num_voters = 6;
+
+query I
+SELECT regexp_extract(raw_config_sql, 'num_replicas = (\d+)')::INT
+FROM [SHOW ZONE CONFIGURATION FOR TABLE d.t];
+----
+7
+
+statement ok
+ALTER TABLE d.t CONFIGURE ZONE USING num_replicas = 7;
+
+# Index direct-inheritance checks.
+statement ok
+ALTER INDEX d.t@idx CONFIGURE ZONE USING num_voters = 6;
+
+query I
+SELECT regexp_extract(raw_config_sql, 'num_replicas = (\d+)')::INT
+FROM [SHOW ZONE CONFIGURATION FOR INDEX d.t@idx];
+----
+7
+
+statement ok
+ALTER INDEX d.t@idx CONFIGURE ZONE USING num_replicas = 7;
+
+# Partition direct-inheritance checks.
+statement ok
+ALTER TABLE d.t CONFIGURE ZONE USING num_voters = 6;
+
+query I
+SELECT regexp_extract(raw_config_sql, 'num_replicas = (\d+)')::INT
+FROM [SHOW ZONE CONFIGURATION FOR PARTITION p1 OF INDEX d.t@idx];
+----
+7

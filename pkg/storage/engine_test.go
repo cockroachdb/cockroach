@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -2588,9 +2589,9 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 
 				// Engine methods don't do validation, but just pass through to Pebble.
 				require.NoError(t, rw.PutEngineRangeKey(
-					rk.StartKey, rk.EndKey, EncodeMVCCTimestampSuffix(rk.Timestamp), nil))
+					rk.StartKey, rk.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rk.Timestamp), nil))
 				require.NoError(t, rw.ClearEngineRangeKey(
-					rk.StartKey, rk.EndKey, EncodeMVCCTimestampSuffix(rk.Timestamp)))
+					rk.StartKey, rk.EndKey, mvccencoding.EncodeMVCCTimestampSuffix(rk.Timestamp)))
 				require.NoError(t, rw.ClearRawRange(
 					rk.StartKey, rk.EndKey, false /* pointKeys */, true /* rangeKeys */))
 			})
@@ -2658,7 +2659,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		valueRaw, err := EncodeMVCCValue(MVCCValue{})
 		require.NoError(t, err)
 		require.NoError(t, rw.PutEngineRangeKey(
-			roachpb.Key("c"), roachpb.Key("e"), EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
+			roachpb.Key("c"), roachpb.Key("e"), mvccencoding.EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
 		require.NoError(t, rw.PutRawMVCCRangeKey(rangeKey("e", "g", 1), valueRaw))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "f", 1, MVCCValue{}),

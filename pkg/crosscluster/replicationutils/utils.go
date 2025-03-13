@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,7 +120,7 @@ func ScanSST(
 					StartKey:               intersectedSpan.Key.Clone(),
 					EndKey:                 intersectedSpan.EndKey.Clone(),
 					Timestamp:              rangeKeyVersion.Timestamp,
-					EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(rangeKeyVersion.Timestamp),
+					EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(rangeKeyVersion.Timestamp),
 				},
 				Value: rangeKeyVersion.Value,
 			})

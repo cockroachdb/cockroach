@@ -109,3 +109,10 @@ func TestCCLLogic_zone(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone")
 }
+
+func TestCCLLogic_zone_config_inheritance(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "zone_config_inheritance")
+}

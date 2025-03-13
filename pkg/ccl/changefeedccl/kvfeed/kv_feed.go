@@ -599,10 +599,9 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 	}
 
 	var stps []kvcoord.SpanTimePair
-	resumeFrontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+	for s, ts := range resumeFrontier.Entries() {
 		stps = append(stps, kvcoord.SpanTimePair{Span: s, StartAfter: ts})
-		return span.ContinueMatch
-	})
+	}
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
@@ -748,12 +747,11 @@ func copyFromSourceToDestUntilTableEvent(
 		// finding the minimum timestamp of its subspans in the frontier.
 		spanFrontier = func(sp roachpb.Span) hlc.Timestamp {
 			minTs := hlc.MaxTimestamp
-			frontier.SpanEntries(sp, func(_ roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			for _, ts := range frontier.SpanEntries(sp) {
 				if ts.Less(minTs) {
 					minTs = ts
 				}
-				return span.ContinueMatch
-			})
+			}
 			if minTs == hlc.MaxTimestamp {
 				return hlc.Timestamp{}
 			}

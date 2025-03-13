@@ -1249,12 +1249,11 @@ func (sip *streamIngestionProcessor) flush() error {
 	sip.buffer = getBuffer()
 
 	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0, sip.frontier.Len())}
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+	for sp, ts := range sip.frontier.Entries() {
 		if !ts.IsEmpty() {
 			checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		}
-		return span.ContinueMatch
-	})
+	}
 
 	select {
 	case sip.flushCh <- flushableBuffer{

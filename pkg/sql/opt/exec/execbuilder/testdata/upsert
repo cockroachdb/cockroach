@@ -1051,8 +1051,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
 Put (locking) /Table/117/1/1/0 -> /TUPLE/
-Del /Table/117/1/1/1/1
-Del /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -1100,7 +1100,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
 count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
-count         Del /Table/120/2/3/0
+count         Del (locking) /Table/120/2/3/0
 count         CPut /Table/120/2/2/0 -> /BYTES/0x8a
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
