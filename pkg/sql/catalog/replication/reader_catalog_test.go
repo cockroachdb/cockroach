@@ -196,6 +196,10 @@ INSERT INTO t1(val) VALUES('closed');
 INSERT INTO t1(val) VALUES('inactive');
 CREATE VIEW v1 AS (SELECT n from t1);
 CREATE TABLE t2(n int);
+CREATE TABLE t3(n int); -- this will get renamed to t5.
+INSERT INTO t3(n) VALUES (1);
+INSERT INTO t3(n) VALUES (2);
+INSERT INTO t3(n) VALUES (3);
 `)
 	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
 
@@ -203,12 +207,14 @@ CREATE TABLE t2(n int);
 	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
 	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
 	r.compareEqual(t, "SELECT * FROM t2 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM t3 ORDER BY n")
 
 	// Validate that system tables are synced
 	r.compareEqual(t, "SELECT * FROM system.users")
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SELECT name FROM system.namespace ORDER BY name")
 
 	// Validate that sequences can be selected.
 	r.compareEqual(t, "SELECT * FROM sq1")
@@ -223,6 +229,7 @@ CREATE TABLE t2(n int);
 		"ALTER USER roacher2 SET timezone='America/New_York';",
 		"CREATE TABLE t4(n int)",
 		"INSERT INTO t4 VALUES (32)",
+		"ALTER TABLE t3 RENAME TO t5",
 	}
 	for _, ddl := range ddlToExec {
 		r.srcRunner.Exec(t, ddl)
@@ -235,6 +242,8 @@ CREATE TABLE t2(n int);
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SELECT * FROM t3 ORDER BY n")
+	r.compareEqual(t, "SELECT name FROM system.namespace ORDER BY name")
 
 	// Move the src timestamp into the future when comparing
 	// values.
@@ -245,6 +254,7 @@ CREATE TABLE t2(n int);
 	r.check(t, "SELECT * FROM system.users", false)
 	r.check(t, "SELECT * FROM system.role_options", false)
 	r.check(t, "SELECT * FROM system.database_role_settings", false)
+	r.check(t, "SELECT name FROM system.namespace ORDER BY name", false)
 
 	// Move the timestamp up on the reader catalog, and confirm that everything matches.
 	require.NoError(t, r.advanceTS(ctx, r.srcAOST, true))
@@ -257,6 +267,8 @@ CREATE TABLE t2(n int);
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
 	r.compareEqual(t, "SELECT * FROM t4 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM t5 ORDER BY n")
+	r.compareEqual(t, "SELECT name FROM system.namespace ORDER BY name")
 
 	// Validate that sequence operations are blocked.
 	r.destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
