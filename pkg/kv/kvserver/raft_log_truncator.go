@@ -254,7 +254,7 @@ type replicaForTruncator interface {
 	// the return value by additionally acquiring pendingLogTruncations.mu.
 	getPendingTruncs() *pendingLogTruncations
 	// Returns the sideloaded bytes that would be freed if we were to truncate
-	// [from, to).
+	// (from, to].
 	sideloadedBytesIfTruncatedFromTo(
 		_ context.Context, from, to kvpb.RaftIndex) (freed int64, _ error)
 	getStateLoader() stateloader.StateLoader
@@ -319,7 +319,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 	// computation returns the same result regardless of which is plugged in as
 	// the lower bound.
 	sideloadedFreed, err := r.sideloadedBytesIfTruncatedFromTo(
-		ctx, alreadyTruncIndex+1, pendingTrunc.compactedIndex()+1)
+		ctx, alreadyTruncIndex, pendingTrunc.compactedIndex())
 	if err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
 		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
