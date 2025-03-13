@@ -28,8 +28,8 @@ type VerifyInput struct {
 	Desc           *roachpb.RangeDescriptor
 
 	// Information about raft.
-	RaftStatus     *raft.Status
-	RaftFirstIndex kvpb.RaftIndex
+	RaftStatus    *raft.Status
+	RaftCompacted kvpb.RaftIndex
 
 	// Information about the previous lease.
 	PrevLease        roachpb.Lease
@@ -296,7 +296,8 @@ func verifyTransfer(ctx context.Context, st Settings, i VerifyInput) error {
 	if i.BypassSafetyChecks {
 		return nil
 	}
-	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftFirstIndex, i.NextLeaseHolder.ReplicaID)
+	// TODO(pav-kv): propagate "compacted" down the stack.
+	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftCompacted+1, i.NextLeaseHolder.ReplicaID)
 	if snapStatus != raftutil.NoSnapshotNeeded {
 		log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 			"need a snapshot: %s", i.NextLeaseHolder, snapStatus)

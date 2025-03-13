@@ -254,7 +254,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 		LocalReplicaID:     i.LocalReplicaID,
 		Desc:               i.Desc,
 		RaftStatus:         i.RaftStatus,
-		RaftFirstIndex:     i.RaftCompacted + 1, // TODO(pav-kv): propagate "compacted"
+		RaftCompacted:      i.RaftCompacted,
 		PrevLease:          i.PrevLease,
 		PrevLeaseExpired:   i.PrevLeaseExpired,
 		NextLeaseHolder:    i.NextLeaseHolder,
