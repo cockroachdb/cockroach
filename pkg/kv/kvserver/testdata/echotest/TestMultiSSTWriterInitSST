@@ -1,6 +1,6 @@
 echo
 ----
-writeBytes=4740 sstSize=4872 dataSize=132
+writeBytes=4497 sstSize=4623 dataSize=126
 >> sst0:
 rangedel: /Local/RangeID/0/{r""-s""}
 rangekeydel: /Local/RangeID/0/{r""-s""}
@@ -14,5 +14,3 @@ rangekeydel: /Local/Lock/Local/Range{"d"-/Max}
 rangedel: /Local/Lock{"d"-/Max}
 rangekeydel: /Local/Lock{"d"-/Max}
 >> sst4:
-rangedel: {d-/Max}
-rangekeydel: {d-/Max}
