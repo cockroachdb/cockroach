@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,6 +119,55 @@ func TestEntryCache(t *testing.T) {
 	ttl, found = cache.GetTTL(barUser)
 	require.Equal(t, true, found)
 	require.Equal(t, laterExpiration-(closerExpiration+20), ttl)
+}
+
+// TestCacheMetricsSync verifies that the cache metrics are correctly synchronized
+// when entries are inserted and updated. It checks that the cache length and
+// expiration times are properly updated and reflected in the metrics.
+func TestCacheMetricsSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	findChildMetric := func(metrics *aggmetric.AggGauge, childName string) *io_prometheus_client.Metric {
+		var result *io_prometheus_client.Metric
+		metrics.Each([]*io_prometheus_client.LabelPair{}, func(metric *io_prometheus_client.Metric) {
+			if metric.GetLabel()[0].GetValue() == childName {
+				result = metric
+			}
+		})
+		return result
+	}
+
+	const (
+		fooUser = "foo"
+
+		laterExpiration  = int64(1684359292)
+		closerExpiration = int64(1584359292)
+	)
+
+	ctx := context.Background()
+
+	timesource := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	// Create a cache with a capacity of 3.
+	cache, expMetric, ttlMetric := newCache(
+		ctx,
+		&cluster.Settings{},
+		3, /* capacity */
+		timesource,
+	)
+	require.Equal(t, 0, cache.Len())
+
+	// insert.
+	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
+	// update.
+	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
+
+	metricFloat := *(findChildMetric(expMetric, fooUser).Gauge.Value)
+	expiration, found := cache.GetExpiration(fooUser)
+
+	// verify that both the cache and metric are in sync.
+	require.Equal(t, true, found)
+	require.Equal(t, closerExpiration, expiration)
+	require.Equal(t, closerExpiration, int64(metricFloat))
 }
 
 func TestPurgePastEntries(t *testing.T) {
