@@ -537,12 +537,12 @@ func TestNewTruncateDecision(t *testing.T) {
 	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
-	// Unlike the last iteration, where we expect a truncation and can wait on
-	// it with succeedsSoon, we can't do that here. This check is fragile in
-	// that the truncation triggered here may lose the race against the call to
-	// GetFirstIndex or newTruncateDecision, giving a false negative. Fixing
-	// this requires additional instrumentation of the queues, which was deemed
-	// to require too much work at the time of this writing.
+	// Unlike the last iteration, where we expect a truncation and can wait on it
+	// with succeedsSoon, we can't do that here. This check is fragile in that the
+	// truncation triggered here may lose the race against the call to
+	// GetCompactedIndex or newTruncateDecision, giving a false negative. Fixing
+	// this requires additional instrumentation of the queues, which was deemed to
+	// require too much work at the time of this writing.
 	dFirst, dTruncatable, dOldest, err := getIndexes()
 	if err != nil {
 		t.Fatal(err)
@@ -598,7 +598,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldFirstIndex := r.GetFirstIndex()
+			oldCompIndex := r.GetCompactedIndex()
 
 			for i := 0; i < c.count; i++ {
 				key := roachpb.Key(fmt.Sprintf("key%02d", i))
@@ -616,10 +616,9 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 					// Flush the engine to advance durability, which triggers truncation.
 					require.NoError(t, store.TODOEngine().Flush())
 				}
-				newFirstIndex := r.GetFirstIndex()
-				if newFirstIndex <= oldFirstIndex {
-					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
-						oldFirstIndex, newFirstIndex)
+				if newCompIndex := r.GetCompactedIndex(); newCompIndex <= oldCompIndex {
+					return errors.Errorf("log was not correctly truncated, old compacted index:%d, current:%d",
+						oldCompIndex, newCompIndex)
 				}
 				return nil
 			})
@@ -913,8 +912,8 @@ func waitForTruncationForTesting(
 			// Flush the engine to advance durability, which triggers truncation.
 			require.NoError(t, r.store.TODOEngine().Flush())
 		}
-		// FirstIndex should have changed.
-		if firstIndex := r.GetFirstIndex(); firstIndex != newFirstIndex {
+		// First index should have changed.
+		if firstIndex := r.GetCompactedIndex() + 1; firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
 		// Some low-level tests also look at the raftEntryCache or sideloaded

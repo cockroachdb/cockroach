@@ -1928,7 +1928,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	return raftStatus
 }
 
-func (r *mockRepl) GetFirstIndex() kvpb.RaftIndex {
+func (r *mockRepl) GetCompactedIndex() kvpb.RaftIndex {
 	return 0
 }
 

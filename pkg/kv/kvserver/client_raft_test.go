@@ -842,7 +842,7 @@ func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstInde
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
 		require.NoError(t, r.Store().TODOEngine().Flush())
-		if firstIndex := r.GetFirstIndex(); firstIndex != newFirstIndex {
+		if firstIndex := r.GetCompactedIndex() + 1; firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
 		return nil
