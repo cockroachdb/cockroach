@@ -182,13 +182,11 @@ func (f spanCoveringFilter) filterCompleted(requiredSpan roachpb.Span) roachpb.S
 // findToDoSpans returns the sub spans within the required span that have not completed.
 func (f spanCoveringFilter) findToDoSpans(requiredSpan roachpb.Span) roachpb.Spans {
 	toDoSpans := make(roachpb.Spans, 0)
-	f.checkpointFrontier.SpanEntries(requiredSpan, func(s roachpb.Span,
-		ts hlc.Timestamp) (done spanUtils.OpResult) {
+	for s, ts := range f.checkpointFrontier.SpanEntries(requiredSpan) {
 		if !ts.Equal(completedSpanTime) {
 			toDoSpans = append(toDoSpans, s)
 		}
-		return spanUtils.ContinueMatch
-	})
+	}
 	return toDoSpans
 }
 
@@ -200,13 +198,12 @@ func (f spanCoveringFilter) getLayersCoveredLater(
 	layersCoveredLater := make(map[int]bool)
 	for layer := range backups {
 		var coveredLater bool
-		f.introducedSpanFrontier.SpanEntries(span, func(s roachpb.Span,
-			ts hlc.Timestamp) (done spanUtils.OpResult) {
+		for _, ts := range f.introducedSpanFrontier.SpanEntries(span) {
 			if backups[layer].EndTime.Less(ts) {
 				coveredLater = true
 			}
-			return spanUtils.StopMatch
-		})
+			break
+		}
 		if coveredLater {
 			// Don't use this backup to cover this span if the span was reintroduced
 			// after the backup's endTime. In this case, this backup may have
