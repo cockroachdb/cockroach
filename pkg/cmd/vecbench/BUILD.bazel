@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/cspann/memstore",
         "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/util/httputil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

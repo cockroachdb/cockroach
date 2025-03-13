@@ -1,0 +1,77 @@
+# ----------
+# Trigger split and other fixups.
+# ----------
+new-index min-partition-size=2 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 10)
+vec3: (-2, 8)
+vec4: (2, 7)
+vec5: (3, 6)
+vec6: (14, 1)
+vec7: (0, 0)
+vec8: (1, 4)
+vec9: (5, 2)
+----
+• 1 (4.625, 5.25)
+│
+├───• 2 (8.5, 5.5)
+│   │
+│   ├───• vec6 (14, 1)
+│   ├───• vec2 (3, 10)
+│   └───• vec9 (5, 2)
+│
+├───• 4 (0, -0.5)
+│   │
+│   ├───• vec7 (0, 0)
+│   └───• vec1 (0, -1)
+│
+└───• 5 (1, 6.25)
+    │
+    ├───• vec5 (3, 6)
+    ├───• vec4 (2, 7)
+    ├───• vec3 (-2, 8)
+    └───• vec8 (1, 4)
+
+metrics
+----
+2 successful splits
+2 fixups added to queue
+2 fixups processed
+
+# Delete vector from primary index, but not from secondary index.
+delete not-found
+vec3
+----
+• 1 (4.625, 5.25)
+│
+├───• 2 (8.5, 5.5)
+│   │
+│   ├───• vec6 (14, 1)
+│   ├───• vec2 (3, 10)
+│   └───• vec9 (5, 2)
+│
+├───• 4 (0, -0.5)
+│   │
+│   ├───• vec7 (0, 0)
+│   └───• vec1 (0, -1)
+│
+└───• 5 (1, 6.25)
+    │
+    ├───• vec5 (3, 6)
+    ├───• vec4 (2, 7)
+    ├───• vec3 (MISSING)
+    └───• vec8 (1, 4)
+
+# Search for fixup, which will enqueue a fixup that removes the vector from the
+# index.
+search max-results=1
+(-2, 8)
+----
+vec4: 17 (centroid=1.25)
+6 leaf vectors, 9 vectors, 4 full vectors, 3 partitions
+
+metrics
+----
+2 successful splits
+3 fixups added to queue
+3 fixups processed

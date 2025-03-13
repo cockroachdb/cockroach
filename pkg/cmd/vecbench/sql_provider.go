@@ -6,14 +6,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"net/http"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -21,7 +24,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// SQLProvider implements VectorProvider using a SQL database connection.
+// SQLProvider implements VectorProvider using a SQL database connection to a
+// CockroachDB instance.
 type SQLProvider struct {
 	datasetName string
 	dims        int
@@ -165,12 +169,21 @@ func (s *SQLProvider) Search(
 }
 
 // GetMetrics implements the VectorProvider interface.
-func (s *SQLProvider) GetMetrics() []IndexMetric {
-	// retryCount is the number of times that InsertVectors encounters conflicts
-	// and needs to retry.
-	retryCount := IndexMetric{Name: "insert retries", Value: float64(s.retryCount.Load())}
+func (s *SQLProvider) GetMetrics() ([]IndexMetric, error) {
+	// Start with our existing metrics
+	metrics := []IndexMetric{
+		// retryCount is the number of times that InsertVectors encounters
+		// conflicts and needs to retry.
+		{Name: "insert retries", Value: float64(s.retryCount.Load())},
+	}
 
-	return []IndexMetric{retryCount}
+	// Fetch Prometheus metrics.
+	promMetrics, err := s.fetchPrometheusMetrics()
+	if err != nil {
+		return nil, err
+	}
+
+	return append(promMetrics, metrics...), nil
 }
 
 // FormatStats implements the VectorProvider interface.
@@ -199,4 +212,87 @@ func sanitizeIdentifier(s string) string {
 		}
 		return '_'
 	}, s)
+}
+
+// Fetch metrics from the Prometheus endpoint.
+func (s *SQLProvider) fetchPrometheusMetrics() ([]IndexMetric, error) {
+	var metricsToTrack = map[string]float64{
+		"sql_vecindex_successful_splits": -1,
+		"sql_vecindex_fixups_added":      -1,
+		"sql_vecindex_fixups_processed":  -1,
+	}
+
+	// Parse connection string to extract host.
+	config, err := pgxpool.ParseConfig(*flagDBConnStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing connection string")
+	}
+
+	// Extract host and convert SQL port to CockroachDB HTTP port.
+	host := config.ConnConfig.Host
+	port := "8080"
+
+	url := fmt.Sprintf("http://%s:%s/_status/vars", host, port)
+
+	// Fetch metrics
+	resp, err := httputil.Get(context.Background(), url)
+	if err != nil {
+		return nil, errors.Wrap(err, "fetching metrics")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Newf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Parse metrics.
+	scanner := bufio.NewScanner(resp.Body)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip comments and empty lines.
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+
+		// Parse metric line (format: metric_name value).
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		metricName := parts[0]
+
+		// Trim any labels.
+		labelOffset := strings.Index(metricName, "{")
+		if labelOffset > 0 {
+			metricName = line[:labelOffset]
+		}
+
+		// Check if this is a metric we want to track and parse its value.
+		if _, ok := metricsToTrack[metricName]; ok {
+			var value float64
+			if _, err := fmt.Sscanf(parts[1], "%f", &value); err == nil {
+				metricsToTrack[metricName] = value
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrap(err, "scanning metrics")
+	}
+
+	// Construct vecbench metrics from the raw CRDB metrics.
+	var metrics []IndexMetric
+	if splits, ok := metricsToTrack["sql_vecindex_successful_splits"]; ok {
+		metrics = append(metrics, IndexMetric{Name: "successful splits", Value: splits})
+	}
+	if added, ok := metricsToTrack["sql_vecindex_fixups_added"]; ok {
+		if processed, ok := metricsToTrack["sql_vecindex_fixups_processed"]; ok {
+			fixupQueueSize := max(added-processed, 0)
+			metrics = append(metrics, IndexMetric{Name: "fixup queue size", Value: fixupQueueSize})
+		}
+	}
+
+	return metrics, nil
 }
