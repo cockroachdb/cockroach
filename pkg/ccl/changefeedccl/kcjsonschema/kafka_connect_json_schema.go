@@ -285,14 +285,20 @@ func TestingMatchesJSON(s Schema, data any) error {
 		}
 
 		schemaFields := make(map[string]struct{})
+		// Check that all fields in the schema are present in the object. This
+		// allows optional fields to be nil/missing.
 		for _, f := range s.Fields {
 			if err := TestingMatchesJSON(f, obj[f.Field]); err != nil {
 				return err
 			}
 			schemaFields[f.Field] = struct{}{}
 		}
-		if len(obj) != len(schemaFields) {
-			return fmt.Errorf("expected %d fields in %+#v, got %d (%+#v)", len(schemaFields), s, len(obj), obj)
+
+		// ensure there are no extra values in the object
+		for k := range obj {
+			if _, exists := schemaFields[k]; !exists {
+				return fmt.Errorf("unexpected field %q in object %#+v", k, obj)
+			}
 		}
 	case SchemaTypeOpaqueJSON:
 		if _, err := json.MakeJSON(data); err != nil {

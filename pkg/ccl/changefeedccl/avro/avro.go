@@ -166,17 +166,20 @@ type DataRecord struct {
 	native map[string]interface{}
 }
 
+type functionalNativeFromRowFn func(row cdcevent.Row, dest map[string]any)
+
 type FunctionalRecord struct {
-	// Use the Record just for schema info
+	// Use the Record just for schema info.
 	Record
 
-	nativeFromRowFn func(row cdcevent.Row) (map[string]any, error)
+	// nativeFromRowFn populates the native map from a row.
+	nativeFromRowFn functionalNativeFromRowFn
+	// Reuse this map to avoid repeated map allocation when encoding.
+	native map[string]any
 }
 
 func NewFunctionalRecord(
-	name, namespace string,
-	fields []*SchemaField,
-	nativeFromRowFn func(row cdcevent.Row) (map[string]any, error),
+	name, namespace string, fields []*SchemaField, nativeFromRowFn functionalNativeFromRowFn,
 ) (*FunctionalRecord, error) {
 	schema := &FunctionalRecord{
 		Record: Record{
@@ -186,6 +189,7 @@ func NewFunctionalRecord(
 			Fields:     fields,
 		},
 		nativeFromRowFn: nativeFromRowFn,
+		native:          make(map[string]any),
 	}
 
 	schemaJSON, err := json.Marshal(schema)
@@ -197,6 +201,16 @@ func NewFunctionalRecord(
 		return nil, err
 	}
 	return schema, nil
+}
+
+// nativeFromRow populates the native map from a row and returns it. The
+// returned map will be reused in subsequent calls.
+func (r *FunctionalRecord) nativeFromRow(row cdcevent.Row) map[string]any {
+	if r.native == nil {
+		r.native = make(map[string]any, len(r.Fields))
+	}
+	r.nativeFromRowFn(row, r.native)
+	return r.native
 }
 
 // Metadata is the `EnvelopeRecord` metadata.
@@ -1158,11 +1172,7 @@ func (r *EnvelopeRecord) BinaryFromRow(
 	}
 
 	if r.Opts.SourceField {
-		sourceNative, err := r.Source.nativeFromRowFn(recordRow)
-		if err != nil {
-			return nil, err
-		}
-		native[`source`] = goavro.Union(unionKey(&r.Source.Record), sourceNative)
+		native[`source`] = goavro.Union(unionKey(&r.Source.Record), r.Source.nativeFromRow(recordRow))
 	}
 	if r.Opts.TsField {
 		native[`ts_ns`] = nil
