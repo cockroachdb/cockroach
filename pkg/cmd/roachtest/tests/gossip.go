@@ -538,7 +538,9 @@ SELECT count(replicas)
 	// Stop our special snowflake process which won't be recognized by the test
 	// harness, and start it again on the regular.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+	// N.B. Since n1 was initially stripped of all the replicas, we must wait for full replication. Otherwise, the
+	// replica consistency checks may time out.
+	c.Start(ctx, t.L(), option.NewStartOpts(option.WaitForReplication()), install.MakeClusterSettings(), c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
