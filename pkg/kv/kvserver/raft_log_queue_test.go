@@ -687,7 +687,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 }
 
 // TestTruncateLog verifies that the TruncateLog command removes a
-// prefix of the raft logs (modifying FirstIndex() and making them
+// prefix of the raft logs (modifying Compacted() and making them
 // inaccessible via Entries()).
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -909,8 +909,7 @@ func waitForTruncationForTesting(
 			require.NoError(t, r.store.TODOEngine().Flush())
 		}
 		// FirstIndex should have changed.
-		firstIndex := r.GetFirstIndex()
-		if firstIndex != newFirstIndex {
+		if firstIndex := r.GetFirstIndex(); firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
 		// Some low-level tests also look at the raftEntryCache or sideloaded

@@ -125,15 +125,6 @@ func newUnstable(last entryID, logger raftlogger.Logger) unstable {
 	}
 }
 
-// maybeFirstIndex returns the index of the first possible entry in entries
-// if it has a snapshot.
-func (u *unstable) maybeFirstIndex() (uint64, bool) {
-	if u.snapshot != nil {
-		return u.snapshot.Metadata.Index + 1, true
-	}
-	return 0, false
-}
-
 // nextEntries returns the unstable entries that are not already in the process
 // of being written to storage.
 func (u *unstable) nextEntries() []pb.Entry {

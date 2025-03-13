@@ -1273,7 +1273,7 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		LocalReplicaID:     r.ReplicaID(),
 		Desc:               r.descRLocked(),
 		RaftStatus:         &raftStatus,
-		RaftFirstIndex:     r.raftFirstIndexRLocked(),
+		RaftFirstIndex:     r.raftCompactedIndexRLocked() + 1, // TODO(pav-kv): use "compacted" indexing
 		PrevLease:          prevLease,
 		PrevLeaseExpired:   !r.ownsValidLeaseRLocked(ctx, r.Clock().NowAsClockTimestamp()),
 		NextLeaseHolder:    nextLease.Replica,

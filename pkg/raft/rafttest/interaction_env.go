@@ -91,7 +91,7 @@ type Storage interface {
 	raft.Storage
 	SetHardState(state pb.HardState) error
 	ApplySnapshot(pb.Snapshot) error
-	Compact(newFirstIndex uint64) error
+	Compact(index uint64) error
 	Append([]pb.Entry) error
 }
 

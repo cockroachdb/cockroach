@@ -50,46 +50,6 @@ func (u *unstable) checkInvariants(t testing.TB) {
 	}
 }
 
-func TestUnstableMaybeFirstIndex(t *testing.T) {
-	prev4 := entryID{term: 1, index: 4}
-	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
-	for _, tt := range []struct {
-		ls   LeadSlice
-		snap *pb.Snapshot
-
-		wok    bool
-		windex uint64
-	}{
-		// no snapshot
-		{
-			prev4.append(1), nil,
-			false, 0,
-		},
-		{
-			LeadSlice{}, nil,
-			false, 0,
-		},
-		// has snapshot
-		{
-			prev4.append(1), snap4,
-			true, 5,
-		},
-		{
-			prev4.append(), snap4,
-			true, 5,
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			u := newUnstableForTesting(tt.ls, tt.snap)
-			u.checkInvariants(t)
-
-			index, ok := u.maybeFirstIndex()
-			require.Equal(t, tt.wok, ok)
-			require.Equal(t, tt.windex, index)
-		})
-	}
-}
-
 func TestLastIndex(t *testing.T) {
 	prev4 := entryID{term: 1, index: 4}
 	snap4 := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}

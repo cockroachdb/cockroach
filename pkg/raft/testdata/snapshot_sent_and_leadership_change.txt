@@ -152,7 +152,7 @@ stabilize 3
 # 3 has applied the snapshot
 raft-log 3
 ----
-log is empty: first index=16, last index=15
+log is empty: compacted index=15, last index=15
 
 # Do compaction on 2
 compact 2 15

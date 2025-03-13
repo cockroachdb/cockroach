@@ -127,12 +127,12 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}
-			fi := s.FirstIndex()
+			ci := s.Compacted()
 			// At the time of writing and for *MemoryStorage, applying a
 			// snapshot also truncates appropriately, but this would change with
 			// other storage engines potentially.
-			if exp := snap.Metadata.Index + 1; fi != exp {
-				return fmt.Errorf("failed to establish first index %d; got %d", exp, fi)
+			if exp := snap.Metadata.Index; ci != exp {
+				return fmt.Errorf("failed to establish compacted index %d; got %d", exp, ci)
 			}
 		}
 		cfg := cfg // fork the config stub
