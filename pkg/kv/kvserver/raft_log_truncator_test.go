@@ -146,9 +146,10 @@ func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, is
 }
 
 func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
-	_ context.Context, from, to kvpb.RaftIndex,
+	_ context.Context, span kvpb.RaftSpan,
 ) (freed int64, _ error) {
-	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n", r.rangeID, from, to)
+	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n",
+		r.rangeID, span.After, span.Last)
 	return r.sideloadedFreed, r.sideloadedErr
 }
 
