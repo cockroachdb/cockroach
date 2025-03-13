@@ -55,7 +55,7 @@ type VectorProvider interface {
 
 	// GetMetrics returns interesting metrics for the vector index. Each provider
 	// can have different metrics.
-	GetMetrics() []IndexMetric
+	GetMetrics() ([]IndexMetric, error)
 
 	// FormatStats gets formatted statistics for the C-SPANN index.
 	FormatStats() string

@@ -324,6 +324,11 @@ func (fw *fixupWorker) splitPartition(
 		}
 	}
 
+	if fw.fp.onSuccessfulSplit != nil {
+		// Notify listener that a partition has been successfully split.
+		fw.fp.onSuccessfulSplit()
+	}
+
 	return nil
 }
 

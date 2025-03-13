@@ -4,6 +4,7 @@ go_library(
     name = "vecindex",
     srcs = [
         "manager.go",
+        "metrics.go",
         "mutation_searcher.go",
         "searcher.go",
         "testing_knobs.go",
@@ -24,6 +25,7 @@ go_library(
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/vector",
