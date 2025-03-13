@@ -4090,6 +4090,13 @@ func TestVoterRemovalWithoutDemotion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test modifies the range descriptor in the proposal filter, which is
+	// technically not allowed; see the comment in ReplicaState.Desc which talks
+	// about the RangeDescriptor needing to be immutable. As such, we're
+	// susceptible to benign test-only races, as seen in
+	// https://github.com/cockroachdb/cockroach/issues/142809.
+	skip.UnderRace(t, "modifies the range descriptor")
+
 	// Inject a filter which skips the demotion of a voter replica when removing
 	// it from the range. This will trigger the raft-level check which ensures
 	// that a voter replica cannot be removed directly.
