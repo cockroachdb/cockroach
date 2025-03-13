@@ -451,7 +451,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			// coupled truncation mechanism in the other branch already ensures
 			// enacting truncations only after state machine synced.
 			if has, err := b.r.raftMu.sideloaded.HasAnyEntry(
-				ctx, b.truncState.Index, truncatedState.Index+1, // include end Index
+				ctx, b.truncState.Index, truncatedState.Index, // (begin, end]
 			); err != nil {
 				return errors.Wrap(err, "failed searching for sideloaded entries")
 			} else if has {
