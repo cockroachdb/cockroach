@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecstore
+package vecencoding_test
 
 import (
 	"fmt"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -70,7 +71,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					originalPartition := cspann.NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
 
 					// Encode the partition.
-					encMetadata, err := EncodePartitionMetadata(level, quantizedSet.GetCentroid())
+					encMetadata, err := vecencoding.EncodePartitionMetadata(level, quantizedSet.GetCentroid())
 					require.NoError(t, err)
 
 					// Create a single buffer containing all vectors.
@@ -78,12 +79,12 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					for i := range set.Count {
 						switch quantizedSet := quantizedSet.(type) {
 						case *quantize.UnQuantizedVectorSet:
-							buf, err = EncodeUnquantizedVector(buf,
+							buf, err = vecencoding.EncodeUnquantizedVector(buf,
 								quantizedSet.GetCentroidDistances()[i], set.At(i),
 							)
 							require.NoError(t, err)
 						case *quantize.RaBitQuantizedVectorSet:
-							buf = EncodeRaBitQVector(buf,
+							buf = vecencoding.EncodeRaBitQVector(buf,
 								quantizedSet.CodeCounts[i], quantizedSet.CentroidDistances[i],
 								quantizedSet.DotProducts[i], quantizedSet.Codes.At(i),
 							)
@@ -95,7 +96,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					buf = append(buf, trailingData...)
 
 					// Decode the encoded partition.
-					decodedLevel, decodedCentroid, err := DecodePartitionMetadata(encMetadata)
+					decodedLevel, decodedCentroid, err := vecencoding.DecodePartitionMetadata(encMetadata)
 					require.NoError(t, err)
 					var decodedSet quantize.QuantizedVectorSet
 					remainder := buf
@@ -104,7 +105,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					case *quantize.UnQuantizedVectorSet:
 						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedCentroid)
 						for range set.Count {
-							remainder, err = DecodeUnquantizedVectorToSet(
+							remainder, err = vecencoding.DecodeUnquantizedVectorToSet(
 								remainder, decodedSet.(*quantize.UnQuantizedVectorSet),
 							)
 							require.NoError(t, err)
@@ -114,7 +115,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 					case *quantize.RaBitQuantizedVectorSet:
 						decodedSet = quantizer.NewQuantizedVectorSet(set.Count, decodedCentroid)
 						for range set.Count {
-							remainder, err = DecodeRaBitQVectorToSet(
+							remainder, err = vecencoding.DecodeRaBitQVectorToSet(
 								remainder, decodedSet.(*quantize.RaBitQuantizedVectorSet),
 							)
 							require.NoError(t, err)

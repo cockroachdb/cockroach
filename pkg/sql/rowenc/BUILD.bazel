@@ -34,6 +34,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/vecencoding",
         "//pkg/util/buildutil",
         "//pkg/util/deduplicate",
         "//pkg/util/encoding",
