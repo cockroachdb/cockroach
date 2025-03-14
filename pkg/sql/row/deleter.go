@@ -133,6 +133,7 @@ func (rd *Deleter) DeleteRow(
 	batch *kv.Batch,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
@@ -154,7 +155,7 @@ func (rd *Deleter) DeleteRow(
 			index,
 			rd.FetchColIDtoRowIndex,
 			values,
-			rowenc.EmptyVectorIndexEncodingHelper,
+			vh.GetDel(),
 			true, /* includeEmpty */
 		)
 		if err != nil {
