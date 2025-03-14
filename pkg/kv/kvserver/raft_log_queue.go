@@ -372,14 +372,6 @@ type truncateDecisionInput struct {
 	PendingSnapshotIndex kvpb.RaftIndex
 }
 
-// FirstIndex returns the first index of the raft log. The entry at this index
-// does not necessarily exist.
-//
-// TODO(pav-kv): switch to using the CompIndex directly, this is temporary.
-func (input truncateDecisionInput) FirstIndex() kvpb.RaftIndex {
-	return input.CompIndex + 1
-}
-
 func (input truncateDecisionInput) LogTooLarge() bool {
 	return input.LogSize > input.MaxLogSize
 }
@@ -392,10 +384,6 @@ type truncateDecision struct {
 	Input        truncateDecisionInput
 	NewCompIndex kvpb.RaftIndex // compacted index after the log truncation
 	ChosenVia    string
-}
-
-func (td *truncateDecision) NewFirstIndex() kvpb.RaftIndex {
-	return td.NewCompIndex + 1
 }
 
 func (td *truncateDecision) raftSnapshotsForIndex(compact kvpb.RaftIndex) int {
@@ -441,8 +429,8 @@ func (td *truncateDecision) String() string {
 	_, _ = fmt.Fprintf(&buf, "should truncate: %t [", td.ShouldTruncate())
 	_, _ = fmt.Fprintf(
 		&buf,
-		"truncate %d entries to first index %d (chosen via: %s)",
-		td.NumTruncatableIndexes(), td.NewFirstIndex(), td.ChosenVia,
+		"truncate %d entries to compacted index %d (chosen via: %s)",
+		td.NumTruncatableIndexes(), td.NewCompIndex, td.ChosenVia,
 	)
 	if td.Input.LogTooLarge() {
 		_, _ = fmt.Fprintf(
@@ -464,10 +452,10 @@ func (td *truncateDecision) String() string {
 }
 
 func (td *truncateDecision) NumTruncatableIndexes() int {
-	if td.NewFirstIndex() < td.Input.FirstIndex() {
+	if td.NewCompIndex < td.Input.CompIndex {
 		return 0
 	}
-	return int(td.NewFirstIndex() - td.Input.FirstIndex())
+	return int(td.NewCompIndex - td.Input.CompIndex)
 }
 
 func (td *truncateDecision) ShouldTruncate() bool {
@@ -627,17 +615,17 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	// TODO(pav-kv): eliminate all the above complexity by using Compacted index
 	// instead of FirstIndex.
-	logEmpty := input.FirstIndex() > input.LastIndex
-	noCommittedEntries := input.FirstIndex() > kvpb.RaftIndex(input.RaftStatus.Commit)
+	logEmpty := input.CompIndex >= input.LastIndex
+	noCommittedEntries := input.CompIndex >= kvpb.RaftIndex(input.RaftStatus.Commit)
 
 	logIndexValid := logEmpty ||
-		(decision.NewFirstIndex() >= input.FirstIndex()) && (decision.NewFirstIndex() <= input.LastIndex+1)
+		(decision.NewCompIndex >= input.CompIndex) && (decision.NewCompIndex <= input.LastIndex)
 	commitIndexValid := noCommittedEntries ||
-		(decision.NewFirstIndex() <= commitIndex+1)
+		(decision.NewCompIndex <= commitIndex)
 	valid := logIndexValid && commitIndexValid
 	if !valid {
-		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
-			decision.NewFirstIndex(), input.FirstIndex(), input.LastIndex, commitIndex)
+		err := fmt.Sprintf("invalid truncation decision: output = %d, input: (%d, %d], commit idx = %d",
+			decision.NewCompIndex, input.CompIndex, input.LastIndex, commitIndex)
 		panic(err)
 	}
 
@@ -671,11 +659,11 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 		return true, !decision.Input.LogSizeTrusted, float64(decision.Input.LogSize)
 	}
 	if decision.Input.LogSizeTrusted ||
-		decision.Input.FirstIndex() > decision.Input.LastIndex {
+		decision.Input.CompIndex >= decision.Input.LastIndex {
 
 		return false, false, 0
 	}
-	// We have a nonempty log (first index <= last index) and can't vouch that
+	// We have a nonempty log (compacted index < last index) and can't vouch that
 	// the bytes in the log are known. Queue the replica; processing it will
 	// force a recomputation. For the priority, we have to pick one as we
 	// usually use the log size which is not available here. Going half-way
@@ -727,9 +715,9 @@ func (rlq *raftLogQueue) process(
 	b := &kv.Batch{}
 	truncRequest := &kvpb.TruncateLogRequest{
 		RequestHeader:      kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
-		Index:              decision.NewFirstIndex(),
+		Index:              decision.NewCompIndex + 1,
 		RangeID:            r.RangeID,
-		ExpectedFirstIndex: decision.Input.FirstIndex(),
+		ExpectedFirstIndex: decision.Input.CompIndex + 1,
 	}
 	b.AddRawRequest(truncRequest)
 	if err := rlq.db.Run(ctx, b); err != nil {
