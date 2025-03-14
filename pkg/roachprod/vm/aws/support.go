@@ -163,6 +163,7 @@ setup_disks
 {{ template "fips_utils" . }}
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
+{{ template "ebpf_exporter" . }}
 
 sudo touch {{ .OSInitializedFile }}
 `

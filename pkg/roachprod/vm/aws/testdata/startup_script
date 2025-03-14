@@ -282,14 +282,37 @@ mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
 
-sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,prometheus.testeng.crdb.io -p tcp --dport 9100 -j ACCEPT
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport 9100 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 9100 -j DROP
 (
-	chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter && \
 	cd ${DEFAULT_USER_HOME}/node_exporter && \
 	sudo systemd-run --unit node_exporter --same-dir \
 		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
 		--web.listen-address=":9100" \
+		--web.telemetry-path="/metrics"
+)
+
+
+
+# Add and start ebpf_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/ebpf_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/ebpf_exporter-2.4.2.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/ebpf_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/ebpf_exporter
+
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport 9435 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 9435 -j DROP
+(
+	cd ${DEFAULT_USER_HOME}/ebpf_exporter && \
+	sudo systemd-run --unit ebpf_exporter --same-dir \
+		./ebpf_exporter \
+		--config.dir=examples \
+		--config.names=biolatency,timers,sched-trace,syscalls,uprobe \
+		--web.listen-address=":9435" \
 		--web.telemetry-path="/metrics"
 )
 
