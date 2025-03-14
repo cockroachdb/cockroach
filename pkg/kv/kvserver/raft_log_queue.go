@@ -574,47 +574,27 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
 
-	// We've inherited the unfortunate semantics for {First,Last}Index from
-	// raft.Storage: both {First,Last}Index are inclusive. The way we've
-	// initialized repl.FirstIndex is to set it to the first index in the
-	// possibly-empty log (TruncatedState.Index + 1), and allowing LastIndex to
-	// fall behind it when the log is empty (TruncatedState.Index). The
-	// initialization is done when minting a new replica from either the
-	// truncated state of incoming snapshot, or using the default initial log
-	// index. This makes for the confusing situation where FirstIndex >
-	// LastIndex. We can detect this special empty log case by comparing
-	// checking if `FirstIndex == LastIndex + 1`. Similar to this, we can have
-	// the case that `FirstIndex = CommitIndex + 1` when there are no committed
-	// entries. Additionally, FirstIndex adjusts for the pending log
-	// truncations, which allows for FirstIndex to be greater than LastIndex and
-	// commited index by more than 1 (see the comment with
-	// truncateDecisionInput). So all invariant checking below is gated on first
-	// ensuring that the log is not empty, i.e., FirstIndex <= LastIndex.
+	// The existing log slice in raft.LogStorage is described by its Compacted()
+	// index and LastIndex(). The log is empty if Compacted == LastIndex.
+	//
+	// The input.CompIndex adjusts for the pending log truncations, which allows
+	// CompIndex to be greater than LastIndex and committed index (see the comment
+	// with truncateDecisionInput). So all invariant checking below is gated on
+	// first ensuring that the remaining log is not empty: CompIndex < LastIndex.
 	//
 	// If the raft log is not empty, and there are committed entries, we can
 	// assert on the following invariants:
 	//
-	//         FirstIndex    <= LastIndex                                    (0)
-	//         NewFirstIndex >= FirstIndex                                   (1)
-	//         NewFirstIndex <= LastIndex + 1                                (2)
-	//         NewFirstIndex <= CommitIndex + 1                              (3)
+	//	(0) CompIndex     <= LastIndex
+	//	(1) NewCompIndex  >= CompIndex
+	//	(2) NewCompIndex  <= LastIndex
+	//	(3) NewCompIndex  <= CommitIndex
 	//
-	// (1) asserts that we're not regressing our FirstIndex
-	// (2) asserts that our we don't truncate past the last index we can
-	//     truncate away, and
-	// (3) is similar to (2) in that we assert that we're not truncating past
-	//     the last known CommitIndex.
+	// The invariants assert that we are not regressing the compacted log index,
+	// and not compacting beyond what can be compacted.
 	//
-	// TODO(irfansharif): We should consider cleaning up this mess around
-	// {First,Last,Commit}Index by using a sentinel value to represent an empty
-	// log (like we do with `invalidLastTerm`). It'd be extra nice if we could
-	// safeguard access by relying on the type system to force callers to
-	// consider the empty case. Something like
-	// https://github.com/nvanbenschoten/optional could help us emulate an
-	// `option<uint64>` type if we care enough.
-	//
-	// TODO(pav-kv): eliminate all the above complexity by using Compacted index
-	// instead of FirstIndex.
+	// TODO(pav-kv): consider removing these checks and making them test-only. We
+	// just need 100% test coverage of this logic.
 	logEmpty := input.CompIndex >= input.LastIndex
 	noCommittedEntries := input.CompIndex >= kvpb.RaftIndex(input.RaftStatus.Commit)
 
