@@ -74,6 +74,22 @@ const (
 	// check plan uses locking. Typically this is set for plans with FK checks
 	// under read committed isolation.
 	PlanFlagCheckContainsLocking
+
+	// PlanFlagContainsDelete is set if at least one DELETE stmt is found in the
+	// whole plan.
+	PlanFlagContainsDelete
+
+	// PlanFlagContainsInsert is set if at least one INSERT stmt is found in the
+	// whole plan.
+	PlanFlagContainsInsert
+
+	// PlanFlagContainsUpdate is set if at least one UPDATE stmt is found in the
+	// whole plan.
+	PlanFlagContainsUpdate
+
+	// PlanFlagContainsUpsert is set if at least one UPSERT stmt is found in the
+	// whole plan.
+	PlanFlagContainsUpsert
 )
 
 func (pf PlanFlags) IsSet(flag PlanFlags) bool {
@@ -242,6 +258,7 @@ type ExplainEnvData struct {
 	Tables    []tree.TableName
 	Sequences []tree.TableName
 	Views     []tree.TableName
+	AddFKs    []*tree.AlterTable
 }
 
 // KVOption represents information about a statement option
