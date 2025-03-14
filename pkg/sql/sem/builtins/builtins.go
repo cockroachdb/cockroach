@@ -6956,7 +6956,7 @@ SELECT
 					// Unlocking a non-locked mutex will irrecoverably fatal the process.
 					// We do TryLock() as a best-effort guard against this, but it will be
 					// racey. The caller is expected to have locked the mutex first.
-					replicaMu.TryLock()
+					// replicaMu.TryLock()
 					replicaMu.Unlock()
 				}
 				return tree.DBoolTrue, nil
