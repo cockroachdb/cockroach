@@ -176,44 +176,40 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
 }
 
-// ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
+// ReplicaMutex is a DRWMutex. It has its own type to make it easier to look for
 // usages specific to the replica mutex.
-type ReplicaMutex syncutil.RWMutex
+type ReplicaMutex syncutil.DRWMutex
 
-func (mu *ReplicaMutex) Lock() {
-	(*syncutil.RWMutex)(mu).Lock()
+func NewReplicaMutex() ReplicaMutex {
+	return ReplicaMutex(syncutil.NewDRWMutex())
 }
 
-func (mu *ReplicaMutex) TracedLock(ctx context.Context) {
-	(*syncutil.RWMutex)(mu).TracedLock(ctx)
+func (mu *ReplicaMutex) Lock() {
+	(*syncutil.DRWMutex)(mu).Lock()
 }
 
 func (mu *ReplicaMutex) Unlock() {
-	(*syncutil.RWMutex)(mu).Unlock()
+	(*syncutil.DRWMutex)(mu).Unlock()
 }
 
 func (mu *ReplicaMutex) RLock() {
-	(*syncutil.RWMutex)(mu).RLock()
-}
-
-func (mu *ReplicaMutex) TracedRLock(ctx context.Context) {
-	(*syncutil.RWMutex)(mu).TracedRLock(ctx)
+	(*syncutil.DRWMutex)(mu).RLocker().Lock()
 }
 
 func (mu *ReplicaMutex) AssertHeld() {
-	(*syncutil.RWMutex)(mu).AssertHeld()
+	(*syncutil.DRWMutex)(mu).AssertHeld()
 }
 
 func (mu *ReplicaMutex) AssertRHeld() {
-	(*syncutil.RWMutex)(mu).AssertRHeld()
+	(*syncutil.DRWMutex)(mu).AssertRHeld()
 }
 
 func (mu *ReplicaMutex) RUnlock() {
-	(*syncutil.RWMutex)(mu).RUnlock()
+	(*syncutil.DRWMutex)(mu).RLocker().Unlock()
 }
 
 func (mu *ReplicaMutex) RLocker() sync.Locker {
-	return (*syncutil.RWMutex)(mu).RLocker()
+	return (*syncutil.DRWMutex)(mu).RLocker()
 }
 
 // A Replica is a contiguous keyspace with writes managed via an

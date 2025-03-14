@@ -537,11 +537,11 @@ type ProbeToCloseTimerScheduler interface {
 // production code.
 type ReplicaMutexAsserter struct {
 	RaftMu    *syncutil.Mutex
-	ReplicaMu *syncutil.RWMutex
+	ReplicaMu *syncutil.DRWMutex
 }
 
 func MakeReplicaMutexAsserter(
-	raftMu *syncutil.Mutex, replicaMu *syncutil.RWMutex,
+	raftMu *syncutil.Mutex, replicaMu *syncutil.DRWMutex,
 ) ReplicaMutexAsserter {
 	return ReplicaMutexAsserter{
 		RaftMu:    raftMu,

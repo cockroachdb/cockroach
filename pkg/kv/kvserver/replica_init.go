@@ -147,6 +147,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	}
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 
+	r.mu.ReplicaMutex = NewReplicaMutex()
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
@@ -266,7 +267,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		ReplicaID:         r.replicaID,
 		ReplicaForTesting: (*replicaForRACv2)(r),
 		ReplicaMutexAsserter: rac2.MakeReplicaMutexAsserter(
-			&r.raftMu.Mutex, (*syncutil.RWMutex)(&r.mu.ReplicaMutex)),
+			&r.raftMu.Mutex, (*syncutil.DRWMutex)(&r.mu.ReplicaMutex)),
 		RaftScheduler:          r.store.scheduler,
 		AdmittedPiggybacker:    r.store.cfg.KVFlowAdmittedPiggybacker,
 		ACWorkQueue:            r.store.cfg.KVAdmissionController,
