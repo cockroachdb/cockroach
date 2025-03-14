@@ -83,63 +83,68 @@ func TestComputeTruncateDecision(t *testing.T) {
 	}{
 		{
 			// Nothing to truncate.
+			1, []uint64{1, 1}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
+		},
+		{
+			// Truncate the latest entry.
 			1, []uint64{1, 2}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: last index)]",
 		},
 		{
 			// Nothing to truncate on this replica, though a quorum elsewhere has more progress.
 			// NB this couldn't happen if we're truly the Raft leader, unless we appended to our
 			// own log asynchronously.
-			1, []uint64{1, 5, 5}, 100, 1, 1, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: last index)]",
+			1, []uint64{1, 5, 5}, 100, 2, 1, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: last index)]",
 		},
 		{
 			// We're not truncating anything, but one follower is already cut off. There's no pending
 			// snapshot so we shouldn't be causing any additional snapshots.
 			2, []uint64{1, 5, 5}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers)]",
 		},
 		{
 			// The happy case.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 0,
-			"should truncate: false [truncate 3 entries to first index 5 (chosen via: last index)]",
+			"should truncate: false [truncate 4 entries to first index 6 (chosen via: last index)]",
 		},
 		{
 			// No truncation, but the outstanding snapshot is made obsolete by the truncation. However
 			// it was already obsolete before. (This example is also not one you could manufacture in
 			// a real system).
-			2, []uint64{5, 5, 5}, 100, 2, 2, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			3, []uint64{5, 5, 5}, 100, 3, 3, 1,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 		{
 			// Respecting the pending snapshot.
 			5, []uint64{5, 5, 5}, 100, 2, 5, 3,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: pending snapshot)]",
+			"should truncate: false [truncate 2 entries to first index 4 (chosen via: pending snapshot)]",
 		},
 		{
 			// Log is below target size, so respecting the slowest follower.
 			3, []uint64{1, 2, 3, 4}, 100, 1, 5, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: followers)]",
 		},
 		{
-			// Truncating since local log starts at 2. One follower is already cut off without a pending
-			// snapshot.
-			2, []uint64{1, 2, 3, 4}, 100, 2, 2, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			// Truncating since local log starts at 3. One follower is already cut off
+			// without a pending snapshot.
+			3, []uint64{1, 3, 3, 4}, 100, 3, 3, 0,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 		// Don't truncate off active followers, even if over targetSize.
 		{
-			3, []uint64{1, 3, 3, 4}, 2000, 1, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
+			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Don't truncate away pending snapshot, even when log too large.
 		{
 			100, []uint64{100, 100}, 2000, 1, 100, 50,
-			"should truncate: false [truncate 49 entries to first index 50 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 50 entries to first index 51 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 2, 3, 0,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 0 entries to first index 2 (chosen via: followers); log too large (2.0 KiB > 1000 B)]",
 		},
 		{
 			3, []uint64{1, 3, 3, 4}, 2000, 3, 3, 0,
@@ -148,22 +153,22 @@ func TestComputeTruncateDecision(t *testing.T) {
 		// Respecting the pending snapshot.
 		{
 			7, []uint64{4}, 2000, 1, 7, 1,
-			"should truncate: false [truncate 0 entries to first index 1 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
+			"should truncate: false [truncate 1 entries to first index 2 (chosen via: pending snapshot); log too large (2.0 KiB > 1000 B)]",
 		},
 		// Never truncate past the commit index.
 		{
-			3, []uint64{3, 3, 6}, 100, 2, 7, 0,
-			"should truncate: false [truncate 1 entries to first index 3 (chosen via: commit)]",
+			3, []uint64{4, 4, 6}, 100, 2, 7, 0,
+			"should truncate: false [truncate 2 entries to first index 4 (chosen via: commit)]",
 		},
 		// Never truncate past the last index.
 		{
 			3, []uint64{5}, 100, 1, 3, 0,
-			"should truncate: false [truncate 2 entries to first index 3 (chosen via: last index)]",
+			"should truncate: false [truncate 3 entries to first index 4 (chosen via: last index)]",
 		},
 		// Never truncate "before the first index".
 		{
-			3, []uint64{5}, 100, 2, 3, 1,
-			"should truncate: false [truncate 0 entries to first index 2 (chosen via: first index)]",
+			4, []uint64{5}, 100, 3, 4, 1,
+			"should truncate: false [truncate 0 entries to first index 3 (chosen via: first index)]",
 		},
 	}
 	for i, c := range testCases {
@@ -235,7 +240,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 		},
 		true: {
 			true:  "should truncate: false [truncate 0 entries to first index 10 (chosen via: probing follower); log too large (2.0 KiB > 1.0 KiB)]",
-			false: "should truncate: true [truncate 190 entries to first index 200 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
+			false: "should truncate: true [truncate 191 entries to first index 201 (chosen via: followers); log too large (2.0 KiB > 1.0 KiB)]",
 		},
 	}
 
@@ -320,8 +325,8 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 
 	decision := truncateDecision{Input: truncateDecisionInput{RaftStatus: status}}
 	assert.Equal(t, 0, decision.raftSnapshotsForIndex(10))
-	assert.Equal(t, 1, decision.raftSnapshotsForIndex(11))
-	assert.Equal(t, 3, decision.raftSnapshotsForIndex(12))
+	assert.Equal(t, 0, decision.raftSnapshotsForIndex(11))
+	assert.Equal(t, 1, decision.raftSnapshotsForIndex(12))
 	assert.Equal(t, 3, decision.raftSnapshotsForIndex(13))
 }
 
@@ -801,12 +806,12 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	_ = rlq
 
 	// NB: Cases for which decision.ShouldTruncate() is true are tested in
-	// TestComputeTruncateDecision, so here the decision itself is never
-	// positive.
+	// TestComputeTruncateDecision, so here the decision itself is never positive.
 	var decision truncateDecision
 	decision.Input.LogSizeTrusted = true
 	decision.Input.LogSize = 12
 	decision.Input.MaxLogSize = 1000
+	decision.Input.FirstIndex = 1 // LastIndex == 0, so it's an empty log
 
 	verify := func(shouldQ bool, recompute bool, prio float64) {
 		t.Helper()
@@ -830,7 +835,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	// Check all boxes except that log is empty.
 	decision = golden
-	decision.Input.LastIndex = decision.Input.FirstIndex
+	decision.Input.LastIndex = decision.Input.FirstIndex - 1
 	verify(false, false, 0)
 }
 
