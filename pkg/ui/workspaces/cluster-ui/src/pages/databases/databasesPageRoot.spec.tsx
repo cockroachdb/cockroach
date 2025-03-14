@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Switch } from "react-router-dom";
 import * as dbApi from "src/api/databases/getDatabaseMetadataApi";
 import { CockroachCloudContext } from "src/contexts";
 
-import { DatabasesPageV2 } from "./";
+import { DatabasesPageV2 } from "./databasesPageRoot";
 
 jest.mock("src/api/fetchData", () => ({
   fetchDataJSON: jest.fn().mockResolvedValue(null),
