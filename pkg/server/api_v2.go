@@ -33,6 +33,11 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -55,6 +60,7 @@ const (
 
 type ApiV2System interface {
 	health(w http.ResponseWriter, r *http.Request)
+	restartSafetyCheck(w http.ResponseWriter, r *http.Request)
 	listNodes(w http.ResponseWriter, r *http.Request)
 	listNodeRanges(w http.ResponseWriter, r *http.Request)
 }
@@ -95,7 +101,7 @@ type apiV2SystemServer struct {
 }
 
 var _ ApiV2System = &apiV2SystemServer{}
-var _ http.Handler = &apiV2Server{}
+var _ http.Handler = &apiV2SystemServer{}
 
 // newAPIV2Server returns a new apiV2Server.
 func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
@@ -180,6 +186,7 @@ func registerRoutes(
 		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
+		{"health/restart_safety/", systemRoutes.restartSafetyCheck, false, authserver.RegularRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
 		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
@@ -392,6 +399,118 @@ func healthInternal(
 
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
+}
+
+func (a *apiV2Server) restartSafetyCheck(w http.ResponseWriter, r *http.Request) {
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+}
+
+// # Restart Safety
+//
+// Endpoint to expose restart safety status. A 200 response indicates that
+// terminating the node in question won't cause any ranges to become
+// unavailable, at the time the response was prepared. Users may use this check
+// as a precondition for advancing a rolling restart process. Checks fail with
+// a 503, or a 500 in the case of an error evaluating safety.
+func (a *apiV2SystemServer) restartSafetyCheck(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodGet {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	nodeID := a.systemStatus.node.Descriptor.NodeID
+
+	res, err := checkRestartSafe(
+		ctx,
+		nodeID,
+		a.systemStatus.nodeLiveness,
+		a.systemStatus.stores,
+		a.systemStatus.storePool.ClusterNodeCount(),
+	)
+	if err != nil {
+		http.Error(w, "Error checking store status", http.StatusInternalServerError)
+		return
+	}
+
+	if res.IsCritical {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusServiceUnavailable, res)
+		return
+	}
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, res)
+}
+
+type storeVisitor interface {
+	VisitStores(visitor func(s *kvserver.Store) error) error
+}
+
+func checkRestartSafe(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	nodeLiveness livenesspb.NodeVitalityInterface,
+	stores storeVisitor,
+	nodeCount int,
+) (*serverpb.RestartSafetyResponse, error) {
+	res := &serverpb.RestartSafetyResponse{
+		IsCritical: false,
+		NodeID:     int32(nodeID),
+	}
+
+	// For each of the node's stores, check each replica's status.
+	err := stores.VisitStores(func(store *kvserver.Store) error {
+		if int32(store.NodeID()) != res.NodeID {
+			return nil
+		}
+
+		vitality := nodeLiveness.ScanNodeVitalityFromCache()
+		store.VisitReplicas(func(replica *kvserver.Replica) bool {
+			id := replica.ID()
+
+			desc, spanCfg := replica.DescAndSpanConfig()
+
+			neededVoters := allocatorimpl.GetNeededVoters(spanCfg.GetNumVoters(), nodeCount)
+			rangeStatus := desc.Replicas().ReplicationStatus(func(rd roachpb.ReplicaDescriptor) bool {
+				return vitality[rd.NodeID].IsLive(livenesspb.Metrics)
+			}, neededVoters, -1)
+
+			isLeader := replica.RaftBasicStatus().RaftState == raftpb.StateLeader
+
+			// Reject Unavailable, Underreplicated, and Leader replicas as unsafe
+			// to terminate. Additionally, reject when the store (really the node,
+			// but the status is reported at the store level) is not draining.
+			statusString := ""
+			switch {
+			case !rangeStatus.Available:
+				statusString = "Unavailable"
+			case rangeStatus.UnderReplicated:
+				statusString = "Underreplicated"
+			case isLeader:
+				statusString = "IsRaftLeader"
+			case !store.IsDraining():
+				statusString = "StoreNotDraining"
+			default:
+				return true
+			}
+			status := serverpb.ReplicaStatus{
+				StoreID:   int32(store.StoreID()),
+				RangeID:   int32(id.RangeID),
+				ReplicaID: int32(id.ReplicaID),
+				Status:    statusString,
+			}
+
+			res.Replicas = append(res.Replicas, &status)
+			res.IsCritical = true
+
+			return ctx.Err() == nil
+		})
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return nil
+	})
+	return res, err
 }
 
 // # Get metric recording and alerting rule templates
