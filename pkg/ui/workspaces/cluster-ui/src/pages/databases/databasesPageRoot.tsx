@@ -15,11 +15,7 @@ import {
   DatabaseSortOptions,
   useDatabaseMetadata,
 } from "src/api/databases/getDatabaseMetadataApi";
-import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
-import { RegionNodesLabel } from "src/components/regionNodesLabel";
-import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
-import { AUTO_STATS_COLLECTION_HELP } from "src/components/tooltipMessages";
 import { ClusterDetailsContext, CockroachCloudContext } from "src/contexts";
 import { PageLayout, PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -37,6 +33,12 @@ import useTable, { TableParams } from "src/sharedFromCloud/useTable";
 import { StoreID } from "src/types/clusterTypes";
 import { Bytes } from "src/util";
 
+import {
+  AUTO_STATS_COLLECTION_HELP,
+  NodeRegionsSelector,
+  RegionNodesLabel,
+  TableMetadataJobControl,
+} from "./components";
 import { DatabaseColName } from "./constants";
 import { DatabaseRow } from "./databaseTypes";
 import { rawDatabaseMetadataToDatabaseRows } from "./utils";
