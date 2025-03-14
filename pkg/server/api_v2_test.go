@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -153,6 +154,56 @@ func TestHealthV2(t *testing.T) {
 	// Check if an unmarshal into the (empty) HealthResponse struct works.
 	var hr serverpb.HealthResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestRestartSafetyV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	urlStr := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "health/restart_safety/").String()
+	req, err := http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(
+		t,
+		http.StatusServiceUnavailable,
+		resp.StatusCode,
+		"expected service unavailable when node is not draining",
+	)
+
+	// Check if an unmarshal into the RestartSafetyResponse struct works.
+	var response serverpb.RestartSafetyResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+
+	stores, ok := ts1.GetStores().(*kvserver.Stores)
+	require.True(t, ok)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		s.SetDraining(true, nil, false)
+		return nil
+	})
+
+	req, err = http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(t, 200, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
 	require.NoError(t, resp.Body.Close())
 }
 
