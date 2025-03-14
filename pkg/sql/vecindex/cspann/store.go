@@ -46,6 +46,22 @@ type PartitionMetadata struct {
 	Centroid vector.T
 }
 
+// PartitionToSearch contains information about a partition to be searched by
+// the SearchPartitions method.
+type PartitionToSearch struct {
+	// Key is the key of the partition to search.
+	Key PartitionKey
+	// ExcludeLeafVectors indicates that the search should not return vectors if
+	// this turns out to be a leaf partition. When inserting a new vector into
+	// the index, it is never necessary to scan leaf vectors. However, until the
+	// partition metadata is scanned, it is not known whether a root partition is
+	// a leaf partition.
+	ExcludeLeafVectors bool
+	// Count is set to the number of vectors in the searched partition. This is
+	// an output value (i.e. it's set by SearchPartitions).
+	Count int
+}
+
 // Store encapsulates the component that’s actually storing the vectors, whether
 // that’s in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
@@ -130,6 +146,7 @@ type Txn interface {
 		ctx context.Context,
 		treeKey TreeKey,
 		partitionKey PartitionKey,
+		level Level,
 		vec vector.T,
 		childKey ChildKey,
 		valueBytes ValueBytes,
@@ -141,19 +158,16 @@ type Txn interface {
 	// if the partition cannot be found, or ErrRestartOperation if the caller
 	// should retry the delete operation that triggered this call.
 	RemoveFromPartition(
-		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, level Level, childKey ChildKey,
 	) error
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
-	// Only partitions with the given keys are searched, and all of them must be
-	// at the same level of the tree. SearchPartitions returns found vectors in
-	// the search set, along with the level of the K-means tree that was searched.
-	//
-	// The caller is responsible for allocating the "partitionCounts" slice with
-	// length equal to the number of partitions to search. SearchPartitions will
-	// update the slice with the number of quantized vectors in the searched
-	// partitions. This is used to determine if a partition needs to be split
-	// or merged.
+	// Only partitions referenced by the "toSearch" list will be returned, and all
+	// of them must be at the same level of the tree. SearchPartitions returns
+	// found vectors in the search set, along with the level of the K-means tree
+	// that was searched. It will also update the "Count" field of each "toSearch"
+	// partition with the number of quantized vectors in that searched partition.
+	// This is used to determine if a partition needs to be split or merged.
 	//
 	// If one or more partitions cannot be found, SearchPartitions returns
 	// ErrPartitionNotFound, or ErrRestartOperation if the caller should retry
@@ -161,10 +175,9 @@ type Txn interface {
 	SearchPartitions(
 		ctx context.Context,
 		treeKey TreeKey,
-		partitionKey []PartitionKey,
+		toSearch []PartitionToSearch,
 		queryVector vector.T,
 		searchSet *SearchSet,
-		partitionCounts []int,
 	) (level Level, err error)
 
 	// GetFullVectors fetches the original full-size vectors that are referenced
