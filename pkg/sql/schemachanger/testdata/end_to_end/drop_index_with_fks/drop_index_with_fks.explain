@@ -2,7 +2,7 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
 CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
 CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
-CREATE UNIQUE INDEX idx2 ON k(j, i) USING HASH;
+CREATE UNIQUE INDEX idx2 ON k(j, i);
 INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
 INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
 CREATE TABLE t_ref(i INT PRIMARY KEY,
@@ -19,77 +19,69 @@ EXPLAIN (DDL) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 8 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "crdb_internal_i_j_shard_16", ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → VALIDATED  ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedDescID: 104 (t)}
- │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
- │         └── 8 Mutation operations
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-), ReferencedColumnIDs: [4]}
+ │         │    ├── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
+ │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedColumnIDs: [2 1], ReferencedDescID: 104 (t)}
+ │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
+ │         └── 6 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":4,"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":106}
- │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
- │              └── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
+ │              └── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":106}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 8 elements transitioning toward ABSENT
- │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_i_j_shard_16", ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
- │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
- │    │    │    ├── VALIDATED  → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │    │    │    ├── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │    │    │    ├── VALIDATED  → PUBLIC ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedDescID: 104 (t)}
- │    │    │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
+ │    │    ├── 6 elements transitioning toward ABSENT
+ │    │    │    ├── VALIDATED → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
+ │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
+ │    │    │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-), ReferencedColumnIDs: [4]}
+ │    │    │    ├── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
+ │    │    │    ├── VALIDATED → PUBLIC ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedColumnIDs: [2 1], ReferencedDescID: 104 (t)}
+ │    │    │    └── ABSENT    → PUBLIC ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 8 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "crdb_internal_i_j_shard_16", ColumnID: 4 (crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → VALIDATED  CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
- │         │    ├── PUBLIC → VALIDATED  ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedDescID: 104 (t)}
- │         │    └── PUBLIC → ABSENT     ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
- │         └── 11 Mutation operations
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-), ReferencedColumnIDs: [4]}
+ │         │    ├── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_i_j_shard_16", ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
+ │         │    ├── PUBLIC → VALIDATED ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedColumnIDs: [2 1], ReferencedDescID: 104 (t)}
+ │         │    └── PUBLIC → ABSENT    ConstraintWithoutIndexName:{DescID: 106 (t_ref), Name: "j_t_fk", ConstraintID: 2 (j_t_fk-)}
+ │         └── 9 Mutation operations
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":4,"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicForeignKeyConstraintValidated {"ConstraintID":2,"TableID":106}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
- │              ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 9 elements transitioning toward ABSENT
-      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
-      │    │    ├── VALIDATED  → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 2 (idx-)}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
-      │    │    ├── PUBLIC     → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED  → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-)}
-      │    │    └── VALIDATED  → ABSENT      ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedDescID: 104 (t)}
-      │    └── 13 Mutation operations
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 10 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC    → WRITE_ONLY  Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
+      │    │    ├── PUBLIC    → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_i_j_shard_16", ColumnID: 4 (crdb_internal_i_j_shard_16-)}
+      │    │    ├── VALIDATED → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
+      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
+      │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
+      │    │    ├── VALIDATED → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-), ReferencedColumnIDs: [4]}
+      │    │    └── VALIDATED → ABSENT      ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedColumnIDs: [2 1], ReferencedDescID: 104 (t)}
+      │    └── 14 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":4,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
       │         ├── RemoveForeignKeyBackReference {"OriginConstraintID":2,"OriginTableID":106,"ReferencedTableID":104}
       │         ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":106}
-      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
+      │         ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":104}
@@ -98,15 +90,25 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward ABSENT
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
+      │    │    └── PUBLIC      → ABSENT      IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
+      │    └── 6 Mutation operations
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 3 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 3, RecreateSourceIndexID: 0}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
-           └── 6 Mutation operations
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+           │    ├── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), Usage: REGULAR}
+           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (crdb_internal_i_j_shard_16-), TypeName: "INT8"}
+           └── 5 Mutation operations
+                ├── RemoveColumnComputeExpression {"ColumnID":4,"TableID":104}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
