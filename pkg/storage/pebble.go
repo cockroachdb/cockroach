@@ -640,11 +640,11 @@ type Pebble struct {
 	sharedBytesRead                  int64
 	sharedBytesWritten               int64
 	iterStats                        struct {
-		syncutil.Mutex
+		syncutil.RBMutex
 		AggregatedIteratorStats
 	}
 	batchCommitStats struct {
-		syncutil.Mutex
+		syncutil.RBMutex
 		AggregatedBatchCommitStats
 	}
 	diskWriteStatsCollector *vfs.DiskWriteStatsCollector
@@ -654,7 +654,7 @@ type Pebble struct {
 	eventListener *pebble.EventListener
 	mu            struct {
 		// This mutex is the lowest in any lock ordering.
-		syncutil.Mutex
+		syncutil.RBMutex
 		flushCompletedCallback func()
 	}
 	asyncDone sync.WaitGroup
@@ -1231,9 +1231,9 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			if info.Err != nil {
 				return
 			}
-			p.mu.Lock()
+			token := p.mu.RLock()
 			cb := p.mu.flushCompletedCallback
-			p.mu.Unlock()
+			p.mu.RUnlock(token)
 			if cb != nil {
 				cb()
 			}
@@ -1830,12 +1830,12 @@ func (p *Pebble) GetMetrics() Metrics {
 		m.BlockLoadsInProgress = semaStats.Outstanding
 		m.BlockLoadsQueued = semaStats.NumHadToWait
 	}
-	p.iterStats.Lock()
+	token := p.iterStats.RLock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
-	p.iterStats.Unlock()
-	p.batchCommitStats.Lock()
+	p.iterStats.RUnlock(token)
+	token = p.batchCommitStats.RLock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
-	p.batchCommitStats.Unlock()
+	p.batchCommitStats.RUnlock(token)
 	if p.diskWriteStatsCollector != nil {
 		m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
 	}
