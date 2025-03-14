@@ -477,15 +477,12 @@ func (td *truncateDecision) ShouldTruncate() bool {
 		(n > 0 && td.Input.LogSize >= RaftLogQueueStaleSize)
 }
 
-// ProtectIndex attempts to "protect" a position in the log by making sure it's
-// not truncated away. Specifically it lowers the proposed truncation point
-// (which will be the new first index after the truncation) to the given index
-// if it would be truncating at a point past it. If a change is made, the
-// ChosenVia is updated with the one given. This protection is not guaranteed if
-// the protected index is outside of the existing [FirstIndex,LastIndex] bounds.
-func (td *truncateDecision) ProtectIndex(index kvpb.RaftIndex, chosenVia string) {
-	if td.NewFirstIndex > index {
-		td.NewFirstIndex = index
+// ProtectAfter attempts to prevent truncation of log indices > compacted. It
+// lowers the proposed compacted index to the given one if the latter is lower.
+// If this change is made, the ChosenVia annotation is updated too.
+func (td *truncateDecision) ProtectAfter(compacted kvpb.RaftIndex, chosenVia string) {
+	if firstIndex := compacted + 1; firstIndex < td.NewFirstIndex {
+		td.NewFirstIndex = firstIndex
 		td.ChosenVia = chosenVia
 	}
 }
@@ -532,7 +529,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	// TODO(pav-kv): source everything from raft.LogSnapshot, and there will be no
 	// discrepancy between commit index and last index.
-	decision.ProtectIndex(commitIndex+1, truncatableIndexChosenViaCommitIndex)
+	decision.ProtectAfter(commitIndex, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
 		// Snapshots are expensive, so we try our best to avoid truncating past
@@ -563,13 +560,9 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// NB: RecentActive is populated by updateRaftProgressFromActivity().
 		if progress.RecentActive {
 			if progress.State == tracker.StateProbe {
-				decision.ProtectIndex(input.FirstIndex(), truncatableIndexChosenViaProbingFollower)
+				decision.ProtectAfter(input.CompIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
-				// NB: since the Match index is already replicated, we don't need to
-				// "protect" it. Only the next entry needs to be replicated. For the
-				// entry before it, the log storage remembers the term, which suffices
-				// for constructing a MsgApp.
-				decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
+				decision.ProtectAfter(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
 			}
 			continue
 		}
@@ -577,7 +570,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// Second, if the follower has not been recently active, we don't truncate
 		// it off as long as the raft log is not too large.
 		if !input.LogTooLarge() {
-			decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
+			decision.ProtectAfter(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
 		}
 
 		// Otherwise, we let it truncate to the committed index.
@@ -588,9 +581,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
 	if snap := input.PendingSnapshotIndex; snap > 0 {
-		// NB: the last index of the snapshot does not need to be "protected"
-		// because it is already incorporated into the snapshot.
-		decision.ProtectIndex(snap+1, truncatableIndexChosenViaPendingSnap)
+		decision.ProtectAfter(snap, truncatableIndexChosenViaPendingSnap)
 	}
 
 	// If new first index dropped below first index, make them equal (resulting
