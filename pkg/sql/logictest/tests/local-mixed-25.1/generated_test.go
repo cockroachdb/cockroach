@@ -1403,6 +1403,13 @@ func TestLogic_postgresjoin(
 	runLogicTest(t, "postgresjoin")
 }
 
+func TestLogic_power(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "power")
+}
+
 func TestLogic_privilege_builtins(
 	t *testing.T,
 ) {

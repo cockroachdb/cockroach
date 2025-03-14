@@ -1441,6 +1441,13 @@ func TestReadCommittedLogic_postgresjoin(
 	runLogicTest(t, "postgresjoin")
 }
 
+func TestReadCommittedLogic_power(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "power")
+}
+
 func TestReadCommittedLogic_privilege_builtins(
 	t *testing.T,
 ) {
