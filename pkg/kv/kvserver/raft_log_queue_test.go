@@ -324,10 +324,10 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 	}
 
 	decision := truncateDecision{Input: truncateDecisionInput{RaftStatus: status}}
+	assert.Equal(t, 0, decision.raftSnapshotsForIndex(9))
 	assert.Equal(t, 0, decision.raftSnapshotsForIndex(10))
-	assert.Equal(t, 0, decision.raftSnapshotsForIndex(11))
-	assert.Equal(t, 1, decision.raftSnapshotsForIndex(12))
-	assert.Equal(t, 3, decision.raftSnapshotsForIndex(13))
+	assert.Equal(t, 1, decision.raftSnapshotsForIndex(11))
+	assert.Equal(t, 3, decision.raftSnapshotsForIndex(12))
 }
 
 func verifyLogSizeInSync(t *testing.T, r *Replica) {
