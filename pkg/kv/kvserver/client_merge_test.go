@@ -4142,7 +4142,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		index := repl.GetLastIndex()
 		truncArgs := &kvpb.TruncateLogRequest{
 			RequestHeader: kvpb.RequestHeader{Key: keyA},
-			Index:         index,
+			Index:         index + 1,
 			RangeID:       repl.RangeID,
 		}
 		if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
