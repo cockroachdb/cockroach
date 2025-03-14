@@ -369,3 +369,51 @@ DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';
           table: writer@writer_pkey
           spans: 1+ spans
           policies: p_delete
+
+# Show that policies are exempt when the table owner queries the table, unless
+# the FORCE option is used.
+# ----------------------------------------------------------------------
+
+exec-ddl
+ALTER TABLE t1 OWNER TO rls_accessor
+----
+
+plan
+select count(*) from t1,t2 where t1.c1 = t2.c1;
+----
+• group (scalar)
+│
+└── • hash join
+    │ equality: (c1) = (c1)
+    │
+    ├── • scan
+    │     table: t1@t1_pkey
+    │     spans: FULL SCAN
+    │     policies: exempt for role
+    │
+    └── • scan
+          table: t2@t2_pkey
+          spans: FULL SCAN
+          policies: t2_pol_1
+
+exec-ddl
+ALTER TABLE t1 FORCE ROW LEVEL SECURITY
+----
+
+plan
+select count(*) from t1,t2 where t1.c1 = t2.c1;
+----
+• group (scalar)
+│
+└── • hash join
+    │ equality: (c1) = (c1)
+    │
+    ├── • scan
+    │     table: t1@t1_pkey
+    │     spans: FULL SCAN
+    │     policies: policy 1, p2, p3, r1, r2
+    │
+    └── • scan
+          table: t2@t2_pkey
+          spans: FULL SCAN
+          policies: t2_pol_1

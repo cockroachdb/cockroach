@@ -1236,6 +1236,227 @@ DROP FUNCTION my_non_sec_definer_reader_function;
 statement ok
 DROP TABLE sensitive_data_table CASCADE;
 
+subtest force
+
+statement ok
+CREATE USER forcer;
+
+statement ok
+CREATE USER funuser;
+
+statement ok
+GRANT CREATE ON DATABASE db1 TO forcer;
+
+statement ok
+set role forcer;
+
+statement ok
+CREATE TABLE force_check (c1 INT NOT NULL PRIMARY KEY, c2 TEXT);
+
+statement ok
+INSERT INTO force_check VALUES (10, 'ten'), (20, 'twenty'), (50, 'fifty')
+
+statement ok
+CREATE FUNCTION access_large_c2_as_session_user() RETURNS TABLE(ID INT)
+LANGUAGE SQL AS
+$$
+ SELECT c1 FROM force_check WHERE length(c2) > 3
+$$;
+
+statement ok
+CREATE FUNCTION access_large_c2_as_forcer() RETURNS TABLE(ID INT)
+LANGUAGE SQL AS
+$$
+ SELECT c1 FROM force_check WHERE length(c2) > 3
+$$ SECURITY DEFINER;
+
+statement ok
+CREATE FUNCTION insert_policy_violation_as_session_user(c1 INT) RETURNS TABLE(id INT, description TEXT)
+LANGUAGE SQL AS
+$$
+ INSERT INTO force_check VALUES (c1, 't - violated col value') RETURNING c1, c2
+$$;
+
+statement ok
+CREATE FUNCTION insert_policy_violation_as_forcer(c1 INT) RETURNS TABLE(id INT, description TEXT)
+LANGUAGE SQL AS
+$$
+ INSERT INTO force_check VALUES (c1, 't - violated col value') RETURNING c1, c2
+$$ SECURITY DEFINER;
+
+statement ok
+ALTER TABLE force_check ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_sel ON force_check TO forcer, funuser USING (c2 not like 't%');
+
+# Should see only part of the rows because we are the table owner with FORCE on.
+# We use different queries, all showing the same results, so that the query cache
+# has multiple statements. We will retry the exact same SQL later once RLS
+# settings have changed. I label each query (e.g. q1) so it can be easily
+# found when its reused in this subtest.
+#
+# q1
+query IT
+SELECT c1, c2 FROM force_check ORDER BY c1;
+----
+50 fifty
+
+# q2
+query IT
+SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
+----
+50 fifty
+
+statement error pq: new row violates row-level security policy for table "force_check"
+INSERT INTO force_check VALUES (30, 'thirty')
+
+# Verify the admin can still see everything
+statement ok
+SET ROLE root
+
+# q1 - show that query reuse doesn't occur for different user
+query IT
+SELECT c1, c2 FROM force_check ORDER BY c1;
+----
+10 ten
+20 twenty
+50 fifty
+
+statement ok
+INSERT INTO force_check VALUES (33, 'thirty-three')
+
+statement ok
+SET ROLE forcer;
+
+# Turn off force to ensure we can see everything again.
+statement ok
+ALTER TABLE force_check NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+INSERT INTO force_check VALUES (30, 'thirty')
+
+# q2 - should not reuse because table version since last use
+query IT
+SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
+----
+10 ten
+20 twenty
+30 thirty
+33 thirty-three
+50 fifty
+
+# Transfer ownership of force_check back to the root and attempt query from cache.
+statement ok
+SET ROLE root
+
+statement ok
+ALTER TABLE force_check OWNER TO root;
+
+statement ok
+GRANT ALL ON force_check TO forcer;
+
+statement ok
+SET ROLE forcer;
+
+# q2 - should not be reused due to an ownership change, which has resulted in a
+# new table version since its last use
+query IT
+SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
+----
+50 fifty
+
+# Turn on force again, but it shouldn't matter because we aren't the owner anymore
+statement ok
+ALTER TABLE force_check FORCE ROW LEVEL SECURITY;
+
+# q2 - should not reuse because table version change
+query IT
+SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
+----
+50 fifty
+
+statement error pq: new row violates row-level security policy for table "force_check"
+INSERT INTO force_check VALUES (34, 'thirty-four')
+
+# Transfer back to forcer and access table via functions as 'funuser'
+statement ok
+SET ROLE root
+
+statement ok
+ALTER TABLE force_check OWNER TO forcer;
+
+statement ok
+GRANT ALL ON force_check TO funuser;
+
+statement ok
+SET ROLE funuser;
+
+# Since FORCE is enabled, the policies will apply both to the session user and
+# when running the function as the security definer (forcer). Therefore, we
+# expect the same filtered result in both cases.
+
+query I
+select * from access_large_c2_as_session_user();
+----
+50
+
+query I
+select * from access_large_c2_as_forcer();
+----
+50
+
+# Similar for functions that add new rows
+
+statement error pq: new row violates row-level security policy for table "force_check"
+SELECT insert_policy_violation_as_session_user(110);
+
+statement error pq: new row violates row-level security policy for table "force_check"
+SELECT insert_policy_violation_as_forcer(111);
+
+# Turn off FORCE and retry function access as funuser
+statement ok
+SET ROLE forcer;
+
+statement ok
+ALTER TABLE force_check NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE funuser;
+
+# FORCE is now off. When run as funuser, the result should remain the same as
+# before. However, when running the function as forcer, policies will not be
+# applied since forcer is the table owner and is exempt from policy enforcement.
+
+query I
+select * from access_large_c2_as_session_user();
+----
+50
+
+query I rowsort
+select * from access_large_c2_as_forcer();
+----
+20
+30
+33
+50
+
+# Similar for functions that add new rows
+
+statement error pq: new row violates row-level security policy for table "force_check"
+SELECT insert_policy_violation_as_session_user(111);
+
+query IT
+SELECT * FROM insert_policy_violation_as_forcer(112);
+----
+112  t - violated col value
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE force_check CASCADE;
+
 subtest truncate
 
 statement ok
