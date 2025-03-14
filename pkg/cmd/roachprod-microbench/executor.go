@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -254,6 +255,71 @@ func (e *executor) listRemotePackages(log *logger.Logger, dir string) ([]string,
 	return packages, nil
 }
 
+func (e *executor) generateBenchmarkCommands(
+	benchmarks []benchmark,
+) ([][]cluster.RemoteCommand, error) {
+	// Generate commands for running benchmarks.
+	commands := make([][]cluster.RemoteCommand, 0)
+
+	// Prepare all benchmark commands first
+	benchmarkCommands := make([][]*cluster.RemoteCommand, e.iterations)
+	for i := range benchmarkCommands {
+		benchmarkCommands[i] = make([]*cluster.RemoteCommand, 0, len(benchmarks)*len(e.binaries))
+	}
+
+	// Sort the binary keys to ensure a deterministic order
+	binaryKeys := maps.Keys(e.binaries)
+	sort.Strings(binaryKeys)
+
+	// Generate all commands for all benchmarks and iterations
+	for _, bench := range benchmarks {
+		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
+			strings.Join(e.testArgs, " "), bench.name)
+		if e.timeout != "" {
+			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
+		}
+		if e.shellCommand != "" {
+			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
+		}
+
+		// For each iteration, add this benchmark to that iteration's command list
+		for i := 0; i < e.iterations; i++ {
+			for _, key := range binaryKeys {
+				bin := e.binaries[key]
+				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
+				command := cluster.RemoteCommand{
+					Args:     []string{"sh", "-c", shellCommand},
+					Metadata: benchmarkKey{bench, key},
+				}
+				benchmarkCommands[i] = append(benchmarkCommands[i], &command)
+			}
+		}
+	}
+
+	// Now add the commands to the final commands list in the desired order
+	// (one iteration of all benchmarks, then the next iteration, etc.)
+	for i := range e.iterations {
+		if e.affinity {
+			// When affinity is enabled, group all binaries for a benchmark together
+			// but keep different benchmarks separate
+			for j := 0; j < len(benchmarkCommands[i]); j += len(e.binaries) {
+				iterationGroup := make([]cluster.RemoteCommand, 0, len(e.binaries))
+				for k := 0; k < len(e.binaries) && j+k < len(benchmarkCommands[i]); k++ {
+					iterationGroup = append(iterationGroup, *benchmarkCommands[i][j+k])
+				}
+				commands = append(commands, iterationGroup)
+			}
+		} else {
+			// When affinity is disabled, each command runs individually
+			for _, cmdPtr := range benchmarkCommands[i] {
+				commands = append(commands, []cluster.RemoteCommand{*cmdPtr})
+			}
+		}
+	}
+
+	return commands, nil
+}
+
 // executeBenchmarks executes the microbenchmarks on the remote cluster. Reports
 // containing the microbenchmark results for each package are stored in the log
 // output directory. Microbenchmark failures are recorded in separate log files,
@@ -305,6 +371,12 @@ func (e *executor) executeBenchmarks() error {
 		return errors.New("no packages containing benchmarks found")
 	}
 
+	// Generate commands for running benchmarks.
+	commands, err := e.generateBenchmarkCommands(benchmarks)
+	if err != nil {
+		return err
+	}
+
 	// Create reports for each key, binary combination.
 	reporters := make(map[string]*report)
 	defer func() {
@@ -324,45 +396,6 @@ func (e *executor) executeBenchmarks() error {
 		reporters[key] = report
 		if err != nil {
 			return err
-		}
-	}
-
-	// Generate commands for running benchmarks.
-	commands := make([][]cluster.RemoteCommand, 0)
-	for _, bench := range benchmarks {
-		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
-			strings.Join(e.testArgs, " "), bench.name)
-		if e.timeout != "" {
-			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
-		}
-		if e.shellCommand != "" {
-			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
-		}
-		// Weave the commands between binaries and iterations.
-		for range e.iterations {
-			iterationGroup := make([]cluster.RemoteCommand, 0)
-			for key, bin := range e.binaries {
-				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
-				command := cluster.RemoteCommand{
-					Args:     []string{"sh", "-c", shellCommand},
-					Metadata: benchmarkKey{bench, key},
-				}
-				iterationGroup = append(iterationGroup, command)
-			}
-
-			if e.affinity {
-				// When affinity is enabled, each iteration runs as a group with binaries interleaved.
-				// This means all binaries for a single iteration will run together on the same node,
-				// but different iterations can run on different nodes.
-				commands = append(commands, iterationGroup)
-			} else {
-				// When affinity is disabled, each command runs individually on any available node.
-				// This has the benefit of not having stragglers, but the downside of possibly
-				// introducing noise due to different node characteristics.
-				for _, command := range iterationGroup {
-					commands = append(commands, []cluster.RemoteCommand{command})
-				}
-			}
 		}
 	}
 
