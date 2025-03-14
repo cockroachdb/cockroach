@@ -181,6 +181,7 @@ require (
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jaegertracing/jaeger v1.18.1
+	github.com/jonhoo/drwmutex v0.0.0-20190519183033-0cffe0733098
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
 	github.com/kevinburke/go-bindata v3.13.0+incompatible

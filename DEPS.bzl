@@ -5492,6 +5492,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_jonhoo_drwmutex",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jonhoo/drwmutex",
+        sha256 = "6a6756724b175d2774cce3dd283c8dadd72249809da428c4bf850fb7ab8fcc31",
+        strip_prefix = "github.com/jonhoo/drwmutex@v0.0.0-20190519183033-0cffe0733098",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jonhoo/drwmutex/com_github_jonhoo_drwmutex-v0.0.0-20190519183033-0cffe0733098.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_jordan_wright_email",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jordan-wright/email",
