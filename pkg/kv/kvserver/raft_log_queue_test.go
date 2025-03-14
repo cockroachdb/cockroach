@@ -460,26 +460,18 @@ func TestNewTruncateDecision(t *testing.T) {
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	getIndexes := func() (kvpb.RaftIndex, int, kvpb.RaftIndex, error) {
 		d, err := newTruncateDecision(ctx, r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		// TODO(pav-kv): clean up the caller to use compacted indices.
-		return d.Input.CompIndex + 1, d.NumTruncatableIndexes(), d.NewCompIndex + 1, nil
+		return d.Input.CompIndex, d.NumTruncatableIndexes(), d.NewCompIndex, nil
 	}
 
-	aFirst, aTruncatable, aOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if aFirst == 0 {
-		t.Errorf("expected first index to be greater than 0, got %d", aFirst)
-	}
+	aComp, aTruncatable, aOldest, err := getIndexes()
+	require.NoError(t, err)
 
 	// Write a few keys to the range.
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
@@ -490,46 +482,32 @@ func TestNewTruncateDecision(t *testing.T) {
 		}
 	}
 
-	bFirst, bTruncatable, bOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if aFirst != bFirst {
-		t.Fatalf("expected firstIndex to not change, instead it changed from %d -> %d", aFirst, bFirst)
-	}
-	if aTruncatable >= bTruncatable {
-		t.Fatalf("expected truncatableIndexes to increase, instead it changed from %d -> %d", aTruncatable, bTruncatable)
-	}
-	if aOldest >= bOldest {
-		t.Fatalf("expected oldestIndex to increase, instead it changed from %d -> %d", aOldest, bOldest)
-	}
+	bComp, bTruncatable, bOldest, err := getIndexes()
+	require.NoError(t, err)
+	require.Equal(t, aComp, bComp, "expected compacted index to not change")
+	require.Greater(t, bTruncatable, aTruncatable, "expected truncatable indices to increase")
+	require.Greater(t, bOldest, aOldest, "expected oldest index to increase")
 
-	// Enable the raft log scanner and and force a truncation.
+	// Enable the raft log scanner and force a truncation.
 	store.SetRaftLogQueueActive(true)
 	store.MustForceRaftLogScanAndProcess()
 	store.SetRaftLogQueueActive(false)
 
 	// There can be a delay from when the truncation command is issued and the
 	// indexes updating.
-	var cFirst, cOldest kvpb.RaftIndex
-	var numTruncatable int
+	var cComp, cOldest kvpb.RaftIndex
+	var cTruncatable int
 	testutils.SucceedsSoon(t, func() error {
 		var err error
-		cFirst, numTruncatable, cOldest, err = getIndexes()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if bFirst == cFirst {
-			return errors.Errorf("truncation did not occur, expected firstIndex to change, instead it remained at %d", cFirst)
+		cComp, cTruncatable, cOldest, err = getIndexes()
+		require.NoError(t, err)
+		if cComp == bComp {
+			return errors.Errorf("expected compacted index to change, it remained at %d", bComp)
 		}
 		return nil
 	})
-	if bTruncatable < numTruncatable {
-		t.Errorf("expected numTruncatable to decrease, instead it changed from %d -> %d", bTruncatable, numTruncatable)
-	}
-	if bOldest >= cOldest {
-		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
-	}
+	require.LessOrEqual(t, cTruncatable, bTruncatable, "did not expect truncatable indices to increase")
+	require.Greater(t, cOldest, bOldest, "expected oldest index to increase")
 
 	verifyLogSizeInSync(t, r)
 
@@ -545,19 +523,11 @@ func TestNewTruncateDecision(t *testing.T) {
 	// GetCompactedIndex or newTruncateDecision, giving a false negative. Fixing
 	// this requires additional instrumentation of the queues, which was deemed to
 	// require too much work at the time of this writing.
-	dFirst, dTruncatable, dOldest, err := getIndexes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cFirst != dFirst {
-		t.Errorf("truncation should not have occurred, but firstIndex changed from %d -> %d", cFirst, dFirst)
-	}
-	if numTruncatable != dTruncatable {
-		t.Errorf("truncation should not have occurred, but truncatableIndexes changed from %d -> %d", numTruncatable, dTruncatable)
-	}
-	if cOldest != dOldest {
-		t.Errorf("truncation should not have occurred, but oldestIndex changed from %d -> %d", cOldest, dOldest)
-	}
+	dComp, dTruncatable, dOldest, err := getIndexes()
+	require.NoError(t, err)
+	require.Equal(t, cComp, dComp, "truncation should have not occurred")
+	require.Equal(t, dTruncatable, cTruncatable, "truncation should have not occurred")
+	require.Equal(t, dOldest, cOldest, "truncation should have not occurred")
 }
 
 // TestProactiveRaftLogTruncate verifies that we proactively truncate the raft
