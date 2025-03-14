@@ -313,6 +313,7 @@ var validationMap = []struct {
 			"MinStaleRows":             {status: iSolemnlySwearThisFieldIsValidated},
 			"FractionStaleRows":        {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialEnabled":           {status: iSolemnlySwearThisFieldIsValidated},
+			"FullEnabled":              {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialMinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialFractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
 		},
@@ -2565,6 +2566,18 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{PartialEnabled: &boolTrue},
+			}},
+		{err: `Setting sql_stats_automatic_full_collection_enabled may not be set on virtual table`,
+			desc: descpb.TableDescriptor{
+				ID:            catconstants.MinVirtualID,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				NextColumnID:      2,
+				AutoStatsSettings: &catpb.AutoStatsSettings{FullEnabled: &boolTrue},
 			}},
 		{err: `Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
 			desc: descpb.TableDescriptor{
