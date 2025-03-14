@@ -156,6 +156,33 @@ func TestHealthV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 }
 
+func TestQuorumGuardrailV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiconstants.APIV2Path+"drain/check/").String(), nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Check if the response was a 200.
+	require.Equal(t, 200, resp.StatusCode)
+	// Check if an unmarshal into the DrainCheckResponse struct works.
+	var response serverpb.DrainCheckResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+}
+
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it
 // returns valid YAML.
 func TestRulesV2(t *testing.T) {

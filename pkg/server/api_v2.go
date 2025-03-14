@@ -33,6 +33,8 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -55,6 +57,7 @@ const (
 
 type ApiV2System interface {
 	health(w http.ResponseWriter, r *http.Request)
+	drainCheck(w http.ResponseWriter, r *http.Request)
 	listNodes(w http.ResponseWriter, r *http.Request)
 	listNodeRanges(w http.ResponseWriter, r *http.Request)
 }
@@ -95,7 +98,7 @@ type apiV2SystemServer struct {
 }
 
 var _ ApiV2System = &apiV2SystemServer{}
-var _ http.Handler = &apiV2Server{}
+var _ http.Handler = &apiV2SystemServer{}
 
 // newAPIV2Server returns a new apiV2Server.
 func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
@@ -181,6 +184,7 @@ func registerRoutes(
 		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
+		{"drain/check/", systemRoutes.drainCheck, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
 		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
 		{"databases/", a.listDatabases, true, authserver.RegularRole, false},
@@ -392,6 +396,85 @@ func healthInternal(
 
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
+}
+
+func (a *apiV2Server) drainCheck(w http.ResponseWriter, r *http.Request) {
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+}
+
+// # Quorum Guardrails
+//
+// Endpoint to expose node criticality information. A 200 response indicates that terminating the node in
+// question won't cause any ranges to become unavailable, at the time the response was prepared. Users may
+// use this check as a precondition for advancing a rolling restart process.
+func (a *apiV2SystemServer) drainCheck(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	nodeInQuestion := a.systemStatus.node.Descriptor.NodeID
+
+	res, err := checkDrainSafe(ctx, nodeInQuestion, a.systemStatus)
+	if err != nil {
+		http.Error(w, "Error checking store status", http.StatusInternalServerError)
+		return
+	}
+
+	if res.IsCritical {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusServiceUnavailable, res)
+		return
+	}
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, res)
+}
+
+func checkDrainSafe(
+	ctx context.Context, nodeInQuestion roachpb.NodeID, systemStatus *systemStatusServer,
+) (*serverpb.DrainCheckResponse, error) {
+	res := &serverpb.DrainCheckResponse{
+		IsCritical: false,
+		NodeID:     int32(nodeInQuestion),
+	}
+
+	isLiveMap := systemStatus.nodeLiveness.ScanNodeVitalityFromCache()
+	err := systemStatus.stores.VisitStores(func(store *kvserver.Store) error {
+		if int32(store.NodeID()) != res.NodeID {
+			return nil
+		}
+
+		// for each store on the nodeInQuestion
+		now := store.Clock().NowAsClockTimestamp()
+		nodeCount := systemStatus.storePool.ClusterNodeCount()
+		store.VisitReplicas(func(replica *kvserver.Replica) bool {
+			// check that its replicas are non-critical
+			metrics := replica.Metrics(ctx, now, isLiveMap, nodeCount)
+			id := replica.ID()
+
+			raftStatus := replica.RaftStatus()
+			noRaftLeader := !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent
+
+			statusString := ""
+			switch {
+			case metrics.Unavailable:
+				statusString = "Unavailable"
+			case metrics.Underreplicated:
+				statusString = "Underreplicated"
+			case noRaftLeader:
+				statusString = "NoRaftLeader"
+			default:
+				return true
+			}
+			status := serverpb.ReplicaStatus{
+				StoreID:   int32(store.StoreID()),
+				RangeID:   int32(id.RangeID),
+				ReplicaID: int32(id.ReplicaID),
+				Status:    statusString,
+			}
+
+			res.Replicas = append(res.Replicas, &status)
+			res.IsCritical = true
+
+			return true
+		})
+		return nil
+	})
+	return res, err
 }
 
 // # Get metric recording and alerting rule templates
