@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -44,6 +46,9 @@ func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	if !goschedstats.Supported {
+		skip.IgnoreLint(t, "goschedstats not supported")
+	}
 	var ambientCtx log.AmbientContext
 	// requesters[numWorkKinds] is used for kv elastic work, when working with a
 	// store grant coordinator.
@@ -395,16 +400,14 @@ func TestStoreCoordinators(t *testing.T) {
 	})
 	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
 	require.Equal(t, []roachpb.StoreID{10, 20}, actualStores)
-	// Do tryGet on all requesters. The requester for the Regular
-	// GrantCoordinator will return false since it has 0 CPU slots. We are
-	// interested in the other ones, which have unlimited slots at this point in
-	// time, so will return true.
+	// Do tryGet on all store requesters, which have unlimited tokens at this
+	// point in time, so will return true.
+	requesters = requesters[1:]
 	for i := range requesters {
 		requesters[i].tryGet(1)
 	}
 	require.Equal(t,
-		"kv: tryGet(1) returned false\n"+
-			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
+		"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n"+
 			"kv-regular: tryGet(1) returned true\nkv-elastic: tryGet(1) returned true\n",
 		buf.String())
 	coords.Close()
