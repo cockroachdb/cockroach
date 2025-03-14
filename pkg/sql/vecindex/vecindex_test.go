@@ -8,6 +8,7 @@ package vecindex_test
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,19 +36,26 @@ func TestVecindexConcurrency(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
+	mgr := srv.ExecutorConfig().(sql.ExecutorConfig).VecIndexManager
 
 	// Construct the table.
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")
 
 	// Load features.
-	vectors := testutils.LoadFeatures(t, 100)
+	vectors := testutils.LoadFeatures(t, 1000)
 
 	for i := 0; i < 1; i++ {
-		buildIndex(ctx, t, runner, vectors)
+		buildIndex(ctx, t, runner, mgr, vectors)
 	}
 }
 
-func buildIndex(ctx context.Context, t *testing.T, runner *sqlutils.SQLRunner, vectors vector.Set) {
+func buildIndex(
+	ctx context.Context,
+	t *testing.T,
+	runner *sqlutils.SQLRunner,
+	mgr *vecindex.Manager,
+	vectors vector.Set,
+) {
 	var insertCount atomic.Uint64
 
 	// Insert block of vectors within the scope of a transaction.
@@ -72,7 +82,7 @@ func buildIndex(ctx context.Context, t *testing.T, runner *sqlutils.SQLRunner, v
 	// Insert vectors into the store on multiple goroutines.
 	var wait sync.WaitGroup
 	// TODO(andyk): replace with runtime.GOMAXPROCS(-1) once contention is solved.
-	procs := 1
+	procs := runtime.GOMAXPROCS(-1)
 	countPerProc := (vectors.Count + procs) / procs
 	const blockSize = 1
 	for i := 0; i < vectors.Count; i += countPerProc {
@@ -89,15 +99,19 @@ func buildIndex(ctx context.Context, t *testing.T, runner *sqlutils.SQLRunner, v
 		}(i, end)
 	}
 
+	metrics := mgr.Metrics().(*vecindex.Metrics)
 	for int(insertCount.Load()) < vectors.Count {
 		time.Sleep(time.Second)
-		log.Infof(ctx, "inserted %d vectors", insertCount.Load())
+		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
+		log.Infof(ctx, "%d successful splits", metrics.SuccessSplits.Count())
+		queued := max(metrics.FixupsAdded.Count()-metrics.FixupsProcessed.Count(), 0)
+		log.Infof(ctx, "%d fixups in queue", queued)
+
+		// Fail on foreground goroutine if any background goroutines failed.
+		if t.Failed() {
+			t.FailNow()
+		}
 	}
 
 	wait.Wait()
-
-	// Fail on foreground goroutine if any background goroutines failed.
-	if t.Failed() {
-		t.FailNow()
-	}
 }
