@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -146,6 +148,19 @@ func TestVectorManager(t *testing.T) {
 	require.NoError(t, err)
 
 	vectorMgr := vecindex.NewManager(ctx, stopper, codec, internalDB)
+
+	t.Run("test metrics", func(t *testing.T) {
+		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
+		require.NoError(t, err)
+		idx.ForceSplit(ctx, nil, 0, cspann.RootKey)
+
+		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
+		require.Equal(t, int64(1), metrics.FixupsAdded.Count())
+		require.Eventually(t, func() bool {
+			return metrics.FixupsProcessed.Count() == 1
+		}, 10*time.Second, 10*time.Millisecond)
+		require.Equal(t, int64(0), metrics.SuccessSplits.Count())
+	})
 
 	t.Run("test single threaded functionality", func(t *testing.T) {
 		// Pull all the indexes.

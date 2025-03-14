@@ -100,7 +100,7 @@ func makeFixupKey(f fixup) fixupKey {
 // All entry methods (i.e. capitalized methods) in fixupProcess are thread-safe.
 type FixupProcessor struct {
 	// --------------------------------------------------
-	// These read-only fields can be read on any goroutine.
+	// These read-only fields can be read on any goroutine after initialization.
 	// --------------------------------------------------
 
 	// initCtx is the context provided to the Init method. It is passed to fixup
@@ -116,6 +116,14 @@ type FixupProcessor struct {
 	// minDelay specifies the minimum delay for insert and delete operations.
 	// This is used for testing.
 	minDelay time.Duration
+
+	// onSuccessfulSplit is called when a partition is split without error.
+	onSuccessfulSplit func()
+	// onFixupAdded is called when a fixup is added to the queue.
+	onFixupAdded func()
+	// onFixupProcessed is called when a fixup is processed and removed from the
+	// queue.
+	onFixupProcessed func()
 
 	// --------------------------------------------------
 	// These fields can be accessed on any goroutine.
@@ -182,6 +190,30 @@ func (fp *FixupProcessor) Init(
 
 	fp.mu.pendingFixups = make(map[fixupKey]bool, maxFixups)
 	fp.mu.waitForFixups.L = &fp.mu
+}
+
+// OnSuccessfulSplit sets a callback function that's invoked when a partition is
+// split without error.
+// NOTE: Callers can only set this immediately after Init is called, before any
+// background operations are possible.
+func (fp *FixupProcessor) OnSuccessfulSplit(fn func()) {
+	fp.onSuccessfulSplit = fn
+}
+
+// OnFixupAdded sets a callback function that's invoked when a fixup is added to
+// the queue.
+// NOTE: Callers can only set this immediately after Init is called, before any
+// background operations are possible.
+func (fp *FixupProcessor) OnFixupAdded(fn func()) {
+	fp.onFixupAdded = fn
+}
+
+// OnFixupProcessed sets a callback function that's invoked when a fixup is
+// processed and removed from the queue.
+// NOTE: Callers can only set this immediately after Init is called, before any
+// background operations are possible.
+func (fp *FixupProcessor) OnFixupProcessed(fn func()) {
+	fp.onFixupProcessed = fn
 }
 
 // QueueSize returns the current size of the fixup queue.
@@ -335,6 +367,11 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	// maxFixups capacity.
 	fp.fixups <- fixup
 
+	if fp.onFixupAdded != nil {
+		// Notify listener that a fixup has been added.
+		fp.onFixupAdded()
+	}
+
 	// Notify the pacer that a fixup was just added.
 	fp.mu.pacer.OnFixup(fp.countFixupsLocked())
 
@@ -403,6 +440,11 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 	delete(fp.mu.pendingFixups, toRemove.CachedKey)
 
 	fp.mu.runningWorkers--
+
+	if fp.onFixupProcessed != nil {
+		// Notify listener that a fixup has been processed.
+		fp.onFixupProcessed()
+	}
 
 	// Notify the pacer that a fixup was just removed.
 	fp.mu.pacer.OnFixup(fp.countFixupsLocked())

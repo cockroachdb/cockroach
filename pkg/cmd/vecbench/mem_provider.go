@@ -203,7 +203,7 @@ func (m *MemProvider) Save(ctx context.Context) error {
 }
 
 // GetMetrics implements the VectorProvider interface.
-func (m *MemProvider) GetMetrics() []IndexMetric {
+func (m *MemProvider) GetMetrics() ([]IndexMetric, error) {
 	// queueSize is the size of the background fixup queue for processing splits
 	// and merges.
 	queueSize := IndexMetric{Name: "fixup queue size"}
@@ -216,7 +216,7 @@ func (m *MemProvider) GetMetrics() []IndexMetric {
 		pacerOpsPerSec.Value = m.index.Fixups().AllowedOpsPerSec()
 	}
 
-	return []IndexMetric{queueSize, pacerOpsPerSec}
+	return []IndexMetric{queueSize, pacerOpsPerSec}, nil
 }
 
 // FormatStats implements the VectorProvider interface.

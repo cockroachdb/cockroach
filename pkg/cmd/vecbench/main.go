@@ -335,7 +335,10 @@ func (vb *vectorBench) BuildIndex() {
 	p99 := cp.AddChart("p99 ms latency")
 
 	// Add additional provider-specific metrics.
-	metrics := vb.provider.GetMetrics()
+	metrics, err := vb.provider.GetMetrics()
+	if err != nil {
+		panic(err)
+	}
 	metricIds := make([]int, len(metrics))
 	for i, metric := range metrics {
 		metricIds[i] = cp.AddChart(metric.Name)
@@ -390,7 +393,11 @@ func (vb *vectorBench) BuildIndex() {
 		cp.AddSample(p99, estimator.Estimate(0.99)*1000)
 
 		// Add provider-specific metric samples.
-		for i, metric := range vb.provider.GetMetrics() {
+		metrics, err := vb.provider.GetMetrics()
+		if err != nil {
+			panic(err)
+		}
+		for i, metric := range metrics {
 			cp.AddSample(metricIds[i], metric.Value)
 		}
 		cp.Plot()
