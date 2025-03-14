@@ -984,24 +984,53 @@ func (f doneFn) Stop(b testing.TB) {
 }
 
 func startAllocsProfile(b testing.TB) doneFn {
-	out := benchmemFile(b)
-	if out == "" {
-		return func(tb testing.TB) {}
-	}
+	outAllocs := testProfileFile(b, "memprofile")
+	diffAllocs := diffProfile(b, func() []byte {
+		if outAllocs == "" {
+			return nil
+		}
+		p := runtimepprof.Lookup("allocs")
+		var buf bytes.Buffer
 
-	// The below is essentially cribbed from pprof.go in net/http/pprof.
-	p := runtimepprof.Lookup("allocs")
-	var buf bytes.Buffer
-	runtime.GC()
-	require.NoError(b, p.WriteTo(&buf, 0))
-	pBase, err := profile.ParseData(buf.Bytes())
-	require.NoError(b, err)
-
-	return func(b testing.TB) {
 		runtime.GC()
+		require.NoError(b, p.WriteTo(&buf, 0))
+
+		return buf.Bytes()
+	})
+
+	outMutex := testProfileFile(b, "mutexprofile")
+	diffMutex := diffProfile(b, func() []byte {
+		if outMutex == "" {
+			return nil
+		}
+		p := runtimepprof.Lookup("mutex")
 		var buf bytes.Buffer
 		require.NoError(b, p.WriteTo(&buf, 0))
-		pNew, err := profile.ParseData(buf.Bytes())
+		return buf.Bytes()
+	})
+
+	return func(b testing.TB) {
+		if sl := diffAllocs(b); len(sl) > 0 {
+			require.NoError(b, os.WriteFile(outAllocs, sl, 0644))
+		}
+		if sl := diffMutex(b); len(sl) > 0 {
+			require.NoError(b, os.WriteFile(outMutex, sl, 0644))
+		}
+	}
+}
+
+func diffProfile(b testing.TB, take func() []byte) func(testing.TB) []byte {
+	// The below is essentially cribbed from pprof.go in net/http/pprof.
+
+	baseBytes := take()
+	if baseBytes == nil {
+		return func(tb testing.TB) []byte { return nil }
+	}
+	pBase, err := profile.ParseData(baseBytes)
+	require.NoError(b, err)
+
+	return func(b testing.TB) []byte {
+		pNew, err := profile.ParseData(take())
 		require.NoError(b, err)
 		pBase.Scale(-1)
 		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
@@ -1009,32 +1038,33 @@ func startAllocsProfile(b testing.TB) doneFn {
 		pMerged.TimeNanos = pNew.TimeNanos
 		pMerged.DurationNanos = pNew.TimeNanos - pBase.TimeNanos
 
-		buf = bytes.Buffer{}
+		buf := bytes.Buffer{}
 		require.NoError(b, pMerged.Write(&buf))
-		require.NoError(b, os.WriteFile(out, buf.Bytes(), 0644))
+		return buf.Bytes()
 	}
 }
 
-// If -test.benchmem is passed, also write a base alloc profile when the
-// setup is done. This can be used via `pprof -base` to show only the
-// allocs during run (excluding the setup).
+// If -test.<something> is passed for the flag corresponding to the given
+// profile, also write a base profile when the setup is done. This can be used
+// via `pprof -base` to show only the samples from during run (excluding the
+// setup).
 //
-// The file name for the base profile will be derived from -test.memprofile, and
+// The file name for the base profile will be derived from -test.<flag>, and
 // will contain it as a prefix (mod the file extension).
-func benchmemFile(b testing.TB) string {
+func testProfileFile(b testing.TB, flagWithoutTestPrefix string) string {
 	b.Helper()
-	var benchMemFile string
+	var flagFile string
 	var outputDir string
-	require.NoError(b, sniffarg.DoEnv("test.memprofile", &benchMemFile))
+	require.NoError(b, sniffarg.DoEnv("test."+flagWithoutTestPrefix, &flagFile))
 	require.NoError(b, sniffarg.DoEnv("test.outputdir", &outputDir))
 
-	if benchMemFile == "" {
+	if flagFile == "" {
 		return ""
 	}
 
 	saniRE := regexp.MustCompile(`\W+`)
 	saniName := saniRE.ReplaceAllString(strings.TrimPrefix(b.Name(), "Benchmark"), "_")
-	dest := strings.Replace(benchMemFile, ".", "_"+saniName+".", 1)
+	dest := strings.Replace(flagFile, ".", "_"+saniName+".", 1)
 	if outputDir != "" {
 		dest = filepath.Join(outputDir, dest)
 	}
