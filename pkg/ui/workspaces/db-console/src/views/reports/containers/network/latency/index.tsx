@@ -48,6 +48,38 @@ type DetailedIdentity = Identity & {
   title?: string;
 };
 
+// SimpleTooltip is a specialized fast-rendering
+// component for the network latency table.
+const SimpleTooltip: React.FC<{
+  content: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ content, children }) => {
+  const [isVisible, setIsVisible] = React.useState(false);
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLDivElement>(null);
+
+  // Handle mouse events
+  const handleMouseEnter = () => setIsVisible(true);
+  const handleMouseLeave = () => setIsVisible(false);
+
+  return (
+    <div
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      style={{ position: "relative", display: "inline-block" }}
+    >
+      {children}
+      {isVisible && (
+        <div ref={tooltipRef} className={"Chip--tooltip"}>
+          {content}
+          <div className={"Chip--tooltip-arrow"} />
+        </div>
+      )}
+    </div>
+  );
+};
+
 // createHeaderCell creates and decorates a header cell.
 function createHeaderCell(
   identity: DetailedIdentity,
@@ -360,10 +392,8 @@ const getLatencyCell = (
       {collapsed ? (
         <Chip title={`${latency.toFixed(2)}ms`} type={type} />
       ) : (
-        <Tooltip
-          overlayClassName="Chip--tooltip"
-          placement="bottom"
-          title={
+        <SimpleTooltip
+          content={
             <div>
               <div className="Chip--tooltip__nodes">
                 <div className="Chip--tooltip__nodes--item">
@@ -429,7 +459,7 @@ const getLatencyCell = (
               type={type}
             />
           </div>
-        </Tooltip>
+        </SimpleTooltip>
       )}
     </td>
   );
@@ -474,7 +504,7 @@ export const Latency: React.SFC<ILatencyProps> = ({
               <th
                 className="region-name"
                 colSpan={data[index].length}
-                key={index}
+                key={`region-${index}`}
               >
                 {value[0].title}
               </th>
@@ -514,15 +544,17 @@ export const Latency: React.SFC<ILatencyProps> = ({
                     </th>
                   )}
                   {createHeaderCell(identityA, false, collapsed)}
-                  {map(identityA.row, (identity: any, indexB: number) =>
-                    getLatencyCell(
-                      { ...identity, identityA },
-                      getVerticalLines(data, indexB),
-                      false,
-                      std,
-                      collapsed,
-                    ),
-                  )}
+                  {map(identityA.row, (identity: any, indexB: number) => (
+                    <React.Fragment key={`cell-${indexB}`}>
+                      {getLatencyCell(
+                        { ...identity, identityA },
+                        getVerticalLines(data, indexB),
+                        false,
+                        std,
+                        collapsed,
+                      )}
+                    </React.Fragment>
+                  ))}
                 </tr>
               );
             }),
