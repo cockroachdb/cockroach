@@ -67,6 +67,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/storage/mvccencoding",
+        "//pkg/storage/mvcceval",
         "//pkg/storage/pebbleiter",
         "//pkg/storage/storagepb",
         "//pkg/util",

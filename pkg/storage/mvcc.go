@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -2981,20 +2982,7 @@ func MVCCBlindConditionalPut(
 func maybeConditionFailedError(
 	expBytes []byte, actVal optionalValue, allowNoExisting bool,
 ) *kvpb.ConditionFailedError {
-	expValPresent := len(expBytes) != 0
-	actValPresent := actVal.IsPresent()
-	if expValPresent && actValPresent {
-		if !bytes.Equal(expBytes, actVal.Value.TagAndDataBytes()) {
-			return &kvpb.ConditionFailedError{
-				ActualValue: actVal.ToPointer(),
-			}
-		}
-	} else if expValPresent != actValPresent && (actValPresent || !allowNoExisting) {
-		return &kvpb.ConditionFailedError{
-			ActualValue: actVal.ToPointer(),
-		}
-	}
-	return nil
+	return mvcceval.MaybeConditionFailedError(expBytes, actVal.ToPointer(), actVal.IsPresent(), allowNoExisting)
 }
 
 func mvccConditionalPutUsingIter(
