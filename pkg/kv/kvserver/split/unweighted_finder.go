@@ -228,6 +228,23 @@ func (f *UnweightedFinder) PopularKey() PopularKey {
 	}
 }
 
+// AccessDirection returns a value in [-1, 1] indicating the direction of access
+// requests over time. A negative value implies more traffic is moving to the left
+// (lower keys), a positive value implies more traffic is moving to the right
+// (higher keys), and zero indicates even distribution.
+func (f *UnweightedFinder) AccessDirection() float64 {
+	var left, right int
+	for _, s := range f.samples {
+		left += s.left
+		right += s.right
+	}
+	if left+right == 0 {
+		return 0
+	}
+	// Return ratio in [-1, 1].
+	return float64(right-left) / float64(right+left)
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (f *UnweightedFinder) SafeFormat(w redact.SafePrinter, r rune) {
 	w.Printf("key=%v start=%v count=%d samples=%v",
