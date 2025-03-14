@@ -681,6 +681,7 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 			InjectedLatencyOracle:  ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle,
 			InjectedLatencyEnabled: ts.params.Knobs.Server.(*TestingKnobs).ContextTestingKnobs.InjectedLatencyEnabled,
 		}
+		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
 	}
 	if ts.params.Knobs.UpgradeManager != nil {
 		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
