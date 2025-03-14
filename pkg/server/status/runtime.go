@@ -591,8 +591,11 @@ type RuntimeStatSampler struct {
 		procUtime int64
 		procStime int64
 		// CPU usage for the whole system.
-		hostUtime int64
-		hostStime int64
+		hostUtime       int64
+		hostStime       int64
+		hostIrqtime     int64
+		hostSoftIrqtime int64
+		hostNiceTime    int64
 
 		cgoCall     int64
 		gcCount     int64
@@ -907,17 +910,23 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	// System CPU usage is in seconds, convert to nanoseconds.
 	hostUtime := int64(cpuUsage.User * 1.e9)
 	hostStime := int64(cpuUsage.System * 1.e9)
+	hostIrqtime := int64(cpuUsage.Irq * 1.e9)
+	hostSoftIrqtime := int64(cpuUsage.Softirq * 1.e9)
+	hostNiceTime := int64(cpuUsage.Nice * 1.e9)
 
-	var procUrate, procSrate, hostUrate, hostSrate float64
+	var procUrate, procSrate, hostUrate, hostSrate, hostIrqrate, hostSoftIrqrate, hostNiceRate float64
 	if rsr.last.now != 0 { // We cannot compute these rates on the first iteration.
 		procUrate = float64(procUtime-rsr.last.procUtime) / dur
 		procSrate = float64(procStime-rsr.last.procStime) / dur
 		hostUrate = float64(hostUtime-rsr.last.hostUtime) / dur
 		hostSrate = float64(hostStime-rsr.last.hostStime) / dur
+		hostIrqrate = float64(hostIrqtime-rsr.last.hostIrqtime) / dur
+		hostSoftIrqrate = float64(hostSoftIrqtime-rsr.last.hostSoftIrqtime) / dur
+		hostNiceRate = float64(hostNiceTime-rsr.last.hostNiceTime) / dur
 	}
 
 	combinedNormalizedProcPerc := (procSrate + procUrate) / cpuCapacity
-	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
+	combinedNormalizedHostPerc := (hostSrate + hostUrate + hostIrqrate + hostSoftIrqrate + hostNiceRate) / float64(numHostCPUs)
 
 	gcPauseTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricGCPauseTotal))
 	nonGcPauseTotal := float64HistogramSum(rsr.goRuntimeSampler.float64Histogram(runtimeMetricNonGCPauseTotal))
@@ -941,6 +950,9 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.last.procStime = procStime
 	rsr.last.hostUtime = hostUtime
 	rsr.last.hostStime = hostStime
+	rsr.last.hostIrqtime = hostIrqtime
+	rsr.last.hostSoftIrqtime = hostSoftIrqtime
+	rsr.last.hostNiceTime = hostNiceTime
 	rsr.last.gcPauseTime = gcPauseTotalNs
 	rsr.last.runnableSum = runnableSum
 
