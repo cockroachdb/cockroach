@@ -78,6 +78,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/protectedts",
