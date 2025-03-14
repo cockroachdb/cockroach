@@ -10,9 +10,11 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1289,6 +1292,43 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 	}
 }
 
+type gen struct {
+	syncutil.Mutex
+
+	in  []string
+	rng *rand.Rand
+}
+
+func (g *gen) Next() string {
+	g.Lock()
+	defer g.Unlock()
+
+	g.shuffleLocked()
+
+	s := strings.Join(g.in, ", ")
+	return fmt.Sprintf(`
+		INSERT INTO sql_stats_workload
+		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, s)
+}
+
+func (g *gen) shuffleLocked() {
+	g.rng.Shuffle(len(g.in), func(i, j int) {
+		g.in[i], g.in[j] = g.in[j], g.in[i]
+	})
+}
+
+func genPermutations() *gen {
+	rng, _ := randutil.NewPseudoRand()
+	return &gen{
+		rng: rng,
+		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
+	}
+}
+
+// BenchmarkSQLStatsFlush benchmarks the performance of flushing SQL stats. It
+// runs the benchmark for clusters of various sizes and various fingerprint
+// cardinality.
 func BenchmarkSQLStatsFlush(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -1296,29 +1336,78 @@ func BenchmarkSQLStatsFlush(b *testing.B) {
 		aggInterval: time.Hour,
 	}
 	fakeTime.setTime(timeutil.Now())
-	ts, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				StubTimeNow: fakeTime.Now,
+	testutils.RunValues(b, "clusterSize", []int{1, 3, 6}, func(b *testing.B, numNodes int) {
+		tc := serverutils.StartCluster(b, numNodes, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SQLStatsKnobs: &sqlstats.TestingKnobs{
+						StubTimeNow: fakeTime.Now,
+					},
+				},
 			},
-		},
-	},
-	)
-	defer ts.Stop(context.Background())
-
-	sqlStats := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
-	runner := sqlutils.MakeSQLRunner(conn)
-
-	ctx := context.Background()
-	const QueryCountScale = int64(5000)
-	for iter := 0; iter < b.N; iter++ {
-		for _, tc := range testQueries {
-			for i := int64(0); i < QueryCountScale; i++ {
-				runner.Exec(b, tc.query)
-			}
+		})
+		defer tc.Stopper().Stop(context.Background())
+		ts := tc.Server(0)
+		conn := ts.SQLConn(b)
+		cp := []*sqlutils.SQLRunner{}
+		for i := range tc.NumServers() {
+			cp = append(cp, sqlutils.MakeSQLRunner(tc.Server(i).SQLConn(b)))
 		}
-		b.StartTimer()
-		sqlStats.MaybeFlush(ctx, ts.Stopper())
-		b.StartTimer()
-	}
+
+		runner := sqlutils.MakeSQLRunner(conn)
+		rng, _ := randutil.NewPseudoRand()
+
+		runner.Exec(b, `CREATE TABLE sql_stats_workload (
+		id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+		col1 INT,
+		col2 INT,
+		col3 INT,
+		col4 INT,
+		col5 INT,
+		col6 INT,
+		col7 INT,
+		col8 INT,
+		col9 INT,
+		col10 INT
+	)`)
+
+		gen := genPermutations()
+
+		testutils.RunValues(b, "fingerprintCardinality", []int64{10, 100, 1000, 7000}, func(b *testing.B, uniqueFingerprintCount int64) {
+			ctx := context.Background()
+			for iter := 0; iter < b.N; iter++ {
+				for i := int64(0); i < uniqueFingerprintCount; i++ {
+					query := gen.Next()
+					// Each query is executed on every node in the cluster to
+					// simulate a distributed workload where every query has
+					// been executed on every node at least once.
+					for _, c := range cp {
+						c.Exec(b, query, rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
+					}
+				}
+				b.StartTimer()
+				var wg sync.WaitGroup
+				wg.Add(tc.NumServers())
+				// Flush sql stats on all nodes in the cluster in parallel,
+				// simulating a real-world scenario where stats are flushed
+				// at the same time.
+				for i := range tc.NumServers() {
+					s := tc.Server(i)
+					provider := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
+					provider.MaybeFlush(ctx, s.Stopper())
+					wg.Done()
+				}
+				b.StopTimer()
+				// Assert that the number of fingerprints in the system tables
+				// are greater than or equal to the number of unique fingerprints.
+				row := runner.QueryRow(b, "select count(distinct fingerprint_id) from system.statement_statistics;")
+				var fingerprints int64
+				row.Scan(&fingerprints)
+				require.GreaterOrEqual(b, fingerprints, uniqueFingerprintCount)
+				// Reset sql stats on all nodes before next iteration.
+				_, err := ts.ApplicationLayer().GetStatusClient(b).ResetSQLStats(ctx, &serverpb.ResetSQLStatsRequest{ResetPersistedStats: true})
+				require.NoError(b, err)
+			}
+		})
+	})
 }
