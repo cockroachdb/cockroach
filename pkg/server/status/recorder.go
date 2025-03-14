@@ -89,6 +89,15 @@ var ChildMetricsEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// includeAggregateMetricsEnabled enables the exporting of the aggregate time series when child
+// metrics are enabled.
+var includeAggregateMetricsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "server.child_metrics.include_aggregate.enabled",
+	"include the reporting of the aggregate time series when child metrics are enabled. This cluster setting "+
+		"has no effect if child metrics are disabled.",
+	true,
+	settings.WithPublic)
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -336,15 +345,16 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 		}
 	}
 	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
-	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
-	pm.ScrapeRegistry(mr.mu.appRegistry, includeChildMetrics)
-	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics)
-	pm.ScrapeRegistry(mr.mu.sysRegistry, includeChildMetrics)
+	includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.appRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.sysRegistry, includeChildMetrics, includeAggregateMetrics)
 	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg, includeChildMetrics)
+		pm.ScrapeRegistry(reg, includeChildMetrics, includeAggregateMetrics)
 	}
 	for _, tenantRegistry := range mr.mu.tenantRegistries {
-		pm.ScrapeRegistry(tenantRegistry, includeChildMetrics)
+		pm.ScrapeRegistry(tenantRegistry, includeChildMetrics, includeAggregateMetrics)
 	}
 }
 
