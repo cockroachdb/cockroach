@@ -125,6 +125,7 @@ func defaultExecutorConfig() executorConfig {
 		iterations:   1,
 		lenient:      true,
 		recoverable:  true,
+		affinity:     true,
 	}
 }
 
