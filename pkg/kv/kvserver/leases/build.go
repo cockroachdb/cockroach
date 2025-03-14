@@ -111,8 +111,8 @@ type BuildInput struct {
 	MinLeaseProposedTS hlc.ClockTimestamp
 
 	// Information about raft.
-	RaftStatus     *raft.Status
-	RaftFirstIndex kvpb.RaftIndex
+	RaftStatus    *raft.Status
+	RaftCompacted kvpb.RaftIndex
 
 	// Information about the previous lease.
 	PrevLease roachpb.Lease
@@ -254,7 +254,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 		LocalReplicaID:     i.LocalReplicaID,
 		Desc:               i.Desc,
 		RaftStatus:         i.RaftStatus,
-		RaftFirstIndex:     i.RaftFirstIndex,
+		RaftCompacted:      i.RaftCompacted,
 		PrevLease:          i.PrevLease,
 		PrevLeaseExpired:   i.PrevLeaseExpired,
 		NextLeaseHolder:    i.NextLeaseHolder,

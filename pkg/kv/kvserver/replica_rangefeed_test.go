@@ -1054,7 +1054,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			waitForTruncationForTesting(t, repl, index+1)
+			waitForTruncationForTesting(t, repl, index)
 		}
 
 		// Remove the partition. Snapshot should follow.

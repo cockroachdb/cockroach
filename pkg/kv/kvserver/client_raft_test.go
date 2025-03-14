@@ -838,12 +838,12 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	}
 }
 
-func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstIndex kvpb.RaftIndex) {
+func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, compacted kvpb.RaftIndex) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
 		require.NoError(t, r.Store().TODOEngine().Flush())
-		if firstIndex := r.GetFirstIndex(); firstIndex != newFirstIndex {
-			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
+		if index := r.GetCompactedIndex(); index != compacted {
+			return errors.Errorf("expected compacted index == %d, got %d", compacted, index)
 		}
 		return nil
 	})
@@ -1023,7 +1023,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		}
 		return nil
 	})
-	waitForTruncationForTesting(t, newLeaderRepl, index+1)
+	waitForTruncationForTesting(t, newLeaderRepl, index)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()

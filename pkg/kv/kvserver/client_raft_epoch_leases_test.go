@@ -653,7 +653,7 @@ func TestSnapshotAfterTruncationWithUncommittedTailEpochLeases(t *testing.T) {
 		}
 		return nil
 	})
-	waitForTruncationForTesting(t, newLeaderRepl, index+1)
+	waitForTruncationForTesting(t, newLeaderRepl, index)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
 	snapsBefore := snapsMetric.Count()

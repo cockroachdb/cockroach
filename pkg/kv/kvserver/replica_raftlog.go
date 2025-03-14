@@ -161,14 +161,12 @@ func (r *Replica) raftCompactedIndexRLocked() kvpb.RaftIndex {
 	return r.shMu.raftTruncState.Index
 }
 
-// GetFirstIndex returns the index of the first entry in the raft log.
+// GetCompactedIndex returns the compacted index of the raft log.
 // Requires that r.mu is not held.
-//
-// TODO(pav-kv): use the "compacted" indexing scheme.
-func (r *Replica) GetFirstIndex() kvpb.RaftIndex {
+func (r *Replica) GetCompactedIndex() kvpb.RaftIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.raftCompactedIndexRLocked() + 1
+	return r.raftCompactedIndexRLocked()
 }
 
 // LogSnapshot returns an immutable point-in-time snapshot of the log storage.

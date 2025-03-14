@@ -167,7 +167,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		{
 			err: nil,
 			fun: func() error {
-				_, _, err := ss.TruncateTo(ctx, 123)
+				_, _, err := ss.TruncateTo(ctx, 122)
 				return err
 			},
 		},
@@ -220,30 +220,30 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertExists(true)
 
 	for n := range payloads {
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
+		index := payloads[n] // (0, index] + (index, ...]
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: index})
 		require.NoError(t, err)
 		freedWhatWasRetained, retainedNothing, err :=
-			ss.BytesIfTruncatedFromTo(ctx, payloads[n], math.MaxUint64)
+			ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{After: index, Last: math.MaxUint64})
 		require.NoError(t, err)
 		require.Zero(t, retainedNothing)
 		require.Equal(t, freedWhatWasRetained, retained)
-		// Truncate indexes < payloads[n] (payloads is sorted in increasing order).
-		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, payloads[n])
+		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, index)
 		if err != nil {
 			t.Fatalf("%d: %+v", n, err)
 		}
 		require.Equal(t, freedByTruncateTo, freed)
 		require.Equal(t, retainedByTruncateTo, retained)
-		// Index payloads[n] and above are still there (truncation is exclusive)
-		// at both terms.
+		// Indexes > payloads[n] are still there at both terms.
 		for _, term := range []kvpb.RaftTerm{lowTerm, highTerm} {
-			for _, i := range payloads[n:] {
+			for _, i := range payloads[n+1:] {
 				if _, err := ss.Get(ctx, i, term); err != nil {
 					t.Fatalf("%d.%d: %+v", n, i, err)
 				}
 			}
-			// Indexes below are gone.
-			for _, i := range payloads[:n] {
+			// Indexes <= payloads[n] are gone.
+			for _, i := range payloads[:n+1] {
 				if _, err := ss.Get(ctx, i, term); !errors.Is(err, errSideloadedFileNotFound) {
 					t.Fatalf("%d.%d: %+v", n, i, err)
 				}
@@ -282,7 +282,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
 		// Ensure HasAnyEntry doesn't find anything.
-		found, err := ss.HasAnyEntry(ctx, 0, 10000)
+		found, err := ss.HasAnyEntry(ctx, kvpb.RaftSpan{Last: 10000})
 		require.NoError(t, err)
 		require.False(t, found)
 
@@ -299,18 +299,18 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			from, to kvpb.RaftIndex
 			want     bool
 		}{
-			{from: 0, to: 3, want: false}, // 3 is excluded
-			{from: 0, to: 4, want: true},  // but included if to == 4
-			{from: 3, to: 5, want: true},  // 3 is included
-			{from: 4, to: 5, want: false},
-			{from: 50, to: 60, want: false},
-			{from: 1, to: 10, want: true},
+			{from: 0, to: 2, want: false}, // 2 is included
+			{from: 0, to: 3, want: true},  // but included if to == 3
+			{from: 2, to: 4, want: true},  // 2 is excluded
+			{from: 3, to: 4, want: false},
+			{from: 49, to: 59, want: false},
+			{from: 0, to: 9, want: true},
 		} {
-			found, err := ss.HasAnyEntry(ctx, check.from, check.to)
+			found, err := ss.HasAnyEntry(ctx, kvpb.RaftSpan{After: check.from, Last: check.to})
 			require.NoError(t, err)
 			require.Equal(t, check.want, found)
 		}
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 		require.NoError(t, err)
 		require.Zero(t, retained)
 		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
@@ -328,11 +328,11 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
 	// without the directory existing.
-	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 1)
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{})
 	require.NoError(t, err)
 	require.Zero(t, freed)
 	require.Zero(t, retained)
-	freed, retained, err = ss.TruncateTo(ctx, 1)
+	freed, retained, err = ss.TruncateTo(ctx, 0)
 	require.NoError(t, err)
 	require.Zero(t, freed)
 	require.Zero(t, retained)

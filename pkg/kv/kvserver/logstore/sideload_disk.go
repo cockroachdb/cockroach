@@ -186,18 +186,20 @@ func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 
 // TruncateTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) TruncateTo(
-	ctx context.Context, firstIndex kvpb.RaftIndex,
+	ctx context.Context, lastIndex kvpb.RaftIndex,
 ) (bytesFreed, bytesRetained int64, _ error) {
-	return ss.possiblyTruncateTo(ctx, 0, firstIndex, true /* doTruncate */)
+	return ss.possiblyTruncateTo(ctx, kvpb.RaftSpan{
+		After: 0, Last: lastIndex,
+	}, true /* doTruncate */)
 }
 
-// Helper for truncation or byte calculation for [from, to).
+// Helper for truncation or byte calculation for (from, to].
 func (ss *DiskSideloadStorage) possiblyTruncateTo(
-	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex, doTruncate bool,
+	ctx context.Context, span kvpb.RaftSpan, doTruncate bool,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
 	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
-		if index >= to {
+		if index > span.Last {
 			size, err := ss.fileSize(filename)
 			if err != nil {
 				return false, err
@@ -206,11 +208,11 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 			deletedAll = false
 			return true, nil
 		}
-		if index < from {
-			// TODO(pavelkalinnikov): these files may never be removed. Clean them up.
+		if index <= span.After {
+			// TODO(pav-kv): these files may never be removed. Clean them up.
 			return true, nil
 		}
-		// index is in [from, to)
+		// index is in (span.After, span.Last].
 		var fileSize int64
 		var err error
 		if doTruncate {
@@ -242,13 +244,11 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 }
 
 // HasAnyEntry implements SideloadStorage.
-func (ss *DiskSideloadStorage) HasAnyEntry(
-	ctx context.Context, from, to kvpb.RaftIndex,
-) (bool, error) {
-	// Find any file at index in [from, to).
+func (ss *DiskSideloadStorage) HasAnyEntry(ctx context.Context, span kvpb.RaftSpan) (bool, error) {
+	// Find any file at index in (from, to].
 	found := false
 	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, _ string) (bool, error) {
-		if index >= from && index < to {
+		if span.Contains(index) {
 			found = true
 			return false, nil // stop the iteration
 		}
@@ -261,9 +261,9 @@ func (ss *DiskSideloadStorage) HasAnyEntry(
 
 // BytesIfTruncatedFromTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
-	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex,
+	ctx context.Context, span kvpb.RaftSpan,
 ) (freed, retained int64, _ error) {
-	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
+	return ss.possiblyTruncateTo(ctx, span, false /* doTruncate */)
 }
 
 // forEach runs the given visit function for each file in the sideloaded storage
