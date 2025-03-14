@@ -100,7 +100,6 @@ func (p *Partition) Metadata() PartitionMetadata {
 	return PartitionMetadata{
 		Level:    p.Level(),
 		Centroid: p.quantizedSet.GetCentroid(),
-		Count:    p.Count(),
 	}
 }
 

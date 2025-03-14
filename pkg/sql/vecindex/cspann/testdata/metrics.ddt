@@ -35,8 +35,8 @@ vec9: (5, 2)
 metrics
 ----
 2 successful splits
-2 fixups added to queue
-2 fixups processed
+5 fixups added to queue
+5 fixups processed
 
 # Delete vector from primary index, but not from secondary index.
 delete not-found
@@ -73,5 +73,5 @@ vec4: 17 (centroid=1.25)
 metrics
 ----
 2 successful splits
-3 fixups added to queue
-3 fixups processed
+6 fixups added to queue
+6 fixups processed
