@@ -310,6 +310,10 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	if ba.ClientRangeInfo == (roachpb.ClientRangeInfo{}) {
 		return
 	}
+	// HACK: return always.
+	if ba.ClientRangeInfo.DescriptorGeneration != 0 {
+		return
+	}
 
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
