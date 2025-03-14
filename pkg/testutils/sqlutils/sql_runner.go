@@ -244,29 +244,25 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	}
 }
 
-// ExpectErrWithTimeout wraps ExpectErr with a timeout and retry on a specific error.
-func (sr *SQLRunner) ExpectErrWithTimeoutAndRetry(
+// ExpectErrWithRetry wraps ExpectErr with a timeout and retry on a specific error.
+func (sr *SQLRunner) ExpectErrWithRetry(
 	t Fataler, errRE string, query string, retryableErrorRE string, args ...interface{},
 ) {
 	helperOrNoop(t)()
-	d := sr.SucceedsSoonDuration
-	if d == 0 {
-		d = testutils.SucceedsSoonDuration()
-	}
-	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
-		_, err := sr.DB.ExecContext(ctx, query, args...)
-		// If the error matches the retryable error expression, retry the query once.
-		if err != nil && testutils.IsError(err, retryableErrorRE) {
-			_, err = sr.DB.ExecContext(ctx, query, args...)
+	var err error
+	sr.succeedsWithin(t, func() error {
+		_, err = sr.DB.ExecContext(context.Background(), query, args...)
+		if testutils.IsError(err, errRE) {
+			// This is our expected error. Do not retry.
+			return nil
 		}
-		sr.expectErr(t, query, err, errRE)
-		return nil
+		if err == nil || !testutils.IsError(err, retryableErrorRE) {
+			// This is not a retryable error. Do not retry.
+			return nil
+		}
+		return err
 	})
-
-	// Fail the test on unexpected error message OR execution timeout
-	if err != nil {
-		t.Fatalf("failed assert error: %s", err)
-	}
+	sr.expectErr(t, query, err, errRE)
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
