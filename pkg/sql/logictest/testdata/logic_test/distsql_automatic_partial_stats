@@ -29,10 +29,21 @@ statistics_name   column_names  row_count  distinct_count  null_count  partial_p
 statement ok
 CREATE STATISTICS __auto__ FROM data
 
-# Set the min_stale_rows to MaxInt32 to ensure that full stat collections are
-# not triggered
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__         {a}           1000       10              0           NULL
+__auto__         {a,b}         1000       100             0           NULL
+__auto__         {a,b,c}       1000       1000            0           NULL
+__auto__         {b}           1000       10              0           NULL
+__auto__         {c}           1000       10              0           NULL
+__auto__         {d}           1000       1               0           NULL
+
+# Disable full stat collections.
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = 2147483647
+SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = false
 
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
@@ -60,11 +71,16 @@ __auto_partial__  {a}           0          0               0           (a IS NUL
 __auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
 __auto_partial__  {d}           100        1               0           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
 
-# Disable automatic partial stats with the table setting
+# Enable full stat collections with the cluster setting.
 statement ok
-ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = false)
+SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = true
 
-# Change 20% of the table, no new partial stats should be collected.
+# Disable automatic partial and full stats with the table settings.
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = false);
+ALTER TABLE data SET (sql_stats_automatic_full_collection_enabled = false)
+
+# Change 20% of the table, no new partial or full stats should be collected.
 statement ok
 UPDATE DATA SET d = 3 WHERE a = 1 OR a = 2
 
@@ -175,3 +191,27 @@ __auto__          {d}           1000       1               0           NULL
 __auto_partial__  {a}           16         1               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
 __auto_partial__  {c}           16         4               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
 __auto_partial__  {d}           216        3               4           (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
+
+# Now disable automatic partial stats but enable full stats with the table settings.
+statement ok
+ALTER TABLE data SET (sql_stats_automatic_partial_collection_enabled = false);
+ALTER TABLE data SET (sql_stats_automatic_full_collection_enabled = true)
+
+# Insert enough data to trigger a full stats collection.
+statement ok
+INSERT INTO data SELECT a, b, c FROM
+  generate_series(15, 25) AS a(a),
+  generate_series(15, 25) AS b(b),
+  generate_series(15, 25) AS c(c)
+
+query TTIIIT colnames,retry
+SELECT DISTINCT ON (statistics_name, column_names) statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY statistics_name, column_names, created DESC
+----
+statistics_name  column_names  row_count  distinct_count  null_count  partial_predicate
+__auto__         {a}           2347       22              0           NULL
+__auto__         {a,b}         2347       225             0           NULL
+__auto__         {a,b,c}       2347       2347            0           NULL
+__auto__         {b}           2347       25              0           NULL
+__auto__         {c}           2347       25              0           NULL
+__auto__         {d}           2347       4               1335        NULL
