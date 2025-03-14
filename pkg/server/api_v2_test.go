@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -156,6 +158,56 @@ func TestHealthV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 }
 
+func TestRestartSafetyV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	urlStr := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "health/restart_safety/").String()
+	req, err := http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(
+		t,
+		http.StatusServiceUnavailable,
+		resp.StatusCode,
+		"expected service unavailable when node is not draining",
+	)
+
+	// Check if an unmarshal into the RestartSafetyResponse struct works.
+	var response serverpb.RestartSafetyResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+
+	stores, ok := ts1.GetStores().(*kvserver.Stores)
+	require.True(t, ok)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		s.SetDraining(true, nil, false)
+		return nil
+	})
+
+	req, err = http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(t, 200, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+}
+
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it
 // returns valid YAML.
 func TestRulesV2(t *testing.T) {
@@ -274,4 +326,99 @@ func TestAuthV2(t *testing.T) {
 
 	})
 
+}
+
+func Test_checkRestartSafe_Criticality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	res, err := checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3)
+	require.NoError(t, err)
+	require.True(t, res.IsCritical)
+
+	// Since we haven't drained, there will be some raft leaders, and others that are simple StoreNotDraining
+	for _, rs := range res.Replicas {
+		switch rs.Status {
+		case "IsRaftLeader":
+		case "StoreNotDraining":
+		default:
+			require.Fail(t, "unexpected status: %s", rs.String())
+		}
+	}
+
+	err = drain(ctx, ts1, t)
+	require.NoError(t, err)
+
+	res, err = checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3)
+	require.NoError(t, err)
+	require.False(t, res.IsCritical)
+}
+
+func Test_checkRestartSafe_RangeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var err error
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts0 := testCluster.Server(0)
+	vitality := livenesspb.TestCreateNodeVitality(testCluster.NodeIDs()...)
+
+	ts1nodeID := testCluster.Server(1).NodeID()
+	vitality.DownNode(ts1nodeID)
+
+	err = drain(ctx, ts0, t)
+	require.NoError(t, err)
+	vitality.Draining(ts0.NodeID(), true)
+
+	require.True(t, vitality.GetNodeVitalityFromCache(ts0.NodeID()).IsDraining())
+	require.False(t, vitality.GetNodeVitalityFromCache(ts1nodeID).IsLive(livenesspb.Metrics))
+
+	res, err := checkRestartSafe(ctx, ts0.NodeID(), vitality, ts0.GetStores().(storeVisitor), 3)
+	require.NoError(t, err)
+	require.True(t, res.IsCritical, "expected critical since a different node is down")
+
+	foundRange := false
+	for _, rs := range res.Replicas {
+		if rs.Status == "Underreplicated" {
+			foundRange = true
+		}
+	}
+	require.True(t, foundRange)
+}
+
+func drain(ctx context.Context, ts1 serverutils.TestServerInterface, t *testing.T) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := ts1.DrainClients(ctx)
+	require.NoError(t, err)
+
+	for timeoutCtx.Err() == nil {
+		drainStream, err := ts1.GetAdminClient(t).Drain(timeoutCtx, &serverpb.DrainRequest{
+			Shutdown: false,
+			DoDrain:  true,
+			NodeId:   ts1.NodeID().String(),
+			Verbose:  false,
+		})
+		require.NoError(t, err)
+		drainRes, err := drainStream.Recv()
+		require.NoError(t, err)
+		require.True(t, drainRes.IsDraining)
+		if drainRes.DrainRemainingIndicator == 0 {
+			break
+		}
+	}
+
+	return timeoutCtx.Err()
 }
