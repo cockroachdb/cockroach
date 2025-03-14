@@ -324,6 +324,15 @@ func (tx *Txn) GetPartitionMetadata(
 		return cspann.PartitionMetadata{},
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
+
+	// If we're preparing to update the root partition, then lazily create its
+	// metadata if it does not yet exist, and lock that record.
+	if forUpdate && partitionKey == cspann.RootKey && b.Results[0].Rows[0].Value == nil {
+		if err := tx.createRootPartition(ctx, metadataKey); err != nil {
+			return cspann.PartitionMetadata{}, err
+		}
+	}
+
 	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
@@ -610,6 +619,27 @@ func (tx *Txn) GetFullVectors(
 		err = tx.getFullVectorsFromPK(ctx, refs, numPKLookups)
 	}
 	return err
+}
+
+// createRootPartition uses the KV CPut operation to create metadata for the
+// root partition, and ensures that it has a SHARE lock on the key.
+// NOTE: CPut will forward the calling transaction's timestamp to the time of
+// the last write of the metadata record. So if another transaction has raced to
+// create the metadata record, this transaction will always "see" it.
+func (tx *Txn) createRootPartition(ctx context.Context, metadataKey roachpb.Key) error {
+	b := tx.kv.NewBatch()
+	meta, err := EncodePartitionMetadata(cspann.LeafLevel, tx.store.emptyVec)
+	if err != nil {
+		return err
+	}
+	b.CPut(metadataKey, meta, []byte{})
+	b.GetForShare(metadataKey, tx.lockDurability)
+	if err := tx.kv.Run(ctx, b); err != nil {
+		// This can happen when there are multiple writers racing to create the
+		// root metadata. Losing transactions may need to be refreshed.
+		return errors.Wrapf(err, "creating root partition metadata")
+	}
+	return nil
 }
 
 // encodePartitionKey takes a partition key and creates a KV key to read that
