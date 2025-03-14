@@ -71,7 +71,10 @@ func (s *sqlSink) getConcreteType() sinkType {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL, tableName string, targets changefeedbase.Targets, mb metricsRecorderBuilder,
+	u *changefeedbase.SinkURL,
+	tableName string,
+	targets changefeedbase.Targets,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
@@ -87,12 +90,12 @@ func makeSQLSink(
 	}
 
 	uri := u.String()
-	u.consumeParam(`sslcert`)
-	u.consumeParam(`sslkey`)
-	u.consumeParam(`sslmode`)
-	u.consumeParam(`sslrootcert`)
+	u.ConsumeParam(`sslcert`)
+	u.ConsumeParam(`sslkey`)
+	u.ConsumeParam(`sslmode`)
+	u.ConsumeParam(`sslrootcert`)
 
-	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
+	if unknownParams := u.RemainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown SQL sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
