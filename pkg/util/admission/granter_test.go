@@ -551,3 +551,67 @@ type testRegistryProvider struct {
 func (r *testRegistryProvider) GetMetricsRegistry(roachpb.StoreID) *metric.Registry {
 	return r.registry
 }
+
+func TestCPUTokenSim(t *testing.T) {
+	// Same as cpu rate s/s, or number of vCPUs to give this work.
+	tokenRateMillisPerMillis := 4
+	burstIntervalMillis := 1000
+	workInitialTokenMillis := 2
+	workUsageMillis := 1
+	if workInitialTokenMillis < workUsageMillis {
+		panic("")
+	}
+	workDurationMillis := 50
+	if workDurationMillis < workUsageMillis {
+		panic("")
+	}
+	// Keep this short since care about under-utilization at short time intervals.
+	simulateIntervalMillis := 2 * 1000
+
+	type work struct {
+		start int
+	}
+	var started []work
+	bucketBurstTokens := tokenRateMillisPerMillis * burstIntervalMillis
+	tokens := bucketBurstTokens
+	usageMillis := 0
+
+	// Tick every 1ms.
+	for i := 0; i <= simulateIntervalMillis; i++ {
+		// Pop work that finished
+		j := 0
+		for ; j < len(started); j++ {
+			if started[j].start+workDurationMillis > i {
+				break
+			}
+			usageMillis += workUsageMillis
+			returnMillis := workInitialTokenMillis - workUsageMillis
+			tokens += returnMillis
+		}
+		started = started[j:]
+		// Add tokens for tick.
+		tokens += tokenRateMillisPerMillis
+		// Cap tokens to burst.
+		if tokens > bucketBurstTokens {
+			tokens = bucketBurstTokens
+		}
+		// Try starting work.
+		for tokens > 0 {
+			tokens -= workInitialTokenMillis
+			started = append(started, work{start: i})
+		}
+	}
+	// End of simulation.
+	for _, w := range started {
+		interval := simulateIntervalMillis - w.start
+		if interval == 0 {
+			continue
+		}
+		intervalFraction := float64(interval) / float64(workDurationMillis)
+		usageMillis += int(intervalFraction * float64(workUsageMillis))
+	}
+	fmt.Printf("work (dur: %d usage: %d): rate: %d, usage-rate: %f\n",
+		workDurationMillis, workUsageMillis,
+		tokenRateMillisPerMillis,
+		float64(usageMillis)/float64(simulateIntervalMillis))
+}
