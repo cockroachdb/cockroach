@@ -1,0 +1,20 @@
+# Modeled after https://github.com/cockroachdb/cockroach/issues/16624#issuecomment-1137394935.
+run
+singleengine: false
+numreplicas: 2
+numworkers: 2
+numwrites: 1000000
+smmemtablebytes: 67108864
+raftmemtablebytes: 67108864
+loosetrunc: true
+----
+singleengine: false
+numreplicas: 2
+numwrites: 1000000
+numworkers: 2
+smmemtablebytes: 67108864
+raftmemtablebytes: 67108864
+raftl0threshold: 2
+loosetrunc: true
+truncthresholdbytes: 65536
+singledel: false
