@@ -8,6 +8,7 @@ package ssmemstorage
 import (
 	"context"
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -184,4 +185,63 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	require.Greater(t, memUsedAfterFreeThenRealloc, int64(0), "Expected memory to be allocated after Free")
 
 	container.Clear(ctx)
+}
+
+func generateRandomKey() stmtKey {
+	const stmtLength = 32
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ "
+	stmt := make([]byte, stmtLength)
+	for i := range stmt {
+		stmt[i] = charset[rand.Intn(len(charset))]
+	}
+
+	// Generate random database name
+	const dbLength = 16
+	db := make([]byte, dbLength)
+	for i := range db {
+		db[i] = charset[rand.Intn(len(charset))]
+	}
+
+	return stmtKey{
+		sampledPlanKey: sampledPlanKey{
+			stmtNoConstants: string(stmt),
+			implicitTxn:     rand.Intn(2) == 1, // random boolean
+			database:        string(db),
+		},
+		planHash:                 rand.Uint64(),
+		transactionFingerprintID: appstatspb.TransactionFingerprintID(rand.Uint64()),
+	}
+}
+
+func BenchmarkStmtKeyMapOperations(b *testing.B) {
+	// Prepare test data
+	const numKeys = 10000
+	keys := make([]stmtKey, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = generateRandomKey()
+	}
+
+	b.Run("MapInsert", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			m := make(map[stmtKey]int)
+			for j := 0; j < numKeys; j++ {
+				m[keys[j]] = j
+			}
+		}
+	})
+
+	b.Run("MapLookup", func(b *testing.B) {
+		b.ResetTimer()
+		m := make(map[stmtKey]int)
+		for j := 0; j < numKeys; j++ {
+			m[keys[j]] = j
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for j := 0; j < numKeys; j++ {
+				_ = m[keys[j]]
+			}
+		}
+	})
 }
