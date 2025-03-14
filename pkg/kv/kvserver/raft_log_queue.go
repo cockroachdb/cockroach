@@ -388,7 +388,7 @@ type truncateDecision struct {
 	ChosenVia     string
 }
 
-func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
+func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
 		if p.State != tracker.StateReplicate {
@@ -400,20 +400,27 @@ func (td *truncateDecision) raftSnapshotsForIndex(index kvpb.RaftIndex) int {
 			continue
 		}
 
-		// When a log truncation happens at the "current log index" (i.e. the
-		// most recently committed index), it is often still in flight to the
-		// followers not required for quorum, and it is likely that they won't
-		// need a truncation to catch up. A follower in that state will have a
-		// Match equaling committed-1, but a Next of committed+1 (indicating that
-		// an append at 'committed' is already ongoing).
-		if kvpb.RaftIndex(p.Match) < index && kvpb.RaftIndex(p.Next) <= index {
+		// TODO(pav-kv): pass "compacted" index instead of "firstIndex". The below
+		// comment is proactively written assuming compacted index, which is equal
+		// to firstIndex-1.
+		//
+		// When a log truncation happens at the "current log index" (i.e. the most
+		// recently committed index), it is often still in flight to the followers
+		// not required for quorum, and it is likely that they won't need a
+		// truncation to catch up. If Match < compact, but Next > compact, appends
+		// containing this index are already in flight.
+		//
+		// Next <= compact means there is at least one entry that is not yet in
+		// flight to this follower, so truncating now would trigger a snapshot.
+		if kvpb.RaftIndex(p.Next)+1 <= firstIndex {
 			n++
 		}
 	}
-	if td.Input.PendingSnapshotIndex != 0 && td.Input.PendingSnapshotIndex < index {
+	// If there is a pending snapshot at some index, compacting beyond this index
+	// might cause a subsequent snapshot.
+	if snap := td.Input.PendingSnapshotIndex; snap != 0 && firstIndex > snap+1 {
 		n++
 	}
-
 	return n
 }
 
@@ -498,9 +505,13 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	decision := truncateDecision{Input: input}
 	decision.CommitIndex = kvpb.RaftIndex(input.RaftStatus.Commit)
 
-	// The last index is most aggressive possible truncation that we could do.
-	// Everything else in this method makes the truncation less aggressive.
-	decision.NewFirstIndex = input.LastIndex
+	// The most aggressive possible truncation deletes the entire log. Everything
+	// else in this method makes the truncation less aggressive.
+	//
+	// TODO(pav-kv): this makes use of the fact that FirstIndex == LastIndex + 1
+	// for an empty log. We should convert to using "compacted index", which
+	// renders in a more intuitive Compacted == LastIndex.
+	decision.NewFirstIndex = input.LastIndex + 1
 	decision.ChosenVia = truncatableIndexChosenViaLastIndex
 
 	// Start by trying to truncate at the commit index. Naively, you would expect
@@ -508,7 +519,14 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// RaftStatus.Progress.Match is updated on the leader when a command is
 	// proposed and in a single replica Raft group this also means that
 	// RaftStatus.Commit is updated at propose time.
-	decision.ProtectIndex(decision.CommitIndex, truncatableIndexChosenViaCommitIndex)
+	//
+	// TODO(pav-kv): the above is not true. The match index is updated after a
+	// durable exchange with the acceptor. The commit index is updated after doing
+	// so with a quorum of acceptors, and single-replica groups are no exception.
+	//
+	// TODO(pav-kv): source everything from raft.LogSnapshot, and there will be no
+	// discrepancy between commit index and last index.
+	decision.ProtectIndex(decision.CommitIndex+1, truncatableIndexChosenViaCommitIndex)
 
 	for _, progress := range input.RaftStatus.Progress {
 		// Snapshots are expensive, so we try our best to avoid truncating past
@@ -541,15 +559,19 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 			if progress.State == tracker.StateProbe {
 				decision.ProtectIndex(input.FirstIndex, truncatableIndexChosenViaProbingFollower)
 			} else {
-				decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+				// NB: since the Match index is already replicated, we don't need to
+				// "protect" it. Only the next entry needs to be replicated. For the
+				// entry before it, the log storage remembers the term, which suffices
+				// for constructing a MsgApp.
+				decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
 			}
 			continue
 		}
 
-		// Second, if the follower has not been recently active, we don't
-		// truncate it off as long as the raft log is not too large.
+		// Second, if the follower has not been recently active, we don't truncate
+		// it off as long as the raft log is not too large.
 		if !input.LogTooLarge() {
-			decision.ProtectIndex(kvpb.RaftIndex(progress.Match), truncatableIndexChosenViaFollowers)
+			decision.ProtectIndex(kvpb.RaftIndex(progress.Match)+1, truncatableIndexChosenViaFollowers)
 		}
 
 		// Otherwise, we let it truncate to the committed index.
@@ -559,8 +581,10 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// about to be added to the range (or is in Raft recovery). We don't want to
 	// truncate the log in a way that will require that new replica to be caught
 	// up via yet another Raft snapshot.
-	if input.PendingSnapshotIndex > 0 {
-		decision.ProtectIndex(input.PendingSnapshotIndex, truncatableIndexChosenViaPendingSnap)
+	if snap := input.PendingSnapshotIndex; snap > 0 {
+		// NB: the last index of the snapshot does not need to be "protected"
+		// because it is already incorporated into the snapshot.
+		decision.ProtectIndex(snap+1, truncatableIndexChosenViaPendingSnap)
 	}
 
 	// If new first index dropped below first index, make them equal (resulting
@@ -592,8 +616,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	//
 	//         FirstIndex    <= LastIndex                                    (0)
 	//         NewFirstIndex >= FirstIndex                                   (1)
-	//         NewFirstIndex <= LastIndex                                    (2)
-	//         NewFirstIndex <= CommitIndex                                  (3)
+	//         NewFirstIndex <= LastIndex + 1                                (2)
+	//         NewFirstIndex <= CommitIndex + 1                              (3)
 	//
 	// (1) asserts that we're not regressing our FirstIndex
 	// (2) asserts that our we don't truncate past the last index we can
@@ -608,13 +632,16 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	// consider the empty case. Something like
 	// https://github.com/nvanbenschoten/optional could help us emulate an
 	// `option<uint64>` type if we care enough.
+	//
+	// TODO(pav-kv): eliminate all the above complexity by using Compacted index
+	// instead of FirstIndex.
 	logEmpty := input.FirstIndex > input.LastIndex
 	noCommittedEntries := input.FirstIndex > kvpb.RaftIndex(input.RaftStatus.Commit)
 
 	logIndexValid := logEmpty ||
-		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex)
+		(decision.NewFirstIndex >= input.FirstIndex) && (decision.NewFirstIndex <= input.LastIndex+1)
 	commitIndexValid := noCommittedEntries ||
-		(decision.NewFirstIndex <= decision.CommitIndex)
+		(decision.NewFirstIndex <= decision.CommitIndex+1)
 	valid := logIndexValid && commitIndexValid
 	if !valid {
 		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
@@ -652,11 +679,11 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 		return true, !decision.Input.LogSizeTrusted, float64(decision.Input.LogSize)
 	}
 	if decision.Input.LogSizeTrusted ||
-		decision.Input.LastIndex == decision.Input.FirstIndex {
+		decision.Input.FirstIndex > decision.Input.LastIndex {
 
 		return false, false, 0
 	}
-	// We have a nonempty log (first index != last index) and can't vouch that
+	// We have a nonempty log (first index <= last index) and can't vouch that
 	// the bytes in the log are known. Queue the replica; processing it will
 	// force a recomputation. For the priority, we have to pick one as we
 	// usually use the log size which is not available here. Going half-way
