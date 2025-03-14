@@ -118,10 +118,7 @@ func TestAdminAPIJobs(t *testing.T) {
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Fails with the default test tenant. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     dir})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 

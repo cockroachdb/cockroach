@@ -519,6 +519,21 @@ func TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
 	}
 }
 
+// TestSkippedForExternalModeDueToPerformance can be used to disable selecting
+// the external process virtual cluster due to significant performance
+// degradation compared to other modes. However, the goal is to eventually make
+// it work efficiently in external mode.
+//
+// It should link to a github issue with label C-investigation.
+func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTenantOptions {
+	return DefaultTestTenantOptions{
+		testBehavior:           ttSharedProcess,
+		allowAdditionalTenants: true,
+		issueNum:               issueNumber,
+		label:                  "C-investigation",
+	}
+}
+
 // InternalNonDefaultDecision builds a sentinel value used inside a
 // mechanism in serverutils. Should not be used by tests directly.
 func InternalNonDefaultDecision(
