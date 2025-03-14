@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ type Manager struct {
 	codec        keys.SQLCodec
 	db           descs.DB
 	testingKnobs *VecIndexTestingKnobs
+	metrics      Metrics
 }
 
 // NewManager returns a new vector index manager which maintains per-node vector
@@ -50,6 +52,7 @@ func NewManager(
 		db:      db,
 	}
 	mgr.mu.indexes = make(map[indexKey]*indexEntry)
+	mgr.metrics.Init()
 
 	return mgr
 }
@@ -73,6 +76,12 @@ type indexEntry struct {
 // SetTestingKnobs sets the testing knobs for the manager to use in unit tests.
 func (m *Manager) SetTestingKnobs(knobs *VecIndexTestingKnobs) {
 	m.testingKnobs = knobs
+}
+
+// Metrics returns a metric.Struct which holds metrics for all vector indexes
+// maintained by the manager.
+func (m *Manager) Metrics() metric.Struct {
+	return &m.metrics
 }
 
 // Get returns the vector index for the given DB table and index. If the DB
@@ -130,7 +139,18 @@ func (m *Manager) Get(
 		// of the Get call. The fixup process gets a child context from the context
 		// passed to cspann.NewIndex, and we don't want that to be the context of
 		// the Get call.
-		return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		idx, err := cspann.NewIndex(
+			m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		if err != nil {
+			return nil, err
+		}
+
+		// Hook up index events to metrics methods.
+		idx.Fixups().OnSuccessfulSplit(m.metrics.IncSuccessSplits)
+		idx.Fixups().OnFixupAdded(m.metrics.IncFixupsAdded)
+		idx.Fixups().OnFixupProcessed(m.metrics.IncFixupsProcessed)
+
+		return idx, nil
 	}()
 	e.mustWait = false
 	e.idx, e.err = idx, err
