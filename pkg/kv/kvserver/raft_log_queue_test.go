@@ -53,7 +53,7 @@ func TestShouldTruncate(t *testing.T) {
 			var d truncateDecision
 			d.Input.LogSize = c.raftLogSize
 			d.Input.CompIndex = 122
-			d.NewFirstIndex = d.Input.FirstIndex() + c.truncatableIndexes
+			d.NewCompIndex = d.Input.CompIndex + c.truncatableIndexes
 			v := d.ShouldTruncate()
 			if c.expected != v {
 				t.Fatalf("expected %v, but found %v", c.expected, v)
@@ -303,7 +303,7 @@ func TestTruncateDecisionZeroValue(t *testing.T) {
 	assert.False(t, decision.ShouldTruncate())
 	assert.Zero(t, decision.NumNewRaftSnapshots())
 	assert.Zero(t, decision.NumTruncatableIndexes())
-	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 0 (chosen via: ); log size untrusted]", decision.String())
+	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 1 (chosen via: ); log size untrusted]", decision.String())
 }
 
 func TestTruncateDecisionNumSnapshots(t *testing.T) {
@@ -468,7 +468,7 @@ func TestNewTruncateDecision(t *testing.T) {
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		return d.Input.FirstIndex(), d.NumTruncatableIndexes(), d.NewFirstIndex, nil
+		return d.Input.FirstIndex(), d.NumTruncatableIndexes(), d.NewFirstIndex(), nil
 	}
 
 	aFirst, aTruncatable, aOldest, err := getIndexes()

@@ -389,9 +389,13 @@ func (input truncateDecisionInput) LogTooLarge() bool {
 // so that it is guaranteed to not contain any PII or confidential
 // cluster data.
 type truncateDecision struct {
-	Input         truncateDecisionInput
-	NewFirstIndex kvpb.RaftIndex // first index of the resulting log after truncation
-	ChosenVia     string
+	Input        truncateDecisionInput
+	NewCompIndex kvpb.RaftIndex // compacted index after the log truncation
+	ChosenVia    string
+}
+
+func (td *truncateDecision) NewFirstIndex() kvpb.RaftIndex {
+	return td.NewCompIndex + 1
 }
 
 func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int {
@@ -431,7 +435,7 @@ func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int
 }
 
 func (td *truncateDecision) NumNewRaftSnapshots() int {
-	return td.raftSnapshotsForIndex(td.NewFirstIndex) - td.raftSnapshotsForIndex(td.Input.FirstIndex())
+	return td.raftSnapshotsForIndex(td.NewFirstIndex()) - td.raftSnapshotsForIndex(td.Input.FirstIndex())
 }
 
 // String returns a representation for the decision.
@@ -443,7 +447,7 @@ func (td *truncateDecision) String() string {
 	_, _ = fmt.Fprintf(
 		&buf,
 		"truncate %d entries to first index %d (chosen via: %s)",
-		td.NumTruncatableIndexes(), td.NewFirstIndex, td.ChosenVia,
+		td.NumTruncatableIndexes(), td.NewFirstIndex(), td.ChosenVia,
 	)
 	if td.Input.LogTooLarge() {
 		_, _ = fmt.Fprintf(
@@ -465,10 +469,10 @@ func (td *truncateDecision) String() string {
 }
 
 func (td *truncateDecision) NumTruncatableIndexes() int {
-	if td.NewFirstIndex < td.Input.FirstIndex() {
+	if td.NewFirstIndex() < td.Input.FirstIndex() {
 		return 0
 	}
-	return int(td.NewFirstIndex - td.Input.FirstIndex())
+	return int(td.NewFirstIndex() - td.Input.FirstIndex())
 }
 
 func (td *truncateDecision) ShouldTruncate() bool {
@@ -481,8 +485,8 @@ func (td *truncateDecision) ShouldTruncate() bool {
 // lowers the proposed compacted index to the given one if the latter is lower.
 // If this change is made, the ChosenVia annotation is updated too.
 func (td *truncateDecision) ProtectAfter(compacted kvpb.RaftIndex, chosenVia string) {
-	if firstIndex := compacted + 1; firstIndex < td.NewFirstIndex {
-		td.NewFirstIndex = firstIndex
+	if compacted < td.NewCompIndex {
+		td.NewCompIndex = compacted
 		td.ChosenVia = chosenVia
 	}
 }
@@ -510,11 +514,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 
 	// The most aggressive possible truncation deletes the entire log. Everything
 	// else in this method makes the truncation less aggressive.
-	//
-	// TODO(pav-kv): this makes use of the fact that FirstIndex == LastIndex + 1
-	// for an empty log. We should convert to using "compacted index", which
-	// renders in a more intuitive Compacted == LastIndex.
-	decision.NewFirstIndex = input.LastIndex + 1
+	decision.NewCompIndex = input.LastIndex
 	decision.ChosenVia = truncatableIndexChosenViaLastIndex
 
 	// Start by trying to truncate at the commit index. Naively, you would expect
@@ -584,10 +584,10 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		decision.ProtectAfter(snap, truncatableIndexChosenViaPendingSnap)
 	}
 
-	// If new first index dropped below first index, make them equal (resulting
-	// in a no-op).
-	if decision.NewFirstIndex < input.FirstIndex() {
-		decision.NewFirstIndex = input.FirstIndex()
+	// If new compacted index dropped below the original one index, make them
+	// equal (resulting in a no-op).
+	if decision.NewCompIndex < input.CompIndex {
+		decision.NewCompIndex = input.CompIndex
 		decision.ChosenVia = truncatableIndexChosenViaFirstIndex
 	}
 
@@ -636,13 +636,13 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 	noCommittedEntries := input.FirstIndex() > kvpb.RaftIndex(input.RaftStatus.Commit)
 
 	logIndexValid := logEmpty ||
-		(decision.NewFirstIndex >= input.FirstIndex()) && (decision.NewFirstIndex <= input.LastIndex+1)
+		(decision.NewFirstIndex() >= input.FirstIndex()) && (decision.NewFirstIndex() <= input.LastIndex+1)
 	commitIndexValid := noCommittedEntries ||
-		(decision.NewFirstIndex <= commitIndex+1)
+		(decision.NewFirstIndex() <= commitIndex+1)
 	valid := logIndexValid && commitIndexValid
 	if !valid {
 		err := fmt.Sprintf("invalid truncation decision: output = %d, input: [%d, %d], commit idx = %d",
-			decision.NewFirstIndex, input.FirstIndex(), input.LastIndex, commitIndex)
+			decision.NewFirstIndex(), input.FirstIndex(), input.LastIndex, commitIndex)
 		panic(err)
 	}
 
@@ -732,7 +732,7 @@ func (rlq *raftLogQueue) process(
 	b := &kv.Batch{}
 	truncRequest := &kvpb.TruncateLogRequest{
 		RequestHeader:      kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
-		Index:              decision.NewFirstIndex,
+		Index:              decision.NewFirstIndex(),
 		RangeID:            r.RangeID,
 		ExpectedFirstIndex: decision.Input.FirstIndex(),
 	}
