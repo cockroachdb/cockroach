@@ -129,7 +129,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		defer commontest.CommitTransaction(ctx, t, store, txn)
 
 		// Ensure the root partition has been created.
-		_, err := txn.AddToPartition(
+		err := txn.AddToPartition(
 			ctx, treeKey, cspann.RootKey, vector.T{10, 10}, childKey1, valueBytes1)
 		require.NoError(t, err)
 
@@ -161,8 +161,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		_, err = txn.AddToPartition(
-			ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey2, valueBytes2)
+		err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey2, valueBytes2)
 		require.NoError(t, err)
 	}()
 
@@ -192,9 +191,9 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	valueBytes30 := cspann.ValueBytes{5, 6}
 	valueBytes40 := cspann.ValueBytes{7, 8}
 
-	_, err := txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+	err := txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
 	require.NoError(t, err)
-	_, err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
+	err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -236,7 +235,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	_, err = txn.AddToPartition(ctx, treeKey, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
+	err = txn.AddToPartition(ctx, treeKey, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
@@ -248,7 +247,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
 	// Remove vector from partition and check stats.
-	_, err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey30)
+	err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey30)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}

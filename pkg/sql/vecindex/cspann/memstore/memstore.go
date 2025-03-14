@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"slices"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
@@ -96,6 +97,9 @@ type memPartition struct {
 	// key is the unique identifier for the partition. It is immutable and can
 	// be accessed without a lock.
 	key qualifiedPartitionKey
+	// count tracks the number of vectors in this partition. It is an atomic so
+	// that it can be read outside the scope of the lock.
+	count atomic.Int64
 
 	// lock is a read-write lock that callers must acquire before accessing any
 	// of the fields.
@@ -282,6 +286,21 @@ func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
 			"in-memory transaction cannot be aborted because state has already been updated"))
 	}
 	return s.CommitTransaction(ctx, txn)
+}
+
+// EstimatePartitionCount implements the Store interface.
+func (s *Store) EstimatePartitionCount(
+	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (int, error) {
+	memPart, ok := s.getPartition(treeKey, partitionKey)
+	if !ok {
+		if partitionKey == cspann.RootKey {
+			// Root partition has not yet been created, so count = 0.
+			return 0, nil
+		}
+		return 0, cspann.ErrPartitionNotFound
+	}
+	return int(memPart.count.Load()), nil
 }
 
 // MergeStats implements the Store interface.
@@ -491,6 +510,7 @@ func (s *Store) insertPartitionLocked(
 	memPart := &memPartition{key: qkey}
 	memPart.lock.partition = partition
 	memPart.lock.created = s.tickLocked()
+	memPart.count.Store(int64(partition.Count()))
 	s.mu.partitions[qkey] = memPart
 	return memPart
 }

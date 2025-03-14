@@ -58,14 +58,14 @@ vec13: (6, 2)
 │   ├───• vec5 (1, 11)
 │   └───• vec9 (2, 8)
 │
-├───• 6 (0.3333, 3)
+├───• 6 (0, 3.5)
 │   │
 │   ├───• vec10 (0, 3)
 │   ├───• vec7 (0, 4)
-│   ├───• vec1 (1, 2)
-│   └───• vec11 (1, 1)
+│   ├───• vec11 (1, 1)
+│   └───• vec1 (1, 2)
 │
-└───• 7 (5.5, 3.5)
+└───• 7 (5.3333, 3.6667)
     │
     ├───• vec3 (4, 3)
     ├───• vec2 (7, 4)
@@ -76,17 +76,17 @@ vec13: (6, 2)
 search max-results=2 beam-size=1
 (1, 6)
 ----
-vec7: 5 (centroid=1.05)
-vec10: 10 (centroid=0.33)
+vec7: 5 (centroid=0.5)
+vec10: 10 (centroid=0.5)
 4 leaf vectors, 8 vectors, 4 full vectors, 2 partitions
 
 # Search for closest vectors with beam-size=2.
 search max-results=2 beam-size=2
 (1, 6)
 ----
-vec7: 5 (centroid=1.05)
+vec7: 5 (centroid=0.5)
 vec9: 5 (centroid=3.67)
-8 leaf vectors, 12 vectors, 6 full vectors, 3 partitions
+8 leaf vectors, 12 vectors, 7 full vectors, 3 partitions
 
 # ----------
 # Search tree with only duplicate vectors.

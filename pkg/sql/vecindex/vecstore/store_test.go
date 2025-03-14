@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -132,6 +133,9 @@ func TestStore(t *testing.T) {
 			vCol.GetID(),
 		)
 		require.NoError(t, err)
+
+		// Use CONSISTENT reads to ensure test is deterministic.
+		store.SetMinimumConsistency(kvpb.CONSISTENT)
 
 		return &testStore{Store: store, usePrefix: usePrefix, runner: runner}
 	}

@@ -117,6 +117,7 @@ func (tx *memTxn) SetRootPartition(
 	// was replaced.
 	memPart.lock.partition = partition
 	memPart.lock.created = tx.store.tickLocked()
+	memPart.count.Store(int64(partition.Count()))
 
 	tx.store.updatedStructureLocked(tx)
 	return nil
@@ -209,7 +210,7 @@ func (tx *memTxn) AddToPartition(
 	vec vector.T,
 	childKey cspann.ChildKey,
 	valueBytes cspann.ValueBytes,
-) (cspann.PartitionMetadata, error) {
+) error {
 	// Acquire exclusive lock on the partition in order to add a vector.
 	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
 	if err != nil {
@@ -218,7 +219,7 @@ func (tx *memTxn) AddToPartition(
 			memPart, err = tx.ensureLockedRootPartition(treeKey)
 		}
 		if err != nil {
-			return cspann.PartitionMetadata{}, err
+			return err
 		}
 	}
 	defer memPart.lock.Release()
@@ -229,10 +230,11 @@ func (tx *memTxn) AddToPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
+		memPart.count.Add(1)
 	}
 
 	tx.updated = true
-	return partition.Metadata(), nil
+	return nil
 }
 
 // RemoveFromPartition implements the Txn interface.
@@ -241,15 +243,15 @@ func (tx *memTxn) RemoveFromPartition(
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
 	childKey cspann.ChildKey,
-) (cspann.PartitionMetadata, error) {
+) error {
 	// Acquire exclusive lock on the partition in order to remove a vector.
 	memPart, err := tx.lockPartition(treeKey, partitionKey, true /* isExclusive */)
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition did not exist, so removal is no-op.
-			return tx.store.makeEmptyRootPartitionMetadata(), nil
+			return nil
 		}
-		return cspann.PartitionMetadata{}, err
+		return err
 	}
 	defer memPart.lock.Release()
 
@@ -259,6 +261,7 @@ func (tx *memTxn) RemoveFromPartition(
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		tx.store.reportPartitionSizeLocked(partition.Count())
+		memPart.count.Add(-1)
 	}
 
 	if partition.Count() == 0 && partition.Level() > cspann.LeafLevel {
@@ -269,7 +272,7 @@ func (tx *memTxn) RemoveFromPartition(
 	}
 
 	tx.updated = true
-	return partition.Metadata(), nil
+	return nil
 }
 
 // SearchPartitions implements the Txn interface.

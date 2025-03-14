@@ -44,8 +44,6 @@ type PartitionMetadata struct {
 	// once when the partition is created and never changes, even if additional
 	// vectors are added later.
 	Centroid vector.T
-	// Count is the number of vectors in the partition.
-	Count int
 }
 
 // Store encapsulates the component that’s actually storing the vectors, whether
@@ -67,6 +65,13 @@ type Store interface {
 	// AbortTransaction aborts a transaction previously started by a call to
 	// Begin.
 	AbortTransaction(ctx context.Context, txn Txn) error
+
+	// EstimatePartitionCount returns the approximate number of vectors in the
+	// given partition. The estimate can be based on a (bounded) stale copy of
+	// the partition.
+	EstimatePartitionCount(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (int, error)
 
 	// MergeStats merges recently gathered stats for this process with global
 	// stats if "skipMerge" is false. "stats" is updated with the latest global
@@ -117,8 +122,7 @@ type Txn interface {
 
 	// AddToPartition adds the given vector and its associated child key and value
 	// bytes to the partition with the given key. If the vector already exists, it
-	// is overwritten with the new key. AddToPartition returns the partition's
-	// metadata, reflecting its size after the add operation. It returns
+	// is overwritten with the new key. AddToPartition returns
 	// ErrPartitionNotFound if the partition cannot be found, or
 	// ErrRestartOperation if the caller should retry the insert operation that
 	// triggered this call.
@@ -129,18 +133,16 @@ type Txn interface {
 		vec vector.T,
 		childKey ChildKey,
 		valueBytes ValueBytes,
-	) (PartitionMetadata, error)
+	) error
 
 	// RemoveFromPartition removes the given vector and its associated child key
 	// from the partition with the given key. If the key is not present in the
-	// partition, it is a no-op. RemoveFromPartition returns the partition's
-	// metadata, reflecting its size after the remove operation. It returns
-	// ErrPartitionNotFound if the partition cannot be found, or
-	// ErrRestartOperation if the caller should retry the delete operation that
-	// triggered this call.
+	// partition, it is a no-op. RemoveFromPartition returns ErrPartitionNotFound
+	// if the partition cannot be found, or ErrRestartOperation if the caller
+	// should retry the delete operation that triggered this call.
 	RemoveFromPartition(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
-	) (PartitionMetadata, error)
+	) error
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
 	// Only partitions with the given keys are searched, and all of them must be

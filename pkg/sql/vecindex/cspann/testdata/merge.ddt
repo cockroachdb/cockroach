@@ -401,7 +401,7 @@ vec5: (1, 5)
     ├───• vec2 (3, 9)
     └───• vec5 (1, 5)
 
-force-merge partition-key=2 parent-partition-key=1
+force-split-or-merge partition-key=2 parent-partition-key=1
 ----
 • 1 (1.3333, 4.1667)
 │
@@ -416,7 +416,7 @@ force-merge partition-key=2 parent-partition-key=1
     ├───• vec2 (3, 9)
     └───• vec5 (1, 5)
 
-force-merge partition-key=3 parent-partition-key=2
+force-split-or-merge partition-key=3 parent-partition-key=2
 ----
 • 1 (1.3333, 4.1667)
 │

@@ -115,6 +115,11 @@ type Context struct {
 	// randomized is the original vector after it has been randomized by applying
 	// a random orthogonal transformation (ROT).
 	randomized vector.T
+	// ignoreLonelyVector, if true, prohibits searches from returning a vector
+	// that is the last remaining in its partition. This is used to avoid moving
+	// the last remaining vector to another partition, thereby creating an empty
+	// non-leaf partition, which is not allowed in a balanced K-means tree.
+	ignoreLonelyVector bool
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
@@ -364,9 +369,8 @@ func (vi *Index) Delete(
 	}
 
 	// Remove the vector from its partition in the store.
-	_, err = vi.removeFromPartition(
+	return vi.removeFromPartition(
 		ctx, idxCtx.txn, treeKey, result.ParentPartitionKey, result.ChildKey)
-	return err
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -404,15 +408,11 @@ func (vi *Index) SearchForInsert(
 		return nil, err
 	}
 
-	// Now fetch the centroid of the insert partition. This has the side effect
-	// of checking the size of the partition, in case it's over-sized.
+	// Now fetch the centroid of the insert partition.
 	partitionKey := result.ChildKey.PartitionKey
 	metadata, err := idxCtx.txn.GetPartitionMetadata(ctx, treeKey, partitionKey, true /* forUpdate */)
 	if err != nil {
 		return nil, err
-	}
-	if metadata.Count > vi.options.MaxPartitionSize {
-		vi.fixups.AddSplit(ctx, treeKey, result.ParentPartitionKey, partitionKey)
 	}
 
 	result.Vector = metadata.Centroid
@@ -474,18 +474,11 @@ func (vi *Index) ProcessFixups() {
 	vi.fixups.Process()
 }
 
-// ForceSplit enqueues a split fixup. It is used for testing.
-func (vi *Index) ForceSplit(
+// ForceSplitOrMerge enqueues a split or merge fixup. It is used for testing.
+func (vi *Index) ForceSplitOrMerge(
 	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
 ) {
-	vi.fixups.AddSplit(ctx, treeKey, parentPartitionKey, partitionKey)
-}
-
-// ForceMerge enqueues a merge fixup. It is used for testing.
-func (vi *Index) ForceMerge(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) {
-	vi.fixups.AddMerge(ctx, treeKey, parentPartitionKey, partitionKey)
+	vi.fixups.AddSplitOrMergeCheck(ctx, treeKey, parentPartitionKey, partitionKey)
 }
 
 // setupInsertContext sets up the given context for an insert operation. Before
@@ -526,10 +519,9 @@ func (vi *Index) insertHelper(
 	if err != nil {
 		return err
 	}
-	parentPartitionKey := result.ParentPartitionKey
 	partitionKey := result.ChildKey.PartitionKey
-	err = vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey, parentPartitionKey,
-		partitionKey, idxCtx.randomized, childKey, valueBytes)
+	err = vi.addToPartition(
+		ctx, idxCtx.txn, idxCtx.treeKey, partitionKey, idxCtx.randomized, childKey, valueBytes)
 	if errors.Is(err, ErrRestartOperation) {
 		return vi.insertHelper(ctx, idxCtx, childKey, valueBytes)
 	}
@@ -551,7 +543,11 @@ func (vi *Index) searchForInsertHelper(
 		return nil, errors.AssertionFailedf(
 			"SearchForInsert should return exactly one result, got %d", len(results))
 	}
-	return &results[0], err
+
+	vi.fixups.AddSplitOrMergeCheck(
+		ctx, idxCtx.treeKey, results[0].ParentPartitionKey, results[0].ChildKey.PartitionKey)
+
+	return &results[0], nil
 }
 
 // addToPartition calls the store to add the given vector to an existing
@@ -561,18 +557,14 @@ func (vi *Index) addToPartition(
 	ctx context.Context,
 	txn Txn,
 	treeKey TreeKey,
-	parentPartitionKey PartitionKey,
 	partitionKey PartitionKey,
 	vec vector.T,
 	childKey ChildKey,
 	valueBytes ValueBytes,
 ) error {
-	metadata, err := txn.AddToPartition(ctx, treeKey, partitionKey, vec, childKey, valueBytes)
+	err := txn.AddToPartition(ctx, treeKey, partitionKey, vec, childKey, valueBytes)
 	if err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
-	}
-	if metadata.Count > vi.options.MaxPartitionSize {
-		vi.fixups.AddSplit(ctx, treeKey, parentPartitionKey, partitionKey)
 	}
 	return vi.stats.OnAddOrRemoveVector(ctx)
 }
@@ -581,16 +573,15 @@ func (vi *Index) addToPartition(
 // existing partition.
 func (vi *Index) removeFromPartition(
 	ctx context.Context, txn Txn, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
-) (metadata PartitionMetadata, err error) {
-	metadata, err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey)
+) error {
+	err := txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey)
 	if err != nil {
-		return PartitionMetadata{},
-			errors.Wrapf(err, "removing vector from partition %d", partitionKey)
+		return errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
-	if err := vi.stats.OnAddOrRemoveVector(ctx); err != nil {
-		return PartitionMetadata{}, err
+	if err = vi.stats.OnAddOrRemoveVector(ctx); err != nil {
+		return err
 	}
-	return metadata, nil
+	return nil
 }
 
 // searchHelper contains the core search logic for the K-means tree. It begins
@@ -768,11 +759,19 @@ func (vi *Index) searchChildPartitions(
 		count := idxCtx.tempCounts[i]
 		searchSet.Stats.SearchedPartition(level, count)
 
+		// If one of the searched partitions has only 1 vector remaining, do not
+		// return that vector when "ignoreLonelyVector" is true.
+		if idxCtx.ignoreLonelyVector && idxCtx.level == level && count == 1 {
+			searchSet.RemoveResults(parentResults[i].ChildKey.PartitionKey)
+		}
+
 		partitionKey := parentResults[i].ChildKey.PartitionKey
 		if count < vi.options.MinPartitionSize && partitionKey != RootKey {
-			vi.fixups.AddMerge(ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
+			vi.fixups.AddSplitOrMergeCheck(
+				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
 		} else if count > vi.options.MaxPartitionSize {
-			vi.fixups.AddSplit(ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
+			vi.fixups.AddSplitOrMergeCheck(
+				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
 		}
 	}
 
