@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { groupGrantsByGrantee } from "./util";
+import { groupGrantsByGrantee } from "./utils";
 
 describe("groupGrantsByGrantee", () => {
   it("should group grants by grantee", () => {

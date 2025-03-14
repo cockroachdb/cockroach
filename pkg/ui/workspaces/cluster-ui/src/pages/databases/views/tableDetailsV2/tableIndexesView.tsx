@@ -13,13 +13,12 @@ import {
 } from "src/api/databases/tableIndexesApi";
 import { IndexStatsLink } from "src/components/links/indexStatsLink";
 import { Tooltip } from "src/components/tooltip";
+import { CockroachCloudContext } from "src/contexts";
 import { ActionCell } from "src/databaseTablePage/helperComponents";
 import Button from "src/sharedFromCloud/button";
 import { Table, TableColumnProps } from "src/sharedFromCloud/table";
 import { Timestamp } from "src/timestamp";
 import { DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
-
-import { CockroachCloudContext } from "../contexts";
 
 type TableIndexRow = TableIndex & {
   key: React.Key;

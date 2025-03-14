@@ -6,14 +6,13 @@
 import React, { useState } from "react";
 
 import { GrantsSortOptions } from "src/api/databases/grantsApi";
+import { PageSection } from "src/layouts";
 import PageCount from "src/sharedFromCloud/pageCount";
 import {
   TableColumnProps,
   Table,
   TableChangeFn,
 } from "src/sharedFromCloud/table";
-
-import { PageSection } from "../../layouts";
 
 // This type is used by data source for the table.
 export type GrantsByUser = {
