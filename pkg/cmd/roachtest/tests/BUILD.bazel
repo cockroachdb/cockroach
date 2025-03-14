@@ -342,6 +342,8 @@ go_library(
         "@org_golang_google_protobuf//proto",
         "@org_golang_x_exp//maps",
         "@org_golang_x_oauth2//clientcredentials",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
     ],
 )
 
@@ -353,6 +355,7 @@ go_test(
         "drt_test.go",
         "query_comparison_util_test.go",
         "restore_test.go",
+        "sysbench_test.go",
         "tpcc_test.go",
         ":mocks_drt",  # keep
     ],
