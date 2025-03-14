@@ -398,7 +398,7 @@ func (td *truncateDecision) NewFirstIndex() kvpb.RaftIndex {
 	return td.NewCompIndex + 1
 }
 
-func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int {
+func (td *truncateDecision) raftSnapshotsForIndex(compact kvpb.RaftIndex) int {
 	var n int
 	for _, p := range td.Input.RaftStatus.Progress {
 		if p.State != tracker.StateReplicate {
@@ -409,11 +409,6 @@ func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int
 			_ = truncatableIndexChosenViaProbingFollower // guru ref
 			continue
 		}
-
-		// TODO(pav-kv): pass "compacted" index instead of "firstIndex". The below
-		// comment is proactively written assuming compacted index, which is equal
-		// to firstIndex-1.
-		//
 		// When a log truncation happens at the "current log index" (i.e. the most
 		// recently committed index), it is often still in flight to the followers
 		// not required for quorum, and it is likely that they won't need a
@@ -422,20 +417,20 @@ func (td *truncateDecision) raftSnapshotsForIndex(firstIndex kvpb.RaftIndex) int
 		//
 		// Next <= compact means there is at least one entry that is not yet in
 		// flight to this follower, so truncating now would trigger a snapshot.
-		if kvpb.RaftIndex(p.Next)+1 <= firstIndex {
+		if kvpb.RaftIndex(p.Next) <= compact {
 			n++
 		}
 	}
 	// If there is a pending snapshot at some index, compacting beyond this index
 	// might cause a subsequent snapshot.
-	if snap := td.Input.PendingSnapshotIndex; snap != 0 && firstIndex > snap+1 {
+	if snap := td.Input.PendingSnapshotIndex; snap != 0 && snap < compact {
 		n++
 	}
 	return n
 }
 
 func (td *truncateDecision) NumNewRaftSnapshots() int {
-	return td.raftSnapshotsForIndex(td.NewFirstIndex()) - td.raftSnapshotsForIndex(td.Input.FirstIndex())
+	return td.raftSnapshotsForIndex(td.NewCompIndex) - td.raftSnapshotsForIndex(td.Input.CompIndex)
 }
 
 // String returns a representation for the decision.
