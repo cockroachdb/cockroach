@@ -322,11 +322,13 @@ func (tx *Txn) GetPartitionMetadata(
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
 
-	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
-	if err != nil {
-		return cspann.PartitionMetadata{}, err
+	// If we're preparing to update the root partition, then lazily create its
+	// metadata if it does not yet exist, and lock that record.
+	if forUpdate && partitionKey == cspann.RootKey && b.Results[0].Rows[0].Value == nil {
+		return tx.createRootPartition(ctx, treeKey, metadataKey)
 	}
-	return metadata, nil
+
+	return tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 }
 
 // AddToPartition implements the cspann.Txn interface.
@@ -573,6 +575,31 @@ func (tx *Txn) GetFullVectors(
 		err = tx.getFullVectorsFromPK(ctx, refs, numPKLookups)
 	}
 	return err
+}
+
+// createRootPartition uses the KV CPut operation to create metadata for the
+// root partition, and ensures that it has a SHARE lock on the key. It returns
+// the metadata for the root partition.
+//
+// NOTE: CPut will forward the calling transaction's timestamp to the time of
+// the last write of the metadata record. So if another transaction has raced to
+// create the metadata record, this transaction will always "see" it.
+func (tx *Txn) createRootPartition(
+	ctx context.Context, treeKey cspann.TreeKey, metadataKey roachpb.Key,
+) (cspann.PartitionMetadata, error) {
+	b := tx.kv.NewBatch()
+	meta, err := EncodePartitionMetadata(cspann.LeafLevel, tx.store.emptyVec)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+	b.CPut(metadataKey, meta, []byte{})
+	b.GetForShare(metadataKey, tx.lockDurability)
+	if err := tx.kv.Run(ctx, b); err != nil {
+		// This can happen when there are multiple writers racing to create the
+		// root metadata. Losing transactions may need to be refreshed.
+		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
+	}
+	return tx.extractMetadataFromKVResult(treeKey, cspann.RootKey, &b.Results[1])
 }
 
 // QuantizeAndEncode quantizes the given vector (which has already been
