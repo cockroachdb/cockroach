@@ -110,11 +110,17 @@ ROLLBACK
 statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
 BEGIN READ WRITE
 
+statement ok
+SET autocommit_before_ddl = false
+
 statement error (pq: cannot execute CREATE DATABASE in a read-only transaction|database \"\[1\]\" does not exist)
 BEGIN; CREATE DATABASE IF NOT EXISTS d2
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
