@@ -206,6 +206,7 @@ func (ru *Updater) UpdateRow(
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
 	pm PartialIndexUpdateHelper,
+	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) ([]tree.Datum, error) {
@@ -231,7 +232,7 @@ func (ru *Updater) UpdateRow(
 		// compromise in order to avoid having to read all values of
 		// the row that is being updated.
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
-			ctx, ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true, /* includeEmpty */
+			ctx, ru.FetchColIDtoRowIndex, oldValues, vh.GetDel(), pm.IgnoreForDel, true, /* includeEmpty */
 		)
 		if err != nil {
 			return nil, err
@@ -288,7 +289,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				oldValues,
-				rowenc.EmptyVectorIndexEncodingHelper,
+				vh.GetDel(),
 				false, /* includeEmpty */
 			)
 			if err != nil {
@@ -305,7 +306,7 @@ func (ru *Updater) UpdateRow(
 				index,
 				ru.FetchColIDtoRowIndex,
 				ru.newValues,
-				rowenc.EmptyVectorIndexEncodingHelper,
+				vh.GetPut(),
 				false, /* includeEmpty */
 			)
 			if err != nil {
@@ -354,11 +355,11 @@ func (ru *Updater) UpdateRow(
 
 	b := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, oth, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, vh, oth, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, b, ru.newValues, pm, oth, CPutOp, traceKV,
+			ctx, b, ru.newValues, pm, vh, oth, CPutOp, traceKV,
 		); err != nil {
 			return nil, err
 		}
