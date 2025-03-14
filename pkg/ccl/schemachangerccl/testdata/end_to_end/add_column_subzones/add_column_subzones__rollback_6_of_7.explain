@@ -1,0 +1,64 @@
+/* setup */
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  V STRING
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER TABLE t ADD COLUMN w TEXT NOT NULL DEFAULT 's';
+EXPLAIN (DDL) rollback at post-commit stage 6 of 7;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN w STRING NOT NULL DEFAULT ‹'s'›; following ALTER INDEX defaultdb.public.t@t_pkey CONFIGURE ZONE USING "gc.ttlseconds" = ‹1›; ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING "gc.ttlseconds" = ‹1›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 14 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC     → ABSENT      IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey+), SeqNum: 1}
+      │    │    ├── PUBLIC     → ABSENT      TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (w-)}
+      │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 104 (t), Name: "w", ColumnID: 3 (w-)}
+      │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey-)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (v), IndexID: 2 (t_pkey-)}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (v), IndexID: 3}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (w-), IndexID: 2 (t_pkey-)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (w-), IndexID: 3}
+      │    │    ├── WRITE_ONLY → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (w-), IndexID: 2 (t_pkey-)}
+      │    │    └── PUBLIC     → ABSENT      TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+      │    └── 15 Mutation operations
+      │         ├── DiscardTableZoneConfig {"TableID":104}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
+      │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── DiscardTableZoneConfig {"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":2,"Ordinal":1,"TableID":104}
+      │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 7 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (w-)}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (w-), TypeName: "STRING"}
+           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (w-), Expr: 's':::STRING}
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
+           └── 8 Mutation operations
+                ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -1867,3 +1867,15 @@ func failIfSafeUpdates(b BuildCtx, n tree.NodeFormatter) {
 		)
 	}
 }
+
+func hasSubzonesForIndex(b BuildCtx, tableID descpb.ID, indexID catid.IndexID) bool {
+	numIdxSubzones := b.QueryByID(tableID).FilterIndexZoneConfig().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexZoneConfig) bool {
+			return e.IndexID == indexID
+		}).Size()
+	numPartSubzones := b.QueryByID(tableID).FilterPartitionZoneConfig().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PartitionZoneConfig) bool {
+			return e.IndexID == indexID
+		}).Size()
+	return numIdxSubzones > 0 || numPartSubzones > 0
+}
