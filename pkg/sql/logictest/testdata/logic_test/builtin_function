@@ -2739,6 +2739,20 @@ SELECT width_bucket(1, array[]::int[]);
 ----
 0
 
+query I
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10);
+----
+11
+
+query I
+SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
+----
+0
+
+statement error pgcode 2201G pq: width_bucket\(\): operand, lower bound, and upper bound cannot be NaN
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+
+
 # Sanity check pg_type_is_visible.
 query BBB
 SELECT pg_type_is_visible('int'::regtype), pg_type_is_visible(NULL), pg_type_is_visible(99999)
