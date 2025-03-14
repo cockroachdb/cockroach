@@ -52,8 +52,8 @@ func TestShouldTruncate(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			var d truncateDecision
 			d.Input.LogSize = c.raftLogSize
-			d.Input.FirstIndex = 123
-			d.NewFirstIndex = d.Input.FirstIndex + c.truncatableIndexes
+			d.Input.CompIndex = 122
+			d.NewFirstIndex = d.Input.FirstIndex() + c.truncatableIndexes
 			v := d.ShouldTruncate()
 			if c.expected != v {
 				t.Fatalf("expected %v, but found %v", c.expected, v)
@@ -190,7 +190,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 				LogSize:              c.raftLogSize,
 				MaxLogSize:           targetSize,
 				LogSizeTrusted:       true,
-				FirstIndex:           c.firstIndex,
+				CompIndex:            c.firstIndex - 1,
 				LastIndex:            c.lastIndex,
 				PendingSnapshotIndex: c.pendingSnapshot,
 			}
@@ -211,8 +211,8 @@ func TestComputeTruncateDecision(t *testing.T) {
 			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
 			input.LogSizeTrusted = false
 			input.RaftStatus.RaftState = raftpb.StateLeader
-			if input.LastIndex <= input.FirstIndex {
-				input.LastIndex = input.FirstIndex + 1
+			if input.LastIndex <= input.FirstIndex() {
+				input.LastIndex = input.FirstIndex() + 1
 			}
 			decision = computeTruncateDecision(input)
 			should, recompute, prio = (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
@@ -279,7 +279,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			input := truncateDecisionInput{
 				RaftStatus:     status,
 				MaxLogSize:     1024,
-				FirstIndex:     10,
+				CompIndex:      9,
 				LastIndex:      lastIndex,
 				LogSizeTrusted: true,
 			}
@@ -468,7 +468,7 @@ func TestNewTruncateDecision(t *testing.T) {
 		if err != nil {
 			return 0, 0, 0, err
 		}
-		return d.Input.FirstIndex, d.NumTruncatableIndexes(), d.NewFirstIndex, nil
+		return d.Input.FirstIndex(), d.NumTruncatableIndexes(), d.NewFirstIndex, nil
 	}
 
 	aFirst, aTruncatable, aOldest, err := getIndexes()
@@ -810,7 +810,6 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	decision.Input.LogSizeTrusted = true
 	decision.Input.LogSize = 12
 	decision.Input.MaxLogSize = 1000
-	decision.Input.FirstIndex = 1 // LastIndex == 0, so it's an empty log
 
 	verify := func(shouldQ bool, recompute bool, prio float64) {
 		t.Helper()
@@ -825,7 +824,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	// Check all the boxes: unknown log size, leader, and non-empty log.
 	decision.Input.LogSize = 123
 	decision.Input.LogSizeTrusted = false
-	decision.Input.FirstIndex = 10
+	decision.Input.CompIndex = 9
 	decision.Input.LastIndex = 20
 
 	verify(true, true, 1+float64(decision.Input.MaxLogSize)/2)
@@ -834,7 +833,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	// Check all boxes except that log is empty.
 	decision = golden
-	decision.Input.LastIndex = decision.Input.FirstIndex - 1
+	decision.Input.LastIndex = decision.Input.FirstIndex() - 1
 	verify(false, false, 0)
 }
 
