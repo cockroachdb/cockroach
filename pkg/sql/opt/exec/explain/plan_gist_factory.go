@@ -666,6 +666,9 @@ func (u *unknownTable) Trigger(i int) cat.Trigger {
 // IsRowLevelSecurityEnabled is part of the cat.Table interface
 func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 
+// IsRowLevelSecurityForced is part of the cat.Table interface
+func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
+
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }
 
