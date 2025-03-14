@@ -377,7 +377,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Now:                   status.Now,
 		MinLeaseProposedTS:    p.repl.mu.minLeaseProposedTS,
 		RaftStatus:            raftStatus,
-		RaftFirstIndex:        p.repl.raftCompactedIndexRLocked() + 1, // TODO(pav-kv): "compacted" indexing
+		RaftCompacted:         p.repl.raftCompactedIndexRLocked(),
 		PrevLease:             status.Lease,
 		PrevLeaseNodeLiveness: status.Liveness,
 		PrevLeaseExpired:      status.IsExpired(),

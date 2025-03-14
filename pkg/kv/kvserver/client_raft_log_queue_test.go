@@ -96,7 +96,7 @@ func TestRaftLogQueue(t *testing.T) {
 		// Get the raft leader (and ensure one exists).
 		raftLeaderRepl := tc.GetRaftLeader(t, roachpb.RKey(key))
 		require.NotNil(t, raftLeaderRepl)
-		originalIndex := raftLeaderRepl.GetFirstIndex()
+		originalIndex := raftLeaderRepl.GetCompactedIndex()
 
 		// Write a collection of values to increase the raft log.
 		value := bytes.Repeat(key, 1000) // 1KB
@@ -116,9 +116,9 @@ func TestRaftLogQueue(t *testing.T) {
 			}
 			// Flush the engine to advance durability, which triggers truncation.
 			require.NoError(t, raftLeaderRepl.Store().TODOEngine().Flush())
-			// Ensure that firstIndex has increased indicating that the log
+			// Ensure that compacted index has increased indicating that the log
 			// truncation has occurred.
-			afterTruncationIndex = raftLeaderRepl.GetFirstIndex()
+			afterTruncationIndex = raftLeaderRepl.GetCompactedIndex()
 			if afterTruncationIndex <= originalIndex {
 				return errors.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
 					afterTruncationIndex, originalIndex)
@@ -130,14 +130,14 @@ func TestRaftLogQueue(t *testing.T) {
 		// already truncated log has no effect. This check, unlike in the last
 		// iteration, cannot use a succeedsSoon. This check is fragile in that the
 		// truncation triggered here may lose the race against the call to
-		// GetFirstIndex, giving a false negative. Fixing this requires additional
-		// instrumentation of the queues, which was deemed to require too much work
-		// at the time of this writing.
+		// GetCompactedIndex, giving a false negative. Fixing this requires
+		// additional instrumentation of the queues, which was deemed to require too
+		// much work at the time of this writing.
 		for i := range tc.Servers {
 			tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 		}
 
-		after2ndTruncationIndex := raftLeaderRepl.GetFirstIndex()
+		after2ndTruncationIndex := raftLeaderRepl.GetCompactedIndex()
 		if afterTruncationIndex > after2ndTruncationIndex {
 			t.Fatalf("second truncation destroyed state: afterTruncationIndex:%d after2ndTruncationIndex:%d",
 				afterTruncationIndex, after2ndTruncationIndex)
@@ -330,11 +330,11 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 		// Pin the leaseholder to the leader node (most likely it's already there).
 		require.NoError(t, tc.TransferRangeLease(*leader.Desc(), tc.Target(0)))
 
-		info := func(r *kvserver.Replica, name string) (kvpb.RaftIndex, kvpb.RaftIndex) {
-			first, last := r.GetFirstIndex(), r.GetLastIndex()
-			t.Logf("%s: log indices: [%d..%d]", name, first, last)
+		info := func(r *kvserver.Replica, name string) kvpb.RaftIndex {
+			compacted, last := r.GetCompactedIndex(), r.GetLastIndex()
+			t.Logf("%s: log indices: (%d..%d]", name, compacted, last)
 			t.Logf("%s: applied to: %d", name, r.State(ctx).ReplicaState.RaftAppliedIndex)
-			return first, last
+			return last
 		}
 		info(leader, "leader")
 		info(follower, "follower")
@@ -358,7 +358,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 			require.NoError(t, pErr.GoError())
 		}
 		t.Log("committed AddSSTs")
-		_, lastIndex := info(leader, "leader")
+		lastIndex := info(leader, "leader")
 		info(follower, "follower")
 
 		// Trigger raft log truncation. When the corresponding command is proposed,

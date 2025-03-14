@@ -28,7 +28,7 @@ add-pending-truncation id=1 first-index=16 trunc-index=22 delta-bytes=-20 sidelo
 ----
 r1.getPendingTruncs
 r1.getTruncatedState
-r1.sideloadedBytesIfTruncatedFromTo(21, 23)
+r1.sideloadedBytesIfTruncatedFromTo(20, 22)
 truncator ranges: 1
 
 print-replica-state id=1
@@ -69,7 +69,7 @@ add-pending-truncation id=2 first-index=21 trunc-index=22 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(21, 23)
+r2.sideloadedBytesIfTruncatedFromTo(20, 22)
 truncator ranges: 1, 2, 13
 
 print-replica-state id=2
@@ -189,7 +189,7 @@ add-pending-truncation id=2 first-index=21 trunc-index=24 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(23, 25)
+r2.sideloadedBytesIfTruncatedFromTo(22, 24)
 truncator ranges: 2
 
 print-replica-state id=2
@@ -226,14 +226,14 @@ add-pending-truncation id=2 first-index=25 trunc-index=26 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(25, 27)
+r2.sideloadedBytesIfTruncatedFromTo(24, 26)
 truncator ranges: 2
 
 add-pending-truncation id=2 first-index=27 trunc-index=28 delta-bytes=-20 sideloaded-bytes=10
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(27, 29)
+r2.sideloadedBytesIfTruncatedFromTo(26, 28)
 truncator ranges: 2
 
 print-replica-state id=2
@@ -247,7 +247,7 @@ add-pending-truncation id=2 first-index=28 trunc-index=29 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(29, 30)
+r2.sideloadedBytesIfTruncatedFromTo(28, 29)
 truncator ranges: 2
 
 # The last two pending truncations are merged and since they overlap,
@@ -291,7 +291,7 @@ add-pending-truncation id=2 first-index=30 trunc-index=31 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(30, 32)
+r2.sideloadedBytesIfTruncatedFromTo(29, 31)
 truncator ranges: 2
 
 print-replica-state id=2
@@ -340,14 +340,14 @@ add-pending-truncation id=2 first-index=32 trunc-index=32 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(32, 33)
+r2.sideloadedBytesIfTruncatedFromTo(31, 32)
 truncator ranges: 2
 
 add-pending-truncation id=2 first-index=33 trunc-index=33 delta-bytes=-20 sideloaded-bytes=10
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(33, 34)
+r2.sideloadedBytesIfTruncatedFromTo(32, 33)
 truncator ranges: 2
 
 print-replica-state id=2
@@ -361,7 +361,7 @@ add-pending-truncation id=2 first-index=34 trunc-index=34 delta-bytes=-20 sidelo
 ----
 r2.getPendingTruncs
 r2.getTruncatedState
-r2.sideloadedBytesIfTruncatedFromTo(34, 35)
+r2.sideloadedBytesIfTruncatedFromTo(33, 34)
 truncator ranges: 2
 
 # Because of the error, the delta for the merged truncation is not trusted.
@@ -416,14 +416,14 @@ add-pending-truncation id=3 first-index=21 trunc-index=22 delta-bytes=-20 sidelo
 ----
 r3.getPendingTruncs
 r3.getTruncatedState
-r3.sideloadedBytesIfTruncatedFromTo(21, 23)
+r3.sideloadedBytesIfTruncatedFromTo(20, 22)
 truncator ranges: 3
 
 add-pending-truncation id=3 first-index=23 trunc-index=24 delta-bytes=-20 sideloaded-bytes=10
 ----
 r3.getPendingTruncs
 r3.getTruncatedState
-r3.sideloadedBytesIfTruncatedFromTo(23, 25)
+r3.sideloadedBytesIfTruncatedFromTo(22, 24)
 truncator ranges: 3
 
 print-replica-state id=3
