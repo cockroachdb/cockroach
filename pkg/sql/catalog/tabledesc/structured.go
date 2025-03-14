@@ -2519,6 +2519,11 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 			appendStorageParam(catpb.AutoPartialStatsEnabledTableSettingName,
 				fmt.Sprintf("%v", value))
 		}
+		if settings.FullEnabled != nil {
+			value := *settings.FullEnabled
+			appendStorageParam(catpb.AutoFullStatsEnabledTableSettingName,
+				fmt.Sprintf("%v", value))
+		}
 		if settings.PartialMinStaleRows != nil {
 			value := *settings.PartialMinStaleRows
 			appendStorageParam(catpb.AutoPartialStatsMinStaleTableSettingName,
@@ -2576,11 +2581,20 @@ func (desc *wrapper) AutoStatsCollectionEnabled() catpb.AutoStatsCollectionStatu
 	return desc.AutoStatsSettings.AutoStatsCollectionEnabled()
 }
 
+// AutoPartialStatsCollectionEnabled implements the TableDescriptor interface.
 func (desc *wrapper) AutoPartialStatsCollectionEnabled() catpb.AutoPartialStatsCollectionStatus {
 	if desc.AutoStatsSettings == nil {
 		return catpb.AutoPartialStatsCollectionNotSet
 	}
 	return desc.AutoStatsSettings.AutoPartialStatsCollectionEnabled()
+}
+
+// AutoFullStatsCollectionEnabled implements the TableDescriptor interface.
+func (desc *wrapper) AutoFullStatsCollectionEnabled() catpb.AutoFullStatsCollectionStatus {
+	if desc.AutoStatsSettings == nil {
+		return catpb.AutoFullStatsCollectionNotSet
+	}
+	return desc.AutoStatsSettings.AutoFullStatsCollectionEnabled()
 }
 
 // AutoStatsMinStaleRows implements the TableDescriptor interface.
