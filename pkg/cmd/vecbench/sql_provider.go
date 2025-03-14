@@ -164,8 +164,36 @@ func (s *SQLProvider) InsertVectors(
 func (s *SQLProvider) Search(
 	ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
 ) ([]cspann.KeyBytes, error) {
-	// This will be implemented in the next phase
-	return nil, errors.New("Search not yet implemented for SQL provider")
+	// Construct a query that searches for similar vectors.
+	query := fmt.Sprintf(`
+		SELECT id
+		FROM %s
+		ORDER BY embedding <-> $1
+		LIMIT $2
+	`, s.tableName)
+
+	// Execute the query.
+	rows, err := s.pool.Query(ctx, query, vec, maxResults)
+	if err != nil {
+		return nil, errors.Wrap(err, "executing search query")
+	}
+	defer rows.Close()
+
+	// Collect the results.
+	var results []cspann.KeyBytes
+	for rows.Next() {
+		var id []byte
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "scanning search result")
+		}
+		results = append(results, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterating search results")
+	}
+
+	return results, nil
 }
 
 // GetMetrics implements the VectorProvider interface.

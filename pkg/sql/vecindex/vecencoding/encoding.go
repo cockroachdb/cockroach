@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package vecstore
+package vecencoding
 
 import (
 	"slices"
@@ -13,6 +13,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
+
+/* Vector indexes are encoded as follows:
+
+Interior (non-leaf) partition KV key:
+  ┌────────────┬──────────────┬───────────┬─────┬─────────────────┐
+  │Index Prefix│Prefix Columns│PartitionID│Level│Child PartitionID│
+  └────────────┴──────────────┴───────────┴─────┴─────────────────┘
+Leaf partition KV key:
+  ┌────────────┬──────────────┬───────────┬─────┬───────────┬────────────────────┐
+  │Index Prefix│Prefix Columns│PartitionID│Level│Primary Key│Sentinel Family ID 0│
+  └────────────┴──────────────┴───────────┴─────┴───────────┴────────────────────┘
+Value:
+  ┌────────────────────────┬────────────────────────┐
+  │Quantized+Encoded Vector│Composite+Stored Columns│
+  └────────────────────────┴────────────────────────┘
+*/
 
 // EncodePartitionMetadata encodes the metadata for a partition.
 func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
@@ -54,6 +70,18 @@ func EncodePartitionKey(appendTo []byte, key cspann.PartitionKey) []byte {
 // partition key.
 func EncodedPartitionKeyLen(key cspann.PartitionKey) int {
 	return encoding.EncLenUvarintAscending(uint64(key))
+}
+
+// EncodePartitionLevel encodes a partition's level into the given byte slice.
+// The level can be used to filter leaf vectors when scanning the partition.
+func EncodePartitionLevel(appendTo []byte, level cspann.Level) []byte {
+	return encoding.EncodeUvarintAscending(appendTo, uint64(level))
+}
+
+// EncodedPartitionLevelLen returns the number of bytes needed to encode the
+// partition level.
+func EncodedPartitionLevelLen(level cspann.Level) int {
+	return encoding.EncLenUvarintAscending(uint64(level))
 }
 
 // EncodeChildKey encodes a child key into the given byte slice. The "appendTo"

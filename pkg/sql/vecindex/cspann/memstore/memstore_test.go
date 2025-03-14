@@ -130,7 +130,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 
 		// Ensure the root partition has been created.
 		err := txn.AddToPartition(
-			ctx, treeKey, cspann.RootKey, vector.T{10, 10}, childKey1, valueBytes1)
+			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{10, 10}, childKey1, valueBytes1)
 		require.NoError(t, err)
 
 		// Acquire partition lock.
@@ -145,15 +145,14 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 			defer commontest.CommitTransaction(ctx, t, store, txn2)
 
 			searchSet := cspann.SearchSet{MaxResults: 1}
-			partitionCounts := []int{0}
-			_, err := txn2.SearchPartitions(ctx, treeKey,
-				[]cspann.PartitionKey{cspann.RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
+			toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
+			_, err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 			require.NoError(t, err)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
 				ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
 			require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
-			require.Equal(t, 2, partitionCounts[0])
+			require.Equal(t, 2, toSearch[0].Count)
 
 			wait.Done()
 		}()
@@ -161,7 +160,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey2, valueBytes2)
+		err = txn.AddToPartition(
+			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{3, 4}, childKey2, valueBytes2)
 		require.NoError(t, err)
 	}()
 
@@ -191,9 +191,11 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	valueBytes30 := cspann.ValueBytes{5, 6}
 	valueBytes40 := cspann.ValueBytes{7, 8}
 
-	err := txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+	err := txn.AddToPartition(
+		ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{1, 2}, childKey10, valueBytes10)
 	require.NoError(t, err)
-	err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
+	err = txn.AddToPartition(
+		ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{3, 4}, childKey20, valueBytes20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -235,7 +237,8 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	err = txn.AddToPartition(ctx, treeKey, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
+	err = txn.AddToPartition(
+		ctx, treeKey, partitionKey, partition.Level(), vector.T{7, 8}, childKey40, valueBytes40)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
@@ -247,7 +250,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 		{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
 	// Remove vector from partition and check stats.
-	err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey30)
+	err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, partition.Level(), childKey30)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}
