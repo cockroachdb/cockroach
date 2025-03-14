@@ -120,13 +120,15 @@ type Context struct {
 	// the last remaining vector to another partition, thereby creating an empty
 	// non-leaf partition, which is not allowed in a balanced K-means tree.
 	ignoreLonelyVector bool
+	// forInsert indicates that this is an insert operation (or a search for
+	// insert operation).
+	forInsert bool
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
 	tempResults         [1]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
-	tempKeys            []PartitionKey
-	tempCounts          []int
+	tempToSearch        []PartitionToSearch
 	tempVectorsWithKeys []VectorWithKey
 }
 
@@ -370,7 +372,7 @@ func (vi *Index) Delete(
 
 	// Remove the vector from its partition in the store.
 	return vi.removeFromPartition(
-		ctx, idxCtx.txn, treeKey, result.ParentPartitionKey, result.ChildKey)
+		ctx, idxCtx.txn, treeKey, result.ParentPartitionKey, LeafLevel, result.ChildKey)
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -493,6 +495,7 @@ func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector
 		SkipRerank:   vi.options.DisableErrorBounds,
 		UpdateStats:  true,
 	}, SecondLevel)
+	idxCtx.forInsert = true
 }
 
 // setupContext sets up the given context as an operation is beginning.
@@ -503,6 +506,7 @@ func (vi *Index) setupContext(
 	idxCtx.options = options
 	idxCtx.level = level
 	idxCtx.original = vec
+	idxCtx.forInsert = false
 
 	// Randomize the original vector.
 	idxCtx.randomized = ensureSliceLen(idxCtx.randomized, len(vec))
@@ -519,9 +523,12 @@ func (vi *Index) insertHelper(
 	if err != nil {
 		return err
 	}
+
+	// Add a vector to the found partition, which is a child of the partition that
+	// was searched.
 	partitionKey := result.ChildKey.PartitionKey
-	err = vi.addToPartition(
-		ctx, idxCtx.txn, idxCtx.treeKey, partitionKey, idxCtx.randomized, childKey, valueBytes)
+	err = vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
+		partitionKey, idxCtx.level-1, idxCtx.randomized, childKey, valueBytes)
 	if errors.Is(err, ErrRestartOperation) {
 		return vi.insertHelper(ctx, idxCtx, childKey, valueBytes)
 	}
@@ -558,11 +565,12 @@ func (vi *Index) addToPartition(
 	txn Txn,
 	treeKey TreeKey,
 	partitionKey PartitionKey,
+	level Level,
 	vec vector.T,
 	childKey ChildKey,
 	valueBytes ValueBytes,
 ) error {
-	err := txn.AddToPartition(ctx, treeKey, partitionKey, vec, childKey, valueBytes)
+	err := txn.AddToPartition(ctx, treeKey, partitionKey, level, vec, childKey, valueBytes)
 	if err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
@@ -572,9 +580,14 @@ func (vi *Index) addToPartition(
 // removeFromPartition calls the store to remove a vector, by its key, from an
 // existing partition.
 func (vi *Index) removeFromPartition(
-	ctx context.Context, txn Txn, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
+	ctx context.Context,
+	txn Txn,
+	treeKey TreeKey,
+	partitionKey PartitionKey,
+	level Level,
+	childKey ChildKey,
 ) error {
-	err := txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey)
+	err := txn.RemoveFromPartition(ctx, treeKey, partitionKey, level, childKey)
 	if err != nil {
 		return errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
@@ -743,20 +756,29 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 func (vi *Index) searchChildPartitions(
 	ctx context.Context, idxCtx *Context, searchSet *SearchSet, parentResults SearchResults,
 ) (level Level, err error) {
-	idxCtx.tempKeys = ensureSliceLen(idxCtx.tempKeys, len(parentResults))
+	idxCtx.tempToSearch = ensureSliceLen(idxCtx.tempToSearch, len(parentResults))
 	for i := range parentResults {
-		idxCtx.tempKeys[i] = parentResults[i].ChildKey.PartitionKey
+		// If this is an Insert or SearchForInsert operation, then do not scan
+		// leaf vectors. Insert operations never need leaf vectors and scanning
+		// them only increases the contention footprint. This is only needed when
+		// we're searching the root partition, as we do not know its level until
+		// we read its metadata record. By contrast, we know whether a non-root
+		// partition is a leaf partition because we know the level of its parent.
+		partitionKey := parentResults[i].ChildKey.PartitionKey
+		idxCtx.tempToSearch[i] = PartitionToSearch{
+			Key:                partitionKey,
+			ExcludeLeafVectors: idxCtx.forInsert && partitionKey == RootKey,
+		}
 	}
 
-	idxCtx.tempCounts = ensureSliceLen(idxCtx.tempCounts, len(parentResults))
 	level, err = idxCtx.txn.SearchPartitions(
-		ctx, idxCtx.treeKey, idxCtx.tempKeys, idxCtx.randomized, searchSet, idxCtx.tempCounts)
+		ctx, idxCtx.treeKey, idxCtx.tempToSearch, idxCtx.randomized, searchSet)
 	if err != nil {
 		return 0, err
 	}
 
 	for i := range parentResults {
-		count := idxCtx.tempCounts[i]
+		count := idxCtx.tempToSearch[i].Count
 		searchSet.Stats.SearchedPartition(level, count)
 
 		// If one of the searched partitions has only 1 vector remaining, do not
@@ -933,6 +955,15 @@ func (vi *Index) Format(
 	helper = func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error {
 		partition, err := idxCtx.txn.GetPartition(ctx, treeKey, partitionKey)
 		if err != nil {
+			if errors.Is(err, ErrPartitionNotFound) {
+				// This should never happen, and indicates a bug in the vector index
+				// implementation. Fallback to showing MISSING.
+				buf.WriteString(parentPrefix)
+				buf.WriteString("• ")
+				buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
+				buf.WriteString(" (MISSING)\n")
+				return nil
+			}
 			return err
 		}
 		// Get centroid for the partition and un-randomize it so that it displays
