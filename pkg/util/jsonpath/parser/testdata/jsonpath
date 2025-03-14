@@ -247,6 +247,21 @@ $[$var]
 ----
 $[$"var"] -- normalized!
 
+parse
+$.a[$.a]
+----
+$."a"[$."a"] -- normalized!
+
+parse
+$[true]
+----
+$[true]
+
+parse
+$[false]
+----
+$[false]
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
@@ -280,14 +295,6 @@ $[$"var"] -- normalized!
 
 # parse
 # $.1a
-# ----
-
-# parse
-# $[true]
-# ----
-
-# parse
-# $[false]
 # ----
 
 # parse

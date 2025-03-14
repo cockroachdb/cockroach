@@ -10,18 +10,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
-)
-
-type ScalarType int
-
-const (
-	ScalarInt ScalarType = iota
-	ScalarFloat
-	ScalarString
-	ScalarBool
-	ScalarNull
-	ScalarVariable
 )
 
 type Jsonpath struct {
@@ -77,38 +65,15 @@ func (p Paths) String() string {
 	return sb.String()
 }
 
-type Scalar struct {
-	Type     ScalarType
-	Value    json.JSON
-	Variable string
-}
-
-var _ Path = Scalar{}
-
-func (s Scalar) String() string {
-	if s.Type == ScalarVariable {
-		return fmt.Sprintf("$%q", s.Variable)
-	}
-	return s.Value.String()
-}
-
-type ArrayIndex Scalar
-
-var _ Path = ArrayIndex{}
-
-func (a ArrayIndex) String() string {
-	return Scalar(a).String()
-}
-
 type ArrayIndexRange struct {
-	Start ArrayIndex
-	End   ArrayIndex
+	Start Path
+	End   Path
 }
 
 var _ Path = ArrayIndexRange{}
 
 func (a ArrayIndexRange) String() string {
-	return fmt.Sprintf("%s to %s", a.Start.Value, a.End.Value)
+	return fmt.Sprintf("%s to %s", a.Start, a.End)
 }
 
 type ArrayList []Path

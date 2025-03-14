@@ -2,7 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "eval",
-    srcs = ["eval.go"],
+    srcs = [
+        "array.go",
+        "eval.go",
+        "key.go",
+        "scalar.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval",
     visibility = ["//visibility:public"],
     deps = [

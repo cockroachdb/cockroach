@@ -2,11 +2,12 @@
 package parser
 
 import (
+  "strconv"
+
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/util/json"
   "github.com/cockroachdb/cockroach/pkg/util/jsonpath"
-  "github.com/cockroachdb/errors"
 )
 
 %}
@@ -79,7 +80,11 @@ func (u *jsonpathSymUnion) path() jsonpath.Path {
   return u.val.(jsonpath.Path)
 }
 
-func (u *jsonpathSymUnion) paths() []jsonpath.Path {
+func (u *jsonpathSymUnion) paths() jsonpath.Paths {
+  return u.val.(jsonpath.Paths)
+}
+
+func (u *jsonpathSymUnion) pathArr() []jsonpath.Path {
   return u.val.([]jsonpath.Path)
 }
 
@@ -93,18 +98,6 @@ func (u *jsonpathSymUnion) numVal() *tree.NumVal {
 
 func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
   return u.val.(jsonpath.ArrayList)
-}
-
-func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
-  paths := path.(jsonpath.Paths)
-  if len(paths) != 1 {
-    return jsonpath.ArrayIndex{}, errors.New("expected exactly one path")
-  }
-  s, ok := paths[0].(jsonpath.Scalar)
-  if !ok {
-    return jsonpath.ArrayIndex{}, errors.New("expected scalar value")
-  }
-  return jsonpath.ArrayIndex(s), nil
 }
 
 %}
@@ -136,16 +129,19 @@ func pathToIndex(path jsonpath.Path) (jsonpath.ArrayIndex, error) {
 %token <str> VARIABLE
 %token <str> TO
 
+%token <str> TRUE
+%token <str> FALSE
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
-%type <[]jsonpath.Path> accessor_expr
 %type <jsonpath.Path> accessor_op
 %type <jsonpath.Path> path_primary
 %type <jsonpath.Path> key
 %type <jsonpath.Path> array_accessor
 %type <jsonpath.Path> scalar_value
 %type <jsonpath.Path> index_elem
+%type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <str> key_name
 %type <str> any_identifier
@@ -187,7 +183,7 @@ expr_or_predicate:
 expr:
   accessor_expr
   {
-    $$.val = jsonpath.Paths($1.paths())
+    $$.val = jsonpath.Paths($1.pathArr())
   }
 ;
 
@@ -198,7 +194,7 @@ accessor_expr:
   }
 | accessor_expr accessor_op
   {
-    $$.val = append($1.paths(), $2.path())
+    $$.val = append($1.pathArr(), $2.path())
   }
 ;
 
@@ -211,6 +207,7 @@ path_primary:
   {
     $$.val = $1.path()
   }
+// TODO(normanchenn): support LAST for array ranges.
 ;
 
 accessor_op:
@@ -263,28 +260,16 @@ index_list:
 index_elem:
   expr
   {
-    index, err := pathToIndex($1.path())
-    if err != nil {
-      return setErr(jsonpathlex, err)
-    }
-    $$.val = index
+    $$.val = $1.path()
   }
 | expr TO expr
   {
-    firstIndex, err := pathToIndex($1.path())
-    if err != nil {
-      return setErr(jsonpathlex, err)
+    $$.val = jsonpath.ArrayIndexRange{
+      Start: $1.path(),
+      End: $3.path(),
     }
-
-    secondIndex, err := pathToIndex($3.path())
-    if err != nil {
-      return setErr(jsonpathlex, err)
-    }
-
-    $$.val = jsonpath.ArrayIndexRange{Start: firstIndex, End: secondIndex}
   }
 ;
-
 
 scalar_value:
   VARIABLE
@@ -301,9 +286,25 @@ scalar_value:
   }
 | FCONST
   {
-    return unimplemented(jsonpathlex, "float consts")
+    f, err := strconv.ParseFloat($1, 64)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    j, err := json.FromFloat64(f)
+    if err != nil {
+      return setErr(jsonpathlex, err)
+    }
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarFloat, Value: j}
   }
-// TODO(normanchenn): support strings, bools, null.
+| TRUE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(true)}
+  }
+| FALSE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
+  }
+// TODO(normanchenn): support strings, null.
 ;
 
 any_identifier:
@@ -312,9 +313,11 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  LAX
+  FALSE
+| LAX
 | STRICT
 | TO
+| TRUE
 ;
 
 %%

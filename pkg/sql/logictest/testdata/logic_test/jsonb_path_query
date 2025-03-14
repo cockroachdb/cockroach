@@ -1,11 +1,6 @@
 # LogicTest: local
 
 query T
-SELECT jsonb_path_query('{"a": "hello"}', '$.a[0 to 0]');
-----
-"hello"
-
-query T
 SELECT jsonb_path_query('{}', '$')
 ----
 {}
@@ -207,6 +202,11 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[4 to 4]');
 ----
 5
 
+query T
+SELECT jsonb_path_query('{"a": "hello"}', '$.a[0 to 0]');
+----
+"hello"
+
 query T rowsort
 SELECT jsonb_path_query('{"a": [[5, 4], [7, 6], [6, 7], [10], []]}', '$.a[*][0]');
 ----
@@ -264,6 +264,14 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1]');
 ----
 2
 
+# TODO(normanchenn): this will be changed after floats are supported.
+statement error pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[0.99]')
+
+# TODO(normanchenn): this will be changed after floats are supported.
+statement error pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[1.01]')
+
 query T
 SELECT jsonb_path_query('{"a": [10, 9, 8, 7]}', '$.a[$varInt]', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
 ----
@@ -295,6 +303,55 @@ SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}, {"baz": "
 
 statement error pgcode 2203A jsonpath member accessor can only be applied to an object
 SELECT jsonb_path_query('{"foo": [{"bar": "value"}, {"bar": "value2"}]}', 'strict $.foo.bar');
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": [1, 2, 3, 4, 5]}', '$.a[$.a]');
+
+query T
+SELECT jsonb_path_query('{}', '$"true"', '{"true": "hello"}');
+----
+"hello"
+
+statement error pgcode 22033 pq: jsonpath array subscript is not a single numeric value
+SELECT jsonb_path_query('{"a": []}', '$.a[true]');
+
+statement error pgcode 42704 pq: could not find jsonpath variable "undefined_var"
+SELECT jsonb_path_query('[{"a": 1}]', '$undefined_var');
+
+query T
+SELECT jsonb_path_query('{}', '2')
+----
+2
+
+query T
+SELECT jsonb_path_query('{}'::jsonb, '8.73'::jsonpath);
+----
+8.73
+
+query T
+SELECT jsonb_path_query('{}', 'false')
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', '$varInt', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+----
+1
+
+query T
+SELECT jsonb_path_query('{}', '$varFloat', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+----
+2.3
+
+query T
+SELECT jsonb_path_query('{}', '$varString', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+----
+"a"
+
+query T
+SELECT jsonb_path_query('{}', '$varBool', '{"varInt": 1, "varFloat": 2.3, "varString": "a", "varBool": true, "varNull": null}')
+----
+true
 
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
