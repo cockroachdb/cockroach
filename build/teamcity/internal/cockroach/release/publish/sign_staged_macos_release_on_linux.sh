@@ -15,9 +15,14 @@ curr_dir=$(pwd)
 
 remove_files_on_exit() {
   rm -f "$curr_dir/.google-credentials.json"
-  rm -f "$curr_dir/.secrets"
+  rm -rf "$curr_dir/.secrets"
 }
 trap remove_files_on_exit EXIT
+
+mkdir -p .secrets
+gcloud secrets versions access latest --secret=apple-signing-cert | base64 -d > "$curr_dir/.secrets/cert.p12"
+gcloud secrets versions access latest --secret=apple-signing-cert-password > "$curr_dir/.secrets/cert.pass"
+gcloud secrets versions access latest --secret=appstoreconnect-api-key > "$curr_dir/.secrets/api_key.json"
 
 # By default, set dry-run variables
 google_credentials="$GCS_CREDENTIALS_DEV"
@@ -32,11 +37,6 @@ if [[ -z "${DRY_RUN}" ]] ; then
 fi
 
 log_into_gcloud
-
-mkdir -p .secrets
-gcloud secrets versions access latest --secret=apple-signing-cert | base64 -d > "$curr_dir/.secrets/cert.p12"
-gcloud secrets versions access latest --secret=apple-signing-cert-password > "$curr_dir/.secrets/cert.pass"
-gcloud secrets versions access latest --secret=appstoreconnect-api-key > "$curr_dir/.secrets/api_key.json"
 
 mkdir -p artifacts
 cd artifacts
