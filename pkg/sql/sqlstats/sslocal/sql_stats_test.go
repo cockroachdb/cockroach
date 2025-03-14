@@ -69,6 +69,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
 		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
 		stats.Key.KeyData = randomData.Key
+		stats.ID = randomData.ID
 		testData = append(testData, stats)
 	}
 
@@ -444,7 +445,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		Settings: st,
 	})
 
-	insightsProvider := insights.New(st, insights.NewMetrics(), nil)
 	sqlStats := sslocal.New(
 		st,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -460,7 +460,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
-		insightsProvider.Writer(),
+		nil,
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
 		false, /* underOuterTxn */
@@ -472,10 +472,11 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		txnFingerprintIDHash := util.MakeFNV64()
 		statsCollector.StartTransaction()
 		defer func() {
-			statsCollector.EndTransaction(ctx, txnFingerprintID, false /* implicit */)
+			statsCollector.EndTransaction(ctx, txnFingerprintID, testCase.implicit /* implicit */)
 			require.NoError(t,
 				statsCollector.
-					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{
+					RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+						FingerprintID: txnFingerprintID,
 						SessionData: &sessiondata.SessionData{
 							SessionData: sessiondatapb.SessionData{
 								UserProto:       username.RootUserName().EncodeProto(),
@@ -486,14 +487,12 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 					}))
 		}()
 		for _, fingerprint := range testCase.fingerprints {
-			stmtFingerprintID, err := statsCollector.RecordStatement(
-				ctx,
-				appstatspb.StatementStatisticsKey{
-					Query:       fingerprint,
-					ImplicitTxn: testCase.implicit,
-				},
-				sqlstats.RecordedStmtStats{},
-			)
+			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
+			err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+				FingerprintID: stmtFingerprintID,
+				Query:         fingerprint,
+				ImplicitTxn:   testCase.implicit,
+			})
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
@@ -596,21 +595,19 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		for _, txn := range simulatedTxns {
 			// Collect stats for the simulated transaction.
 			txnFingerprintIDHash := util.MakeFNV64()
-			statsCollector.StartTransaction()
-
 			for _, fingerprint := range txn.stmtFingerprints {
-				stmtFingerprintID, err := statsCollector.RecordStatement(
-					ctx,
-					appstatspb.StatementStatisticsKey{Query: fingerprint},
-					sqlstats.RecordedStmtStats{},
-				)
+				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
+				err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+					FingerprintID: stmtFingerprintID,
+					Query:         fingerprint,
+				})
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID, false /* implicit */)
-			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
+			err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 				SessionData: &sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						UserProto:       username.RootUserName().EncodeProto(),
@@ -740,7 +737,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 				finishedExecute.Store(true)
 			}
 		},
-		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ *sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
 			if !isInternal && tc.query == stmt && finishedExecute.Load() {
@@ -2081,6 +2078,7 @@ func populateSqlStats(t testing.TB, sqlStats *sslocal.SQLStats, expectedCountSta
 	for i := 0; i < expectedCountStats; i++ {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
 		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stats.ID = appstatspb.StmtFingerprintID(i)
 		stats.Key.KeyData = randomData.Key
 		testStmtData = append(testStmtData, stats)
 
