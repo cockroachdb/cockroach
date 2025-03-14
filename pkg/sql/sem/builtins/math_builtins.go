@@ -666,7 +666,7 @@ func powImpls() builtinDefinition {
 		}, "Calculates `x`^`y`.", volatility.Immutable),
 		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			dd := &tree.DDecimal{}
-			_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
+			err := eval.DecimalPow(tree.DecimalCtx, &dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates `x`^`y`.", volatility.Immutable),
 		tree.Overload{
