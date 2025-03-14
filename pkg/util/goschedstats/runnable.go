@@ -14,7 +14,7 @@ import (
 
 // Supported is true if the system has access to the internal goroutine statistics
 // (i.e. if CockroachDB was built using our Go fork).
-const Supported = supported
+const Supported = true
 
 // CumulativeNormalizedRunnableGoroutines returns the sum (over all seconds
 // since the program started) of the average number of runnable goroutines per
@@ -74,4 +74,4 @@ var alwaysUseShortSamplePeriodEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"goschedstats.always_use_short_sample_period.enabled",
 	"when set to true, the system always does 1ms sampling of runnable queue lengths",
-	false)
+	true)

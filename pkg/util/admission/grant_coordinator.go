@@ -299,6 +299,9 @@ type GrantCoordinator struct {
 
 	settings *cluster.Settings
 
+	isCPUTimeTokenGranter bool
+	closeCh               chan struct{}
+
 	// mu is ordered before any mutex acquired in a requester implementation.
 	mu struct {
 		syncutil.Mutex
@@ -320,6 +323,9 @@ type GrantCoordinator struct {
 		// two resources.
 		cpuOverloadIndicator cpuOverloadIndicator
 		cpuLoadListener      CPULoadListener
+
+		// Non-nil iff GrantCoordinator.isCPUTimeTokenGranter.
+		ctta *cpuTimeTokenAdjuster
 
 		// The latest value of GOMAXPROCS, received via CPULoad. Only initialized if
 		// the cpu resource is being handled by this GrantCoordinator.
@@ -359,14 +365,18 @@ var _ CPULoadListener = &GrantCoordinator{}
 
 // Options for constructing GrantCoordinators.
 type Options struct {
-	MinCPUSlots                   int
-	MaxCPUSlots                   int
-	SQLKVResponseBurstTokens      int64
-	SQLSQLResponseBurstTokens     int64
+	MinCPUSlots               int
+	MaxCPUSlots               int
+	SQLKVResponseBurstTokens  int64
+	SQLSQLResponseBurstTokens int64
+	// Non-nil implies GrantCoordinator.isCPUTimeTokenGranter is true.
+	CPUMetricsProvider            CPUMetricsProvider
 	TestingDisableSkipEnforcement bool
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
 	makeStoreRequesterFunc makeStoreRequesterFunc
+	// Only set to true in tests.
+	testingNoCallsToCPUMetricsProvider bool
 }
 
 var _ base.ModuleTestingKnobs = &Options{}
@@ -376,7 +386,7 @@ func (*Options) ModuleTestingKnobs() {}
 
 // DefaultOptions are the default settings for various admission control knobs.
 var DefaultOptions = Options{
-	MinCPUSlots:               1,
+	MinCPUSlots:               10000,
 	MaxCPUSlots:               100000, /* TODO(sumeer): add cluster setting */
 	SQLKVResponseBurstTokens:  100000, /* TODO(sumeer): add cluster setting */
 	SQLSQLResponseBurstTokens: 100000, /* TODO(sumeer): add cluster setting */
@@ -495,6 +505,10 @@ func makeStoresGrantCoordinators(
 	return storeCoordinators
 }
 
+type CPUMetricsProvider interface {
+	GetCPUInfo() (totalCPUTimeMillis int64, cpuCapacity float64)
+}
+
 func makeRegularGrantCoordinator(
 	ambientCtx log.AmbientContext,
 	opts Options,
@@ -530,7 +544,37 @@ func makeRegularGrantCoordinator(
 	coord.mu.cpuLoadListener = kvSlotAdjuster
 	coord.mu.numProcs = 1
 
-	kvg := &slotGranter{
+	coord.isCPUTimeTokenGranter =
+		opts.CPUMetricsProvider != nil || opts.testingNoCallsToCPUMetricsProvider
+	var stg *slotAndCPUTimeTokenGranter
+	var kvg *slotGranter
+	var gwb granterWithBoth
+	var ctta *cpuTimeTokenAdjuster
+	if coord.isCPUTimeTokenGranter {
+		stg = &slotAndCPUTimeTokenGranter{
+			exhaustedOneStart:                 timeutil.Now(),
+			exhaustedTwoStart:                 timeutil.Now(),
+			cpuTimeTokensExhaustedDurationOne: metrics.KVCPUTimeTokensExhaustedDurationOne,
+			cpuTimeTokensExhaustedDurationTwo: metrics.KVCPUTimeTokensExhaustedDurationTwo,
+		}
+		kvg = &stg.sg
+		gwb = stg
+		ctta = &cpuTimeTokenAdjuster{
+			settings:                  st,
+			granter:                   stg,
+			tenantTokensRequester:     nil,
+			kvCPUTimeTokensOne:        metrics.KVCPUTimeTokensOne,
+			kvCPUTimeTokensTwo:        metrics.KVCPUTimeTokensTwo,
+			kvCPUTimeTokensRateOne:    metrics.KVCPUTimeTokensRateOne,
+			kvCPUTimeTokensRateTwo:    metrics.KVCPUTimeTokensRateTwo,
+			kvTenantCPUTimeTokensRate: metrics.KVTenantCPUTimeTokensRate,
+			kvTokensToCPUMultiplier:   metrics.KVTokensToCPUMultiplier,
+		}
+	} else {
+		kvg = &slotGranter{}
+		gwb = kvg
+	}
+	*kvg = slotGranter{
 		coord:                        coord,
 		workKind:                     KVWork,
 		totalSlots:                   opts.MinCPUSlots,
@@ -538,13 +582,81 @@ func makeRegularGrantCoordinator(
 		usedSlotsMetric:              metrics.KVUsedSlots,
 		slotsExhaustedDurationMetric: metrics.KVSlotsExhaustedDuration,
 	}
-
 	kvSlotAdjuster.granter = kvg
 	wqMetrics := makeWorkQueueMetrics(KVWork.String(), registry, admissionpb.NormalPri, admissionpb.LockingNormalPri)
-	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, makeWorkQueueOptions(KVWork))
+	req := makeRequester(ambientCtx, KVWork, gwb, st, wqMetrics, makeWorkQueueOptions(KVWork))
 	coord.queues[KVWork] = req
 	kvg.requester = req
-	coord.granters[KVWork] = kvg
+	coord.granters[KVWork] = gwb
+	if ctta != nil {
+		wq, ok := req.(*WorkQueue)
+		if ok {
+			wq.isCPUTimeTokenQueue = true
+		}
+		ttreq, ok := req.(tenantTokensRequester)
+		if !ok {
+			panic("not a tenantTokensRequester")
+		}
+		ctta.tenantTokensRequester = ttreq
+		coord.mu.ctta = ctta
+		if !opts.testingNoCallsToCPUMetricsProvider {
+			totalCPUTimeMillis, cpuCapacity := opts.CPUMetricsProvider.GetCPUInfo()
+			timeSource := timeutil.DefaultTimeSource{}
+			coord.mu.Lock()
+			ctta.adjust(timeSource.Now(), totalCPUTimeMillis, cpuCapacity)
+			ctta.allocateTokensTick(int64(time.Second / time.Millisecond))
+			coord.mu.Unlock()
+			coord.closeCh = make(chan struct{})
+			go func() {
+				adjustTime := timeSource.Now()
+				ticker := timeSource.NewTicker(time.Millisecond)
+				lastRemainingTicks := int64(0)
+				var remainingTicksCount int64
+				for {
+					select {
+					case t := <-ticker.Ch():
+						var remainingTicks int64
+						elapsedDur := t.Sub(adjustTime)
+						if elapsedDur >= time.Second {
+							if lastRemainingTicks > 1 {
+								sll := slowMutexWithLogging{name: "coord.mu final alloc", mu: &coord.mu.Mutex}
+								sll.lock()
+								// coord.mu.Lock()
+								ctta.allocateTokensTick(1)
+								sll.unlock()
+								remainingTicksCount++
+							}
+							if remainingTicksCount < 100 {
+								log.Infof(context.Background(), "%s: remainingTicksCount: %d", t.String(), remainingTicksCount)
+							}
+							remainingTicksCount = 0
+							remainingTicks = int64(time.Second / time.Millisecond)
+							adjustTime = t
+							totalCPUTimeMillis, cpuCapacity := opts.CPUMetricsProvider.GetCPUInfo()
+							sll := slowMutexWithLogging{name: "coord.mu adjust", mu: &coord.mu.Mutex}
+							sll.lock()
+							// coord.mu.Lock()
+							ctta.adjust(timeSource.Now(), totalCPUTimeMillis, cpuCapacity)
+							sll.unlock()
+						} else {
+							remainingTicks =
+								int64((time.Second - elapsedDur + time.Millisecond - 1) / time.Millisecond)
+						}
+						sll := slowMutexWithLogging{name: "coord.mu alloc", mu: &coord.mu.Mutex}
+						sll.lock()
+						// coord.mu.Lock()
+						ctta.allocateTokensTick(max(1, remainingTicks))
+						sll.unlock()
+						lastRemainingTicks = remainingTicks
+						remainingTicksCount++
+					case <-coord.closeCh:
+						log.Infof(context.Background(), "coord.closeCh closed")
+						return
+					}
+				}
+			}()
+		}
+	}
 
 	tg := &tokenGranter{
 		coord:                coord,
@@ -666,7 +778,13 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 		// This testing option only applies to KV work.
 		skipEnforcement = false
 	}
-	kvg := coord.granters[KVWork].(*slotGranter)
+	var kvg *slotGranter
+	if coord.isCPUTimeTokenGranter {
+		stg := coord.granters[KVWork].(*slotAndCPUTimeTokenGranter)
+		kvg = &stg.sg
+	} else {
+		kvg = coord.granters[KVWork].(*slotGranter)
+	}
 	kvg.skipSlotEnforcement = skipEnforcement
 
 	if coord.mu.grantChainActive && !coord.tryTerminateGrantChain() {
@@ -677,7 +795,7 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 
 // tryGet is called by granter.tryGet with the WorkKind.
 func (coord *GrantCoordinator) tryGet(
-	workKind WorkKind, count int64, demuxHandle int8,
+	getter getterKind, workKind WorkKind, count int64, demuxHandle int8,
 ) (granted bool) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
@@ -685,7 +803,7 @@ func (coord *GrantCoordinator) tryGet(
 	// to this workKind. So it may be more reasonable to queue. But we have some
 	// concerns about incurring the delay of multiple goroutine context switches
 	// so we ignore this case.
-	res := coord.granters[workKind].tryGetLocked(count, demuxHandle)
+	res := coord.granters[workKind].tryGetLocked(getter, count, demuxHandle)
 	switch res {
 	case grantSuccess:
 		// Grant chain may be active, but it did not get in the way of this grant,
@@ -714,7 +832,7 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64, demux
 	coord.granters[workKind].returnGrantLocked(count, demuxHandle)
 	if coord.mu.grantChainActive {
 		if coord.mu.grantChainIndex > workKind &&
-			coord.granters[workKind].requesterHasWaitingRequests() {
+			coord.granters[workKind].requesterHasWaitingRequests() != getterKindNone {
 			// There are waiting requests that will not be served by the grant chain.
 			// Better to terminate it and start afresh.
 			if !coord.tryTerminateGrantChain() {
@@ -830,12 +948,12 @@ OuterLoop:
 			// remaining will be nil.
 			continue
 		}
-		for granter.requesterHasWaitingRequests() && !localDone {
+		for gk := granter.requesterHasWaitingRequests(); gk != getterKindNone && !localDone; gk = granter.requesterHasWaitingRequests() {
 			chainID := noGrantChain
 			if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
 				chainID = coord.mu.grantChainID
 			}
-			res := granter.tryGrantLocked(chainID)
+			res := granter.tryGrantLocked(gk, chainID)
 			switch res {
 			case grantSuccess:
 				grantBurstCount++
@@ -867,6 +985,9 @@ OuterLoop:
 
 // Close implements the stop.Closer interface.
 func (coord *GrantCoordinator) Close() {
+	if coord.closeCh != nil {
+		close(coord.closeCh)
+	}
 	for i := range coord.queues {
 		if coord.queues[i] != nil {
 			coord.queues[i].close()
@@ -896,6 +1017,10 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			switch g := coord.granters[i].(type) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
+			case *slotAndCPUTimeTokenGranter:
+				s.Printf("%s%s: tokens: used: %d remaining: %d,%d slots: used: %d, total: %d",
+					curSep, kind, g.intTokensUsed, g.cpuTimeTokensOne, g.cpuTimeTokensTwo, g.sg.usedSlots,
+					g.sg.totalSlots)
 			case *kvStoreTokenGranter:
 				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
 					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
@@ -927,6 +1052,16 @@ type GrantCoordinatorMetrics struct {
 	KVCPULoadLongPeriodDuration  *metric.Counter
 	KVSlotAdjusterIncrements     *metric.Counter
 	KVSlotAdjusterDecrements     *metric.Counter
+
+	KVCPUTimeTokensOne                  *metric.Gauge
+	KVCPUTimeTokensTwo                  *metric.Gauge
+	KVCPUTimeTokensRateOne              *metric.Gauge
+	KVCPUTimeTokensRateTwo              *metric.Gauge
+	KVCPUTimeTokensExhaustedDurationOne *metric.Counter
+	KVCPUTimeTokensExhaustedDurationTwo *metric.Counter
+	KVTenantCPUTimeTokensRate           *metric.Gauge
+
+	KVTokensToCPUMultiplier *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -941,6 +1076,15 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),
 		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
 		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
+
+		KVCPUTimeTokensOne:                  metric.NewGauge(kvCPUTimeTokensOne),
+		KVCPUTimeTokensTwo:                  metric.NewGauge(kvCPUTimeTokensTwo),
+		KVCPUTimeTokensRateOne:              metric.NewGauge(kvCPUTimeTokensRateOne),
+		KVCPUTimeTokensRateTwo:              metric.NewGauge(kvCPUTimeTokensRateTwo),
+		KVCPUTimeTokensExhaustedDurationOne: metric.NewCounter(kvCPUTimeTokensExhaustedDurationOne),
+		KVCPUTimeTokensExhaustedDurationTwo: metric.NewCounter(kvCPUTimeTokensExhaustedDurationTwo),
+		KVTenantCPUTimeTokensRate:           metric.NewGauge(kvTenantCPUTimeTokensRate),
+		KVTokensToCPUMultiplier:             metric.NewGauge(kvTokensToCPUMultiplier),
 	}
 }
 
@@ -1029,4 +1173,51 @@ func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *
 		wi:   wi,
 		wq:   e.ElasticCPUWorkQueue,
 	}
+}
+
+type slowMutexWithLogging struct {
+	name string
+	mu   *syncutil.Mutex
+	// goid     atomic.Int64
+	// acquired atomic.Bool
+	// released atomic.Bool
+}
+
+func (sll *slowMutexWithLogging) lock() {
+	/*
+		go func() {
+			start := timeutil.Now()
+			for {
+				time.Sleep(40 * time.Millisecond)
+				if sll.acquired.Load() {
+					break
+				}
+				if timeutil.Since(start) > 5*time.Second {
+					start = timeutil.Now()
+					log.Infof(context.Background(), "slow mutex lock %s %d", sll.name, sll.goid.Load())
+				}
+			}
+			start = timeutil.Now()
+			for {
+				if sll.released.Load() {
+					break
+				}
+				if timeutil.Since(start) > 5*time.Second {
+					start = timeutil.Now()
+					log.Infof(context.Background(), "slow mutex unlock %s %d", sll.name, sll.goid.Load())
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+		}()
+		sll.goid.Store(goid.Get())
+		sll.mu.Lock()
+		sll.acquired.Store(true)
+
+	*/
+	sll.mu.Lock()
+}
+
+func (sll *slowMutexWithLogging) unlock() {
+	sll.mu.Unlock()
+	// sll.released.Store(true)
 }

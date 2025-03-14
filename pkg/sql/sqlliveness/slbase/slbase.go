@@ -17,7 +17,7 @@ var (
 		settings.ApplicationLevel,
 		"server.sqlliveness.ttl",
 		"default sqlliveness session ttl",
-		40*time.Second,
+		4000*time.Second,
 		settings.NonNegativeDuration,
 	)
 	// DefaultHeartBeat specifies the period between attempts to extend a session.
@@ -25,7 +25,7 @@ var (
 		settings.ApplicationLevel,
 		"server.sqlliveness.heartbeat",
 		"duration heart beats to push session expiration further out in time",
-		5*time.Second,
+		500*time.Second,
 		settings.NonNegativeDuration,
 	)
 )

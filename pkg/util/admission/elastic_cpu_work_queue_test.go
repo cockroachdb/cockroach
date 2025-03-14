@@ -130,7 +130,7 @@ func (t *testElasticCPUGranter) grantKind() grantKind {
 	return token
 }
 
-func (t *testElasticCPUGranter) tryGet(count int64) (granted bool) {
+func (t *testElasticCPUGranter) tryGet(_ getterKind, count int64) (granted bool) {
 	panic("unimplemented")
 }
 
@@ -153,13 +153,13 @@ type testElasticCPUInternalWorkQueue struct {
 
 var _ elasticCPUInternalWorkQueue = &testElasticCPUInternalWorkQueue{}
 
-func (t *testElasticCPUInternalWorkQueue) Admit(
-	_ context.Context, info WorkInfo,
-) (enabled bool, err error) {
+func (t *testElasticCPUInternalWorkQueue) Admit(_ context.Context, info WorkInfo) AdmitResponse {
 	if !t.disabled {
 		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
-	return !t.disabled, nil
+	return AdmitResponse{
+		Enabled: !t.disabled,
+	}
 }
 
 func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
@@ -175,7 +175,7 @@ func (t *testElasticCPUInternalWorkQueue) adjustTenantUsed(
 	}
 }
 
-func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() bool {
+func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() getterKind {
 	panic("unimplemented")
 }
 

@@ -1,0 +1,242 @@
+init cpu-time-token
+----
+
+set-try-get-return-value v=true
+----
+
+admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g0 1: returning true
+id 1: admit succeeded
+
+cancel-work id=1
+----
+work already admitted id: 1
+
+set-tenant-cpu-burst-limit tokens=1
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g1) used: 1, w: 1, fifo: -128 cpu: 0 (burst 1) (work 1)
+
+admit id=2 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g1 1: returning true
+id 2: admit succeeded
+
+set-tenant-cpu-burst-limit tokens=10
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g1) used: 2, w: 1, fifo: -128 cpu: 8 (burst 10) (work 1)
+
+admit id=21 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g1 1: returning true
+id 21: admit succeeded
+
+tenant-cpu-tokens-tick tokens=6
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g0) used: 3, w: 1, fifo: -128 cpu: 10 (burst 10) (work 1)
+
+admit id=22 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g0 1: returning true
+id 22: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g1) used: 4, w: 1, fifo: -128 cpu: 9 (burst 10) (work 1)
+
+work-done id=2 cpu-time=50
+----
+returnGrant -49
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g1) used: 53, w: 1, fifo: -128 cpu: -40 (burst 10) (work 1)
+
+set-tenant-cpu-burst-limit tokens=30
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53(g1) used: 53, w: 1, fifo: -128 cpu: -7 (burst 30) (work 25)
+
+set-try-get-return-value v=false
+----
+
+admit id=23 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g1 25: returning false
+
+admit id=3 tenant=13 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g0 25: returning false
+
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 13
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 53, w: 1, fifo: -128 cpu: -7 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+admit id=4 tenant=33 priority=0 create-time-millis=1 bypass=false
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 13
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 53, w: 1, fifo: -128 cpu: -7 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+work-done id=1 cpu-time=1
+----
+returnGrant 0
+
+work-done id=21 cpu-time=500
+----
+returnGrant -499
+
+work-done id=22 cpu-time=100
+----
+returnGrant -99
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 13
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 651, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+cancel-work id=3
+----
+id 3: admit failed
+
+cancel-work id=4
+----
+id 4: admit failed
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25)
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 25)
+ tenant-id: 53(g1) used: 651, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+gc-tenants-and-reset-used
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+admit id=24 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -605 (burst 30) (work 25) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+set-tenant-cpu-burst-limit tokens=30
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+set-try-get-return-value v=true
+----
+
+admit id=5 tenant=13 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g0 120: returning true
+id 5: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 13(g1) used: 120, w: 1, fifo: -128 cpu: -90 (burst 30) (work 120)
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+admit id=6 tenant=13 priority=0 create-time-millis=1 bypass=false
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 13(g1) used: 120, w: 1, fifo: -128 cpu: -90 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+set-try-get-return-value v=false
+----
+
+admit id=7 tenant=33 priority=0 create-time-millis=1 bypass=false
+----
+tryGet g0 120: returning false
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 33
+ tenant-id: 13(g1) used: 120, w: 1, fifo: -128 cpu: -90 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+work-done id=5 cpu-time=0
+----
+returnGrant 120
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 13
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+admit id=8 tenant=13 priority=0 create-time-millis=1 bypass=false
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 13
+ tenant-id: 13(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 6: admit succeeded
+granted: returned 120
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 33
+ tenant-id: 13(g1) used: 120, w: 1, fifo: -128 cpu: -90 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g1) used: 0, w: 1, fifo: -128 cpu: -7 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+tenant-cpu-tokens-tick tokens=200
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 3 top tenant: 33
+ tenant-id: 13(g0) used: 120, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 33(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ tenant-id: 53(g0) used: 0, w: 1, fifo: -128 cpu: 30 (burst 30) (work 120) waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100] [1: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+
+cancel-work id=7
+----
+id 7: admit failed
+
+cancel-work id=8
+----
+id 8: admit failed
+
+cancel-work id=23
+----
+id 23: admit failed
+
+cancel-work id=24
+----
+id 24: admit failed

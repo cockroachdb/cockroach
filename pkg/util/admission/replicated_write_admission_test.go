@@ -335,11 +335,11 @@ func printWorkQueue(q *WorkQueue) string {
 			admissionpb.WorkPriority(tenant.fifoPriorityThreshold),
 			printTrimmedBytes(int64(tenant.used)),
 		))
-		if len(tenant.waitingWorkHeap) > 0 {
+		if len(tenant.waitingForGranterHeap) > 0 {
 			buf.WriteString("\n")
 
-			for i := range tenant.waitingWorkHeap {
-				w := tenant.waitingWorkHeap[i]
+			for i := range tenant.waitingForGranterHeap {
+				w := tenant.waitingForGranterHeap[i]
 				if i != 0 {
 					buf.WriteString("\n")
 				}
@@ -392,7 +392,7 @@ func (tg *testReplicatedWriteGranter) grantKind() grantKind {
 	return token
 }
 
-func (tg *testReplicatedWriteGranter) tryGet(count int64) bool {
+func (tg *testReplicatedWriteGranter) tryGet(_ getterKind, count int64) bool {
 	if count > tg.tokens {
 		tg.buf.printf("[%s] try-get=%s available=%s => insufficient tokens",
 			tg.wc, printTrimmedBytes(count), printTrimmedBytes(tg.tokens))
@@ -422,7 +422,7 @@ func (tg *testReplicatedWriteGranter) grant() {
 		if tg.tokens <= 0 {
 			return // nothing left to do
 		}
-		if !tg.r.hasWaitingRequests() {
+		if tg.r.hasWaitingRequests() == getterKindNone {
 			return // nothing left to do
 		}
 		_ = tg.r.granted(0 /* unused */)

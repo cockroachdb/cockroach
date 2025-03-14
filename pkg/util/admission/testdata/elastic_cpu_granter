@@ -72,7 +72,7 @@ return-grant duration=1s print
 ----
 token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=false
+requester:       has-waiting=255
 
 # The granter periodically checks for waiters, trying to grant to them. There
 # still isn't any.
@@ -80,7 +80,7 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=false
+requester:       has-waiting=255
 
 # Set up a requester that wants 250ms out of 1s available.
 requester num-waiting-requests=1 duration=250ms
@@ -91,8 +91,8 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=750ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=250ms
-                 has-waiting=false
+requester:       has-waiting=0 granted=250ms
+                 has-waiting=255
 
 # Set up another requester wanting slightly more than what's available.
 requester num-waiting-requests=1 duration=800ms
@@ -104,8 +104,8 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=-50ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=800ms
-                 has-waiting=false
+requester:       has-waiting=0 granted=800ms
+                 has-waiting=255
 
 # Similar to before, subsequent requests are penalized.
 requester num-waiting-requests=1 duration=150ms
@@ -115,20 +115,20 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=-50ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true
+requester:       has-waiting=0
 
 advance duration=50ms print
 ----
 token-bucket:    refill=4s/s burst=4s available=150ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true
+requester:       has-waiting=0
 
 try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=150ms
-                 has-waiting=false
+requester:       has-waiting=0 granted=150ms
+                 has-waiting=255
 
 # Set up a requester that doesn't actually accept the grant. First, refill the
 # quota pool to its halfway point.
@@ -136,8 +136,8 @@ advance duration=0.5s print
 ----
 token-bucket:    refill=4s/s burst=4s available=2s across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=150ms
-                 has-waiting=false
+requester:       has-waiting=0 granted=150ms
+                 has-waiting=255
 
 requester num-waiting-requests=1 duration=0s
 ----
@@ -148,7 +148,7 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=2s across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=0s
+requester:       has-waiting=0 granted=0s
 
 # Set up three waiting requests, each requesting 500ms worth of tokens. They
 # should all receive a grant.
@@ -159,10 +159,10 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=500ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=500ms
-                 has-waiting=true granted=500ms
-                 has-waiting=true granted=500ms
-                 has-waiting=false
+requester:       has-waiting=0 granted=500ms
+                 has-waiting=0 granted=500ms
+                 has-waiting=0 granted=500ms
+                 has-waiting=255
 
 
 # Set up three more waiters, two of them should receive a grant but send the
@@ -174,8 +174,8 @@ try-grant print
 ----
 token-bucket:    refill=4s/s burst=4s available=-490ms across 8 procs
 metrics/granter: limit=50.00%
-requester:       has-waiting=true granted=495ms
-                 has-waiting=true granted=495ms
-                 has-waiting=true
+requester:       has-waiting=0 granted=495ms
+                 has-waiting=0 granted=495ms
+                 has-waiting=0
 
 # vim:ft=sh
