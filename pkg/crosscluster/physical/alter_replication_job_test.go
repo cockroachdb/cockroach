@@ -69,7 +69,11 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 
 	var emptyCutoverTime time.Time
-	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, false)
+	// Set Async validation to true, so the post cutover retention job has a long
+	// expiration time.
+	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, true)
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
 	require.GreaterOrEqual(t, cutoverOutput.GoTime(), targetReplicatedTime.GoTime())
 	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))

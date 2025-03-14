@@ -9,6 +9,8 @@ index b842a31e..d5674712 100644
 -        "invariants_off.go",
          "race_off.go",
          "race_on.go",
+         "slow_build_off.go",
+         "slow_build_on.go",
          "tracing_off.go",
 -    ],
 +    ] + select({
