@@ -322,11 +322,13 @@ func (tx *Txn) GetPartitionMetadata(
 			errors.Wrapf(err, "getting partition metadata for %d", partitionKey)
 	}
 
-	metadata, err := tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
-	if err != nil {
-		return cspann.PartitionMetadata{}, err
+	// If we're preparing to update the root partition, then lazily create its
+	// metadata if it does not yet exist.
+	if forUpdate && partitionKey == cspann.RootKey && b.Results[0].Rows[0].Value == nil {
+		return tx.createRootPartition(ctx, metadataKey)
 	}
-	return metadata, nil
+
+	return tx.extractMetadataFromKVResult(treeKey, partitionKey, &b.Results[0])
 }
 
 // AddToPartition implements the cspann.Txn interface.
@@ -573,6 +575,42 @@ func (tx *Txn) GetFullVectors(
 		err = tx.getFullVectorsFromPK(ctx, refs, numPKLookups)
 	}
 	return err
+}
+
+// createRootPartition uses the KV CPut operation to create metadata for the
+// root partition, and then returns that metadata.
+//
+// NOTE: CPut always "sees" the latest write of the metadata record, even if the
+// timestamp of that write is higher than this transaction's.
+func (tx *Txn) createRootPartition(
+	ctx context.Context, metadataKey roachpb.Key,
+) (cspann.PartitionMetadata, error) {
+	b := tx.kv.NewBatch()
+	metadata := cspann.PartitionMetadata{Level: cspann.LeafLevel, Centroid: tx.store.emptyVec}
+	encoded, err := EncodePartitionMetadata(metadata.Level, metadata.Centroid)
+	if err != nil {
+		return cspann.PartitionMetadata{}, err
+	}
+
+	// Use CPutAllowingIfNotExists in order to handle the case where the same
+	// transaction inserts multiple vectors (e.g. multiple VALUES rows). In that
+	// case, the first row will trigger creation of the metadata record. However,
+	// subsequent inserts will not be able to "see" this record, since they will
+	// read at a lower sequence number than the metadata record was written.
+	// However, CPutAllowingIfNotExists will read at the higher sequence number
+	// and see that the record was already created.
+	//
+	// On the other hand, if a different transaction wrote the record, it will
+	// have a higher timestamp, and that will trigger a WriteTooOld error.
+	// Transactions which lose that race need to be refreshed.
+	var roachval roachpb.Value
+	roachval.SetBytes(encoded)
+	b.CPutAllowingIfNotExists(metadataKey, &roachval, roachval.TagAndDataBytes())
+	if err := tx.kv.Run(ctx, b); err != nil {
+		// Lost the race to a different transaction.
+		return cspann.PartitionMetadata{}, errors.Wrapf(err, "creating root partition metadata")
+	}
+	return metadata, nil
 }
 
 // QuantizeAndEncode quantizes the given vector (which has already been

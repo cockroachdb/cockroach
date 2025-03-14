@@ -8,10 +8,13 @@ package vecstore
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -146,6 +149,73 @@ func TestStore(t *testing.T) {
 	// Re-run the tests with a prefixed index.
 	usePrefix = true
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
+
+	// Ensure that races to create partition metadata either do not error, or
+	// they error with WriteTooOldError.
+	t.Run("race to create partition metadata", func(t *testing.T) {
+		store := makeStore(quantize.NewUnQuantizer(2)).(*testStore)
+
+		var done atomic.Int64
+		getMetadata := func(treeKey cspann.TreeKey) {
+			var err error
+			tx, err := store.BeginTransaction(ctx)
+			require.NoError(t, err)
+			defer func() {
+				if err != nil {
+					err = store.AbortTransaction(ctx, tx)
+				}
+			}()
+
+			// Enable stepping in the txn, which is what SQL does.
+			tx.(*Txn).kv.ConfigureStepping(ctx, kv.SteppingEnabled)
+
+			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
+			if err != nil {
+				require.ErrorContains(t, err, "WriteTooOldError")
+				done.Store(1)
+				return
+			}
+
+			// Run GetPartitionMetadata again, to ensure that it succeeds, as a
+			// way of simulating multiple vectors being inserted in the same
+			// SQL statement.
+			_, err = tx.GetPartitionMetadata(ctx, treeKey, cspann.RootKey, true /* forUpdate */)
+			require.NoError(t, err)
+
+			err = store.CommitTransaction(ctx, tx)
+			require.NoError(t, err)
+		}
+
+		for i := range 100 {
+			var wait sync.WaitGroup
+			wait.Add(2)
+			treeKey := store.MakeTreeKey(t, i)
+			go func() {
+				defer func() {
+					wait.Done()
+				}()
+				getMetadata(treeKey)
+			}()
+			go func() {
+				defer func() {
+					wait.Done()
+				}()
+				getMetadata(treeKey)
+			}()
+			wait.Wait()
+
+			// Fail on foreground goroutine if a background goroutine failed.
+			if t.Failed() {
+				t.FailNow()
+			}
+
+			// End the test once we find at least one WriteTooOldError.
+			if done.Load() == 1 {
+				break
+			}
+		}
+	})
+
 }
 
 func TestQuantizeAndEncode(t *testing.T) {
