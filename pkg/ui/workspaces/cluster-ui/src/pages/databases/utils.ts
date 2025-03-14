@@ -39,3 +39,28 @@ export const rawDatabaseMetadataToDatabaseRows = (
     };
   });
 };
+
+type FlatGrant = {
+  grantee: string;
+  privilege: string;
+};
+
+export const groupGrantsByGrantee = (grants: FlatGrant[]) => {
+  if (!grants?.length) {
+    return [];
+  }
+
+  const grantsByUser = {} as Record<string, string[]>;
+  grants.forEach(grant => {
+    if (!grantsByUser[grant.grantee]) {
+      grantsByUser[grant.grantee] = [];
+    }
+    grantsByUser[grant.grantee].push(grant.privilege);
+  });
+
+  return Object.entries(grantsByUser).map(([grantee, privileges]) => ({
+    key: grantee,
+    grantee,
+    privileges,
+  }));
+};
