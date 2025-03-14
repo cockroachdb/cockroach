@@ -27,6 +27,13 @@ const (
 	NodeExporterPort = 9100
 	// NodeExporterMetricsPath is the path that NodeExporter serves metrics on.
 	NodeExporterMetricsPath = "/metrics"
+	// EbpfExporterVersion is the version of EbpfExporter installed on each node
+	// in the startup script.
+	EbpfExporterVersion = "2.4.2"
+	// EbpfExporterPort is the port that EbpfExporter listens on.
+	EbpfExporterPort = 9435
+	// EbpfExporterMetricsPath is the path that EbpfExporter serves metrics on.
+	EbpfExporterMetricsPath = "/metrics"
 
 	// DefaultSharedUser is the default user that is shared across all VMs.
 	DefaultSharedUser = "ubuntu"
@@ -58,6 +65,7 @@ type StartupArgs struct {
 	EnableCron           bool     // Enable cron service
 	ChronyServers        []string // List of NTP servers to use
 	NodeExporterPort     int      // Port that NodeExporter listens on
+	EbpfExporterPort     int      // Port that EbpfExporter listens on
 }
 
 func DefaultStartupArgs(overrides ...IArgOverride) StartupArgs {
@@ -73,6 +81,7 @@ func DefaultStartupArgs(overrides ...IArgOverride) StartupArgs {
 			"time4.google.com",
 		},
 		NodeExporterPort: NodeExporterPort,
+		EbpfExporterPort: EbpfExporterPort,
 	}
 	for _, override := range overrides {
 		override.apply(&startupArgs)
@@ -91,6 +100,7 @@ var (
 		"head_utils":            startupScriptHead,
 		"hostname_utils":        startupScriptHostname,
 		"node_exporter":         startupScriptNodeExporter,
+		"ebpf_exporter":         startupScriptEbpfExporter,
 		"keepalives":            startupScriptKeepalives,
 		"ssh_utils":             startupScriptSSH,
 		"tcpdump":               startupScriptTcpdump,
@@ -220,15 +230,37 @@ mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
 
-sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,prometheus.testeng.crdb.io -p tcp --dport {{.NodeExporterPort}} -j ACCEPT
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport {{.NodeExporterPort}} -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport {{.NodeExporterPort}} -j DROP
 (
-	chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter && \
 	cd ${DEFAULT_USER_HOME}/node_exporter && \
 	sudo systemd-run --unit node_exporter --same-dir \
 		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
 		--web.listen-address=":{{.NodeExporterPort}}" \
 		--web.telemetry-path="` + NodeExporterMetricsPath + `"
+)`
+
+const startupScriptEbpfExporter = `
+# Add and start ebpf_exporter, only authorize scrapping from internal network.
+export ARCH=$(dpkg --print-architecture)
+export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
+mkdir -p ${DEFAULT_USER_HOME}/ebpf_exporter && curl -fsSL \
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/ebpf_exporter-` + EbpfExporterVersion + `.linux-${ARCH}.tar.gz |
+	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/ebpf_exporter \
+	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/ebpf_exporter
+
+export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
+sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport {{.EbpfExporterPort}} -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport {{.EbpfExporterPort}} -j DROP
+(
+	cd ${DEFAULT_USER_HOME}/ebpf_exporter && \
+	sudo systemd-run --unit ebpf_exporter --same-dir \
+		./ebpf_exporter \
+		--config.dir=examples \
+		--config.names=biolatency,timers,sched-trace,syscalls,uprobe \
+		--web.listen-address=":{{.EbpfExporterPort}}" \
+		--web.telemetry-path="` + EbpfExporterMetricsPath + `"
 )`
 
 const startupScriptSSH = `

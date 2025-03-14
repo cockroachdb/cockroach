@@ -852,6 +852,10 @@ func updatePrometheusTargets(
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
 						CustomLabels: createLabels(nodeID, v, "node_exporter", !c.Secure),
 					},
+					{
+						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.EbpfExporterPort),
+						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", !c.Secure),
+					},
 				}
 			}
 			nodeIPPorts[nodeID] = append(
@@ -909,10 +913,18 @@ func createLabels(nodeID int, v vm.VM, job string, insecure bool) map[string]str
 		}
 	case "node_exporter":
 		labels["__metrics_path__"] = vm.NodeExporterMetricsPath
-		// node exporter is always scraped over http
+		// node_exporter is always scraped over http
 		labels["__scheme__"] = "http"
 
 		// Node ID is exposed by cockroachdb metrics, we add it to node_exporter
+		labels["node_id"] = strconv.Itoa(nodeID)
+
+	case "ebpf_exporter":
+		labels["__metrics_path__"] = vm.EbpfExporterMetricsPath
+		// ebpf_exporter is always scraped over http
+		labels["__scheme__"] = "http"
+
+		// Node ID is exposed by cockroachdb metrics, we add it to ebpf_exporter
 		labels["node_id"] = strconv.Itoa(nodeID)
 	}
 
