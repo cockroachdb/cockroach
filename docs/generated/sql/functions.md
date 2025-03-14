@@ -1554,9 +1554,9 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="unnest"></a><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="workload_index_recs"></a><code>workload_index_recs() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs() &rarr; tuple{string AS index_rec, bytes[] AS fingerprint_ids}</code></td><td><span class="funcdesc"><p>Returns index recommendations and the fingerprint ids that the indexes will impact</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="workload_index_recs"></a><code>workload_index_recs(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; tuple{string AS index_rec, bytes[] AS fingerprint_ids}</code></td><td><span class="funcdesc"><p>Returns index recommendations and the fingerprint ids that the indexes will impact</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
