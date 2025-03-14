@@ -650,6 +650,23 @@ message HealthRequest {
 message HealthResponse {
 }
 
+// RestartSafetyResponse indicates whether the current node is critical
+// (cannot be restarted safely).
+message RestartSafetyResponse {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID"];
+  bool is_critical = 2;
+  repeated ReplicaStatus replicas = 3;
+}
+
+// ReplicaStatus indicates the status of a replica. It's used to
+// indicate why a node is unsafe to restart.
+message ReplicaStatus {
+  int32 store_id = 1 [(gogoproto.customname) = "StoreID"];
+  int32 range_id = 2 [(gogoproto.customname) = "RangeID"];
+  int32 replica_id = 3 [(gogoproto.customname) = "ReplicaID"];
+  string status = 4;
+}
+
 // LivenessRequest requests liveness data for all nodes on the cluster.
 message LivenessRequest {
 }
