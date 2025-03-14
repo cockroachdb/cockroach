@@ -15423,7 +15423,7 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 	defer repl.LeaderlessWatcher.mu.RUnlock()
 
 	// Initially, the leaderWatcher doesn't consider the replica as unavailable.
-	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.False(t, repl.LeaderlessWatcher.mu.unavailable)
 
 	// The leaderless timestamp is not set.
 	require.Equal(t, time.Time{}, repl.LeaderlessWatcher.mu.leaderlessTimestamp)
