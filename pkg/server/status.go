@@ -2881,9 +2881,10 @@ func (s *systemStatusServer) HotRangesV2(
 		}
 		if local {
 			resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
-			response.Ranges = append(response.Ranges, resp.Ranges...)
 			if err != nil {
 				response.ErrorsByNodeID[requestedNodeID] = err.Error()
+			} else {
+				response.Ranges = append(response.Ranges, resp.Ranges...)
 			}
 			return response, nil
 		}
