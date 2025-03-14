@@ -16,9 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func executeValidateUniqueIndex(
-	ctx context.Context, deps Dependencies, op *scop.ValidateIndex,
-) error {
+func executeValidateIndex(ctx context.Context, deps Dependencies, op *scop.ValidateIndex) error {
 	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -118,7 +116,7 @@ func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op)
 func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (err error) {
 	switch op := op.(type) {
 	case *scop.ValidateIndex:
-		if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
+		if err = executeValidateIndex(ctx, deps, op); err != nil {
 			if !scerrors.HasSchemaChangerUserError(err) {
 				return errors.Wrapf(err, "%T: %v", op, op)
 			}
