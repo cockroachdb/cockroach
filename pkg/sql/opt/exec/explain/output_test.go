@@ -341,3 +341,35 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	// Meat of the test - verify that the contention was reported.
 	require.True(t, foundContention)
 }
+
+func TestRetryFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE SEQUENCE s")
+
+	retryCountRE := regexp.MustCompile(`number of transaction retries: (\d+)`)
+	retryTimeRE := regexp.MustCompile(`time spent retrying the transaction: (\d+)[µsm]+`)
+	queryMatchRE := func(query string) bool {
+		rows, err := conn.QueryContext(ctx, query)
+		assert.NoError(t, err)
+		var foundCount, foundTime bool
+		for rows.Next() {
+			var res string
+			assert.NoError(t, rows.Scan(&res))
+			if matches := retryCountRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundCount = true
+			}
+			if matches := retryTimeRE.FindStringSubmatch(res); len(matches) > 0 {
+				foundTime = true
+			}
+		}
+		return foundCount && foundTime
+	}
+	assert.True(t, queryMatchRE("EXPLAIN ANALYZE SELECT IF(nextval('s')<=3, crdb_internal.force_retry('1h'::INTERVAL), 0)"))
+}

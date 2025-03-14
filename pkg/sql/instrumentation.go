@@ -200,6 +200,9 @@ type instrumentationHelper struct {
 	// stats scanned by this query.
 	nanosSinceStatsForecasted time.Duration
 
+	// retryCount is the number of times the transaction was retried.
+	retryCount uint64
+
 	// joinTypeCounts records the number of times each type of logical join was
 	// used in the query, up to 255.
 	joinTypeCounts [execbuilder.NumRecordedJoinTypes]uint8
@@ -409,10 +412,12 @@ func (ih *instrumentationHelper) Setup(
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
+	retryCount int32,
 ) (newCtx context.Context) {
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
+	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
@@ -812,6 +817,8 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
+	ob.AddRetryCount(ih.retryCount)
+	ob.AddRetryTime(phaseTimes.GetTransactionRetryLatency())
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {
