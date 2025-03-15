@@ -201,12 +201,11 @@ func maybeRewriteTempIDsInPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
 	}
 	chain.validate()
 	currPrimaryIndexID := getCurrentPrimaryIndexID(b, tableID)
-	hasZoneCfgRefs := hasSubzonesForIndex(b, tableID, currPrimaryIndexID)
-	if hasRewrittenPrimaryID && hasZoneCfgRefs {
+	if hasRewrittenPrimaryID {
 		if err := configureZoneConfigForNewIndexBackfill(b, tableID, currPrimaryIndexID); err != nil {
 			panic(errors.Wrapf(
 				err,
-				"error while updating zone config refs for indexID %d of tableID %d",
+				"error while updating zone configs for indexID %d of tableID %d",
 				currPrimaryIndexID,
 				tableID))
 		}
