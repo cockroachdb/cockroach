@@ -546,10 +546,10 @@ statement ok
 ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42;
 
 # Here, we can see that although the index ID changed, our corresponding
-# subzone config has an entry for our new index; along with a corres. subzone
-# span.
+# subzone config has an entry for our new index, along with a corresponding
+# subzone span.
 skipif config local-mixed-24.3 local-legacy-schema-changer
-query B colnames
+statement ok
 WITH subzones AS (
     SELECT
         json_array_elements(
@@ -571,29 +571,56 @@ primary_index AS (
         )->'table'->'primaryIndex'->>'id')::INT AS primaryID
     FROM system.descriptor
     WHERE id = 'foo'::regclass::oid
+),
+index_ids_match AS (
+  SELECT EXISTS (
+      SELECT 1
+      FROM primary_index, subzone_indexes
+      WHERE primaryID = indexID
+  ) AS match_found
 )
-SELECT EXISTS (
-    SELECT 1
-    FROM primary_index, subzone_indexes
-    WHERE primaryID = indexID
-) AS match_found;
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM index_ids_match WHERE match_found = false;
+
+# The new primary index should have a subzone. The old primary index and the
+# temporary index also have a subzone, and those will be cleaned up later by the
+# schema change GC job.
+skipif config local-mixed-24.3 local-legacy-schema-changer
+query I
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+)
+SELECT indexID
+FROM subzone_indexes
+ORDER BY indexID;
 ----
-match_found
-true
+1
+2
+3
 
 skipif config local-mixed-24.3 local-legacy-schema-changer
-query B
+query T
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
     FROM system.zones
     WHERE id = 'foo'::REGCLASS::OID
 )
-SELECT EXISTS (
-    SELECT 1
-    FROM subzone_spans
-    WHERE crdb_internal.pretty_key(decode(key, 'base64'), 0) = '/2'
-) AS exists;
+SELECT crdb_internal.pretty_key(decode(key, 'base64'), 0)
+FROM subzone_spans
+ORDER BY 1
 ----
-true
+/1
+/2
+/3
 
 subtest end
