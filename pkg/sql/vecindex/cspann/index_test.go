@@ -18,7 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
@@ -848,6 +850,8 @@ func buildIndex(
 	vectors vector.Set,
 	primaryKeys []cspann.KeyBytes,
 ) {
+	var insertCount atomic.Uint64
+
 	// Insert block of vectors within the scope of a transaction.
 	insertBlock := func(idxCtx *cspann.Context, start, end int) {
 		for i := start; i < end; i++ {
@@ -857,6 +861,7 @@ func buildIndex(
 			require.NoError(t,
 				index.Insert(ctx, idxCtx, nil /* treeKey */, vectors.At(i), primaryKeys[i]))
 			commontest.CommitTransaction(ctx, t, store, txn)
+			insertCount.Add(1)
 		}
 	}
 
@@ -879,15 +884,21 @@ func buildIndex(
 			}
 		}(i, end)
 	}
+
+	for int(insertCount.Load()) < vectors.Count {
+		time.Sleep(time.Second)
+		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
+
+		// Fail on foreground goroutine if any background goroutines failed.
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
 	wait.Wait()
 
 	// Process any remaining fixups.
 	index.ProcessFixups()
-
-	// Fail on foreground goroutine if any background goroutines failed.
-	if t.Failed() {
-		t.FailNow()
-	}
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {
