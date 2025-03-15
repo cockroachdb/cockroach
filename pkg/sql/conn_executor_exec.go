@@ -2848,8 +2848,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagFullyDistributed)
 	case physicalplan.PartiallyDistributedPlan:
 		planner.curPlan.flags.Set(planFlagPartiallyDistributed)
-	default:
-		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
 
 	ex.sessionTracing.TraceRetryInformation(ctx, int(ex.state.mu.autoRetryCounter), ex.state.mu.autoRetryReason)
