@@ -2996,7 +2996,6 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
 			ts := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `drop_column`, 2)
 
 			// Backfill for DROP COLUMN b.
@@ -3007,7 +3006,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 					ts.AsOfSystemTime()),
 			})
 
-			// Insert 3 into drop_column
+			// Insert 3 into drop_column.
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
 			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [3]->{"after": {"a": 3}}`,
 			})
@@ -3048,6 +3048,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			// version 2. Then, when adding column c, it goes from 9->17, with the schema change being visible at
 			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
 			// being visible at the 7th step (version 23).
+			// TODO(#142936): Investigate if this descriptor version hardcoding is sound.
 			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 2)
 			addTS := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 15)
 			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.TestServer.Server, `d`, `public`, `multiple_alters`, 23)
