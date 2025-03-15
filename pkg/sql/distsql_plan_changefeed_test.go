@@ -687,3 +687,46 @@ func copyColumnAs(t *testing.T, table catalog.TableDescriptor, from, to tree.Nam
 	desc.SystemColumnKind = catpb.SystemColumnKind_NONE
 	return dst
 }
+
+// TestChangefeedPlanWithEmptyTable verifies that PlanCDCExpression can handle
+// tables with no columns without causing the "unable to determine result columns" error.
+// This test specifically targets a fix for the SQL error [XX000]:
+// "ERROR: internal error: unable to determine result columns" which occurs
+// when a CDC expression is planned against a table without columns.
+func TestChangefeedPlanWithEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Create a table with no columns
+	sqlDB.Exec(t, `CREATE TABLE empty()`)
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
+	sd.Database = "defaultdb"
+
+	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
+	)
+	defer cleanup()
+
+	stmt, err := parser.ParseOne("SELECT * FROM empty")
+	require.NoError(t, err)
+	expr := stmt.AST.(*tree.Select)
+
+	cdcPlan, err := PlanCDCExpression(ctx, p, expr)
+	require.NoError(t, err)
+
+	// For an empty table, presentation might legitimately be empty
+	// but the plan should still be valid
+	tableDesc := desctestutils.TestingGetTableDescriptor(
+		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "empty")
+
+	// Verify the plan has the correct span for the table
+	primarySpan := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+	require.Equal(t, roachpb.Spans{primarySpan}, cdcPlan.Spans)
+}
