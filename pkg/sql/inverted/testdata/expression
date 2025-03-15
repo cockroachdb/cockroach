@@ -5,154 +5,8 @@ span expression
  ├── to read: ["b", "b"]
  └── union spans: ["b", "b"]
 
-new-unknown-leaf name=u-tight tight=true
-----
-unknown expression: tight=true
-
-new-unknown-leaf name=u-not-tight tight=false
-----
-unknown expression: tight=false
-
 # -----------------------------------------------------
-# Tests involving UnknownExpression.
-# -----------------------------------------------------
-
-# Or of tight [b, b] with tight UnknownExpression. They
-# become the left and right child and the result is tight.
-or result=bt left=b right=u-tight
-----
-span expression
- ├── tight: true, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── UNION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: empty
-      └── unknown expression: tight=true
-
-# Same as previous with left and right reversed in the
-# call to Or.
-or result=bt left=u-tight right=b
-----
-span expression
- ├── tight: true, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── UNION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: empty
-      └── unknown expression: tight=true
-
-# Or of tight [b, b] with non-tight UnknownExpression.
-# Unlike bt, the result here is not tight.
-or result=bnt left=b right=u-not-tight
-----
-span expression
- ├── tight: false, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── UNION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: empty
-      └── unknown expression: tight=false
-
-# And of tight [b, b] with tight UnknownExpression.
-# No factoring is possible.
-and result=b-and-unknown left=b right=u-tight
-----
-span expression
- ├── tight: true, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: empty
- └── INTERSECTION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: ["b", "b"]
-      └── unknown expression: tight=true
-
-# Similar and as previous but with non-tight UnknownExpression.
-# Only output difference is that the result is not tight.
-and result=b-and-unknown left=b right=u-not-tight
-----
-span expression
- ├── tight: false, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: empty
- └── INTERSECTION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: ["b", "b"]
-      └── unknown expression: tight=false
-
-# And of bt and bnt. Factoring is possible. The result is
-# not tight.
-and result=bt-and-bnt left=bt right=bnt
-----
-span expression
- ├── tight: false, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── INTERSECTION
-      ├── span expression
-      │    ├── tight: true, unique: false
-      │    ├── to read: ["b", "b"]
-      │    ├── union spans: empty
-      │    └── UNION
-      │         ├── span expression
-      │         │    ├── tight: true, unique: true
-      │         │    ├── to read: ["b", "b"]
-      │         │    └── union spans: empty
-      │         └── unknown expression: tight=true
-      └── span expression
-           ├── tight: false, unique: false
-           ├── to read: ["b", "b"]
-           ├── union spans: empty
-           └── UNION
-                ├── span expression
-                │    ├── tight: true, unique: true
-                │    ├── to read: ["b", "b"]
-                │    └── union spans: empty
-                └── unknown expression: tight=false
-
-# Or of bt and bnt. Similar to And in toRead and unionSpans.
-or result=bt-or-bnt left=bnt right=bt
-----
-span expression
- ├── tight: false, unique: false
- ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── UNION
-      ├── span expression
-      │    ├── tight: false, unique: false
-      │    ├── to read: ["b", "b"]
-      │    ├── union spans: empty
-      │    └── UNION
-      │         ├── span expression
-      │         │    ├── tight: true, unique: true
-      │         │    ├── to read: ["b", "b"]
-      │         │    └── union spans: empty
-      │         └── unknown expression: tight=false
-      └── span expression
-           ├── tight: true, unique: false
-           ├── to read: ["b", "b"]
-           ├── union spans: empty
-           └── UNION
-                ├── span expression
-                │    ├── tight: true, unique: true
-                │    ├── to read: ["b", "b"]
-                │    └── union spans: empty
-                └── unknown expression: tight=true
-
-# -----------------------------------------------------
-# Tests involving NonInvertedColExpression.
+# Tests involving non-inverted expressions.
 # -----------------------------------------------------
 
 new-non-inverted-leaf name=niexpr
@@ -160,24 +14,18 @@ new-non-inverted-leaf name=niexpr
 
 # And with a NonInvertedColExpression makes the result
 # not tight.
-and result=bt-and-niexpr left=bt right=niexpr
+and result=b-and-niexpr left=b right=niexpr
 ----
 span expression
- ├── tight: false, unique: false
+ ├── tight: false, unique: true
  ├── to read: ["b", "b"]
- ├── union spans: ["b", "b"]
- └── UNION
-      ├── span expression
-      │    ├── tight: true, unique: true
-      │    ├── to read: ["b", "b"]
-      │    └── union spans: empty
-      └── unknown expression: tight=true
+ └── union spans: ["b", "b"]
 
 # Or with a NonInvertedColExpression results in a
 # NonInvertedColExpression.
-or result=bt-or-niexpr left=niexpr right=bt
+or result=bt-or-niexpr left=niexpr right=b
 ----
-{}
+nil
 
 # -----------------------------------------------------
 # Tests involving only SpanExpressions.
