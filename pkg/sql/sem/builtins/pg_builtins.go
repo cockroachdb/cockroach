@@ -65,6 +65,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
+	types.Any.Oid():         {},
 	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
@@ -2038,7 +2039,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_column_size": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2053,7 +2054,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
-			Volatility: volatility.Immutable,
+			Volatility: volatility.Stable,
 		}),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like
