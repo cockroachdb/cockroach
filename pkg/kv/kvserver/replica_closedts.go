@@ -7,9 +7,12 @@ package kvserver
 
 import (
 	"context"
+	math "math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +20,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+func (r *Replica) RefreshLatency(latencies map[roachpb.NodeID]time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	desc := r.descRLocked()
+	res := int32(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY)
+	for _, peer := range desc.InternalReplicas {
+		peerLatency, ok := latencies[peer.NodeID]
+		if !ok {
+			continue
+		}
+		// Calculate latency bucket by dividing latency by interval size and adding base policy
+		latencyBucket := int32(math.Ceil(float64(peerLatency)/float64(closedts.ClosedTimestampPolicyLatencyInterval))) +
+			int32(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY)
+		res = max(res, latencyBucket)
+	}
+	r.mu.cachedLocality = ctpb.LatencyBasedRangeClosedTimestampPolicy(res)
+}
+
+func closedTsPolicyAndTarget(
+	policy ctpb.LatencyBasedRangeClosedTimestampPolicy,
+	targetByPolicy map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp,
+) (ctpb.LatencyBasedRangeClosedTimestampPolicy, hlc.Timestamp) {
+	if ts, ok := targetByPolicy[policy]; ok {
+		return policy, ts
+	}
+	return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY,
+		targetByPolicy[ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY]
+}
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
@@ -32,7 +64,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicy map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -50,10 +82,9 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	policy, target := closedTsPolicyAndTarget(r.closedTimestampPolicyRLocked(), targetByPolicy)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
-	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
+	// We need to own the lease but note that stass (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
 	if !valid || !st.OwnedBy(r.StoreID()) {

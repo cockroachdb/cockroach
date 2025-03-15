@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "multiregion",
+    srcs = ["policy_refresher.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver/closedts",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)

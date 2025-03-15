@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -1000,6 +1002,13 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// cachedLocalityProximity is the cached result of the locality comparison
+		// result between the local node and other replicas. It is only updated and
+		// used for leaseholder replicas. It is used to estimate network latency and
+		// time it takes to propagate closed timestamp from leaseholder replicas to
+		// follower replicas.
+		cachedLocality ctpb.LatencyBasedRangeClosedTimestampPolicy
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1296,24 +1305,39 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.shMu.state.Desc
 }
 
+func toClosedTsPolicy(
+	policy ctpb.LatencyBasedRangeClosedTimestampPolicy,
+) roachpb.RangeClosedTimestampPolicy {
+	switch {
+	case policy == ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY:
+		return roachpb.LAG_BY_CLUSTER_SETTING
+	case policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_GREATER_THAN_300MS:
+		return roachpb.LEAD_FOR_GLOBAL_READS
+	default:
+		panic(fmt.Sprintf("unknown policy locality %s", policy))
+	}
+}
+
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
 // range, which is updated asynchronously by listening in on span configuration
 // changes.
 //
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
-func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
-		if !r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
-			return roachpb.LEAD_FOR_GLOBAL_READS
-		}
+func (r *Replica) closedTimestampPolicyRLocked() ctpb.LatencyBasedRangeClosedTimestampPolicy {
+	r.mu.AssertRHeld()
+	if !r.mu.conf.GlobalReads || r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
 		// closing timestamps in the future, it would break liveness updates,
 		// which perform a 1PC transaction with a commit trigger and can not
 		// tolerate being pushed into the future.
+		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return roachpb.LAG_BY_CLUSTER_SETTING
+	if !r.store.policyRefresher.IsEnabled() {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LOCALITY
+	}
+	return r.mu.cachedLocality
 }
 
 // NodeID returns the ID of the node this replica belongs to.
@@ -1449,7 +1473,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	defer r.mu.RUnlock()
 	desc := r.descRLocked()
 	l, _ /* nextLease */ := r.getLeaseRLocked()
-	closedts := r.closedTimestampPolicyRLocked()
+	closedts := toClosedTsPolicy(r.closedTimestampPolicyRLocked())
 
 	// Sanity check the lease.
 	if !l.Empty() {
@@ -1838,7 +1862,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
-	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
+	ri.ClosedTimestampPolicy = toClosedTsPolicy(r.closedTimestampPolicyRLocked())
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
@@ -2157,7 +2181,7 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, r.closedTimestampPolicyRLocked())
+		r.shMu.state.Lease, toClosedTsPolicy(r.closedTimestampPolicyRLocked()))
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
