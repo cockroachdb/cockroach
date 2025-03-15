@@ -819,28 +819,38 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 // unquiesce any replicas on the local store that have leaders on any of the
 // remote stores.
 func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
-	// TODO(mira): Is it expensive to iterate over all replicas? This callback
-	// will be called at most every SupportExpiryInterval (100ms). Alternatively,
-	// we'd have to maintain some data structure of asleep-only replicas. When we
-	// tried this in #140476, we ran into an inherent lock inversion: when falling
-	// asleep or waking up due to an incoming Raft message, Replica.mu is already
-	// held and we need to lock the new data structure for update; but in this
-	// function, we need to lock the new data structure first before we even know
-	// which replicas' Replica.mu to lock.
+	// No replica with a leader on one of the supportWithdrawnForStoreIDs can
+	// fall asleep while we're iterating below. The check for fortifying leader
+	// in maybeFallAsleepRMuLocked, which calls SupportFor, will fail because
+	// support for the leader's store is already withdrawn. If a replica has
+	// started falling asleep (i.e. it's past the fortification check), it will
+	// finish falling asleep, while holding r.mu, before it's processed here.
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-		leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
-		// If we couldn't locate the leader, wake up the replica.
-		if err != nil || leader.StoreID == 0 {
-			r.maybeWakeUpRMuLocked()
+		shouldWakeUp := func() bool {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			// If the replica is not asleep, it shouldn't wake up.
+			if !r.mu.asleep {
+				return false
+			}
+			leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
+			// If we found the replica's leader's store, and it doesn't match any of
+			// the stores in supportWithdrawnForStoreIDs, the replica shouldn't wake
+			// up. In all other cases, the replica should wake up.
+			if err == nil && leader.StoreID != 0 {
+				if _, ok := supportWithdrawnForStoreIDs[leader.StoreID]; !ok {
+					return false
+				}
+			}
 			return true
 		}
-		// If a replica is asleep, and we just withdrew support for its leader,
-		// wake it up.
-		if _, ok := supportWithdrawnForStoreIDs[leader.StoreID]; ok {
-			r.maybeWakeUpRMuLocked()
+		// If the replica shouldn't wake up, continue iterating.
+		if !shouldWakeUp() {
+			return true
 		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.maybeWakeUpRMuLocked()
 		return true
 	})
 }
