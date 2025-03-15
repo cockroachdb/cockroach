@@ -349,7 +349,7 @@ func TestExplainKVInfo(t *testing.T) {
 			}
 
 			scanQuery := "SELECT count(*) FROM ab"
-			info := getKVInfo(t, r, scanQuery)
+			info, fullOutput := getKVInfo(t, r, scanQuery)
 
 			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
@@ -358,9 +358,14 @@ func TestExplainKVInfo(t *testing.T) {
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 1000, info.counters[stepCount])
 			assert.Equal(t, 1, info.counters[seekCount])
+			// Additionally assert that correct distribution is shown.
+			assert.Truef(
+				t, strings.Contains(fullOutput, "distribution: local"),
+				"expected local distribution, found\n\n%s", fullOutput,
+			)
 
 			lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
-			info = getKVInfo(t, r, lookupJoinQuery)
+			info, fullOutput = getKVInfo(t, r, lookupJoinQuery)
 
 			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
@@ -369,6 +374,10 @@ func TestExplainKVInfo(t *testing.T) {
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 0, info.counters[stepCount])
 			assert.Equal(t, 1000, info.counters[seekCount])
+			assert.Truef(
+				t, strings.Contains(fullOutput, "distribution: local"),
+				"expected local distribution\n\n%s", fullOutput,
+			)
 		}
 	}
 }
@@ -406,7 +415,10 @@ func init() {
 // of the given query from the top-most operator in the plan (i.e. if there are
 // multiple operators exposing the scan stats, then the first info that appears
 // in the EXPLAIN output is used).
-func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) kvInfo {
+//
+// It additionally returns the full output of EXPLAIN ANALYZE of the given
+// query.
+func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) (_ kvInfo, fullOutput string) {
 	rows := r.Query(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 	var output strings.Builder
 	var str string
@@ -442,7 +454,7 @@ func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) kvInfo {
 		fmt.Println("Explain output:")
 		fmt.Println(output.String())
 	}
-	return info
+	return info, output.String()
 }
 
 // TestExplainAnalyzeWarnings verifies that warnings are printed whenever the

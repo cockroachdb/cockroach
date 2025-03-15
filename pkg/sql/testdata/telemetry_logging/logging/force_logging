@@ -31,7 +31,7 @@ SELECT * FROM t LIMIT 1;
 {
 	"ApplicationName": "telemetry-logging-datadriven",
 	"Database": "defaultdb",
-	"Distribution": "full",
+	"Distribution": "local",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
@@ -164,7 +164,7 @@ SELECT * FROM t LIMIT 1;
 {
 	"ApplicationName": "$ internal-console-app",
 	"Database": "defaultdb",
-	"Distribution": "full",
+	"Distribution": "local",
 	"EventType": "sampled_query",
 	"PlanGist": "AgHQAQIAAAAAAg==",
 	"ScanCount": 1,
