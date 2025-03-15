@@ -12,12 +12,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -25,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -340,6 +345,46 @@ crdb_internal.json_to_pb(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, opts,
 		)
 	})
+
+	t.Run("maybeStartCompactionJob", func(t *testing.T) {
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
+		db.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 0")
+		}()
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		db.Exec(t, "BACKUP INTO 'nodelocal://1/backup/10'")
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 10))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		var incJobID jobspb.JobID
+		db.QueryRow(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup/10' WITH detached").Scan(&incJobID)
+		waitForSuccessfulJob(t, tc, incJobID)
+		var jobPayload jobspb.Payload
+		var payloadBytes []byte
+		db.QueryRow(
+			t,
+			fmt.Sprintf(
+				`SELECT payload FROM crdb_internal.system_jobs WHERE id = %d`,
+				incJobID,
+			),
+		).Scan(&payloadBytes)
+		require.NoError(t, protoutil.Unmarshal(payloadBytes, &jobPayload))
+		backupDetails, ok := jobPayload.UnwrapDetails().(jobspb.BackupDetails)
+		require.True(t, ok, "expected job details to be of type jobspb.BackupDetails")
+		execCfg, _ := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+		jobID, err := maybeStartCompactionJob(
+			ctx,
+			&execCfg,
+			username.RootUserName(),
+			backupDetails,
+			fmt.Sprintf(incBackupCmd, 10),
+		)
+		require.NoError(t, err)
+		waitForSuccessfulJob(t, tc, jobID)
+	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
 }
@@ -420,6 +465,73 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
 	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end)
+}
+
+func TestScheduledBackupCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
+	schedules, err := th.createBackupSchedule(
+		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+	inc, err = jobs.ScheduledJobDB(th.internalDB()).
+		Load(context.Background(), th.env, inc.ScheduleID())
+	require.NoError(t, err)
+
+	th.env.SetTime(inc.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+
+	inc, err = jobs.ScheduledJobDB(th.internalDB()).
+		Load(context.Background(), th.env, inc.ScheduleID())
+	require.NoError(t, err)
+
+	th.env.SetTime(inc.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+
+	var jobID jobspb.JobID
+	th.sqlDB.QueryRow(
+		t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+	).Scan(&jobID)
+	testutils.SucceedsSoon(t, func() error {
+		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return th.sqlDB.DB.QueryRowContext(
+			ctx,
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			jobID, jobs.StateSucceeded,
+		).Scan(&unused)
+	})
+
+	var numBackups int
+	th.sqlDB.QueryRow(
+		t,
+		"SELECT COUNT(DISTINCT (start_time, end_time)) FROM "+
+			"[SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
+	).Scan(&numBackups)
+	require.Equal(t, 4, numBackups)
 }
 
 // Start and end are unix epoch in nanoseconds.
