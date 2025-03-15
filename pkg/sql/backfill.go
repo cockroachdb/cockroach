@@ -1929,6 +1929,15 @@ func ValidateForwardIndexes(
 							idx.GetID())
 						indexName = idx.GetName()
 					}
+					if !idx.IsUnique() {
+						// For non-unique indexes, the table row count must match the index
+						// key count. Unlike unique indexes, we don't filter out any rows,
+						// so every row must have a corresponding entry in the index. A
+						// mismatch indicates an assertion failure.
+						return errors.AssertionFailedf(
+							"validation of non-unique index %s failed: expected %d rows, found %d",
+							idx.GetName(), errors.Safe(expectedCount), errors.Safe(idxLen))
+					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 						"duplicate key value violates unique constraint %q",
@@ -2989,8 +2998,15 @@ func indexTruncateInTxn(
 // part of a restore, then timestamp will be too old and the job will fail. On
 // the next resume, a mergeTimestamp newer than the GC time will be picked and
 // the job can continue.
-func getMergeTimestamp(clock *hlc.Clock) hlc.Timestamp {
-	return clock.Now()
+func getMergeTimestamp(ctx context.Context, clock *hlc.Clock) hlc.Timestamp {
+	// Use the current timestamp plus the maximum allowed offset to account for
+	// potential clock skew across nodes. The chosen timestamp must be greater
+	// than all commit timestamps used so far. This may result in seeing rows
+	// that are already present in the index being merged, but that’s fine as
+	// they will be treated as no-ops.
+	ts := clock.Now().AddDuration(clock.MaxOffset())
+	log.Infof(ctx, "merging all keys in temporary index before time %v", ts)
+	return ts
 }
 
 func (sc *SchemaChanger) distIndexMerge(
@@ -3001,8 +3017,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	fractionScaler *multiStageFractionScaler,
 ) error {
 
-	mergeTimestamp := getMergeTimestamp(sc.clock)
-	log.Infof(ctx, "merging all keys in temporary index before time %v", mergeTimestamp)
+	mergeTimestamp := getMergeTimestamp(ctx, sc.clock)
 
 	// Gather the initial resume spans for the merge process.
 	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)
