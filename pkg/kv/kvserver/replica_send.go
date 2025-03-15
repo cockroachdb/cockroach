@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -1323,7 +1324,11 @@ func (ec *endCmds) poison() {
 // No-op if the receiver has been zeroed out by a call to move. Idempotent and
 // is safe to call more than once.
 func (ec *endCmds) done(
-	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
+	writeProposalCreatedAt crtime.Mono,
 ) {
 	if ec.repl == nil {
 		// The endCmds were cleared. This may no longer be necessary, see the comment on
@@ -1342,6 +1347,12 @@ func (ec *endCmds) done(
 
 	if ts := ec.replicatingSince; !ts.IsZero() {
 		ec.repl.store.metrics.RaftReplicationLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
+	}
+
+	if successfulWrites := writeProposalCreatedAt != 0 && pErr == nil; successfulWrites {
+		// Read-only or read-write commands that did not result in writes have zero
+		// writeProposalCreatedAt.
+		ec.repl.recordProposalToLocalApplicationLatency(writeProposalCreatedAt.Elapsed())
 	}
 
 	// Release the latches acquired by the request and exit lock wait-queues. Must
