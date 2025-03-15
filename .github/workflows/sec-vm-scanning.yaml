@@ -1,0 +1,79 @@
+name: Vulnerability Scan
+
+# Limit concurrent runs to avoid race conditions
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel already running scans
+
+on:
+  # Manual trigger on any branch
+  workflow_dispatch:
+
+  schedule:
+    # Nightlies: 2 AM EST = 7 AM UTC (accounting for EDT/EST differences)
+    - cron: '0 7 * * *'
+
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - 'release-*'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    # For scheduled runs, only execute on master branch
+    if: github.event_name != 'schedule' || github.ref == 'refs/heads/master'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract branch/tag info
+        id: repo-info
+        run: |
+          # Get repository name (org/repo format)
+          REPO_NAME="${GITHUB_REPOSITORY}"
+          echo "repo-name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          
+          # Get branch or tag name without refs prefix
+          REF_NAME="${GITHUB_REF_NAME}"
+          echo "ref-name=${REF_NAME}" >> $GITHUB_OUTPUT
+          
+          # Log for visibility
+          echo "Repository: ${REPO_NAME}"
+          echo "Branch/Tag: ${REF_NAME}"
+
+      - name: Checkout security repo
+        uses: actions/checkout@v4
+        with:
+          repository: cockroachlabs/security
+          ref: main
+          token: ${{ secrets.SECURITY_PAT }}
+          path: .github/security
+
+      - name: Detect Go version
+        id: go-version
+        uses: ./.github/security/vulnerability_management/static_analysis/go-version-detector
+
+      - name: Run Snyk Monitor
+        uses: ./.github/security/vulnerability_management/static_analysis/snyk-monitor
+        with:
+          snyk_token: ${{ secrets.SNYK_TOKEN }}
+          snyk_org: ${{ secrets.SNYK_ORG }}
+          go-version: ${{ steps.go-version.outputs.version }}
+          project-name: '${{ steps.repo-info.outputs.repo-name }}:${{ steps.repo-info.outputs.ref-name }}'
+          target-reference: '${{ steps.repo-info.outputs.ref-name }}:go.mod'
+          file: 'go.mod'
+          working_directory: '.'
+
+      - name: Run Snyk Monitor for C Dependencies
+        uses: ./.github/security-actions/security/vulnerability_management/static_analysis/snyk-monitor
+        with:
+          snyk_token: ${{ secrets.SNYK_TOKEN }}
+          snyk_org: ${{ secrets.SNYK_ORG }}
+          go-version: ${{ steps.go-version.outputs.version }}
+          project-name: '${{ steps.repo-info.outputs.repo-name }}:${{ steps.repo-info.outputs.ref-name }}'
+          target-reference: '${{ steps.repo-info.outputs.ref-name }}:c-deps'
+          file: 'c-deps'
+          unmanaged: 'true'
+          working_directory: '.'
