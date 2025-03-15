@@ -153,7 +153,7 @@ func (ex *connExecutor) recordStatementSummary(
 	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
 		Query:        stmt.StmtNoConstants,
 		QuerySummary: stmt.StmtSummary,
-		DistSQL:      flags.IsDistributed(),
+		DistSQL:      flags.ShouldBeDistributed(),
 		Vec:          flags.IsSet(planFlagVectorized),
 		ImplicitTxn:  flags.IsSet(planFlagImplicitTxn),
 		FullScan:     fullScan,
@@ -299,7 +299,7 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 
 		m.StatementFingerprintCount.Add([]byte(stmt.StmtNoConstants))
 
-		if flags.IsDistributed() {
+		if flags.ShouldBeDistributed() {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 				if flags.IsSet(planFlagDistributedExecution) {

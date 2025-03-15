@@ -510,10 +510,16 @@ func (p *planTop) init(stmt *Statement, instrumentation *instrumentationHelper) 
 func (p *planTop) savePlanInfo() {
 	vectorized := p.flags.IsSet(planFlagVectorized)
 	distribution := physicalplan.LocalPlan
-	if p.flags.IsSet(planFlagFullyDistributed) {
-		distribution = physicalplan.FullyDistributedPlan
-	} else if p.flags.IsSet(planFlagPartiallyDistributed) {
-		distribution = physicalplan.PartiallyDistributedPlan
+	if p.flags.IsSet(planFlagDistributedExecution) {
+		// Only show that the plan was distributed if we actually had
+		// distributed execution. This matches the logic from explainPlanNode
+		// where we use the actual physical plan's distribution rather than the
+		// physical planning heuristic.
+		if p.flags.IsSet(planFlagFullyDistributed) {
+			distribution = physicalplan.FullyDistributedPlan
+		} else if p.flags.IsSet(planFlagPartiallyDistributed) {
+			distribution = physicalplan.PartiallyDistributedPlan
+		}
 	}
 	containsMutation := p.flags.IsSet(planFlagContainsMutation)
 	generic := p.flags.IsSet(planFlagGeneric)
@@ -610,16 +616,17 @@ const (
 	planFlagOptCacheMiss
 
 	// planFlagFullyDistributed is set if the query is planned to use full
-	// distribution.
+	// distribution. This flag indicates that the query is such that it can be
+	// distributed, and we think it's worth doing so; however, due to range
+	// placement and other physical planning decisions, the plan might still end
+	// up being local. See planFlagDistributedExecution if interested in whether
+	// the physical plan actually ends up being distributed.
 	planFlagFullyDistributed
 
-	// planFlagPartiallyDistributed is set if the query is planned to use partial
-	// distribution (see physicalplan.PartiallyDistributedPlan).
+	// planFlagPartiallyDistributed is set if the query is planned to use
+	// partial distribution (see physicalplan.PartiallyDistributedPlan). Same
+	// caveats apply as for planFlagFullyDistributed.
 	planFlagPartiallyDistributed
-
-	// planFlagNotDistributed is set if the query is planned to not use
-	// distribution.
-	planFlagNotDistributed
 
 	// planFlagImplicitTxn marks that the plan was run inside of an implicit
 	// transaction.
@@ -707,8 +714,10 @@ func (pf *planFlags) Unset(flags planFlags) {
 	*pf &^= flags
 }
 
-// IsDistributed returns true if either the fully or the partially distributed
-// flags is set.
-func (pf planFlags) IsDistributed() bool {
+// ShouldBeDistributed returns true if either fully distributed or partially
+// distributed flag is set. In other words, it returns whether the plan should
+// be distributed (we might end up not distributing it though due to range
+// placement or moving the single flow to the gateway).
+func (pf planFlags) ShouldBeDistributed() bool {
 	return pf&(planFlagFullyDistributed|planFlagPartiallyDistributed) != 0
 }
