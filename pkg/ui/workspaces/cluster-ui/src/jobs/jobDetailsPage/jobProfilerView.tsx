@@ -14,6 +14,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { RequestState } from "src/api";
 import {
+  CollectExecutionDetailsRequest,
+  CollectExecutionDetailsResponse,
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
   ListJobProfilerExecutionDetailsRequest,
@@ -24,40 +26,97 @@ import { EmptyTable } from "src/empty";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import { useScheduleFunction } from "src/util/hooks";
+import {
+  useScheduleFunction,
+  useSwrMutationWithClusterId,
+  useSwrWithClusterId,
+} from "src/util/hooks";
 
 import styles from "./jobProfilerView.module.scss";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const cx = classnames.bind(styles);
 
-export type JobProfilerStateProps = {
+export interface JobProfilerViewPropsV2 {
   jobID: long;
-  executionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
-  lastUpdated: moment.Moment;
-  isDataValid: boolean;
-  onDownloadExecutionFileClicked: (
+  onFetchExecutionDetailFiles: (
+    req: ListJobProfilerExecutionDetailsRequest,
+  ) => Promise<ListJobProfilerExecutionDetailsResponse>;
+  onCollectExecutionDetails: (
+    req: CollectExecutionDetailsRequest,
+  ) => Promise<CollectExecutionDetailsResponse>;
+  onDownloadExecutionFile: (
     req: GetJobProfilerExecutionDetailRequest,
   ) => Promise<GetJobProfilerExecutionDetailResponse>;
-};
+}
 
-export type JobProfilerDispatchProps = {
-  refreshExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => void;
-  onRequestExecutionDetails: (jobID: long) => void;
-};
+export function JobProfilerViewV2({
+  jobID,
+  onFetchExecutionDetailFiles,
+  onCollectExecutionDetails,
+  onDownloadExecutionFile,
+}: JobProfilerViewPropsV2): React.ReactElement {
+  const { data: detailFiles } = useSwrWithClusterId(
+    { name: "jobProfilerExecutionFiles", jobID },
+    () => onFetchExecutionDetailFiles({ job_id: jobID }),
+    {
+      refreshInterval: 10 * 1000, // 10s polling interval
+    },
+  );
+  const { trigger } = useSwrMutationWithClusterId(
+    { name: "collectExecutionDetails", jobID },
+    () => onCollectExecutionDetails({ job_id: jobID }),
+  );
 
-export type JobProfilerViewProps = JobProfilerStateProps &
-  JobProfilerDispatchProps;
+  const columns = makeJobProfilerViewColumns(jobID, onDownloadExecutionFile);
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: true,
+    columnTitle: "executionDetailFiles",
+  });
+  const onChangeSortSetting = (ss: SortSetting): void => {
+    setSortSetting(ss);
+  };
 
-export function extractFileExtension(filename: string): string {
+  // This URL results in a cluster-wide CPU profile to be collected for 5
+  // seconds. We set `tagfocus` (tf) to only view the samples corresponding to
+  // this job's execution.
+  const url = `debug/pprof/ui/cpu?node=all&seconds=5&labels=true&tf=job.*${jobID}`;
+  return (
+    <Space direction="vertical" size="middle" className={cx("full-width")}>
+      <SummaryCard className={cardCx("summary-card")}>
+        <SummaryCardItem
+          label="Cluster-wide CPU Profile"
+          value={<a href={url}>Profile</a>}
+        />
+        <InlineAlert
+          intent="warning"
+          title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
+        />
+      </SummaryCard>
+      <Space direction="vertical" align="end" className={cx("full-width")}>
+        <Button intent="secondary" onClick={trigger}>
+          Request Execution Details
+        </Button>
+      </Space>
+      <SortedTable
+        data={detailFiles?.files}
+        columns={columns}
+        tableWrapperClassName={cx("sorted-table")}
+        sortSetting={sortSetting}
+        onChangeSortSetting={onChangeSortSetting}
+        renderNoResult={<EmptyTable title="No execution detail files found." />}
+      />
+    </Space>
+  );
+}
+
+function extractFileExtension(filename: string): string {
   const parts = filename.split(".");
   // The extension is the last part after the last dot (if it exists).
   return parts.length > 1 ? parts[parts.length - 1] : "";
 }
 
-export function getContentTypeForFile(filename: string): string {
+function getContentTypeForFile(filename: string): string {
   const extension = extractFileExtension(filename);
   switch (extension) {
     case "txt":
@@ -71,8 +130,8 @@ export function getContentTypeForFile(filename: string): string {
   }
 }
 
-export function makeJobProfilerViewColumns(
-  jobID: Long,
+function makeJobProfilerViewColumns(
+  jobID: long,
   onDownloadExecutionFileClicked: (
     req: GetJobProfilerExecutionDetailRequest,
   ) => Promise<GetJobProfilerExecutionDetailResponse>,
@@ -157,6 +216,28 @@ export function makeJobProfilerViewColumns(
     },
   ];
 }
+
+// DEPRECATED: To be removed once above is ported to Cockroach Cloud.
+
+export type JobProfilerStateProps = {
+  jobID: long;
+  executionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
+  lastUpdated: moment.Moment;
+  isDataValid: boolean;
+  onDownloadExecutionFileClicked: (
+    req: GetJobProfilerExecutionDetailRequest,
+  ) => Promise<GetJobProfilerExecutionDetailResponse>;
+};
+
+export type JobProfilerDispatchProps = {
+  refreshExecutionDetailFiles: (
+    req: ListJobProfilerExecutionDetailsRequest,
+  ) => void;
+  onRequestExecutionDetails: (jobID: long) => void;
+};
+
+export type JobProfilerViewProps = JobProfilerStateProps &
+  JobProfilerDispatchProps;
 
 export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
   jobID,
