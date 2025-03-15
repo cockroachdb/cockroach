@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -454,15 +453,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				if _, err := ie.Exec(ctx, "default-tenant", nil,
 					`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
 					demoTenantName); err != nil {
-					return err
-				}
-			}
-
-			for _, s := range []string{
-				string(sqlclustersettings.RestrictAccessToSystemInterface.Name()),
-				string(sql.TipUserAboutSystemInterface.Name()),
-			} {
-				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
 					return err
 				}
 			}
