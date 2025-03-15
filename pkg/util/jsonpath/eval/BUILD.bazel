@@ -6,6 +6,7 @@ go_library(
         "array.go",
         "eval.go",
         "key.go",
+        "operation.go",
         "scalar.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval",

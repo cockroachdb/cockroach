@@ -8,17 +8,16 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 	"github.com/cockroachdb/errors"
 )
 
-func (ctx *jsonpathCtx) evalArrayWildcard(current []tree.DJSON) ([]tree.DJSON, error) {
-	var agg []tree.DJSON
-	for _, res := range current {
-		if res.JSON.Type() == json.ArrayJSONType {
-			paths, err := json.AllPathsWithDepth(res.JSON, 1)
+func (ctx *jsonpathCtx) evalArrayWildcard(current []json.JSON) ([]json.JSON, error) {
+	var agg []json.JSON
+	for _, j := range current {
+		if j.Type() == json.ArrayJSONType {
+			paths, err := json.AllPathsWithDepth(j, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -33,10 +32,10 @@ func (ctx *jsonpathCtx) evalArrayWildcard(current []tree.DJSON) ([]tree.DJSON, e
 				if unwrapped == nil {
 					return nil, errors.AssertionFailedf("unwrapping json element")
 				}
-				agg = append(agg, *ctx.a.NewDJSON(tree.DJSON{JSON: unwrapped}))
+				agg = append(agg, unwrapped)
 			}
 		} else if !ctx.strict {
-			agg = append(agg, res)
+			agg = append(agg, j)
 		} else {
 			return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath wildcard array accessor can only be applied to an array")
 		}
@@ -45,9 +44,9 @@ func (ctx *jsonpathCtx) evalArrayWildcard(current []tree.DJSON) ([]tree.DJSON, e
 }
 
 func (ctx *jsonpathCtx) evalArrayList(
-	a jsonpath.ArrayList, current []tree.DJSON,
-) ([]tree.DJSON, error) {
-	var agg []tree.DJSON
+	a jsonpath.ArrayList, current []json.JSON,
+) ([]json.JSON, error) {
+	var agg []json.JSON
 	for _, path := range a {
 		var from, to int
 		var err error
@@ -68,13 +67,13 @@ func (ctx *jsonpathCtx) evalArrayList(
 			to = from
 		}
 
-		for _, res := range current {
-			if ctx.strict && res.JSON.Type() != json.ArrayJSONType {
+		for _, j := range current {
+			if ctx.strict && j.Type() != json.ArrayJSONType {
 				return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound,
 					"jsonpath array accessor can only be applied to an array")
 			}
-			length := res.JSON.Len()
-			if res.JSON.Type() != json.ArrayJSONType {
+			length := j.Len()
+			if j.Type() != json.ArrayJSONType {
 				length = 1
 			}
 			if ctx.strict && (from < 0 || from > to || to >= length) {
@@ -82,29 +81,29 @@ func (ctx *jsonpathCtx) evalArrayList(
 					"jsonpath array subscript is out of bounds")
 			}
 			for i := max(from, 0); i <= min(to, length-1); i++ {
-				j, err := jsonArrayValueAtIndex(ctx, res.JSON, i)
+				v, err := jsonArrayValueAtIndex(ctx, j, i)
 				if err != nil {
 					return nil, err
 				}
-				if j == nil {
+				if v == nil {
 					continue
 				}
-				agg = append(agg, *ctx.a.NewDJSON(tree.DJSON{JSON: j}))
+				agg = append(agg, v)
 			}
 		}
 	}
 	return agg, nil
 }
 
-func (ctx *jsonpathCtx) resolveArrayIndex(p jsonpath.Path, current []tree.DJSON) (int, error) {
+func (ctx *jsonpathCtx) resolveArrayIndex(p jsonpath.Path, current []json.JSON) (int, error) {
 	results, err := ctx.eval(p, current)
 	if err != nil {
 		return 0, err
 	}
-	if len(results) != 1 || results[0].JSON.Type() != json.NumberJSONType {
+	if len(results) != 1 || results[0].Type() != json.NumberJSONType {
 		return -1, pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is not a single numeric value")
 	}
-	i, err := asInt(results[0].JSON)
+	i, err := asInt(results[0])
 	if err != nil {
 		return -1, pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is not a single numeric value")
 	}
