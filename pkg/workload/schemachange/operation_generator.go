@@ -2802,9 +2802,6 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil, err
 	}
 
-	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
-	// error.
-	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
 	// There is a risk of unique violations if concurrent inserts
 	// happen during an ALTER PRIMARY KEY. So allow this to be
 	// a potential error on the commit.
