@@ -685,6 +685,11 @@ type clusterImpl struct {
 	// debugging service.
 	sideEyeClient *sideeyeclient.SideEyeClient
 
+	// preStartHooks contains registered preStartHook(s).
+	preStartHooks []install.PreStartHook
+	// preStartVirtualClusterHooks contains registered preStartVirtualClusterHook(s).
+	preStartVirtualClusterHooks []install.PreStartHook
+
 	// State that can be accessed concurrently (in particular, read from the UI
 	// HTML generator).
 	mu struct {
@@ -2179,6 +2184,7 @@ func (c *clusterImpl) StartE(
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
+	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartHooks...)
 	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
 	if err := roachprod.Start(ctx, l, c.MakeNodes(nodes), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
@@ -2255,6 +2261,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	if len(startOpts.SeparateProcessNodes) > 0 {
 		startOpts.RoachprodOpts.VirtualClusterLocation = c.MakeNodes(startOpts.SeparateProcessNodes)
 	}
+	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartVirtualClusterHooks...)
 	if err := roachprod.StartServiceForVirtualCluster(
 		ctx, l, c.MakeNodes(storageCluster), startOpts.RoachprodOpts, clusterSettingsOpts...,
 	); err != nil {
@@ -3356,4 +3363,24 @@ func (c *clusterImpl) GetHostErrorVMs(ctx context.Context, l *logger.Logger) ([]
 		allHostErrorVMs = append(allHostErrorVMs, hostErrorVMS...)
 	}
 	return allHostErrorVMs, nil
+}
+
+// RegisterClusterHook registers a hook to be run at a certain point as defined
+// by option.ClusterHookType. This exposes a way for test writers to run code
+// in between certain steps normally orchestrated by the framework, e.g. running
+// some workload during cluster init that depends on knowing connection info.
+func (c *clusterImpl) RegisterClusterHook(
+	hookName string,
+	hookType option.ClusterHookType,
+	timeout time.Duration,
+	fn func(context.Context) error,
+) {
+	switch hookType {
+	case option.PreStartHook:
+		c.preStartHooks = append(c.preStartHooks, install.PreStartHook{Name: hookName, Fn: fn, Timeout: timeout})
+	case option.PreStartVirtualClusterHook:
+		c.preStartVirtualClusterHooks = append(c.preStartVirtualClusterHooks, install.PreStartHook{Name: hookName, Fn: fn, Timeout: timeout})
+	default:
+		panic(fmt.Sprintf("unknown test hook type %v", hookType))
+	}
 }
