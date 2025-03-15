@@ -54,6 +54,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	AutomaticStatisticsMinStaleRows.Override(ctx, &st.SV, 5)
 
 	AutomaticPartialStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticFullStatisticsClusterMode.Override(ctx, &st.SV, false)
 	AutomaticPartialStatisticsMinStaleRows.Override(ctx, &st.SV, 5)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
@@ -82,7 +83,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// There are no stats yet, so this must refresh the full statistics on table t
 	// even though rowsAffected=0.
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -95,7 +97,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 0, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -106,7 +109,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	minStaleRows := int64(100000000)
 	explicitSettings := catpb.AutoStatsSettings{MinStaleRows: &minStaleRows}
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 1 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -115,7 +119,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Do the same for partialMinStaleRows to also prevent a partial refresh.
 	explicitSettings.PartialMinStaleRows = &minStaleRows
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 1 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -127,7 +132,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	fractionStaleRows := float64(100000000)
 	explicitSettings = catpb.AutoStatsSettings{FractionStaleRows: &fractionStaleRows}
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 2 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -136,7 +142,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Do the same for partialFractionStaleRows to also prevent a partial refresh.
 	explicitSettings.PartialFractionStaleRows = &fractionStaleRows
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), &explicitSettings, 10, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 1 /* expectedFull */, 2 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -147,7 +154,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Partial stats should not be refreshed since full stats are being refreshed,
 	// and stale partial stats should be cleared.
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 10 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descA.GetID(), nil /* explicitSettings */, 10, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descA, 2 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -158,7 +166,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descRoleOptions :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "system", "role_options")
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descRoleOptions.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descRoleOptions.GetID(), nil /* explicitSettings */, 10000, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descRoleOptions, 5 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -168,7 +177,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descLease :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "system", "lease")
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descLease.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descLease.GetID(), nil /* explicitSettings */, 10000, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descLease, 0 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -178,7 +188,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	descTableStats :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "system", "table_statistics")
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descTableStats.GetID(), nil /* explicitSettings */, 10000 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descTableStats.GetID(), nil /* explicitSettings */, 10000, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, descTableStats, 0 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -189,7 +200,8 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// TODO(rytaft): Should not enqueue views to begin with.
 	descVW := desctestutils.TestingGetPublicTableDescriptor(s.DB(), codec, "t", "vw")
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), descVW.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), descVW.GetID(), nil /* explicitSettings */, 0, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	select {
 	case <-refresher.mutations:
@@ -558,7 +570,8 @@ func TestAverageRefreshTime(t *testing.T) {
 	// the statistics on table t. With rowsAffected=0, the probability of refresh
 	// is 0.
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, table, 20 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -608,7 +621,8 @@ func TestAverageRefreshTime(t *testing.T) {
 	// remain (5 from column k and 5 from column v), since the old stats on k
 	// and v were deleted.
 	refresher.maybeRefreshStats(
-		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0 /* rowsAffected */, time.Microsecond /* asOf */, true, /* partialStatsEnabled */
+		ctx, s.AppStopper(), table.GetID(), nil /* explicitSettings */, 0, /* rowsAffected */
+		time.Microsecond /* asOf */, true /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 	if err := checkStatsCount(ctx, cache, table, 10 /* expectedFull */, 0 /* expectedPartial */); err != nil {
 		t.Fatal(err)
@@ -757,7 +771,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
 		ctx, s.AppStopper(), 100 /* tableID */, nil /* explicitSettings */, math.MaxInt32,
-		time.Microsecond /* asOfTime */, false, /* partialStatsEnabled */
+		time.Microsecond /* asOfTime */, false /* partialStatsEnabled */, true, /* fullStatsEnabled */
 	)
 
 	// Ensure that we will not try to refresh tableID 100 again.

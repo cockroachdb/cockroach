@@ -511,6 +511,10 @@ var tableParams = map[string]tableParam{
 		onSet:   autoStatsEnabledSettingFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
+	catpb.AutoFullStatsEnabledTableSettingName: {
+		onSet:   autoStatsEnabledSettingFunc,
+		onReset: autoStatsTableSettingResetFunc,
+	},
 	catpb.AutoPartialStatsMinStaleTableSettingName: {
 		onSet: autoStatsMinStaleRowsSettingFunc(func(intVal int64) error {
 			if intVal < 0 {
@@ -677,6 +681,9 @@ func autoStatsEnabledSettingFunc(
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		po.TableDesc.AutoStatsSettings.PartialEnabled = &boolVal
 		return nil
+	case catpb.AutoFullStatsEnabledTableSettingName:
+		po.TableDesc.AutoStatsSettings.FullEnabled = &boolVal
+		return nil
 	}
 	return errors.AssertionFailedf("unable to set table setting %s", key)
 }
@@ -755,6 +762,9 @@ func autoStatsTableSettingResetFunc(
 		return nil
 	case catpb.AutoPartialStatsEnabledTableSettingName:
 		autoStatsSettings.PartialEnabled = nil
+		return nil
+	case catpb.AutoFullStatsEnabledTableSettingName:
+		autoStatsSettings.FullEnabled = nil
 		return nil
 	case catpb.AutoPartialStatsMinStaleTableSettingName:
 		autoStatsSettings.PartialMinStaleRows = nil
