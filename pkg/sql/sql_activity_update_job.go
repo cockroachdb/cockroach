@@ -33,7 +33,7 @@ var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.activity.flush.enabled",
 	"enable the flush to the system statement and transaction activity tables",
-	true)
+	false)
 
 // sqlStatsActivityTopCount is the cluster setting that controls the number of
 // rows selected to be inserted into the activity tables
