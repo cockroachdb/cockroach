@@ -1388,19 +1388,30 @@ func configureZoneConfigForNewIndexBackfill(
 		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
 			return target == scpb.Transient && e.SourceIndexID == oldIndexID
 		}).MustGetZeroOrOneElement()
+	indexNames := b.QueryByID(tableID).FilterIndexName().Elements()
 	newIndex := getLatestPrimaryIndex(b, tableID)
 	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
 	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
 	newSubzones := make([]zonepb.Subzone, 0)
-	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
-	// For the indexes we will use as a part of the backfill, ensure we copy
-	// over each subzone config from the old index to the backfill-related ones.
-	for _, idxToAdd := range newIndexesForBackfill {
-		for _, subzone := range newZoneConfig.Subzones {
-			if subzone.IndexID == uint32(oldIndexID) {
+	for _, subzone := range newZoneConfig.Subzones {
+		if subzone.IndexID == uint32(oldIndexID) {
+			// For the indexes we will use as a part of the backfill, ensure we copy
+			// over each subzone config from the old index to the backfill-related ones,
+			// AND change the ID.
+			for _, idxToAdd := range newIndexesForBackfill {
 				subzone.IndexID = uint32(idxToAdd)
+				newSubzones = append(newSubzones, subzone)
 			}
-			newSubzones = append(newSubzones, subzone)
+		} else {
+			// If a subzone is not related to an index being backfilled, just copy it
+			// without changing anything. If the index is no longer part of the
+			// table, don't copy the subzone.
+			for _, idxName := range indexNames {
+				if subzone.IndexID == uint32(idxName.IndexID) {
+					newSubzones = append(newSubzones, subzone)
+					break
+				}
+			}
 		}
 	}
 	newZoneConfig.Subzones = newSubzones
@@ -1422,11 +1433,8 @@ func configureZoneConfigForNewIndexBackfill(
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
 func configureZoneConfigForNewIndexPartitioning(
-	b BuildCtx, tableID catid.DescID, indexDesc descpb.IndexDescriptor,
+	b BuildCtx, tableID catid.DescID, indexID descpb.IndexID,
 ) error {
-	if indexDesc.ID == 0 {
-		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
-	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
 	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 	if localityRBR != nil {
@@ -1436,8 +1444,8 @@ func configureZoneConfigForNewIndexPartitioning(
 			return err
 		}
 
-		indexIDs := []descpb.IndexID{indexDesc.ID}
-		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexDesc.ID); idx != nil {
+		indexIDs := []descpb.IndexID{indexID}
+		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
 			indexIDs = append(indexIDs, idx.IndexID)
 		}
 
