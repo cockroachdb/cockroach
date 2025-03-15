@@ -231,6 +231,7 @@ func createLogicalReplicationStreamPlanHook(
 			TableNames:                  srcTableNames,
 			AllowOffline:                options.ParentID != 0,
 			UnvalidatedReverseStreamURI: options.BidirectionalURI(),
+			DestClusterVersion:          p.ExecCfg().Settings.Version.ActiveVersion(ctx),
 		})
 		if err != nil {
 			return err
