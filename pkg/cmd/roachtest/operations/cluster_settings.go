@@ -92,6 +92,12 @@ func registerClusterSettings(r registry.Registry) {
 			}),
 			Owner: registry.OwnerKV,
 		},
+		{
+			// Toggle kv prober on/off.
+			Name:      "kv.prober.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*time.Hour),
+			Owner:     registry.OwnerKV,
+		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
 		// the threshold to trigger a fail-over to a secondary store’s WAL.
 		// 20-minute cycle.
