@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 // FailureArgs describes the args passed to a failure mode.
@@ -35,7 +36,8 @@ type FailureMode interface {
 	// Inject a failure into the system.
 	Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
-	// Restore reverses the effects of Inject.
+	// Restore reverses the effects of Inject. The same args passed to Inject
+	// must be passed to Restore.
 	Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
 	// Cleanup uninstalls any dependencies that were installed by Setup.
@@ -52,9 +54,11 @@ type FailureMode interface {
 // provide commonly used functionality that doesn't differ between failure modes,
 // e.g. running remote commands on the cluster.
 type GenericFailure struct {
+	// TODO(Darryl): support specifying virtual clusters
 	c *install.SyncedCluster
 	// runTitle is the title to prefix command output with.
-	runTitle string
+	runTitle          string
+	networkInterfaces []string
 }
 
 func (f *GenericFailure) Run(
@@ -83,4 +87,23 @@ func (f *GenericFailure) RunWithDetails(
 		return install.RunResultDetails{}, err
 	}
 	return res[0], nil
+}
+
+// NetworkInterfaces returns the network interfaces used by the VMs in the cluster.
+// Assumes that all VMs are using the same machine type and will have the same
+// network interfaces.
+func (f *GenericFailure) NetworkInterfaces(
+	ctx context.Context, l *logger.Logger,
+) ([]string, error) {
+	if f.networkInterfaces == nil {
+		res, err := f.c.RunWithDetails(ctx, l, install.WithNodes(f.c.Nodes[:1]), "Get Network Interfaces", "ip -o link show | awk -F ': ' '{print $2}'")
+		if err != nil {
+			return nil, errors.Wrapf(err, "error when determining network interfaces")
+		}
+		interfaces := strings.Split(strings.TrimSpace(res[0].Stdout), "\n")
+		for _, iface := range interfaces {
+			f.networkInterfaces = append(f.networkInterfaces, strings.TrimSpace(iface))
+		}
+	}
+	return f.networkInterfaces, nil
 }
