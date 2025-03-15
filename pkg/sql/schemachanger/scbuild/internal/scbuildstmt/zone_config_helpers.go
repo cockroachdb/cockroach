@@ -1456,11 +1456,8 @@ func configureZoneConfigForNewIndexBackfill(
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
 func configureZoneConfigForNewIndexPartitioning(
-	b BuildCtx, tableID catid.DescID, indexDesc descpb.IndexDescriptor,
+	b BuildCtx, tableID catid.DescID, indexID descpb.IndexID,
 ) error {
-	if indexDesc.ID == 0 {
-		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
-	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
 	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 	if localityRBR != nil {
@@ -1470,8 +1467,8 @@ func configureZoneConfigForNewIndexPartitioning(
 			return err
 		}
 
-		indexIDs := []descpb.IndexID{indexDesc.ID}
-		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexDesc.ID); idx != nil {
+		indexIDs := []descpb.IndexID{indexID}
+		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
 			indexIDs = append(indexIDs, idx.IndexID)
 		}
 
