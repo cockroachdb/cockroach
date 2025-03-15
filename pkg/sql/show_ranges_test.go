@@ -259,6 +259,9 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	// Reduce the backoff duration to make the test faster.
+	sqlDB.Exec(t,
+		`SET CLUSTER SETTING kv.dist_sender.leaseholder_not_found_backoff.threshold='100ms'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold='1s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_raft.leaderless_unavailable_threshold='5s'`)
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
