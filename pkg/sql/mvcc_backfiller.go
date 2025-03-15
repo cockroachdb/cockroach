@@ -92,7 +92,7 @@ func (im *IndexBackfillerMergePlanner) MergeIndexes(
 		)
 		return tracker.SetMergeProgress(ctx, progress)
 	}
-	mergeTimeStamp := getMergeTimestamp(im.execCfg.Clock)
+	mergeTimeStamp := getMergeTimestamp(ctx, im.execCfg.Clock)
 	protectedTimestampCleaner := im.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, job, descriptor, mergeTimeStamp)
 	defer func() {
 		cleanupError := protectedTimestampCleaner(ctx)
