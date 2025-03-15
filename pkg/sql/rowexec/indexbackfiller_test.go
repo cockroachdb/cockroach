@@ -12,8 +12,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -35,7 +41,18 @@ func TestRetryOfIndexEntryBatch(t *testing.T) {
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	db := srv.SystemLayer().InternalDB().(isql.DB)
+
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			DB:       srv.InternalDB().(descs.DB),
+			Settings: srv.ClusterSettings(),
+			Codec:    srv.Codec(),
+		},
+		EvalCtx: &eval.Context{
+			Codec:    srv.Codec(),
+			Settings: srv.ClusterSettings(),
+		},
+	}
 
 	const initialChunkSize int64 = 50000
 	oomErr := mon.NewMemoryBudgetExceededError(1, 1, 1)
@@ -44,44 +61,48 @@ func TestRetryOfIndexEntryBatch(t *testing.T) {
 	for _, tc := range []struct {
 		desc              string
 		errs              []error
-		retryErr          error
 		expectedErr       error
 		expectedChunkSize int64
 	}{
-		{"happy-path", nil, nil, nil, initialChunkSize},
-		{"retry-once", []error{oomErr}, nil, nil, initialChunkSize >> 1},
-		{"retry-then-fail", []error{oomErr, oomErr, nonOomErr}, nil, nonOomErr, initialChunkSize >> 2},
-		{"retry-exhaustive", []error{oomErr, oomErr, oomErr, oomErr}, nil, oomErr, initialChunkSize >> 3},
-		{"retry-error", []error{oomErr}, nonOomErr, oomErr, initialChunkSize},
+		{"happy-path", nil, nil, initialChunkSize},
+		{"retry-once", []error{oomErr}, nil, initialChunkSize >> 1},
+		{"retry-then-fail", []error{oomErr, oomErr, nonOomErr}, nonOomErr, initialChunkSize >> 2},
+		{"retry-exhaustive", []error{oomErr, oomErr, oomErr, oomErr}, oomErr, initialChunkSize >> 3},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			i := 0
-			br := indexBatchRetry{
-				nextChunkSize: initialChunkSize,
-				retryOpts: retry.Options{
-					InitialBackoff: 2 * time.Millisecond,
-					Multiplier:     2,
-					MaxRetries:     2,
-					MaxBackoff:     10 * time.Millisecond,
-				},
-				buildIndexChunk: func(ctx context.Context, txn isql.Txn) error {
-					if i < len(tc.errs) {
-						return tc.errs[i]
-					}
-					return nil
-				},
-				resetForNextAttempt: func(ctx context.Context) error {
-					i++
-					return tc.retryErr
-				},
+			i := -1
+			retryOpts := retry.Options{
+				InitialBackoff: 2 * time.Millisecond,
+				Multiplier:     2,
+				MaxRetries:     2,
+				MaxBackoff:     10 * time.Millisecond,
 			}
-			err := br.buildBatchWithRetry(ctx, db)
+			// Use a custom builder function that returns errors from the test case.
+			builder := func(ctx context.Context,
+				txn *kv.Txn,
+				tableDesc catalog.TableDescriptor,
+				sp roachpb.Span,
+				chunkSize int64,
+				traceKV bool,
+			) ([]rowenc.IndexEntry, roachpb.Key, int64, error) {
+				i++
+				if i < len(tc.errs) {
+					return nil, nil, 0, tc.errs[i]
+				}
+				return nil, nil, 0, nil
+			}
+
+			ib := &indexBackfiller{
+				flowCtx: &flowCtx,
+				spec:    execinfrapb.BackfillerSpec{ChunkSize: initialChunkSize},
+			}
+			_, _, _, err := ib.buildIndexEntryBatchWithRetry(ctx, roachpb.Span{}, srv.Clock().Now(), retryOpts, builder)
 			if tc.expectedErr == nil {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, tc.expectedErr)
 			}
-			require.Equal(t, tc.expectedChunkSize, br.nextChunkSize)
+			require.Equal(t, tc.expectedChunkSize, ib.spec.ChunkSize)
 		})
 	}
 }
