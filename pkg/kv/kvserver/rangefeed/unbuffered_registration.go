@@ -107,6 +107,7 @@ func newUnbufferedRegistration(
 		baseRegistration: baseRegistration{
 			streamCtx:              streamCtx,
 			span:                   span,
+			startAt:                crtime.NowMono(),
 			catchUpTimestamp:       startTS,
 			withDiff:               withDiff,
 			withFiltering:          withFiltering,
@@ -177,6 +178,7 @@ func (ubr *unbufferedRegistration) publish(
 // the processor in response to errors from the replica and by the StreamManager
 // in response to shutdowns.
 func (ubr *unbufferedRegistration) Disconnect(pErr *kvpb.Error) {
+	ubr.metrics.RangefeedLifetimeNanos.Inc(ubr.startAt.Elapsed().Nanoseconds())
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	ubr.disconnectLocked(pErr)
