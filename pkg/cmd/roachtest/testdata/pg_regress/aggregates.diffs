@@ -1,0 +1,3355 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --label=/mnt/data1/postgres/src/test/regress/results/aggregates.out /mnt/data1/postgres/src/test/regress/expected/aggregates.out /mnt/data1/postgres/src/test/regress/results/aggregates.out
+--- /mnt/data1/postgres/src/test/regress/expected/aggregates.out
++++ /mnt/data1/postgres/src/test/regress/results/aggregates.out
+@@ -3,6 +3,7 @@
+ --
+ -- directory paths are passed to us in environment variables
+ \getenv abs_srcdir PG_ABS_SRCDIR
++invalid command \getenv
+ -- avoid bit-exact output here because operations may not be bit-exact.
+ SET extra_float_digits = 0;
+ -- prepare some test data
+@@ -12,57 +13,52 @@
+ );
+ \set filename :abs_srcdir '/data/agg.data'
+ COPY aggtest FROM :'filename';
++ERROR:  at or near ":abs_srcdir/data/agg.data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++COPY aggtest FROM ':abs_srcdir/data/agg.data'
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ANALYZE aggtest;
+ SELECT avg(four) AS avg_1 FROM onek;
+-       avg_1        
+---------------------
+- 1.5000000000000000
++         avg_1         
++-----------------------
++ 1.5000000000000000000
+ (1 row)
+ 
+ SELECT avg(a) AS avg_32 FROM aggtest WHERE a < 100;
+-       avg_32        
+----------------------
+- 32.6666666666666667
++ avg_32 
++--------
++       
+ (1 row)
+ 
+ SELECT any_value(v) FROM (VALUES (1), (2), (3)) AS v (v);
+- any_value 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: any_value()
+ SELECT any_value(v) FROM (VALUES (NULL)) AS v (v);
+- any_value 
+------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: any_value()
+ SELECT any_value(v) FROM (VALUES (NULL), (1), (2)) AS v (v);
+- any_value 
+------------
+-         1
+-(1 row)
+-
++ERROR:  unknown function: any_value()
+ SELECT any_value(v) FROM (VALUES (array['hello', 'world'])) AS v (v);
+-   any_value   
+----------------
+- {hello,world}
+-(1 row)
+-
++ERROR:  unknown function: any_value()
+ -- In 7.1, avg(float4) is computed using float8 arithmetic.
+ -- Round the result to 3 digits to avoid platform-specific results.
+ SELECT avg(b)::numeric(10,3) AS avg_107_943 FROM aggtest;
+  avg_107_943 
+ -------------
+-     107.943
++            
+ (1 row)
+ 
+ SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
+- avg_3_4 
+----------
+-     3.4
+-(1 row)
+-
++ERROR:  relation "student" does not exist
+ SELECT sum(four) AS sum_1500 FROM onek;
+  sum_1500 
+ ----------
+@@ -72,21 +68,17 @@
+ SELECT sum(a) AS sum_198 FROM aggtest;
+  sum_198 
+ ---------
+-     198
++        
+ (1 row)
+ 
+ SELECT sum(b) AS avg_431_773 FROM aggtest;
+  avg_431_773 
+ -------------
+-     431.773
++            
+ (1 row)
+ 
+ SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
+- avg_6_8 
+----------
+-     6.8
+-(1 row)
+-
++ERROR:  relation "student" does not exist
+ SELECT max(four) AS max_3 FROM onek;
+  max_3 
+ -------
+@@ -96,67 +88,63 @@
+ SELECT max(a) AS max_100 FROM aggtest;
+  max_100 
+ ---------
+-     100
++        
+ (1 row)
+ 
+ SELECT max(aggtest.b) AS max_324_78 FROM aggtest;
+  max_324_78 
+ ------------
+-     324.78
++           
+ (1 row)
+ 
+ SELECT max(student.gpa) AS max_3_7 FROM student;
+- max_3_7 
+----------
+-     3.7
+-(1 row)
+-
++ERROR:  relation "student" does not exist
+ SELECT stddev_pop(b) FROM aggtest;
+-   stddev_pop    
+------------------
+- 131.10703231895
++ stddev_pop 
++------------
++           
+ (1 row)
+ 
+ SELECT stddev_samp(b) FROM aggtest;
+-   stddev_samp    
+-------------------
+- 151.389360803998
++ stddev_samp 
++-------------
++            
+ (1 row)
+ 
+ SELECT var_pop(b) FROM aggtest;
+-     var_pop      
+-------------------
+- 17189.0539234823
++ var_pop 
++---------
++        
+ (1 row)
+ 
+ SELECT var_samp(b) FROM aggtest;
+-     var_samp     
+-------------------
+- 22918.7385646431
++ var_samp 
++----------
++         
+ (1 row)
+ 
+ SELECT stddev_pop(b::numeric) FROM aggtest;
+-    stddev_pop    
+-------------------
+- 131.107032862199
++ stddev_pop 
++------------
++           
+ (1 row)
+ 
+ SELECT stddev_samp(b::numeric) FROM aggtest;
+-   stddev_samp    
+-------------------
+- 151.389361431288
++ stddev_samp 
++-------------
++            
+ (1 row)
+ 
+ SELECT var_pop(b::numeric) FROM aggtest;
+-      var_pop       
+---------------------
+- 17189.054065929769
++ var_pop 
++---------
++        
+ (1 row)
+ 
+ SELECT var_samp(b::numeric) FROM aggtest;
+-      var_samp      
+---------------------
+- 22918.738754573025
++ var_samp 
++----------
++         
+ (1 row)
+ 
+ -- population variance is defined for a single tuple, sample variance
+@@ -404,9 +392,9 @@
+ -- test accuracy with a large input offset
+ SELECT avg(x::float8), var_pop(x::float8)
+ FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
+-    avg    | var_pop 
+------------+---------
+- 100000005 |     2.5
++    avg    |     var_pop      
++-----------+------------------
++ 100000005 | 2.50000000558794
+ (1 row)
+ 
+ SELECT avg(x::float8), var_pop(x::float8)
+@@ -420,55 +408,55 @@
+ SELECT regr_count(b, a) FROM aggtest;
+  regr_count 
+ ------------
+-          4
++          0
+ (1 row)
+ 
+ SELECT regr_sxx(b, a) FROM aggtest;
+  regr_sxx 
+ ----------
+-     5099
++         
+ (1 row)
+ 
+ SELECT regr_syy(b, a) FROM aggtest;
+-     regr_syy     
+-------------------
+- 68756.2156939293
++ regr_syy 
++----------
++         
+ (1 row)
+ 
+ SELECT regr_sxy(b, a) FROM aggtest;
+-     regr_sxy     
+-------------------
+- 2614.51582155004
++ regr_sxy 
++----------
++         
+ (1 row)
+ 
+ SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
+- regr_avgx |    regr_avgy     
+------------+------------------
+-      49.5 | 107.943152273074
++ regr_avgx | regr_avgy 
++-----------+-----------
++           |          
+ (1 row)
+ 
+ SELECT regr_r2(b, a) FROM aggtest;
+-      regr_r2       
+---------------------
+- 0.0194977982031803
++ regr_r2 
++---------
++        
+ (1 row)
+ 
+ SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
+-    regr_slope     |  regr_intercept  
+--------------------+------------------
+- 0.512750700441271 | 82.5619926012309
++ regr_slope | regr_intercept 
++------------+----------------
++            |               
+ (1 row)
+ 
+ SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest;
+-    covar_pop    |    covar_samp    
+------------------+------------------
+- 653.62895538751 | 871.505273850014
++ covar_pop | covar_samp 
++-----------+------------
++           |           
+ (1 row)
+ 
+ SELECT corr(b, a) FROM aggtest;
+-       corr        
+--------------------
+- 0.139634516517873
++ corr 
++------
++     
+ (1 row)
+ 
+ -- check single-tuple behavior
+@@ -508,17 +496,9 @@
+ (1 row)
+ 
+ SELECT float8_accum('{4,140,2900}'::float8[], 100);
+- float8_accum 
+---------------
+- {5,240,6280}
+-(1 row)
+-
++ERROR:  unknown function: float8_accum()
+ SELECT float8_regr_accum('{4,140,2900,1290,83075,15050}'::float8[], 200, 100);
+-      float8_regr_accum       
+-------------------------------
+- {5,240,6280,1490,95080,8680}
+-(1 row)
+-
++ERROR:  unknown function: float8_regr_accum()
+ SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+ FROM regr_test WHERE x IN (10,20,30);
+  count | sum | regr_sxx | sum | regr_syy | regr_sxy 
+@@ -534,44 +514,20 @@
+ (1 row)
+ 
+ SELECT float8_combine('{3,60,200}'::float8[], '{0,0,0}'::float8[]);
+- float8_combine 
+-----------------
+- {3,60,200}
+-(1 row)
+-
++ERROR:  unknown function: float8_combine()
+ SELECT float8_combine('{0,0,0}'::float8[], '{2,180,200}'::float8[]);
+- float8_combine 
+-----------------
+- {2,180,200}
+-(1 row)
+-
++ERROR:  unknown function: float8_combine()
+ SELECT float8_combine('{3,60,200}'::float8[], '{2,180,200}'::float8[]);
+- float8_combine 
+-----------------
+- {5,240,6280}
+-(1 row)
+-
++ERROR:  unknown function: float8_combine()
+ SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                            '{0,0,0,0,0,0}'::float8[]);
+-    float8_regr_combine    
+----------------------------
+- {3,60,200,750,20000,2000}
+-(1 row)
+-
++ERROR:  unknown function: float8_regr_combine()
+ SELECT float8_regr_combine('{0,0,0,0,0,0}'::float8[],
+                            '{2,180,200,740,57800,-3400}'::float8[]);
+-     float8_regr_combine     
+------------------------------
+- {2,180,200,740,57800,-3400}
+-(1 row)
+-
++ERROR:  unknown function: float8_regr_combine()
+ SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
+                            '{2,180,200,740,57800,-3400}'::float8[]);
+-     float8_regr_combine      
+-------------------------------
+- {5,240,6280,1490,95080,8680}
+-(1 row)
+-
++ERROR:  unknown function: float8_regr_combine()
+ DROP TABLE regr_test;
+ -- test count, distinct
+ SELECT count(four) AS cnt_1000 FROM onek;
+@@ -620,41 +576,17 @@
+ 
+ -- user-defined aggregates
+ SELECT newavg(four) AS avg_1 FROM onek;
+-       avg_1        
+---------------------
+- 1.5000000000000000
+-(1 row)
+-
++ERROR:  unknown function: newavg()
+ SELECT newsum(four) AS sum_1500 FROM onek;
+- sum_1500 
+-----------
+-     1500
+-(1 row)
+-
++ERROR:  unknown function: newsum()
+ SELECT newcnt(four) AS cnt_1000 FROM onek;
+- cnt_1000 
+-----------
+-     1000
+-(1 row)
+-
++ERROR:  unknown function: newcnt()
+ SELECT newcnt(*) AS cnt_1000 FROM onek;
+- cnt_1000 
+-----------
+-     1000
+-(1 row)
+-
++ERROR:  unknown function: newcnt()
+ SELECT oldcnt(*) AS cnt_1000 FROM onek;
+- cnt_1000 
+-----------
+-     1000
+-(1 row)
+-
++ERROR:  unknown function: oldcnt()
+ SELECT sum2(q1,q2) FROM int8_tbl;
+-       sum2        
+--------------------
+- 18271560493827981
+-(1 row)
+-
++ERROR:  unknown function: sum2()
+ -- test for outer-level aggregates
+ -- this should work
+ select ten, sum(distinct four) from onek a
+@@ -662,11 +594,11 @@
+ having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+  ten | sum 
+ -----+-----
+-   0 |   2
+-   2 |   2
+    4 |   2
++   0 |   2
+    6 |   2
+    8 |   2
++   2 |   2
+ (5 rows)
+ 
+ -- this should fail because subquery has an agg of its own in WHERE
+@@ -675,8 +607,6 @@
+ having exists (select 1 from onek b
+                where sum(distinct a.four + b.four) = b.four);
+ ERROR:  aggregate functions are not allowed in WHERE
+-LINE 4:                where sum(distinct a.four + b.four) = b.four)...
+-                             ^
+ -- Test handling of sublinks within outer-level aggregates.
+ -- Per bug report from Daniel Grace.
+ select
+@@ -695,24 +625,11 @@
+      lateral (select s2, sum(s1 + s2) sm
+               from generate_series(1, 3) s2 group by s2) ss
+ order by 1, 2;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Sort
+-   Output: s1.s1, s2.s2, (sum((s1.s1 + s2.s2)))
+-   Sort Key: s1.s1, s2.s2
+-   ->  Nested Loop
+-         Output: s1.s1, s2.s2, (sum((s1.s1 + s2.s2)))
+-         ->  Function Scan on pg_catalog.generate_series s1
+-               Output: s1.s1
+-               Function Call: generate_series(1, 3)
+-         ->  HashAggregate
+-               Output: s2.s2, sum((s1.s1 + s2.s2))
+-               Group Key: s2.s2
+-               ->  Function Scan on pg_catalog.generate_series s2
+-                     Output: s2.s2
+-                     Function Call: generate_series(1, 3)
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select s1, s2, sm
+ from generate_series(1, 3) s1,
+      lateral (select s2, sum(s1 + s2) sm
+@@ -735,23 +652,11 @@
+ select array(select sum(x+y) s
+             from generate_series(1,3) y group by y order by s)
+   from generate_series(1,3) x;
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Function Scan on pg_catalog.generate_series x
+-   Output: (SubPlan 1)
+-   Function Call: generate_series(1, 3)
+-   SubPlan 1
+-     ->  Sort
+-           Output: (sum((x.x + y.y))), y.y
+-           Sort Key: (sum((x.x + y.y)))
+-           ->  HashAggregate
+-                 Output: sum((x.x + y.y)), y.y
+-                 Group Key: y.y
+-                 ->  Function Scan on pg_catalog.generate_series y
+-                       Output: y.y
+-                       Function Call: generate_series(1, 3)
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select array(select sum(x+y) s
+             from generate_series(1,3) y group by y order by s)
+   from generate_series(1,3) x;
+@@ -779,12 +684,9 @@
+   BIT_OR(i4)  AS "?",
+   BIT_XOR(i8) AS "?"
+ FROM bitwise_test;
+- ? | ? | ? 
+----+---+---
+-   |   |  
+-(1 row)
+-
++ERROR:  unknown function: bit_xor()
+ COPY bitwise_test FROM STDIN NULL 'null';
++ERROR:  could not parse string as bit array: "B" is not a valid binary digit
+ SELECT
+   BIT_AND(i2) AS "1",
+   BIT_AND(i4) AS "1",
+@@ -805,11 +707,7 @@
+   BIT_XOR(x)  AS "7",
+   BIT_XOR(y)  AS "1101"
+ FROM bitwise_test;
+- 1 | 1 | 1 | ? | 0 | 0100 | 7 | 7 | 7 | ? | 7 | 1101 | 5 | 5 | 5 | ? | 7 | 1101 
+----+---+---+---+---+------+---+---+---+---+---+------+---+---+---+---+---+------
+- 1 | 1 | 1 | 1 | 0 | 0100 | 7 | 7 | 7 | 3 | 7 | 1101 | 5 | 5 | 5 | 2 | 7 | 1101
+-(1 row)
+-
++ERROR:  unknown function: bit_xor()
+ --
+ -- test boolean aggregates
+ --
+@@ -827,11 +725,7 @@
+   NOT booland_statefunc(TRUE, FALSE) AS "t",
+   NOT booland_statefunc(FALSE, TRUE) AS "t",
+   NOT booland_statefunc(FALSE, FALSE) AS "t";
+- t | t | t | t | t | t | t | t | t 
+----+---+---+---+---+---+---+---+---
+- t | t | t | t | t | t | t | t | t
+-(1 row)
+-
++ERROR:  unknown function: booland_statefunc()
+ SELECT
+   -- boolean or transitions
+   -- null because strict
+@@ -845,11 +739,7 @@
+   boolor_statefunc(TRUE, FALSE) AS "t",
+   boolor_statefunc(FALSE, TRUE) AS "t",
+   NOT boolor_statefunc(FALSE, FALSE) AS "t";
+- t | t | t | t | t | t | t | t | t 
+----+---+---+---+---+---+---+---+---
+- t | t | t | t | t | t | t | t | t
+-(1 row)
+-
++ERROR:  unknown function: boolor_statefunc()
+ CREATE TEMPORARY TABLE bool_test(
+   b1 BOOL,
+   b2 BOOL,
+@@ -912,15 +802,11 @@
+ -- Basic cases
+ explain (costs off)
+   select min(unique1) from tenk1;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan using tenk1_unique1 on tenk1
+-                 Index Cond: (unique1 IS NOT NULL)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(unique1) from tenk1;
+  min 
+ -----
+@@ -929,15 +815,11 @@
+ 
+ explain (costs off)
+   select max(unique1) from tenk1;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique1 on tenk1
+-                 Index Cond: (unique1 IS NOT NULL)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique1) from tenk1;
+  max  
+ ------
+@@ -946,15 +828,11 @@
+ 
+ explain (costs off)
+   select max(unique1) from tenk1 where unique1 < 42;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique1 on tenk1
+-                 Index Cond: ((unique1 IS NOT NULL) AND (unique1 < 42))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique1) from tenk1 where unique1 < 42;
+  max 
+ -----
+@@ -963,15 +841,11 @@
+ 
+ explain (costs off)
+   select max(unique1) from tenk1 where unique1 > 42;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique1 on tenk1
+-                 Index Cond: ((unique1 IS NOT NULL) AND (unique1 > 42))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique1) from tenk1 where unique1 > 42;
+  max  
+ ------
+@@ -984,36 +858,36 @@
+ -- the optimized plan, so temporarily disable parallel query.
+ begin;
+ set local max_parallel_workers_per_gather = 0;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+   select max(unique1) from tenk1 where unique1 > 42000;
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique1 on tenk1
+-                 Index Cond: ((unique1 IS NOT NULL) AND (unique1 > 42000))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique1) from tenk1 where unique1 > 42000;
+- max 
+------
+-    
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;
+ -- multi-column index (uses tenk1_thous_tenthous)
+ explain (costs off)
+   select max(tenthous) from tenk1 where thousand = 33;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_thous_tenthous on tenk1
+-                 Index Cond: ((thousand = 33) AND (tenthous IS NOT NULL))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(tenthous) from tenk1 where thousand = 33;
+  max  
+ ------
+@@ -1022,15 +896,11 @@
+ 
+ explain (costs off)
+   select min(tenthous) from tenk1 where thousand = 33;
+-                                QUERY PLAN                                
+---------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan using tenk1_thous_tenthous on tenk1
+-                 Index Cond: ((thousand = 33) AND (tenthous IS NOT NULL))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(tenthous) from tenk1 where thousand = 33;
+  min 
+ -----
+@@ -1041,42 +911,30 @@
+ explain (costs off)
+   select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+     from int4_tbl;
+-                                       QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+- Seq Scan on int4_tbl
+-   SubPlan 2
+-     ->  Result
+-           InitPlan 1 (returns $1)
+-             ->  Limit
+-                   ->  Index Only Scan using tenk1_unique1 on tenk1
+-                         Index Cond: ((unique1 IS NOT NULL) AND (unique1 > int4_tbl.f1))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select f1, (select min(unique1) from tenk1 where unique1 > f1) AS gt
+-  from int4_tbl;
++  from int4_tbl order by f1;
+      f1      | gt 
+ -------------+----
++ -2147483647 |  0
++     -123456 |  0
+            0 |  1
+       123456 |   
+-     -123456 |  0
+   2147483647 |   
+- -2147483647 |  0
+ (5 rows)
+ 
+ -- check some cases that were handled incorrectly in 8.3.0
+ explain (costs off)
+   select distinct max(unique2) from tenk1;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- HashAggregate
+-   Group Key: $0
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique2 on tenk1
+-                 Index Cond: (unique2 IS NOT NULL)
+-   ->  Result
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select distinct max(unique2) from tenk1;
+  max  
+ ------
+@@ -1085,17 +943,11 @@
+ 
+ explain (costs off)
+   select max(unique2) from tenk1 order by 1;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Sort
+-   Sort Key: ($0)
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique2 on tenk1
+-                 Index Cond: (unique2 IS NOT NULL)
+-   ->  Result
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique2) from tenk1 order by 1;
+  max  
+ ------
+@@ -1104,17 +956,11 @@
+ 
+ explain (costs off)
+   select max(unique2) from tenk1 order by max(unique2);
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Sort
+-   Sort Key: ($0)
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique2 on tenk1
+-                 Index Cond: (unique2 IS NOT NULL)
+-   ->  Result
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique2) from tenk1 order by max(unique2);
+  max  
+ ------
+@@ -1123,17 +969,11 @@
+ 
+ explain (costs off)
+   select max(unique2) from tenk1 order by max(unique2)+1;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Sort
+-   Sort Key: (($0 + 1))
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique2 on tenk1
+-                 Index Cond: (unique2 IS NOT NULL)
+-   ->  Result
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique2) from tenk1 order by max(unique2)+1;
+  max  
+ ------
+@@ -1142,39 +982,21 @@
+ 
+ explain (costs off)
+   select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+-                             QUERY PLAN                              
+----------------------------------------------------------------------
+- Sort
+-   Sort Key: (generate_series(1, 3)) DESC
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan Backward using tenk1_unique2 on tenk1
+-                 Index Cond: (unique2 IS NOT NULL)
+-   ->  ProjectSet
+-         ->  Result
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(unique2), generate_series(1,3) as g from tenk1 order by g desc;
+- max  | g 
+-------+---
+- 9999 | 3
+- 9999 | 2
+- 9999 | 1
+-(3 rows)
+-
++ERROR:  column "generate_series" must appear in the GROUP BY clause or be used in an aggregate function
+ -- interesting corner case: constant gets optimized into a seqscan
+ explain (costs off)
+   select max(100) from tenk1;
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Result
+-                 One-Time Filter: (100 IS NOT NULL)
+-                 ->  Seq Scan on tenk1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select max(100) from tenk1;
+  max 
+ -----
+@@ -1184,194 +1006,148 @@
+ -- try it on an inheritance tree
+ create table minmaxtest(f1 int);
+ create table minmaxtest1() inherits (minmaxtest);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table minmaxtest1() inherits (minmaxtest)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table minmaxtest2() inherits (minmaxtest);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table minmaxtest2() inherits (minmaxtest)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table minmaxtest3() inherits (minmaxtest);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table minmaxtest3() inherits (minmaxtest)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create index minmaxtesti on minmaxtest(f1);
+ create index minmaxtest1i on minmaxtest1(f1);
++ERROR:  relation "minmaxtest1" does not exist
+ create index minmaxtest2i on minmaxtest2(f1 desc);
++ERROR:  relation "minmaxtest2" does not exist
+ create index minmaxtest3i on minmaxtest3(f1) where f1 is not null;
++ERROR:  relation "minmaxtest3" does not exist
+ insert into minmaxtest values(11), (12);
+ insert into minmaxtest1 values(13), (14);
++ERROR:  relation "minmaxtest1" does not exist
+ insert into minmaxtest2 values(15), (16);
++ERROR:  relation "minmaxtest2" does not exist
+ insert into minmaxtest3 values(17), (18);
++ERROR:  relation "minmaxtest3" does not exist
+ explain (costs off)
+   select min(f1), max(f1) from minmaxtest;
+-                                         QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: minmaxtest.f1
+-                 ->  Index Only Scan using minmaxtesti on minmaxtest minmaxtest_1
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest1i on minmaxtest1 minmaxtest_2
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest2i on minmaxtest2 minmaxtest_3
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest3i on minmaxtest3 minmaxtest_4
+-   InitPlan 2 (returns $1)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: minmaxtest_5.f1 DESC
+-                 ->  Index Only Scan Backward using minmaxtesti on minmaxtest minmaxtest_6
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest1i on minmaxtest1 minmaxtest_7
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest2i on minmaxtest2 minmaxtest_8
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest3i on minmaxtest3 minmaxtest_9
+-(23 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(f1), max(f1) from minmaxtest;
+  min | max 
+ -----+-----
+-  11 |  18
++  11 |  12
+ (1 row)
+ 
+ -- DISTINCT doesn't do anything useful here, but it shouldn't fail
+ explain (costs off)
+   select distinct min(f1), max(f1) from minmaxtest;
+-                                         QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+- Unique
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: minmaxtest.f1
+-                 ->  Index Only Scan using minmaxtesti on minmaxtest minmaxtest_1
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest1i on minmaxtest1 minmaxtest_2
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest2i on minmaxtest2 minmaxtest_3
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest3i on minmaxtest3 minmaxtest_4
+-   InitPlan 2 (returns $1)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: minmaxtest_5.f1 DESC
+-                 ->  Index Only Scan Backward using minmaxtesti on minmaxtest minmaxtest_6
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest1i on minmaxtest1 minmaxtest_7
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan using minmaxtest2i on minmaxtest2 minmaxtest_8
+-                       Index Cond: (f1 IS NOT NULL)
+-                 ->  Index Only Scan Backward using minmaxtest3i on minmaxtest3 minmaxtest_9
+-   ->  Sort
+-         Sort Key: ($0), ($1)
+-         ->  Result
+-(26 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select distinct min(f1), max(f1) from minmaxtest;
+  min | max 
+ -----+-----
+-  11 |  18
++  11 |  12
+ (1 row)
+ 
+ drop table minmaxtest cascade;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table minmaxtest1
+-drop cascades to table minmaxtest2
+-drop cascades to table minmaxtest3
+ -- check for correct detection of nested-aggregate errors
+ select max(min(unique1)) from tenk1;
+-ERROR:  aggregate function calls cannot be nested
+-LINE 1: select max(min(unique1)) from tenk1;
+-                   ^
++ERROR:  max(): min(): aggregate function calls cannot be nested
+ select (select max(min(unique1)) from int8_tbl) from tenk1;
+-ERROR:  aggregate function calls cannot be nested
+-LINE 1: select (select max(min(unique1)) from int8_tbl) from tenk1;
+-                           ^
++ERROR:  max(): min(): aggregate function calls cannot be nested
+ select avg((select avg(a1.col1 order by (select avg(a2.col2) from tenk1 a3))
+             from tenk1 a1(col1)))
+ from tenk1 a2(col2);
+ ERROR:  aggregate function calls cannot be nested
+-LINE 1: select avg((select avg(a1.col1 order by (select avg(a2.col2)...
+-                                                        ^
+ --
+ -- Test removal of redundant GROUP BY columns
+ --
+ create temp table t1 (a int, b int, c int, d int, primary key (a, b));
+ create temp table t2 (x int, y int, z int, primary key (x, y));
+ create temp table t3 (a int, b int, c int, primary key(a, b) deferrable);
++ERROR:  at or near "deferrable": syntax error
++DETAIL:  source SQL:
++create temp table t3 (a int, b int, c int, primary key(a, b) deferrable)
++                                                             ^
++HINT:  try \h CREATE TABLE
+ -- Non-primary-key columns can be removed from GROUP BY
+ explain (costs off) select * from t1 group by a,b,c,d;
+-      QUERY PLAN      
+-----------------------
+- HashAggregate
+-   Group Key: a, b
+-   ->  Seq Scan on t1
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from t1 group by a,b,c,d
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- No removal can happen if the complete PK is not present in GROUP BY
+ explain (costs off) select a,c from t1 group by a,c,d;
+-      QUERY PLAN      
+-----------------------
+- HashAggregate
+-   Group Key: a, c, d
+-   ->  Seq Scan on t1
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a,c from t1 group by a,c,d
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Test removal across multiple relations
+ explain (costs off) select *
+ from t1 inner join t2 on t1.a = t2.x and t1.b = t2.y
+ group by t1.a,t1.b,t1.c,t1.d,t2.x,t2.y,t2.z;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- HashAggregate
+-   Group Key: t1.a, t1.b
+-   ->  Hash Join
+-         Hash Cond: ((t2.x = t1.a) AND (t2.y = t1.b))
+-         ->  Seq Scan on t2
+-         ->  Hash
+-               ->  Seq Scan on t1
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select *
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Test case where t1 can be optimized but not t2
+ explain (costs off) select t1.*,t2.x,t2.z
+ from t1 inner join t2 on t1.a = t2.x and t1.b = t2.y
+ group by t1.a,t1.b,t1.c,t1.d,t2.x,t2.z;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- HashAggregate
+-   Group Key: t1.a, t1.b, t2.z
+-   ->  Hash Join
+-         Hash Cond: ((t2.x = t1.a) AND (t2.y = t1.b))
+-         ->  Seq Scan on t2
+-         ->  Hash
+-               ->  Seq Scan on t1
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select t1.*,t2.x,t2.z
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Cannot optimize when PK is deferrable
+ explain (costs off) select * from t3 group by a,b,c;
+-      QUERY PLAN      
+-----------------------
+- HashAggregate
+-   Group Key: a, b, c
+-   ->  Seq Scan on t3
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from t3 group by a,b,c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create temp table t1c () inherits (t1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table t1c () inherits (t1)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ -- Ensure we don't remove any columns when t1 has a child table
+ explain (costs off) select * from t1 group by a,b,c,d;
+-             QUERY PLAN              
+--------------------------------------
+- HashAggregate
+-   Group Key: t1.a, t1.b, t1.c, t1.d
+-   ->  Append
+-         ->  Seq Scan on t1 t1_1
+-         ->  Seq Scan on t1c t1_2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from t1 group by a,b,c,d
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Okay to remove columns if we're only querying the parent.
+ explain (costs off) select * from only t1 group by a,b,c,d;
+-      QUERY PLAN      
+-----------------------
+- HashAggregate
+-   Group Key: a, b
+-   ->  Seq Scan on t1
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from only t1 group by a,b,c,d
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create temp table p_t1 (
+   a int,
+   b int,
+@@ -1379,24 +1155,42 @@
+   d int,
+   primary key(a,b)
+ ) partition by list(a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create temp table p_t1 (
++  a int,
++  b int,
++  c int,
++  d int,
++  primary key(a,b)
++) partition by list(a)
++                      ^
++HINT:  try \h CREATE TABLE
+ create temp table p_t1_1 partition of p_t1 for values in(1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create temp table p_t1_1 partition of p_t1 for values in(1)
++                         ^
++HINT:  try \h CREATE TABLE
+ create temp table p_t1_2 partition of p_t1 for values in(2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create temp table p_t1_2 partition of p_t1 for values in(2)
++                         ^
++HINT:  try \h CREATE TABLE
+ -- Ensure we can remove non-PK columns for partitioned tables.
+ explain (costs off) select * from p_t1 group by a,b,c,d;
+-           QUERY PLAN           
+---------------------------------
+- HashAggregate
+-   Group Key: p_t1.a, p_t1.b
+-   ->  Append
+-         ->  Seq Scan on p_t1_1
+-         ->  Seq Scan on p_t1_2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from p_t1 group by a,b,c,d
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table t1 cascade;
+-NOTICE:  drop cascades to table t1c
+ drop table t2;
+ drop table t3;
++ERROR:  relation "t3" does not exist
+ drop table p_t1;
++ERROR:  relation "p_t1" does not exist
+ --
+ -- Test GROUP BY matching of join columns that are type-coerced due to USING
+ --
+@@ -1419,9 +1213,10 @@
+ 
+ -- only this one should fail:
+ select t1.f1 from t1 left join t2 using (f1) group by f1;
+-ERROR:  column "t1.f1" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: select t1.f1 from t1 left join t2 using (f1) group by f1;
+-               ^
++ f1 
++----
++(0 rows)
++
+ -- check case where we have to inject nullingrels into coerced join alias
+ select f1, count(*) from
+ t1 x(x0,x1) left join (t1 left join t2 using(f1)) on (x0 = 0)
+@@ -1446,14 +1241,11 @@
+ explain (costs off)
+ select sum(two order by two),max(four order by four), min(four order by four)
+ from tenk1;
+-          QUERY PLAN           
+--------------------------------
+- Aggregate
+-   ->  Sort
+-         Sort Key: four
+-         ->  Seq Scan on tenk1
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure we order by two.  It's a tie between ordering by two and four but
+ -- we tiebreak on the aggregate's position.
+ explain (costs off)
+@@ -1461,28 +1253,22 @@
+   sum(two order by two), max(four order by four),
+   min(four order by four), max(two order by two)
+ from tenk1;
+-          QUERY PLAN           
+--------------------------------
+- Aggregate
+-   ->  Sort
+-         Sort Key: two
+-         ->  Seq Scan on tenk1
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Similar to above, but tiebreak on ordering by four
+ explain (costs off)
+ select
+   max(four order by four), sum(two order by two),
+   min(four order by four), max(two order by two)
+ from tenk1;
+-          QUERY PLAN           
+--------------------------------
+- Aggregate
+-   ->  Sort
+-         Sort Key: four
+-         ->  Seq Scan on tenk1
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure this one orders by ten since there are 3 aggregates that require ten
+ -- vs two that suit two and four.
+ explain (costs off)
+@@ -1491,14 +1277,11 @@
+   min(four order by four), max(two order by two),
+   sum(ten order by ten), min(ten order by ten), max(ten order by ten)
+ from tenk1;
+-          QUERY PLAN           
+--------------------------------
+- Aggregate
+-   ->  Sort
+-         Sort Key: ten
+-         ->  Seq Scan on tenk1
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Try a case involving a GROUP BY clause where the GROUP BY column is also
+ -- part of an aggregate's ORDER BY clause.  We want a sort order that works
+ -- for the GROUP BY along with the first and the last aggregate.
+@@ -1508,15 +1291,11 @@
+   sum(unique1 order by two, four)
+ from tenk1
+ group by ten;
+-            QUERY PLAN            
+-----------------------------------
+- GroupAggregate
+-   Group Key: ten
+-   ->  Sort
+-         Sort Key: ten, two, four
+-         ->  Seq Scan on tenk1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure that we never choose to provide presorted input to an Aggref with
+ -- a volatile function in the ORDER BY / DISTINCT clause.  We want to ensure
+ -- these sorts are performed individually rather than at the query level.
+@@ -1527,34 +1306,76 @@
+   sum(unique1 order by two, random(), random() + 1)
+ from tenk1
+ group by ten;
+-            QUERY PLAN            
+-----------------------------------
+- GroupAggregate
+-   Group Key: ten
+-   ->  Sort
+-         Sort Key: ten, four, two
+-         ->  Seq Scan on tenk1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure consecutive NULLs are properly treated as distinct from each other
+ select array_agg(distinct val)
+ from (select null as val from generate_series(1, 2));
+- array_agg 
+------------
+- {NULL}
+-(1 row)
++ERROR:  ambiguous call: array_agg(unknown), candidates are:
++array_agg(bool) -> bool[]
++array_agg(bool[]) -> bool[][]
++array_agg(box2d) -> box2d[]
++array_agg(box2d[]) -> box2d[][]
++array_agg(int) -> int[]
++array_agg(int[]) -> int[][]
++array_agg(float) -> float[]
++array_agg(float[]) -> float[][]
++array_agg(decimal) -> decimal[]
++array_agg(decimal[]) -> decimal[][]
++array_agg(date) -> date[]
++array_agg(date[]) -> date[][]
++array_agg(timestamp) -> timestamp[]
++array_agg(timestamp[]) -> timestamp[][]
++array_agg(interval) -> interval[]
++array_agg(interval[]) -> interval[][]
++array_agg(geography) -> geography[]
++array_agg(geography[]) -> geography[][]
++array_agg(geometry) -> geometry[]
++array_agg(geometry[]) -> geometry[][]
++array_agg(string) -> string[]
++array_agg(string[]) -> string[][]
++array_agg(bytes) -> bytes[]
++array_agg(bytes[]) -> bytes[][]
++array_agg(timestamptz) -> timestamptz[]
++array_agg(timestamptz[]) -> timestamptz[][]
++array_agg(oid) -> oid[]
++array_agg(oid[]) -> oid[][]
++array_agg(uuid) -> uuid[]
++array_agg(uuid[]) -> uuid[][]
++array_agg(inet) -> inet[]
++array_agg(inet[]) -> inet[][]
++array_agg(pg_lsn) -> pg_lsn[]
++array_agg(pg_lsn[]) -> pg_lsn[][]
++array_agg(refcursor) -> refcursor[]
++array_agg(refcursor[]) -> refcursor[][]
++array_agg(time) -> time[]
++array_agg(time[]) -> time[][]
++array_agg(timetz) -> timetz[]
++array_agg(timetz[]) -> timetz[][]
++array_agg(jsonb) -> jsonb[]
++array_agg(jsonb[]) -> jsonb[][]
++array_agg(varbit) -> varbit[]
++array_agg(varbit[]) -> varbit[][]
++array_agg(anyenum) -> anyenum[]
++array_agg(anyenum[]) -> anyenum[][]
++array_agg(tuple) -> tuple[]
++array_agg(tuple[]) -> tuple[][]
+ 
+ -- Ensure no ordering is requested when enable_presorted_aggregate is off
+ set enable_presorted_aggregate to off;
++ERROR:  unrecognized configuration parameter "enable_presorted_aggregate"
+ explain (costs off)
+ select sum(two order by two) from tenk1;
+-       QUERY PLAN        
+--------------------------
+- Aggregate
+-   ->  Seq Scan on tenk1
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset enable_presorted_aggregate;
++ERROR:  unrecognized configuration parameter "enable_presorted_aggregate"
+ --
+ -- Test combinations of DISTINCT and/or ORDER BY
+ --
+@@ -1595,246 +1416,186 @@
+ 
+ select array_agg(distinct a order by a)
+   from (values (1),(2),(1),(3),(null),(2)) v(a);
+-  array_agg   
+---------------
+- {1,2,3,NULL}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select array_agg(distinct a order by a)
++                            ^
++HINT:  try \hf array_agg
+ select array_agg(distinct a order by a desc)
+   from (values (1),(2),(1),(3),(null),(2)) v(a);
+-  array_agg   
+---------------
+- {NULL,3,2,1}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select array_agg(distinct a order by a desc)
++                            ^
++HINT:  try \hf array_agg
+ select array_agg(distinct a order by a desc nulls last)
+   from (values (1),(2),(1),(3),(null),(2)) v(a);
+-  array_agg   
+---------------
+- {3,2,1,NULL}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select array_agg(distinct a order by a desc nulls last)
++                            ^
++HINT:  try \hf array_agg
+ -- multi-arg aggs, strict/nonstrict, distinct/order by
+ select aggfstr(a,b,c)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-                aggfstr                
+----------------------------------------
+- {"(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  unknown function: aggfstr()
+ select aggfns(a,b,c)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
+-                    aggfns                     
+------------------------------------------------
+- {"(1,3,foo)","(0,,)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  unknown function: aggfns()
+ select aggfstr(distinct a,b,c)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,3) i;
+-                aggfstr                
+----------------------------------------
+- {"(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  unknown function: aggfstr()
+ select aggfns(distinct a,b,c)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,3) i;
+-                    aggfns                     
+------------------------------------------------
+- {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  unknown function: aggfns()
+ select aggfstr(distinct a,b,c order by b)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,3) i;
+-                aggfstr                
+----------------------------------------
+- {"(3,1,baz)","(2,2,bar)","(1,3,foo)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfstr(distinct a,b,c order by b)
++                              ^
+ select aggfns(distinct a,b,c order by b)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,3) i;
+-                    aggfns                     
+------------------------------------------------
+- {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by b)
++                             ^
+ -- test specific code paths
+ select aggfns(distinct a,a,c order by c using ~<~,a)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,2) i;
+-                     aggfns                     
+-------------------------------------------------
+- {"(2,2,bar)","(3,3,baz)","(1,1,foo)","(0,0,)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,a,c order by c using ~<~,a)
++                             ^
+ select aggfns(distinct a,a,c order by c using ~<~)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,2) i;
+-                     aggfns                     
+-------------------------------------------------
+- {"(2,2,bar)","(3,3,baz)","(1,1,foo)","(0,0,)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,a,c order by c using ~<~)
++                             ^
+ select aggfns(distinct a,a,c order by a)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,2) i;
+-                     aggfns                     
+-------------------------------------------------
+- {"(0,0,)","(1,1,foo)","(2,2,bar)","(3,3,baz)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,a,c order by a)
++                             ^
+ select aggfns(distinct a,b,c order by a,c using ~<~,b)
+   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+        generate_series(1,2) i;
+-                    aggfns                     
+------------------------------------------------
+- {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by a,c using ~<~,b)
++                             ^
+ -- check node I/O via view creation and usage, also deparsing logic
+ create view agg_view1 as
+   select aggfns(a,b,c)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
++ERROR:  unknown function: aggfns()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(1,3,foo)","(0,,)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(a, b, c) AS aggfns                                                                                  +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(distinct a,b,c)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+          generate_series(1,3) i;
++ERROR:  unknown function: aggfns()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(DISTINCT v.a, v.b, v.c) AS aggfns                                                                   +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c),+
+-     generate_series(1, 3) i(i);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(distinct a,b,c order by b)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+          generate_series(1,3) i;
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++create or replace view agg_view1 as
++  select aggfns(distinct a,b,c order by b)
++                               ^
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(DISTINCT v.a, v.b, v.c ORDER BY v.b) AS aggfns                                                      +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c),+
+-     generate_series(1, 3) i(i);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(a,b,c order by b+1)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
++ERROR:  unknown function: aggfns()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(3,1,baz)","(2,2,bar)","(1,3,foo)","(0,,)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(a, b, c ORDER BY (b + 1)) AS aggfns                                                                 +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(a,a,c order by b)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
++ERROR:  unknown function: aggfns()
++HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
+ select * from agg_view1;
+-                     aggfns                     
+-------------------------------------------------
+- {"(3,3,baz)","(2,2,bar)","(1,1,foo)","(0,0,)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(a, a, c ORDER BY b) AS aggfns                                                                       +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(a,b,c order by c using ~<~)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
++ERROR:  at or near "using": syntax error
++DETAIL:  source SQL:
++create or replace view agg_view1 as
++  select aggfns(a,b,c order by c using ~<~)
++                                 ^
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(2,2,bar)","(3,1,baz)","(1,3,foo)","(0,,)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(a, b, c ORDER BY c USING ~<~ NULLS LAST) AS aggfns                                                  +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ create or replace view agg_view1 as
+   select aggfns(distinct a,b,c order by a,c using ~<~,b)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+          generate_series(1,2) i;
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++create or replace view agg_view1 as
++  select aggfns(distinct a,b,c order by a,c using ~<~,b)
++                               ^
+ select * from agg_view1;
+-                    aggfns                     
+------------------------------------------------
+- {"(0,,)","(1,3,foo)","(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ select pg_get_viewdef('agg_view1'::regclass);
+-                                                   pg_get_viewdef                                                    
+----------------------------------------------------------------------------------------------------------------------
+-  SELECT aggfns(DISTINCT v.a, v.b, v.c ORDER BY v.a, v.c USING ~<~ NULLS LAST, v.b) AS aggfns                       +
+-    FROM ( VALUES (1,3,'foo'::text), (0,NULL::integer,NULL::text), (2,2,'bar'::text), (3,1,'baz'::text)) v(a, b, c),+
+-     generate_series(1, 2) i(i);
+-(1 row)
+-
++ERROR:  relation "agg_view1" does not exist
+ drop view agg_view1;
++ERROR:  relation "agg_view1" does not exist
+ -- incorrect DISTINCT usage errors
+ select aggfns(distinct a,b,c order by i)
+   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select aggfns(distinct a,b,c order by i)
+-                                              ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by i)
++                             ^
+ select aggfns(distinct a,b,c order by a,b+1)
+   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select aggfns(distinct a,b,c order by a,b+1)
+-                                                ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by a,b+1)
++                             ^
+ select aggfns(distinct a,b,c order by a,b,i,c)
+   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select aggfns(distinct a,b,c order by a,b,i,c)
+-                                                  ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by a,b,i,c)
++                             ^
+ select aggfns(distinct a,a,c order by a,b)
+   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select aggfns(distinct a,a,c order by a,b)
+-                                                ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,a,c order by a,b)
++                             ^
+ -- string_agg tests
+ select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+    string_agg   
+@@ -1862,25 +1623,29 @@
+ 
+ -- check some implicit casting cases, as per bug #5564
+ select string_agg(distinct f1, ',' order by f1) from varchar_tbl;  -- ok
+- string_agg 
+-------------
+- a,ab,abcd
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select string_agg(distinct f1, ',' order by f1) from varchar_tbl
++                                   ^
++HINT:  try \hf string_agg
+ select string_agg(distinct f1::text, ',' order by f1) from varchar_tbl;  -- not ok
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select string_agg(distinct f1::text, ',' order by f1) from v...
+-                                                          ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select string_agg(distinct f1::text, ',' order by f1) from varchar_tbl
++                                         ^
++HINT:  try \hf string_agg
+ select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not ok
+-ERROR:  in an aggregate with DISTINCT, ORDER BY expressions must appear in argument list
+-LINE 1: select string_agg(distinct f1, ',' order by f1::text) from v...
+-                                                    ^
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl
++                                   ^
++HINT:  try \hf string_agg
+ select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
+- string_agg 
+-------------
+- a,ab,abcd
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl
++                                         ^
++HINT:  try \hf string_agg
+ -- string_agg bytea tests
+ create table bytea_test_table(v bytea);
+ select string_agg(v, '') from bytea_test_table;
+@@ -1922,11 +1687,60 @@
+ select (case x % 4 when 1 then null else x end), x % 10
+ from generate_series(1,5000) x;
+ set parallel_setup_cost TO 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set parallel_tuple_cost TO 0;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set parallel_leader_participation TO 0;
++ERROR:  unrecognized configuration parameter "parallel_leader_participation"
+ set min_parallel_table_scan_size = 0;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set bytea_output = 'escape';
+ set max_parallel_workers_per_gather = 2;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- create a view as we otherwise have to repeat this query a few times.
+ create view v_pagg_test AS
+ select
+@@ -1954,66 +1768,92 @@
+ 	) a1
+ ) a2
+ group by y;
++ERROR:  unknown signature: min(int[])
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Ensure results are correct.
+ select * from v_pagg_test order by y;
+- y | tmin | tmax | tndistinct | bmin | bmax | bndistinct | amin | amax | andistinct | aamin | aamax | aandistinct 
+----+------+------+------------+------+------+------------+------+------+------------+-------+-------+-------------
+- 0 |   10 | 5000 |        500 | 10   | 990  |        500 |   10 | 5000 |        500 |    10 |  5000 |         500
+- 1 |   11 | 4991 |        250 | 1011 | 991  |        250 |   11 | 4991 |        250 |    11 |  4991 |         250
+- 2 |    2 | 4992 |        500 | 1002 | 992  |        500 |    2 | 4992 |        500 |     2 |  4992 |         500
+- 3 |    3 | 4983 |        250 | 1003 | 983  |        250 |    3 | 4983 |        250 |     3 |  4983 |         250
+- 4 |    4 | 4994 |        500 | 1004 | 994  |        500 |    4 | 4994 |        500 |     4 |  4994 |         500
+- 5 |   15 | 4995 |        250 | 1015 | 995  |        250 |   15 | 4995 |        250 |    15 |  4995 |         250
+- 6 |    6 | 4996 |        500 | 1006 | 996  |        500 |    6 | 4996 |        500 |     6 |  4996 |         500
+- 7 |    7 | 4987 |        250 | 1007 | 987  |        250 |    7 | 4987 |        250 |     7 |  4987 |         250
+- 8 |    8 | 4998 |        500 | 1008 | 998  |        500 |    8 | 4998 |        500 |     8 |  4998 |         500
+- 9 |   19 | 4999 |        250 | 1019 | 999  |        250 |   19 | 4999 |        250 |    19 |  4999 |         250
+-(10 rows)
+-
++ERROR:  relation "v_pagg_test" does not exist
+ -- Ensure parallel aggregation is actually being used.
+ explain (costs off) select * from v_pagg_test order by y;
+-                                                              QUERY PLAN                                                              
+---------------------------------------------------------------------------------------------------------------------------------------
+- GroupAggregate
+-   Group Key: pagg_test.y
+-   ->  Sort
+-         Sort Key: pagg_test.y, (((unnest(regexp_split_to_array((string_agg((pagg_test.x)::text, ','::text)), ','::text))))::integer)
+-         ->  Result
+-               ->  ProjectSet
+-                     ->  Finalize HashAggregate
+-                           Group Key: pagg_test.y
+-                           ->  Gather
+-                                 Workers Planned: 2
+-                                 ->  Partial HashAggregate
+-                                       Group Key: pagg_test.y
+-                                       ->  Parallel Seq Scan on pagg_test
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from v_pagg_test order by y
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ set max_parallel_workers_per_gather = 0;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure results are the same without parallel aggregation.
+ select * from v_pagg_test order by y;
+- y | tmin | tmax | tndistinct | bmin | bmax | bndistinct | amin | amax | andistinct | aamin | aamax | aandistinct 
+----+------+------+------------+------+------+------------+------+------+------------+-------+-------+-------------
+- 0 |   10 | 5000 |        500 | 10   | 990  |        500 |   10 | 5000 |        500 |    10 |  5000 |         500
+- 1 |   11 | 4991 |        250 | 1011 | 991  |        250 |   11 | 4991 |        250 |    11 |  4991 |         250
+- 2 |    2 | 4992 |        500 | 1002 | 992  |        500 |    2 | 4992 |        500 |     2 |  4992 |         500
+- 3 |    3 | 4983 |        250 | 1003 | 983  |        250 |    3 | 4983 |        250 |     3 |  4983 |         250
+- 4 |    4 | 4994 |        500 | 1004 | 994  |        500 |    4 | 4994 |        500 |     4 |  4994 |         500
+- 5 |   15 | 4995 |        250 | 1015 | 995  |        250 |   15 | 4995 |        250 |    15 |  4995 |         250
+- 6 |    6 | 4996 |        500 | 1006 | 996  |        500 |    6 | 4996 |        500 |     6 |  4996 |         500
+- 7 |    7 | 4987 |        250 | 1007 | 987  |        250 |    7 | 4987 |        250 |     7 |  4987 |         250
+- 8 |    8 | 4998 |        500 | 1008 | 998  |        500 |    8 | 4998 |        500 |     8 |  4998 |         500
+- 9 |   19 | 4999 |        250 | 1019 | 999  |        250 |   19 | 4999 |        250 |    19 |  4999 |         250
+-(10 rows)
+-
++ERROR:  relation "v_pagg_test" does not exist
+ -- Clean up
+ reset max_parallel_workers_per_gather;
++ERROR:  unimplemented: the configuration setting "max_parallel_workers_per_gather" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset bytea_output;
+ reset min_parallel_table_scan_size;
++ERROR:  unimplemented: the configuration setting "min_parallel_table_scan_size" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset parallel_leader_participation;
++ERROR:  unrecognized configuration parameter "parallel_leader_participation"
+ reset parallel_tuple_cost;
++ERROR:  unimplemented: the configuration setting "parallel_tuple_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset parallel_setup_cost;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop view v_pagg_test;
++ERROR:  relation "v_pagg_test" does not exist
+ drop table pagg_test;
+ -- FILTER tests
+ select min(unique1) filter (where unique1 > 100) from tenk1;
+@@ -2023,13 +1863,9 @@
+ (1 row)
+ 
+ select sum(1/ten) filter (where ten > 0) from tenk1;
+- sum  
+-------
+- 1000
+-(1 row)
+-
++ERROR:  division by zero
+ select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
+-group by ten;
++group by ten order by ten;
+  ten | sum 
+ -----+-----
+    0 |    
+@@ -2045,17 +1881,14 @@
+ (10 rows)
+ 
+ select ten, sum(distinct four) filter (where four > 10) from onek a
+-group by ten
++group by ten order by ten
+ having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+- ten | sum 
+------+-----
+-   0 |    
+-   2 |    
+-   4 |    
+-   6 |    
+-   8 |    
+-(5 rows)
+-
++ERROR:  at or near "having": syntax error
++DETAIL:  source SQL:
++select ten, sum(distinct four) filter (where four > 10) from onek a
++group by ten order by ten
++having exists (select 1 from onek b where sum(distinct a.four) = b.four)
++^
+ select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')
+ from (values ('a', 'b')) AS v(foo,bar);
+  max 
+@@ -2064,11 +1897,7 @@
+ (1 row)
+ 
+ select any_value(v) filter (where v > 2) from (values (1), (2), (3)) as v (v);
+- any_value 
+------------
+-         3
+-(1 row)
+-
++ERROR:  unknown function: any_value()
+ -- outer reference in FILTER (PostgreSQL extension)
+ select (select count(*)
+         from (values (1)) t0(inner_c))
+@@ -2117,11 +1946,10 @@
+ select aggfns(distinct a,b,c order by a,c using ~<~,b) filter (where a > 1)
+     from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
+     generate_series(1,2) i;
+-          aggfns           
+----------------------------
+- {"(2,2,bar)","(3,1,baz)"}
+-(1 row)
+-
++ERROR:  at or near "order": syntax error
++DETAIL:  source SQL:
++select aggfns(distinct a,b,c order by a,c using ~<~,b) filter (where a > 1)
++                             ^
+ -- check handling of bare boolean Var in FILTER
+ select max(0) filter (where b1) from bool_test;
+  max 
+@@ -2137,78 +1965,49 @@
+ 
+ -- check for correct detection of nested-aggregate errors in FILTER
+ select max(unique1) filter (where sum(ten) > 0) from tenk1;
+-ERROR:  aggregate functions are not allowed in FILTER
+-LINE 1: select max(unique1) filter (where sum(ten) > 0) from tenk1;
+-                                          ^
++ERROR:  sum(): aggregate functions are not allowed in FILTER
+ select (select max(unique1) filter (where sum(ten) > 0) from int8_tbl) from tenk1;
+-ERROR:  aggregate function calls cannot be nested
+-LINE 1: select (select max(unique1) filter (where sum(ten) > 0) from...
+-                                                  ^
++ERROR:  sum(): aggregate functions are not allowed in FILTER
+ select max(unique1) filter (where bool_or(ten > 0)) from tenk1;
+-ERROR:  aggregate functions are not allowed in FILTER
+-LINE 1: select max(unique1) filter (where bool_or(ten > 0)) from ten...
+-                                          ^
++ERROR:  bool_or(): aggregate functions are not allowed in FILTER
+ select (select max(unique1) filter (where bool_or(ten > 0)) from int8_tbl) from tenk1;
+-ERROR:  aggregate function calls cannot be nested
+-LINE 1: select (select max(unique1) filter (where bool_or(ten > 0)) ...
+-                                                  ^
++ERROR:  bool_or(): aggregate functions are not allowed in FILTER
+ -- ordered-set aggregates
+ select p, percentile_cont(p) within group (order by x::float8)
+ from generate_series(1,5) x,
+      (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+ group by p order by p;
+-  p   | percentile_cont 
+-------+-----------------
+-    0 |               1
+-  0.1 |             1.4
+- 0.25 |               2
+-  0.4 |             2.6
+-  0.5 |               3
+-  0.6 |             3.4
+- 0.75 |               4
+-  0.9 |             4.6
+-    1 |               5
+-(9 rows)
+-
++ERROR:  VALUES types decimal and float cannot be matched
+ select p, percentile_cont(p order by p) within group (order by x)  -- error
+ from generate_series(1,5) x,
+      (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+ group by p order by p;
+-ERROR:  cannot use multiple ORDER BY clauses with WITHIN GROUP
+-LINE 1: select p, percentile_cont(p order by p) within group (order ...
+-                                                ^
++ERROR:  VALUES types decimal and float cannot be matched
+ select p, sum() within group (order by x::float8)  -- error
+ from generate_series(1,5) x,
+      (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+ group by p order by p;
+-ERROR:  sum is not an ordered-set aggregate, so it cannot have WITHIN GROUP
+-LINE 1: select p, sum() within group (order by x::float8)  -- error
+-                  ^
++ERROR:  VALUES types decimal and float cannot be matched
+ select p, percentile_cont(p,p)  -- error
+ from generate_series(1,5) x,
+      (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
+ group by p order by p;
+-ERROR:  WITHIN GROUP is required for ordered-set aggregate percentile_cont
+-LINE 1: select p, percentile_cont(p,p)  -- error
+-                  ^
++ERROR:  VALUES types decimal and float cannot be matched
+ select percentile_cont(0.5) within group (order by b) from aggtest;
+- percentile_cont  
+-------------------
+- 53.4485001564026
++ percentile_cont 
++-----------------
++                
+ (1 row)
+ 
+ select percentile_cont(0.5) within group (order by b), sum(b) from aggtest;
+- percentile_cont  |   sum   
+-------------------+---------
+- 53.4485001564026 | 431.773
++ percentile_cont | sum 
++-----------------+-----
++                 |    
+ (1 row)
+ 
+ select percentile_cont(0.5) within group (order by thousand) from tenk1;
+- percentile_cont 
+------------------
+-           499.5
+-(1 row)
+-
++ERROR:  unknown signature: percentile_cont_impl(decimal, int4)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percentile_disc(0.5) within group (order by thousand) from tenk1;
+  percentile_disc 
+ -----------------
+@@ -2217,161 +2016,97 @@
+ 
+ select rank(3) within group (order by x)
+ from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
+- rank 
+-------
+-    5
+-(1 row)
+-
++ERROR:  unknown signature: rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select cume_dist(3) within group (order by x)
+ from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
+- cume_dist 
+------------
+-     0.875
+-(1 row)
+-
++ERROR:  unknown signature: cume_dist(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percent_rank(3) within group (order by x)
+ from (values (1),(1),(2),(2),(3),(3),(4),(5)) v(x);
+- percent_rank 
+---------------
+-          0.5
+-(1 row)
+-
++ERROR:  unknown signature: percent_rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select dense_rank(3) within group (order by x)
+ from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
+- dense_rank 
+-------------
+-          3
+-(1 row)
+-
++ERROR:  unknown signature: dense_rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percentile_disc(array[0,0.1,0.25,0.5,0.75,0.9,1]) within group (order by thousand)
+ from tenk1;
+-      percentile_disc       
+-----------------------------
+- {0,99,249,499,749,899,999}
+-(1 row)
+-
++ERROR:  unknown signature: percentile_disc_impl(decimal[], int4)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percentile_cont(array[0,0.25,0.5,0.75,1]) within group (order by thousand)
+ from tenk1;
+-       percentile_cont       
+------------------------------
+- {0,249.75,499.5,749.25,999}
+-(1 row)
+-
++ERROR:  unknown signature: percentile_cont_impl(decimal[], int4)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percentile_disc(array[[null,1,0.5],[0.75,0.25,null]]) within group (order by thousand)
+ from tenk1;
+-         percentile_disc         
+----------------------------------
+- {{NULL,999,499},{749,249,NULL}}
+-(1 row)
+-
++ERROR:  unknown signature: percentile_disc_impl(decimal[][], int4)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select percentile_cont(array[0,1,0.25,0.75,0.5,1,0.3,0.32,0.35,0.38,0.4]) within group (order by x)
+ from generate_series(1,6) x;
+-             percentile_cont              
+-------------------------------------------
+- {1,6,2.25,4.75,3.5,6,2.5,2.6,2.75,2.9,3}
+-(1 row)
+-
++ERROR:  unknown signature: percentile_cont_impl(decimal[], int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select ten, mode() within group (order by string4) from tenk1 group by ten;
+- ten |  mode  
+------+--------
+-   0 | HHHHxx
+-   1 | OOOOxx
+-   2 | VVVVxx
+-   3 | OOOOxx
+-   4 | HHHHxx
+-   5 | HHHHxx
+-   6 | OOOOxx
+-   7 | AAAAxx
+-   8 | VVVVxx
+-   9 | VVVVxx
+-(10 rows)
+-
++ERROR:  unknown function: mode()
+ select percentile_disc(array[0.25,0.5,0.75]) within group (order by x)
+ from unnest('{fred,jim,fred,jack,jill,fred,jill,jim,jim,sheila,jim,sheila}'::text[]) u(x);
+- percentile_disc 
+------------------
+- {fred,jill,jim}
+-(1 row)
+-
++ERROR:  unknown signature: percentile_disc_impl(decimal[], string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- check collation propagates up in suitable cases:
+ select pg_collation_for(percentile_disc(1) within group (order by x collate "POSIX"))
+   from (values ('fred'),('jim')) v(x);
+  pg_collation_for 
+ ------------------
+- "POSIX"
++ "default"
+ (1 row)
+ 
+ -- ordered-set aggs created with CREATE AGGREGATE
+ select test_rank(3) within group (order by x)
+ from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
+- test_rank 
+------------
+-         5
+-(1 row)
+-
++ERROR:  unknown function: test_rank()
+ select test_percentile_disc(0.5) within group (order by thousand) from tenk1;
+- test_percentile_disc 
+-----------------------
+-                  499
+-(1 row)
+-
++ERROR:  unknown function: test_percentile_disc()
+ -- ordered-set aggs can't use ungrouped vars in direct args:
+ select rank(x) within group (order by x) from generate_series(1,5) x;
+-ERROR:  column "x.x" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: select rank(x) within group (order by x) from generate_serie...
+-                    ^
+-DETAIL:  Direct arguments of an ordered-set aggregate must use only grouped columns.
++ERROR:  unknown signature: rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- outer-level agg can't use a grouped arg of a lower level, either:
+ select array(select percentile_disc(a) within group (order by x)
+                from (values (0.3),(0.7)) v(a) group by a)
+   from generate_series(1,5) g(x);
+-ERROR:  outer-level aggregate cannot contain a lower-level variable in its direct arguments
+-LINE 1: select array(select percentile_disc(a) within group (order b...
+-                                            ^
++ERROR:  unknown signature: percentile_disc_impl(decimal, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- agg in the direct args is a grouping violation, too:
+ select rank(sum(x)) within group (order by x) from generate_series(1,5) x;
+-ERROR:  aggregate function calls cannot be nested
+-LINE 1: select rank(sum(x)) within group (order by x) from generate_...
+-                    ^
++ERROR:  unknown signature: rank(decimal)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- hypothetical-set type unification and argument-count failures:
+ select rank(3) within group (order by x) from (values ('fred'),('jim')) v(x);
+-ERROR:  WITHIN GROUP types text and integer cannot be matched
+-LINE 1: select rank(3) within group (order by x) from (values ('fred...
+-                    ^
++ERROR:  unknown signature: rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select rank(3) within group (order by stringu1,stringu2) from tenk1;
+-ERROR:  function rank(integer, name, name) does not exist
+-LINE 1: select rank(3) within group (order by stringu1,stringu2) fro...
+-               ^
+-HINT:  To use the hypothetical-set aggregate rank, the number of hypothetical direct arguments (here 1) must match the number of ordering columns (here 2).
++ERROR:  at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
++DETAIL:  source SQL:
++select rank(3) within group (order by stringu1,stringu2) from tenk1
++                                                       ^
+ select rank('fred') within group (order by x) from generate_series(1,5) x;
+-ERROR:  invalid input syntax for type integer: "fred"
+-LINE 1: select rank('fred') within group (order by x) from generate_...
+-                    ^
++ERROR:  unknown signature: rank(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select rank('adam'::text collate "C") within group (order by x collate "POSIX")
+   from (values ('fred'),('jim')) v(x);
+-ERROR:  collation mismatch between explicit collations "C" and "POSIX"
+-LINE 1: ...adam'::text collate "C") within group (order by x collate "P...
+-                                                             ^
++ERROR:  unknown signature: rank(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- hypothetical-set type unification successes:
+ select rank('adam'::varchar) within group (order by x) from (values ('fred'),('jim')) v(x);
+- rank 
+-------
+-    1
+-(1 row)
+-
++ERROR:  unknown signature: rank(varchar)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select rank('3') within group (order by x) from generate_series(1,5) x;
+- rank 
+-------
+-    3
+-(1 row)
+-
++ERROR:  unknown signature: rank(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- divide by zero check
+ select percent_rank(0) within group (order by x) from generate_series(1,0) x;
+- percent_rank 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown signature: percent_rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- deparse and multiple features:
+ create view aggordview1 as
+ select ten,
+@@ -2380,73 +2115,83 @@
+        rank(5,'AZZZZ',50) within group (order by hundred, string4 desc, hundred)
+   from tenk1
+  group by ten order by ten;
++ERROR:  at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
++DETAIL:  source SQL:
++create view aggordview1 as
++select ten,
++       percentile_disc(0.5) within group (order by thousand) as p50,
++       percentile_disc(0.5) within group (order by thousand) filter (where hundred=1) as px,
++       rank(5,'AZZZZ',50) within group (order by hundred, string4 desc, hundred)
++                                                                               ^
+ select pg_get_viewdef('aggordview1');
+-                                                  pg_get_viewdef                                                   
+--------------------------------------------------------------------------------------------------------------------
+-  SELECT ten,                                                                                                     +
+-     percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY thousand) AS p50,                            +
+-     percentile_disc((0.5)::double precision) WITHIN GROUP (ORDER BY thousand) FILTER (WHERE (hundred = 1)) AS px,+
+-     rank(5, 'AZZZZ'::name, 50) WITHIN GROUP (ORDER BY hundred, string4 DESC, hundred) AS rank                    +
+-    FROM tenk1                                                                                                    +
+-   GROUP BY ten                                                                                                   +
+-   ORDER BY ten;
+-(1 row)
+-
++ERROR:  unknown signature: pg_get_viewdef(string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from aggordview1 order by ten;
+- ten | p50 | px  | rank 
+------+-----+-----+------
+-   0 | 490 |     |  101
+-   1 | 491 | 401 |  101
+-   2 | 492 |     |  101
+-   3 | 493 |     |  101
+-   4 | 494 |     |  101
+-   5 | 495 |     |   67
+-   6 | 496 |     |    1
+-   7 | 497 |     |    1
+-   8 | 498 |     |    1
+-   9 | 499 |     |    1
+-(10 rows)
+-
++ERROR:  relation "aggordview1" does not exist
+ drop view aggordview1;
++ERROR:  relation "aggordview1" does not exist
+ -- variadic aggregates
+ select least_agg(q1,q2) from int8_tbl;
+-     least_agg     
+--------------------
+- -4567890123456789
+-(1 row)
+-
++ERROR:  unknown function: least_agg()
+ select least_agg(variadic array[q1,q2]) from int8_tbl;
+-     least_agg     
+--------------------
+- -4567890123456789
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select least_agg(variadic array[q1,q2]) from int8_tbl
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select cleast_agg(q1,q2) from int8_tbl;
+-    cleast_agg     
+--------------------
+- -4567890123456789
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select cleast_agg(4.5,f1) from int4_tbl;
+- cleast_agg  
+--------------
+- -2147483647
+-(1 row)
++We appreciate your feedback.
+ 
++select cleast_agg(q1,q2) from int8_tbl;
++ERROR:  unknown function: cleast_agg()
++select cleast_agg(4.5,f1) from int4_tbl;
++ERROR:  unknown function: cleast_agg()
+ select cleast_agg(variadic array[4.5,f1]) from int4_tbl;
+- cleast_agg  
+--------------
+- -2147483647
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select cleast_agg(variadic array[4.5,f1]) from int4_tbl
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select pg_typeof(cleast_agg(variadic array[4.5,f1])) from int4_tbl;
+- pg_typeof 
+------------
+- numeric
+-(1 row)
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select pg_typeof(cleast_agg(variadic array[4.5,f1])) from int4_tbl
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ -- test aggregates with common transition functions share the same states
+ begin work;
++ERROR:  at or near "work": syntax error
++DETAIL:  source SQL:
++begin work
++      ^
++HINT:  try \h BEGIN
+ create type avg_state as (total bigint, count bigint);
+ create or replace function avg_transfn(state avg_state, n int) returns avg_state as
+ $$
+@@ -2469,6 +2214,10 @@
+ 	return null;
+ end
+ $$ language plpgsql;
++ERROR:  no data source matches prefix: state in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ create function avg_finalfn(state avg_state) returns int4 as
+ $$
+ begin
+@@ -2479,6 +2228,10 @@
+ 	end if;
+ end
+ $$ language plpgsql;
++ERROR:  no data source matches prefix: state in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ create function sum_finalfn(state avg_state) returns int4 as
+ $$
+ begin
+@@ -2489,106 +2242,70 @@
+ 	end if;
+ end
+ $$ language plpgsql;
++ERROR:  no data source matches prefix: state in this context
++HINT:  to access a field of a composite-typed column or variable, surround the column/variable name in parentheses: (varName).fieldName
++--
++See: https://go.crdb.dev/issue-v/114687/_version_
+ create aggregate my_avg(int4)
+ (
+    stype = avg_state,
+    sfunc = avg_transfn,
+    finalfunc = avg_finalfn
+ );
++ERROR:  at or near "my_avg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_avg(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate my_sum(int4)
+ (
+    stype = avg_state,
+    sfunc = avg_transfn,
+    finalfunc = sum_finalfn
+ );
++ERROR:  at or near "my_sum": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_sum(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- aggregate state should be shared as aggs are the same.
+ select my_avg(one),my_avg(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+- my_avg | my_avg 
+---------+--------
+-      2 |      2
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- aggregate state should be shared as transfn is the same for both aggs.
+ select my_avg(one),my_sum(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+- my_avg | my_sum 
+---------+--------
+-      2 |      4
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- same as previous one, but with DISTINCT, which requires sorting the input.
+ select my_avg(distinct one),my_sum(distinct one) from (values(1),(3),(1)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+- my_avg | my_sum 
+---------+--------
+-      2 |      4
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- shouldn't share states due to the distinctness not matching.
+ select my_avg(distinct one),my_sum(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+-NOTICE:  avg_transfn called with 3
+- my_avg | my_sum 
+---------+--------
+-      2 |      4
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- shouldn't share states due to the filter clause not matching.
+ select my_avg(one) filter (where one > 1),my_sum(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+-NOTICE:  avg_transfn called with 3
+- my_avg | my_sum 
+---------+--------
+-      3 |      4
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- this should not share the state due to different input columns.
+ select my_avg(one),my_sum(two) from (values(1,2),(3,4)) t(one,two);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 2
+-NOTICE:  avg_transfn called with 3
+-NOTICE:  avg_transfn called with 4
+- my_avg | my_sum 
+---------+--------
+-      2 |      6
+-(1 row)
+-
++ERROR:  unknown function: my_avg()
+ -- exercise cases where OSAs share state
+ select
+   percentile_cont(0.5) within group (order by a),
+   percentile_disc(0.5) within group (order by a)
+ from (values(1::float8),(3),(5),(7)) t(a);
+- percentile_cont | percentile_disc 
+------------------+-----------------
+-               4 |               3
+-(1 row)
+-
++ERROR:  VALUES types int and float cannot be matched
+ select
+   percentile_cont(0.25) within group (order by a),
+   percentile_disc(0.5) within group (order by a)
+ from (values(1::float8),(3),(5),(7)) t(a);
+- percentile_cont | percentile_disc 
+------------------+-----------------
+-             2.5 |               3
+-(1 row)
+-
++ERROR:  VALUES types int and float cannot be matched
+ -- these can't share state currently
+ select
+   rank(4) within group (order by a),
+   dense_rank(4) within group (order by a)
+ from (values(1),(3),(5),(7)) t(a);
+- rank | dense_rank 
+-------+------------
+-    3 |          3
+-(1 row)
+-
++ERROR:  unknown signature: rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- test that aggs with the same sfunc and initcond share the same agg state
+ create aggregate my_sum_init(int4)
+ (
+@@ -2597,6 +2314,12 @@
+    finalfunc = sum_finalfn,
+    initcond = '(10,0)'
+ );
++ERROR:  at or near "my_sum_init": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_sum_init(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate my_avg_init(int4)
+ (
+    stype = avg_state,
+@@ -2604,6 +2327,12 @@
+    finalfunc = avg_finalfn,
+    initcond = '(10,0)'
+ );
++ERROR:  at or near "my_avg_init": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_avg_init(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate my_avg_init2(int4)
+ (
+    stype = avg_state,
+@@ -2611,30 +2340,28 @@
+    finalfunc = avg_finalfn,
+    initcond = '(4,0)'
+ );
++ERROR:  at or near "my_avg_init2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_avg_init2(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- state should be shared if INITCONDs are matching
+ select my_sum_init(one),my_avg_init(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+- my_sum_init | my_avg_init 
+--------------+-------------
+-          14 |           7
+-(1 row)
+-
++ERROR:  unknown function: my_sum_init()
+ -- Varying INITCONDs should cause the states not to be shared.
+ select my_sum_init(one),my_avg_init2(one) from (values(1),(3)) t(one);
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 1
+-NOTICE:  avg_transfn called with 3
+-NOTICE:  avg_transfn called with 3
+- my_sum_init | my_avg_init2 
+--------------+--------------
+-          14 |            4
+-(1 row)
+-
++ERROR:  unknown function: my_sum_init()
+ rollback;
++WARNING:  there is no transaction in progress
+ -- test aggregate state sharing to ensure it works if one aggregate has a
+ -- finalfn and the other one has none.
+ begin work;
++ERROR:  at or near "work": syntax error
++DETAIL:  source SQL:
++begin work
++      ^
++HINT:  try \h BEGIN
+ create or replace function sum_transfn(state int4, n int4) returns int4 as
+ $$
+ declare new_state int4;
+@@ -2664,29 +2391,35 @@
+ 	end if;
+ end
+ $$ language plpgsql;
++ERROR:  unsupported binary operator: <int4> / <int> (returning <int4>)
+ create aggregate my_sum(int4)
+ (
+    stype = int4,
+    sfunc = sum_transfn
+ );
++ERROR:  at or near "my_sum": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_sum(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ create aggregate my_half_sum(int4)
+ (
+    stype = int4,
+    sfunc = sum_transfn,
+    finalfunc = halfsum_finalfn
+ );
++ERROR:  at or near "my_half_sum": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate my_half_sum(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- Agg state should be shared even though my_sum has no finalfn
+ select my_sum(one),my_half_sum(one) from (values(1),(2),(3),(4)) t(one);
+-NOTICE:  sum_transfn called with 1
+-NOTICE:  sum_transfn called with 2
+-NOTICE:  sum_transfn called with 3
+-NOTICE:  sum_transfn called with 4
+- my_sum | my_half_sum 
+---------+-------------
+-     10 |           5
+-(1 row)
+-
++ERROR:  unknown function: my_sum()
+ rollback;
++WARNING:  there is no transaction in progress
+ -- test that the aggregate transition logic correctly handles
+ -- transition / combine functions returning NULL
+ -- First test the case of a normal transition function returning NULL
+@@ -2701,6 +2434,7 @@
+     END IF;
+     RETURN NULL;
+ END$$;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ CREATE AGGREGATE balk(int4)
+ (
+     SFUNC = balkifnull(int8, int4),
+@@ -2708,13 +2442,16 @@
+     PARALLEL = SAFE,
+     INITCOND = '0'
+ );
++ERROR:  at or near "balk": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE balk(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ SELECT balk(hundred) FROM tenk1;
+- balk 
+-------
+-     
+-(1 row)
+-
++ERROR:  unknown function: balk()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- Secondly test the case of a parallel aggregate combiner function
+ -- returning NULL. For that use normal transition function, but a
+ -- combiner function returning NULL.
+@@ -2730,6 +2467,23 @@
+     END IF;
+     RETURN NULL;
+ END$$;
++ERROR:  at or near "parallel": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FUNCTION balkifnull(int8, int8)
++RETURNS int8
++PARALLEL SAFE
++^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE AGGREGATE balk(int4)
+ (
+     SFUNC = int4_sum(int8, int4),
+@@ -2738,26 +2492,27 @@
+     PARALLEL = SAFE,
+     INITCOND = '0'
+ );
++ERROR:  at or near "balk": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE balk(int4)
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- force use of parallelism
+ ALTER TABLE tenk1 set (parallel_workers = 4);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET LOCAL parallel_setup_cost=0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET LOCAL max_parallel_workers_per_gather=4;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS OFF) SELECT balk(hundred) FROM tenk1;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Finalize Aggregate
+-   ->  Gather
+-         Workers Planned: 4
+-         ->  Partial Aggregate
+-               ->  Parallel Index Only Scan using tenk1_hundred on tenk1
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT balk(hundred) FROM tenk1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT balk(hundred) FROM tenk1;
+- balk 
+-------
+-     
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- test multiple usage of an aggregate whose finalfn returns a R/W datum
+ BEGIN;
+@@ -2767,6 +2522,8 @@
+     RETURN array_fill(y[1], ARRAY[4]);
+ END;
+ $$;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  unknown function: array_fill()
+ CREATE FUNCTION rwagg_finalfunc(x anyarray) RETURNS anyarray
+ LANGUAGE plpgsql STRICT IMMUTABLE AS $$
+ DECLARE
+@@ -2777,11 +2534,25 @@
+     RETURN res;
+ END;
+ $$;
++ERROR:  at or near "type": syntax error: unable to parse type of variable declaration
++DETAIL:  source SQL:
++DECLARE
++    res x%TYPE;
++          ^
++HINT:  you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
++--
++See: https://go.crdb.dev/issue-v/114676/_version_
+ CREATE AGGREGATE rwagg(anyarray) (
+     STYPE = anyarray,
+     SFUNC = rwagg_sfunc,
+     FINALFUNC = rwagg_finalfunc
+ );
++ERROR:  at or near "rwagg": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE AGGREGATE rwagg(anyarray) (
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ CREATE FUNCTION eatarray(x real[]) RETURNS real[]
+ LANGUAGE plpgsql STRICT IMMUTABLE AS $$
+ BEGIN
+@@ -2789,21 +2560,44 @@
+     RETURN x;
+ END;
+ $$;
++ERROR:  at or near ";": at or near "x": syntax error
++DETAIL:  source SQL:
++x[1] := x[1] + 1
++^
++--
++source SQL:
++BEGIN
++    x[1] := x[1] + 1;
++                    ^
+ SELECT eatarray(rwagg(ARRAY[1.0::real])), eatarray(rwagg(ARRAY[1.0::real]));
+- eatarray  | eatarray  
+------------+-----------
+- {2,1,1,1} | {2,1,1,1}
+-(1 row)
+-
++ERROR:  unknown function: eatarray()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- test coverage for aggregate combine/serial/deserial functions
+ BEGIN;
+ SET parallel_setup_cost = 0;
++ERROR:  unimplemented: the configuration setting "parallel_setup_cost" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET parallel_tuple_cost = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET min_parallel_table_scan_size = 0;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET max_parallel_workers_per_gather = 4;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET parallel_leader_participation = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET enable_indexonlyscan = off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- variance(int4) covers numeric_poly_combine
+ -- sum(int8) covers int8_avg_combine
+ -- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
+@@ -2813,36 +2607,17 @@
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1) u;
+-                                                                                      QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- Finalize Aggregate
+-   Output: variance(tenk1.unique1), sum((tenk1.unique1)::bigint), regr_count((tenk1.unique1)::double precision, (tenk1.unique1)::double precision)
+-   ->  Gather
+-         Output: (PARTIAL variance(tenk1.unique1)), (PARTIAL sum((tenk1.unique1)::bigint)), (PARTIAL regr_count((tenk1.unique1)::double precision, (tenk1.unique1)::double precision))
+-         Workers Planned: 4
+-         ->  Partial Aggregate
+-               Output: PARTIAL variance(tenk1.unique1), PARTIAL sum((tenk1.unique1)::bigint), PARTIAL regr_count((tenk1.unique1)::double precision, (tenk1.unique1)::double precision)
+-               ->  Parallel Append
+-                     ->  Parallel Seq Scan on public.tenk1
+-                           Output: tenk1.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_1
+-                           Output: tenk1_1.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_2
+-                           Output: tenk1_2.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_3
+-                           Output: tenk1_3.unique1
+-(16 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF, VERBOSE)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT variance(unique1::int4), sum(unique1::int8), regr_count(unique1::float8, unique1::float8)
+ FROM (SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1) u;
+-       variance       |    sum    | regr_count 
+-----------------------+-----------+------------
+- 8333541.588539713493 | 199980000 |      40000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- variance(int8) covers numeric_combine
+ -- avg(numeric) covers numeric_avg_combine
+ EXPLAIN (COSTS OFF, VERBOSE)
+@@ -2851,46 +2626,22 @@
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1) u;
+-                                               QUERY PLAN                                               
+---------------------------------------------------------------------------------------------------------
+- Finalize Aggregate
+-   Output: variance((tenk1.unique1)::bigint), avg((tenk1.unique1)::numeric)
+-   ->  Gather
+-         Output: (PARTIAL variance((tenk1.unique1)::bigint)), (PARTIAL avg((tenk1.unique1)::numeric))
+-         Workers Planned: 4
+-         ->  Partial Aggregate
+-               Output: PARTIAL variance((tenk1.unique1)::bigint), PARTIAL avg((tenk1.unique1)::numeric)
+-               ->  Parallel Append
+-                     ->  Parallel Seq Scan on public.tenk1
+-                           Output: tenk1.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_1
+-                           Output: tenk1_1.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_2
+-                           Output: tenk1_2.unique1
+-                     ->  Parallel Seq Scan on public.tenk1 tenk1_3
+-                           Output: tenk1_3.unique1
+-(16 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF, VERBOSE)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT variance(unique1::int8), avg(unique1::numeric)
+ FROM (SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1
+       UNION ALL SELECT * FROM tenk1) u;
+-       variance       |          avg          
+-----------------------+-----------------------
+- 8333541.588539713493 | 4999.5000000000000000
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- test coverage for dense_rank
+ SELECT dense_rank(x) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2),(2),(3),(3)) v(x) GROUP BY (x) ORDER BY 1;
+- dense_rank 
+-------------
+-          1
+-          1
+-          1
+-(3 rows)
+-
++ERROR:  unknown signature: dense_rank(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- Ensure that the STRICT checks for aggregates does not take NULLness
+ -- of ORDER BY columns into account. See bug report around
+ -- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
+@@ -2929,27 +2680,46 @@
+ -- does not lead to array overflow due to unexpected duplicate hash keys
+ -- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
+ set enable_memoize to off;
++ERROR:  unrecognized configuration parameter "enable_memoize"
+ explain (costs off)
+   select 1 from tenk1
+    where (hundred, thousand) in (select twothousand, twothousand from onek);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Hash Join
+-   Hash Cond: (tenk1.hundred = onek.twothousand)
+-   ->  Seq Scan on tenk1
+-         Filter: (hundred = thousand)
+-   ->  Hash
+-         ->  HashAggregate
+-               Group Key: onek.twothousand, onek.twothousand
+-               ->  Seq Scan on onek
+-(8 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset enable_memoize;
++ERROR:  unrecognized configuration parameter "enable_memoize"
+ --
+ -- Hash Aggregation Spill tests
+ --
+ set enable_sort=false;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set work_mem='64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select unique1, count(*), sum(twothousand) from tenk1
+ group by unique1
+ having sum(fivethous) > 4975
+@@ -3007,36 +2777,84 @@
+ (48 rows)
+ 
+ set work_mem to default;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_sort to default;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Compare results between plans using sorting and plans using hash
+ -- aggregation. Force spilling in both cases by setting work_mem low.
+ --
+ set work_mem='64kB';
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create table agg_data_2k as
+ select g from generate_series(0, 1999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ analyze agg_data_2k;
+ create table agg_data_20k as
+ select g from generate_series(0, 19999) g;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ analyze agg_data_20k;
+ -- Produce results with sorting.
+ set enable_hashagg = false;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set jit_above_cost = 0;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ explain (costs off)
+ select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+   from agg_data_20k group by g%10000;
+-              QUERY PLAN              
+---------------------------------------
+- GroupAggregate
+-   Group Key: ((g % 10000))
+-   ->  Sort
+-         Sort Key: ((g % 10000))
+-         ->  Seq Scan on agg_data_20k
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create table agg_group_1 as
+ select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+   from agg_data_20k group by g%10000;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create table agg_group_2 as
+ select * from
+   (values (100), (300), (500)) as r(a),
+@@ -3047,30 +2865,58 @@
+     from agg_data_2k
+     where g < r.a
+     group by g/2) as s;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ set jit_above_cost to default;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ create table agg_group_3 as
+ select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+   from agg_data_2k group by g/2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create table agg_group_4 as
+ select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+   from agg_data_2k group by g/2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ -- Produce results with hash aggregation
+ set enable_hashagg = true;
++ERROR:  unimplemented: the configuration setting "enable_hashagg" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_sort = false;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set jit_above_cost = 0;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ explain (costs off)
+ select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+   from agg_data_20k group by g%10000;
+-           QUERY PLAN           
+---------------------------------
+- HashAggregate
+-   Group Key: (g % 10000)
+-   ->  Seq Scan on agg_data_20k
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create table agg_hash_1 as
+ select g%10000 as c1, sum(g::numeric) as c2, count(*) as c3
+   from agg_data_20k group by g%10000;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create table agg_hash_2 as
+ select * from
+   (values (100), (300), (500)) as r(a),
+@@ -3081,15 +2927,43 @@
+     from agg_data_2k
+     where g < r.a
+     group by g/2) as s;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ set jit_above_cost to default;
++ERROR:  unrecognized configuration parameter "jit_above_cost"
+ create table agg_hash_3 as
+ select (g/2)::numeric as c1, sum(7::int4) as c2, count(*) as c3
+   from agg_data_2k group by g/2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create table agg_hash_4 as
+ select (g/2)::numeric as c1, array_agg(g::numeric) as c2, count(*) as c3
+   from agg_data_2k group by g/2;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ set enable_sort = true;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set work_mem to default;
++ERROR:  unimplemented: the configuration setting "work_mem" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Compare group aggregation results to hash aggregation results
+ (select * from agg_hash_1 except select * from agg_group_1)
+   union all

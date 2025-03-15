@@ -1,0 +1,869 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tstypes.out --label=/mnt/data1/postgres/src/test/regress/results/tstypes.out /mnt/data1/postgres/src/test/regress/expected/tstypes.out /mnt/data1/postgres/src/test/regress/results/tstypes.out
+--- /mnt/data1/postgres/src/test/regress/expected/tstypes.out
++++ /mnt/data1/postgres/src/test/regress/results/tstypes.out
+@@ -62,17 +62,13 @@
+ (1 row)
+ 
+ SELECT $$'\\as' ab\c ab\\c AB\\\c ab\\\\c$$::tsvector;
+-                tsvector                
+-----------------------------------------
+- 'AB\\c' '\\as' 'ab\\\\c' 'ab\\c' 'abc'
++             tsvector              
++-----------------------------------
++ 'AB\c' '\as' 'ab\\c' 'ab\c' 'abc'
+ (1 row)
+ 
+ SELECT tsvectorin(tsvectorout($$'\\as' ab\c ab\\c AB\\\c ab\\\\c$$::tsvector));
+-               tsvectorin               
+-----------------------------------------
+- 'AB\\c' '\\as' 'ab\\\\c' 'ab\\c' 'abc'
+-(1 row)
+-
++ERROR:  tsvectorout(): unimplemented
+ SELECT '''w'':4A,3B,2C,1D,5 a:8';
+        ?column?        
+ -----------------------
+@@ -80,34 +76,20 @@
+ (1 row)
+ 
+ SELECT 'a:3A b:2a'::tsvector || 'ba:1234 a:1B';
+-          ?column?          
+-----------------------------
+- 'a':3A,4B 'b':2A 'ba':1237
++ERROR:  unsupported binary operator: <tsvector> || <string>
++SELECT $$'' '1' '2'$$::tsvector;  -- error, empty lexeme is not allowed
++  tsvector  
++------------
++ '' '1' '2'
+ (1 row)
+ 
+-SELECT $$'' '1' '2'$$::tsvector;  -- error, empty lexeme is not allowed
+-ERROR:  syntax error in tsvector: "'' '1' '2'"
+-LINE 1: SELECT $$'' '1' '2'$$::tsvector;
+-               ^
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('foo', 'tsvector');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid($$''$$, 'tsvector');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info($$''$$, 'tsvector');
+-            message             | detail | hint | sql_error_code 
+---------------------------------+--------+------+----------------
+- syntax error in tsvector: "''" |        |      | 42601
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --Base tsquery test
+ SELECT '1'::tsquery;
+  tsquery 
+@@ -346,7 +328,7 @@
+ SELECT $$'\\as'$$::tsquery;
+  tsquery 
+ ---------
+- '\\as'
++ '\as'
+ (1 row)
+ 
+ SELECT 'a:* & nbb:*ac | doo:a* | goo'::tsquery;
+@@ -393,133 +375,60 @@
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('foo', 'tsquery');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('foo!', 'tsquery');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('foo!', 'tsquery');
+-             message             | detail | hint | sql_error_code 
+----------------------------------+--------+------+----------------
+- syntax error in tsquery: "foo!" |        |      | 42601
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('a <100000> b', 'tsquery');
+-                                        message                                        | detail | hint | sql_error_code 
+----------------------------------------------------------------------------------------+--------+------+----------------
+- distance in phrase operator must be an integer value between zero and 16384 inclusive |        |      | 22023
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --comparisons
+ SELECT 'a' < 'b & c'::tsquery as "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> < <tsquery>
+ SELECT 'a' > 'b & c'::tsquery as "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> > <tsquery>
+ SELECT 'a | f' < 'b & c'::tsquery as "false";
+- false 
+--------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> < <tsquery>
+ SELECT 'a | ff' < 'b & c'::tsquery as "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> < <tsquery>
+ SELECT 'a | f | g' < 'b & c'::tsquery as "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <string> < <tsquery>
+ --concatenation
+ SELECT numnode( 'new'::tsquery );
+- numnode 
+----------
+-       1
+-(1 row)
+-
++ERROR:  numnode(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT numnode( 'new & york'::tsquery );
+- numnode 
+----------
+-       3
+-(1 row)
+-
++ERROR:  numnode(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT numnode( 'new & york | qwery'::tsquery );
+- numnode 
+----------
+-       5
+-(1 row)
+-
++ERROR:  numnode(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT 'foo & bar'::tsquery && 'asd';
+-       ?column?        
+------------------------
+- 'foo' & 'bar' & 'asd'
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> && <string>
+ SELECT 'foo & bar'::tsquery || 'asd & fg';
+-           ?column?           
+-------------------------------
+- 'foo' & 'bar' | 'asd' & 'fg'
+-(1 row)
+-
++ERROR:  unsupported binary operator: <tsquery> || <string>
+ SELECT 'foo & bar'::tsquery || !!'asd & fg'::tsquery;
+-             ?column?              
+------------------------------------
+- 'foo' & 'bar' | !( 'asd' & 'fg' )
+-(1 row)
+-
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT 'foo & bar'::tsquery || !!'asd & fg'::tsquery
++                               ^
+ SELECT 'foo & bar'::tsquery && 'asd | fg';
+-             ?column?             
+-----------------------------------
+- 'foo' & 'bar' & ( 'asd' | 'fg' )
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <tsquery> && <string>
+ SELECT 'a' <-> 'b & d'::tsquery;
+-       ?column?        
+------------------------
+- 'a' <-> ( 'b' & 'd' )
+-(1 row)
+-
++ERROR:  unsupported binary operator: <string> <-> <tsquery>
+ SELECT 'a & g' <-> 'b & d'::tsquery;
+-            ?column?             
+----------------------------------
+- ( 'a' & 'g' ) <-> ( 'b' & 'd' )
+-(1 row)
+-
++ERROR:  unsupported binary operator: <string> <-> <tsquery>
+ SELECT 'a & g' <-> 'b | d'::tsquery;
+-            ?column?             
+----------------------------------
+- ( 'a' & 'g' ) <-> ( 'b' | 'd' )
+-(1 row)
+-
++ERROR:  unsupported binary operator: <string> <-> <tsquery>
+ SELECT 'a & g' <-> 'b <-> d'::tsquery;
+-             ?column?              
+------------------------------------
+- ( 'a' & 'g' ) <-> ( 'b' <-> 'd' )
+-(1 row)
+-
++ERROR:  unsupported binary operator: <string> <-> <tsquery>
+ SELECT tsquery_phrase('a <3> g', 'b & d', 10);
+-         tsquery_phrase         
+---------------------------------
+- 'a' <3> 'g' <10> ( 'b' & 'd' )
+-(1 row)
+-
++ERROR:  tsquery_phrase(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- tsvector-tsquery operations
+ SELECT 'a b:89  ca:23A,64b d:34c'::tsvector @@ 'd:AC & ca' as "true";
+  true 
+@@ -625,29 +534,21 @@
+ 
+ -- historically, a stripped tsvector matches queries ignoring weights:
+ SELECT strip('wa:1A'::tsvector) @@ 'w:*A'::tsquery as "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT strip('wa:1A'::tsvector) @@ 'w:*D'::tsquery as "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT strip('wa:1A'::tsvector) @@ '!w:*A'::tsquery as "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT strip('wa:1A'::tsvector) @@ '!w:*D'::tsquery as "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT 'supernova'::tsvector @@ 'super'::tsquery AS "false";
+  false 
+ -------
+@@ -765,11 +666,9 @@
+ 
+ -- without position data, phrase search does not match
+ SELECT strip(to_tsvector('simple', '1 2 3 4')) @@ '1 <-> 2 <-> 3' AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select to_tsvector('simple', 'q x q y') @@ 'q <-> (x & y)' AS "false";
+  false 
+ -------
+@@ -939,35 +838,25 @@
+ (1 row)
+ 
+ select strip(to_tsvector('simple', 'x y q y')) @@ '!x <-> y' AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select strip(to_tsvector('simple', 'x y q y')) @@ '!x <-> !y' AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select strip(to_tsvector('simple', 'x y q y')) @@ '!x <-> !!y' AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select strip(to_tsvector('simple', 'x y q y')) @@ '!(x <-> y)' AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select strip(to_tsvector('simple', 'x y q y')) @@ '!(x <2> y)' AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ select to_tsvector('simple', 'x y q y') @@ '!foo' AS "true";
+  true 
+ ------
+@@ -1036,125 +925,85 @@
+ (1 row)
+ 
+ SELECT ts_rank_cd(' a:1 s:2C d g'::tsvector, 'a | s');
+- ts_rank_cd 
+-------------
+-        0.3
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2C d g'::tsvector, 'a | s');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2C d g'::tsvector, 'a | s:*');
+- ts_rank_cd 
+-------------
+-        0.3
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2C d g'::tsvector, 'a | sa:*');
+- ts_rank_cd 
+-------------
+-        0.3
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:3C sab:2c d g'::tsvector, 'a | sa:*');
+- ts_rank_cd 
+-------------
+-        0.5
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2B d g'::tsvector, 'a | s');
+- ts_rank_cd 
+-------------
+-        0.5
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2 d g'::tsvector, 'a | s');
+- ts_rank_cd 
+-------------
+-        0.2
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2C d g'::tsvector, 'a & s');
+- ts_rank_cd 
+-------------
+-   0.133333
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2B d g'::tsvector, 'a & s');
+- ts_rank_cd 
+-------------
+-       0.16
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2 d g'::tsvector, 'a & s');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2A d g'::tsvector, 'a <-> s');
+- ts_rank_cd 
+-------------
+-   0.181818
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2C d g'::tsvector, 'a <-> s');
+- ts_rank_cd 
+-------------
+-   0.133333
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2 d g'::tsvector, 'a <-> s');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2 d:2A g'::tsvector, 'a <-> s');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 s:2,3A d:2A g'::tsvector, 'a <2> s:A');
+- ts_rank_cd 
+-------------
+-  0.0909091
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 b:2 s:3A d:2A g'::tsvector, 'a <2> s:A');
+- ts_rank_cd 
+-------------
+-  0.0909091
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2D sb:2A g'::tsvector, 'a <-> s:*');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2A sb:2D g'::tsvector, 'a <-> s:*');
+- ts_rank_cd 
+-------------
+-        0.1
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2A sb:2D g'::tsvector, 'a <-> s:* <-> sa:A');
+- ts_rank_cd 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_rank_cd(' a:1 sa:2A sb:2D g'::tsvector, 'a <-> s:* <-> sa:B');
+- ts_rank_cd 
+-------------
+-          0
+-(1 row)
+-
++ERROR:  ts_rank_cd(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT 'a:1 b:2'::tsvector @@ 'a <-> b'::tsquery AS "true";
+  true 
+ ------
+@@ -1217,228 +1066,143 @@
+ 
+ -- tsvector editing operations
+ SELECT strip('w:12B w:13* w:12,5,6 a:1,3* a:3 w asd:1dc asd'::tsvector);
+-     strip     
+----------------
+- 'a' 'asd' 'w'
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT strip('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+-                    strip                     
+-----------------------------------------------
+- 'base' 'hidden' 'rebel' 'spaceship' 'strike'
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT strip('base hidden rebel spaceship strike'::tsvector);
+-                    strip                     
+-----------------------------------------------
+- 'base' 'hidden' 'rebel' 'spaceship' 'strike'
+-(1 row)
+-
++ERROR:  strip(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete(to_tsvector('english', 'Rebel spaceships, striking from a hidden base'), 'spaceship');
+-                ts_delete                 
+-------------------------------------------
+- 'base':7 'hidden':6 'rebel':1 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, 'base');
+-                          ts_delete                           
+---------------------------------------------------------------
+- 'hidden':6 'rebel':1 'spaceship':2,33A,34B,35C,36 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, 'bas');
+-                               ts_delete                               
+------------------------------------------------------------------------
+- 'base':7 'hidden':6 'rebel':1 'spaceship':2,33A,34B,35C,36 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, 'bases');
+-                               ts_delete                               
+------------------------------------------------------------------------
+- 'base':7 'hidden':6 'rebel':1 'spaceship':2,33A,34B,35C,36 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, 'spaceship');
+-                ts_delete                 
+-------------------------------------------
+- 'base':7 'hidden':6 'rebel':1 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base hidden rebel spaceship strike'::tsvector, 'spaceship');
+-            ts_delete             
+-----------------------------------
+- 'base' 'hidden' 'rebel' 'strike'
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, ARRAY['spaceship','rebel']);
+-           ts_delete            
+---------------------------------
+- 'base':7 'hidden':6 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, ARRAY['spaceships','rebel']);
+-                          ts_delete                          
+--------------------------------------------------------------
+- 'base':7 'hidden':6 'spaceship':2,33A,34B,35C,36 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, ARRAY['spaceshi','rebel']);
+-                          ts_delete                          
+--------------------------------------------------------------
+- 'base':7 'hidden':6 'spaceship':2,33A,34B,35C,36 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector, ARRAY['spaceship','leya','rebel']);
+-           ts_delete            
+---------------------------------
+- 'base':7 'hidden':6 'strike':3
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base hidden rebel spaceship strike'::tsvector, ARRAY['spaceship','leya','rebel']);
+-        ts_delete         
+---------------------------
+- 'base' 'hidden' 'strike'
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base hidden rebel spaceship strike'::tsvector, ARRAY['spaceship','leya','rebel','rebel']);
+-        ts_delete         
+---------------------------
+- 'base' 'hidden' 'strike'
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_delete('base hidden rebel spaceship strike'::tsvector, ARRAY['spaceship','leya','rebel', '', NULL]);
+-        ts_delete         
+---------------------------
+- 'base' 'hidden' 'strike'
+-(1 row)
+-
++ERROR:  ts_delete(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT unnest('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+-                   unnest                    
+----------------------------------------------
+- (base,{7},{D})
+- (hidden,{6},{D})
+- (rebel,{1},{D})
+- (spaceship,"{2,33,34,35,36}","{D,A,B,C,D}")
+- (strike,{3},{D})
+-(5 rows)
+-
++ERROR:  unknown signature: unnest(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT unnest('base hidden rebel spaceship strike'::tsvector);
+-    unnest     
+----------------
+- (base,,)
+- (hidden,,)
+- (rebel,,)
+- (spaceship,,)
+- (strike,,)
+-(5 rows)
+-
++ERROR:  unknown signature: unnest(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT * FROM unnest('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+-  lexeme   |    positions    |   weights   
+------------+-----------------+-------------
+- base      | {7}             | {D}
+- hidden    | {6}             | {D}
+- rebel     | {1}             | {D}
+- spaceship | {2,33,34,35,36} | {D,A,B,C,D}
+- strike    | {3}             | {D}
+-(5 rows)
+-
++ERROR:  unknown signature: unnest(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT * FROM unnest('base hidden rebel spaceship strike'::tsvector);
+-  lexeme   | positions | weights 
+------------+-----------+---------
+- base      |           | 
+- hidden    |           | 
+- rebel     |           | 
+- spaceship |           | 
+- strike    |           | 
+-(5 rows)
+-
++ERROR:  unknown signature: unnest(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT lexeme, positions[1] from unnest('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+-  lexeme   | positions 
+------------+-----------
+- base      |         7
+- hidden    |         6
+- rebel     |         1
+- spaceship |         2
+- strike    |         3
+-(5 rows)
+-
++ERROR:  unknown signature: unnest(tsvector)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT tsvector_to_array('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+-          tsvector_to_array           
+---------------------------------------
+- {base,hidden,rebel,spaceship,strike}
+-(1 row)
+-
++ERROR:  tsvector_to_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT tsvector_to_array('base hidden rebel spaceship strike'::tsvector);
+-          tsvector_to_array           
+---------------------------------------
+- {base,hidden,rebel,spaceship,strike}
+-(1 row)
+-
++ERROR:  tsvector_to_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT array_to_tsvector(ARRAY['base','hidden','rebel','spaceship','strike']);
+-              array_to_tsvector               
+-----------------------------------------------
+- 'base' 'hidden' 'rebel' 'spaceship' 'strike'
+-(1 row)
+-
++ERROR:  array_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- null and empty string are disallowed, since we mustn't make an empty lexeme
+ SELECT array_to_tsvector(ARRAY['base','hidden','rebel','spaceship', NULL]);
+-ERROR:  lexeme array may not contain nulls
++ERROR:  array_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT array_to_tsvector(ARRAY['base','hidden','rebel','spaceship', '']);
+-ERROR:  lexeme array may not contain empty strings
++ERROR:  array_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- array_to_tsvector must sort and de-dup
+ SELECT array_to_tsvector(ARRAY['foo','bar','baz','bar']);
+- array_to_tsvector 
+--------------------
+- 'bar' 'baz' 'foo'
+-(1 row)
+-
++ERROR:  array_to_tsvector(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('w:12B w:13* w:12,5,6 a:1,3* a:3 w asd:1dc asd zxc:81,567,222A'::tsvector, 'c');
+-                        setweight                         
+-----------------------------------------------------------
+- 'a':1C,3C 'asd':1C 'w':5C,6C,12C,13C 'zxc':81C,222C,567C
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('a:1,3A asd:1C w:5,6,12B,13A zxc:81,222A,567'::tsvector, 'c');
+-                        setweight                         
+-----------------------------------------------------------
+- 'a':1C,3C 'asd':1C 'w':5C,6C,12C,13C 'zxc':81C,222C,567C
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('a:1,3A asd:1C w:5,6,12B,13A zxc:81,222A,567'::tsvector, 'c', '{a}');
+-                      setweight                       
+-------------------------------------------------------
+- 'a':1C,3C 'asd':1C 'w':5,6,12B,13A 'zxc':81,222A,567
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('a:1,3A asd:1C w:5,6,12B,13A zxc:81,222A,567'::tsvector, 'c', '{a}');
+-                      setweight                       
+-------------------------------------------------------
+- 'a':1C,3C 'asd':1C 'w':5,6,12B,13A 'zxc':81,222A,567
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('a:1,3A asd:1C w:5,6,12B,13A zxc:81,222A,567'::tsvector, 'c', '{a,zxc}');
+-                       setweight                        
+---------------------------------------------------------
+- 'a':1C,3C 'asd':1C 'w':5,6,12B,13A 'zxc':81C,222C,567C
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT setweight('a asd w:5,6,12B,13A zxc'::tsvector, 'c', ARRAY['a', 'zxc', '', NULL]);
+-            setweight            
+----------------------------------
+- 'a' 'asd' 'w':5,6,12B,13A 'zxc'
+-(1 row)
+-
++ERROR:  setweight(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_filter('base:7A empir:17 evil:15 first:11 galact:16 hidden:6A rebel:1A spaceship:2A strike:3A victori:12 won:9'::tsvector, '{a}');
+-                          ts_filter                          
+--------------------------------------------------------------
+- 'base':7A 'hidden':6A 'rebel':1A 'spaceship':2A 'strike':3A
+-(1 row)
+-
++ERROR:  ts_filter(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_filter('base hidden rebel spaceship strike'::tsvector, '{a}');
+- ts_filter 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_filter(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_filter('base hidden rebel spaceship strike'::tsvector, '{a,b,NULL}');
+-ERROR:  weight array may not contain nulls
++ERROR:  ts_filter(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_

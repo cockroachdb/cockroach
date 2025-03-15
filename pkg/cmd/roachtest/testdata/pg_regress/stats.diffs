@@ -1,0 +1,2230 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats.out --label=/mnt/data1/postgres/src/test/regress/results/stats.out /mnt/data1/postgres/src/test/regress/expected/stats.out /mnt/data1/postgres/src/test/regress/results/stats.out
+--- /mnt/data1/postgres/src/test/regress/expected/stats.out
++++ /mnt/data1/postgres/src/test/regress/results/stats.out
+@@ -6,23 +6,57 @@
+ --
+ -- conditio sine qua non
+ SHOW track_counts;  -- must be on
+- track_counts 
+---------------
+- on
+-(1 row)
+-
++ERROR:  unrecognized configuration parameter "track_counts"
+ -- ensure that both seqscan and indexscan plans are allowed
+ SET enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan TO on;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- for the moment, we don't want index-only scans here
+ SET enable_indexonlyscan TO off;
++ERROR:  unimplemented: the configuration setting "enable_indexonlyscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- not enabled by default, but we want to test it...
+ SET track_functions TO 'all';
++ERROR:  unimplemented: the configuration setting "track_functions" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- record dboid for later use
+ SELECT oid AS dboid from pg_database where datname = current_database() \gset
+ -- save counters
+ BEGIN;
+ SET LOCAL stats_fetch_consistency = snapshot;
++ERROR:  unrecognized configuration parameter "stats_fetch_consistency"
+ CREATE TABLE prevstats AS
+ SELECT t.seq_scan, t.seq_tup_read, t.idx_scan, t.idx_tup_fetch,
+        (b.heap_blks_read + b.heap_blks_hit) AS heap_blks,
+@@ -31,6 +65,7 @@
+   FROM pg_catalog.pg_stat_user_tables AS t,
+        pg_catalog.pg_statio_user_tables AS b
+  WHERE t.relname='tenk2' AND b.relname='tenk2';
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- test effects of TRUNCATE on n_live_tup/n_dead_tup counters
+ CREATE TABLE trunc_stats_test(id serial);
+@@ -52,8 +87,10 @@
+ BEGIN;
+ UPDATE trunc_stats_test1 SET id = id + 100;
+ TRUNCATE trunc_stats_test1;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ INSERT INTO trunc_stats_test1 DEFAULT VALUES;
+ COMMIT;
++WARNING:  there is no transaction in progress
+ -- use a savepoint: 1 insert, 1 live
+ BEGIN;
+ INSERT INTO trunc_stats_test2 DEFAULT VALUES;
+@@ -61,9 +98,12 @@
+ SAVEPOINT p1;
+ INSERT INTO trunc_stats_test2 DEFAULT VALUES;
+ TRUNCATE trunc_stats_test2;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ INSERT INTO trunc_stats_test2 DEFAULT VALUES;
+ RELEASE SAVEPOINT p1;
++WARNING:  there is no transaction in progress
+ COMMIT;
++WARNING:  there is no transaction in progress
+ -- rollback a savepoint: this should count 4 inserts and have 2
+ -- live tuples after commit (and 2 dead ones due to aborted subxact)
+ BEGIN;
+@@ -73,203 +113,161 @@
+ INSERT INTO trunc_stats_test3 DEFAULT VALUES;
+ INSERT INTO trunc_stats_test3 DEFAULT VALUES;
+ TRUNCATE trunc_stats_test3;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ INSERT INTO trunc_stats_test3 DEFAULT VALUES;
+ ROLLBACK TO SAVEPOINT p1;
++ERROR:  savepoint "p1" does not exist
+ COMMIT;
++WARNING:  there is no transaction in progress
+ -- rollback a truncate: this should count 2 inserts and produce 2 dead tuples
+ BEGIN;
+ INSERT INTO trunc_stats_test4 DEFAULT VALUES;
+ INSERT INTO trunc_stats_test4 DEFAULT VALUES;
+ TRUNCATE trunc_stats_test4;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ INSERT INTO trunc_stats_test4 DEFAULT VALUES;
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- do a seqscan
+ SELECT count(*) FROM tenk2;
+  count 
+ -------
+- 10000
++     0
+ (1 row)
+ 
+ -- do an indexscan
+ -- make sure it is not a bitmap scan, which might skip fetching heap tuples
+ SET enable_bitmapscan TO off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT count(*) FROM tenk2 WHERE unique1 = 1;
+  count 
+ -------
+-     1
++     0
+ (1 row)
+ 
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- ensure pending stats are flushed
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ -- check effects
+ BEGIN;
+ SET LOCAL stats_fetch_consistency = snapshot;
++ERROR:  unrecognized configuration parameter "stats_fetch_consistency"
+ SELECT relname, n_tup_ins, n_tup_upd, n_tup_del, n_live_tup, n_dead_tup
+   FROM pg_stat_user_tables
+  WHERE relname like 'trunc_stats_test%' order by relname;
+-      relname      | n_tup_ins | n_tup_upd | n_tup_del | n_live_tup | n_dead_tup 
+--------------------+-----------+-----------+-----------+------------+------------
+- trunc_stats_test  |         3 |         0 |         0 |          0 |          0
+- trunc_stats_test1 |         4 |         2 |         1 |          1 |          0
+- trunc_stats_test2 |         1 |         0 |         0 |          1 |          0
+- trunc_stats_test3 |         4 |         0 |         0 |          2 |          2
+- trunc_stats_test4 |         2 |         0 |         0 |          0 |          2
+-(5 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT st.seq_scan >= pr.seq_scan + 1,
+        st.seq_tup_read >= pr.seq_tup_read + cl.reltuples,
+        st.idx_scan >= pr.idx_scan + 1,
+        st.idx_tup_fetch >= pr.idx_tup_fetch + 1
+   FROM pg_stat_user_tables AS st, pg_class AS cl, prevstats AS pr
+  WHERE st.relname='tenk2' AND cl.relname='tenk2';
+- ?column? | ?column? | ?column? | ?column? 
+-----------+----------+----------+----------
+- t        | t        | t        | t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT st.heap_blks_read + st.heap_blks_hit >= pr.heap_blks + cl.relpages,
+        st.idx_blks_read + st.idx_blks_hit >= pr.idx_blks + 1
+   FROM pg_statio_user_tables AS st, pg_class AS cl, prevstats AS pr
+  WHERE st.relname='tenk2' AND cl.relname='tenk2';
+- ?column? | ?column? 
+-----------+----------
+- t        | t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pr.snap_ts < pg_stat_get_snapshot_timestamp() as snapshot_newer
+ FROM prevstats AS pr;
+- snapshot_newer 
+-----------------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ ----
+ -- Basic tests for track_functions
+ ---
+ CREATE FUNCTION stats_test_func1() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+ SELECT 'stats_test_func1()'::regprocedure::oid AS stats_test_func1_oid \gset
+-CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+-SELECT 'stats_test_func2()'::regprocedure::oid AS stats_test_func2_oid \gset
++-- CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
++-- SELECT 'stats_test_func2()'::regprocedure::oid AS stats_test_func2_oid \gset
+ -- test that stats are accumulated
+ BEGIN;
+ SET LOCAL stats_fetch_consistency = none;
++ERROR:  unrecognized configuration parameter "stats_fetch_consistency"
+ SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_xact_function_calls(:stats_test_func1_oid);
+- pg_stat_get_xact_function_calls 
+----------------------------------
+-                                
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT stats_test_func1();
+- stats_test_func1 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_xact_function_calls(:stats_test_func1_oid);
+- pg_stat_get_xact_function_calls 
+----------------------------------
+-                               1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT stats_test_func1();
+- stats_test_func1 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_xact_function_calls(:stats_test_func1_oid);
+- pg_stat_get_xact_function_calls 
+----------------------------------
+-                               2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                          0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- Verify that function stats are not transactional
+ -- rolled back savepoint in committing transaction
+ BEGIN;
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: stats_test_func2()
+ SAVEPOINT foo;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO SAVEPOINT foo;
++ERROR:  savepoint "foo" does not exist
+ SELECT pg_stat_get_xact_function_calls(:stats_test_func2_oid);
+- pg_stat_get_xact_function_calls 
+----------------------------------
+-                               2
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT pg_stat_get_xact_function_calls(:stats_test_func2_oid)
++                                       ^
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- rolled back transaction
+ BEGIN;
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: stats_test_func2()
+ ROLLBACK;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ -- check collected stats
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
+-     funcname     | calls 
+-------------------+-------
+- stats_test_func1 |     2
+-(1 row)
++ funcname | calls 
++----------+-------
++(0 rows)
+ 
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid;
+-     funcname     | calls 
+-------------------+-------
+- stats_test_func2 |     4
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid
++                                                                  ^
+ -- check that a rolled back drop function stats leaves stats alive
+ BEGIN;
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
+-     funcname     | calls 
+-------------------+-------
+- stats_test_func1 |     2
+-(1 row)
++ funcname | calls 
++----------+-------
++(0 rows)
+ 
+ DROP FUNCTION stats_test_func1();
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ -- shouldn't be visible via view
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
+  funcname | calls 
+@@ -278,68 +276,53 @@
+ 
+ -- but still via oid access
+ SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                          2
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_function_calls()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
+-     funcname     | calls 
+-------------------+-------
+- stats_test_func1 |     2
+-(1 row)
++ funcname | calls 
++----------+-------
++(0 rows)
+ 
+ SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                          2
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_function_calls()
+ -- check that function dropped in main transaction leaves no stats behind
+ BEGIN;
+ DROP FUNCTION stats_test_func1();
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  unknown function: stats_test_func1()
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func1_oid;
+  funcname | calls 
+ ----------+-------
+ (0 rows)
+ 
+ SELECT pg_stat_get_function_calls(:stats_test_func1_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_function_calls()
+ -- check that function dropped in a subtransaction leaves no stats behind
+ BEGIN;
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: stats_test_func2()
+ SAVEPOINT a;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT stats_test_func2();
+- stats_test_func2 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SAVEPOINT b;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DROP FUNCTION stats_test_func2();
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid;
+- funcname | calls 
+-----------+-------
+-(0 rows)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT funcname, calls FROM pg_stat_user_functions WHERE funcid = :stats_test_func2_oid
++                                                                  ^
+ SELECT pg_stat_get_function_calls(:stats_test_func2_oid);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT pg_stat_get_function_calls(:stats_test_func2_oid)
++                                  ^
+ -- Check that stats for relations are dropped. For that we need to access stats
+ -- by oid after the DROP TABLE. Save oids.
+ CREATE TABLE drop_stats_test();
+@@ -352,210 +335,113 @@
+ INSERT INTO drop_stats_test_subxact DEFAULT VALUES;
+ SELECT 'drop_stats_test_subxact'::regclass::oid AS drop_stats_test_subxact_oid \gset
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ DROP TABLE drop_stats_test;
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_xact_tuples_inserted()
+ -- check that rollback protects against having stats dropped and that local
+ -- modifications don't pose a problem
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_xact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ SELECT pg_stat_get_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_tuples_inserted 
+------------------------------
+-                           1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_tuples_inserted()
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_xact_tuples_inserted()
+ BEGIN;
+ INSERT INTO drop_stats_test_xact DEFAULT VALUES;
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_xact_tuples_inserted()
+ DROP TABLE drop_stats_test_xact;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_xact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ SELECT pg_stat_get_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_tuples_inserted 
+------------------------------
+-                           2
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_tuples_inserted()
+ -- transactional drop
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_xact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ SELECT pg_stat_get_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_tuples_inserted 
+------------------------------
+-                           2
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_tuples_inserted()
+ BEGIN;
+ INSERT INTO drop_stats_test_xact DEFAULT VALUES;
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_xact_tuples_inserted()
+ DROP TABLE drop_stats_test_xact;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                0
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_xact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ SELECT pg_stat_get_tuples_inserted(:drop_stats_test_xact_oid);
+- pg_stat_get_tuples_inserted 
+------------------------------
+-                           0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_tuples_inserted()
+ -- savepoint rollback (2 levels)
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ BEGIN;
+ INSERT INTO drop_stats_test_subxact DEFAULT VALUES;
+ SAVEPOINT sp1;
+ INSERT INTO drop_stats_test_subxact DEFAULT VALUES;
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_subxact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                2
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_xact_tuples_inserted()
+ SAVEPOINT sp2;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ DROP TABLE drop_stats_test_subxact;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK TO SAVEPOINT sp2;
++ERROR:  savepoint "sp2" does not exist
+ SELECT pg_stat_get_xact_tuples_inserted(:drop_stats_test_subxact_oid);
+- pg_stat_get_xact_tuples_inserted 
+-----------------------------------
+-                                2
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       3
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ -- savepoint rolback (1 level)
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       3
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ BEGIN;
+ SAVEPOINT sp1;
+ DROP TABLE drop_stats_test_subxact;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SAVEPOINT sp2;
++WARNING:  there is no transaction in progress
+ ROLLBACK TO SAVEPOINT sp1;
++ERROR:  savepoint "sp1" does not exist
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       3
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ -- and now actually drop
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       3
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ BEGIN;
+ SAVEPOINT sp1;
+ DROP TABLE drop_stats_test_subxact;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  relation "drop_stats_test_subxact" does not exist
+ SAVEPOINT sp2;
++WARNING:  there is no transaction in progress
+ RELEASE SAVEPOINT sp1;
++WARNING:  there is no transaction in progress
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT pg_stat_get_live_tuples(:drop_stats_test_subxact_oid);
+- pg_stat_get_live_tuples 
+--------------------------
+-                       0
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_live_tuples()
+ DROP TABLE trunc_stats_test, trunc_stats_test1, trunc_stats_test2, trunc_stats_test3, trunc_stats_test4;
+ DROP TABLE prevstats;
++ERROR:  relation "prevstats" does not exist
+ -----
+ -- Test that last_seq_scan, last_idx_scan are correctly maintained
+ --
+@@ -566,204 +452,202 @@
+ -----
+ BEGIN;
+ CREATE TEMPORARY TABLE test_last_scan(idx_col int primary key, noidx_col int);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ INSERT INTO test_last_scan(idx_col, noidx_col) VALUES(1, 1);
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT last_seq_scan, last_idx_scan FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass;
+- last_seq_scan | last_idx_scan 
+----------------+---------------
+-               | 
+-(1 row)
+-
++ERROR:  column "last_seq_scan" does not exist
+ COMMIT;
++WARNING:  there is no transaction in progress
+ SELECT pg_stat_reset_single_table_counters('test_last_scan'::regclass);
+- pg_stat_reset_single_table_counters 
+--------------------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_single_table_counters()
+ SELECT seq_scan, idx_scan FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass;
+  seq_scan | idx_scan 
+ ----------+----------
+-        0 |        0
+-(1 row)
++(0 rows)
+ 
+ -- ensure we start out with exactly one index and sequential scan
+ BEGIN;
+ SET LOCAL enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET LOCAL enable_indexscan TO on;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL enable_bitmapscan TO off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE noidx_col = 1;
+-            QUERY PLAN            
+-----------------------------------
+- Aggregate
+-   ->  Seq Scan on test_last_scan
+-         Filter: (noidx_col = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE noidx_col = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_last_scan WHERE noidx_col = 1;
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET LOCAL enable_seqscan TO off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Aggregate
+-   ->  Index Scan using test_last_scan_pkey on test_last_scan
+-         Index Cond: (idx_col = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- fetch timestamps from before the next test
+ SELECT last_seq_scan AS test_last_seq, last_idx_scan AS test_last_idx
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass \gset
++ERROR:  column "last_seq_scan" does not exist
+ SELECT pg_sleep(0.1); -- assume a minimum timestamp granularity of 100ms
+  pg_sleep 
+ ----------
+- 
++ t
+ (1 row)
+ 
+ -- cause one sequential scan
+ BEGIN;
+ SET LOCAL enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET LOCAL enable_indexscan TO off;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL enable_bitmapscan TO off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE noidx_col = 1;
+-            QUERY PLAN            
+-----------------------------------
+- Aggregate
+-   ->  Seq Scan on test_last_scan
+-         Filter: (noidx_col = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE noidx_col = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_last_scan WHERE noidx_col = 1;
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- check that just sequential scan stats were incremented
+ SELECT seq_scan, :'test_last_seq' < last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' = last_idx_scan AS idx_ok
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass;
+- seq_scan | seq_ok | idx_scan | idx_ok 
+-----------+--------+----------+--------
+-        2 | t      |        1 | t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT seq_scan, :'test_last_seq' < last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' = last_idx_scan AS idx_ok
++                 ^
+ -- fetch timestamps from before the next test
+ SELECT last_seq_scan AS test_last_seq, last_idx_scan AS test_last_idx
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass \gset
++ERROR:  column "last_seq_scan" does not exist
+ SELECT pg_sleep(0.1);
+  pg_sleep 
+ ----------
+- 
++ t
+ (1 row)
+ 
+ -- cause one index scan
+ BEGIN;
+ SET LOCAL enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET LOCAL enable_indexscan TO on;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL enable_bitmapscan TO off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+-                          QUERY PLAN                          
+---------------------------------------------------------------
+- Aggregate
+-   ->  Index Scan using test_last_scan_pkey on test_last_scan
+-         Index Cond: (idx_col = 1)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- check that just index scan stats were incremented
+ SELECT seq_scan, :'test_last_seq' = last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' < last_idx_scan AS idx_ok
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass;
+- seq_scan | seq_ok | idx_scan | idx_ok 
+-----------+--------+----------+--------
+-        2 | t      |        2 | t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT seq_scan, :'test_last_seq' = last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' < last_idx_scan AS idx_ok
++                 ^
+ -- fetch timestamps from before the next test
+ SELECT last_seq_scan AS test_last_seq, last_idx_scan AS test_last_idx
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass \gset
++ERROR:  column "last_seq_scan" does not exist
+ SELECT pg_sleep(0.1);
+  pg_sleep 
+ ----------
+- 
++ t
+ (1 row)
+ 
+ -- cause one bitmap index scan
+ BEGIN;
+ SET LOCAL enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET LOCAL enable_indexscan TO off;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET LOCAL enable_bitmapscan TO on;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Aggregate
+-   ->  Bitmap Heap Scan on test_last_scan
+-         Recheck Cond: (idx_col = 1)
+-         ->  Bitmap Index Scan on test_last_scan_pkey
+-               Index Cond: (idx_col = 1)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS off) SELECT count(*) FROM test_last_scan WHERE idx_col = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT count(*) FROM test_last_scan WHERE idx_col = 1;
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ -- check that just index scan stats were incremented
+ SELECT seq_scan, :'test_last_seq' = last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' < last_idx_scan AS idx_ok
+ FROM pg_stat_all_tables WHERE relid = 'test_last_scan'::regclass;
+- seq_scan | seq_ok | idx_scan | idx_ok 
+-----------+--------+----------+--------
+-        2 | t      |        3 | t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT seq_scan, :'test_last_seq' = last_seq_scan AS seq_ok, idx_scan, :'test_last_idx' < last_idx_scan AS idx_ok
++                 ^
+ -----
+ -- Test reset of some stats for shared table
+ -----
+@@ -776,33 +660,25 @@
+ BEGIN;
+ SELECT current_database() as datname \gset
+ COMMENT ON DATABASE :"datname" IS 'This is a test comment';
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ COMMIT;
++WARNING:  there is no transaction in progress
+ -- check that the stats are reset.
+ SELECT (n_tup_ins + n_tup_upd) > 0 AS has_data FROM pg_stat_all_tables
+   WHERE relid = 'pg_shdescription'::regclass;
+  has_data 
+ ----------
+- t
+-(1 row)
++(0 rows)
+ 
+ SELECT pg_stat_reset_single_table_counters('pg_shdescription'::regclass);
+- pg_stat_reset_single_table_counters 
+--------------------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_single_table_counters()
+ SELECT (n_tup_ins + n_tup_upd) > 0 AS has_data FROM pg_stat_all_tables
+   WHERE relid = 'pg_shdescription'::regclass;
+  has_data 
+ ----------
+- f
+-(1 row)
++(0 rows)
+ 
+ -- set back comment
+ \if :{?description_before}
+@@ -815,220 +691,170 @@
+ -----
+ -- Test that sessions is incremented when a new session is started in pg_stat_database
+ SELECT sessions AS db_stat_sessions FROM pg_stat_database WHERE datname = (SELECT current_database()) \gset
++ERROR:  column "sessions" does not exist
+ \c
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sessions > :db_stat_sessions FROM pg_stat_database WHERE datname = (SELECT current_database());
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT sessions > :db_stat_sessions FROM pg_stat_database WHERE datname = (SELECT current_database())
++                  ^
+ -- Test pg_stat_bgwriter checkpointer-related stats, together with pg_stat_wal
+ SELECT checkpoints_req AS rqst_ckpts_before FROM pg_stat_bgwriter \gset
++no rows returned for \gset
+ -- Test pg_stat_wal (and make a temp table so our temp schema exists)
+ SELECT wal_bytes AS wal_bytes_before FROM pg_stat_wal \gset
++ERROR:  relation "pg_stat_wal" does not exist
+ CREATE TEMP TABLE test_stats_temp AS SELECT 17;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ DROP TABLE test_stats_temp;
+ -- Checkpoint twice: The checkpointer reports stats after reporting completion
+ -- of the checkpoint. But after a second checkpoint we'll see at least the
+ -- results of the first.
+ CHECKPOINT;
++ERROR:  at or near "checkpoint": syntax error
++DETAIL:  source SQL:
++CHECKPOINT
++^
+ CHECKPOINT;
++ERROR:  at or near "checkpoint": syntax error
++DETAIL:  source SQL:
++CHECKPOINT
++^
+ SELECT checkpoints_req > :rqst_ckpts_before FROM pg_stat_bgwriter;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT checkpoints_req > :rqst_ckpts_before FROM pg_stat_bgwriter
++                         ^
+ SELECT wal_bytes > :wal_bytes_before FROM pg_stat_wal;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT wal_bytes > :wal_bytes_before FROM pg_stat_wal
++                   ^
+ -- Test pg_stat_get_backend_idset() and some allied functions.
+ -- In particular, verify that their notion of backend ID matches
+ -- our temp schema index.
+ SELECT (current_schemas(true))[1] = ('pg_temp_' || beid::text) AS match
+ FROM pg_stat_get_backend_idset() beid
+ WHERE pg_stat_get_backend_pid(beid) = pg_backend_pid();
+- match 
+--------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_backend_idset()
+ -----
+ -- Test that resetting stats works for reset timestamp
+ -----
+ -- Test that reset_slru with a specified SLRU works.
+ SELECT stats_reset AS slru_commit_ts_reset_ts FROM pg_stat_slru WHERE name = 'CommitTs' \gset
++no rows returned for \gset
+ SELECT stats_reset AS slru_notify_reset_ts FROM pg_stat_slru WHERE name = 'Notify' \gset
++no rows returned for \gset
+ SELECT pg_stat_reset_slru('CommitTs');
+- pg_stat_reset_slru 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_slru()
+ SELECT stats_reset > :'slru_commit_ts_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'CommitTs';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'slru_commit_ts_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'CommitTs'
++                     ^
+ SELECT stats_reset AS slru_commit_ts_reset_ts FROM pg_stat_slru WHERE name = 'CommitTs' \gset
++no rows returned for \gset
+ -- Test that multiple SLRUs are reset when no specific SLRU provided to reset function
+ SELECT pg_stat_reset_slru(NULL);
+- pg_stat_reset_slru 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_slru()
+ SELECT stats_reset > :'slru_commit_ts_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'CommitTs';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'slru_commit_ts_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'CommitTs'
++                     ^
+ SELECT stats_reset > :'slru_notify_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'Notify';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'slru_notify_reset_ts'::timestamptz FROM pg_stat_slru WHERE name = 'Notify'
++                     ^
+ -- Test that reset_shared with archiver specified as the stats type works
+ SELECT stats_reset AS archiver_reset_ts FROM pg_stat_archiver \gset
++no rows returned for \gset
+ SELECT pg_stat_reset_shared('archiver');
+- pg_stat_reset_shared 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_shared()
+ SELECT stats_reset > :'archiver_reset_ts'::timestamptz FROM pg_stat_archiver;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'archiver_reset_ts'::timestamptz FROM pg_stat_archiver
++                     ^
+ SELECT stats_reset AS archiver_reset_ts FROM pg_stat_archiver \gset
++no rows returned for \gset
+ -- Test that reset_shared with bgwriter specified as the stats type works
+ SELECT stats_reset AS bgwriter_reset_ts FROM pg_stat_bgwriter \gset
++no rows returned for \gset
+ SELECT pg_stat_reset_shared('bgwriter');
+- pg_stat_reset_shared 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_shared()
+ SELECT stats_reset > :'bgwriter_reset_ts'::timestamptz FROM pg_stat_bgwriter;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'bgwriter_reset_ts'::timestamptz FROM pg_stat_bgwriter
++                     ^
+ SELECT stats_reset AS bgwriter_reset_ts FROM pg_stat_bgwriter \gset
++no rows returned for \gset
+ -- Test that reset_shared with wal specified as the stats type works
+ SELECT stats_reset AS wal_reset_ts FROM pg_stat_wal \gset
++ERROR:  relation "pg_stat_wal" does not exist
+ SELECT pg_stat_reset_shared('wal');
+- pg_stat_reset_shared 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_shared()
+ SELECT stats_reset > :'wal_reset_ts'::timestamptz FROM pg_stat_wal;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'wal_reset_ts'::timestamptz FROM pg_stat_wal
++                     ^
+ SELECT stats_reset AS wal_reset_ts FROM pg_stat_wal \gset
++ERROR:  relation "pg_stat_wal" does not exist
+ -- Test that reset_shared with no specified stats type doesn't reset anything
+ SELECT pg_stat_reset_shared(NULL);
+- pg_stat_reset_shared 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_shared()
+ SELECT stats_reset = :'archiver_reset_ts'::timestamptz FROM pg_stat_archiver;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset = :'archiver_reset_ts'::timestamptz FROM pg_stat_archiver
++                     ^
+ SELECT stats_reset = :'bgwriter_reset_ts'::timestamptz FROM pg_stat_bgwriter;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset = :'bgwriter_reset_ts'::timestamptz FROM pg_stat_bgwriter
++                     ^
+ SELECT stats_reset = :'wal_reset_ts'::timestamptz FROM pg_stat_wal;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset = :'wal_reset_ts'::timestamptz FROM pg_stat_wal
++                     ^
+ -- Test that reset works for pg_stat_database
+ -- Since pg_stat_database stats_reset starts out as NULL, reset it once first so we have something to compare it to
+ SELECT pg_stat_reset();
+- pg_stat_reset 
+----------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset()
+ SELECT stats_reset AS db_reset_ts FROM pg_stat_database WHERE datname = (SELECT current_database()) \gset
++no rows returned for \gset
+ SELECT pg_stat_reset();
+- pg_stat_reset 
+----------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset()
+ SELECT stats_reset > :'db_reset_ts'::timestamptz FROM pg_stat_database WHERE datname = (SELECT current_database());
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT stats_reset > :'db_reset_ts'::timestamptz FROM pg_stat_database WHERE datname = (SELECT current_database())
++                     ^
+ ----
+ -- pg_stat_get_snapshot_timestamp behavior
+ ----
+ BEGIN;
+ SET LOCAL stats_fetch_consistency = snapshot;
++ERROR:  unrecognized configuration parameter "stats_fetch_consistency"
+ -- no snapshot yet, return NULL
+ SELECT pg_stat_get_snapshot_timestamp();
+- pg_stat_get_snapshot_timestamp 
+---------------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- any attempt at accessing stats will build snapshot
+ SELECT pg_stat_get_function_calls(0);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() >= NOW();
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- shows NULL again after clearing
+ SELECT pg_stat_clear_snapshot();
+- pg_stat_clear_snapshot 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp();
+- pg_stat_get_snapshot_timestamp 
+---------------------------------
+- 
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ ----
+ -- Changing stats_fetch_consistency in a transaction.
+@@ -1036,90 +862,51 @@
+ BEGIN;
+ -- Stats filled under the cache mode
+ SET LOCAL stats_fetch_consistency = cache;
++ERROR:  unrecognized configuration parameter "stats_fetch_consistency"
+ SELECT pg_stat_get_function_calls(0);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() IS NOT NULL AS snapshot_ok;
+- snapshot_ok 
+--------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Success in accessing pre-existing snapshot data.
+ SET LOCAL stats_fetch_consistency = snapshot;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() IS NOT NULL AS snapshot_ok;
+- snapshot_ok 
+--------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_function_calls(0);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() IS NOT NULL AS snapshot_ok;
+- snapshot_ok 
+--------------
+- t
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- Snapshot cleared.
+ SET LOCAL stats_fetch_consistency = none;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() IS NOT NULL AS snapshot_ok;
+- snapshot_ok 
+--------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_function_calls(0);
+- pg_stat_get_function_calls 
+-----------------------------
+-                           
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT pg_stat_get_snapshot_timestamp() IS NOT NULL AS snapshot_ok;
+- snapshot_ok 
+--------------
+- f
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ ----
+ -- pg_stat_have_stats behavior
+ ----
+ -- fixed-numbered stats exist
+ SELECT pg_stat_have_stats('bgwriter', 0, 0);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- unknown stats kinds error out
+ SELECT pg_stat_have_stats('zaphod', 0, 0);
+-ERROR:  invalid statistics kind: "zaphod"
++ERROR:  unknown function: pg_stat_have_stats()
+ -- db stats have objoid 0
+ SELECT pg_stat_have_stats('database', :dboid, 1);
+- pg_stat_have_stats 
+---------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ SELECT pg_stat_have_stats('database', :dboid, 0);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- pg_stat_have_stats returns true for committed index creation
+ CREATE table stats_test_tab1 as select generate_series(1,10) a;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ CREATE index stats_test_idx1 on stats_test_tab1(a);
+ SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
+ SET enable_seqscan TO off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ select a from stats_test_tab1 where a = 3;
+  a 
+ ---
+@@ -1127,28 +914,19 @@
+ (1 row)
+ 
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- pg_stat_have_stats returns false for dropped index with stats
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ DROP index stats_test_idx1;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- pg_stat_have_stats returns false for rolled back index creation
+ BEGIN;
+ CREATE index stats_test_idx1 on stats_test_tab1(a);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
+ select a from stats_test_tab1 where a = 3;
+  a 
+@@ -1157,20 +935,14 @@
+ (1 row)
+ 
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- pg_stat_have_stats returns true for reindex CONCURRENTLY
+ CREATE index stats_test_idx1 on stats_test_tab1(a);
++ERROR:  index with name "stats_test_idx1" already exists
+ SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
+ select a from stats_test_tab1 where a = 3;
+  a 
+@@ -1179,58 +951,37 @@
+ (1 row)
+ 
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ REINDEX index CONCURRENTLY stats_test_idx1;
++ERROR:  at or near "concurrently": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++REINDEX index CONCURRENTLY stats_test_idx1
++              ^
++HINT:  CockroachDB does not require reindexing.
+ -- false for previous oid
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- true for new oid
+ SELECT 'stats_test_idx1'::regclass::oid AS stats_test_idx1_oid \gset
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- pg_stat_have_stats returns true for a rolled back drop index with stats
+ BEGIN;
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ DROP index stats_test_idx1;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ SELECT pg_stat_have_stats('relation', :dboid, :stats_test_idx1_oid);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ -- put enable_seqscan back to on
+ SET enable_seqscan TO on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- ensure that stats accessors handle NULL input correctly
+ SELECT pg_stat_get_replication_slot(NULL);
+- pg_stat_get_replication_slot 
+-------------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_replication_slot()
+ SELECT pg_stat_get_subscription_stats(NULL);
+- pg_stat_get_subscription_stats 
+---------------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_subscription_stats()
+ -- Test that the following operations are tracked in pg_stat_io:
+ -- - reads of target blocks into shared buffers
+ -- - writes of shared buffers to permanent storage
+@@ -1243,118 +994,126 @@
+ -- extends.
+ SELECT sum(extends) AS io_sum_shared_before_extends
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT sum(writes) AS writes, sum(fsyncs) AS fsyncs
+   FROM pg_stat_io
+   WHERE object = 'relation' \gset io_sum_shared_before_
++ERROR:  relation "pg_stat_io" does not exist
+ CREATE TABLE test_io_shared(a int);
+ INSERT INTO test_io_shared SELECT i FROM generate_series(1,100)i;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(extends) AS io_sum_shared_after_extends
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_shared_after_extends > :io_sum_shared_before_extends;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_shared_after_extends > :io_sum_shared_before_extends
++       ^
+ -- After a checkpoint, there should be some additional IOCONTEXT_NORMAL writes
+ -- and fsyncs.
+ -- See comment above for rationale for two explicit CHECKPOINTs.
+ CHECKPOINT;
++ERROR:  at or near "checkpoint": syntax error
++DETAIL:  source SQL:
++CHECKPOINT
++^
+ CHECKPOINT;
++ERROR:  at or near "checkpoint": syntax error
++DETAIL:  source SQL:
++CHECKPOINT
++^
+ SELECT sum(writes) AS writes, sum(fsyncs) AS fsyncs
+   FROM pg_stat_io
+   WHERE object = 'relation' \gset io_sum_shared_after_
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_shared_after_writes > :io_sum_shared_before_writes;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_shared_after_writes > :io_sum_shared_before_writes
++       ^
+ SELECT current_setting('fsync') = 'off'
+   OR :io_sum_shared_after_fsyncs > :io_sum_shared_before_fsyncs;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT current_setting('fsync') = 'off'
++  OR :io_sum_shared_after_fsyncs > :io_sum_shared_before_fsyncs
++     ^
+ -- Change the tablespace so that the table is rewritten directly, then SELECT
+ -- from it to cause it to be read back into shared buffers.
+ SELECT sum(reads) AS io_sum_shared_before_reads
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ -- Do this in a transaction to prevent spurious failures due to concurrent accesses to our newly
+ -- rewritten table, e.g. by autovacuum.
+ BEGIN;
+ ALTER TABLE test_io_shared SET TABLESPACE regress_tblspace;
++ERROR:  at or near "tablespace": syntax error
++DETAIL:  source SQL:
++ALTER TABLE test_io_shared SET TABLESPACE regress_tblspace
++                               ^
++HINT:  try \h ALTER TABLE
+ -- SELECT from the table so that the data is read into shared buffers and
+ -- context 'normal', object 'relation' reads are counted.
+ SELECT COUNT(*) FROM test_io_shared;
+- count 
+--------
+-   100
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(reads) AS io_sum_shared_after_reads
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation'  \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_shared_after_reads > :io_sum_shared_before_reads;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_shared_after_reads > :io_sum_shared_before_reads
++       ^
+ SELECT sum(hits) AS io_sum_shared_before_hits
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ -- Select from the table again to count hits.
+ -- Ensure we generate hits by forcing a nested loop self-join with no
+ -- materialize node. The outer side's buffer will stay pinned, preventing its
+ -- eviction, while we loop through the inner side and generate hits.
+ BEGIN;
+ SET LOCAL enable_nestloop TO on; SET LOCAL enable_mergejoin TO off;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SET LOCAL enable_hashjoin TO off; SET LOCAL enable_material TO off;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- ensure plan stays as we expect it to
+ EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM test_io_shared t1 INNER JOIN test_io_shared t2 USING (a);
+-                QUERY PLAN                 
+--------------------------------------------
+- Aggregate
+-   ->  Nested Loop
+-         Join Filter: (t1.a = t2.a)
+-         ->  Seq Scan on test_io_shared t1
+-         ->  Seq Scan on test_io_shared t2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT COUNT(*) FROM test_io_shared t1 INNER JOIN test_io_shared t2 USING (a)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT COUNT(*) FROM test_io_shared t1 INNER JOIN test_io_shared t2 USING (a);
+- count 
+--------
+-   100
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(hits) AS io_sum_shared_after_hits
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_shared_after_hits > :io_sum_shared_before_hits;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_shared_after_hits > :io_sum_shared_before_hits
++       ^
+ DROP TABLE test_io_shared;
+ -- Test that the follow IOCONTEXT_LOCAL IOOps are tracked in pg_stat_io:
+ -- - eviction of local buffers in order to reuse them
+@@ -1366,23 +1125,33 @@
+ -- accessed by previous tests in this session.
+ \c
+ SET temp_buffers TO 100;
++ERROR:  unimplemented: the configuration setting "temp_buffers" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TEMPORARY TABLE test_io_local(a int, b TEXT);
+ SELECT sum(extends) AS extends, sum(evictions) AS evictions, sum(writes) AS writes
+   FROM pg_stat_io
+   WHERE context = 'normal' AND object = 'temp relation' \gset io_sum_local_before_
++ERROR:  relation "pg_stat_io" does not exist
+ -- Insert tuples into the temporary table, generating extends in the stats.
+ -- Insert enough values that we need to reuse and write out dirty local
+ -- buffers, generating evictions and writes.
+ INSERT INTO test_io_local SELECT generate_series(1, 5000) as id, repeat('a', 200);
+ -- Ensure the table is large enough to exceed our temp_buffers setting.
+ SELECT pg_relation_size('test_io_local') / current_setting('block_size')::int8 > 100;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_relation_size()
+ SELECT sum(reads) AS io_sum_local_before_reads
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'temp relation' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ -- Read in evicted buffers, generating reads.
+ SELECT COUNT(*) FROM test_io_local;
+  count 
+@@ -1391,45 +1160,54 @@
+ (1 row)
+ 
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(evictions) AS evictions,
+        sum(reads) AS reads,
+        sum(writes) AS writes,
+        sum(extends) AS extends
+   FROM pg_stat_io
+   WHERE context = 'normal' AND object = 'temp relation'  \gset io_sum_local_after_
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_local_after_evictions > :io_sum_local_before_evictions,
+        :io_sum_local_after_reads > :io_sum_local_before_reads,
+        :io_sum_local_after_writes > :io_sum_local_before_writes,
+        :io_sum_local_after_extends > :io_sum_local_before_extends;
+- ?column? | ?column? | ?column? | ?column? 
+-----------+----------+----------+----------
+- t        | t        | t        | t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_local_after_evictions > :io_sum_local_before_evictions,
++       ^
+ -- Change the tablespaces so that the temporary table is rewritten to other
+ -- local buffers, exercising a different codepath than standard local buffer
+ -- writes.
+ ALTER TABLE test_io_local SET TABLESPACE regress_tblspace;
++ERROR:  at or near "tablespace": syntax error
++DETAIL:  source SQL:
++ALTER TABLE test_io_local SET TABLESPACE regress_tblspace
++                              ^
++HINT:  try \h ALTER TABLE
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(writes) AS io_sum_local_new_tblspc_writes
+   FROM pg_stat_io WHERE context = 'normal' AND object = 'temp relation'  \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_local_new_tblspc_writes > :io_sum_local_after_writes;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_local_new_tblspc_writes > :io_sum_local_after_writes
++       ^
+ RESET temp_buffers;
++ERROR:  unimplemented: the configuration setting "temp_buffers" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test that reuse of strategy buffers and reads of blocks into these reused
+ -- buffers while VACUUMing are tracked in pg_stat_io. If there is sufficient
+ -- demand for shared buffers from concurrent queries, some buffers may be
+@@ -1443,87 +1221,102 @@
+ -- shared buffers -- preventing us from testing BAS_VACUUM BufferAccessStrategy
+ -- reads.
+ SET wal_skip_threshold = '1 kB';
++ERROR:  unrecognized configuration parameter "wal_skip_threshold"
+ SELECT sum(reuses) AS reuses, sum(reads) AS reads, sum(evictions) AS evictions
+   FROM pg_stat_io WHERE context = 'vacuum' \gset io_sum_vac_strategy_before_
++ERROR:  relation "pg_stat_io" does not exist
+ CREATE TABLE test_io_vac_strategy(a int, b int) WITH (autovacuum_enabled = 'false');
++NOTICE:  storage parameter "autovacuum_enabled = 'false'" is ignored
+ INSERT INTO test_io_vac_strategy SELECT i, i from generate_series(1, 4500)i;
+ -- Ensure that the next VACUUM will need to perform IO by rewriting the table
+ -- first with VACUUM (FULL).
+ VACUUM (FULL) test_io_vac_strategy;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM (FULL) test_io_vac_strategy
++^
+ -- Use the minimum BUFFER_USAGE_LIMIT to cause reuses or evictions with the
+ -- smallest table possible.
+ VACUUM (PARALLEL 0, BUFFER_USAGE_LIMIT 128) test_io_vac_strategy;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM (PARALLEL 0, BUFFER_USAGE_LIMIT 128) test_io_vac_strategy
++^
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(reuses) AS reuses, sum(reads) AS reads, sum(evictions) AS evictions
+   FROM pg_stat_io WHERE context = 'vacuum' \gset io_sum_vac_strategy_after_
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_vac_strategy_after_reads > :io_sum_vac_strategy_before_reads;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_vac_strategy_after_reads > :io_sum_vac_strategy_before_reads
++       ^
+ SELECT (:io_sum_vac_strategy_after_reuses + :io_sum_vac_strategy_after_evictions) >
+   (:io_sum_vac_strategy_before_reuses + :io_sum_vac_strategy_before_evictions);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT (:io_sum_vac_strategy_after_reuses + :io_sum_vac_strategy_after_evictions) >
++        ^
+ RESET wal_skip_threshold;
++ERROR:  unrecognized configuration parameter "wal_skip_threshold"
+ -- Test that extends done by a CTAS, which uses a BAS_BULKWRITE
+ -- BufferAccessStrategy, are tracked in pg_stat_io.
+ SELECT sum(extends) AS io_sum_bulkwrite_strategy_extends_before
+   FROM pg_stat_io WHERE context = 'bulkwrite' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ CREATE TABLE test_io_bulkwrite_strategy AS SELECT i FROM generate_series(1,100)i;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ SELECT pg_stat_force_next_flush();
+- pg_stat_force_next_flush 
+---------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_force_next_flush()
+ SELECT sum(extends) AS io_sum_bulkwrite_strategy_extends_after
+   FROM pg_stat_io WHERE context = 'bulkwrite' \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_sum_bulkwrite_strategy_extends_after > :io_sum_bulkwrite_strategy_extends_before;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_sum_bulkwrite_strategy_extends_after > :io_sum_bulkwrite_strategy_extends_before
++       ^
+ -- Test IO stats reset
+ SELECT pg_stat_have_stats('io', 0, 0);
+- pg_stat_have_stats 
+---------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_have_stats()
+ SELECT sum(evictions) + sum(reuses) + sum(extends) + sum(fsyncs) + sum(reads) + sum(writes) + sum(writebacks) + sum(hits) AS io_stats_pre_reset
+   FROM pg_stat_io \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT pg_stat_reset_shared('io');
+- pg_stat_reset_shared 
+-----------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_reset_shared()
+ SELECT sum(evictions) + sum(reuses) + sum(extends) + sum(fsyncs) + sum(reads) + sum(writes) + sum(writebacks) + sum(hits) AS io_stats_post_reset
+   FROM pg_stat_io \gset
++ERROR:  relation "pg_stat_io" does not exist
+ SELECT :io_stats_post_reset < :io_stats_pre_reset;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT :io_stats_post_reset < :io_stats_pre_reset
++       ^
+ -- test BRIN index doesn't block HOT update
+ CREATE TABLE brin_hot (
+   id  integer PRIMARY KEY,
+   val integer NOT NULL
+ ) WITH (autovacuum_enabled = off, fillfactor = 70);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
++NOTICE:  storage parameter "fillfactor" is ignored
+ INSERT INTO brin_hot SELECT *, 0 FROM generate_series(1, 235);
+ CREATE INDEX val_brin ON brin_hot using brin(val);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX val_brin ON brin_hot using brin(val)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE FUNCTION wait_for_hot_stats() RETURNS void AS $$
+ DECLARE
+   start_time timestamptz := clock_timestamp();
+@@ -1544,6 +1337,31 @@
+     EXTRACT(epoch FROM clock_timestamp() - start_time);
+ END
+ $$ LANGUAGE plpgsql;
++ERROR:  at or near ";": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DECLARE
++  start_time timestamptz := clock_timestamp();
++  updated bool;
++BEGIN
++  -- we don't want to wait forever; loop will exit after 30 seconds
++  FOR i IN 1 .. 300 LOOP
++    SELECT (pg_stat_get_tuples_hot_updated('brin_hot'::regclass::oid) > 0) INTO updated;
++    EXIT WHEN updated;
++
++    -- wait a little
++    PERFORM pg_sleep_for('100 milliseconds');
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ UPDATE brin_hot SET val = -3 WHERE id = 42;
+ -- We can't just call wait_for_hot_stats() at this point, because we only
+ -- transmit stats when the session goes idle, and we probably didn't
+@@ -1553,19 +1371,12 @@
+ -- then send its stats before dying.
+ \c -
+ SELECT wait_for_hot_stats();
+- wait_for_hot_stats 
+---------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: wait_for_hot_stats()
+ SELECT pg_stat_get_tuples_hot_updated('brin_hot'::regclass::oid);
+- pg_stat_get_tuples_hot_updated 
+---------------------------------
+-                              1
+-(1 row)
+-
++ERROR:  unknown function: pg_stat_get_tuples_hot_updated()
+ DROP TABLE brin_hot;
+ DROP FUNCTION wait_for_hot_stats();
++ERROR:  unknown function: wait_for_hot_stats()
+ -- Test handling of index predicates - updating attributes in precicates
+ -- should not block HOT when summarizing indexes are involved. We update
+ -- a row that was not indexed due to the index predicate, and becomes
+@@ -1573,14 +1384,28 @@
+ CREATE TABLE brin_hot_2 (a int, b int);
+ INSERT INTO brin_hot_2 VALUES (1, 100);
+ CREATE INDEX ON brin_hot_2 USING brin (b) WHERE a = 2;
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX ON brin_hot_2 USING brin (b) WHERE a = 2
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ UPDATE brin_hot_2 SET a = 2;
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_2 WHERE a = 2 AND b = 100;
+-            QUERY PLAN             
+------------------------------------
+- Seq Scan on brin_hot_2
+-   Filter: ((a = 2) AND (b = 100))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_2 WHERE a = 2 AND b = 100
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT COUNT(*) FROM brin_hot_2 WHERE a = 2 AND b = 100;
+  count 
+ -------
+@@ -1588,15 +1413,13 @@
+ (1 row)
+ 
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_2 WHERE a = 2 AND b = 100;
+-                 QUERY PLAN                  
+----------------------------------------------
+- Bitmap Heap Scan on brin_hot_2
+-   Recheck Cond: ((b = 100) AND (a = 2))
+-   ->  Bitmap Index Scan on brin_hot_2_b_idx
+-         Index Cond: (b = 100)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_2 WHERE a = 2 AND b = 100
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT COUNT(*) FROM brin_hot_2 WHERE a = 2 AND b = 100;
+  count 
+ -------
+@@ -1608,18 +1431,31 @@
+ -- BRIN column.
+ -- https://postgr.es/m/05ebcb44-f383-86e3-4f31-0a97a55634cf@enterprisedb.com
+ CREATE TABLE brin_hot_3 (a int, filler text) WITH (fillfactor = 10);
++NOTICE:  storage parameter "fillfactor" is ignored
+ INSERT INTO brin_hot_3 SELECT 1, repeat(' ', 500) FROM generate_series(1, 20);
+ CREATE INDEX ON brin_hot_3 USING brin (a) WITH (pages_per_range = 1);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX ON brin_hot_3 USING brin (a) WITH (pages_per_range = 1)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ UPDATE brin_hot_3 SET a = 2;
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_3 WHERE a = 2;
+-                 QUERY PLAN                  
+----------------------------------------------
+- Bitmap Heap Scan on brin_hot_3
+-   Recheck Cond: (a = 2)
+-   ->  Bitmap Index Scan on brin_hot_3_a_idx
+-         Index Cond: (a = 2)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_hot_3 WHERE a = 2
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT COUNT(*) FROM brin_hot_3 WHERE a = 2;
+  count 
+ -------
+@@ -1628,4 +1464,5 @@
+ 
+ DROP TABLE brin_hot_3;
+ SET enable_seqscan = on;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- End of Stats Test
