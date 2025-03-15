@@ -108,6 +108,7 @@ go_library(
         "stores_base.go",
         "stores_server.go",
         "stores_store_liveness.go",
+        "task_pacer.go",
         "testing_knobs.go",
         "ts_maintenance_queue.go",
         ":gen-refreshraftreason-stringer",  # keep
@@ -379,6 +380,7 @@ go_test(
         "store_replica_btree_test.go",
         "store_test.go",
         "stores_test.go",
+        "task_pacer_test.go",
         "testutils_test.go",
         "ts_maintenance_queue_test.go",
         "txn_recovery_integration_test.go",
