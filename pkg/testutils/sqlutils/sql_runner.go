@@ -244,6 +244,31 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	}
 }
 
+// ExpectErrWithTimeout wraps ExpectErr with a timeout and retry on a specific error.
+func (sr *SQLRunner) ExpectErrWithTimeoutAndRetry(
+	t Fataler, errRE string, query string, retryableErrorRE string, args ...interface{},
+) {
+	helperOrNoop(t)()
+	d := sr.SucceedsSoonDuration
+	if d == 0 {
+		d = testutils.SucceedsSoonDuration()
+	}
+	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
+		_, err := sr.DB.ExecContext(ctx, query, args...)
+		// If the error matches the retryable error expression, retry the query once.
+		if err != nil && testutils.IsError(err, retryableErrorRE) {
+			_, err = sr.DB.ExecContext(ctx, query, args...)
+		}
+		sr.expectErr(t, query, err, errRE)
+		return nil
+	})
+
+	// Fail the test on unexpected error message OR execution timeout
+	if err != nil {
+		t.Fatalf("failed assert error: %s", err)
+	}
+}
+
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (sr *SQLRunner) Query(t Fataler, query string, args ...interface{}) *gosql.Rows {
 	helperOrNoop(t)()
