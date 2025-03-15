@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -25,6 +26,7 @@ import (
 type streamClient[Req, Resp any] interface {
 	Send(Req) error
 	Recv() (Resp, error)
+	grpc.ClientStream
 }
 
 // streamConstructor creates a new gRPC stream client over the provided client
@@ -75,6 +77,8 @@ type pooledStream[Req, Resp any, Conn comparable] struct {
 
 	reqC  chan Req
 	respC chan result[Resp]
+
+	reqMsg *grpcutil.PreparedMsg
 }
 
 func newPooledStream[Req, Resp any, Conn comparable](
@@ -90,6 +94,7 @@ func newPooledStream[Req, Resp any, Conn comparable](
 		streamCancel: streamCancel,
 		reqC:         make(chan Req),
 		respC:        make(chan result[Resp], 1),
+		reqMsg:       new(grpcutil.PreparedMsg),
 	}
 }
 
@@ -102,7 +107,12 @@ func (s *pooledStream[Req, Resp, Conn]) run(ctx context.Context) {
 func (s *pooledStream[Req, Resp, Conn]) runOnce(ctx context.Context) (loop bool) {
 	select {
 	case req := <-s.reqC:
-		err := s.stream.Send(req)
+		err := s.reqMsg.Encode(s.stream, req)
+		if err != nil {
+			s.respC <- result[Resp]{err: err}
+			return false
+		}
+		err = s.stream.SendMsg(s.reqMsg.AsGrpc())
 		if err != nil {
 			// From grpc.ClientStream.SendMsg:
 			// > On error, SendMsg aborts the stream.
