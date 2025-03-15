@@ -108,6 +108,9 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
     ],
 )
 
