@@ -30,7 +30,7 @@ func (vs *UnQuantizedVectorSet) GetCentroidDistances() []float32 {
 // Clone implements the QuantizedVectorSet interface.
 func (vs *UnQuantizedVectorSet) Clone() QuantizedVectorSet {
 	return &UnQuantizedVectorSet{
-		Centroid:          slices.Clone(vs.Centroid),
+		Centroid:          vs.Centroid, // Centroid is immutable
 		CentroidDistances: slices.Clone(vs.CentroidDistances),
 		Vectors:           vs.Vectors.Clone(),
 	}
@@ -38,7 +38,8 @@ func (vs *UnQuantizedVectorSet) Clone() QuantizedVectorSet {
 
 // Clear implements the QuantizedVectorSet interface.
 func (vs *UnQuantizedVectorSet) Clear(centroid vector.T) {
-	copy(vs.Centroid, centroid)
+	// vs.Centroid is immutable, so do not try to reuse its memory.
+	vs.Centroid = centroid
 	vs.CentroidDistances = vs.CentroidDistances[:0]
 	vs.Vectors.Clear()
 }

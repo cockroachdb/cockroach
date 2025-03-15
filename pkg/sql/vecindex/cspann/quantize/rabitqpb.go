@@ -138,7 +138,7 @@ func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
 // Clone implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 	return &RaBitQuantizedVectorSet{
-		Centroid:          slices.Clone(vs.Centroid),
+		Centroid:          vs.Centroid, // Centroid is immutable
 		Codes:             vs.Codes.Clone(),
 		CodeCounts:        slices.Clone(vs.CodeCounts),
 		CentroidDistances: slices.Clone(vs.CentroidDistances),
@@ -161,7 +161,8 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes.
 	}
 
-	copy(vs.Centroid, centroid)
+	// vs.Centroid is immutable, so do not try to reuse its memory.
+	vs.Centroid = centroid
 	vs.Codes.Clear()
 	vs.CodeCounts = vs.CodeCounts[:0]
 	vs.CentroidDistances = vs.CentroidDistances[:0]
