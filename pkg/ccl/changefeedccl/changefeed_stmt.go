@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
@@ -312,6 +313,20 @@ func changefeedPlanHook(
 		// Start the job.
 		if err := sj.Start(ctx); err != nil {
 			return err
+		}
+
+		// This warning will only appear for enterprise changefeeds due to how the planhook buffer works
+		// TODO (keithch): Should we expand this to sinkless?
+		const warningThresholdHours = 2
+		if opts.HasStartCursor() && st != changefeedbase.OnlyInitialScan {
+			cursorTS, err := strconv.ParseInt(opts.GetCursor(), 10, 64)
+			if err != nil {
+				return err
+			}
+			statementTS := p.ExtendedEvalContext().GetStmtTimestamp().UnixNano()
+			if cursorTS < statementTS && statementTS-cursorTS > warningThresholdHours*int64(time.Hour/time.Nanosecond) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("the provided cursor is more than %d hours old, which could result in increased changefeed latency", warningThresholdHours))
+			}
 		}
 
 		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
