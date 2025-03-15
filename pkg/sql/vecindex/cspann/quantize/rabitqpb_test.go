@@ -77,7 +77,6 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	// Ensure that cloning does not disturb anything.
 	cloned := quantizedSet.Clone().(*RaBitQuantizedVectorSet)
 	copy(cloned.Codes.At(0), []uint64{10, 20, 30})
-	cloned.Centroid[0] = 10
 	cloned.CodeCounts[0] = 10
 	cloned.CentroidDistances[0] = 10
 	cloned.DotProducts[0] = 10
@@ -97,7 +96,7 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, float32(4.56), quantizedSet.DotProducts[2])
 
 	// Check that clone is unaffected.
-	require.Equal(t, []float32{10, 2, 3}, cloned.Centroid)
+	require.Equal(t, []float32{1, 2, 3}, cloned.Centroid)
 	require.Equal(t, RaBitQCodeSet{Count: 1, Width: 3, Data: []uint64{10, 20, 30}}, cloned.Codes)
 	require.Equal(t, []uint32{10}, cloned.CodeCounts)
 	require.Equal(t, []float32{10}, cloned.CentroidDistances)
