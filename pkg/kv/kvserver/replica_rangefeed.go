@@ -864,7 +864,8 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 		&r.store.cfg.Settings.SV,
 	); signal.exceedsNudgeLagThreshold {
 		m := r.store.metrics.RangeFeedMetrics
-		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
+		expensiveLog := m.RangeFeedSlowClosedTimestampLogN.ShouldLog()
+		if expensiveLog {
 			if closedTS.IsEmpty() {
 				log.Infof(ctx, "RangeFeed closed timestamp is empty")
 			} else {
@@ -909,8 +910,10 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 					// reason would require a new version of the proto, which would
 					// prohibit us from cancelling the rangefeed in the current version,
 					// due to mixed version compatibility.
-					log.Warningf(ctx,
-						`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
+					if expensiveLog {
+						log.Infof(ctx,
+							`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
+					}
 					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
 					r.store.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampCancelledRanges.Inc(1)
 				}
