@@ -90,6 +90,7 @@ go_test(
         "//pkg/sql/schemachanger/scexec/scmutationexec",  # keep
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",
@@ -97,6 +98,8 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
