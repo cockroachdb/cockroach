@@ -33,6 +33,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -55,6 +56,7 @@ const (
 
 type ApiV2System interface {
 	health(w http.ResponseWriter, r *http.Request)
+	quorumGuardrail(w http.ResponseWriter, r *http.Request)
 	listNodes(w http.ResponseWriter, r *http.Request)
 	listNodeRanges(w http.ResponseWriter, r *http.Request)
 }
@@ -95,7 +97,7 @@ type apiV2SystemServer struct {
 }
 
 var _ ApiV2System = &apiV2SystemServer{}
-var _ http.Handler = &apiV2Server{}
+var _ http.Handler = &apiV2SystemServer{}
 
 // newAPIV2Server returns a new apiV2Server.
 func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
@@ -181,6 +183,7 @@ func registerRoutes(
 		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
+		{"quorumGuardrail/", systemRoutes.quorumGuardrail, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
 		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
 		{"databases/", a.listDatabases, true, authserver.RegularRole, false},
@@ -392,6 +395,75 @@ func healthInternal(
 
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	healthInternal(w, r, a.admin.checkReadinessForHealthCheck)
+}
+
+func (a *apiV2Server) quorumGuardrail(w http.ResponseWriter, r *http.Request) {
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+}
+
+// # Quorum Guardrails
+//
+// Endpoint to expose node criticality information. A 200 response indicates that terminating the node in
+// question won't cause any ranges to become unavailable, at the time the response was prepared. Users may
+// use this check as a precondition for advancing a rolling restart process.
+func (a *apiV2SystemServer) quorumGuardrail(w http.ResponseWriter, r *http.Request) {
+	const OK string = "ok"
+	verbose := r.URL.Query().Has("verbose")
+
+	res := &serverpb.QuorumGuardrailResponse{
+		IsCritical: false,
+		Replicas:   make([]*serverpb.ReplicaStatus, 0),
+	}
+
+	ctx := r.Context()
+
+	err := a.systemStatus.stores.VisitStores(func(store *kvserver.Store) error {
+		res.NodeID = int32(store.NodeID())
+
+		// for each store in the local node
+		now := store.Clock().NowAsClockTimestamp()
+		isLiveMap := a.systemStatus.nodeLiveness.ScanNodeVitalityFromCache()
+		nodeCount := a.systemStatus.storePool.ClusterNodeCount()
+		store.VisitReplicas(func(replica *kvserver.Replica) bool {
+			// check that its replicas are non-critical
+			metrics := replica.Metrics(ctx, now, isLiveMap, nodeCount)
+			id := replica.ID()
+			status := serverpb.ReplicaStatus{
+				StoreID:   int32(store.StoreID()),
+				RangeID:   int32(id.RangeID),
+				ReplicaID: int32(id.ReplicaID),
+				Status:    OK,
+			}
+
+			raftStatus := replica.RaftStatus()
+			noRaftLeader := !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent
+
+			if metrics.Unavailable {
+				status.Status = "Unavailable"
+			} else if metrics.Underreplicated {
+				status.Status = "Underreplicated"
+			} else if noRaftLeader {
+				status.Status = "NoRaftLeader"
+			}
+
+			if verbose || status.Status != OK {
+				res.Replicas = append(res.Replicas, &status)
+			}
+			res.IsCritical = res.IsCritical || status.Status != OK
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		http.Error(w, "Error checking store status", http.StatusInternalServerError)
+		return
+	}
+
+	if res.IsCritical {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusServiceUnavailable, res)
+		return
+	}
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, res)
 }
 
 // # Get metric recording and alerting rule templates
