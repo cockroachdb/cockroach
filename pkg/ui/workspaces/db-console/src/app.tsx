@@ -14,7 +14,6 @@ import {
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
-import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
