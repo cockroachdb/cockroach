@@ -33,7 +33,6 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 
 	// Ensure that cloning does not disturb anything.
 	cloned := quantizedSet.Clone().(*UnQuantizedVectorSet)
-	cloned.Centroid[0] = 10
 	cloned.CentroidDistances[0] = 10
 	copy(cloned.Vectors.At(0), vector.T{0, 0})
 	cloned.ReplaceWithLast(1)
@@ -49,7 +48,7 @@ func TestUnQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, []float32{5, 25, 181, 113}, testutils.RoundFloats(distances, 4))
 
 	// Check that clone is unaffected.
-	require.Equal(t, []float32{10, 2}, cloned.Centroid)
+	require.Equal(t, []float32{4, 2}, cloned.Centroid)
 	require.Equal(t, []float32{10, 9.43, 4.12, 6.71}, testutils.RoundFloats(cloned.CentroidDistances, 2))
 	require.Equal(t, vector.Set{Dims: 2, Count: 4, Data: []float32{0, 0, 9, 10, 5, 6, 7, 8}}, cloned.Vectors)
 }

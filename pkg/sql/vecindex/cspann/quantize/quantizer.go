@@ -85,6 +85,8 @@ type QuantizedVectorSet interface {
 	Clone() QuantizedVectorSet
 
 	// Clear removes all the elements of the vector set so that it may be reused.
-	// The new centroid is copied over the existing centroid.
+	// The new centroid replaces the existing centroid.
+	// NOTE: Centroids are immutable, so the existing centroid should be replaced
+	// rather than having its memory overwritten.
 	Clear(centroid vector.T)
 }

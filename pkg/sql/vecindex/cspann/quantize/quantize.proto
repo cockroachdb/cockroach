@@ -35,6 +35,7 @@ message RaBitQuantizedVectorSet {
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
+  // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
   // Codes is a set of RaBitQ quantization codes, with one code per quantized
   // vector in the set.
@@ -58,6 +59,7 @@ message UnQuantizedVectorSet {
   // Centroid is the average of vectors in the set, representing its "center of
   // mass". Note that the centroid is computed when a vector set is created and
   // is not updated when vectors are added or removed.
+  // NOTE: The centroid should be treated as immutable.
   repeated float centroid = 1;
   // CentroidDistances is a slice of the exact distances of the vectors in the
   // set from the centroid.
