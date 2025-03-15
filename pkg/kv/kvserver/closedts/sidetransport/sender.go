@@ -334,6 +334,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			lagTargetDuration,
 			leadTargetOverride,
 			sideTransportCloseInterval,
+			closedts.DefaultMaxNetworkRTT,
 			pol,
 		)
 		s.trackedMu.lastClosed[pol] = target
