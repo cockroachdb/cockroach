@@ -549,7 +549,7 @@ ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42;
 # subzone config has an entry for our new index; along with a corres. subzone
 # span.
 skipif config local-mixed-24.3 local-legacy-schema-changer
-query B colnames
+statement ok
 WITH subzones AS (
     SELECT
         json_array_elements(
@@ -571,29 +571,109 @@ primary_index AS (
         )->'table'->'primaryIndex'->>'id')::INT AS primaryID
     FROM system.descriptor
     WHERE id = 'foo'::regclass::oid
+),
+primary_idx_matches_subzone_idx AS (
+  SELECT EXISTS (
+      SELECT 1
+      FROM primary_index, subzone_indexes
+      WHERE primaryID = indexID
+  ) AS match_found
 )
-SELECT EXISTS (
-    SELECT 1
-    FROM primary_index, subzone_indexes
-    WHERE primaryID = indexID
-) AS match_found;
-----
-match_found
-true
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM primary_idx_matches_subzone_idx WHERE match_found = false;
 
 skipif config local-mixed-24.3 local-legacy-schema-changer
-query B
+statement ok
 WITH subzone_spans AS (
     SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
     FROM system.zones
     WHERE id = 'foo'::REGCLASS::OID
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 'foo'::regclass::oid
+),
+subzone_span_matches_primary_idx AS (
+  SELECT EXISTS (
+      SELECT
+        crdb_internal.pretty_key(decode(key, 'base64'), 0) AS subzone_span,
+        primaryID
+      FROM subzone_spans, primary_index
+      WHERE crdb_internal.pretty_key(decode(key, 'base64'), 0) = ('/' || primaryID::STRING)
+  ) AS match_found
 )
-SELECT EXISTS (
-    SELECT 1
-    FROM subzone_spans
-    WHERE crdb_internal.pretty_key(decode(key, 'base64'), 0) = '/2'
-) AS exists;
-----
-true
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM subzone_span_matches_primary_idx WHERE match_found = false;
+
+statement ok
+ALTER TABLE foo DROP COLUMN j
+
+# After dropping the column, the IDs should still match.
+skipif config local-mixed-24.3 local-legacy-schema-changer
+statement ok
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 'foo'::regclass::oid
+),
+primary_idx_matches_subzone_idx AS (
+  SELECT EXISTS (
+      SELECT 1
+      FROM primary_index, subzone_indexes
+      WHERE primaryID = indexID
+  ) AS match_found
+)
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM primary_idx_matches_subzone_idx WHERE match_found = false;
+
+skipif config local-mixed-24.3 local-legacy-schema-changer
+statement ok
+WITH subzone_spans AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 'foo'::regclass::oid
+),
+subzone_span_matches_primary_idx AS (
+  SELECT EXISTS (
+      SELECT
+        crdb_internal.pretty_key(decode(key, 'base64'), 0) AS subzone_span,
+        primaryID
+      FROM subzone_spans, primary_index
+      WHERE crdb_internal.pretty_key(decode(key, 'base64'), 0) = ('/' || primaryID::STRING)
+  ) AS match_found
+)
+SELECT crdb_internal.force_error('', 'expected IDs to match')
+FROM subzone_span_matches_primary_idx WHERE match_found = false;
 
 subtest end
