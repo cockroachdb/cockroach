@@ -2377,6 +2377,7 @@ GO_TARGETS = [
     "//pkg/storage/metamorphic:metamorphic",
     "//pkg/storage/metamorphic:metamorphic_test",
     "//pkg/storage/mvccencoding:mvccencoding",
+    "//pkg/storage/mvcceval:mvcceval",
     "//pkg/storage/pebbleiter:pebbleiter",
     "//pkg/storage/pebbleiter:pebbleiter_test",
     "//pkg/storage/storagepb:storagepb",
