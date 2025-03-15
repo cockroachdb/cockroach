@@ -40,9 +40,10 @@ type stmtKey struct {
 
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
-	stmtNoConstants string
-	implicitTxn     bool
-	database        string
+	stmtNoConstants  string
+	sqlCommenterTags string
+	implicitTxn      bool
+	database         string
 }
 
 func (p sampledPlanKey) size() int64 {
