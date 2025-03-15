@@ -1,0 +1,221 @@
+# This file contains tests for special cases for the power function as described
+# in https://github.com/cockroachdb/cockroach/issues/114872. Additionally, there
+# was more changes to be made as the apd library follows a different spec than
+# postgres. More details can be found in pkg/sql/sem/builtins/math_builtins.go:handlePowEdgeCases.
+
+# NaN ^ 0 = 1.
+query T
+SELECT power('NaN'::numeric, '0'::numeric);
+----
+1
+
+query T
+SELECT 'NaN'::numeric ^ 0;
+----
+1
+
+# 1 ^ NaN = 1.
+query T
+SELECT power('1'::numeric, 'NaN');
+----
+1
+
+query T
+SELECT 1 ^ 'NaN'::numeric;
+----
+1
+
+# Zero raised to a negative power is undefined.
+statement error pgcode 2201F zero raised to a negative power is undefined
+SELECT power('0'::numeric, '-1');
+
+statement error pgcode 2201F zero raised to a negative power is undefined
+SELECT power('0'::numeric, '-0.0001');
+
+statement error pgcode 2201F zero raised to a negative power is undefined
+SELECT power('0'::numeric, '-Inf'::numeric);
+
+# A negative number raised to a non-integer power yields a complex result.
+statement error pgcode 2201F a negative number raised to a non-integer power yields a complex result
+SELECT power('-2'::numeric, '-1.5');
+
+statement error pgcode 2201F a negative number raised to a non-integer power yields a complex result
+SELECT power('-0.0001'::numeric, '3.3');
+
+statement error pgcode 2201F a negative number raised to a non-integer power yields a complex result
+SELECT power('-Inf'::numeric, '4.5');
+
+# For x = 1 and any value of y, 1.0 shall be returned.
+query T
+SELECT power('1'::numeric, 'Inf'::numeric);
+----
+1
+
+query T
+SELECT power('1'::numeric, '-Inf'::numeric);
+----
+1
+
+query T
+SELECT power('1'::numeric, '0.0001'::numeric);
+----
+1
+
+query T
+SELECT power('1'::numeric, '-0.0001'::numeric);
+----
+1
+
+# For any value of x and y is 0, 1.0 shall be returned.
+# apd.Context.Pow() would return NaN for 0 ^ 0.
+query T
+SELECT power('0'::numeric, '0'::numeric);
+----
+1
+
+query T
+SELECT power('0.0001'::numeric, '0'::numeric);
+----
+1
+
+query T
+SELECT power('-0.0001'::numeric, '0'::numeric);
+----
+1
+
+query T
+SELECT power('Inf'::numeric, '0'::numeric);
+----
+1
+
+query T
+SELECT power('-Inf'::numeric, '0'::numeric);
+----
+1
+
+# If x is 0 and y is positive, 0 shall be returned. This is handled in apd.
+query T
+SELECT power('0'::numeric, '0.0001'::numeric);
+----
+0
+
+query T
+SELECT power('0'::numeric, 'Inf'::numeric);
+----
+0
+
+# If x is -1 and y is (+/-)Inf, 1.0 shall be returned.
+query T
+SELECT power('-1'::numeric, 'Inf'::numeric);
+----
+1
+
+query T
+SELECT power('-1'::numeric, '-Inf'::numeric);
+----
+1
+
+# If |x| < 1 and y is -Inf, +Inf is returned.
+query T
+SELECT power('0.999'::numeric, '-Inf'::numeric);
+----
+Infinity
+
+query T
+SELECT power('-0.999'::numeric, '-Inf'::numeric);
+----
+Infinity
+
+# If |x| < 1 and y is +Inf, +0 shall be returned.
+query T
+SELECT power('0.999'::numeric, 'Inf'::numeric);
+----
+0
+
+query T
+SELECT power('-0.999'::numeric, 'Inf'::numeric);
+----
+0
+
+# If |x| > 1 and y is -Inf, +0 shall be returned.
+query T
+SELECT power('1.001'::numeric, '-Inf'::numeric);
+----
+0
+
+query T
+SELECT power('-1.001'::numeric, '-Inf'::numeric);
+----
+0
+
+query T
+SELECT power('-2'::numeric, '-Inf'::numeric);
+----
+0
+
+# If |x| > 1 and y is +Inf, +Inf shall be returned.
+query T
+SELECT power('1.001'::numeric, 'Inf'::numeric);
+----
+Infinity
+
+
+query T
+SELECT power('-1.001'::numeric, 'Inf'::numeric);
+----
+Infinity
+
+query T
+SELECT power('-2'::numeric, 'Inf'::numeric);
+----
+Infinity
+
+# If x is +Inf and y < 0, 0 shall be returned. This is handled in apd.
+query T
+SELECT power('Inf'::numeric, '-0.0001'::numeric);
+----
+0
+
+query T
+SELECT power('Inf'::numeric, '-Inf'::numeric);
+----
+0
+
+# If x is +Inf and y > 0, +Inf shall be returned. This is handled in apd.
+query T
+SELECT power('Inf'::numeric, '0.0001'::numeric);
+----
+Infinity
+
+query T
+SELECT power('Inf'::numeric, 'Inf'::numeric);
+----
+Infinity
+
+# If x is -Inf and y < 0, 0 shall be returned.
+query T
+SELECT power('-Inf'::numeric, '-Inf'::numeric);
+----
+0
+
+# If x is -Inf and y > 0 and y is odd, -Inf shall be returned. This is handled in apd.
+# If x is -Inf and y > 0 and y is even, +Inf shall be returned. This is handled in apd.
+query T
+SELECT power('-Inf'::numeric, '1'::numeric);
+----
+-Infinity
+
+query T
+SELECT power('-Inf'::numeric, '2'::numeric);
+----
+Infinity
+
+query T
+SELECT power('-Inf'::numeric, 'Inf'::numeric);
+----
+Infinity
+
+query T
+SELECT power('-Inf'::numeric, '-Inf'::numeric);
+----
+0

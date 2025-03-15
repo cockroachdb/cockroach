@@ -1434,6 +1434,13 @@ func TestRepeatableReadLogic_postgresjoin(
 	runLogicTest(t, "postgresjoin")
 }
 
+func TestRepeatableReadLogic_power(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "power")
+}
+
 func TestRepeatableReadLogic_privilege_builtins(
 	t *testing.T,
 ) {
