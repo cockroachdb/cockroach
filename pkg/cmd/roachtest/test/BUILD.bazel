@@ -11,6 +11,6 @@ go_library(
     deps = [
         "//pkg/cmd/roachtest/roachtestutil/task",
         "//pkg/roachprod/logger",
-        "//pkg/util/version",
+        "@com_github_cockroachdb_version//:version",
     ],
 )

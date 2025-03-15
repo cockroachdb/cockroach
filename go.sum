@@ -606,6 +606,8 @@ github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 h1:qVTb3XEv+7VVj
 github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40/go.mod h1:cllxeV+TYc387/XzQRnDg6YThHoDzFewovWffzAm37Q=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8 h1:Hli+oX84dKq44sLVCcsGKqifm5Lg9J8VoJ2P3h9iPdI=
 github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8/go.mod h1:75wnig8+TF6vst9hChkpcFO7YrRLddouJ5is8uqpfv0=
+github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2 h1:8Vfw2iNEpYIV6aLtMwT5UOGuPmp9MKlEKWKFTuB+MPU=
+github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2/go.mod h1:P9WiZOdQ1R/ZZDL0WzF5wlyRvrjtfhNOwMZymFpBwjE=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82 h1:8htEd1lLILqfjKardWfKKGgXVCs0WmcgEj9cXnmcuos=
 github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82/go.mod h1:+bhevpN4bd6bstiRREkJDaMWZR3lTe5ypydTtXgf7GU=
 github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c h1:fL+zfQ88TclMTv0pWlHhe3z+rZvb9CpyCp+fFQSN2Ys=
@@ -2293,8 +2295,8 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.5/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
-github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
-github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
+github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=
 github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2/go.mod h1:hkRG7XYTFWNJGYcbNJQlaLq0fg1yr4J4t/NcTQtrfww=

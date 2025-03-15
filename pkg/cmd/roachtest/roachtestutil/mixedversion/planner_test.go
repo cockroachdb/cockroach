@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -351,7 +351,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 // the oldest supported version. Called by TestMain.
 func setDefaultVersions() func() {
 	previousBuildV := clusterupgrade.TestBuildVersion
-	clusterupgrade.TestBuildVersion = buildVersion
+	clusterupgrade.TestBuildVersion = &buildVersion
 
 	previousOldestV := OldestSupportedVersion
 	OldestSupportedVersion = minimumSupported
