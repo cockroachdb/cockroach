@@ -13,6 +13,13 @@ INSERT INTO table_regional_by_row VALUES ($stageKey * -1);
 DELETE FROM table_regional_by_row WHERE k = $stageKey;
 ----
 
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+INSERT INTO table_regional_by_row VALUES (100 + $stageKey);
+INSERT INTO table_regional_by_row VALUES ((100 + $stageKey) * -1);
+DELETE FROM table_regional_by_row WHERE k = (100 + $stageKey);
+----
+
 stage-exec phase=PostCommitPhase stage=:
 USE multiregion_db;
 SELECT crdb_internal.validate_multi_region_zone_configs()

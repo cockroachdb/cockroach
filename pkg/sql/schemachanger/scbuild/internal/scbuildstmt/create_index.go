@@ -121,11 +121,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
 		}
 	}
-	// We don't support handling zone config related properties for tables required
-	// for regional by row tables.
 	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
+		// We don't support adding an index of a region is being added to a
+		// REGIONAL BY ROW table.
 		panicIfRegionChangeUnderwayOnRBRTable(b, "CREATE INDEX", tbl.TableID)
-		fallBackIfRegionalByRowTable(b, n, tbl.TableID)
 	}
 	relationElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch e.(type) {
@@ -243,6 +242,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are created concurrently"),
 		)
+	}
+
+	if err := configureZoneConfigForNewIndexPartitioning(
+		b,
+		idxSpec.secondary.TableID,
+		idxSpec.indexID(),
+	); err != nil {
+		panic(err)
 	}
 }
 

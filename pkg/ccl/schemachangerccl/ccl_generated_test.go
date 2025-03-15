@@ -78,6 +78,13 @@ func TestBackupRollbacks_ccl_create_index(t *testing.T) {
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacks_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacks_ccl_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -187,6 +194,13 @@ func TestBackupRollbacksMixedVersion_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -302,6 +316,13 @@ func TestBackupSuccess_ccl_create_index(t *testing.T) {
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccess_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccess_ccl_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -411,6 +432,13 @@ func TestBackupSuccessMixedVersion_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -526,6 +554,13 @@ func TestEndToEndSideEffects_ccl_create_index(t *testing.T) {
 	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_ccl_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -635,6 +670,13 @@ func TestExecuteWithDMLInjection_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
 	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -750,6 +792,13 @@ func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
 	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_ccl_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -859,6 +908,13 @@ func TestPause_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
 	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -974,6 +1030,13 @@ func TestPauseMixedVersion_ccl_create_index(t *testing.T) {
 	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_ccl_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1083,6 +1146,13 @@ func TestRollback_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_create_index_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
 	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
 }
 

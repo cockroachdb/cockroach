@@ -305,10 +305,13 @@ func alterTableAddColumn(
 	if isRBR && idx != nil {
 		// Configure zone configuration if required. This must happen after
 		// all the IDs have been allocated.
+		if idx.ID == 0 {
+			panic(errors.AssertionFailedf("index %s does not have id", idx.Name))
+		}
 		if err = configureZoneConfigForNewIndexPartitioning(
 			b,
 			tbl.TableID,
-			*idx,
+			idx.ID,
 		); err != nil {
 			panic(err)
 		}
