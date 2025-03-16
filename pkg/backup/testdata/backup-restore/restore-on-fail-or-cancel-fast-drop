@@ -17,7 +17,7 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster_backup';
 ----
 
-new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant
+new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant not-slim
 ----
 
 # Restore's OnFailOrCancel deletes descriptors which requires us to wait for no

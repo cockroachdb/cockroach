@@ -9363,7 +9363,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 
 	var exportReqsAtomic int64
 
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParamsNotSlim(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Disabled to run within tenants because the function that sets up the restoring cluster
@@ -10628,7 +10628,7 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0,
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParamsNotSlim(t, singleNode, 0,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// ForceTableGC sends a kvpb.GCRequest that is marked as systemOnly in
