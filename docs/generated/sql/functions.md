@@ -1267,6 +1267,19 @@ available replica will error.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.
+The vars argument must be a JSON object, and its fields provide named
+values to be substituted into the jsonpath expression.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.
+The vars argument must be a JSON object, and its fields provide named
+values to be substituted into the jsonpath expression. If the silent
+argument is true, the function suppresses the following errors:
+missing object field or array element, unexpected JSON item type,
+datetime and numeric errors.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_path_query"></a><code>jsonb_path_query(target: jsonb, path: jsonpath) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the specified JSON value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_path_query"></a><code>jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the specified JSON value.

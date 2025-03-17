@@ -1123,6 +1123,20 @@ func TestLogic_json_index(
 	runLogicTest(t, "json_index")
 }
 
+func TestLogic_jsonb_path_exists(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists")
+}
+
+func TestLogic_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query")
+}
+
 func TestLogic_jsonpath(
 	t *testing.T,
 ) {
