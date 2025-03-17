@@ -2,14 +2,22 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "kvtestutils",
-    testonly = 1,
-    srcs = ["test_utils.go"],
+    # This package can become testonly when kvnemesis tests are moved
+    # into a test package.
+    # testonly = 1,
+    srcs = [
+        "consistency.go",
+        "test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvtestutils",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvbase",
-        "//pkg/testutils",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
