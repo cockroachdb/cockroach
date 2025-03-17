@@ -65,7 +65,7 @@ tick-election 1
 ----
 INFO 1 leader at term 1 does not support itself in the liveness fabric
 INFO 1 leader at term 1 does not support itself in the liveness fabric
-WARN 1 stepped down to follower since quorum is not active
+INFO 1 stepped down to follower since quorum is not active
 INFO 1 became follower at term 1
 
 stabilize

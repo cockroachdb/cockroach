@@ -63,7 +63,9 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftp
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		ctx := r.AnnotateCtx(context.TODO())
-		log.Warningf(ctx, "store not found for replica %d in SupportFor", replicaID)
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.VEventf(ctx, 1, "store not found for replica %d in SupportFor", replicaID)
+		}
 		return 0, false
 	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
@@ -77,7 +79,9 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		ctx := r.AnnotateCtx(context.TODO())
-		log.Warningf(ctx, "store not found for replica %d in SupportFrom", replicaID)
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.VEventf(ctx, 1, "store not found for replica %d in SupportFrom", replicaID)
+		}
 		return 0, hlc.Timestamp{}
 	}
 	epoch, exp := r.store.storeLiveness.SupportFrom(storeID)
