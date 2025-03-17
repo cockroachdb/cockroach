@@ -619,14 +619,15 @@ func TestCPUTokenSim(t *testing.T) {
 
 func TestMultiTenantCPUTokenSim(t *testing.T) {
 	// 16ms of tokens per tick, represent 80%. want 10% consumed by tenant 0 and
-	// tenant 1 combined. Would be 2ms per tick. But want 1 in 8 to see arrival.
+	// tenant 1 combined. Would be 2ms per tick.
+	// NO MORE: But want 1 in 8 to see arrival.
 	const tokensPerTick = 16
 	const burstTokens = 1000 * 16
 	tokens := burstTokens
-	const workInitialTokens = 5
-	const workUsageTokens = 1
-	const workDuration = 2
-	const numSmallTenants = 2
+	const workInitialTokens = 100
+	const workUsageTokens = workInitialTokens
+	const workDuration = workInitialTokens
+	const numSmallTenants = 4
 	type waitingWork struct {
 		startWait int
 	}
@@ -643,7 +644,7 @@ func TestMultiTenantCPUTokenSim(t *testing.T) {
 	}
 	var waitTimes [numSmallTenants]waitTime
 
-	simulateIntervalMillis := 5 * 1000
+	simulateIntervalMillis := 50 * 1000
 	for i := 0; i <= simulateIntervalMillis; i++ {
 		// Pop work that finished
 		j := 0
@@ -676,7 +677,7 @@ func TestMultiTenantCPUTokenSim(t *testing.T) {
 				tenant = numSmallTenants
 			}
 			tokensUsed[tenant] += workInitialTokens
-			started = append(started, work{tenant: tenant})
+			started = append(started, work{tenant: tenant, start: i})
 			tokens -= workInitialTokens
 			// fmt.Printf("%d: picked tenant %d\n", i, tenant)
 			if tenant != numSmallTenants {
@@ -685,10 +686,201 @@ func TestMultiTenantCPUTokenSim(t *testing.T) {
 				smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
 			}
 		}
-		if i%8 == 0 {
+		if i%100 == 0 {
 			for j := range smallTenantWaiting {
-				for k := 0; k < 8; k++ {
+				for k := 0; k < 1; k++ {
 					smallTenantWaiting[j] = append(smallTenantWaiting[j], waitingWork{startWait: i})
+				}
+			}
+		}
+	}
+	sumTokensUsed := 0
+	for j := range tokensUsed {
+		sumTokensUsed += tokensUsed[j]
+	}
+	fmt.Printf("rate %.2f\n", float64(sumTokensUsed)/float64(simulateIntervalMillis))
+	fmt.Printf("tenant fractions:")
+	for j := range tokensUsed {
+		fmt.Printf(" %d:%.2f", j, float64(tokensUsed[j])/float64(sumTokensUsed))
+	}
+	fmt.Printf("\n")
+	fmt.Printf("wait times:")
+	for j := range waitTimes {
+		fmt.Printf(" %d:%.2fms", j, float64(waitTimes[j].waitTime)/float64(waitTimes[j].count))
+	}
+	fmt.Printf("\n")
+}
+
+func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
+	// 16ms of tokens per tick, represent 80%. want 20% consumed by tenant 0, 1,
+	// 2, 3 combined.
+	const tokensPerTick = 16
+	const burstTokens = 1000 * 16
+	tokens := burstTokens
+	const workInitialTokens = 100
+	const workUsageTokens = workInitialTokens
+	const workDuration = workInitialTokens
+	const numSmallTenants = 4
+	const smallTenantArrivalInterval = 100
+	type waitingWork struct {
+		startWait int
+	}
+	var smallTenantWaiting [numSmallTenants][]waitingWork
+	type work struct {
+		tenant int
+		start  int
+	}
+	var started []work
+	var tokensUsed [numSmallTenants + 1]int
+	var tenantTokensNanos [numSmallTenants + 1]int64
+	tenantBurstTokensNanos := int64(burstTokens) * 1e6
+	for i := range tenantTokensNanos {
+		tenantTokensNanos[i] = tenantBurstTokensNanos
+	}
+	uncontrolledTokens := 0
+	type waitTime struct {
+		count    int
+		waitTime int
+	}
+	var waitTimes [numSmallTenants]waitTime
+
+	simulateIntervalMillis := 8 * 1000
+	lastTotalTokensUsed := 0
+	for i := 0; i <= simulateIntervalMillis; i++ {
+		// Pop work that finished
+		{
+			j := 0
+			for ; j < len(started); j++ {
+				if started[j].start+workDuration > i {
+					break
+				}
+				returnTokens := workInitialTokens - workUsageTokens
+				tokens += returnTokens
+				tenantTokensNanos[started[j].tenant] += int64(returnTokens) * 1e6
+				tokensUsed[started[j].tenant] -= returnTokens
+			}
+			started = started[j:]
+		}
+		// Add tokens for tick.
+		tokens += tokensPerTick
+		// Cap tokens to burst.
+		if tokens > burstTokens {
+			tokens = burstTokens
+		}
+		if i%1000 == 0 {
+			if uncontrolledTokens != 0 {
+				tenantBurstTokensNanos -= int64(uncontrolledTokens) * 1e6
+				fmt.Printf("%d: uncontrolledTokens: %d, tenantBurstTokens: %d, tokens: %d\n",
+					i, uncontrolledTokens,
+					tenantBurstTokensNanos/1e6, tokens)
+			}
+			uncontrolledTokens = 0
+			// Under-utilization of aggregate tokens.
+			if tokens > (burstTokens / 8) {
+				tenantBurstTokensNanos = int64(burstTokens) * 1e6
+				fmt.Printf("%d: tenantBurstTokens: %d\n", i, tenantBurstTokensNanos/1e6)
+			}
+			totalTokensUsed := 0
+			for i := range tokensUsed {
+				totalTokensUsed += tokensUsed[i]
+			}
+			deltaTokensUsed := totalTokensUsed - lastTotalTokensUsed
+			lastTotalTokensUsed = totalTokensUsed
+			fmt.Printf("%d: delta tokens used: %d\n", i, deltaTokensUsed)
+		}
+		for i := range tenantTokensNanos {
+			tenantTokensNanos[i] += tenantBurstTokensNanos / 1000
+			if tenantTokensNanos[i] > tenantBurstTokensNanos {
+				tenantTokensNanos[i] = tenantBurstTokensNanos
+			}
+		}
+		fmt.Printf("%d: tokens: %d tt:", i, tokens)
+		for i := range tenantTokensNanos {
+			fmt.Printf(" %d", tenantTokensNanos[i]/1e6)
+		}
+		fmt.Printf("\n")
+
+		// Try starting work using tokens.
+		for tokens > 0 {
+			tenant := -1
+			used := math.MaxInt
+			for j := range smallTenantWaiting {
+				if len(smallTenantWaiting[j]) > 0 && tokensUsed[j] < used && tenantTokensNanos[j] > 0 {
+					tenant = j
+					used = tokensUsed[j]
+				}
+			}
+			if tokensUsed[numSmallTenants] < used && tenantTokensNanos[numSmallTenants] > 0 {
+				tenant = numSmallTenants
+			}
+			if tenant < 0 {
+				fmt.Printf("%d: no tenant picked\n", i)
+				break
+			} else {
+				tokensUsed[tenant] += workInitialTokens
+				started = append(started, work{tenant: tenant, start: i})
+				tokens -= workInitialTokens
+				tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+				if tenant != numSmallTenants {
+					waitTimes[tenant].count++
+					wt := (i - smallTenantWaiting[tenant][0].startWait)
+					waitTimes[tenant].waitTime += wt
+					smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
+					fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+				} else {
+					fmt.Printf("%d: picked tenant %d\n", i, tenant)
+				}
+			}
+		}
+		// Either tokens < 0, or all tenants with waiting work have no more
+		// tenantTokensNanos[tenant]. In the latter case the following loop will
+		// by definition be unsuccessful. In the former case, it can do something.
+
+		// Try starting work using tenantTokensNanos.
+		for tenant := 0; tenant <= numSmallTenants; tenant++ {
+			for tenantTokensNanos[tenant] > (3*tenantBurstTokensNanos)/4 {
+				if tenant == numSmallTenants || len(smallTenantWaiting[tenant]) > 0 {
+					require.GreaterOrEqual(t, 0, tokens)
+					tokensUsed[tenant] += workInitialTokens
+					started = append(started, work{tenant: tenant, start: i})
+					tokens -= workInitialTokens
+					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+					uncontrolledTokens += workInitialTokens
+					if tenant != numSmallTenants {
+						waitTimes[tenant].count++
+						wt := (i - smallTenantWaiting[tenant][0].startWait)
+						waitTimes[tenant].waitTime += wt
+						smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
+						fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+					} else {
+						fmt.Printf("%d: uncontrolled picked tenant %d\n", i, tenant)
+					}
+				} else {
+					break
+				}
+			}
+		}
+		if i%100 == 0 {
+			// Add a work unit for small tenants.
+			for tenant := range smallTenantWaiting {
+				haveTenantTokens := tenantTokensNanos[tenant] > 0
+				canBeUncontrolled := tenantTokensNanos[tenant] > (3*tenantBurstTokensNanos)/4
+				haveTokens := tokens > 0
+				if haveTenantTokens && (haveTokens || canBeUncontrolled) {
+					tokensUsed[tenant] += workInitialTokens
+					started = append(started, work{tenant: tenant, start: i})
+					tokens -= workInitialTokens
+					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+					if !haveTokens {
+						uncontrolledTokens += workInitialTokens
+						fmt.Printf("%d: arrived-admitted uncontrolled tenant %d\n", i, tenant)
+					} else {
+						fmt.Printf("%d: arrived-admitted tenant %d\n", i, tenant)
+					}
+					waitTimes[tenant].count++
+				} else {
+					smallTenantWaiting[tenant] = append(smallTenantWaiting[tenant], waitingWork{startWait: i})
+					fmt.Printf("%d: arrived-queued tenant %d\n", i, tenant)
 				}
 			}
 		}
