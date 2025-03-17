@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -1338,11 +1339,8 @@ func (r *Replica) closedTimestampPolicyRLocked() ctpb.RangeClosedTimestampPolicy
 }
 
 // RefreshPolicy updates the replica's cached closed timestamp policy based on
-// its span configuration. Note that the given map can be nil.
-//
-// TODO(wenyihu6): update this function to consult the supplied map and
-// clarify what happens when the map is nil
-func (r *Replica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration) {
+// span configurations and provided node latencies.
+func (r *Replica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
 	policy := func() ctpb.RangeClosedTimestampPolicy {
 		desc, conf := r.DescAndSpanConfig()
 		// The node liveness range ignores zone configs and always uses a
@@ -1356,7 +1354,25 @@ func (r *Replica) RefreshPolicy(_ map[roachpb.NodeID]time.Duration) {
 		if !conf.GlobalReads {
 			return ctpb.LAG_BY_CLUSTER_SETTING
 		}
-		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+		// If the provided map is nil, the policy will be
+		// LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO. The latency will be hardcoded
+		// to closedts.defaultMaxNetworkRTT in closed timestamp calculation.
+		if latencies == nil {
+			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+		}
+
+		// For ranges serving global reads, it determines the maximum latency
+		// leaseholder-to-peer replica using the provided map and sets an
+		// appropriate policy bucket which will control how far in the future
+		// timestamps should be closed for global reads. Skip peers for which we
+		// don't have latency information.
+		maxLatency := time.Duration(-1)
+		for _, peer := range r.shMu.state.Desc.InternalReplicas {
+			if peerLatency, ok := latencies[peer.NodeID]; ok {
+				maxLatency = max(maxLatency, peerLatency)
+			}
+		}
+		return closedts.FindBucketBasedOnNetworkRTT(maxLatency)
 	}
 	r.cachedClosedTimestampPolicy.Store(int32(policy()))
 }
