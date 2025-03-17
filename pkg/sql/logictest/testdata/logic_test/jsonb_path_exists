@@ -1,0 +1,39 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1
+
+query B
+SELECT jsonb_path_exists('{}', '$');
+----
+true
+
+query B
+SELECT jsonb_path_exists('{}', '$.a');
+----
+false
+
+statement error pgcode 2203A JSON object does not contain key "a"
+SELECT jsonb_path_exists('{}', 'strict $.a');
+
+query B
+SELECT jsonb_path_exists('{"a": "b"}', '$.a');
+----
+true
+
+query B
+SELECT jsonb_path_exists('{"A": "b"}', '$.a');
+----
+false
+
+query B
+SELECT jsonb_path_exists('[{"a": 1}]', 'false');
+----
+true
+
+query B
+SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', '{}', false);
+----
+true
+
+query B
+SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', '{}', true);
+----
+true
