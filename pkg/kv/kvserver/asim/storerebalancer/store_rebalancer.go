@@ -250,7 +250,6 @@ func (src *storeRebalancerControl) applyLeaseRebalance(
 		candidateReplica.GetRangeID(),
 		candidateReplica.StoreID(),
 		target.StoreID,
-		candidateReplica.RangeUsageInfo(),
 	)
 
 	// Dispatch the transfer and updating the pending transfer state.
