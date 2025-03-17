@@ -268,7 +268,7 @@ func TestCheckpointRestoreForTest(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
 		_, err := span.MakeFrontierAt(ts(1),
 			roachpb.Spans{{
-				Key: roachpb.Key("\x00\x00\x14\xeb\xcavL\b\xb8a*B\x1d\xee־"),
+				Key: roachpb.Key("a"),
 			}}...)
 		require.Error(t, err, `inverted span`)
 	})
