@@ -492,6 +492,14 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 		return false
 	}
 
+	if !(rctx.mode == LBRebalancingLeasesOnly || rctx.mode == LBRebalancingLeasesAndReplicas) {
+		// There's nothing to do, the store rebalancer is disabled. Note that this
+		// is is redundant when called via the store rebalancer's Start method, but
+		// it's necessary when called from tests, which don't start the store
+		// rebalancer loop, such as the asim pkg.
+		return false
+	}
+
 	// We only bother rebalancing stores that are fielding more than the
 	// cluster-level overfull threshold of load.
 	if rctx.LessThanMaxThresholds() {

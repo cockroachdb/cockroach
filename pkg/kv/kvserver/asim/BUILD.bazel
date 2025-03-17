@@ -10,6 +10,7 @@ go_library(
         "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/mmaintegration",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
         "//pkg/kv/kvserver/asim/scheduled",
