@@ -762,6 +762,8 @@ func clear2DSlice[T any](v [][]T) [][]T {
 
 // rangeAnalyzedConstraints is a function of the spanConfig and the current
 // stores that have replicas for that range (including the ReplicaType).
+//
+// LEARNER and VOTER_DEMOTING_LEARNER replicas are ignored.
 type rangeAnalyzedConstraints struct {
 	numNeededReplicas [numReplicaKinds]int32
 	replicas          [numReplicaKinds][]storeAndLocality
@@ -1759,6 +1761,14 @@ func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
 	return cands, curLeasePreferenceIndex
 }
 
+func isVoter(typ roachpb.ReplicaType) bool {
+	return typ == roachpb.VOTER_FULL || typ == roachpb.VOTER_INCOMING
+}
+
+func isNonVoter(typ roachpb.ReplicaType) bool {
+	return typ == roachpb.NON_VOTER || typ == roachpb.VOTER_DEMOTING_NON_VOTER
+}
+
 // Helper for constructing rangeAnalyzedConstraints. Contains initial state
 // and intermediate scratch space needed for computing
 // rangeAnalyzedConstraints.
@@ -1772,6 +1782,8 @@ func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
 // no longer depend on this LEARNER being useful, so we should up-replicate
 // (which is what is likely to happen as a side-effect of ignoring the
 // LEARNER).
+//
+// We also ignore VOTER_DEMOTING_LEARNER, since it is going away.
 //
 // TODO(sumeer): the read-only methods should also use this buf to reduce
 // allocations, if there is no concurrency.
@@ -1805,11 +1817,10 @@ func (acb *analyzeConstraintsBuf) tryAddingStore(
 	// and ignore it here, we may propose another change. Will that happen after
 	// exiting from the joint config, or can that race ahead and confuse the
 	// joint config situation?
-	switch replicaType {
-	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING:
+	if isVoter(replicaType) {
 		acb.replicas[voterIndex] = append(
 			acb.replicas[voterIndex], storeAndLocality{storeID, locality})
-	case roachpb.NON_VOTER, roachpb.VOTER_DEMOTING_NON_VOTER:
+	} else if isNonVoter(replicaType) {
 		acb.replicas[nonVoterIndex] = append(
 			acb.replicas[nonVoterIndex], storeAndLocality{storeID, locality})
 	}
