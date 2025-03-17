@@ -48,10 +48,11 @@ type mockReplica struct {
 
 var _ Replica = &mockReplica{}
 
-func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
-func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
+func (m *mockReplica) StoreID() roachpb.StoreID                                    { return m.storeID }
+func (m *mockReplica) GetRangeID() roachpb.RangeID                                 { return m.rangeID }
+func (m *mockReplica) RefreshLatency(latencyInfo map[roachpb.NodeID]time.Duration) {}
 func (m *mockReplica) BumpSideTransportClosed(
-	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	_ context.Context, _ hlc.ClockTimestamp, _ map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -120,7 +121,7 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 		rangeID: id,
 		canBump: true,
 		lai:     5,
-		policy:   ctpb.LAG_BY_CLUSTER_SETTING,
+		policy:  ctpb.LAG_BY_CLUSTER_SETTING,
 	}
 	r.mu.desc = desc
 	return r
@@ -137,7 +138,7 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 		rangeID: id,
 		canBump: true,
 		lai:     5,
-		policy:   ctpb.LAG_BY_CLUSTER_SETTING,
+		policy:  ctpb.LAG_BY_CLUSTER_SETTING,
 	}
 	r.mu.desc = desc
 	return r
