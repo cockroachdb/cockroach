@@ -167,7 +167,7 @@ func (ex *connExecutor) recordStatementSummary(
 	implicitTxn := flags.IsSet(planFlagImplicitTxn)
 	stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
-	recordedStmtStats := sqlstats.RecordedStmtStats{
+	recordedStmtStats := &sqlstats.RecordedStmtStats{
 		FingerprintID:        stmtFingerprintID,
 		QuerySummary:         stmt.StmtSummary,
 		DistSQL:              flags.ShouldBeDistributed(),
@@ -207,6 +207,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
+
 	if err != nil {
 		if log.V(1) {
 			log.Warningf(ctx, "failed to record statement: %s", err)
