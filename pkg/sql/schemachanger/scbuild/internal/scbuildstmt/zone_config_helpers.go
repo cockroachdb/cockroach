@@ -1354,14 +1354,14 @@ func constructSideEffectPartitionElem(
 	return elem
 }
 
-// getMostRecentTableZoneCfg returns the most recent table (denoted by
+// getMostRecentTableZoneConfig returns the most recent table (denoted by
 // highest seqNum) zone config for the given tableID (if any exist).
 //
 // N.B. Adding a new zone config element entails adding a new element where the
 // seqNum is 1 greater than the most recent zone config element. This helps
 // ensure zone config changes are applied in the correct order during explicit
 // transactions.
-func getMostRecentTableZoneCfg(b BuildCtx, tableID catid.DescID) *scpb.TableZoneConfig {
+func getMostRecentTableZoneConfig(b BuildCtx, tableID catid.DescID) *scpb.TableZoneConfig {
 	maxSeq := uint32(0)
 	var tzo *scpb.TableZoneConfig
 	b.QueryByID(tableID).FilterTableZoneConfig().
@@ -1379,7 +1379,11 @@ func getMostRecentTableZoneCfg(b BuildCtx, tableID catid.DescID) *scpb.TableZone
 func configureZoneConfigForNewIndexBackfill(
 	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID,
 ) error {
-	mostRecentTableZoneConfig := getMostRecentTableZoneCfg(b, tableID)
+	// Short-circuit if there are no subzones for the old index.
+	if !hasSubzonesForIndex(b, tableID, oldIndexID) {
+		return nil
+	}
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
 	if mostRecentTableZoneConfig == nil {
 		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
 			" on tableID %d that does not a zone config set", oldIndexID, tableID)
@@ -1395,12 +1399,15 @@ func configureZoneConfigForNewIndexBackfill(
 	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
 	// For the indexes we will use as a part of the backfill, ensure we copy
 	// over each subzone config from the old index to the backfill-related ones.
+	// NOTE: The subzones for the old index and temporary index will eventually
+	// be removed by the schema change GC job, but we need them to be present
+	// for the duration of this schema change.
 	for _, idxToAdd := range newIndexesForBackfill {
 		for _, subzone := range newZoneConfig.Subzones {
 			if subzone.IndexID == uint32(oldIndexID) {
 				subzone.IndexID = uint32(idxToAdd)
+				newSubzones = append(newSubzones, subzone)
 			}
-			newSubzones = append(newSubzones, subzone)
 		}
 	}
 	newZoneConfig.Subzones = newSubzones
@@ -1547,7 +1554,7 @@ func applyZoneConfigForMultiRegionTable(
 		return nil
 	}
 	mostRecentSeqNum := uint32(0)
-	mostRecentTableZoneConfig := getMostRecentTableZoneCfg(b, tableID)
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
 	if mostRecentTableZoneConfig != nil {
 		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}
