@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -444,6 +445,21 @@ func (pb *ProcessorBase) Reset() {
 // states are relevant when the processor is using the draining utilities in
 // ProcessorBase.
 type procState int
+
+func (i procState) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	switch i {
+	case StateRunning:
+		s.Print("StateRunning")
+	case StateDraining:
+		s.Print("StateDraining")
+	case StateTrailingMeta:
+		s.Print("StateTrailingMeta")
+	case StateExhausted:
+		s.Print("StateExhausted")
+	}
+}
+
+var _ redact.SafeFormatter = procState(0)
 
 //go:generate stringer -type=procState
 const (
