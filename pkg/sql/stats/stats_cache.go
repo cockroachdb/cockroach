@@ -717,6 +717,9 @@ func (sc *TableStatisticsCache) parseStats(
 		if err = DecodeHistogramBuckets(res); err != nil {
 			return nil, nil, err
 		}
+		// Update the HistogramData proto to nil out Buckets field to allow for
+		// the memory to be GCed.
+		res.HistogramData.Buckets = nil
 	}
 	return res, udt, nil
 }
