@@ -353,6 +353,12 @@ func TestNetworkRTTAndPolicyCalculations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Test RTT -> Policy conversion.
+			policy := FindBucketBasedOnNetworkRTT(tc.networkRTT)
+			require.Equal(t, tc.expectedPolicy, policy,
+				"expected policy %v for RTT %v, got %v",
+				tc.expectedPolicy, tc.networkRTT, policy)
+
 			// Test Policy -> RTT conversion.
 			rtt := computeNetworkRTTBasedOnPolicy(policy)
 			require.Equal(t, tc.expectedRTT, rtt,
