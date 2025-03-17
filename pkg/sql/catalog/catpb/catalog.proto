@@ -213,7 +213,9 @@ message AutoStatsSettings {
   // PartialEnabled is table setting sql_stats_automatic_partial_collection_enabled.
   optional bool partial_enabled = 4;
   // PartialMinStaleRows is table setting sql_stats_automatic_partial_collection_min_stale_rows.
-  optional int64  partial_min_stale_rows = 5;
+  optional int64 partial_min_stale_rows = 5;
   // PartialFractionStaleRows is table setting sql_stats_automatic_partial_collection_fraction_stale_rows.
   optional double partial_fraction_stale_rows = 6;
+  // FullEnabled is table setting sql_stats_automatic_full_collection_enabled.
+  optional bool full_enabled = 7;
 }

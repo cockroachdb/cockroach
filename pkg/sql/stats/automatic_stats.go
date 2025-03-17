@@ -39,13 +39,24 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 // AutomaticPartialStatisticsClusterMode controls the cluster setting for
-// enabling automatic table partial statistics collection. If automatic full
+// enabling automatic partial table statistics collection. If automatic
 // table statistics are disabled for a table, then automatic partial statistics
 // will also be disabled.
 var AutomaticPartialStatisticsClusterMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	catpb.AutoPartialStatsEnabledSettingName,
 	"automatic partial statistics collection mode",
+	true,
+	settings.WithPublic)
+
+// AutomaticFullStatisticsClusterMode controls the cluster setting for
+// enabling automatic full table statistics collection. If automatic
+// table statistics are disabled for a table, then automatic full statistics
+// will also be disabled.
+var AutomaticFullStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	catpb.AutoFullStatsEnabledSettingName,
+	"automatic full statistics collection mode",
 	true,
 	settings.WithPublic)
 
@@ -400,6 +411,25 @@ func (r *Refresher) autoPartialStatsEnabled(desc catalog.TableDescriptor) bool {
 	return enabledForTable == catpb.AutoPartialStatsCollectionEnabled
 }
 
+// autoFullStatsEnabled returns true if the
+// sql_stats_automatic_full_collection_enabled setting of the table
+// descriptor set to true. If the table descriptor is nil or the table-level
+// setting is not set, the function returns true if the automatic full stats
+// cluster setting is enabled.
+func (r *Refresher) autoFullStatsEnabled(desc catalog.TableDescriptor) bool {
+	if desc == nil {
+		// If the descriptor could not be accessed, defer to the cluster setting.
+		return AutomaticFullStatisticsClusterMode.Get(&r.st.SV)
+	}
+	enabledForTable := desc.AutoFullStatsCollectionEnabled()
+	// The table-level setting of sql_stats_automatic_full_collection_enabled
+	// takes precedence over the cluster setting.
+	if enabledForTable == catpb.AutoFullStatsCollectionNotSet {
+		return AutomaticFullStatisticsClusterMode.Get(&r.st.SV)
+	}
+	return enabledForTable == catpb.AutoFullStatsCollectionEnabled
+}
+
 func (r *Refresher) autoStatsEnabledForTableID(
 	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.AutoStatsSettings,
 ) bool {
@@ -624,6 +654,7 @@ func (r *Refresher) Start(
 								rowsAffected,
 								r.asOfTime,
 								r.autoPartialStatsEnabled(desc),
+								r.autoFullStatsEnabled(desc),
 							)
 
 							select {
@@ -854,6 +885,7 @@ func (r *Refresher) maybeRefreshStats(
 	rowsAffected int64,
 	asOf time.Duration,
 	partialStatsEnabled bool,
+	fullStatsEnabled bool,
 ) {
 	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
@@ -893,16 +925,27 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
-	statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
-	targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
-	// randInt will panic if we pass it a value of 0.
-	randomTargetRows := int64(0)
-	if targetRows > 0 {
-		randomTargetRows = r.randGen.randInt(targetRows)
+	// We will always do a full stats refresh if we must or if the maximum
+	// rowsAffected value was specified.
+	doFullRefresh := mustRefresh || rowsAffected >= math.MaxInt32
+	if !doFullRefresh {
+		// Perform the "dice roll".
+		statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
+		statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
+		targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
+		// randInt will panic if we pass it a value of 0.
+		randomTargetRows := int64(0)
+		if targetRows > 0 {
+			randomTargetRows = r.randGen.randInt(targetRows)
+		}
+		doFullRefresh = randomTargetRows < rowsAffected
 	}
-	if (!mustRefresh && rowsAffected < math.MaxInt32 && randomTargetRows >= rowsAffected) ||
-		(r.knobs != nil && r.knobs.DisableFullStatsRefresh) {
+	if (r.knobs != nil && r.knobs.DisableFullStatsRefresh) || !fullStatsEnabled {
+		// We cannot do the full stats refresh.
+		doFullRefresh = false
+	}
+
+	if !doFullRefresh {
 		// No full statistics refresh is happening this time. Let's try a partial
 		// stats refresh.
 		if !partialStatsEnabled {
@@ -910,16 +953,17 @@ func (r *Refresher) maybeRefreshStats(
 			return
 		}
 
-		randomTargetRows = int64(0)
+		// Perform the "dice roll".
+		randomTargetRows := int64(0)
 		partialStatsMinStaleRows := r.autoPartialStatsMinStaleRows(explicitSettings)
 		partialStatsFractionStaleRows := r.autoPartialStatsFractionStaleRows(explicitSettings)
-		targetRows = int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
+		targetRows := int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
 		// randInt will panic if we pass it a value of 0.
 		if targetRows > 0 {
 			randomTargetRows = r.randGen.randInt(targetRows)
 		}
 		if randomTargetRows >= rowsAffected {
-			// No refresh is happening this time, full or partial
+			// No refresh is happening this time, full or partial.
 			return
 		}
 
