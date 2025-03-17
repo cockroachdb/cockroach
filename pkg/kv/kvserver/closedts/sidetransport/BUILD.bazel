@@ -13,9 +13,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/multiregion",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
@@ -36,6 +38,7 @@ go_test(
     name = "sidetransport_test",
     srcs = [
         "receiver_test.go",
+        "sender_helper_test.go",
         "sender_test.go",
     ],
     embed = [":sidetransport"],

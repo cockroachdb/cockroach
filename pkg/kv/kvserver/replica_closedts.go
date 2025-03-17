@@ -52,7 +52,10 @@ func (r *Replica) BumpSideTransportClosed(
 
 	lai := r.shMu.state.LeaseAppliedIndex
 	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	target, ok := targetByPolicy[policy]
+	if !ok {
+		log.Fatalf(ctx, "no target found for policy %d", policy)
+	}
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
