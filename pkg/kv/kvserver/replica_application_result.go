@@ -509,9 +509,9 @@ func (r *Replica) handleTruncatedStateResult(
 	r.shMu.raftTruncState = *t
 	r.mu.Unlock()
 
-	// Clear any entries in the Raft log entry cache for this range up
-	// to and including the most recently truncated index.
-	r.store.raftEntryCache.Clear(r.RangeID, t.Index+1)
+	// Clear any entries in the Raft log entry cache for this range up to and
+	// including the most recently truncated index.
+	r.store.raftEntryCache.Clear(r.RangeID, t.Index)
 
 	// Truncate the sideloaded storage. This is safe only if the new truncated
 	// state is durably stored on disk, i.e. synced.
