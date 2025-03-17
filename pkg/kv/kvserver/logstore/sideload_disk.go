@@ -187,7 +187,7 @@ func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 // TruncateTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) TruncateTo(
 	ctx context.Context, lastIndex kvpb.RaftIndex,
-) (bytesFreed, bytesRetained int64, _ error) {
+) (bytesFreed int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, kvpb.RaftSpan{
 		After: 0, Last: lastIndex,
 	}, true /* doTruncate */)
@@ -196,20 +196,11 @@ func (ss *DiskSideloadStorage) TruncateTo(
 // Helper for truncation or byte calculation for (from, to].
 func (ss *DiskSideloadStorage) possiblyTruncateTo(
 	ctx context.Context, span kvpb.RaftSpan, doTruncate bool,
-) (bytesFreed, bytesRetained int64, _ error) {
+) (bytesFreed int64, _ error) {
 	deletedAll := true
 	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
-		if index > span.Last {
-			size, err := ss.fileSize(filename)
-			if err != nil {
-				return false, err
-			}
-			bytesRetained += size
+		if !span.Contains(index) {
 			deletedAll = false
-			return true, nil
-		}
-		if index <= span.After {
-			// TODO(pav-kv): these files may never be removed. Clean them up.
 			return true, nil
 		}
 		// index is in (span.After, span.Last].
@@ -226,7 +217,7 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 		bytesFreed += fileSize
 		return true, nil
 	}); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	if deletedAll && doTruncate {
@@ -240,7 +231,7 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 			err = nil // handled
 		}
 	}
-	return bytesFreed, bytesRetained, nil
+	return bytesFreed, nil
 }
 
 // HasAnyEntry implements SideloadStorage.
@@ -262,7 +253,7 @@ func (ss *DiskSideloadStorage) HasAnyEntry(ctx context.Context, span kvpb.RaftSp
 // BytesIfTruncatedFromTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
 	ctx context.Context, span kvpb.RaftSpan,
-) (freed, retained int64, _ error) {
+) (freed int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, span, false /* doTruncate */)
 }
 

@@ -9,6 +9,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"slices"
 	"sync"
@@ -590,9 +591,7 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	// The remaining bytes if one were to truncate (0, 0] gives us the total
-	// number of bytes in sideloaded files.
-	_, totalSideloaded, err := s.Sideload.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{})
+	totalSideloaded, err := s.Sideload.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 	if err != nil {
 		return 0, err
 	}

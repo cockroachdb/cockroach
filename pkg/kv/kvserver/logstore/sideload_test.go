@@ -167,7 +167,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		{
 			err: nil,
 			fun: func() error {
-				_, _, err := ss.TruncateTo(ctx, 122)
+				_, err := ss.TruncateTo(ctx, 122)
 				return err
 			},
 		},
@@ -221,32 +221,29 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	for n := range payloads {
 		index := payloads[n] // (0, index] + (index, ...]
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: index})
+		total, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 		require.NoError(t, err)
-		freedWhatWasRetained, retainedNothing, err :=
-			ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{After: index, Last: math.MaxUint64})
+		prefixBytes, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: index})
 		require.NoError(t, err)
-		require.Zero(t, retainedNothing)
-		require.Equal(t, freedWhatWasRetained, retained)
+		suffixBytes, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{
+			After: index, Last: math.MaxUint64,
+		})
+		require.NoError(t, err)
+		require.Equal(t, total, prefixBytes+suffixBytes)
 		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, index)
-		if err != nil {
-			t.Fatalf("%d: %+v", n, err)
-		}
-		require.Equal(t, freedByTruncateTo, freed)
-		require.Equal(t, retainedByTruncateTo, retained)
+		freed, err := ss.TruncateTo(ctx, index)
+		require.NoError(t, err)
+		require.Equal(t, prefixBytes, freed)
 		// Indexes > payloads[n] are still there at both terms.
 		for _, term := range []kvpb.RaftTerm{lowTerm, highTerm} {
 			for _, i := range payloads[n+1:] {
-				if _, err := ss.Get(ctx, i, term); err != nil {
-					t.Fatalf("%d.%d: %+v", n, i, err)
-				}
+				_, err := ss.Get(ctx, i, term)
+				require.NoErrorf(t, err, "%d.%d", n, i)
 			}
 			// Indexes <= payloads[n] are gone.
 			for _, i := range payloads[:n+1] {
-				if _, err := ss.Get(ctx, i, term); !errors.Is(err, errSideloadedFileNotFound) {
-					t.Fatalf("%d.%d: %+v", n, i, err)
-				}
+				_, err := ss.Get(ctx, i, term)
+				require.ErrorIs(t, err, errSideloadedFileNotFound)
 			}
 		}
 	}
@@ -263,20 +260,18 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// we will be prevented from removing it below.
 		require.NoError(t, f.Close())
 
-		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		_, err = ss.TruncateTo(ctx, math.MaxUint64)
 		// The sideloaded storage should not error out here; removing files
 		// is optional. But the file should still be there!
 		require.NoError(t, err)
-		{
-			_, err := eng.Env().Stat(nonRemovableFile)
-			require.NoError(t, err)
-		}
+		_, err = eng.Env().Stat(nonRemovableFile)
+		require.NoError(t, err)
 
 		// Now remove extra file and let truncation proceed to remove directory.
 		require.NoError(t, eng.Env().Remove(nonRemovableFile))
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
-		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		_, err = ss.TruncateTo(ctx, math.MaxUint64)
 		require.NoError(t, err)
 		// Ensure directory is removed, now that all files should be gone.
 		_, err = eng.Env().Stat(ss.Dir())
@@ -310,13 +305,11 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.NoError(t, err)
 			require.Equal(t, check.want, found)
 		}
-		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+		prefixBytes, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 		require.NoError(t, err)
-		require.Zero(t, retained)
-		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
+		freed, err := ss.TruncateTo(ctx, math.MaxUint64)
 		require.NoError(t, err)
-		require.Zero(t, retainedByTruncateTo)
-		require.Equal(t, freedByTruncateTo, freed)
+		require.Equal(t, prefixBytes, freed)
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -328,14 +321,12 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
 	// without the directory existing.
-	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{})
+	size, err := ss.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+	require.NoError(t, err)
+	require.Zero(t, size)
+	freed, err := ss.TruncateTo(ctx, 0)
 	require.NoError(t, err)
 	require.Zero(t, freed)
-	require.Zero(t, retained)
-	freed, retained, err = ss.TruncateTo(ctx, 0)
-	require.NoError(t, err)
-	require.Zero(t, freed)
-	require.Zero(t, retained)
 
 	assertExists(false)
 

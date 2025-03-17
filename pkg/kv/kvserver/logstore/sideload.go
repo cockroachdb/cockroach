@@ -47,13 +47,13 @@ type SideloadStorage interface {
 	// HasAnyEntry returns whether there is any entry in the given log span.
 	HasAnyEntry(_ context.Context, _ kvpb.RaftSpan) (bool, error)
 	// TruncateTo removes all files belonging to an index <= the given index.
-	// Returns the number of bytes freed, the number of bytes in files that
-	// remain, or an error.
-	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed, retained int64, _ error)
+	// Returns the number of bytes freed, or an error.
+	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed int64, _ error)
 	// BytesIfTruncatedFromTo returns the number of bytes that would be freed, if
-	// one were to truncate the given (from, to] log span. Additionally, it
-	// returns the number of bytes that would be retained > to.
-	BytesIfTruncatedFromTo(_ context.Context, _ kvpb.RaftSpan) (freed, retained int64, _ error)
+	// one were to truncate the given (from, to] log span.
+	// TODO(pav-kv): merge this with HasAnyEntry into a single "stats" call. The
+	// truncation path needs both anyway.
+	BytesIfTruncatedFromTo(_ context.Context, _ kvpb.RaftSpan) (freed int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (string, error)
