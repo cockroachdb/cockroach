@@ -27,7 +27,8 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	switch ch {
 	case '$':
 		// Root path ($)
-		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' {
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' || s.peek() == ')' {
+			lval.SetID(lexbase.ROOT)
 			return
 		}
 
@@ -47,6 +48,51 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
 			lval.SetID(lexbase.IDENT)
+		}
+		return
+	case '=':
+		if s.peek() == '=' { // ==
+			s.pos++
+			lval.SetID(lexbase.EQUAL)
+			return
+		}
+		return
+	case '!':
+		if s.peek() == '=' { // !=
+			s.pos++
+			lval.SetID(lexbase.NOT_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.NOT)
+		return
+	case '>':
+		if s.peek() == '=' { // >=
+			s.pos++
+			lval.SetID(lexbase.GREATER_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.GREATER)
+		return
+	case '<':
+		if s.peek() == '=' { // <=
+			s.pos++
+			lval.SetID(lexbase.LESS_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.LESS)
+		return
+	case '&':
+		if s.peek() == '&' { // &&
+			s.pos++
+			lval.SetID(lexbase.AND)
+			return
+		}
+		return
+	case '|':
+		if s.peek() == '|' { // ||
+			s.pos++
+			lval.SetID(lexbase.OR)
+			return
 		}
 		return
 	default:

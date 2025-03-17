@@ -262,6 +262,86 @@ $[false]
 ----
 $[false]
 
+parse
+1 < 1
+----
+(1 < 1) -- normalized!
+
+parse
+1 <= 1
+----
+(1 <= 1) -- normalized!
+
+parse
+1 > 1
+----
+(1 > 1) -- normalized!
+
+parse
+1 >= 1
+----
+(1 >= 1) -- normalized!
+
+parse
+1 != 1
+----
+(1 != 1) -- normalized!
+
+parse
+1 == 1
+----
+(1 == 1) -- normalized!
+
+parse
+((true < false))
+----
+(true < false) -- normalized!
+
+parse
+((true <= false))
+----
+(true <= false) -- normalized!
+
+parse
+((true > false))
+----
+(true > false) -- normalized!
+
+parse
+((true >= false))
+----
+(true >= false) -- normalized!
+
+parse
+((true != false))
+----
+(true != false) -- normalized!
+
+parse
+((true == false))
+----
+(true == false) -- normalized!
+
+parse
+$ < 1
+----
+($ < 1) -- normalized!
+
+parse
+$ == $
+----
+($ == $) -- normalized!
+
+parse
+1 == 1 && 1 != 1
+----
+((1 == 1) && (1 != 1)) -- normalized!
+
+parse
+1 == 1 || 1 != 1
+----
+((1 == 1) || (1 != 1)) -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
