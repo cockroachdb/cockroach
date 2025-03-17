@@ -243,7 +243,7 @@ func (sc *TableStatisticsCache) GetTableStats(
 	}
 	forecast := forecastAllowed(table, sc.settings)
 	return sc.getTableStatsFromCache(
-		ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver,
+		ctx, table.GetID(), forecast, table.UserDefinedTypeColumns(), typeResolver,
 	)
 }
 
@@ -334,7 +334,7 @@ func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Set
 func (sc *TableStatisticsCache) getTableStatsFromCache(
 	ctx context.Context,
 	tableID descpb.ID,
-	forecast *bool,
+	forecast bool,
 	udtCols []catalog.Column,
 	typeResolver *descs.DistSQLTypeResolver,
 ) ([]*TableStatistic, error) {
@@ -350,13 +350,13 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 		}
 	}
 
-	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver)
+	return sc.addCacheEntryLocked(ctx, tableID, forecast, typeResolver)
 }
 
 // isStale checks whether we need to evict and re-load the cache entry.
-func (e *cacheEntry) isStale(forecast *bool, udtCols []catalog.Column) bool {
+func (e *cacheEntry) isStale(forecast bool, udtCols []catalog.Column) bool {
 	// Check whether forecast settings have changed.
-	if forecast != nil && e.forecast != *forecast {
+	if e.forecast != forecast {
 		return true
 	}
 	// Check whether user-defined types have changed (this is similar to

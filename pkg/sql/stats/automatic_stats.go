@@ -887,7 +887,7 @@ func (r *Refresher) maybeRefreshStats(
 	partialStatsEnabled bool,
 	fullStatsEnabled bool,
 ) {
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, false /* forecast */, nil /* udtCols */, nil /* typeResolver */)
 	if err != nil {
 		log.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
