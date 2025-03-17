@@ -521,7 +521,7 @@ func (r *Replica) handleTruncatedStateResult(
 	// handleTruncatedStateResult, stop calculating the size of the removed
 	// files and the remaining files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
-	size, _, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index)
+	size, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index)
 	if err != nil {
 		// We don't *have* to remove these entries for correctness. Log a
 		// loud error, but keep humming along.
