@@ -92,3 +92,19 @@ func (a ArrayList) String() string {
 	sb.WriteString("]")
 	return sb.String()
 }
+
+type Filter struct {
+	Condition Path
+}
+
+var _ Path = Filter{}
+
+func (f Filter) String() string {
+	return fmt.Sprintf("?(%s)", f.Condition)
+}
+
+type Current struct{}
+
+var _ Path = Current{}
+
+func (c Current) String() string { return "@" }

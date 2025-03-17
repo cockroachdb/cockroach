@@ -95,6 +95,9 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 			return
 		}
 		return
+	case '@':
+		lval.SetID(lexbase.CURRENT)
+		return
 	default:
 		if sqllexbase.IsDigit(ch) {
 			s.scanNumber(lval, ch)
