@@ -135,7 +135,6 @@ func backup(
 	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
-	statsCache *stats.TableStatisticsCache,
 	execLocality roachpb.Locality,
 ) (_ roachpb.RowCount, numBackupInstances int, _ error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
@@ -435,7 +434,7 @@ func backup(
 		}
 	}
 
-	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), settings, backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, 0, err
 	}
@@ -468,39 +467,29 @@ func releaseProtectedTimestamp(
 // to suboptimal performance when reading/writing to this table until
 // the stats have been recomputed.
 func getTableStatsForBackup(
-	ctx context.Context, statsCache *stats.TableStatisticsCache, descs []descpb.Descriptor,
+	ctx context.Context,
+	executor isql.Executor,
+	settings *cluster.Settings,
+	descs []descpb.Descriptor,
 ) backuppb.StatsTable {
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range descs {
 		if tbl, _, _, _, _ := descpb.GetDescriptors(&descs[i]); tbl != nil {
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
-			// nil typeResolver means that we'll use the latest committed type
-			// metadata which is acceptable.
-			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc, nil /* typeResolver */)
+			tableStatisticsAcc, err := stats.GetTableStatsProtosFromDB(ctx, tableDesc, executor, settings)
 			if err != nil {
-				log.Warningf(ctx, "failed to collect stats for table: %s, "+
-					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),
-					err.Error())
+				log.Warningf(
+					ctx, "failed to collect stats for table: %s, table ID: %d during a backup: %s",
+					tableDesc.GetName(), tableDesc.GetID(), err,
+				)
 				continue
 			}
-
-			for _, stat := range tableStatisticsAcc {
-				if statShouldBeIncludedInBackupRestore(&stat.TableStatisticProto) {
-					tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
-				}
-			}
+			tableStatistics = append(tableStatistics, tableStatisticsAcc...)
 		}
 	}
 	return backuppb.StatsTable{
 		Statistics: tableStatistics,
 	}
-}
-
-func statShouldBeIncludedInBackupRestore(stat *stats.TableStatisticProto) bool {
-	// Forecasts and merged stats are computed from the persisted
-	// stats on demand and do not need to be backed up or
-	// restored.
-	return stat.Name != jobspb.ForecastStatsName && stat.Name != jobspb.MergedStatsName
 }
 
 type backupResumer struct {
@@ -699,7 +688,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
 	// errors that are also rpc errors. Don't retry too aggressively.
@@ -735,7 +723,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			backupManifest,
 			p.ExecCfg().DistSQLSrv.ExternalStorage,
 			details.EncryptionOptions,
-			statsCache,
 			details.ExecutionLocality,
 		)
 		if err == nil {

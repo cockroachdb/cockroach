@@ -722,24 +722,22 @@ func remapAndFilterRelevantStatistics(
 
 	tableHasStatsInBackup := make(map[descpb.ID]struct{})
 	for _, stat := range tableStatistics {
-		if statShouldBeIncludedInBackupRestore(stat) {
-			tableHasStatsInBackup[stat.TableID] = struct{}{}
-			if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
-				// We only restore statistics when all necessary descriptor rewrites are
-				// present in the rewrite map.
-				stat.TableID = tableRewrite.ID
-				// We also need to remap the type OID in the histogram for UDTs.
-				if stat.HistogramData != nil && stat.HistogramData.ColumnType != nil {
-					if typ := stat.HistogramData.ColumnType; typ.UserDefined() {
-						typDescID := typedesc.GetUserDefinedTypeDescID(typ)
-						if _, ok := descriptorRewrites[typDescID]; !ok {
-							continue
-						}
-						rewrite.RewriteIDsInTypesT(typ, descriptorRewrites)
+		tableHasStatsInBackup[stat.TableID] = struct{}{}
+		if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
+			// We only restore statistics when all necessary descriptor rewrites are
+			// present in the rewrite map.
+			stat.TableID = tableRewrite.ID
+			// We also need to remap the type OID in the histogram for UDTs.
+			if stat.HistogramData != nil && stat.HistogramData.ColumnType != nil {
+				if typ := stat.HistogramData.ColumnType; typ.UserDefined() {
+					typDescID := typedesc.GetUserDefinedTypeDescID(typ)
+					if _, ok := descriptorRewrites[typDescID]; !ok {
+						continue
 					}
+					rewrite.RewriteIDsInTypesT(typ, descriptorRewrites)
 				}
-				relevantTableStatistics = append(relevantTableStatistics, stat)
 			}
+			relevantTableStatistics = append(relevantTableStatistics, stat)
 		}
 	}
 
