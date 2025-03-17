@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -58,6 +59,7 @@ type State interface {
 	// first flag is false, then the capacity is generated from scratch,
 	// otherwise the last calculated capacity values are used for each store.
 	StoreDescriptors(bool, ...StoreID) []roachpb.StoreDescriptor
+	Node(NodeID) Node
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
@@ -197,6 +199,8 @@ type State interface {
 	// RegisterConfigChangeListener registers a listener which will be called
 	// when a cluster configuration change occurs such as a store being added.
 	RegisterConfigChangeListener(ConfigChangeListener)
+	// NodeCapacity returns the capacity of the node with ID NodeID.
+	NodeCapacity(NodeID) roachpb.NodeCapacity
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -207,6 +211,8 @@ type Node interface {
 	Stores() []StoreID
 	// Descriptor returns the descriptor for this node.
 	Descriptor() roachpb.NodeDescriptor
+	// TODO: Move this to be external.
+	MMAllocator() mma.Allocator
 }
 
 // Store is a container for replicas.
