@@ -170,7 +170,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				candsPL.insert(store.StoreID)
 				var means meansForStoreSet
 				clear(scratchNodes)
-				computeMeansForStoreSet(candsPL, a.cs, &means, scratchNodes)
+				means.stores = candsPL
+				computeMeansForStoreSet(a.cs, &means, scratchNodes)
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
