@@ -61,13 +61,13 @@ select 1, 2; select 1, 2, 3; select 'ok'
 statement ok
 SET application_name = ''
 
-query TTB
-SELECT txn_fingerprint_id, key, implicit_txn FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY txn_fingerprint_id
+query TTTB
+SELECT statement_id, txn_fingerprint_id, key, implicit_txn FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY key, txn_fingerprint_id
 ----
-11423158778792053189  SELECT _                  true
-11423158778792053189  SELECT _, _               true
-11423158778792053189  SELECT _, _, _            true
-6692757627851618087   SET application_name = _  true
+10543509969653713415  11423158778792053189  SELECT _                  true
+5745311157220589890   11423158778792053189  SELECT _, _               true
+5153809228704478449   11423158778792053189  SELECT _, _, _            true
+17546814520094097656  6692757627851618087   SET application_name = _  true
 
 statement ok
 CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);
@@ -223,19 +223,19 @@ SELECT z FROM test where y=2;
 statement ok
 SELECT x FROM test where y=1;
 
-query TB colnames
-SELECT key, implicit_txn
+query TTTB colnames
+SELECT statement_id, txn_fingerprint_id, key, implicit_txn
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'implicit_txn_test'
-ORDER BY key, implicit_txn;
+ORDER BY statement_id, key, implicit_txn;
 ----
-key                             implicit_txn
-SELECT _                        false
-SELECT x FROM test WHERE y = _  false
-SELECT x FROM test WHERE y = _  false
-SELECT x FROM test WHERE y = _  true
-SELECT x, z FROM test           false
-SELECT z FROM test WHERE y = _  true
+statement_id          txn_fingerprint_id    key                             implicit_txn
+10408858296841757952  4544145443417805535   SELECT x FROM test WHERE y = _  false
+10408858296841757952  13478531408983698331  SELECT x FROM test WHERE y = _  false
+10408858296841757964  4544145443417805523   SELECT x FROM test WHERE y = _  true
+10543509969653713419  646847662919799570    SELECT _                        false
+15907252083884073594  8332314834087515557   SELECT z FROM test WHERE y = _  true
+3710577796014427302   13478531408983698331  SELECT x, z FROM test           false
 
 # Test throttling of storing statistics per application
 

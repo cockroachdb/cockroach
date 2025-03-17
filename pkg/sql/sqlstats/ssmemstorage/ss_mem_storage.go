@@ -33,7 +33,7 @@ import (
 // should use stmtFingerprintID (which is a hashed string of the fields below) as the
 // stmtKey.
 type stmtKey struct {
-	sampledPlanKey
+	fingerprintID            appstatspb.StmtFingerprintID
 	planHash                 uint64
 	transactionFingerprintID appstatspb.TransactionFingerprintID
 }
@@ -49,12 +49,8 @@ func (p sampledPlanKey) size() int64 {
 	return int64(unsafe.Sizeof(p)) + int64(len(p.stmtNoConstants)) + int64(len(p.database))
 }
 
-func (s stmtKey) String() string {
-	return s.stmtNoConstants
-}
-
 func (s stmtKey) size() int64 {
-	return s.sampledPlanKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
+	return int64(unsafe.Sizeof(invalidStmtFingerprintID))
 }
 
 const invalidStmtFingerprintID = 0
@@ -208,16 +204,16 @@ func NewTempContainerFromExistingStmtStats(
 			return container, statistics[i:], nil
 		}
 		key := stmtKey{
-			sampledPlanKey: sampledPlanKey{
-				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
-				database:        statistics[i].Key.KeyData.Database,
-			},
+			fingerprintID:            statistics[i].ID,
 			planHash:                 statistics[i].Key.KeyData.PlanHash,
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
 		stmtStats, _, throttled :=
-			container.tryCreateStatsForStmtWithKeyLocked(key, statistics[i].ID)
+			container.tryCreateStatsForStmtWithKeyLocked(key, sampledPlanKey{
+				stmtNoConstants: statistics[i].Key.KeyData.Query,
+				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
+				database:        statistics[i].Key.KeyData.Database,
+			})
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
 		}
@@ -238,7 +234,6 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats.mu.vectorized = statistics[i].Key.KeyData.Vec
 		stmtStats.mu.distSQLUsed = statistics[i].Key.KeyData.DistSQL
 		stmtStats.mu.fullScan = statistics[i].Key.KeyData.FullScan
-		stmtStats.mu.database = statistics[i].Key.KeyData.Database
 		stmtStats.mu.querySummary = statistics[i].Key.KeyData.QuerySummary
 	}
 
@@ -336,6 +331,10 @@ type stmtStats struct {
 	// ID is the statementFingerprintID constructed using the stmtKey fields.
 	ID appstatspb.StmtFingerprintID
 
+	// The fields in meta are encoded into the ID.
+	// They shouldn't be modified after the stmtStats object is created.
+	meta sampledPlanKey
+
 	// data contains all fields that are modified when new statements matching
 	// the stmtKey are executed, and therefore must be protected by a mutex.
 	mu struct {
@@ -353,10 +352,6 @@ type stmtStats struct {
 		// full table index scan.
 		fullScan bool
 
-		// database records the database from the session the statement
-		// was executed from.
-		database string
-
 		// querySummary records a summarized format of the query statement.
 		querySummary string
 
@@ -366,14 +361,14 @@ type stmtStats struct {
 
 func (s *stmtStats) sizeUnsafeLocked() int64 {
 	const stmtStatsShallowSize = int64(unsafe.Sizeof(stmtStats{}))
-	databaseNameSize := int64(len(s.mu.database))
+	metaFieldsSize := s.meta.size()
 
 	// s.mu.data might contain pointer tyeps, so we subtract its shallow size and
 	// include the actual size.
 	dataSize := -int64(unsafe.Sizeof(appstatspb.StatementStatistics{})) +
 		int64(s.mu.data.Size())
 
-	return stmtStatsShallowSize + databaseNameSize + dataSize
+	return stmtStatsShallowSize + metaFieldsSize + dataSize
 }
 
 func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
@@ -415,15 +410,15 @@ func (s *Container) getStatsForStmtWithKey(key stmtKey) (stats *stmtStats) {
 // is 0, we'll also compute the fingerprintID from the stmtKey.
 // we'll construct it from the stmtKey.
 func (s *Container) tryCreateStatsForStmtWithKey(
-	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID,
+	key stmtKey, meta sampledPlanKey,
 ) (stats *stmtStats, created, throttled bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.tryCreateStatsForStmtWithKeyLocked(key, stmtFingerprintID)
+	return s.tryCreateStatsForStmtWithKeyLocked(key, meta)
 }
 
 func (s *Container) tryCreateStatsForStmtWithKeyLocked(
-	key stmtKey, stmtFingerprintID appstatspb.StmtFingerprintID,
+	key stmtKey, meta sampledPlanKey,
 ) (stats *stmtStats, created, throttled bool) {
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
@@ -438,15 +433,11 @@ func (s *Container) tryCreateStatsForStmtWithKeyLocked(
 		return stats, false /* created */, true /* throttled */
 	}
 
-	// Otherwise try to create a new entry.
-	if stmtFingerprintID == 0 {
-		stmtFingerprintID = constructStatementFingerprintIDFromStmtKey(key)
+	stats = &stmtStats{
+		ID:   key.fingerprintID,
+		meta: meta,
 	}
-
-	stats = &stmtStats{}
-	stats.ID = stmtFingerprintID
 	s.mu.stmts[key] = stats
-	s.mu.sampledStatementCache[key.sampledPlanKey] = struct{}{}
 
 	return stats, true /* created */, false /* throttled */
 }
@@ -494,10 +485,10 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 			return json.Marshal(stats.mu.data)
 		}()
 		if err != nil {
-			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
+			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.fingerprintID, err)
 			continue
 		}
-		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
+		fmt.Fprintf(&buf, "%q: %s\n", key.fingerprintID, json)
 	}
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
@@ -524,7 +515,7 @@ func (s *Container) DrainStats(
 
 	var data appstatspb.StatementStatistics
 	var distSQLUsed, vectorized, fullScan bool
-	var database, querySummary string
+	var querySummary string
 
 	for key, stmt := range stmts {
 		func() {
@@ -534,20 +525,19 @@ func (s *Container) DrainStats(
 			distSQLUsed = stmt.mu.distSQLUsed
 			vectorized = stmt.mu.vectorized
 			fullScan = stmt.mu.fullScan
-			database = stmt.mu.database
 			querySummary = stmt.mu.querySummary
 		}()
 
 		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
 			Key: appstatspb.StatementStatisticsKey{
-				Query:                    key.stmtNoConstants,
+				Query:                    stmt.meta.stmtNoConstants,
 				QuerySummary:             querySummary,
 				DistSQL:                  distSQLUsed,
 				Vec:                      vectorized,
-				ImplicitTxn:              key.implicitTxn,
+				ImplicitTxn:              stmt.meta.implicitTxn,
 				FullScan:                 fullScan,
 				App:                      s.appName,
-				Database:                 database,
+				Database:                 stmt.meta.database,
 				PlanHash:                 key.planHash,
 				TransactionFingerprintID: key.transactionFingerprintID,
 			},
@@ -627,6 +617,7 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 	}()
 
 	// Copy the statement stats for each statement key.
+	// We only care about the data and meta fields.
 	for k, v := range statMap {
 		statCopy := func() *stmtStats {
 			v.mu.Lock()
@@ -635,13 +626,14 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			statCopy.mu.data = v.mu.data
 			return statCopy
 		}()
+		statCopy.meta = v.meta
 		statCopy.ID = v.ID
 		statMap[k] = statCopy
 	}
 
 	// Merge the statement stats.
 	for k, v := range statMap {
-		stats, created, throttled := s.tryCreateStatsForStmtWithKey(k, v.ID)
+		stats, created, throttled := s.tryCreateStatsForStmtWithKey(k, v.meta)
 		// If we have reached the limit of fingerprints, we skip this fingerprint.
 		// No cleanup necessary.
 		if throttled {
@@ -793,10 +785,4 @@ type transactionCounts struct {
 		// TODO(arul): Can we rename this without breaking stuff?
 		appstatspb.TxnStats
 	}
-}
-
-func constructStatementFingerprintIDFromStmtKey(key stmtKey) appstatspb.StmtFingerprintID {
-	return appstatspb.ConstructStatementFingerprintID(
-		key.stmtNoConstants, key.implicitTxn, key.database,
-	)
 }
