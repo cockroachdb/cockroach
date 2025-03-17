@@ -2191,6 +2191,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 func (r *Replica) maybeMarkReplicaUnavailableInLeaderlessWatcher(
 	ctx context.Context, postTickLead raftpb.PeerID, storeClockTime time.Time,
 ) {
+	log.Infof(ctx, "maybeMarkReplicaUnavailableInLeaderlessWatcher")
 	r.LeaderlessWatcher.mu.Lock()
 	defer r.LeaderlessWatcher.mu.Unlock()
 
