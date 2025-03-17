@@ -35,6 +35,10 @@ type ReplicaType struct {
 type ReplicaIDAndType struct {
 	// ReplicaID can be set to unknownReplicaID or noReplicaID.
 	roachpb.ReplicaID
+	// In general, all roachpb.ReplicaTypes can be represented here. Some
+	// contexts that use ReplicaIDAndType may only represent a subset of
+	// roachpb.ReplicaTypes -- the commentary in those contexts will specify if
+	// that is the case.
 	ReplicaType
 }
 
@@ -78,20 +82,13 @@ func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 	// leaseholder, or that leaseholder change has happened, then the change has
 	// been subsumed.
 	switch rit.ReplicaType.ReplicaType {
-	// TODO(kvoli,sumeer): in some cases we normalize the types, but we don't
-	// document it clearly. And documentation is insufficient -- we should use a
-	// different type, and centralize the normalization code. Examples: this
-	// normalization; the pendingReplicaChange.{prev,next} fields;
-	// analyzedConstraintsBuf.tryAddingStore. It may not be possible to normalize
-	// in the same way, as here we are concerned with load, unlike in
-	// analyzedConstraintsBuf.tryAddingStore.
 	case roachpb.VOTER_INCOMING:
 		// Already seeing the load, so consider the change done.
 		rit.ReplicaType.ReplicaType = roachpb.VOTER_FULL
 	}
 	// rit.replicaId equal to LEARNER, VOTER_DEMOTING* are left as-is. If next
-	// is trying to remove a replica, this store is still seeing some of the
-	// load.
+	// is trying to remove a replica, this change has not finished yet, and the
+	// store is still seeing the load corresponding to the state it is exiting.
 	if rit.ReplicaType == next.ReplicaType && (prev.IsLeaseholder == next.IsLeaseholder ||
 		rit.IsLeaseholder == next.IsLeaseholder) {
 		return true
@@ -635,6 +632,8 @@ type storeState struct {
 		// replicas is computed from the authoritative information provided by
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
+		//
+		// NB: this can include LEARNER and VOTER_DEMOTING_LEARNER replicas.
 		replicas map[roachpb.RangeID]ReplicaState
 		// topKRanges along some load dimension. If the store is closer to hitting
 		// the resource limit on some resource ranges that are higher in that
@@ -648,6 +647,8 @@ type storeState struct {
 		// may provide a building block for the incremental computation.
 		//
 		// The key in this map is a local store-id.
+		//
+		// NB: this does not include LEARNER and VOTER_DEMOTING_LEARNER replicas.
 		topKRanges map[roachpb.StoreID]*topKReplicas
 		// TODO(kvoli,sumeerbhola): Update enactedHistory when integrating the
 		// storeChangeRateLimiter.
@@ -806,6 +807,15 @@ type rangeState struct {
 	// If non-nil, it is up-to-date. Typically, non-nil for a range that has no
 	// pendingChanges and is not satisfying some constraint, since we don't want
 	// to repeat the analysis work every time we consider it.
+	//
+	// REMINDER: rangeAnalyzedConstraints ignores LEARNER and
+	// VOTER_DEMOTING_LEARNER replicas. So if a voter/non-voter is being added
+	// and is currently a LEARNER, calling one of the methods on
+	// rangeAnalyzedConstraints that tells us about an unsatisfied constraint
+	// can give us something that is already pending. Our expectation is that
+	// the pending changes will be reflected in pendingChanges. Then it becomes
+	// the responsibility of a higher layer (allocator) to notice that the
+	// rangeState has pendingChanges, and not make any more changes.
 	constraints *rangeAnalyzedConstraints
 
 	// TODO(sumeer): populate and use.
@@ -1048,9 +1058,8 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		rs := cs.ranges[rangeID]
 		// TODO: replicas is also already adjusted.
 		for _, replica := range rs.replicas {
-			switch replica.ReplicaState.ReplicaType.ReplicaType {
-			// TODO: another place we are picking only a few types.
-			case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER, roachpb.VOTER_DEMOTING_NON_VOTER:
+			typ := replica.ReplicaState.ReplicaType.ReplicaType
+			if isVoter(typ) || isNonVoter(typ) {
 				ss := cs.stores[replica.StoreID]
 				topk := ss.adjusted.topKRanges[msg.StoreID]
 				switch topk.dim {
