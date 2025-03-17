@@ -71,6 +71,8 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []json.JSON) ([]json.JSON
 		return current, nil
 	case jsonpath.Root:
 		return []json.JSON{ctx.root}, nil
+	case jsonpath.Current:
+		return current, nil
 	case jsonpath.Key:
 		return ctx.evalKey(p, current)
 	case jsonpath.Wildcard:
@@ -85,9 +87,19 @@ func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []json.JSON) ([]json.JSON
 		return []json.JSON{resolved}, nil
 	case jsonpath.Operation:
 		return ctx.evalOperation(p, current)
+	case jsonpath.Filter:
+		return ctx.evalFilter(p, current)
 	default:
 		return nil, errUnimplemented
 	}
+}
+
+func (ctx *jsonpathCtx) unwrap(input json.JSON) []json.JSON {
+	if !ctx.strict && input.Type() == json.ArrayJSONType {
+		array, _ := input.AsArray()
+		return array
+	}
+	return []json.JSON{input}
 }
 
 func (ctx *jsonpathCtx) evalAndUnwrap(path jsonpath.Path, inputs []json.JSON) ([]json.JSON, error) {
@@ -100,12 +112,12 @@ func (ctx *jsonpathCtx) evalAndUnwrap(path jsonpath.Path, inputs []json.JSON) ([
 	}
 	var unwrapped []json.JSON
 	for _, result := range results {
-		if result.Type() == json.ArrayJSONType {
-			array, _ := result.AsArray()
-			unwrapped = append(unwrapped, array...)
-		} else {
-			unwrapped = append(unwrapped, result)
-		}
+		unwrapped = append(unwrapped, ctx.unwrap(result)...)
 	}
 	return unwrapped, nil
+}
+
+func (ctx *jsonpathCtx) unwrapAndEval(path jsonpath.Path, input json.JSON) ([]json.JSON, error) {
+	unwrapped := ctx.unwrap(input)
+	return ctx.eval(path, unwrapped)
 }

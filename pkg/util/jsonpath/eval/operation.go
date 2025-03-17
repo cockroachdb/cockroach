@@ -53,11 +53,11 @@ func convertToBool(j json.JSON) jsonpathBool {
 }
 
 func (ctx *jsonpathCtx) evalOperation(
-	p jsonpath.Operation, current []json.JSON,
+	op jsonpath.Operation, current []json.JSON,
 ) ([]json.JSON, error) {
-	switch p.Type {
+	switch op.Type {
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
-		res, err := ctx.evalLogical(p, current)
+		res, err := ctx.evalLogical(op, current)
 		if err != nil {
 			return nil, err
 		}
@@ -65,7 +65,7 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		res, err := ctx.evalComparison(p, current)
+		res, err := ctx.evalComparison(op, current)
 		if err != nil {
 			return nil, err
 		}
