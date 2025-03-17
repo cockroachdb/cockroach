@@ -125,6 +125,7 @@ func defaultExecutorConfig() executorConfig {
 		iterations:   1,
 		lenient:      true,
 		recoverable:  true,
+		affinity:     true,
 	}
 }
 
@@ -337,26 +338,30 @@ func (e *executor) executeBenchmarks() error {
 		if e.shellCommand != "" {
 			runCommand = fmt.Sprintf("%s && %s", e.shellCommand, runCommand)
 		}
-		commandGroup := make([]cluster.RemoteCommand, 0)
 		// Weave the commands between binaries and iterations.
-		for i := 0; i < e.iterations; i++ {
+		for range e.iterations {
+			iterationGroup := make([]cluster.RemoteCommand, 0)
 			for key, bin := range e.binaries {
 				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
 				command := cluster.RemoteCommand{
 					Args:     []string{"sh", "-c", shellCommand},
 					Metadata: benchmarkKey{bench, key},
 				}
-				commandGroup = append(commandGroup, command)
+				iterationGroup = append(iterationGroup, command)
 			}
-		}
-		if e.affinity {
-			commands = append(commands, commandGroup)
-		} else {
-			// When affinity is disabled, commands & single iterations can run on any
-			// node. This has the benefit of not having stragglers, but the downside
-			// of possibly introducing noise.
-			for _, command := range commandGroup {
-				commands = append(commands, []cluster.RemoteCommand{command})
+
+			if e.affinity {
+				// When affinity is enabled, each iteration runs as a group with binaries interleaved.
+				// This means all binaries for a single iteration will run together on the same node,
+				// but different iterations can run on different nodes.
+				commands = append(commands, iterationGroup)
+			} else {
+				// When affinity is disabled, each command runs individually on any available node.
+				// This has the benefit of not having stragglers, but the downside of possibly
+				// introducing noise due to different node characteristics.
+				for _, command := range iterationGroup {
+					commands = append(commands, []cluster.RemoteCommand{command})
+				}
 			}
 		}
 	}
