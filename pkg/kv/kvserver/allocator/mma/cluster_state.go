@@ -1289,8 +1289,22 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 // causing it to be overloaded (or the node to be overloaded). It does not
 // change any state between the call and return.
 func (cs *clusterState) canAddLoad(ss *storeState, delta LoadVector, means *meansForStoreSet) bool {
-	// TODO(sumeer):
-	return false
+	ns := cs.nodes[ss.NodeID]
+	// Add the delta.
+	for i := range delta {
+		ss.adjusted.load[i] += delta[i]
+	}
+	ns.adjustedCPU += delta[CPURate]
+	sls := computeLoadSummary(ss, ns, &means.storeLoad, &means.nodeLoad)
+	// Undo the addition.
+	for i := range delta {
+		ss.adjusted.load[i] -= delta[i]
+	}
+	ns.adjustedCPU -= delta[CPURate]
+	// We already filtered out stores >= loadNoChange before attempting to add
+	// this load, so we allow everyone <= loadNoChange now, since those equal to
+	// loadNoChange must be due to this addition.
+	return sls.sls <= loadNoChange && sls.nls <= loadNoChange
 }
 
 func (cs *clusterState) computeLoadSummary(
@@ -1298,6 +1312,12 @@ func (cs *clusterState) computeLoadSummary(
 ) storeLoadSummary {
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
+	return computeLoadSummary(ss, ns, msl, mnl)
+}
+
+func computeLoadSummary(
+	ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
+) storeLoadSummary {
 	sls := loadLow
 	var highDiskSpaceUtil bool
 	var cpuSummary loadSummary
