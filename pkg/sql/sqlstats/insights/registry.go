@@ -10,7 +10,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
 
@@ -29,7 +31,9 @@ func (r *lockingRegistry) Clear() {
 	r.statements = make(map[clusterunique.ID]*statementBuf)
 }
 
-func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
+func (r *lockingRegistry) ObserveStatement(
+	sessionID clusterunique.ID, statement *sqlstats.RecordedStmtStats,
+) {
 	if !r.enabled() {
 		return
 	}
@@ -41,13 +45,14 @@ func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement
 	b.append(statement)
 }
 
-type statementBuf []*Statement
+type statementBuf []*sqlstats.RecordedStmtStats
 
-func (b *statementBuf) append(statement *Statement) {
+func (b *statementBuf) append(statement *sqlstats.RecordedStmtStats) {
 	*b = append(*b, statement)
 }
 
 func (b *statementBuf) release() {
+	// Clear the buffer.
 	for i, n := 0, len(*b); i < n; i++ {
 		(*b)[i] = nil
 	}
@@ -85,13 +90,23 @@ func addProblem(arr []Problem, n Problem) []Problem {
 	return append(arr, n)
 }
 
-func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
+// ObserveTransaction determines if a transaction is slow or failed and records
+// an insight if so. It does so by examining the statements in the transaction
+// and marking them as slow or failed if they are.
+// NB: ObserveTransaction will clear the statements buffered in the registry for
+// the given sessionID. The buffer is returned to the pool and the statement
+// pointers are nilled.
+func (r *lockingRegistry) ObserveTransaction(
+	sessionID clusterunique.ID, transactionStats *sqlstats.RecordedTxnStats,
+) {
 	if !r.enabled() {
 		return
 	}
-	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
+
+	if transactionStats.TransactionID.Equal(uuid.Nil) {
 		return
 	}
+
 	statements, ok := func() (*statementBuf, bool) {
 		statements, ok := r.statements[sessionID]
 		if !ok {
@@ -108,7 +123,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// Mark statements which are detected as slow or have a failed status.
 	var slowOrFailedStatements intsets.Fast
 	for i, s := range *statements {
-		if !shouldIgnoreStatement(s) && (r.detector.isSlow(s) || isFailed(s)) {
+		if !shouldIgnoreStatement(s) && (r.detector.isSlow(s) || s.Failed) {
 			slowOrFailedStatements.Add(i)
 		}
 	}
@@ -116,12 +131,9 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// So far this is the only case when a transaction is considered slow.
 	// In the future, we may want to make a detector for transactions if there
 	// are more cases.
-	highContention := false
-	if transaction.Contention != nil {
-		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
-	}
+	highContention := transactionStats.ExecStats.ContentionTime.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
 
-	txnFailed := transaction.Status == Transaction_Failed
+	txnFailed := !transactionStats.Committed
 	if slowOrFailedStatements.Empty() && !highContention && !txnFailed {
 		// We only record an insight if we have slow statements, high txn contention, or failed executions.
 		return
@@ -129,6 +141,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
+	transaction := makeTxnInsight(transactionStats)
 	insight := makeInsight(sessionID, transaction)
 
 	if highContention {
@@ -145,7 +158,8 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// this does not take into account the "Cancelled" transaction status.
 	var lastStmtErr redact.RedactableString
 	var lastStmtErrCode string
-	for i, s := range *statements {
+	for i, recordedStmt := range *statements {
+		s := makeStmtInsight(recordedStmt)
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
