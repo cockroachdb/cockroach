@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
@@ -45,6 +46,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",
