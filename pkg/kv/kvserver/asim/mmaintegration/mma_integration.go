@@ -49,7 +49,7 @@ func MakeStoreLeaseholderMsgFromState(
 		rl.Load[mma.WriteBandwidth] = mma.LoadValue(load.WriteBytesPerSecond)
 		rl.Load[mma.ByteSize] = mma.LoadValue(load.LogicalBytes)
 		rl.Load[mma.CPURate] = mma.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
-		rl.RaftCPU = 0
+		rl.RaftCPU = mma.LoadValue(load.RaftCPUNanosPerSecond)
 
 		rangeMessages = append(rangeMessages, mma.RangeMsg{
 			RangeID:   roachpb.RangeID(replica.Range()),
