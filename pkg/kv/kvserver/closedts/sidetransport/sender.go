@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -306,6 +307,21 @@ func (s *Sender) UnregisterLeaseholder(
 	}
 }
 
+// If the cluster is not fully upgraded, only look at closed timestamps policies
+// without considering locality info. Note that side transport sends closed
+// timestamps for all policies even when
+// kv.closed_timestamp.policy_refresh_interval is 0. It is up to the ranges to
+// choose not to use the latency based policies when
+// kv.closed_timestamp.policy_refresh_interval is 0.
+func (s *Sender) maxClosedTimestampPolicy() int {
+	// Even if no auto-tuning is disabled, still send them. No ranges would use
+	// this policy though.
+	if s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	}
+	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+}
+
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
@@ -314,7 +330,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// TODO(wenyihu6): a cluster version check is needed here once we add new
 	// policies to ctpb.RangeClosedTimestampPolicies that do not have a
 	// corresponding roachpb.RangeClosedTimestampPolicy.
-	numPolicies := int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	numPolicies := s.maxClosedTimestampPolicy()
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, numPolicies)
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,

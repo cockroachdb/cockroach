@@ -19,6 +19,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// getTargetByPolicy returns a range's closed timestamp policy and target
+// timestamp. Falls back to LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO if the
+// range's policy is not found in targetByPolicy. This fallback handles race
+// conditions where the policy refresher observes cluster version upgrades
+// before the side transport.
+func (r *Replica) getTargetByPolicy(
+	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
+) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
+	policy := r.closedTimestampPolicyRLocked()
+	target, ok := targetByPolicy[policy]
+	if ok {
+		return policy, target
+	}
+	if policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			targetByPolicy[ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO]
+	}
+	panic("unexpected: policy not found in targetByPolicy")
+}
+
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
 // requests, making sure that future requests are not allowed to write below the
@@ -51,8 +72,7 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	policy, target := r.getTargetByPolicy(targetByPolicy)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
