@@ -84,6 +84,22 @@ SELECT '$'::JSONPATH AS col ORDER BY col DESC NULLS FIRST;
 statement error pgcode 42883 could not identify an ordering operator for type jsonpath
 SELECT '$'::JSONPATH ORDER BY 1 ASC;
 
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t VALUES (0);
+
+query T
+SELECT bpchar('$."a1"[*]':::JSONPATH::JSONPATH)::BPCHAR FROM t ORDER BY 1 NULLS LAST;
+----
+$."a1"[*]
+
+query T
+SELECT bpchar('$.   abc    [*]':::JSONPATH::JSONPATH)::BPCHAR FROM t ORDER BY 1 NULLS LAST;
+----
+$."abc"[*]
+
 ## When we allow table creation
 
 # statement ok
