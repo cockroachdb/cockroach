@@ -56,8 +56,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 				mixedversion.AlwaysUseLatestPredecessors,
 				// Don't go back too far. We are mostly interested in upgrading to v24.3
 				// where RACv2 was introduced.
-				mixedversion.MaxUpgrades(2),
-				mixedversion.MinimumSupportedVersion("v24.1.0"),
+				mixedversion.MinimumBootstrapVersion("v24.1.0"),
 			)
 
 			// Limit the disk throughput to 128 MiB/s, to more easily stress the
