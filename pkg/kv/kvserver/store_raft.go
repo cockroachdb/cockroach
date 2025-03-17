@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"math"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -203,6 +204,24 @@ func (qs *raftReceiveQueues) SetEnforceMaxLen(enforceMaxLen bool) {
 		q.SetEnforceMaxLen(enforceMaxLen)
 		return true
 	})
+}
+
+// raftTickPacerConf is a configuration struct for the raft tick pacer.
+// It implements the taskPacerConfig interface.
+type raftTickPacerConf struct {
+	store *Store
+}
+
+func newRaftTickPacerConf(s *Store) raftTickPacerConf {
+	return raftTickPacerConf{store: s}
+}
+
+func (r raftTickPacerConf) getRefresh() time.Duration {
+	return r.store.cfg.RaftTickInterval
+}
+
+func (r raftTickPacerConf) getSmear() time.Duration {
+	return r.store.cfg.RaftTickSmearInterval
 }
 
 // HandleDelegatedSnapshot reads the incoming delegated snapshot message and
@@ -896,9 +915,30 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.RaftTickInterval)
 	defer ticker.Stop()
 
+	var timer timeutil.Timer
+	defer timer.Stop()
+	// waitUntil is used to wait between different tick batches to pace the
+	// ticking process over the entire tick interval.
+	waitUntil := func(until time.Time) {
+		now := timeutil.Now()
+		if !now.Before(until) {
+			return
+		}
+		timer.Reset(until.Sub(now))
+		<-timer.C
+		timer.Read = true
+	}
+
+	// Create a config that will be used by the taskPacer, which allows us to pace
+	// the enqueuing of Raft ticks.
+	conf := newRaftTickPacerConf(s)
+	pacer := NewTaskPacer(conf)
+
 	for {
 		select {
 		case <-ticker.C:
+			now := timeutil.Now()
+			pacer.StartTask(now)
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
 				s.updateLivenessMap()
@@ -906,19 +946,45 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			s.updateIOThresholdMap()
 
 			s.unquiescedOrAwakeReplicas.Lock()
-			// Why do we bother to ever queue a Replica on the Raft scheduler for
-			// tick processing? Couldn't we just call Replica.tick() here? Yes, but
-			// then a single bad/slow Replica can disrupt tick processing for every
-			// Replica on the store which cascades into Raft elections and more
-			// disruption.
-			batch := s.scheduler.NewEnqueueBatch()
+
+			// Reuse the rangeIDs slice across runs to minimize allocation.
+			var rangeIDs []roachpb.RangeID
+			rangeIDs = rangeIDs[:0]
 			for rangeID := range s.unquiescedOrAwakeReplicas.m {
-				batch.Add(rangeID)
+				rangeIDs = append(rangeIDs, rangeID)
 			}
 			s.unquiescedOrAwakeReplicas.Unlock()
 
-			s.scheduler.EnqueueRaftTicks(batch)
-			batch.Close()
+			// Sort the rangeIDs to have a deterministic order in which we process
+			// the replicas. This helps achieve more determinism in the order in which
+			// replicas are being ticked at.
+			// TODO(ibrahim): If we find that sorting ranges is expensive, we should
+			// try to optimize it by relying on the fact that ranges shouldn't change
+			// much from one iteration to the next.
+			slices.Sort(rangeIDs)
+
+			// Enqueue ticks using the taskPacer. This is important to avoid
+			// running all the schedulers goroutines at once until all the replicas
+			// are ticked, which can lead to increased goroutine scheduling latency.
+			for startAt := now; len(rangeIDs) != 0; {
+				waitUntil(startAt)
+				todo, by := pacer.Pace(timeutil.Now(), len(rangeIDs))
+				batch := s.scheduler.NewEnqueueBatch()
+				for _, id := range rangeIDs[:todo] {
+					batch.Add(id)
+				}
+
+				// Why do we bother to ever queue a Replica on the Raft scheduler for
+				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
+				// then a single bad/slow Replica can disrupt tick processing for every
+				// Replica on the store which cascades into Raft elections and more
+				// disruption.
+				s.scheduler.EnqueueRaftTicks(batch)
+				batch.Close()
+				rangeIDs = rangeIDs[todo:]
+				startAt = by
+			}
+
 			s.metrics.RaftTicks.Inc(1)
 
 		case <-s.stopper.ShouldQuiesce():

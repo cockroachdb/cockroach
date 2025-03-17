@@ -239,6 +239,11 @@ var (
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RAFT_TICK_INTERVAL", 500*time.Millisecond)
 
+	// defaultRaftTickSmearInterval is the default interval at which ticks are
+	// enqueued at.
+	defaultRaftTickSmearInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RAFT_TICK_SMEAR_INTERVAL", time.Millisecond)
+
 	// defaultRaftHeartbeatIntervalTicks is the default value for
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
 	// each heartbeat.
@@ -552,6 +557,13 @@ type RaftConfig struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
+	// RaftTickSmearInterval is the interval at which ticks are enqueued at. This
+	// will smear the Raft tick processing over the RaftTickInterval. It's used to
+	// prevent all raft scheduler threads running ticking at the same time without
+	// utilizing the full RaftTickInterval. You can disable this by setting it to
+	// 0.
+	RaftTickSmearInterval time.Duration
+
 	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
 	// an election. The actual election timeout is randomized by each replica to
 	// between the interval: [defaultRaftElectionTimeoutTicks,
@@ -675,6 +687,9 @@ type RaftConfig struct {
 func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftTickInterval == 0 {
 		cfg.RaftTickInterval = defaultRaftTickInterval
+	}
+	if cfg.RaftTickSmearInterval == 0 {
+		cfg.RaftTickSmearInterval = defaultRaftTickSmearInterval
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks

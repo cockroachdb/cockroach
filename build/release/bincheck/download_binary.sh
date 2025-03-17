@@ -18,10 +18,10 @@ download_and_extract() {
 
   # Check if this is a tarball or zip.
   if [[ "${binary_suffix}" == *.tgz ]]; then
-    curl -sSfL "${binary_url}" > cockroach.tar.gz
+    curl --header 'Cache-Control: no-cache' -sSfL "${binary_url}?$RANDOM" > cockroach.tar.gz
     tar zxf cockroach.tar.gz -C mnt --strip-components=1
   else
-    curl -sSfL "${binary_url}" > cockroach.zip
+    curl --header 'Cache-Control: no-cache' -sSfL "${binary_url}?$RANDOM" > cockroach.zip
     7z e -omnt cockroach.zip
   fi
 
