@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -1002,6 +1004,13 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// cachedLocalityProximity is the cached result of the locality comparison
+		// result between the local node and other replicas. It is only updated and
+		// used for leaseholder replicas. It is used to estimate network latency and
+		// time it takes to propagate closed timestamp from leaseholder replicas to
+		// follower replicas.
+		cachedLocality ctpb.LatencyBasedRangeClosedTimestampPolicy
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1320,17 +1329,37 @@ func toClientClosedTsPolicy(
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() ctpb.LatencyBasedRangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
-		if !r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
-			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
-		}
+	r.mu.AssertRHeld()
+	if !r.mu.conf.GlobalReads || r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
 		// closing timestamps in the future, it would break liveness updates,
 		// which perform a 1PC transaction with a commit trigger and can not
 		// tolerate being pushed into the future.
+		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return ctpb.LAG_BY_CLUSTER_SETTING
+	if !r.store.policyRefresher.IsEnabled() {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+	}
+	return r.mu.cachedLocality
+}
+
+func (r *Replica) RefreshLatency(latencies map[roachpb.NodeID]time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	desc := r.descRLocked()
+	res := int32(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)
+	for _, peer := range desc.InternalReplicas {
+		peerLatency, ok := latencies[peer.NodeID]
+		if !ok {
+			continue
+		}
+		// Calculate latency bucket by dividing latency by interval size and adding base policy
+		latencyBucket := int32(math.Floor(float64(peerLatency)/float64(closedts.ClosedTimestampPolicyLatencyInterval))+1) +
+			int32(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)
+		res = max(res, latencyBucket)
+	}
+	r.mu.cachedLocality = ctpb.LatencyBasedRangeClosedTimestampPolicy(res)
 }
 
 // NodeID returns the ID of the node this replica belongs to.
