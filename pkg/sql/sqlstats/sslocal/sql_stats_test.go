@@ -475,7 +475,8 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
 				statsCollector.
-					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{
+					RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+						FingerprintID: txnFingerprintID,
 						SessionData: &sessiondata.SessionData{
 							SessionData: sessiondatapb.SessionData{
 								UserProto:       username.RootUserName().EncodeProto(),
