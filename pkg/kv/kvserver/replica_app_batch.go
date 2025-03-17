@@ -450,11 +450,11 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			// We only need to check sideloaded entries in this path. The loosely
 			// coupled truncation mechanism in the other branch already ensures
 			// enacting truncations only after state machine synced.
-			if has, err := b.r.raftMu.sideloaded.HasAnyEntry(ctx, kvpb.RaftSpan{
+			if entries, _, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
 				After: b.truncState.Index, Last: truncatedState.Index,
 			}); err != nil {
 				return errors.Wrap(err, "failed searching for sideloaded entries")
-			} else if has {
+			} else if entries != 0 {
 				b.changeTruncatesSideloadedFiles = true
 			}
 		} else {

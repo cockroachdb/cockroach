@@ -591,7 +591,7 @@ func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	totalSideloaded, err := s.Sideload.BytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+	_, totalSideloaded, err := s.Sideload.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 	if err != nil {
 		return 0, err
 	}
