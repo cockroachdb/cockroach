@@ -340,7 +340,7 @@ func BenchmarkMutex(b *testing.B) {
 				b.Run(fmt.Sprintf("threads=%d", numThreads), func(b *testing.B) {
 					var rWaitTime, wWaitTime atomic.Int64
 					for i := 0; i < b.N; i++ {
-						var mu RBMutex
+						var mu RWMutex
 						g := errgroup.Group{}
 						g.SetLimit(numThreads)
 
@@ -358,10 +358,10 @@ func BenchmarkMutex(b *testing.B) {
 									time.Sleep(writeHoldTimeMs)
 									mu.Unlock()
 								} else {
-									token := mu.RLock()
+									mu.RLock()
 									rWaitTime.Add(int64(now.Elapsed()))
 									time.Sleep(readHoldTimeMs)
-									mu.RUnlock(token)
+									mu.RUnlock()
 								}
 								return nil
 							})
