@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
@@ -474,17 +473,11 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		defer func() {
 			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
-				statsCollector.
-					RecordTransaction(ctx, sqlstats.RecordedTxnStats{
-						FingerprintID: txnFingerprintID,
-						SessionData: &sessiondata.SessionData{
-							SessionData: sessiondatapb.SessionData{
-								UserProto:       username.RootUserName().EncodeProto(),
-								Database:        "defaultdb",
-								ApplicationName: "appname_findme",
-							},
-						},
-					}))
+				statsCollector.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+					FingerprintID:  txnFingerprintID,
+					UserNormalized: username.RootUser,
+					Application:    "appname_findme",
+				}))
 		}()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
@@ -609,14 +602,9 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID)
 			err := statsCollector.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
-				FingerprintID: transactionFingerprintID,
-				SessionData: &sessiondata.SessionData{
-					SessionData: sessiondatapb.SessionData{
-						UserProto:       username.RootUserName().EncodeProto(),
-						Database:        "defaultdb",
-						ApplicationName: "appname_findme",
-					},
-				},
+				FingerprintID:  transactionFingerprintID,
+				UserNormalized: username.RootUser,
+				Application:    "appname_findme",
 			})
 			require.NoError(t, err)
 

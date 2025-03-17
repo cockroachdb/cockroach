@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -119,8 +118,10 @@ type RecordedTxnStats struct {
 	RowsWritten             int64
 	BytesRead               int64
 	Priority                roachpb.UserPriority
-	SessionData             *sessiondata.SessionData
 	TxnErr                  error
+	Application             string
+	// Normalized user name.
+	UserNormalized string
 }
 
 // SSDrainer is the interface for draining or resetting sql stats.
