@@ -326,7 +326,10 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 func maybeAdjustVirtualIndexScanForExplain(
 	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
 ) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
-	idx := index.(*optVirtualIndex)
+	idx, ok := index.(*optVirtualIndex)
+	if !ok {
+		return idx, params, extraAttribute
+	}
 	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
 		// If we picked the virtual index, check that we can actually use it.
 		spans := params.IndexConstraint.Spans
