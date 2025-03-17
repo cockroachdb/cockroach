@@ -338,7 +338,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// The proposer hasn't included the sideloaded entries into the delta. We
 		// counted these above, and combine the deltas.
 		raftLogDelta += rResult.RaftLogDelta
-		sm.r.handleRaftLogDeltaResult(ctx, raftLogDelta, isRaftLogTruncationDeltaTrusted)
+		sm.r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
 
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
