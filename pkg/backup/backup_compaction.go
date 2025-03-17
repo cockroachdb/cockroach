@@ -879,7 +879,7 @@ func concludeBackupCompaction(
 		}
 	}
 
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().TableStatsCache, backupManifest.Descriptors)
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
 	return backupinfo.WriteTableStatistics(ctx, store, encryption, kmsEnv, &statsTable)
 }
 
