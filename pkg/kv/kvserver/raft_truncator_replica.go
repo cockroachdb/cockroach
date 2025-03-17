@@ -31,7 +31,7 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 
 func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
 	(*Replica)(r).handleTruncatedStateResult(ctx, pt.RaftTruncatedState,
-		pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted, true /* sideloadIncluded */)
+		pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {

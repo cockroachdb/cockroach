@@ -45,9 +45,7 @@ type SideloadStorage interface {
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index <= the given index.
-	// Returns the number of bytes freed, or an error.
-	// TODO(pav-kv): don't need to count the bytes anymore.
-	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed int64, _ error)
+	TruncateTo(_ context.Context, index kvpb.RaftIndex) error
 	// Stats returns the number and the total size of the sideloaded entries in
 	// the given log span.
 	Stats(_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)
