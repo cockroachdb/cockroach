@@ -17,6 +17,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/cockroachdb/crlib/crtime"
+	"golang.org/x/sync/errgroup"
 )
 
 type bench struct {
@@ -315,4 +319,62 @@ func BenchmarkDeleteCollision(b *testing.B) {
 			}
 		},
 	})
+}
+
+func BenchmarkMutex(b *testing.B) {
+	const (
+		totalOps        = 10000                 // Total number of lock operations
+		writeHoldTimeMs = 50 * time.Microsecond // Time to hold each write lock
+		readHoldTimeMs  = 10 * time.Microsecond // Time to hold each read lock
+	)
+
+	// Test different write percentages
+	// writePercentages := []int{0, 5, 25, 50, 75, 95, 100}
+	writePercentages := []int{5, 25, 35, 50}
+
+	for _, writePercent := range writePercentages {
+		name := fmt.Sprintf("writes=%d%%", writePercent)
+		b.Run(name, func(b *testing.B) {
+			// Test different thread counts
+			for numThreads := 54; numThreads <= 512; numThreads *= 2 {
+				b.Run(fmt.Sprintf("threads=%d", numThreads), func(b *testing.B) {
+					var rWaitTime, wWaitTime atomic.Int64
+					for i := 0; i < b.N; i++ {
+						var mu RBMutex
+						g := errgroup.Group{}
+						g.SetLimit(numThreads)
+
+						// Launch goroutines
+						for t := 0; t < totalOps; t++ {
+							g.Go(func() error {
+
+								// Determine if this operation should be a write.
+								now := crtime.NowMono()
+								isWrite := (int(now) % 100) < writePercent
+
+								if isWrite {
+									mu.Lock()
+									wWaitTime.Add(int64(now.Elapsed()))
+									time.Sleep(writeHoldTimeMs)
+									mu.Unlock()
+								} else {
+									token := mu.RLock()
+									rWaitTime.Add(int64(now.Elapsed()))
+									time.Sleep(readHoldTimeMs)
+									mu.RUnlock(token)
+								}
+								return nil
+							})
+						}
+
+						if err := g.Wait(); err != nil {
+							b.Fatal(err)
+						}
+						b.ReportMetric(float64(wWaitTime.Load())/float64(time.Millisecond), "write_wait_ms")
+						b.ReportMetric(float64(rWaitTime.Load())/float64(time.Millisecond), "read_wait_ms")
+					}
+				})
+			}
+		})
+	}
 }

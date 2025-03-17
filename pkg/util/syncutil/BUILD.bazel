@@ -32,5 +32,9 @@ go_test(
         "set_test.go",
     ],
     embed = [":syncutil"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "@com_github_cockroachdb_crlib//crtime",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+    ],
 )
