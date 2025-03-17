@@ -6,6 +6,7 @@
 package mma
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
@@ -356,6 +357,9 @@ func computeMeansForStoreSet(
 	scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
 	n := len(means.stores)
+	if n == 0 {
+		panic(fmt.Sprintf("no stores for meansForStoreSet: %v, stores: %v", *means, stores))
+	}
 	clear(scratchNodes)
 	for _, storeID := range means.stores {
 		sload := loadProvider.getStoreReportedLoad(storeID)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // This file contains helper classes and functions for the allocator related
@@ -784,6 +785,33 @@ type rangeAnalyzedConstraints struct {
 	// diversityScoringMemo.
 
 	buf analyzeConstraintsBuf
+}
+
+func (rac *rangeAnalyzedConstraints) String() string {
+	return redact.StringWithoutMarkers(rac)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rac *rangeAnalyzedConstraints) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("leaseholder=%v", rac.leaseholderID)
+	w.Print(" voters=[")
+	for i := range rac.replicas[voterIndex] {
+		if i > 0 {
+			w.Print(", ")
+		}
+		w.Printf("s%v", rac.replicas[voterIndex][i].StoreID)
+	}
+	w.Print("]")
+	w.Print(" non-voters=[")
+	for i := range rac.replicas[nonVoterIndex] {
+		if i > 0 {
+			w.Print(", ")
+		}
+		w.Printf("s%v", rac.replicas[nonVoterIndex][i].StoreID)
+	}
+	w.Print("]")
+	w.Printf(" req_num_voters=%v req_num_non_voters=%v",
+		rac.numNeededReplicas[voterIndex], rac.numNeededReplicas[nonVoterIndex])
 }
 
 var rangeAnalyzedConstraintsPool = sync.Pool{

@@ -7,6 +7,7 @@ package mma
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"math/rand"
 	"slices"
@@ -256,7 +257,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 			}
 			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 			if !isVoter && !isNonVoter {
-				panic("mma internal state inconsistency")
+				panic(fmt.Sprintf("internal state inconsistency: "+
+					"store=%v range_id=%v pending-changes=%v "+
+					"rstate_replicas=%v rstate_constraints=%v",
+					store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
 			}
 			var conj constraintsConj
 			var err error
