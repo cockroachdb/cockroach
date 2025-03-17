@@ -61,7 +61,7 @@ func TestNetworkRTTAndPolicyCalculations(t *testing.T) {
 		{
 			name: "high-end bucket boundary",
 			// 19.999999999ms in nanoseconds
-			networkRTT:     time.Duration(19*time.Millisecond + 999*time.Microsecond),
+			networkRTT:     19*time.Millisecond + 999*time.Microsecond,
 			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS,
 			expectedRTT:    10 * time.Millisecond,
 		},
@@ -354,6 +354,12 @@ func TestNetworkRTTAndPolicyCalculations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Test RTT -> Policy conversion.
+			policy := FindBucketBasedOnNetworkRTT(tc.networkRTT)
+			require.Equal(t, tc.expectedPolicy, policy,
+				"expected policy %v for RTT %v, got %v",
+				tc.expectedPolicy, tc.networkRTT, policy)
+
 			// Test Policy -> RTT conversion.
 			rtt := computeNetworkRTTBasedOnPolicy(policy)
 			require.Equal(t, tc.expectedRTT, rtt,
