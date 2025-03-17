@@ -39,7 +39,8 @@ type bufferedStmtStats []sqlstats.RecordedStmtStats
 //
 //  2. The insights subsystem (insightsWriter) which is used to
 //     persist statement and transaction insights to an in-memory cache.
-//     Events are sent to the insights subsystem for async processing.
+//     Events are sent to the insights subsystem for async processing in
+//     observeStatement() and observeTransaction() respectively.
 type StatsCollector struct {
 
 	// stmtBuf contains the current transaction's statement
@@ -227,11 +228,9 @@ func (s *StatsCollector) shouldObserveInsights() bool {
 	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV)
 }
 
-// ObserveStatement sends the recorded statement stats to the insights system
+// observeStatement sends the recorded statement stats to the insights system
 // for further processing.
-func (s *StatsCollector) ObserveStatement(
-	stmtFingerprintID appstatspb.StmtFingerprintID, value sqlstats.RecordedStmtStats,
-) {
+func (s *StatsCollector) observeStatement(value sqlstats.RecordedStmtStats) {
 	if !s.sendInsights {
 		return
 	}
@@ -257,7 +256,7 @@ func (s *StatsCollector) ObserveStatement(
 
 	insight := insights.Statement{
 		ID:                   value.StatementID,
-		FingerprintID:        stmtFingerprintID,
+		FingerprintID:        value.FingerprintID,
 		LatencyInSeconds:     value.ServiceLatencySec,
 		Query:                value.Query,
 		Status:               getInsightStatus(value.StatementError),
@@ -283,12 +282,10 @@ func (s *StatsCollector) ObserveStatement(
 	}
 }
 
-// ObserveTransaction sends the recorded transaction stats to the insights system
+// observeTransaction sends the recorded transaction stats to the insights system
 // for further processing.
-func (s *StatsCollector) ObserveTransaction(
-	_ctx context.Context,
-	txnFingerprintID appstatspb.TransactionFingerprintID,
-	value sqlstats.RecordedTxnStats,
+func (s *StatsCollector) observeTransaction(
+	txnFingerprintID appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) {
 	if !s.sendInsights {
 		return
@@ -344,6 +341,8 @@ func (s *StatsCollector) ObserveTransaction(
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value sqlstats.RecordedStmtStats,
 ) error {
+	s.observeStatement(value)
+
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
@@ -362,6 +361,8 @@ func (s *StatsCollector) RecordStatement(
 func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
+	s.observeTransaction(key, value)
+
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return nil

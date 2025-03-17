@@ -235,8 +235,6 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	ex.statsCollector.ObserveStatement(stmtFingerprintID, recordedStmtStats)
-
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
 
