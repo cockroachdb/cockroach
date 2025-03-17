@@ -620,13 +620,13 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 		if prep.Costs.NumCustom() < CustomPlanThreshold {
 			return false
 		}
-		// A generic plan should be used if we have CustomPlanThreshold custom
+		// A generic plan should be built if we have CustomPlanThreshold custom
 		// plan costs and:
 		//
 		//   1. The generic cost is unknown because a generic plan has not been
 		//      built.
-		//   2. Or, the cost of the generic plan is less than the average cost of
-		//      the custom plans.
+		//   2. Or, the cost of the generic plan is less than the average cost
+		//      of the custom plans.
 		//
 		return prep.Costs.Generic().C == 0 || prep.Costs.Generic().Less(prep.Costs.AvgCustom())
 	default:
@@ -645,9 +645,11 @@ func (opc *optPlanningCtx) reuseGenericPlan() bool {
 	return opc.buildNonIdealGenericPlan()
 }
 
-// chooseValidPreparedMemo returns an optimized memo that is equal to, or built
-// from, baseMemo or genericMemo. It returns nil if both memos are stale. It
-// selects baseMemo or genericMemo based on the following rules, in order:
+// chooseValidPreparedMemo returns a pre-built memo. It may be an unoptimized
+// base memo, a fully optimized generic memo, or nil. It returns nil if either
+// memo is stale, or the memo it decides to use (base or generic) does not yet
+// exist. It selects the base memo or generic memo based on the following rules,
+// in order, assuming both are non-stale:
 //
 //  1. If the generic memo is ideal, it is returned as-is.
 //  2. If plan_cache_mode=force_generic_plan is true then genericMemo is
@@ -664,39 +666,43 @@ func (opc *optPlanningCtx) reuseGenericPlan() bool {
 //     new memo.
 func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.Memo, error) {
 	prep := opc.p.stmt.Prepared
-	if opc.reuseGenericPlan() {
-		if prep.GenericMemo == nil {
-			// A generic plan does not yet exist.
-			return nil, nil
-		}
+
+	if prep.GenericMemo != nil {
 		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
 		if err != nil {
 			return nil, err
-		} else if !isStale {
-			return prep.GenericMemo, nil
+		} else if isStale {
+			// Clear the generic and custom costs if the memo is stale. DDL or
+			// new stats could drastically change the cost of generic and custom
+			// plans, so we should re-consider which to use.
+			prep.GenericMemo = nil
+			prep.BaseMemo = nil
+			prep.Costs.Reset()
+			return nil, nil
 		}
-		// Clear the generic cost if the memo is stale. DDL or new stats
-		// could drastically change the cost of generic and custom plans, so
-		// we should re-consider which to use.
-		prep.Costs.ClearGeneric()
-		return nil, nil
 	}
 
 	if prep.BaseMemo != nil {
 		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
 		if err != nil {
 			return nil, err
-		} else if !isStale {
-			return prep.BaseMemo, nil
+		} else if isStale {
+			// Clear the generic and custom costs if the memo is stale. DDL or
+			// new stats could drastically change the cost of generic and custom
+			// plans, so we should re-consider which to use.
+			prep.GenericMemo = nil
+			prep.BaseMemo = nil
+			prep.Costs.Reset()
+			return nil, nil
 		}
-		// Clear the custom costs if the memo is stale. DDL or new stats
-		// could drastically change the cost of generic and custom plans, so
-		// we should re-consider which to use.
-		prep.Costs.ClearCustom()
 	}
 
-	// A valid memo was not found.
-	return nil, nil
+	// NOTE: The generic or base memos returned below could be nil if they have
+	// not yet been built.
+	if opc.reuseGenericPlan() {
+		return prep.GenericMemo, nil
+	}
+	return prep.BaseMemo, nil
 }
 
 // fetchPreparedMemo attempts to fetch a memo from the prepared statement
