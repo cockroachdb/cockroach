@@ -608,7 +608,8 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID)
-			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
+			err := statsCollector.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+				FingerprintID: transactionFingerprintID,
 				SessionData: &sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						UserProto:       username.RootUserName().EncodeProto(),
