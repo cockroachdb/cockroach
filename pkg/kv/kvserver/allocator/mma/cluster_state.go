@@ -330,7 +330,7 @@ func (prc PendingRangeChange) IsChangeReplicas() bool {
 // operation.
 func (prc PendingRangeChange) IsTransferLease() bool {
 	if len(prc.pendingReplicaChanges) != 2 {
-		panic("expected exactly two changes for a transfer lease change")
+		return false
 	}
 	var foundAddLease, foundRemoveLease bool
 	for _, c := range prc.pendingReplicaChanges {
