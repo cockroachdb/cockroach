@@ -2194,18 +2194,18 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
 			return err
 		}
-		rangeCount := -1
-		allEqualRangeCount := true
-		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-			if rangeCount == -1 {
-				rangeCount = s.ReplicaCount()
-			} else if rangeCount != s.ReplicaCount() {
-				allEqualRangeCount = false
-			}
-			return nil
-		})
-		if !allEqualRangeCount {
-			return errors.New("Range counts are not all equal")
+		s, err := sqlutils.RowsToDataDrivenOutput(sqlutils.MakeSQLRunner(tc.Conns[0]).Query(t, `
+SELECT * FROM (
+    SELECT
+        range_id,
+        array_length(voting_replicas, 1) AS vc,
+        COALESCE(array_length(non_voting_replicas, 1), 0) AS nvc
+    FROM crdb_internal.ranges_no_leases
+) WHERE vc != 7 OR nvc > 0 ORDER BY range_id ASC LIMIT 1
+`))
+		require.NoError(t, err)
+		if len(s) > 0 {
+			return errors.Errorf("still upreplicating:\n%s", s)
 		}
 		return nil
 	})
