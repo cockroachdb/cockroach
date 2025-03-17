@@ -4,6 +4,7 @@ go_library(
     name = "closedts",
     srcs = [
         "policy.go",
+        "policy_calculation.gp.go",
         "setting.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts",

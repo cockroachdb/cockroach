@@ -1311,10 +1311,11 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 func toClientClosedTsPolicy(
 	policy ctpb.RangeClosedTimestampPolicy,
 ) roachpb.RangeClosedTimestampPolicy {
-	switch policy {
-	case ctpb.LAG_BY_CLUSTER_SETTING:
+	switch {
+	case policy == ctpb.LAG_BY_CLUSTER_SETTING:
 		return roachpb.LAG_BY_CLUSTER_SETTING
-	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO:
+	case policy >= ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS:
 		return roachpb.LEAD_FOR_GLOBAL_READS
 	default:
 		panic(fmt.Sprintf("unknown policy locality %s", policy))
