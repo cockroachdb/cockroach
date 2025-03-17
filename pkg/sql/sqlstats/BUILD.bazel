@@ -20,7 +20,6 @@ go_library(
         "//pkg/sql/clusterunique",
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/util/log",
         "//pkg/util/metric",

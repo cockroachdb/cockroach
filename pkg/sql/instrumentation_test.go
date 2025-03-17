@@ -215,7 +215,7 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats) {
 					// We won't run into a race here because we'll only observe
 					// txns from a single connection.
-					if txnStats.SessionData.ApplicationName == testApp {
+					if txnStats.Application == testApp {
 						if strings.Contains(stmt, `SET application_name`) {
 							return
 						}
