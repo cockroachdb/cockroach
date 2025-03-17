@@ -284,9 +284,7 @@ func (s *StatsCollector) observeStatement(value sqlstats.RecordedStmtStats) {
 
 // observeTransaction sends the recorded transaction stats to the insights system
 // for further processing.
-func (s *StatsCollector) observeTransaction(
-	txnFingerprintID appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
-) {
+func (s *StatsCollector) observeTransaction(value sqlstats.RecordedTxnStats) {
 	if !s.sendInsights {
 		return
 	}
@@ -315,7 +313,7 @@ func (s *StatsCollector) observeTransaction(
 
 	insight := insights.Transaction{
 		ID:              value.TransactionID,
-		FingerprintID:   txnFingerprintID,
+		FingerprintID:   value.FingerprintID,
 		UserPriority:    value.Priority.String(),
 		ImplicitTxn:     value.ImplicitTxn,
 		Contention:      &value.ExecStats.ContentionTime,
@@ -359,9 +357,9 @@ func (s *StatsCollector) RecordStatement(
 // RecordTransaction records the statistics of a transaction.
 // Transaction stats are always recorded directly on the flushTarget.
 func (s *StatsCollector) RecordTransaction(
-	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context, value sqlstats.RecordedTxnStats,
 ) error {
-	s.observeTransaction(key, value)
+	s.observeTransaction(value)
 
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
@@ -374,7 +372,7 @@ func (s *StatsCollector) RecordTransaction(
 	if t > 0 {
 		return nil
 	}
-	return s.flushTarget.RecordTransaction(ctx, key, value)
+	return s.flushTarget.RecordTransaction(ctx, value)
 }
 
 func (s *StatsCollector) IterateStatementStats(
