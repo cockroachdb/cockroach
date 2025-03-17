@@ -1474,6 +1474,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/asim/history:history",
     "//pkg/kv/kvserver/asim/metrics:metrics",
     "//pkg/kv/kvserver/asim/metrics:metrics_test",
+    "//pkg/kv/kvserver/asim/mmaintegration:mmaintegration",
     "//pkg/kv/kvserver/asim/op:op",
     "//pkg/kv/kvserver/asim/op:op_test",
     "//pkg/kv/kvserver/asim/queue:queue",

@@ -18,7 +18,6 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
-        "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

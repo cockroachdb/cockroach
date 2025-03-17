@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -262,6 +263,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// We re-use the existing store capacity and selectively zero out the fields
 	// we intend to change.
 	capacity := store.desc.Capacity
+	capacity.CPUPerSecond = 0
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
 	capacity.WriteBytesPerSecond = 0
@@ -285,6 +287,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 			capacity.WritesPerSecond += usage.WritesPerSecond
 			capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
 			capacity.LogicalBytes += usage.LogicalBytes
+			capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
 			capacity.LeaseCount++
 		}
 		capacity.RangeCount++
@@ -315,6 +318,11 @@ func (s *state) Nodes() []Node {
 		return cmp.Compare(a.NodeID(), b.NodeID())
 	})
 	return nodes
+}
+
+func (s *state) Node(nodeID NodeID) Node {
+	node := s.nodes[nodeID]
+	return node
 }
 
 // RangeFor returns the range containing Key in [StartKey, EndKey). This
@@ -411,9 +419,10 @@ func (s *state) AddNode() Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
 	node := &node{
-		nodeID: nodeID,
-		desc:   roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
-		stores: []StoreID{},
+		nodeID:      nodeID,
+		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
+		stores:      []StoreID{},
+		mmAllocator: mma.NewAllocatorState(s.clock),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -550,6 +559,24 @@ func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
 	store.desc.Capacity.Capacity = capacity
 }
 
+func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
+	node := s.nodes[nodeID]
+	stores := node.Stores()
+	cpuRate := 0
+	for _, storeID := range stores {
+		capacity := s.capacity(storeID)
+		cpuRate += int(capacity.CPUPerSecond)
+	}
+
+	return roachpb.NodeCapacity{
+		StoresCPURate:    int64(cpuRate),
+		NumStores:        int32(len(stores)),
+		NodeCPURateUsage: int64(cpuRate),
+		// TODO: Add support for node CPU capacity.
+		NodeCPURateCapacity: 2 * int64(cpuRate),
+	}
+}
+
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
@@ -589,6 +616,7 @@ func (s *state) addReplica(
 	// exists at all times.
 	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
+		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
 	return replica, true
@@ -924,6 +952,8 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
 	s.setLeaseholder(rangeID, storeID)
+	s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, oldStoreID)
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -931,7 +961,6 @@ func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -939,7 +968,6 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
-			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
@@ -1071,10 +1099,17 @@ func (s *state) UpdateStorePool(
 		storeIDs = append(storeIDs, storeIDA)
 	}
 	sort.Sort(storeIDs)
+	store := s.stores[storeID]
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := detail.Copy()
 		s.stores[storeID].storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
+		copiedDesc := *detail.Desc
+		copiedDetail.Desc = &copiedDesc
+		// TODO: Support origin timestamps.
+		storeLoadMsg := allocator.MakeStoreLoadMsg(copiedDesc, s.clock.Now().UnixNano())
+		s.nodes[store.nodeID].mmAllocator.SetStore(copiedDesc)
+		s.nodes[store.nodeID].mmAllocator.ProcessStoreLoadMsg(&storeLoadMsg)
 	}
 }
 
@@ -1321,7 +1356,8 @@ type node struct {
 	nodeID NodeID
 	desc   roachpb.NodeDescriptor
 
-	stores []StoreID
+	stores      []StoreID
+	mmAllocator mma.Allocator
 }
 
 // NodeID returns the ID of this node.
@@ -1337,6 +1373,10 @@ func (n *node) Stores() []StoreID {
 // Descriptor returns the descriptor for this node.
 func (n *node) Descriptor() roachpb.NodeDescriptor {
 	return n.desc
+}
+
+func (n *node) MMAllocator() mma.Allocator {
+	return n.mmAllocator
 }
 
 // store is an implementation of the Store interface.
