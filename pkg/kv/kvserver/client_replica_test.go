@@ -5889,10 +5889,10 @@ func TestMergeReplicatesLocks(t *testing.T) {
 
 	for _, b := range []bool{true, false} {
 		name := "lhs-lock"
-		lockKey := lhsKey
+		lockKeySuffix := lhsKey
 		if b {
 			name = "rhs-lock"
-			lockKey = rhsKey
+			lockKeySuffix = rhsKey
 		}
 		t.Run(name, func(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -5900,9 +5900,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 					Settings: st,
 				},
 			})
+
+			sql := tc.ServerConn(0)
 			defer tc.Stopper().Stop(ctx)
 			scratch := tc.ScratchRange(t)
-			splitKey := append(scratch[:len(scratch):len(scratch)], splitPoint...)
+			mkKey := func(s string) roachpb.Key {
+				prefix := scratch.Clone()
+				return append(prefix[:len(prefix):len(prefix)], s...)
+			}
+
+			lockKey := mkKey(lockKeySuffix)
+			splitKey := mkKey(splitPoint)
 			tc.SplitRangeOrFatal(t, splitKey)
 			// Write a value for the key because at the moment we don't create locks for
 			// non-existent keys.
@@ -5957,10 +5965,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			t.Log("merging ranges")
 			_, err := tc.MergeRanges(scratch)
 			require.NoError(t, err)
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 			t.Log("cancelling txn2")
 			txn2Cancel()
 			require.NoError(t, g.Wait())
+			failures := sqlutils.CheckConsistency(ctx, sql, roachpb.Span{
+				Key:    keys.ScratchRangeMin,
+				EndKey: keys.ScratchRangeMax,
+			})
+			for _, err := range failures {
+				t.Errorf("consistency failure: %s", err.Error())
+			}
 		})
 	}
 }

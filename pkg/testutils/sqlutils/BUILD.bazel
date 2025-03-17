@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sqlutils",
     srcs = [
+        "consistency.go",
         "inject.go",
         "parse.go",
         "pretty.go",
@@ -19,6 +20,8 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
