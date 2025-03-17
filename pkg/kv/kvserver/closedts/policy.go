@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DefaultMaxNetworkRTT = 150 * time.Millisecond
+	DefaultMaxNetworkRTT             = 150 * time.Millisecond
 	closedTimestampPolicyBucketWidth = 20 * time.Millisecond
 )
 

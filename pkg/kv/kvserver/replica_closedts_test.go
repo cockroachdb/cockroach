@@ -1107,3 +1107,97 @@ func TestClosedTimestampPolicyRefreshIntervalOnLeaseTransfers(t *testing.T) {
 		return nil
 	})
 }
+
+// TestRefreshPolicy tests the RefreshPolicy method of the Replica struct. This
+// test focuses on the latency based closed timestamp policies. Other part of the
+// logic is tested above.
+func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range.
+	scratchKey := tc.ScratchRange(t)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, repl)
+	repl.SetSpanConfig(roachpb.SpanConfig{GlobalReads: true}, roachpb.Span{Key: scratchKey})
+
+	// Define test cases with different latency scenarios.
+	testCases := []struct {
+		name           string
+		latencies      map[roachpb.NodeID]time.Duration
+		expectedPolicy ctpb.RangeClosedTimestampPolicy
+	}{
+		{
+			name: "all replicas with low latencies",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+				tc.Target(1).NodeID: 15 * time.Millisecond,
+				tc.Target(2).NodeID: 20 * time.Millisecond,
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(20 * time.Millisecond),
+		},
+		{
+			name: "one replica with high latency",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+				tc.Target(1).NodeID: 15 * time.Millisecond,
+				tc.Target(2).NodeID: 300 * time.Millisecond,
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(300 * time.Millisecond),
+		},
+		{
+			name: "some replicas missing",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+				// tc.Target(1,2).NodeID is missing, simulating nil.
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(closedts.DefaultMaxNetworkRTT),
+		},
+		{
+			name:           "nil latencies",
+			latencies:      nil,
+			expectedPolicy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+		},
+		{
+			name: "one nil, others low",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(0).NodeID: 10 * time.Millisecond,
+				tc.Target(1).NodeID: 15 * time.Millisecond,
+				// tc.Target(2).NodeID is missing, simulating nil.
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(closedts.DefaultMaxNetworkRTT),
+		},
+		{
+			name: "two nil, one high",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(2).NodeID: 300 * time.Millisecond,
+				// tc.Target(0,1).NodeID are missing, simulating nil.
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(300 * time.Millisecond),
+		},
+		{
+			name: "two nil, one low",
+			latencies: map[roachpb.NodeID]time.Duration{
+				tc.Target(2).NodeID: 10 * time.Millisecond,
+				// tc.Target(0,1).NodeID are missing, simulating nil.
+			},
+			expectedPolicy: closedts.FindBucketBasedOnNetworkRTT(closedts.DefaultMaxNetworkRTT),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Refresh the policy with the current test case's latencies map.
+			repl.RefreshPolicy(tc.latencies)
+
+			// Verify the policy is set correctly.
+			actualPolicy := repl.GetCachedClosedTimestampPolicyForTesting()
+			require.Equal(t, tc.expectedPolicy, actualPolicy, "expected policy %v, got %v", tc.expectedPolicy, actualPolicy)
+		})
+	}
+}

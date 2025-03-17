@@ -19,6 +19,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// getTargetByPolicy returns a range's closed timestamp policy and target
+// timestamp.
+func (r *Replica) getTargetByPolicy(
+	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
+) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
+	policy := r.closedTimestampPolicyRLocked()
+	target, ok := targetByPolicy[policy]
+	if ok {
+		return policy, target
+	}
+	// If the range's policy is not found in targetByPolicy, fall back to
+	// LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO.
+	//
+	// This fallback handles race conditions between the policy refresher and side
+	// transport during cluster version upgrades. The race can occur in this
+	// sequence:
+	// 1. Side transport prepares a policy map before cluster upgrade is
+	// complete.
+	// 2. Cluster upgrade completes.
+	// 3. Policy refresher sees the upgrade and quickly updates replica policies
+	// to use latency-based policies.
+	// 4. Replica tries to use a latency-based policy but the policy map from step
+	// 1 doesn't include it yet.
+	//
+	// In this case, we temporarily fall back to the no-latency policy until the
+	// side transport catches up with the new cluster version.
+	// TODO(wenyihu6): remove this fallback once version compatibility with v25.1
+	// is no longer a concern
+	if policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			targetByPolicy[ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO]
+	}
+	panic("unexpected: policy not found in targetByPolicy")
+}
+
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
 // requests, making sure that future requests are not allowed to write below the
@@ -51,8 +87,7 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
+	policy, target := r.getTargetByPolicy(targetByPolicy)
 	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
