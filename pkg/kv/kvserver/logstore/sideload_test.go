@@ -166,10 +166,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		},
 		{
 			err: nil,
-			fun: func() error {
-				_, err := ss.TruncateTo(ctx, 122)
-				return err
-			},
+			fun: func() error { return ss.TruncateTo(ctx, 122) },
 		},
 		{
 			err: nil,
@@ -231,9 +228,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		require.NoError(t, err)
 		require.Equal(t, total, prefixBytes+suffixBytes)
 		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		freed, err := ss.TruncateTo(ctx, index)
-		require.NoError(t, err)
-		require.Equal(t, prefixBytes, freed)
+		require.NoError(t, ss.TruncateTo(ctx, index))
 		// Indexes > payloads[n] are still there at both terms.
 		for _, term := range []kvpb.RaftTerm{lowTerm, highTerm} {
 			for _, i := range payloads[n+1:] {
@@ -260,10 +255,9 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// we will be prevented from removing it below.
 		require.NoError(t, f.Close())
 
-		_, err = ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
 		// The sideloaded storage should not error out here; removing files
 		// is optional. But the file should still be there!
-		require.NoError(t, err)
 		_, err = eng.Env().Stat(nonRemovableFile)
 		require.NoError(t, err)
 
@@ -271,8 +265,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		require.NoError(t, eng.Env().Remove(nonRemovableFile))
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
-		_, err = ss.TruncateTo(ctx, math.MaxUint64)
-		require.NoError(t, err)
+		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
 		// Ensure directory is removed, now that all files should be gone.
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -319,11 +312,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.Equal(t, check.wantCount, count)
 			require.Equal(t, check.wantSize, size)
 		}
-		_, prefixBytes, err := ss.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
-		require.NoError(t, err)
-		freed, err := ss.TruncateTo(ctx, math.MaxUint64)
-		require.NoError(t, err)
-		require.Equal(t, prefixBytes, freed)
+		require.NoError(t, ss.TruncateTo(ctx, math.MaxUint64))
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Env().Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -333,14 +322,12 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertExists(false)
 
-	// Sanity check that Stats and TruncateTo return zeroes when the directory
-	// does not exist.
-	_, size, err := ss.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
+	// Sanity check that Stats returns zeroes when the directory does not exist.
+	count, size, err := ss.Stats(ctx, kvpb.RaftSpan{Last: math.MaxUint64})
 	require.NoError(t, err)
+	require.Zero(t, count)
 	require.Zero(t, size)
-	freed, err := ss.TruncateTo(ctx, 0)
-	require.NoError(t, err)
-	require.Zero(t, freed)
+	require.NoError(t, ss.TruncateTo(ctx, 0))
 
 	assertExists(false)
 

@@ -503,14 +503,10 @@ func (r *Replica) handleLeaseResult(
 // new RaftTruncatedState and log size delta, and removes obsolete entries from
 // the raft log cache and sideloaded storage.
 //
-// The sideloadIncluded flag specifies whether the raftLogDelta already includes
-// the total size of the sideloaded entries. It is true in loosely coupled
-// truncations stack, and false in the tightly coupled stack.
-//
 // The isDeltaTrusted flag specifies whether the raftLogDelta has been correctly
 // computed. The loosely coupled truncations stack sets it to false if, for
 // example, it failed to account for the sideloaded entries. The tightly coupled
-// truncations have correct stats (but excluding the sideloaded entries).
+// truncations have correct stats.
 //
 // TODO(pav-kv): simplify this.
 func (r *Replica) handleTruncatedStateResult(
@@ -519,7 +515,6 @@ func (r *Replica) handleTruncatedStateResult(
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
 	raftLogDelta int64,
 	isDeltaTrusted bool,
-	sideloadIncluded bool,
 ) {
 	r.raftMu.AssertHeld()
 	// NB: The expected first index is zero if this proposal is from before v22.1
@@ -556,8 +551,7 @@ func (r *Replica) handleTruncatedStateResult(
 	// state is already synced. If it wasn't, a crash right after removing the
 	// sideloaded entries could result in missing entries in the log.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
-	size, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index)
-	if err != nil {
+	if err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index); err != nil {
 		// We don't *have* to remove these entries for correctness. Log a loud
 		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
@@ -566,9 +560,6 @@ func (r *Replica) handleTruncatedStateResult(
 	// reasons.
 	// TODO(#136416): If a crash occurs before the files are durably removed,
 	// there will be dangling files at the next start. Clean them up at startup.
-	if !sideloadIncluded {
-		raftLogDelta -= size
-	}
 	r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
 }
 

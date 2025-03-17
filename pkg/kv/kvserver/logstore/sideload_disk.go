@@ -185,9 +185,7 @@ func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 }
 
 // TruncateTo implements SideloadStorage.
-func (ss *DiskSideloadStorage) TruncateTo(
-	ctx context.Context, lastIndex kvpb.RaftIndex,
-) (bytesFreed int64, _ error) {
+func (ss *DiskSideloadStorage) TruncateTo(ctx context.Context, lastIndex kvpb.RaftIndex) error {
 	span := kvpb.RaftSpan{Last: lastIndex}
 	deletedAll := true
 	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
@@ -196,14 +194,14 @@ func (ss *DiskSideloadStorage) TruncateTo(
 			return true, nil
 		}
 		// index is in (span.After, span.Last].
-		fileSize, err := ss.purgeFile(ctx, filename)
+		// TODO(pav-kv): don't compute the size in purgeFile.
+		_, err := ss.purgeFile(ctx, filename)
 		if err != nil {
 			return false, err
 		}
-		bytesFreed += fileSize
 		return true, nil
 	}); err != nil {
-		return 0, err
+		return err
 	}
 
 	if deletedAll {
@@ -217,7 +215,7 @@ func (ss *DiskSideloadStorage) TruncateTo(
 			err = nil // handled
 		}
 	}
-	return bytesFreed, nil
+	return nil
 }
 
 // Stats implements SideloadStorage.
