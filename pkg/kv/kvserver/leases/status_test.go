@@ -192,7 +192,7 @@ func TestStatus(t *testing.T) {
 				MinValidObservedTs: hlc.ClockTimestamp{},
 				RaftStatus:         tc.raftStatus,
 				RequestTs:          tc.reqTS,
-				Lease:              tc.lease,
+				Lease:              &tc.lease,
 			}
 
 			got := Status(context.Background(), nl, in)
