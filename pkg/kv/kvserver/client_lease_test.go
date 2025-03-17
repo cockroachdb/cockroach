@@ -1112,7 +1112,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	// clock jumps. Disable the suspect timer to prevent them becoming suspect
 	// when we bump the clocks.
 	liveness.TimeAfterNodeSuspect.Override(ctx, sv, 0)
+
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(sv)
+	// We'll jump the clock forward and don't accidentally want the watcher to
+	// fire.
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, sv, 5*timeUntilNodeDead)
 
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
@@ -1232,7 +1236,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Add(getArgs(key))
 	_, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
-	require.Nil(t, pErr)
+	require.NoError(t, pErr.GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		// Validate that the lease transferred to a preferred locality. n4 (us) and

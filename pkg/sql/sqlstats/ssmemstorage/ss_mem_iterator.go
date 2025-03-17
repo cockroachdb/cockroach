@@ -81,20 +81,19 @@ func (s *StmtStatsIterator) Next() bool {
 	distSQLUsed := statementStats.mu.distSQLUsed
 	vectorized := statementStats.mu.vectorized
 	fullScan := statementStats.mu.fullScan
-	database := statementStats.mu.database
 	querySummary := statementStats.mu.querySummary
 	statementStats.mu.Unlock()
 
 	s.currentValue = &appstatspb.CollectedStatementStatistics{
 		Key: appstatspb.StatementStatisticsKey{
-			Query:                    stmtKey.stmtNoConstants,
+			Query:                    statementStats.meta.stmtNoConstants,
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
-			ImplicitTxn:              stmtKey.implicitTxn,
+			ImplicitTxn:              statementStats.meta.implicitTxn,
 			FullScan:                 fullScan,
 			App:                      s.container.appName,
-			Database:                 database,
+			Database:                 statementStats.meta.database,
 			PlanHash:                 stmtKey.planHash,
 			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
