@@ -8,6 +8,7 @@ package admission
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -614,4 +615,97 @@ func TestCPUTokenSim(t *testing.T) {
 		workDurationMillis, workUsageMillis,
 		tokenRateMillisPerMillis,
 		float64(usageMillis)/float64(simulateIntervalMillis))
+}
+
+func TestMultiTenantCPUTokenSim(t *testing.T) {
+	// 16ms of tokens per tick, represent 80%. want 10% consumed by tenant 0 and
+	// tenant 1 combined. Would be 2ms per tick. But want 1 in 8 to see arrival.
+	const tokensPerTick = 16
+	const burstTokens = 1000 * 16
+	tokens := burstTokens
+	const workInitialTokens = 5
+	const workUsageTokens = 1
+	const workDuration = 2
+	const numSmallTenants = 2
+	type waitingWork struct {
+		startWait int
+	}
+	var smallTenantWaiting [numSmallTenants][]waitingWork
+	type work struct {
+		tenant int
+		start  int
+	}
+	var started []work
+	var tokensUsed [numSmallTenants + 1]int
+	type waitTime struct {
+		count    int
+		waitTime int
+	}
+	var waitTimes [numSmallTenants]waitTime
+
+	simulateIntervalMillis := 5 * 1000
+	for i := 0; i <= simulateIntervalMillis; i++ {
+		// Pop work that finished
+		j := 0
+		for ; j < len(started); j++ {
+			if started[j].start+workDuration > i {
+				break
+			}
+			returnTokens := workInitialTokens - workUsageTokens
+			tokens += returnTokens
+			tokensUsed[started[j].tenant] -= returnTokens
+		}
+		started = started[j:]
+		// Add tokens for tick.
+		tokens += tokensPerTick
+		// Cap tokens to burst.
+		if tokens > burstTokens {
+			tokens = burstTokens
+		}
+		// Try starting work.
+		for tokens > 0 {
+			tenant := -1
+			used := math.MaxInt
+			for j := range smallTenantWaiting {
+				if len(smallTenantWaiting[j]) > 0 && tokensUsed[j] < used {
+					tenant = j
+					used = tokensUsed[j]
+				}
+			}
+			if tokensUsed[numSmallTenants] < used {
+				tenant = numSmallTenants
+			}
+			tokensUsed[tenant] += workInitialTokens
+			started = append(started, work{tenant: tenant})
+			tokens -= workInitialTokens
+			// fmt.Printf("%d: picked tenant %d\n", i, tenant)
+			if tenant != numSmallTenants {
+				waitTimes[tenant].count++
+				waitTimes[tenant].waitTime += (i - smallTenantWaiting[tenant][0].startWait)
+				smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
+			}
+		}
+		if i%8 == 0 {
+			for j := range smallTenantWaiting {
+				for k := 0; k < 8; k++ {
+					smallTenantWaiting[j] = append(smallTenantWaiting[j], waitingWork{startWait: i})
+				}
+			}
+		}
+	}
+	sumTokensUsed := 0
+	for j := range tokensUsed {
+		sumTokensUsed += tokensUsed[j]
+	}
+	fmt.Printf("rate %.2f\n", float64(sumTokensUsed)/float64(simulateIntervalMillis))
+	fmt.Printf("tenant fractions:")
+	for j := range tokensUsed {
+		fmt.Printf(" %d:%.2f", j, float64(tokensUsed[j])/float64(sumTokensUsed))
+	}
+	fmt.Printf("\n")
+	fmt.Printf("wait times:")
+	for j := range waitTimes {
+		fmt.Printf(" %d:%.2fms", j, float64(waitTimes[j].waitTime)/float64(waitTimes[j].count))
+	}
+	fmt.Printf("\n")
 }
