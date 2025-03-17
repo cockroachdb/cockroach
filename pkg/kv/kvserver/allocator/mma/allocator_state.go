@@ -19,8 +19,7 @@ import (
 )
 
 type allocatorState struct {
-	cs     *clusterState
-	nodeID roachpb.NodeID
+	cs *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -77,6 +76,10 @@ func NewAllocatorState(ts timeutil.TimeSource) *allocatorState {
 // Called periodically, say every 10s.
 func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []PendingRangeChange {
 	now := timeutil.Now()
+	// NB: We interpret the local NodeID based on the given localStoreID because
+	// the allocator is initialized when starting a server, so the NodeID is not
+	// yet known.
+	localNodeID := a.cs.stores[localStoreID].NodeID
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
 	// capacities). We do not want to loop through all ranges in the cluster,
@@ -142,7 +145,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 
 		doneShedding := false
 		ss := a.cs.stores[store.StoreID]
-		if ss.NodeID == a.nodeID && store.storeCPUSummary >= overloadSlow {
+		if ss.NodeID == localNodeID && store.storeCPUSummary >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
 			// NB: any ranges at this store that don't have pending changes must
@@ -872,7 +875,6 @@ const epsilon = 1e-10
 
 // Avoid unused lint errors.
 
-var _ = NewAllocatorState
 var _ = allocatorState{}.changeRateLimiter
 var _ = (&existingReplicaLocalities{}).clear
 var _ = replicasLocalityTiers{}.hash
