@@ -552,6 +552,11 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	}
 
 	setupContext := p.nonUpgradeContext(initialVersion, SystemSetupStage)
+
+	clusterStartHooks := p.hooks.BeforeClusterStartSteps(setupContext, p.prng)
+	if len(clusterStartHooks) > 0 {
+		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
+	}
 	return append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
 			version:            initialVersion,
@@ -574,6 +579,7 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 // passed is the version in which the tenant is created.
 func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	setupContext := p.nonUpgradeContext(v, TenantSetupStage)
+	var steps []testStep
 	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
 		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
@@ -593,11 +599,15 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 		}
 	}
 
+	clusterStartHooks := p.hooks.BeforeClusterStartSteps(setupContext, p.prng)
+	if len(clusterStartHooks) > 0 {
+		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
+	}
 	// We are creating a virtual cluster: we first create it, then wait
 	// for the cluster version to match the expected version, then set
 	// it as the default cluster, and finally give it all capabilities
 	// if necessary.
-	steps := []testStep{
+	steps = append(steps,
 		p.newSingleStepWithContext(setupContext, startStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
@@ -605,7 +615,7 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 			desiredVersion:     versionToClusterVersion(v),
 			virtualClusterName: p.tenantName(),
 		}),
-	}
+	)
 
 	// We only use the 'default tenant' cluster setting in
 	// shared-process deployments. For separate-process deployments, we

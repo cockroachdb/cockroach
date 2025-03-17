@@ -757,7 +757,7 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		MinProposedTs:      r.mu.minLeaseProposedTS,
 		MinValidObservedTs: r.mu.minValidObservedTimestamp,
 		RequestTs:          reqTS,
-		Lease:              *r.shMu.state.Lease,
+		Lease:              r.shMu.state.Lease,
 	}
 
 	if in.Lease.Type() == roachpb.LeaseLeader {

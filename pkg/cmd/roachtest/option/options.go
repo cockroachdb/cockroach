@@ -268,3 +268,15 @@ func Graceful(gracePeriodSeconds int) func(interface{}) {
 func WithNodes(nodes NodeListOption) install.RunOptions {
 	return install.WithNodes(nodes.InstallNodes())
 }
+
+// ClusterHookType represents when an install.PreStartHook should be run.
+type ClusterHookType int
+
+const (
+	// PreStartHook is a func run after service registration occurs in StartE but before
+	// the cluster is actually started. This can be useful if we want to run some code
+	// during CRDB startup that is dependent on knowing the service registration info.
+	PreStartHook ClusterHookType = iota
+	// PreStartVirtualClusterHook is similar to preStartHook but for virtual clusters.
+	PreStartVirtualClusterHook
+)
