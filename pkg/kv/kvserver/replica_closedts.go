@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -32,7 +33,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicy map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
