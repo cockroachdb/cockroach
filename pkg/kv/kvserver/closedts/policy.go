@@ -106,23 +106,23 @@ func TargetForPolicy(
 	sideTransportCloseInterval time.Duration,
 	policy roachpb.RangeClosedTimestampPolicy,
 ) hlc.Timestamp {
-	var res hlc.Timestamp
+	var targetOffsetTime time.Duration
 	switch policy {
 	case roachpb.LAG_BY_CLUSTER_SETTING:
 		// Simple calculation: lag now by desired duration.
-		res = now.ToTimestamp().Add(-lagTargetDuration.Nanoseconds(), 0)
+		targetOffsetTime = -lagTargetDuration
 	case roachpb.LEAD_FOR_GLOBAL_READS:
 		// Override entirely with cluster setting, if necessary.
 		if leadTargetOverride != 0 {
-			res = now.ToTimestamp().Add(leadTargetOverride.Nanoseconds(), 0)
+			targetOffsetTime = leadTargetOverride
 			break
 		}
-		leadTimeAtSender := computeLeadTimeForGlobalReads(defaultMaxNetworkRTT,
+		targetOffsetTime = computeLeadTimeForGlobalReads(defaultMaxNetworkRTT,
 			maxClockOffset, sideTransportCloseInterval)
-		res = now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
 	}
+	res := now.ToTimestamp().Add(targetOffsetTime.Nanoseconds(), 0)
 	// We truncate the logical part in order to save a few bytes over the network,
 	// and also because arithmetic with logical timestamp doesn't make much sense.
 	res.Logical = 0
