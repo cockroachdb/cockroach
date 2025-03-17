@@ -13,7 +13,7 @@ import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // LatencyBasedRangeClosedTimestampPolicy defines closed timestamp policies that
-// are dynamically adjusted based on the network latency between a range's
+// are dynamically adjusted based on the network latency between a range's 
 // leaseholder and its furthest follower replica. Each range is assigned a policy
 // based on observed network latencies between nodes.
 enum LatencyBasedRangeClosedTimestampPolicy {
@@ -22,6 +22,24 @@ enum LatencyBasedRangeClosedTimestampPolicy {
   LAG_BY_CLUSTER_SETTING = 0;
   // Lead policy for global reads with no locality information.
   LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO = 1;
+  // Lead policy for cross-region ranges with global reads policy.
+  // Following policies are selected based on max leaseholder-to-follower latency.
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS = 2;  // [0,20)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS = 3;  // [20,40)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS = 4;  // [40,60)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS = 5;  // [60,80)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS = 6;  // [80,100)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS = 7;  // [100,120)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS = 8;  // [120,140)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS = 9;  // [140,160)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS = 10; // [160,180)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS = 11; // [180,200)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS = 12; // [200,220)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS = 13; // [220,240)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS = 14; // [240,260)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS = 15; // [260,280)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS = 16; // [280,300)ms
+  LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS = 17; // >=300ms
   // Sentinel value for slice sizing.
   MAX_CLOSED_TIMESTAMP_POLICY = 18;
 }
