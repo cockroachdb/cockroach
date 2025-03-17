@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -788,6 +789,107 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	require.NoError(t, writeMore(), "initial insert")
 	_, err = sqlDB.Exec("CREATE INDEX ON t.test (v)")
 	require.NoError(t, err)
+}
+
+// TestIndexOverwritesChunksDuringMerge intentionally overwrites as chunks
+// during merge process and confirms those rows are removed.
+func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	chunkSize := 10
+	const maxAutoRetries = 10
+	params, _ := createTestServerParamsAllowTenants()
+	var writeMore func(sampleData bool) error
+	retryTracker := struct {
+		limitedPerKey map[string]int
+		syncutil.Mutex
+		commitChannel chan struct{}
+	}{
+		limitedPerKey: make(map[string]int),
+		commitChannel: make(chan struct{}),
+	}
+	var smallerChunkSizeObserved atomic.Int64
+	var nonZeroKeysToSkipObserved atomic.Int64
+
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				// Overwrite all rows something exists in the temp index.
+				return writeMore(false)
+			},
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(startKey roachpb.Key) error {
+					// Modify 1 in 4 rows on each scan chunk, so that those
+					// keys are skipped over.
+					return writeMore(true)
+				},
+				RunBeforeMergeTxn: func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkip int) error {
+					if len(sourceKeys) < chunkSize {
+						smallerChunkSizeObserved.Add(1)
+					}
+					if keysToSkip > 0 {
+						nonZeroKeysToSkipObserved.Add(1)
+					}
+					return nil
+				},
+				RunDuringMergeTxn: func(ctx context.Context, txn *kv.Txn, startKey, endKey roachpb.Key) error {
+					retryTracker.Lock()
+					defer retryTracker.Unlock()
+					if count := retryTracker.limitedPerKey[string(startKey)]; count >= maxAutoRetries {
+						return nil
+					}
+					retryTracker.limitedPerKey[string(startKey)]++
+					return txn.GenerateForcedRetryableErr(ctx, "forcing a retry error")
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	var mu syncutil.Mutex
+	var iteration = 0
+	// Upserts rows in the table. If sampleData is false,
+	// then all rows are updated. Otherwise, 1 in 4 rouws are
+	// updated.
+	writeMore = func(sampleData bool) error {
+		const rowsPerWrite = 500
+		mu.Lock()
+		defer mu.Unlock()
+		for i := 0; i <= rowsPerWrite; i++ {
+			if sampleData {
+				if i%4 != 0 {
+					continue
+				}
+			}
+			if _, err := sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", i, iteration); err != nil {
+				return err
+			}
+		}
+		iteration += 1
+		return nil
+	}
+	_, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = %d`, maxAutoRetries))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v int);`)
+	require.NoError(t, err)
+	require.NoError(t, writeMore(false), "initial insert")
+	_, err = sqlDB.Exec("ALTER TABLE t.test ADD COLUMN j INT DEFAULT 32")
+	require.NoError(t, err)
+	require.Greater(t,
+		smallerChunkSizeObserved.Load(),
+		int64(0),
+		"no chunks have decreased in size %d.",
+		smallerChunkSizeObserved.Load())
+	require.Greater(t,
+		nonZeroKeysToSkipObserved.Load(),
+		int64(0),
+		"no chunks have had keys to skip %d.",
+		nonZeroKeysToSkipObserved.Load())
 }
 
 // TestIndexMergeWithSplitsAndDistSQL tests the case where there's an index
