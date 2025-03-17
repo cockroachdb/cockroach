@@ -778,6 +778,15 @@ type StoreIDAndReplicaState struct {
 	ReplicaState
 }
 
+func (s StoreIDAndReplicaState) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("s%v:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType)
+}
+
 // rangeState is periodically updated based on reporting by the leaseholder.
 type rangeState struct {
 	// replicas is the adjusted replicas. It is always consistent with
@@ -890,6 +899,12 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	// Handle the node load, updating the reported load and set the adjusted load
 	// to be equal to the reported load initially. Any remaining pending changes
 	// will be re-applied to the reported load.
+	if ns == nil {
+		panic(fmt.Sprintf("node %d not found storeMsg=%v", storeMsg.NodeID, *storeMsg))
+	}
+	if ss == nil {
+		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
+	}
 	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
 	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
 	// Undo the adjustment for the store. We will apply the adjustment again
@@ -949,6 +964,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		rs.load = rangeMsg.RangeLoad
 		rs.replicas = rangeMsg.Replicas
 		for _, replica := range rs.replicas {
+			ss := cs.stores[replica.StoreID]
+			if ss == nil {
+				panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
+			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
 		}
 		for _, replica := range rangeMsg.Replicas {
@@ -989,6 +1008,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			panic(err)
 		}
 		rs.conf = normSpanConfig
+		// NB: Always recompute the analyzed range constraints for any range,
+		// assuming the leaseholder wouldn't have sent the message if there was no
+		// change.
+		rs.constraints = nil
 	}
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
@@ -1365,4 +1388,3 @@ var _ = storeChangeRateLimiter{}.clusterMean
 var _ = newStoreChangeRateLimiter
 var _ = (*storeChangeRateLimiter).initForRebalancePass
 var _ = (*storeChangeRateLimiter).updateForRebalancePass
-var _ = (*clusterState).canAddLoad
