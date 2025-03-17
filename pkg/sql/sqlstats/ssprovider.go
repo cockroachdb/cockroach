@@ -97,6 +97,7 @@ type RecordedStmtStats struct {
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
+	FingerprintID           appstatspb.TransactionFingerprintID
 	SessionID               clusterunique.ID
 	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
