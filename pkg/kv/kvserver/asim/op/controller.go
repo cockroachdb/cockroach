@@ -137,6 +137,12 @@ func (c *controller) process(
 			op.done = true
 			op.complete = tick
 		}
+	case *ChangeReplicasOp:
+		if err := c.processChangeReplicas(ctx, tick, state, op); err != nil {
+			op.error(err)
+			op.done = true
+			op.complete = tick
+		}
 	default:
 		return
 	}
@@ -229,5 +235,39 @@ func (c *controller) processTransferLease(
 	}
 
 	ro.next = tick.Add(delay)
+	return nil
+}
+
+func (c *controller) processChangeReplicas(
+	ctx context.Context, tick time.Time, s state.State, cro *ChangeReplicasOp,
+) error {
+	rng := s.RangeFor(state.Key(cro.rangeID))
+	if rng == nil {
+		return errors.Errorf("range %d not found", cro.rangeID)
+	}
+
+	// Apply the change
+	change := state.ReplicaChange{
+		RangeID: rng.RangeID(),
+		Author:  c.storeID,
+		Changes: cro.changes,
+	}
+
+	targets := kvserver.SynthesizeTargetsByChangeType(cro.changes)
+	if len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0 {
+		change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(), true /* use range size */)
+	}
+
+	completeAt, ok := c.changer.Push(tick, &change)
+	if !ok {
+		return errors.Newf("tick %d: Changer did not accept change for range %d", tick, cro.rangeID)
+	}
+
+	// If the change was applied instantly or the operation is already complete
+	if completeAt.Equal(tick) || completeAt.Before(tick) {
+		cro.Complete(tick)
+	} else {
+		cro.next = completeAt
+	}
 	return nil
 }

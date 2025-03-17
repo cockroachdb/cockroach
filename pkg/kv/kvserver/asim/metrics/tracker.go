@@ -21,6 +21,7 @@ type StoreMetrics struct {
 	Tick       time.Time
 	StoreID    int64
 	QPS        int64
+	CPU        int64
 	WriteKeys  int64
 	WriteBytes int64
 	ReadKeys   int64
@@ -104,6 +105,7 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 			Tick:               tick,
 			StoreID:            int64(storeID),
 			QPS:                int64(desc.Capacity.QueriesPerSecond),
+			CPU:                int64(desc.Capacity.CPUPerSecond),
 			WriteKeys:          u.WriteKeys,
 			WriteBytes:         u.WriteBytes,
 			ReadKeys:           u.ReadKeys,
