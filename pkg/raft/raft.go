@@ -2356,7 +2356,7 @@ func (r *raft) checkQuorumActive() {
 		r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
 	}
 	if !quorumActiveByHeartbeats && !quorumActiveByFortification {
-		r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
+		r.logger.Infof("%x stepped down to follower since quorum is not active", r.id)
 		r.becomeFollower(r.Term, None)
 	}
 	// Mark everyone (but ourselves) as inactive in preparation for the next
