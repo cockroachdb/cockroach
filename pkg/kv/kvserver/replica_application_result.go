@@ -524,11 +524,6 @@ func (r *Replica) handleTruncatedStateResult(
 		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
 	isRaftLogTruncationDeltaTrusted := isDeltaTrusted && expectedFirstIndexWasAccurate
 
-	// TODO(pav-kv): we are updating the truncation state, but leaving the raft
-	// log size at the previous value and update it in a different Replica.mu
-	// section in handleRaftLogDeltaResult. This can confuse the truncations queue
-	// to make decisions based on incorrect stats. We should fix this and other
-	// log stats inconsistencies.
 	// TODO(#132114, #131063): updating the truncated state after the storage
 	// writes leads to a necessity of the ErrCompacted handling in raft, when
 	// reads are made under Replica.mu. This error API can be removed entirely if
@@ -536,6 +531,7 @@ func (r *Replica) handleTruncatedStateResult(
 	// is truncated "logically" first, and then physically under raftMu.
 	r.mu.Lock()
 	r.shMu.raftTruncState = t
+	r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up
@@ -560,15 +556,14 @@ func (r *Replica) handleTruncatedStateResult(
 	// reasons.
 	// TODO(#136416): If a crash occurs before the files are durably removed,
 	// there will be dangling files at the next start. Clean them up at startup.
-	r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
 }
 
-// TODO(pav-kv): update the stats in the same Replica.mu section with the
-// truncated state update.
+// handleRaftLogDeltaResult updates the raft log stats with the given delta.
+// Both Replica.{raftMu,mu} must be held.
 func (r *Replica) handleRaftLogDeltaResult(delta int64, isDeltaTrusted bool) {
 	r.raftMu.AssertHeld()
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.AssertHeld()
+
 	r.shMu.raftLogSize += delta
 	r.shMu.raftLogLastCheckSize += delta
 	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
