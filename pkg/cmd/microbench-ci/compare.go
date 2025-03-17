@@ -6,9 +6,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
-	"math"
 	"os"
 	"path"
 
@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/perf/benchfmt"
+	"golang.org/x/perf/benchmath"
 )
 
 type (
@@ -31,10 +32,23 @@ type (
 
 const (
 	NoChange Status = iota
-	Better
-	Worse
-	Regression
+	Improved
+	Regressed
 )
+
+// String returns the string representation of the status.
+func (s Status) String() string {
+	switch s {
+	case NoChange:
+		return "No Change"
+	case Improved:
+		return "Improved"
+	case Regressed:
+		return "Regressed"
+	default:
+		panic(fmt.Sprintf("unknown status: %d", s))
+	}
+}
 
 // status returns the status of a metric in the comparison.
 func (c *CompareResult) status(metricName string) Status {
@@ -47,35 +61,36 @@ func (c *CompareResult) status(metricName string) Status {
 		return NoChange
 	}
 	status := NoChange
-	threshold := c.Benchmark.Thresholds[metricName] * 100.0
 	if cc.Delta*float64(entry.Better) > 0 {
-		status = Better
+		status = Improved
 	} else if cc.Delta*float64(entry.Better) < 0 {
-		status = Worse
-		if math.Abs(cc.Delta) >= threshold {
-			status = Regression
-		}
+		status = Regressed
 	}
 	return status
 }
 
-// regressed returns true if any metric in the comparison has regressed.
-func (c *CompareResult) regressed() bool {
+// top returns the top status of all metrics in the comparison.
+func (c *CompareResult) top() Status {
+	topStatus := NoChange
 	for metric := range c.MetricMap {
 		status := c.status(metric)
-		if status == Regression {
-			return true
+		if status > topStatus {
+			topStatus = status
 		}
 	}
-	return false
+	return topStatus
 }
 
-// compare compares the metrics of a benchmark between two revisions.
-func (b *Benchmark) compare() (*CompareResult, error) {
-	builder := model.NewBuilder()
+// compare compares the metrics of a benchmark between two revisions. Only the
+// specified last number of lines of the benchmark logs are considered. If lines
+// is 0, it considers the entire logs.
+func (b *Benchmark) compare(lines int) (*CompareResult, error) {
+	builder := model.NewBuilder(model.WithThresholds(&benchmath.Thresholds{
+		CompareAlpha: b.CompareAlpha,
+	}))
 	compareResult := CompareResult{Benchmark: b}
 	for _, revision := range []Revision{Old, New} {
-		data, err := os.ReadFile(path.Join(suite.artifactsDir(revision), b.cleanLog()))
+		data, err := logTail(path.Join(suite.artifactsDir(revision), b.cleanLog()), lines)
 		if err != nil {
 			return nil, err
 		}
@@ -110,11 +125,42 @@ func (b *Benchmark) compare() (*CompareResult, error) {
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
-		compareResult, err := benchmark.compare()
+		compareResult, err := benchmark.compare(0)
 		if err != nil {
 			return nil, err
 		}
 		compareResults = append(compareResults, compareResult)
 	}
 	return compareResults, nil
+}
+
+// logTail returns the last N lines of a file.
+// If N is 0, it returns the entire file.
+func logTail(filePath string, N int) ([]byte, error) {
+	if N == 0 {
+		return os.ReadFile(filePath)
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	lines := make([]string, 0, N)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+		if len(lines) > N {
+			lines = lines[1:]
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+	for _, line := range lines {
+		buffer.WriteString(line + "\n")
+	}
+	return buffer.Bytes(), nil
 }
