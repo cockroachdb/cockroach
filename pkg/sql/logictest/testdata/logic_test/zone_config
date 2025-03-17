@@ -531,3 +531,69 @@ statement ok
 RESET use_declarative_schema_changer;
 
 subtest end
+
+# Ensure that index ID changes due to a backfill have a properly corresponding
+# zone config.
+subtest backfill_idx_id
+
+statement ok
+CREATE TABLE foo(i int);
+
+statement ok
+ALTER INDEX foo@foo_pkey CONFIGURE ZONE USING gc.ttlseconds=90;
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42;
+
+# Here, we can see that although the index ID changed, our corresponding
+# subzone config has an entry for our new index; along with a corres. subzone
+# span.
+skipif config local-mixed-24.3 local-legacy-schema-changer
+query B colnames
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 'foo'::regclass::oid
+)
+SELECT EXISTS (
+    SELECT 1
+    FROM primary_index, subzone_indexes
+    WHERE primaryID = indexID
+) AS match_found;
+----
+match_found
+true
+
+skipif config local-mixed-24.3 local-legacy-schema-changer
+query B
+WITH subzone_spans AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
+    FROM system.zones
+    WHERE id = 'foo'::REGCLASS::OID
+)
+SELECT EXISTS (
+    SELECT 1
+    FROM subzone_spans
+    WHERE crdb_internal.pretty_key(decode(key, 'base64'), 0) = '/2'
+) AS exists;
+----
+true
+
+subtest end
