@@ -376,12 +376,6 @@ func (s *StatsCollector) RecordTransaction(
 	return s.flushTarget.RecordTransaction(ctx, key, value)
 }
 
-func (s *StatsCollector) IterateStatementStats(
-	ctx context.Context, opts sqlstats.IteratorOptions, f sqlstats.StatementVisitor,
-) error {
-	return s.flushTarget.IterateStatementStats(ctx, opts, f)
-}
-
 // UpgradeToExplicitTransaction is called by the connExecutor when the current
 // transaction is upgraded from an implicit transaction to explicit. Since this
 // property is part of the statement fingerprint ID, we need to update the

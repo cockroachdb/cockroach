@@ -620,7 +620,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 
 			// Gather the collected stats so that we can assert on them.
 			var stats []*appstatspb.CollectedStatementStatistics
-			err = statsCollector.IterateStatementStats(
+			err = appStats.IterateStatementStats(
 				ctx,
 				sqlstats.IteratorOptions{},
 				func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
