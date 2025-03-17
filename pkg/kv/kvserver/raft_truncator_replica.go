@@ -65,8 +65,7 @@ func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 func (r *raftTruncatorReplica) sideloadedBytesIfTruncatedFromTo(
 	ctx context.Context, span kvpb.RaftSpan,
 ) (freed int64, err error) {
-	freed, _, err = r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, span)
-	return freed, err
+	return r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, span)
 }
 
 func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {
