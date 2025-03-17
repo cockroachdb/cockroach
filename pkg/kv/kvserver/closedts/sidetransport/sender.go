@@ -18,9 +18,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -130,6 +132,7 @@ type leaseholder struct {
 // Replica represents a *Replica object, but with only the capabilities needed
 // by the closed timestamp side transport to accomplish its job.
 type Replica interface {
+	multiregion.Replica
 	// Accessors.
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
@@ -302,12 +305,24 @@ func (s *Sender) UnregisterLeaseholder(
 	}
 }
 
+// If the cluster is not fully upgraded or if the
+// lead_for_global_reads_auto_tune_interval is 0, only look at closed timestamps
+// policies without considering locality info.
+func (s *Sender) maxClosedTimestampPolicy() int {
+	// Even if no auto-tuning is disabled, still send them. No ranges would use
+	// this policy though.
+	if s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	}
+	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+}
+
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
 	log.VEventf(ctx, 4, "side-transport generating a new message")
 	s.trackedMu.closingFailures = [MaxReason]int{}
-	numOfPolicies := int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	numOfPolicies := s.maxClosedTimestampPolicy()
 	s.trackedMu.lastClosed = make(map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp, numOfPolicies)
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -468,6 +483,16 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 
 	// Return the publication time, for tests.
 	return now
+}
+
+func (s *Sender) GetLeaseholders() []multiregion.Replica {
+	s.leaseholdersMu.Lock()
+	defer s.leaseholdersMu.Unlock()
+	leaseholders := make([]multiregion.Replica, 0, len(s.leaseholdersMu.leaseholders))
+	for _, lh := range s.leaseholdersMu.leaseholders {
+		leaseholders = append(leaseholders, lh.Replica)
+	}
+	return leaseholders
 }
 
 // GetSnapshot generates an update that contains all the sender's state (as
