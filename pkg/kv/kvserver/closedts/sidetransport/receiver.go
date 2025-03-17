@@ -246,8 +246,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			if !ok {
 				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
-			r.stores.ForwardSideTransportClosedTimestampForRange(
-				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
+			ts, ok := r.mu.lastClosed[info.policy]
+			if !ok {
+				log.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
+			}
+			r.stores.ForwardSideTransportClosedTimestampForRange(ctx, rangeID, ts, info.lai)
 		}
 		r.mu.RUnlock()
 	}
@@ -258,9 +261,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
-		for i := range r.mu.lastClosed {
-			r.mu.lastClosed[i] = hlc.Timestamp{}
-		}
+		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
 		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
