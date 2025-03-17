@@ -153,6 +153,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r.mu.RUnlock()
 	b.changeRemovesReplica = false
 	b.changeTruncatesSideloadedFiles = false
+	b.truncatedSideloadedSize = 0
 	// TODO(pav-kv): what about b.ab and b.followerStoreWriteBytes?
 	b.start = timeutil.Now()
 	return b
@@ -331,8 +332,9 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// The delta in these historical proposals is accurate, but does not account
 		// for the sideloaded entries.
 		// TODO(pav-kv): remove the zero clause after any below-raft migration.
+		logDelta := rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize
 		sm.r.handleTruncatedStateResult(ctx, *truncState, rResult.RaftExpectedFirstIndex,
-			rResult.RaftLogDelta, true /* isDeltaTrusted */, false /* sideloadIncluded */)
+			logDelta, true /* isDeltaTrusted */)
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
 	}
