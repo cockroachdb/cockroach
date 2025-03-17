@@ -100,6 +100,7 @@ func (b *ringBuf) truncateFrom(lo kvpb.RaftIndex) (removedBytes, removedEntries 
 // clearTo clears all entries from the ringBuf with index less than hi. The
 // method returns the aggregate size and count of entries removed.
 func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32) {
+	// TODO(pav-kv): since hi is not inclusive, this should be hi <= firstIndex.
 	if b.len == 0 || hi < first(b).index(b) {
 		return
 	}
