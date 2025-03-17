@@ -328,7 +328,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	computeMeansForStoreSet(means.stores, mm.loadInfoProvider, means, mm.scratchNodes)
+	computeMeansForStoreSet(mm.loadInfoProvider, means, mm.scratchNodes)
 	return means
 }
 
@@ -351,14 +351,11 @@ func (mm *meansMemo) getStoreLoadSummary(
 // storeMembershipRemoved, fdDrain and fdDead. As these are never eligible
 // candidate stores and should therefore not be considered in the means.
 func computeMeansForStoreSet(
-	stores storeIDPostingList,
-	loadProvider loadInfoProvider,
-	means *meansForStoreSet,
-	scratchNodes map[roachpb.NodeID]*NodeLoad,
+	loadProvider loadInfoProvider, means *meansForStoreSet, scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
 	n := len(means.stores)
 	if n == 0 {
-		panic(fmt.Sprintf("no stores for meansForStoreSet: %v, stores: %v", *means, stores))
+		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", *means))
 	}
 	clear(scratchNodes)
 	for _, storeID := range means.stores {
