@@ -181,13 +181,9 @@ func (p *planCosts) AvgCustom() memo.Cost {
 	return sum
 }
 
-// ClearGeneric clears the generic cost.
-func (p *planCosts) ClearGeneric() {
+// Reset clears any previously set costs.
+func (p *planCosts) Reset() {
 	p.generic = memo.Cost{C: 0}
-}
-
-// ClearCustom clears any previously added custom costs.
-func (p *planCosts) ClearCustom() {
 	p.custom.nextIdx = 0
 	p.custom.length = 0
 }

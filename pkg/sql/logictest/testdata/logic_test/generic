@@ -226,7 +226,7 @@ DEALLOCATE p
 # Now use a more complex query that could have multiple join orderings.
 statement ok
 PREPARE p AS
-SELECT * FROM t
+SELECT t.k, c.k, g.k FROM t
 JOIN c ON t.k = c.a
 JOIN g ON c.k = g.a
 WHERE t.a = $1 AND t.c = $2
@@ -254,6 +254,35 @@ plan type: generic, re-optimized
 # On the seventh execution the generic plan is reused.
 query T match(plan\stype)
 EXPLAIN ANALYZE EXECUTE p(10000, 20000)
+----
+plan type: generic, reused
+
+statement ok
+ALTER TABLE t ADD COLUMN z INT
+
+# If a schema change occurs, the cost of both plans is reset, so the custom plan
+# is used for at least 5 executions.
+query T match(plan\stype)
+EXPLAIN ANALYZE EXECUTE p(1, 2)
+----
+plan type: custom
+
+statement ok
+EXECUTE p(1, 2);
+EXECUTE p(10, 20);
+EXECUTE p(100, 200);
+EXECUTE p(1000, 2000);
+
+# On the sixth execution after the schema change a generic plan is built and
+# used.
+query T match(plan\stype)
+EXPLAIN ANALYZE EXECUTE p(1, 2)
+----
+plan type: generic, re-optimized
+
+# On the seventh execution after the schema change the generic plan is reused.
+query T match(plan\stype)
+EXPLAIN ANALYZE EXECUTE p(1, 2)
 ----
 plan type: generic, reused
 

@@ -32,7 +32,7 @@ func TestPlanCosts(t *testing.T) {
 	}
 	var pc planCosts
 	for _, tc := range testCases {
-		pc.ClearCustom()
+		pc.Reset()
 		for _, cost := range tc.input {
 			pc.AddCustom(memo.Cost{C: cost})
 		}
