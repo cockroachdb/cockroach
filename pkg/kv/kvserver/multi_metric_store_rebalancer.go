@@ -43,7 +43,7 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 	_ = stopper.RunAsyncTask(ctx, "multi-metric-store-rebalancer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
-
+		timer.Reset(jitteredInterval(mma.RebalanceInterval))
 		for {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
