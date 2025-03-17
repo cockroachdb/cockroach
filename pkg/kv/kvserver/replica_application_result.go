@@ -498,6 +498,19 @@ func (r *Replica) handleLeaseResult(
 		assertNoLeaseJump)
 }
 
+// handleTruncatedStateResult is a post-apply handler for the raft log
+// truncation command. It updates the in-memory state of the Replica with the
+// new RaftTruncatedState, and removes obsolete entries from the raft log cache
+// and sideloaded storage.
+//
+// The truncation is finalized by the handleRaftLogDeltaResult method below,
+// which updates the raft log size using the computed delta. The reason for
+// having two separate methods is that the handling is different between the
+// tightly and loosely coupled truncation stacks. The latter computes the log
+// size delta when preparing the truncation, while the former only evaluates a
+// partial delta and accounts for the sideloaded files size when applying.
+//
+// TODO(pav-kv): simplify this.
 func (r *Replica) handleTruncatedStateResult(
 	ctx context.Context,
 	t *kvserverpb.RaftTruncatedState,
@@ -545,6 +558,27 @@ func (r *Replica) handleTruncatedStateResult(
 	// TODO(#136416): If a crash occurs before the files are durably removed,
 	// there will be dangling files at the next start. Clean them up at startup.
 	return -size, expectedFirstIndexWasAccurate
+}
+
+// TODO(pav-kv): update the stats in the same Replica.mu section with the
+// truncated state update.
+func (r *Replica) handleRaftLogDeltaResult(delta int64, isDeltaTrusted bool) {
+	r.raftMu.AssertHeld()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shMu.raftLogSize += delta
+	r.shMu.raftLogLastCheckSize += delta
+	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+	// between server restarts.
+	if r.shMu.raftLogSize < 0 {
+		r.shMu.raftLogSize = 0
+	}
+	if r.shMu.raftLogLastCheckSize < 0 {
+		r.shMu.raftLogLastCheckSize = 0
+	}
+	if !isDeltaTrusted {
+		r.shMu.raftLogSizeTrusted = false
+	}
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -625,9 +659,4 @@ func (r *Replica) handleChangeReplicasResult(
 	}
 
 	return true
-}
-
-// TODO(sumeer): remove method when all truncation is loosely coupled.
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, isDeltaTrusted bool) {
-	(*raftTruncatorReplica)(r).setTruncationDeltaAndTrusted(delta, isDeltaTrusted)
 }
