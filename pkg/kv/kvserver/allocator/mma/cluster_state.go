@@ -962,7 +962,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
 		rs.load = rangeMsg.RangeLoad
-		rs.replicas = rangeMsg.Replicas
 		for _, replica := range rs.replicas {
 			ss := cs.stores[replica.StoreID]
 			if ss == nil {
@@ -970,6 +969,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
 		}
+		rs.replicas = rangeMsg.Replicas
 		for _, replica := range rangeMsg.Replicas {
 			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
 		}
