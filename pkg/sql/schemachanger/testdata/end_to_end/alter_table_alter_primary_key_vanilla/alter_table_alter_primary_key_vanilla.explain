@@ -294,7 +294,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── PUBLIC    → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_idx-), RecreateSourceIndexID: 0}
  │    │    │    ├── PUBLIC    → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_j_idx-), RecreateSourceIndexID: 0}
  │    │    │    └── PUBLIC    → VALIDATED     SecondaryIndex:{DescID: 104 (t), IndexID: 6 (t_k_idx-), RecreateSourceIndexID: 0}
- │    │    └── 23 Mutation operations
+ │    │    └── 26 Mutation operations
  │    │         ├── SetIndexName {"IndexID":8,"Name":"t_i_idx","TableID":104}
  │    │         ├── SetIndexName {"IndexID":10,"Name":"t_j_idx","TableID":104}
  │    │         ├── SetIndexName {"IndexID":12,"Name":"t_k_idx","TableID":104}
@@ -307,10 +307,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":14,"Kind":1,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":15,"Kind":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":14,"Name":"t_i_key","TableID":104}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":8,"TableID":104,"TargetPrimaryIndexID":16}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":8,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":10,"TableID":104,"TargetPrimaryIndexID":16}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":10,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":12,"TableID":104,"TargetPrimaryIndexID":16}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":12,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
  │    │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
@@ -401,7 +404,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 6 (t_k_idx-)}
       │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 6 (t_k_idx-), RecreateSourceIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_k_idx", IndexID: 6 (t_k_idx-)}
-      │    └── 36 Mutation operations
+      │    └── 37 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":16,"Name":"t_pkey","TableID":104}
@@ -426,6 +429,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":16,"TableID":104}
+      │         ├── MarkRecreatedIndexesAsVisible {"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":17,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}

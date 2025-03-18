@@ -688,6 +688,7 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
+    recreateTargetId: 0
     referencedColumnIds:
     - 2
     sharding: null
@@ -1691,6 +1692,7 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
+    recreateTargetId: 0
     referencedColumnIds:
     - 2
     sharding: null

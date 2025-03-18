@@ -806,7 +806,7 @@ validate CHECK constraint crdb_internal_a_shard_10_auto_not_null in table #104
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitPhase stage 16 of 16 with 11 MutationType ops
+## PostCommitPhase stage 16 of 16 with 12 MutationType ops
 upsert descriptor #104
   ...
        name: rowid_auto_not_null
@@ -837,7 +837,9 @@ upsert descriptor #104
   -    id: 2
   +    id: 4
        interleave: {}
+  +    invisibility: 1
        keyColumnDirections:
+       - ASC
   ...
        - b
        keySuffixColumnIds:
@@ -845,6 +847,7 @@ upsert descriptor #104
   +    - 1
   +    - 4
        name: idx_b
+  +    notVisible: true
        partitioning: {}
        sharded: {}
   +    storeColumnNames: []
@@ -1277,10 +1280,10 @@ upsert descriptor #104
   -  version: "18"
   +  version: "19"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 5 with 11 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 5 with 12 MutationType ops pending"
 commit transaction #19
 begin transaction #20
-## PostCommitNonRevertiblePhase stage 2 of 5 with 13 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 5 with 14 MutationType ops
 upsert descriptor #104
    table:
   -  checks: []
@@ -1308,6 +1311,18 @@ upsert descriptor #104
   +    virtual: true
      createAsOfTime:
        wallTime: "1640995200000000000"
+  ...
+       id: 4
+       interleave: {}
+  -    invisibility: 1
+       keyColumnDirections:
+       - ASC
+  ...
+       - 4
+       name: idx_b
+  -    notVisible: true
+       partitioning: {}
+       sharded: {}
   ...
      mutations:
      - column:

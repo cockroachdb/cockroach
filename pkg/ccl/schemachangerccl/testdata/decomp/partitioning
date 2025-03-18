@@ -525,6 +525,7 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
+    recreateTargetId: 0
     sharding: null
     sourceIndexId: 0
     tableId: 104
@@ -960,6 +961,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     recreateSourceId: 0
+    recreateTargetId: 0
     sharding: null
     sourceIndexId: 0
     tableId: 105
