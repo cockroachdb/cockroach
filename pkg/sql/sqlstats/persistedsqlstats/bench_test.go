@@ -412,8 +412,10 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 		}
 
 		for i := int64(1); i <= txnFingerprintLimit; i++ {
-			mockTxnValue := sqlstats.RecordedTxnStats{}
-			err := appContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(i), mockTxnValue)
+			mockTxnValue := sqlstats.RecordedTxnStats{
+				FingerprintID: appstatspb.TransactionFingerprintID(i),
+			}
+			err := appContainer.RecordTransaction(ctx, mockTxnValue)
 			if errors.Is(err, ssmemstorage.ErrFingerprintLimitReached) {
 				break
 			}

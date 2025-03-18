@@ -51,8 +51,8 @@ type eventBufChPayload struct {
 	events        *eventBuffer
 }
 
-// ConcurrentBufferIngester buffers the "events" it sees (via ObserveStatement
-// and ObserveTransaction) and passes them along to the underlying registry
+// ConcurrentBufferIngester buffers the "events" it sees (via observeStatement
+// and observeTransaction) and passes them along to the underlying registry
 // once its buffer is full. (Or once a timeout has passed, for low-traffic
 // clusters and tests.)
 //

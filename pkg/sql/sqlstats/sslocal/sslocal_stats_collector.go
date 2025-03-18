@@ -7,17 +7,14 @@ package sslocal
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
-	"github.com/cockroachdb/redact"
 )
 
 type bufferedStmtStats []sqlstats.RecordedStmtStats
@@ -215,135 +212,19 @@ func (s *StatsCollector) SetStatementSampled(
 	s.flushTarget.TrySetStatementSampled(fingerprint, implicitTxn, database)
 }
 
-func getInsightStatus(statementError error) insights.Statement_Status {
-	if statementError == nil {
-		return insights.Statement_Completed
-	}
-
-	return insights.Statement_Failed
-}
-
 func (s *StatsCollector) shouldObserveInsights() bool {
 	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV)
-}
-
-// ObserveStatement sends the recorded statement stats to the insights system
-// for further processing.
-func (s *StatsCollector) ObserveStatement(
-	stmtFingerprintID appstatspb.StmtFingerprintID, value sqlstats.RecordedStmtStats,
-) {
-	if !s.sendInsights {
-		return
-	}
-
-	var autoRetryReason string
-	if value.AutoRetryReason != nil {
-		autoRetryReason = value.AutoRetryReason.Error()
-	}
-
-	var contention *time.Duration
-	var cpuSQLNanos int64
-	if value.ExecStats != nil {
-		contention = &value.ExecStats.ContentionTime
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
-	}
-
-	var errorCode string
-	var errorMsg redact.RedactableString
-	if value.StatementError != nil {
-		errorCode = pgerror.GetPGCode(value.StatementError).String()
-		errorMsg = redact.Sprint(value.StatementError)
-	}
-
-	insight := insights.Statement{
-		ID:                   value.StatementID,
-		FingerprintID:        stmtFingerprintID,
-		LatencyInSeconds:     value.ServiceLatencySec,
-		Query:                value.Query,
-		Status:               getInsightStatus(value.StatementError),
-		StartTime:            value.StartTime,
-		EndTime:              value.EndTime,
-		FullScan:             value.FullScan,
-		PlanGist:             value.PlanGist,
-		Retries:              int64(value.AutoRetryCount),
-		AutoRetryReason:      autoRetryReason,
-		RowsRead:             value.RowsRead,
-		RowsWritten:          value.RowsWritten,
-		Nodes:                value.Nodes,
-		KVNodeIDs:            value.KVNodeIDs,
-		Contention:           contention,
-		IndexRecommendations: value.IndexRecommendations,
-		Database:             value.Database,
-		CPUSQLNanos:          cpuSQLNanos,
-		ErrorCode:            errorCode,
-		ErrorMsg:             errorMsg,
-	}
-	if s.insightsWriter != nil {
-		s.insightsWriter.ObserveStatement(value.SessionID, &insight)
-	}
-}
-
-// ObserveTransaction sends the recorded transaction stats to the insights system
-// for further processing.
-func (s *StatsCollector) ObserveTransaction(
-	_ctx context.Context,
-	txnFingerprintID appstatspb.TransactionFingerprintID,
-	value sqlstats.RecordedTxnStats,
-) {
-	if !s.sendInsights {
-		return
-	}
-
-	var retryReason string
-	if value.AutoRetryReason != nil {
-		retryReason = value.AutoRetryReason.Error()
-	}
-
-	var cpuSQLNanos int64
-	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
-	}
-
-	var errorCode string
-	var errorMsg redact.RedactableString
-	if value.TxnErr != nil {
-		errorCode = pgerror.GetPGCode(value.TxnErr).String()
-		errorMsg = redact.Sprint(value.TxnErr)
-	}
-
-	status := insights.Transaction_Failed
-	if value.Committed {
-		status = insights.Transaction_Completed
-	}
-
-	insight := insights.Transaction{
-		ID:              value.TransactionID,
-		FingerprintID:   txnFingerprintID,
-		UserPriority:    value.Priority.String(),
-		ImplicitTxn:     value.ImplicitTxn,
-		Contention:      &value.ExecStats.ContentionTime,
-		StartTime:       value.StartTime,
-		EndTime:         value.EndTime,
-		User:            value.SessionData.User().Normalized(),
-		ApplicationName: value.SessionData.ApplicationName,
-		RowsRead:        value.RowsRead,
-		RowsWritten:     value.RowsWritten,
-		RetryCount:      value.RetryCount,
-		AutoRetryReason: retryReason,
-		CPUSQLNanos:     cpuSQLNanos,
-		LastErrorCode:   errorCode,
-		LastErrorMsg:    errorMsg,
-		Status:          status,
-	}
-	if s.insightsWriter != nil {
-		s.insightsWriter.ObserveTransaction(value.SessionID, &insight)
-	}
 }
 
 // RecordStatement records the statistics of a statement.
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value sqlstats.RecordedStmtStats,
 ) error {
+	if s.sendInsights && s.insightsWriter != nil {
+		insight := insights.MakeStmtInsight(value)
+		s.insightsWriter.ObserveStatement(value.SessionID, insight)
+	}
+
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
@@ -360,8 +241,13 @@ func (s *StatsCollector) RecordStatement(
 // RecordTransaction records the statistics of a transaction.
 // Transaction stats are always recorded directly on the flushTarget.
 func (s *StatsCollector) RecordTransaction(
-	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context, value sqlstats.RecordedTxnStats,
 ) error {
+	if s.sendInsights && s.insightsWriter != nil {
+		insight := insights.MakeTxnInsight(value)
+		s.insightsWriter.ObserveTransaction(value.SessionID, insight)
+	}
+
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return nil
@@ -373,7 +259,7 @@ func (s *StatsCollector) RecordTransaction(
 	if t > 0 {
 		return nil
 	}
-	return s.flushTarget.RecordTransaction(ctx, key, value)
+	return s.flushTarget.RecordTransaction(ctx, value)
 }
 
 // UpgradeToExplicitTransaction is called by the connExecutor when the current

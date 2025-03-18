@@ -4330,6 +4330,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
+		FingerprintID:           transactionFingerprintID,
 		SessionID:               ex.planner.extendedEvalCtx.SessionID,
 		TransactionID:           ev.txnID,
 		TransactionTimeSec:      elapsedTime.Seconds(),
@@ -4376,13 +4377,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		)
 	}
 
-	ex.statsCollector.ObserveTransaction(ctx, transactionFingerprintID, recordedTxnStats)
-
-	return ex.statsCollector.RecordTransaction(
-		ctx,
-		transactionFingerprintID,
-		recordedTxnStats,
-	)
+	return ex.statsCollector.RecordTransaction(ctx, recordedTxnStats)
 }
 
 // Records a SERIALIZATION_CONFLICT contention event to the contention registry event

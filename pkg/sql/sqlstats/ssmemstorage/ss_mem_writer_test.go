@@ -65,7 +65,9 @@ func TestRecordTransaction(t *testing.T) {
 			nil,
 		)
 		// Record a transaction, ensure no insights are generated.
-		require.NoError(t, memContainer.RecordTransaction(ctx, appstatspb.TransactionFingerprintID(123), sqlstats.RecordedTxnStats{}))
+		require.NoError(t, memContainer.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+			FingerprintID: appstatspb.TransactionFingerprintID(123),
+		}))
 	})
 }
 
@@ -122,6 +124,7 @@ func TestContainer_Add(t *testing.T) {
 		// Add some transaction stats to the source container
 		txnFingerprintID := appstatspb.TransactionFingerprintID(123)
 		txnStats := sqlstats.RecordedTxnStats{
+			FingerprintID:  txnFingerprintID,
 			RowsAffected:   10,
 			ServiceLatency: 1,
 			RetryLatency:   2,
@@ -132,7 +135,7 @@ func TestContainer_Add(t *testing.T) {
 			RowsWritten:    5,
 			BytesRead:      100,
 		}
-		require.NoError(t, src.RecordTransaction(ctx, txnFingerprintID, txnStats))
+		require.NoError(t, src.RecordTransaction(ctx, txnStats))
 
 		// In the src destination, these 'reduced' entries will have
 		// 0 values.
@@ -159,6 +162,7 @@ func TestContainer_Add(t *testing.T) {
 		}
 		reducedTxnFingerprintID := appstatspb.TransactionFingerprintID(321)
 		reducedTxnStats := sqlstats.RecordedTxnStats{
+			FingerprintID:  reducedTxnFingerprintID,
 			RowsAffected:   100,
 			ServiceLatency: 500 * time.Millisecond,
 			RetryLatency:   100 * time.Millisecond,
@@ -170,11 +174,13 @@ func TestContainer_Add(t *testing.T) {
 			BytesRead:      100,
 		}
 		require.NoError(t, dest.RecordStatement(ctx, reducedStmtStats))
-		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnFingerprintID, reducedTxnStats))
+		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnStats))
 		require.NoError(t, src.RecordStatement(ctx, sqlstats.RecordedStmtStats{
 			FingerprintID: appstatspb.StmtFingerprintID(321),
 		}))
-		require.NoError(t, src.RecordTransaction(ctx, reducedTxnFingerprintID, sqlstats.RecordedTxnStats{}))
+		require.NoError(t, src.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+			FingerprintID: reducedTxnFingerprintID,
+		}))
 
 		for i := 0; i < 10; i++ {
 			require.NoError(t, dest.Add(ctx, src))
@@ -316,10 +322,11 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	require.NoError(t, err)
 
 	// Record a transaction to allocate more memory.
-	txnKey := appstatspb.TransactionFingerprintID(100)
-	txnStats := sqlstats.RecordedTxnStats{}
+	txnStats := sqlstats.RecordedTxnStats{
+		FingerprintID: appstatspb.TransactionFingerprintID(100),
+	}
 
-	err = container.RecordTransaction(ctx, txnKey, txnStats)
+	err = container.RecordTransaction(ctx, txnStats)
 	require.NoError(t, err)
 
 	// Verify memory is allocated
