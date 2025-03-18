@@ -431,6 +431,8 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
+				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
+				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
 				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
 				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
 				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
