@@ -135,9 +135,7 @@ type TenantStreamingClusters struct {
 	DestTenantConn *gosql.DB
 	DestTenantSQL  *sqlutils.SQLRunner
 
-	ReaderTenantServer serverutils.ApplicationLayerInterface
-	ReaderTenantConn   *gosql.DB
-	ReaderTenantSQL    *sqlutils.SQLRunner
+	ReaderTenantSQL *sqlutils.SQLRunner
 
 	Rng *rand.Rand
 }
@@ -214,30 +212,41 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	}
 }
 
-// ConnectToReaderTenant should be invoked when a PCR job has reader tenant enabled
-// and is in running state to open a connection to the standby reader tenant.
-func (c *TenantStreamingClusters) ConnectToReaderTenant(
-	ctx context.Context, tenantID roachpb.TenantID, tenantName string, server int,
-) {
-	var err error
-	c.ReaderTenantServer, c.ReaderTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+func SetupReaderTenant(
+	ctx context.Context,
+	t *testing.T,
+	tenantID roachpb.TenantID,
+	tenantName string,
+	cluster *testcluster.TestCluster,
+	sysSQL *sqlutils.SQLRunner,
+) *gosql.DB {
+	_, _, err := cluster.Server(0).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantID:    tenantID,
 		TenantName:  roachpb.TenantName(tenantName),
 		UseDatabase: "defaultdb",
 	})
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`, tenantName)
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING bulkio.stream_ingestion.standby_read_ts_poll_interval = '500ms'`, tenantName)
+	require.NoError(t, err)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING bulkio.stream_ingestion.standby_read_ts_poll_interval = '500ms'`, tenantName)
 
 	// Attempt to keep the reader tenant's historical aost close to the present.
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`, tenantName)
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`, tenantName)
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`, tenantName)
-
-	require.NoError(c.T, err)
-	c.ReaderTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T,
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`, tenantName)
+	readerConn := cluster.Server(0).SystemLayer().SQLConn(t,
 		serverutils.DBName("cluster:"+tenantName+"/defaultdb"))
-	c.ReaderTenantSQL = sqlutils.MakeSQLRunner(c.ReaderTenantConn)
-	testutils.SucceedsSoon(c.T, func() error { return c.ReaderTenantConn.Ping() })
+	testutils.SucceedsSoon(t, func() error { return readerConn.Ping() })
+	return readerConn
+}
+
+// ConnectToReaderTenant should be invoked when a PCR job has reader tenant enabled
+// and is in running state to open a connection to the standby reader tenant.
+func (c *TenantStreamingClusters) ConnectToReaderTenant(
+	ctx context.Context, tenantID roachpb.TenantID, tenantName string,
+) {
+	readerConn := SetupReaderTenant(ctx, c.T, tenantID, tenantName, c.DestCluster, c.DestSysSQL)
+	c.ReaderTenantSQL = sqlutils.MakeSQLRunner(readerConn)
+
 }
 
 // CompareResult compares the results of query on the primary and standby
