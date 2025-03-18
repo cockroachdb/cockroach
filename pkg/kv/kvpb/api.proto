@@ -347,29 +347,8 @@ message ConditionalPutRequest {
   // the use of this value with transactions.
   bool inline = 7;
 
-  // OriginTimestamp, if set, indicates that the ConditionalPut should
-  // only succeed if the provided timestamp is greater than the
-  // OriginTimestamp field in the MVCCValueHeader of the existing
-  // value (if the value has a non-zero OriginTimestamp) or the MVCC
-  // timestamp of the existing value. If there is no existing value,
-  // the timestamp check succeeds.
-  //
-  // The conditional put request will only succeed if this timestamp
-  // comparison is successful and the expected bytes matches the
-  // actual bytes.
-  //
-  // On success, this timestamp will also be stored in the
-  // OriginTimestamp field of the the MVCCValueHeader for the newly
-  // written value.
-  //
-  // In the proposed use case, the OriginTimestamp is the MVCC version
-  // timestamp of the row on the source cluster and the semantics lead
-  // to idempotent last-write-wins semantics against the "original
-  // MVCC timestamp" of the value on the destination, which is its
-  // MVCC timestamp or, if set, the OriginTimestamp (reflecting that
-  // this value originated from the source cluster).
-  //
-  // Used by logical data replication.
+  // OriginTimestamp is deprecated. If set, it must be equal to the
+  // OriginTimestamp in the batch's WriteOptions.
   util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
 
   reserved 9;
@@ -2997,9 +2976,26 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
-  // OriginTimestamp is bound to the MVCCValueHeader of written key in the
-  // batch. Note that a kv client cannot set this if they use CPut's origin
-  // timestamp arg.
+  // OriginTimestamp is used by logical data replication. It is the MVCC
+  // timestamp of the row in the source cluster.
+  //
+  // If set the write will only succeed if the provided timestamp is greater than
+  // the OriginTimestamp field in the MVCCValueHeader of the existing value (if
+  // the value has a non-zero OriginTimestamp) or the MVCC timestamp of the
+  // existing value. If there is no existing value, the timestamp check succeeds.
+	//
+	// The origin_timestamp header is only handled by the put, cput, delete, and
+	// range delete commands.
+  //
+  // On success, this timestamp will also be stored in the
+  // OriginTimestamp field of the the MVCCValueHeader for the newly
+  // written value.
+  //
+  // In LDR, the OriginTimestamp is the MVCC version timestamp of the row on the
+  // source cluster and the semantics leads to idempotent last-write-wins
+  // semantics against the "original" MVCC timestamp of the value on the
+  // destination, which is its MVCC timestamp or, if set, the OriginTimestamp
+  // (reflecting that this value originated from the source cluster).
   util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 

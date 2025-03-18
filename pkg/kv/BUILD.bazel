@@ -51,6 +51,7 @@ go_test(
         "admission_test.go",
         "client_test.go",
         "db_test.go",
+        "kv_client_lww_test.go",
         "main_test.go",
         "range_lookup_test.go",
         "txn_external_test.go",

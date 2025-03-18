@@ -234,6 +234,82 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	require.Equal(t, exp, neg)
 }
 
+func TestCheckOriginTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		value    optionalValue
+		ts       hlc.Timestamp
+		wantErr  bool
+		expError *kvpb.ConditionFailedError
+	}{
+		{
+			name: "no-existing-value",
+			value: optionalValue{
+				exists: false,
+			},
+			ts:      hlc.Timestamp{WallTime: 100},
+			wantErr: false,
+		},
+		{
+			name: "existing-value-older-origin-timestamp",
+			value: optionalValue{
+				exists: true,
+				MVCCValue: MVCCValue{
+					Value: roachpb.Value{},
+					MVCCValueHeader: enginepb.MVCCValueHeader{
+						OriginTimestamp: hlc.Timestamp{WallTime: 100},
+					},
+				},
+			},
+			ts:      hlc.Timestamp{WallTime: 200},
+			wantErr: false,
+		},
+		{
+			name: "existing-value-newer-origin-timestamp",
+			value: optionalValue{
+				exists: true,
+				MVCCValue: MVCCValue{
+					Value: roachpb.Value{},
+					MVCCValueHeader: enginepb.MVCCValueHeader{
+						OriginTimestamp: hlc.Timestamp{WallTime: 200},
+					},
+				},
+			},
+			ts:      hlc.Timestamp{WallTime: 100},
+			wantErr: true,
+			expError: &kvpb.ConditionFailedError{
+				OriginTimestampOlderThan: hlc.Timestamp{WallTime: 200},
+			},
+		},
+		{
+			name: "no-origin-timestamp",
+			value: optionalValue{
+				exists: true,
+				MVCCValue: MVCCValue{
+					Value:           roachpb.Value{},
+					MVCCValueHeader: enginepb.MVCCValueHeader{},
+				},
+			},
+			ts:      hlc.Timestamp{WallTime: 200},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.value.checkOriginTimestamp(tc.ts)
+			if tc.wantErr {
+				require.Error(t, err)
+				require.True(t, errors.Is(err, tc.expError))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestMVCCStatsHasUserDataCloseTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1864,7 +1940,6 @@ func TestMVCCDeleteRangeOldTimestamp(t *testing.T) {
 	require.Equal(t, int64(1), keyCount)
 	require.NoError(t, err)
 }
-
 func TestMVCCDeleteRangeInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
