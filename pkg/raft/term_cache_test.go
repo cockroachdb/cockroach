@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"testing"
 
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/require"
 )
 
