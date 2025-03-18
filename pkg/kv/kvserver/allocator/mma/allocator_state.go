@@ -143,6 +143,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	var storesToExcludeForRange storeIDPostingList
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	for _, store := range sheddingStores {
+		log.Infof(context.Background(), "local=n%vs%v shedding store %v sls=%v",
+			localNodeID, localStoreID, store.StoreID, store.storeLoadSummary)
 		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
 		// to shed leases first. See earlier longer to do.
 
@@ -181,8 +183,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK {
 						log.Infof(
 							context.Background(),
-							"n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
-							ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
+							"local=n%vs%v shedding=n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
+							localNodeID, localStoreID, ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
@@ -194,8 +196,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					})
 				}
 				if len(candsSet.candidates) == 0 {
-					log.Infof(context.Background(), "n%vs%v no candidates to move lease for r%v candidates=%v",
-						localNodeID, ss.StoreID, rangeID, candsPL)
+					log.Infof(
+						context.Background(),
+						"local=n%vs%v shedding=n%vs%v no candidates to move lease for r%v [pre_filter_candidates=%v]",
+						localNodeID, localNodeID, ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
 				// Have underloaded candidates.

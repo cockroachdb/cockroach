@@ -209,7 +209,7 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(sls=%v store_cpu=%v node=%v high_disk=%v fd=%v)",
+	w.Printf("(store=%v store_cpu=%v node=%v high_disk=%v fd=%v)",
 		sls.sls, sls.storeCPUSummary, sls.nls, sls.highDiskSpaceUtilization, sls.fd)
 }
 
