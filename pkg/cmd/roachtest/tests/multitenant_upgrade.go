@@ -177,19 +177,26 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// parallel. The returned channel is closed once the workload
 	// finishes running on every tenant.
 	runTPCC := func(
-		ctx context.Context, c cluster.Cluster, binaryPath string, h *mixedversion.Helper,
+		ctx context.Context, h *mixedversion.Helper, version *clusterupgrade.Version,
 	) chan struct{} {
 		return forEachTenant(
 			"run tpcc",
 			ctx,
 			h,
 			func(ctx context.Context, l *logger.Logger, tenant *tenantUpgradeStatus) error {
+				nodes := c.Node(tenant.nodes[0])
+				// We may attempt to runTPCC using a cockroach binary version
+				// that was never uploaded. See #142807.
+				binaryPath, err := clusterupgrade.UploadCockroach(ctx, t, l, c, nodes, version)
+				if err != nil {
+					return errors.Wrapf(err, "uploading cockroach %s", version)
+				}
 				cmd := fmt.Sprintf(
 					"%s workload run tpcc --warehouses %d --duration %s %s",
 					binaryPath, numWarehouses, tpccDuration, tenant.pgurl(),
 				)
 
-				return c.RunE(ctx, option.WithNodes(c.Node(tenant.nodes[0])), cmd)
+				return c.RunE(ctx, option.WithNodes(nodes), cmd)
 			},
 		)
 	}
@@ -239,9 +246,8 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				}
 			}
 
-			binaryPath := clusterupgrade.BinaryPathForVersion(t, h.Context().FromVersion, "cockroach")
 			l.Printf("waiting for tpcc to run on tenants...")
-			<-runTPCC(ctx, c, binaryPath, h)
+			<-runTPCC(ctx, h, h.Context().FromVersion)
 			return nil
 		},
 	)
@@ -262,8 +268,7 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				}
 			}
 
-			binaryPath := clusterupgrade.BinaryPathForVersion(t, h.Context().ToVersion, "cockroach")
-			tpccFinished := runTPCC(ctx, c, binaryPath, h)
+			tpccFinished := runTPCC(ctx, h, h.Context().ToVersion)
 
 			upgradeFinished := forEachTenant(
 				"finalize upgrade",
