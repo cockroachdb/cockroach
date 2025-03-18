@@ -57,6 +57,8 @@ const (
 	AWSEndpointParam = "AWS_ENDPOINT"
 	// AWSEndpointParam is the query parameter for UsePathStyle in S3 options.
 	AWSUsePathStyle = "AWS_USE_PATH_STYLE"
+	// AWSSkipChecksumParam is the query parameter for SkipChecksum in S3 options.
+	AWSSkipChecksumParam = "AWS_SKIP_CHECKSUM"
 
 	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
 	// mode to be used for server side encryption. It can either be AES256 or
@@ -200,6 +202,7 @@ type s3ClientConfig struct {
 	assumeRoleProvider                                           roleProvider
 	delegateRoleProviders                                        []roleProvider
 
+	skipChecksum bool
 	// log.V(2) decides session init params so include it in key.
 	verbose bool
 }
@@ -232,6 +235,7 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 	return s3ClientConfig{
 		endpoint:              conf.Endpoint,
 		usePathStyle:          conf.UsePathStyle,
+		skipChecksum:          conf.SkipChecksum,
 		region:                conf.Region,
 		bucket:                conf.Bucket,
 		accessKey:             conf.AccessKey,
@@ -280,6 +284,9 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	if conf.UsePathStyle {
 		q.Set(AWSUsePathStyle, "true")
 	}
+	if conf.SkipChecksum {
+		q.Set(AWSSkipChecksumParam, "true")
+	}
 	if conf.AssumeRoleProvider.Role != "" {
 		roleProviderStrings := make([]string, 0, len(conf.DelegateRoleProviders)+1)
 		for _, p := range conf.DelegateRoleProviders {
@@ -325,6 +332,15 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSUsePathStyle)
 		}
 	}
+	skipChecksumStr := s3URL.ConsumeParam(AWSSkipChecksumParam)
+	skipChecksumBool := false
+	if skipChecksumStr != "" {
+		var err error
+		skipChecksumBool, err = strconv.ParseBool(skipChecksumStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSSkipChecksumParam)
+		}
+	}
 
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
@@ -334,6 +350,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
 		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
 		UsePathStyle:          pathStyleBool,
+		SkipChecksum:          skipChecksumBool,
 		Region:                s3URL.ConsumeParam(S3RegionParam),
 		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
 		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
@@ -590,6 +607,11 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		return s3Client{}, "", errors.Wrap(err, "could not initialize an aws config")
 	}
 
+	if s.opts.skipChecksum {
+		cfg.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+		cfg.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+	}
+
 	var endpointURI string
 	if s.opts.endpoint != "" {
 		var err error
@@ -728,7 +750,7 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 
 	buf := bytes.NewBuffer(make([]byte, 0, 4<<20))
 
-	return &putUploader{
+	uploader := &putUploader{
 		b: buf,
 		input: &s3.PutObjectInput{
 			Bucket:               s.bucket,
@@ -739,7 +761,11 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 			ChecksumAlgorithm:    checksumAlgorithm,
 		},
 		client: client,
-	}, nil
+	}
+	if s.conf.SkipChecksum {
+		uploader.input.ChecksumAlgorithm = ""
+	}
+	return uploader, nil
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
@@ -757,8 +783,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
 		// Upload the file to S3.
-		// TODO(dt): test and tune the uploader parameters.
-		_, err := uploader.Upload(ctx, &s3.PutObjectInput{
+		input := &s3.PutObjectInput{
 			Bucket:               s.bucket,
 			Key:                  aws.String(path.Join(s.prefix, basename)),
 			Body:                 r,
@@ -766,7 +791,13 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 			StorageClass:         types.StorageClass(s.conf.StorageClass),
 			ChecksumAlgorithm:    checksumAlgorithm,
-		})
+		}
+
+		if s.conf.SkipChecksum {
+			input.ChecksumAlgorithm = ""
+		}
+
+		_, err := uploader.Upload(ctx, input)
 		err = interpretAWSError(err)
 		err = errors.Wrap(err, "upload failed")
 		// Mark with ctx's error for upstream code to not interpret this as
@@ -787,7 +818,9 @@ func (s *s3Storage) openStreamAt(
 	if err != nil {
 		return nil, err
 	}
-	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
+	req := &s3.GetObjectInput{
+		Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename)),
+	}
 	if endPos != 0 {
 		if pos >= endPos {
 			return nil, io.EOF
