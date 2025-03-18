@@ -746,6 +746,7 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 
 	simulateIntervalMillis := 8 * 1000
 	lastTotalTokensUsed := 0
+	lastTokens := burstTokens
 	for i := 0; i <= simulateIntervalMillis; i++ {
 		// Pop work that finished
 		{
@@ -768,10 +769,43 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 			tokens = burstTokens
 		}
 		if i%1000 == 0 {
+			totalTokensUsed := 0
+			for i := range tokensUsed {
+				totalTokensUsed += tokensUsed[i]
+			}
+			deltaTokensUsed := totalTokensUsed - lastTotalTokensUsed
+			lastTotalTokensUsed = totalTokensUsed
+			// Ignoring the fact that tokens are capped.
+			maxControlledTokensAvailable := burstTokens + lastTokens
+			if tokens < 0 {
+				// Don't let these become too negative.
+				tokens = 0
+			}
+			lastTokens = tokens
+			// For logging.
+			prevTenantBurstTokensNanos := tenantBurstTokensNanos
 			if uncontrolledTokens != 0 {
-				tenantBurstTokensNanos -= int64(uncontrolledTokens) * 1e6
-				fmt.Printf("%d: uncontrolledTokens: %d, tenantBurstTokens: %d, tokens: %d\n",
-					i, uncontrolledTokens,
+				excessTokens := deltaTokensUsed - maxControlledTokensAvailable
+				if excessTokens < 0 {
+					excessTokens = 0
+				}
+				toDeduct := min(excessTokens, uncontrolledTokens)
+				// Some tenants are exhausing our aggregate. We need to restrict
+				// them. How to restrict them?
+				//
+				// When we do tenantBurstTokensNanos -= int64(uncontrolledTokens) *
+				// 1e6 we could reduce tenantBurstTokens by a much larger value than
+				// what we should be doing. Cap this to 25% of burstTokens, which will
+				// be 4000.
+				//
+				// Second problem. When we deduct this from tenantTokensNanos we may
+				// still not become the restriction. The large tenant is being shaped
+				// by the aggregate, but keeping the burst close to 0. This is ok. In that
+				// case we don't want to reduce the tt. But also gone over because of
+				// initial burst.
+				tenantBurstTokensNanos -= int64(toDeduct) * 1e6
+				fmt.Printf("%d: uncontrolledTokens: %d, excessTokens: %d, tenantBurstTokens: %d, tokens: %d\n",
+					i, uncontrolledTokens, excessTokens,
 					tenantBurstTokensNanos/1e6, tokens)
 			}
 			uncontrolledTokens = 0
@@ -780,12 +814,12 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 				tenantBurstTokensNanos = int64(burstTokens) * 1e6
 				fmt.Printf("%d: tenantBurstTokens: %d\n", i, tenantBurstTokensNanos/1e6)
 			}
-			totalTokensUsed := 0
-			for i := range tokensUsed {
-				totalTokensUsed += tokensUsed[i]
+			deltaTenantBurstTokensNanos := tenantBurstTokensNanos - prevTenantBurstTokensNanos
+			fmt.Printf("%d: delta tenant burst tokens: %d\n", i, deltaTenantBurstTokensNanos/1e6)
+			for tenant := range tenantTokensNanos {
+				tenantTokensNanos[tenant] += deltaTenantBurstTokensNanos
 			}
-			deltaTokensUsed := totalTokensUsed - lastTotalTokensUsed
-			lastTotalTokensUsed = totalTokensUsed
+
 			fmt.Printf("%d: delta tokens used: %d\n", i, deltaTokensUsed)
 		}
 		for i := range tenantTokensNanos {
