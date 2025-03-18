@@ -63,6 +63,7 @@ message ExternalStorage {
     string temp_token = 5;
     string endpoint = 6;
     bool use_path_style=16;
+    bool skip_checksum=17;
     string region = 7;
     string auth = 8;
     string server_enc_mode  = 9;
@@ -91,7 +92,10 @@ message ExternalStorage {
     // role chain. These roles will be assumed in the order they appear in the
     // list so that the role specified in AssumeRoleProvider can be assumed.
     repeated AssumeRoleProvider delegate_role_providers = 15 [(gogoproto.nullable) = false];
+
+    // Next ID: 18;
   }
+  
   message GCS {
     string bucket = 1;
     string prefix = 2;
