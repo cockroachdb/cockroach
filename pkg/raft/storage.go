@@ -334,6 +334,7 @@ func MakeLogSnapshot(ms *MemoryStorage) LogSnapshot {
 		compacted: ms.Compacted(),
 		storage:   ms.LogSnapshot(),
 		unstable:  LeadSlice{term: ls.lastEntryID().term, LogSlice: ls},
+		termCache: newTermCache(1, ms.ls.lastEntryID()),
 		logger:    raftlogger.DiscardLogger,
 	}
 }
