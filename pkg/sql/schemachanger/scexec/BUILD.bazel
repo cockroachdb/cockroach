@@ -109,6 +109,9 @@ go_test(
         "@com_github_stretchr_testify//require",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/schemachanger/scplan",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/ctxgroup",
     ],
 )
 
