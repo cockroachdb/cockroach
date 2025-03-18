@@ -72,8 +72,8 @@ run group=1
 
 | Metric                      | Old Commit     | New Commit     | Delta      | Note         |
 |-----------------------------|----------------|----------------|------------|--------------|
-| ⚪ **sec/op** | 9.852m ±0% | 9.880m ±1% | ~ | p=0.084 n=20    |
-| ⚪ **allocs/op** | 10.38k ±0% | 10.38k ±0% | ~ | p=1.000 n=20    |
+| ⚪ **sec/op** | 9.852m ±0% | 9.852m ±0% | ~ | p=1.000 n=10    |
+| ⚪ **allocs/op** | 10.38k ±1% | 10.38k ±1% | ~ | p=1.000 n=10    |
 
 <details><summary>Reproduce</summary>
 
@@ -127,7 +127,6 @@ tree
 
 /abcdef123
 /abcdef123/artifacts
-/abcdef123/artifacts/.REGRESSED
 /abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
@@ -136,7 +135,6 @@ tree
 /github-summary.md
 /qwerty456
 /qwerty456/artifacts
-/qwerty456/artifacts/.REGRESSED
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
@@ -161,32 +159,22 @@ json
             "Metric": "B/op",
             "Summary": {
               "Center": 2367667,
-              "Lo": 2364281,
-              "Hi": 2369187,
-              "Confidence": 0.95861,
+              "Lo": 2358650,
+              "Hi": 2370670,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 2352326,
-                2352326,
-                2358650,
                 2358650,
                 2364281,
-                2364281,
-                2365463,
                 2365463,
                 2367582,
-                2367582,
-                2367752,
                 2367752,
                 2368213,
-                2368213,
-                2369187,
                 2369187,
                 2370670,
-                2370670,
-                2375306,
                 2375306
               ],
               "Thresholds": {
@@ -199,32 +187,22 @@ json
             "Metric": "allocs/op",
             "Summary": {
               "Center": 10378.50000,
-              "Lo": 10361,
-              "Hi": 10392,
-              "Confidence": 0.95861,
+              "Lo": 10287,
+              "Hi": 10398,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 10246,
-                10246,
-                10287,
                 10287,
                 10361,
-                10361,
-                10377,
                 10377,
                 10378,
-                10378,
-                10379,
                 10379,
                 10386,
-                10386,
-                10392,
                 10392,
                 10398,
-                10398,
-                10411,
                 10411
               ],
               "Thresholds": {
@@ -236,10 +214,10 @@ json
           {
             "Metric": "sec/op",
             "Summary": {
-              "Center": 0.00988,
+              "Center": 0.00985,
               "Lo": 0.00985,
-              "Hi": 0.00995,
-              "Confidence": 0.95861,
+              "Hi": 0.00985,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
@@ -253,17 +231,7 @@ json
                 0.00985,
                 0.00985,
                 0.00985,
-                0.00985,
-                0.00991,
-                0.00993,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00995,
-                0.00997,
-                0.00998,
-                0.00998,
-                0.01000
+                0.00985
               ],
               "Thresholds": {
                 "CompareAlpha": 0.05000
@@ -277,32 +245,22 @@ json
             "Metric": "B/op",
             "Summary": {
               "Center": 2367667,
-              "Lo": 2364281,
-              "Hi": 2369187,
-              "Confidence": 0.95861,
+              "Lo": 2358650,
+              "Hi": 2370670,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 2352326,
-                2352326,
-                2358650,
                 2358650,
                 2364281,
-                2364281,
-                2365463,
                 2365463,
                 2367582,
-                2367582,
-                2367752,
                 2367752,
                 2368213,
-                2368213,
-                2369187,
                 2369187,
                 2370670,
-                2370670,
-                2375306,
                 2375306
               ],
               "Thresholds": {
@@ -315,32 +273,22 @@ json
             "Metric": "allocs/op",
             "Summary": {
               "Center": 10378.50000,
-              "Lo": 10361,
-              "Hi": 10392,
-              "Confidence": 0.95861,
+              "Lo": 10287,
+              "Hi": 10398,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
                 10246,
-                10246,
-                10287,
                 10287,
                 10361,
-                10361,
-                10377,
                 10377,
                 10378,
-                10378,
-                10379,
                 10379,
                 10386,
-                10386,
-                10392,
                 10392,
                 10398,
-                10398,
-                10411,
                 10411
               ],
               "Thresholds": {
@@ -355,21 +303,11 @@ json
               "Center": 0,
               "Lo": 0,
               "Hi": 0,
-              "Confidence": 0.95861,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
                 0,
                 0,
                 0,
@@ -393,12 +331,11 @@ json
               "Center": 0.00985,
               "Lo": 0.00985,
               "Hi": 0.00985,
-              "Confidence": 0.95861,
+              "Confidence": 0.97852,
               "Warnings": null
             },
             "Sample": {
               "Values": [
-                0.00981,
                 0.00985,
                 0.00985,
                 0.00985,
@@ -408,16 +345,7 @@ json
                 0.00985,
                 0.00985,
                 0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00985,
-                0.00987,
-                0.00988,
-                0.00990,
-                0.00993,
-                0.00998
+                0.00985
               ],
               "Thresholds": {
                 "CompareAlpha": 0.05000
