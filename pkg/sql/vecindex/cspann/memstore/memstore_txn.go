@@ -199,7 +199,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	}
 	defer memPart.lock.ReleaseShared()
 
-	return memPart.lock.partition.Metadata(), nil
+	return *memPart.lock.partition.Metadata(), nil
 }
 
 // AddToPartition implements the Txn interface.

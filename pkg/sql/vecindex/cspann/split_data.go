@@ -39,7 +39,8 @@ func (s *splitData) Init(
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
 	quantizedSet := quantizer.Quantize(w, s.Vectors)
-	s.Partition = NewPartition(quantizer, quantizedSet, childKeys, valueBytes, level)
+	metadata := PartitionMetadata{Level: level, Centroid: quantizedSet.GetCentroid()}
+	s.Partition = NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 }
 
 // ReplaceWithLast removes the vector at the given offset in the set, replacing

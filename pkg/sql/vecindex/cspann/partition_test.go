@@ -42,7 +42,8 @@ func TestPartition(t *testing.T) {
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
 	childKeys := []ChildKey{childKey10, childKey20, childKey30}
 	valueBytes := []ValueBytes{valueBytes10, valueBytes20, valueBytes30, valueBytes40}
-	partition := NewPartition(quantizer, quantizedSet, childKeys, valueBytes, Level(1))
+	metadata := PartitionMetadata{Level: 1, Centroid: quantizedSet.GetCentroid()}
+	partition := NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 	require.True(t, partition.Add(&workspace, vector.T{4, 3}, childKey40, valueBytes40))
 
 	// Add vector and expect its value to be updated.
@@ -114,7 +115,7 @@ func roundResults(results SearchResults, prec int) SearchResults {
 }
 
 func checkPartitionMetadata(
-	t *testing.T, metadata PartitionMetadata, level Level, centroid vector.T,
+	t *testing.T, metadata *PartitionMetadata, level Level, centroid vector.T,
 ) {
 	require.Equal(t, level, metadata.Level)
 	require.Equal(t, []float32(centroid), testutils.RoundFloats(metadata.Centroid, 2))
