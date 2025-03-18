@@ -84,7 +84,9 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	if execConfig.Codec.IsSystem() && !kvserver.RangefeedEnabled.Get(&execConfig.Settings.SV) {
 		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be enabled on the source cluster for logical replication")
 	}
-
+	if err := maybeAuthorizeReverseStream(ctx, r, req); err != nil {
+		return streampb.ReplicationProducerSpec{}, errors.Wrap(err, "uri requires REPLICATIONDEST privilege for bidirectional replication")
+	}
 	if err := maybeValidateReverseURI(ctx, req.UnvalidatedReverseStreamURI, r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).InternalDB); err != nil {
 		return streampb.ReplicationProducerSpec{}, errors.Wrap(err, "reverse stream uri failed validation")
 	}
@@ -155,6 +157,20 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		ReplicationStartTime: replicationStartTime,
 		ExternalCatalog:      externalCatalog,
 	}, nil
+}
+
+func maybeAuthorizeReverseStream(
+	ctx context.Context, r *replicationStreamManagerImpl, req streampb.ReplicationProducerRequest,
+) error {
+	if req.UnvalidatedReverseStreamURI == "" {
+		return nil
+	}
+	if err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.REPLICATIONDEST); err != nil {
+		return replicationutils.AuthorizeTableLevelPriv(ctx, r.resolver, r.evalCtx.SessionAccessor, privilege.REPLICATIONDEST, req.TableNames)
+	}
+	return nil
 }
 
 func maybeValidateReverseURI(ctx context.Context, reverseURI string, db *sql.InternalDB) error {

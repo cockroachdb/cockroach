@@ -1954,6 +1954,7 @@ func TestShowLogicalReplicationJobs(t *testing.T) {
 func TestUserPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
+	skip.UnderRaceWithIssue(t, 142992)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -1978,6 +1979,8 @@ func TestUserPrivileges(t *testing.T) {
 	dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"2"))
 	testuser := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser), serverutils.DBName("a")))
 	testuser2 := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.User(username.TestUser+"2"), serverutils.DBName("a")))
+	dbB.Exec(t, "CREATE USER testuser3")
+	dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
 
 	var jobAID jobspb.JobID
 	createStmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
@@ -2022,21 +2025,58 @@ func TestUserPrivileges(t *testing.T) {
 	})
 
 	t.Run("replication-dest", func(t *testing.T) {
-		testuser.ExpectErr(t, "user testuser does not have REPLICATIONDEST system privilege", createStmt, dbBURL.String())
+		testuser.ExpectErr(t, "failed privilege check: table or system level REPLICATIONDEST privilege required: user testuser does not have REPLICATIONDEST privilege on relation tab", createStmt, dbBURL.String())
 		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+		dbA.Exec(t, fmt.Sprintf("REVOKE SYSTEM REPLICATIONDEST FROM %s", username.TestUser))
 	})
 	t.Run("replication-src", func(t *testing.T) {
-		dbB.Exec(t, "CREATE USER testuser3")
-		dbBURL2 := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"), serverutils.User(username.TestUser+"3"))
-		testuser.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE system privilege", createStmt, dbBURL2.String())
+		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE system privilege", createStmt, dbBURL2.String())
 		sourcePriv := "REPLICATIONSOURCE"
 		if rng.Intn(3) == 0 {
 			// Test deprecated privilege name.
 			sourcePriv = "REPLICATION"
 		}
+
 		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s", sourcePriv, username.TestUser+"3"))
-		testuser.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
+		dbA.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
+		dbB.Exec(t, fmt.Sprintf("REVOKE SYSTEM %s FROM %s", sourcePriv, username.TestUser+"3"))
+	})
+	t.Run("table-level-replication-dest", func(t *testing.T) {
+
+		dbA.Exec(t, `CREATE TABLE tab2 (x INT PRIMARY KEY)`)
+		dbB.Exec(t, `CREATE TABLE tab2 (x INT PRIMARY KEY)`)
+
+		multiTableStmt := `CREATE LOGICAL REPLICATION STREAM FROM TABLES (tab, tab2) ON $1 INTO TABLES (tab, tab2)`
+
+		testuser.ExpectErr(t, "failed privilege check: table or system level REPLICATIONDEST privilege required: user testuser does not have REPLICATIONDEST privilege on relation tab", multiTableStmt, dbBURL.String())
+
+		dbA.Exec(t, fmt.Sprintf(`GRANT REPLICATIONDEST ON TABLE tab TO %s`, username.TestUser))
+		testuser.ExpectErr(t, "failed privilege check: table or system level REPLICATIONDEST privilege required: user testuser does not have REPLICATIONDEST privilege on relation tab2", multiTableStmt, dbBURL.String())
+
+		dbA.Exec(t, fmt.Sprintf(`GRANT REPLICATIONDEST ON TABLE tab2 TO %s`, username.TestUser))
+		testuser.Exec(t, multiTableStmt, dbBURL.String())
+		dbA.Exec(t, fmt.Sprintf(`REVOKE REPLICATIONDEST ON TABLE tab FROM %s`, username.TestUser))
+		dbA.Exec(t, fmt.Sprintf(`REVOKE REPLICATIONDEST ON TABLE tab2 FROM %s`, username.TestUser))
+	})
+	t.Run("db-create-replication-dest", func(t *testing.T) {
+		createStmt := "CREATE LOGICALLY REPLICATED TABLES (tab_clone, tab2_clone) FROM TABLES (tab, tab2) ON $1 WITH UNIDIRECTIONAL"
+		// First try without CREATE privilege on destination database - should fail
+		testuser.ExpectErr(t, "user testuser does not have CREATE privilege on database a", createStmt, dbBURL.String())
+
+		// Grant CREATE privilege on destination database - should now succeed
+		dbA.Exec(t, `GRANT CREATE ON DATABASE a TO testuser`)
+		testuser.Exec(t, createStmt, dbBURL.String())
+
+		dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"), serverutils.User(username.TestUser))
+
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATION TO %s", username.TestUser+"3"))
+		createStmtBidi := "CREATE LOGICALLY REPLICATED TABLES (tab_clone_2, tab2_clone_2) FROM TABLES (tab, tab2) ON $1 WITH BIDIRECTIONAL ON $2"
+		testuser.ExpectErr(t, " uri requires REPLICATIONDEST privilege for bidirectional replication: user testuser3 does not have REPLICATIONDEST privilege on relation tab", createStmtBidi, dbBURL2.String(), dbAURL.String())
+
+		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"3"))
+		testuser.QueryRow(t, createStmtBidi, dbBURL2.String(), dbAURL.String()).Scan(&jobAID)
+
 	})
 }
 
