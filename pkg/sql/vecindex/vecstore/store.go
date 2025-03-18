@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -159,6 +160,13 @@ func (s *Store) EstimatePartitionCount(
 ) (int, error) {
 	// Create a batch with INCONSISTENT read consistency to avoid updating the
 	// timestamp cache or blocking on locks.
+	// NOTE: In rare edge cases, INCONSISTENT scans can return results that are
+	// arbitrarily old. However, there is a fixup processor on every node, so each
+	// partition has its size checked multiple times across nodes. At least two
+	// nodes in a cluster will have up-to-date results for any given partition, so
+	// stale results are not a concern in practice. If we ever find evidence that
+	// it is, we can fall back to a consistent scan if the inconsistent scan
+	// returns results that are too old.
 	b := s.db.KV().NewBatch()
 	b.Header.ReadConsistency = s.minConsistency
 
@@ -189,10 +197,10 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 func (s *Store) encodePartitionKey(
 	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) roachpb.Key {
-	capacity := len(s.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
+	capacity := len(s.prefix) + len(treeKey) + vecencoding.EncodedPartitionKeyLen(partitionKey)
 	keyBuffer := make(roachpb.Key, 0, capacity)
 	keyBuffer = append(keyBuffer, s.prefix...)
 	keyBuffer = append(keyBuffer, treeKey...)
-	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
+	keyBuffer = vecencoding.EncodePartitionKey(keyBuffer, partitionKey)
 	return keyBuffer
 }
