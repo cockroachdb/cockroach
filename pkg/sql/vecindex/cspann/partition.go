@@ -59,27 +59,27 @@ const (
 // primary key if this is a leaf partition, or a child partition key if this is
 // a branch/root partition.
 type Partition struct {
+	metadata     PartitionMetadata
 	quantizer    quantize.Quantizer
 	quantizedSet quantize.QuantizedVectorSet
 	childKeys    []ChildKey
 	valueBytes   []ValueBytes
-	level        Level
 }
 
 // NewPartition constructs a new partition.
 func NewPartition(
+	metadata PartitionMetadata,
 	quantizer quantize.Quantizer,
 	quantizedSet quantize.QuantizedVectorSet,
 	childKeys []ChildKey,
 	valueBytes []ValueBytes,
-	level Level,
 ) *Partition {
 	return &Partition{
+		metadata:     metadata,
 		quantizer:    quantizer,
 		quantizedSet: quantizedSet,
 		childKeys:    childKeys,
 		valueBytes:   valueBytes,
-		level:        level,
 	}
 }
 
@@ -87,20 +87,17 @@ func NewPartition(
 // do not affect the other.
 func (p *Partition) Clone() *Partition {
 	return &Partition{
+		metadata:     p.metadata,
 		quantizer:    p.quantizer,
 		quantizedSet: p.quantizedSet.Clone(),
 		childKeys:    slices.Clone(p.childKeys),
 		valueBytes:   slices.Clone(p.valueBytes),
-		level:        p.level,
 	}
 }
 
 // Metadata returns metadata for the partition.
-func (p *Partition) Metadata() PartitionMetadata {
-	return PartitionMetadata{
-		Level:    p.Level(),
-		Centroid: p.quantizedSet.GetCentroid(),
-	}
+func (p *Partition) Metadata() *PartitionMetadata {
+	return &p.metadata
 }
 
 // Count is the number of quantized vectors in the partition.
@@ -111,7 +108,7 @@ func (p *Partition) Count() int {
 // Level is the level of this partition in the K-means tree. The leaf level
 // always has the well-known value of one.
 func (p *Partition) Level() Level {
-	return p.level
+	return p.metadata.Level
 }
 
 // Quantizer is the quantizer used to quantize vectors in this partition.
@@ -178,7 +175,7 @@ func (p *Partition) Search(
 		searchSet.Add(&searchSet.result)
 	}
 
-	return p.level, count
+	return p.Level(), count
 }
 
 // Add quantizes the given vector as part of this partition. If a vector with
@@ -244,5 +241,6 @@ func CreateEmptyPartition(quantizer quantize.Quantizer, level Level) *Partition 
 	var workspace workspace.T
 	var empty vector.Set
 	quantizedSet := quantizer.Quantize(&workspace, empty)
-	return NewPartition(quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil), level)
+	metadata := PartitionMetadata{Level: level, Centroid: quantizedSet.GetCentroid()}
+	return NewPartition(metadata, quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil))
 }

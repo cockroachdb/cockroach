@@ -199,8 +199,10 @@ func (suite *StoreTestSuite) TestNonRootPartition() {
 		quantizedSet := suite.quantizer.Quantize(&suite.workspace, vectors)
 		childKeys := []cspann.ChildKey{partitionKey1, partitionKey2}
 		valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2}
+		metadata := cspann.PartitionMetadata{
+			Level: cspann.SecondLevel, Centroid: quantizedSet.GetCentroid()}
 		partition := cspann.NewPartition(
-			suite.quantizer, quantizedSet, childKeys, valueBytes, cspann.SecondLevel)
+			metadata, suite.quantizer, quantizedSet, childKeys, valueBytes)
 
 		partitionKey, err := tx.InsertPartition(suite.ctx, treeKey, partition)
 		suite.NoError(err)
@@ -458,8 +460,10 @@ func (suite *StoreTestSuite) insertLeafPartition(store TestStore, treeID int) cs
 	quantizedSet := suite.quantizer.Quantize(&suite.workspace, vectors)
 	childKeys := []cspann.ChildKey{primaryKey1, primaryKey2, primaryKey3}
 	valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2, valueBytes3}
+	metadata := cspann.PartitionMetadata{
+		Level: cspann.LeafLevel, Centroid: quantizedSet.GetCentroid()}
 	partition := cspann.NewPartition(
-		suite.quantizer, quantizedSet, childKeys, valueBytes, cspann.LeafLevel)
+		metadata, suite.quantizer, quantizedSet, childKeys, valueBytes)
 
 	partitionKey, err := tx.InsertPartition(suite.ctx, treeKey, partition)
 	suite.NoError(err)
@@ -600,14 +604,16 @@ func (suite *StoreTestSuite) setRootPartition(store TestStore, treeID int) {
 	quantizedSet := suite.rootQuantizer.Quantize(&suite.workspace, vectors)
 	childKeys := []cspann.ChildKey{partitionKey1, partitionKey2}
 	valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2}
+	metadata := cspann.PartitionMetadata{
+		Level: cspann.SecondLevel, Centroid: quantizedSet.GetCentroid()}
 	newRoot := cspann.NewPartition(
-		suite.rootQuantizer, quantizedSet, childKeys, valueBytes, cspann.SecondLevel)
+		metadata, suite.rootQuantizer, quantizedSet, childKeys, valueBytes)
 
 	err := tx.SetRootPartition(suite.ctx, treeKey, newRoot)
 	suite.NoError(err)
 
 	// Check partition metadata.
-	metadata, err := tx.GetPartitionMetadata(suite.ctx, treeKey, cspann.RootKey, false /* forUpdate */)
+	metadata, err = tx.GetPartitionMetadata(suite.ctx, treeKey, cspann.RootKey, false /* forUpdate */)
 	suite.NoError(err)
 	CheckPartitionMetadata(suite.T(), metadata, cspann.SecondLevel, centroid)
 
