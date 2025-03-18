@@ -556,7 +556,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -598,6 +598,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
+	scratch = append(s.Codec().TenantPrefix(), scratch...)
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
