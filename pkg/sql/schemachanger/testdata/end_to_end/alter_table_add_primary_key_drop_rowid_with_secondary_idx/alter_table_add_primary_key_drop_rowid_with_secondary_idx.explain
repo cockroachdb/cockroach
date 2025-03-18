@@ -294,13 +294,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    ├── PUBLIC    → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC    → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
  │         │    └── PUBLIC    → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
- │         └── 11 Mutation operations
+ │         └── 12 Mutation operations
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── SetIndexName {"IndexID":6,"Name":"t_pkey","TableID":104}
  │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":4,"TableID":104}
  │              ├── SetIndexName {"IndexID":4,"Name":"idx_b","TableID":104}
  │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":6,"TableID":104}
+ │              ├── MarkRecreatedIndexAsInvisible {"IndexID":4,"TableID":104,"TargetPrimaryIndexID":8}
  │              ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":104}
  │              ├── RefreshStats {"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
@@ -373,7 +374,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── WRITE_ONLY  → DELETE_ONLY         Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── DELETE_ONLY → ABSENT              PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    └── DELETE_ONLY → ABSENT              SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b-), RecreateSourceIndexID: 0}
-      │    └── 13 Mutation operations
+      │    └── 14 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
@@ -381,6 +382,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":8,"Name":"t_pkey","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":8,"TableID":104}
+      │         ├── MarkRecreatedIndexesAsVisible {"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":4,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── AddCheckConstraint {"CheckExpr":"crdb_internal_a_...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":104,"Validity":2}

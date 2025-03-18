@@ -1120,7 +1120,7 @@ validate forward indexes [10] in table #104
 validate forward indexes [4] in table #104
 commit transaction #25
 begin transaction #26
-## PostCommitNonRevertiblePhase stage 1 of 4 with 34 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 35 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -1172,13 +1172,16 @@ upsert descriptor #104
   -    id: 2
   +    id: 4
        interleave: {}
+  +    invisibility: 1
        keyColumnDirections:
+       - ASC
   ...
        - a
        keySuffixColumnIds:
   -    - 3
   +    - 2
        name: t_a_idx
+  +    notVisible: true
        partitioning: {}
        sharded: {}
   +    storeColumnNames: []
@@ -1462,11 +1465,11 @@ upsert descriptor #104
   +  version: "23"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 17 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 4 with 18 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #26
 begin transaction #27
-## PostCommitNonRevertiblePhase stage 2 of 4 with 19 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 20 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -1481,6 +1484,18 @@ upsert descriptor #104
   +      width: 64
      createAsOfTime:
        wallTime: "1640995200000000000"
+  ...
+       id: 4
+       interleave: {}
+  -    invisibility: 1
+       keyColumnDirections:
+       - ASC
+  ...
+       - 2
+       name: t_a_idx
+  -    notVisible: true
+       partitioning: {}
+       sharded: {}
   ...
      modificationTime: {}
      mutations:

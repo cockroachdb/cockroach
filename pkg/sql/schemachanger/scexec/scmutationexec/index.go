@@ -506,3 +506,52 @@ func (i *immediateVisitor) AddPartitionZoneConfig(
 		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
 	return nil
 }
+
+func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
+	ctx context.Context, op scop.MarkRecreatedIndexAsInvisible,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	// If the primary index is already visible, then nothing
+	// needs to be done. This can happen if we are able to sequence
+	// publishing the primary and secondary indexes together.
+	if tbl.GetPrimaryIndexID() == op.TargetPrimaryIndexID {
+		return nil
+	}
+	mut, err := FindMutation(tbl, MakeIndexIDMutationSelector(op.IndexID))
+	if err != nil {
+		return err
+	}
+	m := &tbl.TableDesc().Mutations[mut.MutationOrdinal()]
+	if idx := m.GetIndex(); idx != nil {
+		idx.Invisibility = 1.0
+		idx.NotVisible = true
+	}
+	return nil
+}
+
+func (i *immediateVisitor) MarkRecreatedIndexesAsVisible(
+	ctx context.Context, op scop.MarkRecreatedIndexesAsVisible,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	for indexID, invisibility := range op.IndexVisibilities {
+		idx, err := catalog.MustFindIndexByID(tbl, indexID)
+		if err != nil {
+			return err
+		}
+		idx.IndexDesc().Invisibility = invisibility
+		if invisibility == 0.0 {
+			idx.IndexDesc().NotVisible = false
+		} else {
+			idx.IndexDesc().NotVisible = true
+		}
+	}
+	return nil
+}

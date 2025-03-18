@@ -383,6 +383,7 @@ object SecondaryIndex
 SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
 SecondaryIndex :  RecreateSourceIndexID
+SecondaryIndex :  RecreateTargetIndexID
 
 object SecondaryIndexPartial
 
