@@ -253,6 +253,10 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 	}
 }
 
+// TODO(kvoli,mma): The store Capacity.Capacity is currently 0 in most tests.
+// It should be set, determine why this is and fix it. Currently, the only
+// working way to set the store capacity for a simulation is via the override,
+// which overwrites select store capacity fields on each call.
 func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
 	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
@@ -276,22 +280,19 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 
 	for _, repl := range s.Replicas(storeID) {
 		rangeID := repl.Range()
-		replicaID := repl.ReplicaID()
 		rng, _ := s.Range(rangeID)
-		if rng.Leaseholder() == replicaID {
-			// TODO(kvoli): We currently only consider load on the leaseholder
-			// replica for a range. The other replicas have an estimate that is
-			// calculated within the allocation algorithm. Adapt this to
-			// support follower reads, when added to the workload generator.
-			usage := s.RangeUsageInfo(rng.RangeID(), storeID)
-			capacity.QueriesPerSecond += usage.QueriesPerSecond
-			capacity.WritesPerSecond += usage.WritesPerSecond
-			capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
-			capacity.LogicalBytes += usage.LogicalBytes
-			capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
+		usage := s.RangeUsageInfo(rng.RangeID(), storeID)
+		leaseholder, _ := s.LeaseholderStore(rangeID)
+
+		capacity.RangeCount++
+		if leaseholder.StoreID() == storeID {
 			capacity.LeaseCount++
 		}
-		capacity.RangeCount++
+		capacity.QueriesPerSecond += usage.QueriesPerSecond
+		capacity.WritesPerSecond += usage.WritesPerSecond
+		capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
+		capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
+		capacity.LogicalBytes += usage.LogicalBytes
 	}
 
 	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
@@ -609,7 +610,6 @@ func (s *state) addReplica(
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
-	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -620,6 +620,10 @@ func (s *state) addReplica(
 		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
+	// NB: We only publish the capacity change events leaving the range in a
+	// consistent state. This is because they may call back into the state to
+	// generate the store descriptor for gossip.
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 	return replica, true
 }
 
@@ -1048,29 +1052,35 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
-// ReplicaLoad returns the usage information for the Range with ID
-// RangeID on the store with ID StoreID.
+// ReplicaLoad returns the usage information for the Range with ID RangeID on
+// the store with ID StoreID. If the given store has a replica for the range,
+// this returns the write-bytes-per-second, raft cpu, written keys and logical
+// bytes. If the given store is the leaseholder for the range, then then the
+// request cpu and qps is also returned. If the given store does not have a
+// replica for the range, this function panics.
 func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
-	// NB: we only return the actual replica load, if the range leaseholder is
-	// currently on the store given. Otherwise, return an empty, zero counter
-	// value.
-	store, ok := s.LeaseholderStore(rangeID)
+	r, ok := s.Range(rangeID)
 	if !ok {
-		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
+		panic(fmt.Sprintf("no range found for range %v", rangeID))
 	}
-
-	r, _ := s.Range(rangeID)
-	// TODO(kvoli): The requested storeID is not the leaseholder. Non
-	// leaseholder load tracking is not currently supported but is checked by
-	// other components such as hot ranges. In this case, ignore it but we
-	// should also track non leaseholder load. See load.go for more. Return an
-	// empty initialized load counter here.
-	if store.StoreID() != storeID {
-		return allocator.RangeUsageInfo{LogicalBytes: r.Size()}
+	if _, ok := r.Replica(storeID); !ok {
+		panic(fmt.Sprintf("no replica found for range %v on store %v [replicas=%v]",
+			rangeID, storeID, r.Replicas()))
+	}
+	leaseholderStore, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		panic(fmt.Sprintf("no leaseholder store found for range %v", rangeID))
 	}
 
 	usage := s.load[rangeID].Load()
 	usage.LogicalBytes = r.Size()
+	if leaseholderStore.StoreID() != storeID {
+		// See the method comment, we don't include the request cpu or qps for
+		// non-leaseholder replicas.
+		usage.RequestCPUNanosPerSecond = 0
+		usage.QueriesPerSecond = 0
+	}
+
 	return usage
 }
 
