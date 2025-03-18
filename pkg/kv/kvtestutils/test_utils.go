@@ -6,10 +6,11 @@
 package kvtestutils
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
@@ -54,6 +55,10 @@ func OnlyFollowerReads(rec tracingpb.Recording) bool {
 // kvserver.Is{Retryable,Illegal}ReplicationChangeError,
 // which avoids string matching.
 func IsExpectedRelocateError(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	allowlist := []string{
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
@@ -74,5 +79,9 @@ func IsExpectedRelocateError(err error) bool {
 		"cannot remove learner while snapshot is in flight", // https://github.com/cockroachdb/cockroach/issues/79887
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
-	return testutils.IsError(err, pattern)
+	matched, merr := regexp.MatchString(pattern, pgerror.FullError(err))
+	if merr != nil {
+		return false
+	}
+	return matched
 }

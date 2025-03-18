@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/bootstrap",
