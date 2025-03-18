@@ -787,10 +787,10 @@ def go_deps():
         name = "com_github_axiomhq_hyperloglog",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/axiomhq/hyperloglog",
-        sha256 = "fdbbf370d3ddb6b5463a88678b9e2d78d31dff46f11e8cbb9a9d58ba8af1af2f",
-        strip_prefix = "github.com/axiomhq/hyperloglog@v0.2.0",
+        sha256 = "6125b12664bb5dd8614e82f0fe7528242dcb11649e1d7e051aabf3da471e14e1",
+        strip_prefix = "github.com/axiomhq/hyperloglog@v0.2.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.2.5.zip",
         ],
     )
     go_repository(
@@ -5629,6 +5629,16 @@ def go_deps():
         strip_prefix = "github.com/k0kubun/colorstring@v0.0.0-20150214042306-9440f1994b88",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/k0kubun/colorstring/com_github_k0kubun_colorstring-v0.0.0-20150214042306-9440f1994b88.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_kamstrup_intmap",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/kamstrup/intmap",
+        sha256 = "3cc752347b8e5ce47c148e9f81f31999942e4a2fae4c63f88d0bab4df6f1ec58",
+        strip_prefix = "github.com/kamstrup/intmap@v0.5.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kamstrup/intmap/com_github_kamstrup_intmap-v0.5.1.zip",
         ],
     )
     go_repository(
