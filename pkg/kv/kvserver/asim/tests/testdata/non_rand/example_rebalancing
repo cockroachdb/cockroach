@@ -9,7 +9,7 @@ gen_ranges ranges=7 placement_skew=true
 ----
 
 # Create a load generator, where there are 7k ops/s and the access follows a
-# zipfian distribution on the keyspace.
+# uniform distribution on the keyspace.
 gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 ----
 
@@ -27,7 +27,7 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 
 # The generators are then called and 2 simulation runs, named samples are
-# created and evaluated. Each sample has a fixed duration of 5 minutes.
+# created and evaluated. Each sample has a fixed duration of 3 minutes.
 # Following the evaluation, the samples are checked individually against the
 # existing assertions, added above. If any assertion fails, the reason is
 # printed. If no assertions fail, then OK is printed.
@@ -64,6 +64,30 @@ plot stat=qps sample=2
 ----
 ----
 
+plot stat=replica_moves sample=2
+----
+----
+
+ 6.00 ┤   ╭───────────────────────────────────────────────────────────────────────────
+ 5.60 ┤  ╭╯
+ 5.20 ┤  │
+ 4.80 ┤  │
+ 4.40 ┤  │
+ 4.00 ┤  │
+ 3.60 ┤  │
+ 3.20 ┤ ╭╯
+ 2.80 ┤ │
+ 2.40 ┤ │
+ 2.00 ┤ │
+ 1.60 ┤ │
+ 1.20 ┤╭╯╭────────────────────────────────────────────────────────────────────────────
+ 0.80 ┤│ │
+ 0.40 ┤│ │
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                        replica_moves
+----
+----
+
 # The cluster settings and simulation variables can be modified to examine how
 # allocation behaves during uncommon scenarios. Update the gossip delay to be
 # unreasonably long (default 500ms).
@@ -71,15 +95,16 @@ setting gossip_delay=20s
 ----
 
 # Evaluate with the updated gossip setting but otherwise identical generators
-# and seed. Here we see that neither the balance assertion nor steady state
-# assertion is reached due to how the system reacts to the long gossip delays.
+# and seed. Here we see that the balance assertion and steady state assertion
+# are reached, but after more fluctuation and a longer duration of 5m, due to
+# how the system reacts to the long gossip delays.
 eval duration=5m samples=2 seed=42
 ----
 OK
 
-# To investigate further, plot the QPS output again. The plotted output matches
-# expectations given the assertion failed, The system exhibits thrashing as
-# rebalancing occurs frequently but without actually achieving convergence.
+# To investigate further, plot the QPS output again. The plotted output
+# exhibits thrashing as rebalancing occurs frequently with eventual
+# convergence.
 plot stat=qps sample=3
 ----
 ----
@@ -106,7 +131,7 @@ plot stat=qps sample=3
 
 # Plot the replica movements for the same sample, we should see a steadily
 # increasing counter for each store; indicating that rebalancing activity is
-# persistent.
+# persistent, until convergence.
 plot stat=replica_moves sample=3
 ----
 ----
