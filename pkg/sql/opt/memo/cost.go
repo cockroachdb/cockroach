@@ -13,6 +13,14 @@ import "math"
 type Cost struct {
 	C     float64
 	Flags CostFlags
+
+	// aux is auxiliary information within a cost that does not affect how the
+	// cost is compared to other costs with Less.
+	aux struct {
+		// fullScanCount is the number of full table or index scans in a
+		// sub-plan, up to 255.
+		fullScanCount uint8
+	}
 }
 
 // MaxCost is the maximum possible estimated cost. It's used to suppress memo
@@ -49,6 +57,26 @@ func (c Cost) Less(other Cost) bool {
 func (c *Cost) Add(other Cost) {
 	c.C += other.C
 	c.Flags.Add(other.Flags)
+	if c.aux.fullScanCount > math.MaxUint8-other.aux.fullScanCount {
+		// Avoid overflow.
+		c.aux.fullScanCount = math.MaxUint8
+	} else {
+		c.aux.fullScanCount += other.aux.fullScanCount
+	}
+}
+
+// FullScanCount returns the number of full scans in the cost.
+func (c Cost) FullScanCount() uint8 {
+	return c.aux.fullScanCount
+}
+
+// IncrFullScanCount increments that auxiliary full scan count within c.
+func (c *Cost) IncrFullScanCount() {
+	if c.aux.fullScanCount == math.MaxUint8 {
+		// Avoid overflow.
+		return
+	}
+	c.aux.fullScanCount++
 }
 
 // CostFlags contains flags that penalize the cost of an operator.

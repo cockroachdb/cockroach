@@ -355,6 +355,51 @@ plan type: custom
 statement ok
 DEALLOCATE p
 
+statement ok
+PREPARE p AS
+SELECT * FROM g WHERE a IN ($1, $2) AND b > $3
+
+statement ok
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+
+# The generic query plan is not chosen because it has a full table scan, while
+# the custom plan does not.
+query T match((plan\stype|FULL\sSCAN))
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+plan type: custom
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS
+SELECT * FROM g
+UNION ALL
+SELECT * FROM g WHERE a IN ($1, $2) AND b > $3
+
+statement ok
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+
+# The generic query plan is not chosen because it has two full table scans,
+# while the custom plan has only one.
+query T match((plan\stype|FULL\sSCAN))
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+plan type: custom
+│     spans: FULL SCAN
+
+statement ok
+DEALLOCATE p
+
 # Regression test for #132963. Do not cache non-reusable plans.
 statement ok
 SET plan_cache_mode = auto
