@@ -1,4 +1,4 @@
-gen_cluster nodes=5
+gen_cluster nodes=5 store_byte_capacity=10737418240
 ----
 
 # Each range will be 500 MiB in size and the placement will be skewed, s.t.
@@ -11,24 +11,6 @@ gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_skew=true
 # and replicate queues so that only the mma store rebalancer is moving replicas
 # or leases.
 setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false 
-----
-
-# Set the capacity of each store to approx. 10 GiB
-#
-# TODO(kvoli): Support setting the capacity of each store via gen_cluster.
-set_capacity store=1 capacity=10737418240
-----
-
-set_capacity store=2 capacity=10737418240
-----
-
-set_capacity store=3 capacity=10737418240
-----
-
-set_capacity store=4 capacity=10737418240
-----
-
-set_capacity store=5 capacity=10737418240
 ----
 
 eval duration=10m seed=42
