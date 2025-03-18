@@ -617,6 +617,19 @@ func TestCPUTokenSim(t *testing.T) {
 		float64(usageMillis)/float64(simulateIntervalMillis))
 }
 
+/*
+numSmallTenants = 4:
+
+rate 16.32
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.75
+wait times: 0:1.00ms 1:7.00ms 2:13.00ms 3:19.00ms
+
+numSmallTenants = 8:
+
+rate 16.32
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.06 5:0.06 6:0.06 7:0.06 8:0.51
+wait times: 0:1.00ms 1:7.00ms 2:13.00ms 3:19.00ms 4:26.00ms 5:32.00ms 6:38.00ms 7:44.00ms
+*/
 func TestMultiTenantCPUTokenSim(t *testing.T) {
 	// 16ms of tokens per tick, represent 80%. want 10% consumed by tenant 0 and
 	// tenant 1 combined. Would be 2ms per tick.
@@ -627,7 +640,7 @@ func TestMultiTenantCPUTokenSim(t *testing.T) {
 	const workInitialTokens = 100
 	const workUsageTokens = workInitialTokens
 	const workDuration = workInitialTokens
-	const numSmallTenants = 4
+	const numSmallTenants = 8
 	type waitingWork struct {
 		startWait int
 	}
@@ -711,6 +724,25 @@ func TestMultiTenantCPUTokenSim(t *testing.T) {
 	fmt.Printf("\n")
 }
 
+/*
+numSmallTenants = 4:
+
+12000: uncontrolledTokens: 4000, excessTokens: 0, tenantBurstTokens: 12000, tokens: 0
+12000: delta tenant burst tokens: 0
+12000: delta tokens used: 16000
+rate 17.70
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.77
+wait times: 0:0.00ms 1:0.00ms 2:0.00ms 3:0.00ms
+
+numSmallTenants = 8:
+
+12000: uncontrolledTokens: 14000, excessTokens: 0, tenantBurstTokens: 8000, tokens: 0
+12000: delta tenant burst tokens: 0
+12000: delta tokens used: 16000
+rate 18.07
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.06 5:0.06 6:0.06 7:0.06 8:0.55
+wait times: 0:0.00ms 1:0.00ms 2:0.00ms 3:0.00ms 4:0.00ms 5:0.00ms 6:0.00ms 7:0.00ms
+*/
 func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 	// 16ms of tokens per tick, represent 80%. want 20% consumed by tenant 0, 1,
 	// 2, 3 combined.
@@ -720,8 +752,7 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 	const workInitialTokens = 100
 	const workUsageTokens = workInitialTokens
 	const workDuration = workInitialTokens
-	const numSmallTenants = 4
-	const smallTenantArrivalInterval = 100
+	const numSmallTenants = 8
 	type waitingWork struct {
 		startWait int
 	}
@@ -744,9 +775,10 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 	}
 	var waitTimes [numSmallTenants]waitTime
 
-	simulateIntervalMillis := 8 * 1000
+	simulateIntervalMillis := 12 * 1000
 	lastTotalTokensUsed := 0
 	lastTokens := burstTokens
+	const printPerTick = false
 	for i := 0; i <= simulateIntervalMillis; i++ {
 		// Pop work that finished
 		{
@@ -809,7 +841,11 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 			// And say we deduct by 25 here. So the burst allowance is 75 and the tt
 			// is 50. 50/75 = 66.67%, so not hovering close to 75%.
 
-			// Don't let the tenantBurstTokenNanos fall below 10%
+			// Don't let the tenantBurstTokenNanos fall below 10%. This means each
+			// tenant can consume 2.5% of goal without being controlled. So if
+			// overload due to many small tenants, performance isolation will
+			// suffer. We deem this acceptable since we are trying to avoid queueing
+			// for small tenants in general.
 			tenantBurstTokensNanos -= int64(toDeduct) * 1e6
 			if tenantBurstTokensNanos < int64(burstTokens/10)*1e6 {
 				tenantBurstTokensNanos = int64(burstTokens/10) * 1e6
@@ -837,11 +873,13 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 				tenantTokensNanos[i] = tenantBurstTokensNanos
 			}
 		}
-		fmt.Printf("%d: tokens: %d tt:", i, tokens)
-		for i := range tenantTokensNanos {
-			fmt.Printf(" %d", tenantTokensNanos[i]/1e6)
+		if printPerTick {
+			fmt.Printf("%d: tokens: %d tt:", i, tokens)
+			for i := range tenantTokensNanos {
+				fmt.Printf(" %d", tenantTokensNanos[i]/1e6)
+			}
+			fmt.Printf("\n")
 		}
-		fmt.Printf("\n")
 
 		// Try starting work using tokens.
 		for tokens > 0 {
@@ -857,7 +895,9 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 				tenant = numSmallTenants
 			}
 			if tenant < 0 {
-				fmt.Printf("%d: no tenant picked\n", i)
+				if printPerTick {
+					fmt.Printf("%d: no tenant picked\n", i)
+				}
 				break
 			} else {
 				tokensUsed[tenant] += workInitialTokens
@@ -869,9 +909,13 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 					wt := (i - smallTenantWaiting[tenant][0].startWait)
 					waitTimes[tenant].waitTime += wt
 					smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
-					fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+					if printPerTick {
+						fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+					}
 				} else {
-					fmt.Printf("%d: picked tenant %d\n", i, tenant)
+					if printPerTick {
+						fmt.Printf("%d: picked tenant %d\n", i, tenant)
+					}
 				}
 			}
 		}
@@ -894,9 +938,13 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 						wt := (i - smallTenantWaiting[tenant][0].startWait)
 						waitTimes[tenant].waitTime += wt
 						smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
-						fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+						if printPerTick {
+							fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+						}
 					} else {
-						fmt.Printf("%d: uncontrolled picked tenant %d\n", i, tenant)
+						if printPerTick {
+							fmt.Printf("%d: uncontrolled picked tenant %d\n", i, tenant)
+						}
 					}
 				} else {
 					break
@@ -916,14 +964,20 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
 					if !haveTokens {
 						uncontrolledTokens += workInitialTokens
-						fmt.Printf("%d: arrived-admitted uncontrolled tenant %d\n", i, tenant)
+						if printPerTick {
+							fmt.Printf("%d: arrived-admitted uncontrolled tenant %d\n", i, tenant)
+						}
 					} else {
-						fmt.Printf("%d: arrived-admitted tenant %d\n", i, tenant)
+						if printPerTick {
+							fmt.Printf("%d: arrived-admitted tenant %d\n", i, tenant)
+						}
 					}
 					waitTimes[tenant].count++
 				} else {
 					smallTenantWaiting[tenant] = append(smallTenantWaiting[tenant], waitingWork{startWait: i})
-					fmt.Printf("%d: arrived-queued tenant %d\n", i, tenant)
+					if printPerTick {
+						fmt.Printf("%d: arrived-queued tenant %d\n", i, tenant)
+					}
 				}
 			}
 		}
