@@ -121,13 +121,26 @@ func (b *Benchmark) compare(lines int) (*CompareResult, error) {
 	return &compareResult, nil
 }
 
-// compareBenchmarks compares the metrics of all benchmarks between two revisions.
+// compareBenchmarks compares the metrics of all benchmarks between two
+// revisions. It first compares only the last outer run of each benchmark. If
+// the last run had significant changes, it compares the metrics of all runs.
+// This is because the last run would only have completed with significant
+// changes if all the previous runs had them as well, and then we want to
+// include it in the final assessment. In contrast if the last run had no
+// significant changes, it is possible that the previous runs had significant
+// changes, and we don't want to include them in the final assessment.
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
-		compareResult, err := benchmark.compare(0)
+		compareResult, err := benchmark.compare(benchmark.Count)
 		if err != nil {
 			return nil, err
+		}
+		if compareResult.top() != NoChange {
+			compareResult, err = benchmark.compare(0)
+			if err != nil {
+				return nil, err
+			}
 		}
 		compareResults = append(compareResults, compareResult)
 	}
