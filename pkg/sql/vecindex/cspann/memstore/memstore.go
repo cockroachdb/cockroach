@@ -485,8 +485,10 @@ func Load(data []byte) (*Store, error) {
 			quantizedSet = partitionProto.UnQuantized
 		}
 
-		memPart.lock.partition = cspann.NewPartition(quantizer, quantizedSet,
-			partitionProto.ChildKeys, partitionProto.ValueBytes, partitionProto.Level)
+		metadata := cspann.PartitionMetadata{
+			Level: partitionProto.Level, Centroid: quantizedSet.GetCentroid()}
+		memPart.lock.partition = cspann.NewPartition(metadata, quantizer, quantizedSet,
+			partitionProto.ChildKeys, partitionProto.ValueBytes)
 
 		inMemStore.mu.partitions[memPart.key] = memPart
 	}

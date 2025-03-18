@@ -203,7 +203,7 @@ func (tx *Txn) decodePartition(
 	}
 
 	return cspann.NewPartition(
-		codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes, metadata.Level), nil
+		metadata, codec.quantizer, codec.getVectorSet(), tx.tmpChildKeys, tx.tmpValueBytes), nil
 }
 
 // GetPartition is part of the cspann.Txn interface. Read the partition

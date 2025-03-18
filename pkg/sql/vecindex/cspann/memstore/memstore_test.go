@@ -210,8 +210,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	// Upsert new root partition with higher level and check stats.
 	oldRoot, err := txn.GetPartition(ctx, treeKey, cspann.RootKey)
 	require.NoError(t, err)
-	newRoot := cspann.NewPartition(oldRoot.Quantizer(), oldRoot.QuantizedSet(),
-		oldRoot.ChildKeys(), oldRoot.ValueBytes(), cspann.Level(3))
+	metadata := cspann.PartitionMetadata{
+		Level: 3, Centroid: oldRoot.QuantizedSet().GetCentroid()}
+	newRoot := cspann.NewPartition(metadata, oldRoot.Quantizer(), oldRoot.QuantizedSet(),
+		oldRoot.ChildKeys(), oldRoot.ValueBytes())
 	require.NoError(t, txn.SetRootPartition(ctx, treeKey, newRoot))
 	stats.CVStats = []cspann.CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
@@ -223,8 +225,9 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
-	partition := cspann.NewPartition(quantizer, quantizedSet,
-		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30}, 2)
+	metadata = cspann.PartitionMetadata{Level: 2, Centroid: quantizedSet.GetCentroid()}
+	partition := cspann.NewPartition(metadata, quantizer, quantizedSet,
+		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30})
 	partitionKey, err := txn.InsertPartition(ctx, treeKey, partition)
 	require.NoError(t, err)
 
@@ -279,12 +282,14 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	unquantizer := quantize.NewUnQuantizer(2)
 	store := New(2, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
+	centroid := []float32{4, 3}
 
 	memPart := &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
+		cspann.PartitionMetadata{Level: 1, Centroid: centroid},
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          []float32{4, 3},
+			Centroid:          centroid,
 			CentroidDistances: []float32{1, 2, 3},
 			Vectors: vector.Set{
 				Dims:  2,
@@ -293,16 +298,16 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 			},
 		},
 		[]cspann.ChildKey{{PartitionKey: 10}, {PartitionKey: 20}},
-		[]cspann.ValueBytes{{1, 2}, {3, 4}},
-		cspann.Level(1))
+		[]cspann.ValueBytes{{1, 2}, {3, 4}})
 	qkey10 := makeQualifiedPartitionKey(ToTreeKey(1), 10)
 	store.mu.partitions[qkey10] = memPart
 
 	memPart = &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
+		cspann.PartitionMetadata{Level: 2, Centroid: centroid},
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          []float32{4, 3},
+			Centroid:          centroid,
 			CentroidDistances: []float32{1, 2, 3, 4},
 			Vectors: vector.Set{
 				Dims:  2,
@@ -311,8 +316,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 			},
 		},
 		[]cspann.ChildKey{{PartitionKey: 10}, {PartitionKey: 20}, {PartitionKey: 30}},
-		[]cspann.ValueBytes{{1, 2}, {3, 4}, {5, 6}},
-		cspann.Level(2))
+		[]cspann.ValueBytes{{1, 2}, {3, 4}, {5, 6}})
 	qkey20 := makeQualifiedPartitionKey(ToTreeKey(1), 20)
 	store.mu.partitions[qkey20] = memPart
 

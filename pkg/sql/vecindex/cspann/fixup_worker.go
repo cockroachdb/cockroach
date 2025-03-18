@@ -303,8 +303,10 @@ func (fw *fixupWorker) splitPartition(
 			{PartitionKey: rightPartitionKey},
 		}
 		valueBytes := make([]ValueBytes, 2)
+		rootMetadata := PartitionMetadata{
+			Level: partition.Level() + 1, Centroid: quantizedSet.GetCentroid()}
 		rootPartition := NewPartition(
-			fw.index.rootQuantizer, quantizedSet, childKeys, valueBytes, partition.Level()+1)
+			rootMetadata, fw.index.rootQuantizer, quantizedSet, childKeys, valueBytes)
 		if err = fw.txn.SetRootPartition(ctx, fw.treeKey, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for split of partition %d", partitionKey)
 		}
@@ -616,9 +618,9 @@ func (fw *fixupWorker) mergePartition(
 			return errors.AssertionFailedf("only root partition can have zero vectors")
 		}
 		quantizedSet := fw.index.rootQuantizer.Quantize(&fw.workspace, vectors)
+		metadata := PartitionMetadata{Level: partition.Level(), Centroid: quantizedSet.GetCentroid()}
 		rootPartition := NewPartition(
-			fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(),
-			partition.ValueBytes(), partition.Level())
+			metadata, fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.ValueBytes())
 		if err = fw.txn.SetRootPartition(ctx, fw.treeKey, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for merge of partition %d", partitionKey)
 		}
