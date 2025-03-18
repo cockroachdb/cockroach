@@ -784,30 +784,39 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 			lastTokens = tokens
 			// For logging.
 			prevTenantBurstTokensNanos := tenantBurstTokensNanos
-			if uncontrolledTokens != 0 {
-				excessTokens := deltaTokensUsed - maxControlledTokensAvailable
-				if excessTokens < 0 {
-					excessTokens = 0
-				}
-				toDeduct := min(excessTokens, uncontrolledTokens)
-				// Some tenants are exhausing our aggregate. We need to restrict
-				// them. How to restrict them?
-				//
-				// When we do tenantBurstTokensNanos -= int64(uncontrolledTokens) *
-				// 1e6 we could reduce tenantBurstTokens by a much larger value than
-				// what we should be doing. Cap this to 25% of burstTokens, which will
-				// be 4000.
-				//
-				// Second problem. When we deduct this from tenantTokensNanos we may
-				// still not become the restriction. The large tenant is being shaped
-				// by the aggregate, but keeping the burst close to 0. This is ok. In that
-				// case we don't want to reduce the tt. But also gone over because of
-				// initial burst.
-				tenantBurstTokensNanos -= int64(toDeduct) * 1e6
-				fmt.Printf("%d: uncontrolledTokens: %d, excessTokens: %d, tenantBurstTokens: %d, tokens: %d\n",
-					i, uncontrolledTokens, excessTokens,
-					tenantBurstTokensNanos/1e6, tokens)
+			excessTokens := deltaTokensUsed - maxControlledTokensAvailable
+			if excessTokens < 0 {
+				excessTokens = 0
 			}
+			// TODO: should we do exponential smoothing of toDeduct?
+			toDeduct := excessTokens
+			// Some tenants are exhausing our aggregate. We need to restrict
+			// them. How to restrict them?
+			//
+			// When we do tenantBurstTokensNanos -= int64(uncontrolledTokens) *
+			// 1e6 we could reduce tenantBurstTokens by a much larger value than
+			// what we should be doing. Cap this to 25% of burstTokens, which will
+			// be 4000.
+			//
+			// Second problem. When we deduct this from tenantTokensNanos we may
+			// still not become the restriction. The large tenant is being shaped by
+			// the aggregate, but keeping the burst close to 0. This is ok. In that
+			// case we don't want to reduce the tt. So now we don't use
+			// uncontrolledTokens to adjust tt.
+
+			// If toDeduct > 0, some tenant(s) may been hovering near the 75%. Say
+			// they had a burst of allowance of 100 and were hovering close to 75.
+			// And say we deduct by 25 here. So the burst allowance is 75 and the tt
+			// is 50. 50/75 = 66.67%, so not hovering close to 75%.
+
+			// Don't let the tenantBurstTokenNanos fall below 10%
+			tenantBurstTokensNanos -= int64(toDeduct) * 1e6
+			if tenantBurstTokensNanos < int64(burstTokens/10)*1e6 {
+				tenantBurstTokensNanos = int64(burstTokens/10) * 1e6
+			}
+			fmt.Printf("%d: uncontrolledTokens: %d, excessTokens: %d, tenantBurstTokens: %d, tokens: %d\n",
+				i, uncontrolledTokens, excessTokens,
+				tenantBurstTokensNanos/1e6, tokens)
 			uncontrolledTokens = 0
 			// Under-utilization of aggregate tokens.
 			if tokens > (burstTokens / 8) {
