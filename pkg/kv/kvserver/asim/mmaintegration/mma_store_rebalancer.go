@@ -85,7 +85,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		msr.pendingChanges = msr.allocator.ComputeChanges(mma.ChangeOptions{
 			LocalStoreID: roachpb.StoreID(msr.localStoreID),
 		})
-		log.Infof(ctx, "store %d: computed %d changes", msr.localStoreID, len(msr.pendingChanges))
+		log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
 	}
 
 	for {
