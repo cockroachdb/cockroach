@@ -586,6 +586,76 @@ func TestStableTo(t *testing.T) {
 	}
 }
 
+// TestTermCacheLookUpAfterStableTo tests the term cache lookup after we have
+// persisted entries from unstable to stable. The test asserts that the term
+// cache is used for lookups when possible and that the storage is not accessed.
+func TestTermCacheLookUpAfterStableTo(t *testing.T) {
+	for _, tt := range []struct {
+		init          LeadSlice
+		stableTo      LogMark
+		wantTermCalls int // the expected number of LogStorage.Term() calls
+	}{{
+		init:          entryID{}.append(1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5),
+		stableTo:      LogMark{Term: 5, Index: 10},
+		wantTermCalls: 2, // indices 0-1
+	}, {
+		init:          entryID{}.append(1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9),
+		stableTo:      LogMark{Term: 9, Index: 10},
+		wantTermCalls: 6, // indices 0-5
+	}, {
+		init:          entryID{}.append(1, 2, 3),
+		stableTo:      LogMark{Term: 3, Index: 2},
+		wantTermCalls: 0,
+	}, {
+		init:          entryID{}.append(1, 2, 3, 4),
+		stableTo:      LogMark{Term: 4, Index: 3},
+		wantTermCalls: 1, // index 0
+	}, {
+		init:          entryID{}.append(1, 2, 3, 4, 5),
+		stableTo:      LogMark{Term: 5, Index: 4},
+		wantTermCalls: 2, // indices 0-1
+	}, {
+		init:          entryID{}.append(1, 2, 3, 4, 5, 5, 5, 5, 5),
+		stableTo:      LogMark{Term: 5, Index: 7},
+		wantTermCalls: 2, // indices 0-1
+	}, {
+		init:          entryID{}.append(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3),
+		stableTo:      LogMark{Term: 3, Index: 10},
+		wantTermCalls: 0,
+	}, {
+		init:          entryID{index: 10, term: 4}.append(5, 5, 6, 6, 7, 7, 8, 8, 9, 9),
+		stableTo:      LogMark{Term: 9, Index: 16},
+		wantTermCalls: 3, // indices 10-12
+	}} {
+		t.Run("", func(t *testing.T) {
+			// Initialize the log storage to a particular truncated state.
+			storage := NewMemoryStorage()
+			initID := tt.init.prev
+			if initID.index != 0 {
+				require.NoError(t, storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
+					Index: initID.index, Term: initID.term,
+				}}))
+			}
+			// Initialize the raft log from the storage.
+			raftLog := newLog(storage, raftlogger.DiscardLogger)
+			// Manually hardcode the term cache size for testing.
+			raftLog.termCache.maxSize = 4
+			require.True(t, raftLog.append(tt.init))
+			// Imitate a transfer of some unstable entries into storage.
+			require.NoError(t, storage.Append(tt.init.sub(initID.index, tt.stableTo.Index)))
+			raftLog.stableTo(tt.stableTo)
+
+			// Do term lookup for the parts of raftLog not covered by unstable.
+			start, end := tt.init.LogSlice.prev.index, raftLog.unstable.prev.index
+			for i := start; i <= end; i++ {
+				_, err := raftLog.term(i)
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.wantTermCalls, storage.callStats.term-1)
+		})
+	}
+}
+
 func TestStableToWithSnap(t *testing.T) {
 	snapID := entryID{term: 2, index: 5}
 	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
@@ -674,6 +744,9 @@ func TestLogRestore(t *testing.T) {
 	require.Equal(t, index, raftLog.committed)
 	require.Equal(t, index, raftLog.unstable.prev.index)
 	require.Equal(t, term, mustTerm(raftLog.term(index)))
+	// Term cache should be re-initialized to only have the snapshot entryID.
+	require.Equal(t, entryID{index: index, term: term}, raftLog.termCache.first())
+	require.Equal(t, 1, len(raftLog.termCache.cache))
 }
 
 func TestIsOutOfBounds(t *testing.T) {
