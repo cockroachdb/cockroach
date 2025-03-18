@@ -4356,8 +4356,9 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add qos
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
-		SessionData: ex.sessionData(),
-		TxnErr:      txnErr,
+		TxnErr:         txnErr,
+		Application:    ex.applicationName.Load().(string),
+		UserNormalized: ex.sessionData().User().Normalized(),
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {

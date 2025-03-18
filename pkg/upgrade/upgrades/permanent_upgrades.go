@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -254,6 +255,12 @@ func createDefaultDbs(
 	// already.
 	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s" WITH OWNER root`
 
+	id, _, _ := readerTenantInfo(ctx, deps)
+	if id.IsSet() {
+		// Don't create the default databases for read from standby tenants.
+		return nil
+	}
+
 	var err error
 	for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
 		stmt := fmt.Sprintf(createDbStmt, dbName)
@@ -264,4 +271,22 @@ func createDefaultDbs(
 		}
 	}
 	return nil
+}
+
+// readerTenantInfo returns the tenant ID and timestamp if we're spinning up a
+// read from standby tenant.
+func readerTenantInfo(
+	ctx context.Context, d upgrade.TenantDeps,
+) (roachpb.TenantID, hlc.Timestamp, error) {
+	if d.TenantInfoAccessor == nil {
+		return roachpb.TenantID{}, hlc.Timestamp{}, nil
+	}
+	id, ts, err := d.TenantInfoAccessor.ReadFromTenantInfo(ctx)
+	if err != nil {
+		return roachpb.TenantID{}, hlc.Timestamp{}, err
+	}
+	if !id.IsSet() {
+		return roachpb.TenantID{}, hlc.Timestamp{}, nil
+	}
+	return id, ts, nil
 }

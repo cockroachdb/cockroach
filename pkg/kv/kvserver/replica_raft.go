@@ -2220,7 +2220,9 @@ func (r *Replica) maybeMarkReplicaUnavailableInLeaderlessWatcher(
 			err := errors.Errorf("have been leaderless for %.2fs, setting the "+
 				"leaderless watcher replica's state as unavailable",
 				durationSinceLeaderless.Seconds())
-			log.Warningf(ctx, "%s", err)
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.VEventf(ctx, 1, "%s", err)
+			}
 			r.LeaderlessWatcher.mu.unavailable = true
 		}
 	}
