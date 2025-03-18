@@ -7,10 +7,13 @@ package scexec_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -19,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -332,4 +338,85 @@ func TestExecBackfiller(t *testing.T) {
 		})
 	}
 
+}
+
+// TestMergeTimestampSkew will ensure we do not miss rows during the merge phase
+// if the clocks are skewed.
+func TestMergeTimestampSkew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var hookEnabled atomic.Bool
+	var ingestFn func() error
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					BeforeStage: func(p scplan.Plan, stageIdx int) error {
+						if !hookEnabled.Load() {
+							return nil
+						}
+						return ingestFn()
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	db1 := tc.ApplicationLayer(0).SQLConn(t, serverutils.DBName("defaultdb"))
+	r1 := sqlutils.MakeSQLRunner(db1)
+
+	// Add a second node so that we can use a separate clock for it.
+	manualClock2 := hlc.NewHybridManualClock()
+	tc.AddAndStartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				WallClock: manualClock2,
+			},
+		},
+	})
+	db2 := tc.ApplicationLayer(1).SQLConn(t, serverutils.DBName("defaultdb"))
+	r2 := sqlutils.MakeSQLRunner(db2)
+
+	t.Run("create_non_unique_index", func(t *testing.T) {
+		r1.ExecMultiple(t,
+			`ALTER DATABASE defaultdb CONFIGURE ZONE USING num_replicas = 1, constraints = '[-node2]'`,
+			"CREATE TABLE t_idx(n int)",
+			"INSERT INTO t_idx(n) SELECT * FROM generate_series(1, 100)",
+		)
+		additionalInserts := 0
+
+		// Each stage we will insert a new row from a different node. That node will
+		// use a skewed clock.
+		ingestFn = func() error {
+			manualClock2.Increment(10000000)
+			keyVal := 1000 + additionalInserts
+			additionalInserts++
+			r2.Exec(t, fmt.Sprintf("INSERT INTO t_idx(n) VALUES (%d)", keyVal))
+			return nil
+		}
+		hookEnabled.Store(true)
+		defer hookEnabled.Store(false)
+
+		grp := ctxgroup.WithContext(ctx)
+		grp.GoCtx(func(ctx context.Context) error {
+			r1.Exec(t, "CREATE INDEX i1 ON t_idx (n)")
+			hookEnabled.Store(false)
+			return nil
+		})
+		require.NoError(t, grp.Wait())
+
+		// Compare row count with between new index and the primary key
+		for _, q := range []string{
+			`SELECT count(1) FROM t_idx@i1`,
+			`SELECT count(1) FROM t_idx@t_idx_pkey`,
+		} {
+			var rowCount int
+			res := r1.QueryRow(t, q)
+			res.Scan(&rowCount)
+			expectedRowCount := 100 + additionalInserts
+			require.Equal(t, expectedRowCount, rowCount, "post create index row count mismatch in query %q", q)
+		}
+	})
 }
