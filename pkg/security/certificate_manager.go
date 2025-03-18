@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -54,7 +55,7 @@ type CertificateManager struct {
 	certMetrics *Metrics
 
 	// Client cert expiration cache.
-	clientCertExpirationCache *ClientCertExpirationCache
+	clientCertExpirationCache *clientcert.ClientCertExpirationCache
 
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
@@ -196,7 +197,7 @@ func (cm *CertificateManager) RegisterSignalHandler(
 
 // RegisterExpirationCache registers a cache for client certificate expiration.
 // It is called during server startup.
-func (cm *CertificateManager) RegisterExpirationCache(cache *ClientCertExpirationCache) {
+func (cm *CertificateManager) RegisterExpirationCache(cache *clientcert.ClientCertExpirationCache) {
 	cm.clientCertExpirationCache = cache
 }
 
