@@ -121,7 +121,19 @@ func (b *Benchmark) compare(lines int) (*CompareResult, error) {
 	return &compareResult, nil
 }
 
-// compareBenchmarks compares the metrics of all benchmarks between two revisions.
+// changed returns true if any benchmark in the comparison has significant
+// changes.
+func (c CompareResults) changed() bool {
+	for _, result := range c {
+		if result.top() != NoChange {
+			return true
+		}
+	}
+	return false
+}
+
+// compareBenchmarks compares the metrics of all benchmarks between two
+// revisions.
 func (b Benchmarks) compareBenchmarks() (CompareResults, error) {
 	compareResults := make(CompareResults, 0, len(b))
 	for _, benchmark := range b {
