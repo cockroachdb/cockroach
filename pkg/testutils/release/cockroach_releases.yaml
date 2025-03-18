@@ -33,7 +33,7 @@
   latest: 24.3.8
   predecessor: "24.2"
 "25.1":
-  latest: 25.1.1
+  latest: 25.1.2
   predecessor: "24.3"
 "25.2":
   predecessor: "25.1"
