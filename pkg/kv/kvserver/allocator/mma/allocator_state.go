@@ -48,7 +48,7 @@ const (
 	maxFractionPendingThreshold               = 0.1
 )
 
-func NewAllocatorState(ts timeutil.TimeSource) *allocatorState {
+func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
@@ -56,6 +56,7 @@ func NewAllocatorState(ts timeutil.TimeSource) *allocatorState {
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		diversityScoringMemo:   newDiversityScoringMemo(),
 		changeRateLimiter:      newStoreChangeRateLimiter(rateChangeLimiterGCInterval),
+		rand:                   rand,
 	}
 }
 
