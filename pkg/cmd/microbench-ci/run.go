@@ -103,6 +103,7 @@ func (b *Benchmark) run() error {
 		// iterations. Retries are run once a benchmark has regressed or improved,
 		// on the first try, to ensure that the change is not a fluke.
 		if currentStatus == NoChange {
+			status = currentStatus
 			break
 		}
 
@@ -122,12 +123,10 @@ func (b *Benchmark) run() error {
 
 	// Write change marker file if the benchmark changed.
 	if status != NoChange {
-		for _, revision := range []Revision{New, Old} {
-			marker := strings.ToUpper(status.String())
-			err := os.WriteFile(path.Join(suite.artifactsDir(revision), "."+marker), nil, 0644)
-			if err != nil {
-				return err
-			}
+		marker := strings.ToUpper(status.String())
+		err := os.WriteFile(path.Join(suite.artifactsDir(New), "."+marker), nil, 0644)
+		if err != nil {
+			return err
 		}
 	}
 
