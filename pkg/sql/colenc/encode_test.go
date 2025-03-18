@@ -709,7 +709,7 @@ func (c *capturePutter) CPut(key, value interface{}, expValue []byte) {
 }
 
 func (c *capturePutter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp,
 ) {
 	colexecerror.InternalError(errors.New("unimplemented"))
 }
