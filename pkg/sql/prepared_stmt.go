@@ -163,34 +163,25 @@ func (p *planCosts) NumCustom() int {
 }
 
 // IsGenericOptimal returns true if the generic plan is optimal w.r.t. the
-// custom plans. Both the cost flags and the cost value are considered.
-//
-// There are currently three cost flags to consider:
-//
-// FullScanPenalty - The generic plan is not optimal if it has a full scan
-// penalty and at least one of the custom plans does not.
-//
-// HugeCostPenalty - We can ignore HugeCostPenalty because it is only used
-// for hints that force specific operators and the optimizer should error if
-// they cannot be used, so it should never be present here.
-//
-// UnboundedCardinality - The generic plan is not optimal if it has
-// unbounded cardinality and at least one of the custom plans does not. This
-// is only present if optimizer_prefer_bounded_cardinality is enabled.
-//
-// If the cost flags have not yielded a result, then the generic plan is optimal
-// if its cost value is less than the average cost of the custom plans.
+// custom plans. The cost flags, auxiliary cost information, and the cost value
+// are all considered. If any of the custom plan cost flags are less than the
+// generic cost flags, then the generic plan is not optimal. If the generic plan
+// has more full scans than any of the custom plans, then it is not optimal.
+// Otherwise, the generic plan is optimal if its cost value is less than the
+// average cost of the custom plans.
 func (p *planCosts) IsGenericOptimal() bool {
-	// Check flags.
-	if !p.generic.Flags.Empty() {
+	// Check cost flags and full scan counts.
+	if gc := p.generic.FullScanCount(); gc > 0 || !p.generic.Flags.Empty() {
 		for i := 0; i < p.custom.length; i++ {
-			if p.custom.costs[i].Flags.Less(p.generic.Flags) {
+			if p.custom.costs[i].Flags.Less(p.generic.Flags) ||
+				gc > p.custom.costs[i].FullScanCount() {
 				return false
 			}
 		}
 	}
 
-	// Clear the cost flags because they have already been handled above.
+	// Compare the generic cost to the average custom cost. Clear the cost flags
+	// because they have already been handled above.
 	gen := memo.Cost{C: p.generic.C}
 	return gen.Less(p.avgCustom())
 }
