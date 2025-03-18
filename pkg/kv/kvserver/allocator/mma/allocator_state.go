@@ -349,6 +349,11 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				NodeID:  ss.NodeID,
 				StoreID: ss.StoreID,
 			}
+			if addTarget.StoreID == removeTarget.StoreID {
+				panic(fmt.Sprintf("internal state inconsistency: "+
+					"add=%v==remove_target=%v range_id=%v candidates=%v",
+					addTarget, removeTarget, rangeID, cands.candidates))
+			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
@@ -356,6 +361,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				RangeID:               rangeID,
 				pendingReplicaChanges: pendingChanges[:],
 			})
+			log.Infof(context.Background(),
+				"local=n%vs%v shedding=n%vs%v range %v from store %v to store %v [%v]",
+				localNodeID, localStoreID, ss.NodeID, store.StoreID,
+				rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1])
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
