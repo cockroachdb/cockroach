@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -422,7 +423,7 @@ func (s *state) AddNode() Node {
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
 		stores:      []StoreID{},
-		mmAllocator: mma.NewAllocatorState(s.clock),
+		mmAllocator: mma.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed))),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
