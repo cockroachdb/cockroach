@@ -251,19 +251,6 @@ import (
 //    Completes a pending statement with the provided name, validating its
 //    results as expected per the given options to "statement async <name>...".
 //
-//  - copy,copy-error
-//    Runs a COPY FROM STDIN statement, because of the separate data chunk it requires
-//    special logictest support. Format is:
-//      copy
-//      COPY <table> FROM STDIN;
-//      <blankline>
-//      COPY DATA
-//      ----
-//      <NUMROWS>
-//
-//    copy-error is just like copy but an error is expected and results should be error
-//    string.
-//
 //  - query <typestring> <options> <label>
 //    Runs the query that follows and verifies the results (specified after the
 //    query and a ---- separator). Example:
