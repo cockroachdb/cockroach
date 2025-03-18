@@ -1066,8 +1066,9 @@ func (p *PlanningCtx) setUpForMainQuery(
 }
 
 // associateWithPlanNode returns a callback function (possibly nil) that should
-// be invoked when a new stage of processors is added that corresponds to the
-// given planNode.
+// be invoked to associate the last stage of processors with the given planNode.
+// The returned function can be safely invoked multiple times for the given
+// planNode and the same last stage of processors.
 func (p *PlanningCtx) associateWithPlanNode(node planNode) func(*physicalplan.PhysicalPlan) {
 	if p.associateNodeWithComponents == nil {
 		return nil
@@ -4225,6 +4226,19 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	if err != nil {
 		return nil, err
+	}
+
+	if associateWithPlanNode := planCtx.associateWithPlanNode(node); associateWithPlanNode != nil {
+		// Even though we might not have created a new stage in the physical
+		// plan for the current planNode, we still need to associate it with the
+		// last stage. This is needed to handle cases where a single physical
+		// plan stage handles multiple planNodes (e.g. renderNode that is done
+		// by adjusting PostProcessSpec).
+		//
+		// Note that it is ok if we already did the association with the current
+		// planNode when created the last stage of the physical plan - the
+		// callback handles this case safely (i.e. without double-counting).
+		associateWithPlanNode(&plan.PhysicalPlan)
 	}
 
 	return plan, err

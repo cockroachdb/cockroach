@@ -82,3 +82,102 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: privileges@privileges_path_user_id_key
   spans: /"vtable/crdb_internal/tables"-/"vtable/crdb_internal/tables"/PrefixEnd
+
+query T
+EXPLAIN ANALYZE SHOW TABLES;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• sort
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ estimated max memory allocated: 0 B
+│ order: +nspname,+relname
+│
+└── • render
+    │
+    └── • hash join (left outer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 1
+        │ estimated max memory allocated: 0 B
+        │ equality: (column80) = (table_id)
+        │
+        ├── • render
+        │   │
+        │   └── • hash join (left outer)
+        │       │ sql nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ actual row count: 1
+        │       │ estimated max memory allocated: 0 B
+        │       │ equality: (column62) = (table_id)
+        │       │
+        │       ├── • render
+        │       │   │
+        │       │   └── • hash join (right outer)
+        │       │       │ sql nodes: <hidden>
+        │       │       │ regions: <hidden>
+        │       │       │ actual row count: 1
+        │       │       │ estimated max memory allocated: 0 B
+        │       │       │ equality: (oid) = (relowner)
+        │       │       │
+        │       │       ├── • virtual table
+        │       │       │     sql nodes: <hidden>
+        │       │       │     regions: <hidden>
+        │       │       │     actual row count: 4
+        │       │       │     table: pg_roles@primary
+        │       │       │
+        │       │       └── • hash join
+        │       │           │ sql nodes: <hidden>
+        │       │           │ regions: <hidden>
+        │       │           │ actual row count: 1
+        │       │           │ estimated max memory allocated: 0 B
+        │       │           │ equality: (oid) = (relnamespace)
+        │       │           │
+        │       │           ├── • filter
+        │       │           │   │ sql nodes: <hidden>
+        │       │           │   │ regions: <hidden>
+        │       │           │   │ actual row count: 1
+        │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
+        │       │           │   │
+        │       │           │   └── • virtual table
+        │       │           │         sql nodes: <hidden>
+        │       │           │         regions: <hidden>
+        │       │           │         actual row count: 5
+        │       │           │         table: pg_namespace@primary
+        │       │           │
+        │       │           └── • filter
+        │       │               │ sql nodes: <hidden>
+        │       │               │ regions: <hidden>
+        │       │               │ actual row count: 330
+        │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
+        │       │               │
+        │       │               └── • virtual table
+        │       │                     sql nodes: <hidden>
+        │       │                     regions: <hidden>
+        │       │                     actual row count: 362
+        │       │                     table: pg_class@primary
+        │       │
+        │       └── • virtual table
+        │             sql nodes: <hidden>
+        │             regions: <hidden>
+        │             actual row count: 330
+        │             table: table_row_statistics@primary
+        │
+        └── • virtual table
+              sql nodes: <hidden>
+              regions: <hidden>
+              actual row count: 1
+              table: tables@tables_database_name_idx (partial index)
+              spans: [/'test' - /'test']
