@@ -543,7 +543,7 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 	respIter.reset()
 	rm := makeRespMerger(respIter, h)
 	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, false /* reverse */)
-	return rm.toScanResp(resp), nil
+	return rm.toScanResp(resp, h), nil
 }
 
 // mergeWithReverseScanResp takes a ReverseScanRequest, that was sent to the KV
@@ -567,7 +567,7 @@ func (twb *txnWriteBuffer) mergeWithReverseScanResp(
 	respIter.reset()
 	rm := makeRespMerger(respIter, h)
 	twb.mergeBufferAndResp(respIter, rm.acceptKV, rm.acceptServerResp, true /* reverse */)
-	return rm.toReverseScanResp(resp), nil
+	return rm.toReverseScanResp(resp, h), nil
 }
 
 // mergeBufferAndScanResp merges (think the merge step from merge sort) the
@@ -1184,6 +1184,11 @@ func (s *respIter) seq() enginepb.TxnSeq {
 type respSizeHelper struct {
 	it *respIter
 
+	// numKeys and numBytes track the values that NumKeys and NumBytes fields of
+	// the merged {,Reverse}ScanResponse should be set to.
+	numKeys  int64
+	numBytes int64
+
 	// rowsSize tracks the total number of KVs that we'll include in the Rows
 	// field of the merged {,Reverse}ScanResponse when KEY_VALUES scan format is
 	// used.
@@ -1216,23 +1221,31 @@ func makeRespSizeHelper(it *respIter) respSizeHelper {
 }
 
 func (h *respSizeHelper) acceptBuffer(key roachpb.Key, value *roachpb.Value) {
+	h.numKeys++
+	lenKV, _ := encKVLength(key, value)
+	h.numBytes += int64(lenKV)
 	if h.it.scanFormat == kvpb.KEY_VALUES {
 		h.rowsSize++
 		return
 	}
-	lenKV, _ := encKVLength(key, value)
 	// Note that this will always be in bounds even when h.it is no longer
 	// valid (due to the "spill-over" slice).
 	h.batchResponseSize[h.it.brIndex] += lenKV
 }
 
 func (h *respSizeHelper) acceptResp() {
+	h.numKeys++
 	if h.it.scanFormat == kvpb.KEY_VALUES {
+		kv := h.it.rows[h.it.rowsIndex]
+		lenKV, _ := encKVLength(kv.Key, &kv.Value)
+		h.numBytes += int64(lenKV)
 		h.rowsSize++
 		return
 	}
 	br := h.it.batchResponses[h.it.brIndex][h.it.brOffset:]
-	h.batchResponseSize[h.it.brIndex] += getFirstKVLength(br)
+	lenKV := getFirstKVLength(br)
+	h.numBytes += int64(lenKV)
+	h.batchResponseSize[h.it.brIndex] += lenKV
 }
 
 // respMerger encapsulates state to combine a {,Reverse}ScanResponse, returned
@@ -1314,10 +1327,11 @@ func (m *respMerger) acceptServerResp() {
 
 // toScanResp populates a copy of the given response with the final merged
 // state.
-func (m *respMerger) toScanResp(resp *kvpb.ScanResponse) *kvpb.ScanResponse {
+func (m *respMerger) toScanResp(resp *kvpb.ScanResponse, h respSizeHelper) *kvpb.ScanResponse {
 	assertTrue(m.serverRespIter.scanReq != nil, "weren't accumulating a scan resp")
-	// TODO(yuzefovich): we need to update NumKeys and NumBytes.
 	result := resp.ShallowCopy().(*kvpb.ScanResponse)
+	result.NumKeys = h.numKeys
+	result.NumBytes = h.numBytes
 	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
 		// If we've done everything correctly, resIdx == len(response rows).
 		assertTrue(m.rowsIdx == len(m.rows), "did not fill in all rows; did we miscount?")
@@ -1340,10 +1354,13 @@ func (m *respMerger) toScanResp(resp *kvpb.ScanResponse) *kvpb.ScanResponse {
 
 // toReverseScanResp populates a copy of the given response with the final
 // merged state.
-func (m *respMerger) toReverseScanResp(resp *kvpb.ReverseScanResponse) *kvpb.ReverseScanResponse {
+func (m *respMerger) toReverseScanResp(
+	resp *kvpb.ReverseScanResponse, h respSizeHelper,
+) *kvpb.ReverseScanResponse {
 	assertTrue(m.serverRespIter.scanReq == nil, "weren't accumulating a reverse scan resp")
-	// TODO(yuzefovich): we need to update NumKeys and NumBytes.
 	result := resp.ShallowCopy().(*kvpb.ReverseScanResponse)
+	result.NumKeys = h.numKeys
+	result.NumBytes = h.numBytes
 	if m.serverRespIter.scanFormat == kvpb.KEY_VALUES {
 		// If we've done everything correctly, resIdx == len(response rows).
 		assertTrue(m.rowsIdx == len(m.rows), "did not fill in all rows; did we miscount?")
