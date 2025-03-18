@@ -36,12 +36,6 @@ func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
 		status = Transaction_Completed
 	}
 
-	var user, appName string
-	if value.SessionData != nil {
-		user = value.SessionData.User().Normalized()
-		appName = value.SessionData.ApplicationName
-	}
-
 	insight := &Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   value.FingerprintID,
@@ -50,8 +44,8 @@ func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
 		Contention:      &value.ExecStats.ContentionTime,
 		StartTime:       value.StartTime,
 		EndTime:         value.EndTime,
-		User:            user,
-		ApplicationName: appName,
+		User:            value.UserNormalized,
+		ApplicationName: value.Application,
 		RowsRead:        value.RowsRead,
 		RowsWritten:     value.RowsWritten,
 		RetryCount:      value.RetryCount,
