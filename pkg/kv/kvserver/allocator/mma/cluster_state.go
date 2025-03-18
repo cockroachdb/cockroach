@@ -310,6 +310,26 @@ type PendingRangeChange struct {
 	pendingReplicaChanges []*pendingReplicaChange
 }
 
+func (prc PendingRangeChange) String() string {
+	return redact.StringWithoutMarkers(prc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+//
+// TODO: This is adhoc for debugging. A nicer string format would include the
+// previous state and next state.
+func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%v=[", prc.RangeID)
+	if prc.IsTransferLease() {
+		w.Printf("transfer_to=%v", prc.LeaseTransferTarget())
+	} else if prc.IsChangeReplicas() {
+		w.Printf("change_replicas=%v", prc.ReplicationChanges())
+	} else {
+		panic("unknown change type")
+	}
+	w.Print("]")
+}
+
 // IsChangeReplicas returns true if the pending range change is a change
 // replicas operation.
 func (prc PendingRangeChange) IsChangeReplicas() bool {
