@@ -204,6 +204,15 @@ type storeLoadSummary struct {
 	loadSeqNum uint64
 }
 
+func (sls storeLoadSummary) String() string {
+	return redact.StringWithoutMarkers(sls)
+}
+
+func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(sls=%v store_cpu=%v node=%v high_disk=%v fd=%v)",
+		sls.sls, sls.storeCPUSummary, sls.nls, sls.highDiskSpaceUtilization, sls.fd)
+}
+
 // The allocator often needs mean load information for a set of stores. This
 // set is implied by a constraintsDisj. We also want to know the set of stores
 // that satisfy that contraintsDisj. meansForStoreSet encapsulates all of this
@@ -424,6 +433,27 @@ const (
 	// to shed load.
 	overloadUrgent
 )
+
+func (ls loadSummary) String() string {
+	return redact.StringWithoutMarkers(ls)
+}
+
+func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch ls {
+	case loadLow:
+		w.Print("loadLow")
+	case loadNormal:
+		w.Print("loadNormal")
+	case loadNoChange:
+		w.Print("loadNoChange")
+	case overloadSlow:
+		w.Print("overloadSlow")
+	case overloadUrgent:
+		w.Print("overloadUrgent")
+	default:
+		panic("unknown loadSummary")
+	}
+}
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
