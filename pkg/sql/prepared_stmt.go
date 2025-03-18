@@ -134,9 +134,9 @@ type planCosts struct {
 	}
 }
 
-// Generic returns the cost of the generic plan.
-func (p *planCosts) Generic() memo.Cost {
-	return p.generic
+// HasGeneric returns true if the planCosts has a generic plan cost.
+func (p *planCosts) HasGeneric() bool {
+	return p.generic.C != 0
 }
 
 // SetGeneric sets the cost of the generic plan.
@@ -162,23 +162,50 @@ func (p *planCosts) NumCustom() int {
 	return p.custom.length
 }
 
-// AvgCustom returns the average cost of all the custom plan costs in planCosts.
-// If there are no custom plan costs, it returns 0.
+// IsGenericOptimal returns true if the generic plan is optimal w.r.t. the
+// custom plans. Both the cost flags and the cost value are considered.
 //
-// TODO(mgartner): Figure out how this should incorporate cost flags. Some of
-// them, like UnboundedCardinality, are only set if session settings are set.
-// When those session settings change, do we need to clear and recompute the
-// average cost of custom plans?
-func (p *planCosts) AvgCustom() memo.Cost {
+// There are currently three cost flags to consider:
+//
+// FullScanPenalty - The generic plan is not optimal if it has a full scan
+// penalty and at least one of the custom plans does not.
+//
+// HugeCostPenalty - We can ignore HugeCostPenalty because it is only used
+// for hints that force specific operators and the optimizer should error if
+// they cannot be used, so it should never be present here.
+//
+// UnboundedCardinality - The generic plan is not optimal if it has
+// unbounded cardinality and at least one of the custom plans does not. This
+// is only present if optimizer_prefer_bounded_cardinality is enabled.
+//
+// If the cost flags have not yielded a result, then the generic plan is optimal
+// if its cost value is less than the average cost of the custom plans.
+func (p *planCosts) IsGenericOptimal() bool {
+	// Check flags.
+	if !p.generic.Flags.Empty() {
+		for i := 0; i < p.custom.length; i++ {
+			if p.custom.costs[i].Flags.Less(p.generic.Flags) {
+				return false
+			}
+		}
+	}
+
+	// Clear the cost flags because they have already been handled above.
+	gen := memo.Cost{C: p.generic.C}
+	return gen.Less(p.avgCustom())
+}
+
+// avgCustom returns the average cost of all the custom plan costs in planCosts.
+// If there are no custom plan costs, it returns 0.
+func (p *planCosts) avgCustom() memo.Cost {
 	if p.custom.length == 0 {
 		return memo.Cost{C: 0}
 	}
-	var sum memo.Cost
+	var sum float64
 	for i := 0; i < p.custom.length; i++ {
-		sum.Add(p.custom.costs[i])
+		sum += p.custom.costs[i].C
 	}
-	sum.C /= float64(p.custom.length)
-	return sum
+	return memo.Cost{C: sum / float64(p.custom.length)}
 }
 
 // Reset clears any previously set costs.
