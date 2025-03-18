@@ -311,7 +311,11 @@ message Index {
   // TODO(postamar): try to get rid of these altogether
   //  Perhaps move these to the target metadata instead?
   bool is_concurrently = 20;
+  // SourceIndexID refers back to the primary index for which a secondary index
+  // was created.
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // TemporaryIndexID refers to the temporary index that was created while this
+  // index is being backfilled.
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];

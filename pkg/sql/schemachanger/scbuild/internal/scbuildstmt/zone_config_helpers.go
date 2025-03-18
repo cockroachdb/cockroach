@@ -1243,11 +1243,24 @@ func prepareZoneConfig(
 func isCorrespondingTemporaryIndex(
 	b BuildCtx, tableID catid.DescID, idx catid.IndexID, otherIdx catid.IndexID,
 ) bool {
-	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
-		}).MustGetZeroOrOneElement()
-	return maybeCorresponding != nil
+	tmpIndexes := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, tmpIndex *scpb.TemporaryIndex) bool {
+			return tmpIndex.IndexID == idx
+		}).Elements()
+	for _, tmpIndex := range tmpIndexes {
+		foundPrimary := b.QueryByID(tableID).FilterPrimaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+				return primaryIndex.TemporaryIndexID == tmpIndex.IndexID && primaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		foundSecondary := b.QueryByID(tableID).FilterSecondaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+				return secondaryIndex.TemporaryIndexID == tmpIndex.IndexID && secondaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		if foundPrimary || foundSecondary {
+			return true
+		}
+	}
+	return false
 }
 
 // findCorrespondingTemporaryIndexByID finds the temporary index that
@@ -1258,10 +1271,27 @@ func isCorrespondingTemporaryIndex(
 func findCorrespondingTemporaryIndexByID(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) *scpb.TemporaryIndex {
-	return b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return e.SourceIndexID == indexID
+	primaryIdx := b.QueryByID(tableID).FilterPrimaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+			return primaryIndex.IndexID == indexID
 		}).MustGetZeroOrOneElement()
+	if primaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == primaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	secondaryIdx := b.QueryByID(tableID).FilterSecondaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+			return secondaryIndex.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	if secondaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == secondaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	return nil
 }
 
 // getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexes
@@ -1388,11 +1418,8 @@ func configureZoneConfigForNewIndexBackfill(
 		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
 			" on tableID %d that does not a zone config set", oldIndexID, tableID)
 	}
-	tempIndex := b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return target == scpb.Transient && e.SourceIndexID == oldIndexID
-		}).MustGetZeroOrOneElement()
 	newIndex := getLatestPrimaryIndex(b, tableID)
+	tempIndex := findCorrespondingTemporaryIndexByID(b, tableID, newIndex.IndexID)
 	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
 	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
 	newSubzones := make([]zonepb.Subzone, 0)
