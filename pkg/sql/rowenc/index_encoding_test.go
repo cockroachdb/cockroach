@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1292,23 +1292,9 @@ func TestDecodeKeyVals(t *testing.T) {
 	}
 }
 
-/* Vector indexes are encoded as follows. The index encoder can only write leaf
-keys, so that's what's tested here.
-
-Interior (non-leaf) partition KV key:
-  ┌────────────┬──────────────┬───────────┬─────────────────┐
-  │Index Prefix│Prefix Columns│PartitionID│Child PartitionID│
-  └────────────┴──────────────┴───────────┴─────────────────┘
-Leaf partition KV key:
-  ┌────────────┬──────────────┬───────────┬───────────┬────────────────────┐
-  │Index Prefix│Prefix Columns│PartitionID│Primary Key│Sentinel Family ID 0│
-  └────────────┴──────────────┴───────────┴───────────┴────────────────────┘
-Value:
-  ┌────────────────────────┬────────────────────────┐
-  │Quantized+Encoded Vector│Composite+Stored Columns│
-  └────────────────────────┴────────────────────────┘
-*/
-
+// See comment at the top of pkg/sql/vecindex/vecstore/encoding.go for more
+// details on the encoding format for vector indexes. The index encoder can only
+// write leaf keys, so that's what's tested here.
 func TestVectorEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1330,7 +1316,7 @@ func TestVectorEncoding(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "prefix_cols")
 
 	testVector := vector.T{1, 2, 4}
-	encodedVector, err := vecstore.EncodeUnquantizedVector([]byte{}, 0, testVector)
+	encodedVector, err := vecencoding.EncodeUnquantizedVector([]byte{}, 0, testVector)
 	require.NoError(t, err)
 
 	vh := VectorIndexEncodingHelper{
@@ -1355,8 +1341,11 @@ func TestVectorEncoding(t *testing.T) {
 	}
 
 	expectedKeyMap := map[string][]uint64{
-		"simple_idx": {8311, 1, 0},
-		"prefix_idx": {3, 2, 8311, 1, 0},
+		// Partition key (8311), leaf level (1), suffix key column (1), first
+		// byte of primary key (0).
+		"simple_idx": {8311, 1, 1, 0},
+		// Same as above, prefixed by column c value (3) and column b value (2).
+		"prefix_idx": {3, 2, 8311, 1, 1, 0},
 	}
 
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
@@ -1416,7 +1405,7 @@ func TestVectorCompositeEncoding(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "prefix_cols")
 
 	testVector := vector.T{1, 2, 4}
-	encodedVector, err := vecstore.EncodeUnquantizedVector([]byte{}, 0, testVector)
+	encodedVector, err := vecencoding.EncodeUnquantizedVector([]byte{}, 0, testVector)
 	require.NoError(t, err)
 
 	vh := VectorIndexEncodingHelper{
@@ -1474,6 +1463,11 @@ func TestVectorCompositeEncoding(t *testing.T) {
 	keyBytes, decodedPartitionID, err := encoding.DecodeUvarintAscending(keyBytes)
 	require.NoError(t, err)
 	require.Equal(t, uint64(8311), decodedPartitionID)
+
+	// Decode the partition Level and ensure that it is correct.
+	keyBytes, decodedPartitionLevel, err := encoding.DecodeUvarintAscending(keyBytes)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), decodedPartitionLevel)
 
 	// Decode the primary key and ensure that it is correct.
 	pkValue, keyBytes, err := keyside.Decode(&tree.DatumAlloc{}, types.Int, keyBytes, encoding.Ascending)

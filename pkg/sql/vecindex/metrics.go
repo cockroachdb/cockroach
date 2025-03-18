@@ -9,7 +9,7 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
 	metaSuccessSplits = metric.Metadata{
-		Name:        "sql.vecindex.splits",
+		Name:        "sql.vecindex.successful_splits",
 		Help:        "Total number of vector index partitions split without error",
 		Measurement: "Vector Index Splits",
 		Unit:        metric.Unit_COUNT,

@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "vecencoding",
+    srcs = ["encoding.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/util/encoding",
+        "//pkg/util/vector",
+    ],
+)
+
+go_test(
+    name = "vecencoding_test",
+    srcs = ["encoding_test.go"],
+    deps = [
+        ":vecencoding",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/quantize",
+        "//pkg/sql/vecindex/cspann/testutils",
+        "//pkg/sql/vecindex/cspann/workspace",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/vector",
+        "@com_github_stretchr_testify//require",
+    ],
+)
