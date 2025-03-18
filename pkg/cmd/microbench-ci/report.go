@@ -180,7 +180,6 @@ func (c CompareResults) writeJSONSummary(path string) error {
 // githubSummary creates a markdown summary of the comparison results.
 func (c CompareResults) githubSummary() (string, error) {
 	buf := bytes.NewBuffer(nil)
-	regressionDetected := false
 	summaries := make([]GitHubData, 0, len(c))
 	for _, cr := range c {
 		finalStatus := NoChange
@@ -193,9 +192,6 @@ func (c CompareResults) githubSummary() (string, error) {
 			if status > finalStatus {
 				finalStatus = status
 			}
-			if status == Regressed {
-				regressionDetected = true
-			}
 			return statusToDot(status)
 		})
 		data.BenchmarkStatus = statusToDot(finalStatus)
@@ -207,11 +203,6 @@ func (c CompareResults) githubSummary() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	description := "No regressions detected!"
-	if regressionDetected {
-		description = "A regression has been detected, please investigate further!"
-	}
-
 	err = tmpl.Execute(buf, struct {
 		GitHubSummaryData []GitHubData
 		Artifacts         map[Revision]string
@@ -219,7 +210,6 @@ func (c CompareResults) githubSummary() (string, error) {
 		Commit            string
 	}{
 		GitHubSummaryData: summaries,
-		Description:       description,
 		Artifacts: map[Revision]string{
 			Old: suite.artifactsURL(Old),
 			New: suite.artifactsURL(New),
