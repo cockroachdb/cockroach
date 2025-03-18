@@ -7,6 +7,7 @@ package mma
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -77,7 +79,7 @@ func NewAllocatorState(ts timeutil.TimeSource) *allocatorState {
 func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []PendingRangeChange {
 	now := timeutil.Now()
 	// NB: We interpret the local NodeID based on the given localStoreID because
-	// the allocator is initialized when starting a server, so the NodeID is not
+	// the allocator is initialized when starting a server so the NodeID is not
 	// yet known.
 	localNodeID := a.cs.stores[localStoreID].NodeID
 	// To select which stores are overloaded, we use a notion of overload that
@@ -176,6 +178,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
 					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK {
+						log.Infof(
+							context.Background(),
+							"n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
+							ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
@@ -187,6 +193,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					})
 				}
 				if len(candsSet.candidates) == 0 {
+					log.Infof(context.Background(), "n%vs%v no candidates to move lease for r%v candidates=%v",
+						localNodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
 				// Have underloaded candidates.
