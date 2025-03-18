@@ -586,6 +586,53 @@ func TestStableTo(t *testing.T) {
 	}
 }
 
+// TestTermCacheLookUpAfterStableTo tests the term cache lookup after we have persisted entries from unstable to stable
+// the test asserts that the term cache is used for lookups when possible and that the storage is not accessed.
+func TestTermCacheLookUpAfterStableTo(t *testing.T) {
+	// t0/0, t1/1, t2/2, t3/3, t4/4, t5/5, t5/6, t5/7, t5/8, t5/9, t5/10, t5/11, t5/12, t5/13, t5/14
+	init := entryID{}.append(1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5)
+	for _, tt := range []struct {
+		stableToMark LogMark
+	}{
+		// successful acknowledgements
+		{stableToMark: LogMark{Term: 5, Index: 10}},
+	} {
+		t.Run("", func(t *testing.T) {
+			storage := NewMemoryStorage()
+			raftLog := newLog(storage, raftlogger.DiscardLogger)
+			// manually modify the term cache size for test hard coding
+			raftLog.termCache.maxSize = 4
+			require.True(t, raftLog.append(init))
+			storage.Append(init.entries[:tt.stableToMark.Index+1])
+			raftLog.stableTo(tt.stableToMark)
+
+			prevCallStatsTerm := storage.callStats.term
+			ct := 0
+
+			// test for term lookup for the parts of raftLog not covered by unstable
+			start, end := init.LogSlice.prev.index+1, raftLog.unstable.prev.index
+			for i := start; i <= end; i++ {
+				_, err := raftLog.term(i)
+				require.NoError(t, err)
+				if i >= raftLog.termCache.first().index {
+					// covered by term cache, no storage access
+					require.Equal(t, prevCallStatsTerm, storage.callStats.term)
+					ct++
+				} else {
+					// not covered by term cache, storage access
+					require.Equal(t, prevCallStatsTerm+1, storage.callStats.term)
+				}
+				prevCallStatsTerm = storage.callStats.term
+			}
+			// assert that we did indeed exercise the term cache at least once
+			require.GreaterOrEqual(t, ct, 1)
+			// assert that the number of successful term cache lookups is equal
+			// to the number of entries covered by the term cache
+			require.Equal(t, uint64(ct), tt.stableToMark.Index-raftLog.termCache.first().index+1)
+		})
+	}
+}
+
 func TestStableToWithSnap(t *testing.T) {
 	snapID := entryID{term: 2, index: 5}
 	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
@@ -674,6 +721,14 @@ func TestLogRestore(t *testing.T) {
 	require.Equal(t, index, raftLog.committed)
 	require.Equal(t, index, raftLog.unstable.prev.index)
 	require.Equal(t, term, mustTerm(raftLog.term(index)))
+	// term cache should be re-initialized to only have the snapshot
+	// meta entryID.
+	require.Equal(t, term, raftLog.termCache.first().term)
+	require.Equal(t, 1, len(raftLog.termCache.cache))
+	// term cache should return false for term lookup for index less
+	// than snapshot index after restoring snapshot.
+	term, found := raftLog.termCache.term(index - 1)
+	require.False(t, found)
 }
 
 func TestIsOutOfBounds(t *testing.T) {

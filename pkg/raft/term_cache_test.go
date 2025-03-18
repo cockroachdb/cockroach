@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,6 +59,41 @@ func TestTermCacheTerm(t *testing.T) {
 			require.Equal(t, tt.wantOK, ok, "index %d", tt.index)
 		})
 	}
+}
+
+func TestTermCacheLogSnapshot(t *testing.T) {
+	initLeadSlice := entryID{term: 0, index: 0}.append(1, 2, 3, 4, 5, 6)
+	initEntries := initLeadSlice.LogSlice.entries
+
+	s := NewMemoryStorage()
+	raftLog := newLog(s, raftlogger.DiscardLogger)
+	// hardcode the maxSize to 4 for testing
+	raftLog.termCache.maxSize = 4
+	raftLog.append(initLeadSlice)
+	origCap := cap(raftLog.termCache.cache)
+
+	// Preserve the log snapshot which includes a reference to term cache.
+	snap := raftLog.snap(s)
+	// where the termCache starts to cover in the initEntries.
+	offset := len(initEntries) - int(raftLog.termCache.maxSize)
+	// The term cache must be immutable regardless of mutations on the raftLog.
+	check := func() {
+		// Check that the term cache referenced by the snapshot
+		// has not been mutated by appends.
+		for _, ent := range initEntries[offset:] {
+			term, found := snap.termCache.term(ent.Index)
+			require.True(t, found)
+			require.Equal(t, ent.Term, term)
+			require.Equal(t, origCap, cap(snap.termCache.cache))
+		}
+	}
+	check()
+	require.True(t, raftLog.append(entryID{term: 6, index: 6}.append(6, 6, 6, 6))) // regular append, no term flip
+	check()
+	require.True(t, raftLog.maybeAppend(entryID{term: 4, index: 4}.append(7, 8, 9, 10))) // partial overwrite
+	check()
+	require.True(t, raftLog.maybeAppend(entryID{term: 1, index: 1}.append(11, 12, 13, 14))) // complete overwrite
+	check()
 }
 
 func TestTermCachePopulatedTruncateAndAppend(t *testing.T) {
