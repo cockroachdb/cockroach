@@ -16,6 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+const (
+	requestCPUPerRequest   = 1e6 // 1ms
+	raftCPUPerWriteRequest = 1e6 // 1ms
+)
+
 // ReplicaLoad defines the methods a datastructure is required to perform in
 // order to record and report load events.
 type ReplicaLoad interface {
@@ -75,9 +80,9 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	// of the load event, or we can calculate it based on the number of requests
 	// and the size of the requests. At the moment we just assume a fixed cost of
 	// 1ms per request, then another 1ms for raft if it is a write.
-	rl.loadStats.RecordReqCPUNanos(1e6)
+	rl.loadStats.RecordReqCPUNanos(requestCPUPerRequest)
 	if le.Writes > 0 {
-		rl.loadStats.RecordRaftCPUNanos(1e6)
+		rl.loadStats.RecordRaftCPUNanos(raftCPUPerWriteRequest)
 	}
 }
 
