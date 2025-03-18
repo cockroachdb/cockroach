@@ -10794,6 +10794,49 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
+func TestCDCQuerySelectSingleRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	errCh := make(chan error, 1)
+	knobsFn := func(knobs *base.TestingKnobs) {
+		// TODO: this error should probably be terminal too.
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		cfKnobs.HandleDistChangefeedError = func(err error) error {
+			errCh <- err
+			return err
+		}
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+
+		execed := make(chan struct{})
+		go func() {
+			defer close(execed)
+			// initial_scan='only' is not required, but it makes testing this easier.
+			db.Exec(t, "CREATE CHANGEFEED WITH initial_scan='only' AS SELECT * FROM foo WHERE key = 1")
+		}()
+
+		select {
+		case err := <-errCh:
+			t.Fatalf("unexpected error: %v", err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out")
+		case <-execed:
+		}
+	}
+	// This fails with all sinks, but it's much easier to detect failures with sinkless, because the statement itself fails.
+	cdcTest(t, testFn, feedTestForceSink("sinkless"), withKnobsFn(knobsFn))
+}
+
 func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	epochNanos := parseTimeToHLC(t, ts).WallTime
 	now := timeutil.Now()
