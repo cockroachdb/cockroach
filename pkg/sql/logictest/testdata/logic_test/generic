@@ -320,6 +320,41 @@ plan type: generic, reused
 statement ok
 DEALLOCATE p
 
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+ALTER TABLE g INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0,
+    "avg_size": 1
+  }
+]';
+
+statement ok
+PREPARE p AS
+UPDATE t SET b = 0 WHERE a IN ($1, $2) AND b > $3
+
+statement ok
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+EXECUTE p(1, 10, 100);
+
+# The generic query plan is not chosen because it has a full table scan on a
+# mutating table, while the custom plan does not.
+query T match((plan\stype|FULL\sSCAN))
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+plan type: custom
+
+statement ok
+DEALLOCATE p
+
 # Regression test for #132963. Do not cache non-reusable plans.
 statement ok
 SET plan_cache_mode = auto
