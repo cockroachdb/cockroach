@@ -1,0 +1,20 @@
+run ok
+put k=a v=wow ts=3
+----
+>> at end:
+data: "a"/3.000000000,0 -> /BYTES/wow
+
+# put with a younger origin time should lose LWW
+run error
+put k=a v=wow ts=4 origin_ts=2
+----
+>> at end:
+data: "a"/3.000000000,0 -> /BYTES/wow
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 3.000000000,0
+
+run ok
+put k=a v=wow ts=5 origin_ts=4
+----
+>> at end:
+data: "a"/5.000000000,0 -> {originTs=4.000000000,0}/BYTES/wow
+data: "a"/3.000000000,0 -> /BYTES/wow
