@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -55,7 +56,7 @@ type CertificateManager struct {
 	certMetrics *Metrics
 
 	// Client cert expiration cache.
-	clientCertExpirationCache *clientcert.ClientCertExpirationCache
+	clientCertExpirationCache *clientcert.Cache
 
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
@@ -182,7 +183,7 @@ func (cm *CertificateManager) RegisterSignalHandler(
 			case sig := <-ch:
 				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
 				if cache := cm.clientCertExpirationCache; cache != nil {
-					cache.Clear()
+					cache.Clear(ctx)
 				}
 				if err := cm.LoadCertificates(); err != nil {
 					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
@@ -195,26 +196,38 @@ func (cm *CertificateManager) RegisterSignalHandler(
 	})
 }
 
-// RegisterExpirationCache registers a cache for client certificate expiration.
-// It is called during server startup.
-func (cm *CertificateManager) RegisterExpirationCache(cache *clientcert.ClientCertExpirationCache) {
-	cm.clientCertExpirationCache = cache
+// RegisterExpirationCache sets up and attaches caches for client certificate
+// expiration times and TTLs.
+func (cm *CertificateManager) RegisterExpirationCaches(
+	ctx context.Context, stopper *stop.Stopper, parentMon *mon.BytesMonitor,
+) error {
+	m := mon.NewMonitorInheritWithLimit(
+		"client-expiration-caches", 0 /* limit */, parentMon, true, /* longLiving */
+	)
+	acc := m.MakeConcurrentBoundAccount()
+	m.StartNoReserved(ctx, parentMon)
+
+	cm.clientCertExpirationCache = clientcert.NewCache(acc, stopper, cm.certMetrics.ClientExpiration, cm.certMetrics.ClientTTL)
+	err := cm.clientCertExpirationCache.StartPurgeLoop(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // MaybeUpsertClientExpiration updates or inserts the expiration time for the
 // given client certificate. An update is contingent on whether the old
 // expiration is after the new expiration.
 func (cm *CertificateManager) MaybeUpsertClientExpiration(
-	ctx context.Context, identity string, expiration int64,
-) {
+	ctx context.Context, identity, serial string, expiration int64,
+) error {
 	if cache := cm.clientCertExpirationCache; cache != nil {
-		cache.MaybeUpsert(ctx,
-			identity,
-			expiration,
-			cm.certMetrics.ClientExpiration,
-			cm.certMetrics.ClientTTL,
-		)
+		err := cache.Upsert(ctx, identity, serial, expiration)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // CACert returns the CA cert. May be nil.

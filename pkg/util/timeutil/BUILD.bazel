@@ -4,6 +4,7 @@ go_library(
     name = "timeutil",
     srcs = [
         "cpustopwatch.go",
+        "jitter.go",
         "manual_time.go",
         "stopwatch.go",
         "ticker.go",
@@ -33,6 +34,7 @@ go_test(
     name = "timeutil_test",
     size = "medium",
     srcs = [
+        "jitter_test.go",
         "main_test.go",
         "manual_time_test.go",
         "now_test.go",

@@ -154,6 +154,13 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	return child
 }
 
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggHistogram) RemoveChild(labelVals ...string) {
+	key := &Gauge{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
+}
+
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the
 // parent. When metrics are collected by prometheus, each of the children will
 // appear with a distinct label, however, when cockroach internally collects
