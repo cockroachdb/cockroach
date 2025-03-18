@@ -58,6 +58,10 @@ func NewReplicateQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
 func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
+	if !rq.settings.ReplicateQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
 	repl := NewSimulatorReplica(replica, s)
 	rq.AddLogTag("r", repl.repl.Descriptor())
 	rq.AnnotateCtx(ctx)
@@ -166,7 +170,10 @@ func pushReplicateChange(
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
 			TransferTarget: state.StoreID(op.Target),
 			Author:         state.StoreID(op.Source),
-			Wait:           delayFn(rng.Size(), true),
+			// TODO(mma): Should this be add? I don't think so since it will assume
+			// it takes as long as adding a replica. Will need to regenerate the
+			// tests and check the output when changing this.
+			Wait: delayFn(rng.Size(), true /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
 		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
@@ -174,7 +181,7 @@ func pushReplicateChange(
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(rng.Size(), true),
+			Wait:    delayFn(rng.Size(), true /* add */),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
