@@ -18,11 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
@@ -326,4 +332,36 @@ func UnlockLDRTables(
 		}
 		return nil
 	})
+}
+
+func AuthorizeTableLevelPriv(
+	ctx context.Context,
+	r resolver.SchemaResolver,
+	sessionAccessor eval.SessionAccessor,
+	priv privilege.Kind,
+	tableNames []string,
+) error {
+	for _, name := range tableNames {
+		uon, err := parser.ParseTableName(name)
+		if err != nil {
+			return err
+		}
+		lookupFlags := tree.ObjectLookupFlags{
+			Required:             true,
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: tree.ResolveRequireTableDesc,
+		}
+		d, _, err := resolver.ResolveExistingObject(ctx, r, uon, lookupFlags)
+		if err != nil {
+			return err
+		}
+		td, ok := d.(catalog.TableDescriptor)
+		if !ok {
+			return errors.New("expected table descriptor")
+		}
+		if err := sessionAccessor.CheckPrivilege(ctx, td, priv); err != nil {
+			return err
+		}
+	}
+	return nil
 }
