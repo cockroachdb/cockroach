@@ -7,6 +7,7 @@ package cspann
 
 import (
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestBalancedKMeans(t *testing.T) {
-	calcCentroid := func(vectors *vector.Set, offsets []uint64) vector.T {
+	calcCentroid := func(vectors vector.Set, offsets []uint64) vector.T {
 		centroid := make(vector.T, vectors.Dims)
 		for _, offset := range offsets {
 			num32.Add(centroid, vectors.At(int(offset)))
@@ -28,7 +29,7 @@ func TestBalancedKMeans(t *testing.T) {
 		return centroid
 	}
 
-	calcMeanDistance := func(vectors *vector.Set, centroid vector.T, offsets []uint64) float32 {
+	calcMeanDistance := func(vectors vector.Set, centroid vector.T, offsets []uint64) float32 {
 		var distanceSum float32
 		for _, offset := range offsets {
 			distanceSum += num32.L2Distance(vectors.At(int(offset)), centroid)
@@ -109,8 +110,13 @@ func TestBalancedKMeans(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		leftCentroid := make(vector.T, tc.vectors.Dims)
+		rightCentroid := make(vector.T, tc.vectors.Dims)
 		offsets := make([]uint64, tc.vectors.Count)
-		leftOffsets, rightOffsets := kmeans.Compute(&tc.vectors, offsets)
+		leftOffsets, rightOffsets := kmeans.ComputeCentroids(
+			tc.vectors, leftCentroid, rightCentroid, offsets)
+		require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
+		require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
 		ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
 		require.False(t, ratio < 0.5)
 		require.False(t, ratio > 2)
@@ -123,17 +129,27 @@ func TestBalancedKMeans(t *testing.T) {
 
 		// Ensure that distance to left centroid is less for vectors in the left
 		// partition than those in the right partition.
-		leftCentroid := calcCentroid(&tc.vectors, leftOffsets)
-		leftMean := calcMeanDistance(&tc.vectors, leftCentroid, leftOffsets)
-		rightMean := calcMeanDistance(&tc.vectors, leftCentroid, rightOffsets)
+		leftMean := calcMeanDistance(tc.vectors, leftCentroid, leftOffsets)
+		rightMean := calcMeanDistance(tc.vectors, leftCentroid, rightOffsets)
 		require.LessOrEqual(t, leftMean, rightMean)
+
+		// Check that AssignPartitions returns the same offsets.
+		offsets2 := make([]uint64, tc.vectors.Count)
+		leftOffsets2, rightOffsets2 := kmeans.AssignPartitions(
+			tc.vectors, leftCentroid, rightCentroid, offsets2)
+		slices.Sort(leftOffsets2)
+		slices.Sort(rightOffsets2)
+		require.Equal(t, leftOffsets, leftOffsets2)
+		require.Equal(t, rightOffsets, rightOffsets2)
 	}
 
 	t.Run("use global random number generator", func(t *testing.T) {
 		kmeans = BalancedKmeans{Workspace: workspace}
 		vectors := vector.MakeSetFromRawData([]float32{1, 2, 3, 4}, 2)
+		leftCentroid := make(vector.T, 2)
+		rightCentroid := make(vector.T, 2)
 		offsets := make([]uint64, vectors.Count)
-		kmeans.Compute(&vectors, offsets)
+		kmeans.ComputeCentroids(vectors, leftCentroid, rightCentroid, offsets)
 	})
 }
 
@@ -193,8 +209,8 @@ func TestMeanOfVariances(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			kmeans := BalancedKmeans{Workspace: &workspace.T{}, vectors: &tc.vectors}
-			result := float64(kmeans.calculateMeanOfVariances())
+			kmeans := BalancedKmeans{Workspace: &workspace.T{}}
+			result := float64(kmeans.calculateMeanOfVariances(tc.vectors))
 			if !tc.noRound {
 				result = scalar.Round(result, 4)
 			}
