@@ -34,7 +34,9 @@ func TestSplitPartitionData(t *testing.T) {
 	}, 2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
 
+	metadata := PartitionMetadata{Level: 1, Centroid: quantizedSet.GetCentroid()}
 	splitPartition := NewPartition(
+		metadata,
 		quantizer,
 		quantizedSet,
 		[]ChildKey{
@@ -48,8 +50,7 @@ func TestSplitPartitionData(t *testing.T) {
 		},
 		[]ValueBytes{
 			{1, 2}, {3, 4}, {5, 6}, {7, 8}, {9, 10}, {11, 12}, {13, 14},
-		},
-		1)
+		})
 
 	validate := func(split *splitData, offsets []uint64) {
 		require.Equal(t, splitPartition.Level(), split.Partition.Level())
