@@ -253,10 +253,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 	}
 }
 
-// TODO(kvoli,mma): The store Capacity.Capacity is currently 0 in most tests.
-// It should be set, determine why this is and fix it. Currently, the only
-// working way to set the store capacity for a simulation is via the override,
-// which overwrites select store capacity fields on each call.
+// capacity returns the store capacity of the store with the given storeID.
 func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
 	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
