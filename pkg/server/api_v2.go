@@ -29,8 +29,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -47,9 +50,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
+	"golang.org/x/time/rate"
 )
 
 // Path variables.
@@ -63,6 +68,7 @@ type ApiV2System interface {
 	restartSafetyCheck(w http.ResponseWriter, r *http.Request)
 	listNodes(w http.ResponseWriter, r *http.Request)
 	listNodeRanges(w http.ResponseWriter, r *http.Request)
+	planDrain(w http.ResponseWriter, r *http.Request)
 }
 
 type apiV2ServerOpts struct {
@@ -187,6 +193,7 @@ func registerRoutes(
 		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
 		{"health/restart_safety/", systemRoutes.restartSafetyCheck, false, authserver.RegularRole, false},
+		{"drain/plan/", systemRoutes.planDrain, true, authserver.ViewClusterMetadataRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
 		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
@@ -562,6 +569,242 @@ func checkRestartSafe(
 		return nil
 	})
 	return res, err
+}
+
+func (a *apiV2Server) planDrain(w http.ResponseWriter, r *http.Request) {
+	apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
+}
+
+// planDrain requests are somewhat expensive, and there's no real reason to invoke it at a high rate, so we rate limit
+// it.
+var planDrainRateLimiter = rate.NewLimiter(rate.Every(time.Second), 10)
+
+func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx = authserver.ForwardHTTPAuthInfoToRPCCalls(ctx, r)
+
+	// get the nodes we've already handled
+	nodeStrs, ok := r.URL.Query()["doneNodes"]
+	doneNodes := make(map[roachpb.NodeID]struct{})
+	if ok && len(nodeStrs) > 0 {
+		for _, nodeStr := range nodeStrs {
+			nID, err := strconv.Atoi(nodeStr)
+			if err != nil {
+				apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("invalid node ID: %s", nodeStr))
+				return
+			}
+
+			doneNodes[roachpb.NodeID(nID)] = struct{}{}
+		}
+	}
+
+	// parse the capacityTarget
+	capTargetStr := r.URL.Query().Get("capacityTarget")
+	if capTargetStr == "" {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("missing capacityTarget query parameter"))
+		return
+	}
+	capacityTarget, err := strconv.ParseFloat(capTargetStr, 64)
+	if err != nil {
+		apiutil.WriteJSONResponse(ctx, w, http.StatusBadRequest, fmt.Errorf("invalid capacityTarget: %s", capTargetStr))
+		return
+	}
+
+	err = planDrainRateLimiter.Wait(ctx)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	batch, moreBatches, err := planRollingRestart(ctx, doneNodes, capacityTarget, a.systemStatus)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+
+	resp := &serverpb.RestartPlanBatch{
+		Batch:       batch,
+		MoreBatches: moreBatches,
+	}
+
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, resp)
+}
+
+// planRollingRestart is an iterator over nodes. It produces nodes in batches. To be included in the next batch, a
+// node must have healthy ranges, and none of its ranges can overlap any other node in the batch. Due to changes in
+// range allocation, or outages that impact range health, each node in the batch should be checked for termination
+// safety before being terminated.
+//
+// In a large cluster with several localities, it's likely that the batch will consist of nodes in one locality, due
+// to the range overlap constraints. This is not guaranteed, but the goal here is to enable safe parallel draining and
+// restart operations on a running cluster, within capacity constraints.
+//
+// `doneNodes` is the set of nodes that should not be considered, presumably because they've already been restarted.
+// `capacityTarget` impacts the size of the batch. We assume that the cluster needs this much capacity to continue
+// without disruption, and limit the size of the batch to `totalNodes * (1.0 - capacityTarget)`. capacityTarget must be
+// less than 1.0. Targets less than 0.66 are treated as 0.8, since taking down more than a third of the cluster is
+// definitely a bad idea. That said, the minimum batch size limit is 1.
+//
+// The returned batch may be empty, or could be less than the batch size limit, if range health restricts it.
+// It's assumed that calls to this method will be well-separated in time. Don't poll in a tight loop; wait long enough
+// for cluster conditions to change before checking again.
+//
+// Since an empty batch does not indicate the end of iteration, there's a separate moreBatches return value.
+func planRollingRestart(
+	ctx context.Context,
+	doneNodes map[roachpb.NodeID]struct{},
+	capacityTarget float64,
+	systemStatus *systemStatusServer,
+) (batch []*roachpb.NodeDescriptor, moreBatches bool, err error) {
+	if capacityTarget >= 1.0 {
+		return nil, false, fmt.Errorf("capacity target must be less than 1.0")
+	}
+
+	totalNodes := systemStatus.storePool.ClusterNodeCount()
+	// Due to floating-point rounding error, 1.0-0.8 < 0.2, so we end up a whole node short of our target.
+	// a fudge factor of about 1 in a million is sufficient to correct the error, and small enough to be
+	// insignificant
+	const fudgeFactor float64 = 1.0 / (1024.0 * 1024.0)
+	nodesPerRound := int(math.Floor(float64(totalNodes) * (1.0 - capacityTarget + fudgeFactor)))
+	if nodesPerRound < 1 {
+		nodesPerRound = 1
+	}
+
+	nodeVitality := systemStatus.nodeLiveness.ScanNodeVitalityFromCache()
+
+	// Start with all live nodes as candidates
+	candidateNodes := make(map[roachpb.NodeID]struct{})
+	for nID, nv := range nodeVitality {
+		if nv.IsDecommissioned() || nv.IsDecommissioning() {
+			// remove decommissioned nodes from done nodes, as we don't count them among the totalNodes
+			delete(doneNodes, nID)
+			continue
+		}
+
+		if nv.IsLive(livenesspb.Metrics) {
+			// node is available; may be draining
+			candidateNodes[nID] = struct{}{}
+		}
+	}
+
+	if totalNodes <= len(doneNodes) {
+		// Apparently, the last candidate for the rolling restart got decommissioned instead
+		return nil, false, nil
+	}
+
+	// Remove all the done nodes
+	for nID := range doneNodes {
+		delete(candidateNodes, nID)
+	}
+
+	// Count draining nodes against the disruption budget, and also
+	// remove them and their neighbors from the candidate set.
+	for nID, nv := range nodeVitality {
+		if nv.IsDraining() {
+			nodesPerRound -= 1
+			if nodesPerRound < 1 {
+				// We're already using our disruption budget to drain nodes
+				return nil, true, nil
+			}
+
+			delete(candidateNodes, nID)
+
+			res, err := systemStatus.NodeFaultToleranceStatus(ctx, &serverpb.NodeFaultToleranceRequest{NodeID: nID.String()})
+			if err != nil {
+				// We know this node is draining. It may already be terminated
+				// due to the state being stale. If we can't get its neighbors,
+				// just treat it like it's dead.
+				log.InfofDepth(ctx, 1, "error getting neighbors for draining node %d: %v", nID, err)
+				continue
+			}
+
+			for neighborID := range res.Neighbors {
+				delete(candidateNodes, roachpb.NodeID(neighborID))
+			}
+		}
+	}
+
+	// Fetch the node metadata for all the surviving candidates
+	candidateNodeDescs := make([]roachpb.NodeDescriptor, 0, len(candidateNodes))
+	for nID := range candidateNodes {
+		nodeStr := strconv.Itoa(int(nID))
+		node, err := systemStatus.Node(ctx, &serverpb.NodeRequest{
+			NodeId: nodeStr,
+			Redact: false,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+
+		candidateNodeDescs = append(candidateNodeDescs, node.Desc)
+	}
+
+	// Sort candidates by node locality, for consistency and predictability
+	sort.Slice(candidateNodeDescs, func(i, j int) bool {
+		// compare by locality, then nodeID
+		l := candidateNodeDescs[i].Locality.Tiers
+		r := candidateNodeDescs[j].Locality.Tiers
+
+		for k, lt := range l {
+			if k < len(r) {
+				// less if key is less
+				if lt.Key < r[k].Key {
+					return true
+				} else if lt.Key > r[k].Key {
+					return false
+				}
+
+				// less if value is less
+				if lt.Value < r[k].Value {
+					return true
+				} else if lt.Value > r[k].Value {
+					return false
+				}
+			} else {
+				// greater if r is shorter and everything matches up to here
+				return false
+			}
+		}
+
+		if len(l) < len(r) {
+			// less if l is shorter and the kv pairs match
+			return true
+		}
+
+		// nodeID as a tie breaker
+		return candidateNodeDescs[i].NodeID < candidateNodeDescs[j].NodeID
+	})
+
+	// Go through the candidates, and return the first ones that can be terminated.
+	toRestart := make([]*roachpb.NodeDescriptor, 0, nodesPerRound)
+	for _, node := range candidateNodeDescs {
+		if _, ok := candidateNodes[node.NodeID]; !ok {
+			continue
+		}
+
+		res, err := systemStatus.NodeFaultToleranceStatus(ctx, &serverpb.NodeFaultToleranceRequest{NodeID: node.NodeID.String()})
+		if err != nil {
+			return nil, false, err
+		}
+		if res.CanTerminate {
+			toRestart = append(toRestart, &node)
+
+			for neighborID := range res.Neighbors {
+				delete(candidateNodes, roachpb.NodeID(neighborID))
+			}
+		}
+
+		// Regardless of canTerminate, remove this node
+		delete(candidateNodes, node.NodeID)
+
+		if len(toRestart) >= nodesPerRound {
+			break
+		}
+	}
+
+	moreBatches = len(toRestart)+len(doneNodes) < totalNodes
+
+	return toRestart, moreBatches, nil
 }
 
 // # Get metric recording and alerting rule templates

@@ -388,6 +388,7 @@ go_library(
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",
         "@org_golang_x_exp//maps",
+        "@org_golang_x_time//rate",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",

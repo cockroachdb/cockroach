@@ -4460,3 +4460,74 @@ func (s *statusServer) getThrottlingMetadataLocal(
 		},
 		nil
 }
+
+func (s *systemStatusServer) NodeFaultToleranceStatus(
+	ctx context.Context, req *serverpb.NodeFaultToleranceRequest,
+) (*serverpb.NodeFaultToleranceResponse, error) {
+	requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if local {
+		return s.nodeFaultToleranceLocal(ctx)
+	}
+
+	statusClient, err := s.dialNode(ctx, requestedNodeID)
+	if err != nil {
+		return nil, err
+	}
+	return statusClient.NodeFaultToleranceStatus(ctx, req)
+}
+
+func (s *systemStatusServer) nodeFaultToleranceLocal(
+	ctx context.Context,
+) (*serverpb.NodeFaultToleranceResponse, error) {
+	vitality := s.nodeLiveness.ScanNodeVitalityFromCache()
+	canTerminate := true
+	neighbors := make(map[roachpb.NodeID]struct{})
+	err := s.stores.VisitStores(func(store *kvserver.Store) error {
+		thisNode := store.NodeID()
+		store.VisitReplicas(func(replica *kvserver.Replica) bool {
+			rangeStatus := replica.Desc().Replicas().ReplicationStatus(func(rd roachpb.ReplicaDescriptor) bool {
+				if rd.NodeID == thisNode {
+					return false
+				} else {
+					switch rd.Type {
+					case roachpb.VOTER_FULL:
+						fallthrough
+					case roachpb.VOTER_INCOMING:
+						fallthrough
+					case roachpb.VOTER_OUTGOING:
+						neighbors[rd.NodeID] = struct{}{}
+					}
+				}
+				return vitality[rd.NodeID].IsLive(livenesspb.AdminHealthCheck)
+			}, 0, -1)
+
+			if !rangeStatus.Available {
+				canTerminate = false
+			}
+
+			if ctx.Err() != nil {
+				return false
+			}
+
+			return true
+		})
+		return ctx.Err()
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	neighborList := make([]int32, 0, len(neighbors))
+	for nID := range neighbors {
+		neighborList = append(neighborList, int32(nID))
+	}
+
+	return &serverpb.NodeFaultToleranceResponse{
+		CanTerminate: canTerminate,
+		Neighbors:    neighborList,
+	}, nil
+}

@@ -5586,6 +5586,52 @@ show throttling warnings and alerts in DB Console.
 
 
 
+## NodeFaultToleranceStatus
+
+
+
+NodeFaultToleranceStatus indicates whether it's safe to terminate a
+node, and what that node's neighbor nodes are in the replication graph
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.NodeFaultToleranceRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| can_terminate | [bool](#cockroach.server.serverpb.NodeFaultToleranceResponse-bool) |  |  | [reserved](#support-status) |
+| neighbors | [int32](#cockroach.server.serverpb.NodeFaultToleranceResponse-int32) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
