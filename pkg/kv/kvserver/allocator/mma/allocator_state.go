@@ -139,7 +139,9 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	// first shed load from the stores of n1, before we shed load from the store
 	// on n2.
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
-		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls))
+		// Use StoreID for tie-breaker for determinism.
+		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls),
+			cmp.Compare(a.StoreID, b.StoreID))
 	})
 	var changes []PendingRangeChange
 	var disj [1]constraintsConj
