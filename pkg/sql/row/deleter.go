@@ -161,10 +161,10 @@ func (rd *Deleter) DeleteRow(
 		if err != nil {
 			return err
 		}
-		needsLock := index.IsUnique() && (rd.secondaryLocked == nil || rd.secondaryLocked.GetID() != index.GetID())
+		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
-				ctx, b, index, &e.Key, needsLock, traceKV, rd.Helper.secIndexValDirs[i],
+				ctx, b, index, &e.Key, alreadyLocked, traceKV, rd.Helper.secIndexValDirs[i],
 			); err != nil {
 				return err
 			}

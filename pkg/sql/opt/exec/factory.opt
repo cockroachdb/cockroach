@@ -558,6 +558,10 @@ define Update {
     Passthrough colinfo.ResultColumns
     UniqueWithTombstonesIndexes cat.IndexOrdinals
 
+    # If set, the input has already acquired the locks during the initial scan
+    # of the Update (i.e. on the "old" KVs within these indexes).
+    LockedIndexes cat.IndexOrdinals
+
     # If set, the operator will commit the transaction as part of its execution.
     AutoCommit bool
 }
@@ -598,6 +602,10 @@ define Upsert {
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
     UniqueWithTombstonesIndexes cat.IndexOrdinals
+
+    # If set, the input has already acquired the locks during the initial scan
+    # of the Upsert (i.e. on the "old" KVs within these indexes).
+    LockedIndexes cat.IndexOrdinals
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction, or there are

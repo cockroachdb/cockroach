@@ -429,7 +429,7 @@ func newKVTableWriter(
 	}
 	rd := row.MakeDeleter(evalCtx.Codec, tableDesc, nil /* lockedIndexes */, readCols, &evalCtx.Settings.SV, internal, nil)
 	ru, err := row.MakeUpdater(
-		ctx, nil, evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, readCols, writeCols, row.UpdaterDefault, a, &evalCtx.Settings.SV, internal, nil,
+		ctx, nil, evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, nil /* lockedIndexes */, readCols, writeCols, row.UpdaterDefault, a, &evalCtx.Settings.SV, internal, nil,
 	)
 	if err != nil {
 		return nil, err
