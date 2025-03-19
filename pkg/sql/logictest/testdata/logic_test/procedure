@@ -543,3 +543,14 @@ CALL withdraw(17, 100.0, NULL);
 statement ok
 DROP PROCEDURE withdraw;
 DROP TABLE bank;
+
+# Regression test for #142886 - we should not be able to create an overload that
+# differs only in the type width of the input type.
+statement ok
+CREATE PROCEDURE p142886(p VARCHAR(10)) LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement error pgcode 42723 function "p142886" already exists with same argument types
+CREATE PROCEDURE p142886(p VARCHAR(100)) LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP PROCEDURE p142886;

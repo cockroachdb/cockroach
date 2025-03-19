@@ -424,16 +424,16 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
-	// MatchIdentical is similar to match but checks that the types are identical matches,
-	// instead of equivalent matches. See types.T.Equivalent and types.T.Identical.
-	MatchIdentical(types []*types.T) bool
+	// MatchOid is similar to match but checks that the types have the same
+	// Oids, instead of being equivalent (in types.T.Equivalent sense) matches.
+	MatchOid(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
-	// MatchAtIdentical is similar to MatchAt but checks that the type at index i of
-	// the Typelist is identical to typ.
-	MatchAtIdentical(typ *types.T, i int) bool
+	// MatchAtOid is similar to MatchAt but checks that the Oid of the type at
+	// index i of the Typelist is the same as the Oid of typ.
+	MatchAtOid(typ *types.T, i int) bool
 	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
 	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
@@ -474,12 +474,12 @@ func (p ParamTypes) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (p ParamTypes) MatchIdentical(types []*types.T) bool {
+func (p ParamTypes) MatchOid(types []*types.T) bool {
 	if len(types) != len(p) {
 		return false
 	}
 	for i := range types {
-		if !p.MatchAtIdentical(types[i], i) {
+		if !p.MatchAtOid(types[i], i) {
 			return false
 		}
 	}
@@ -500,15 +500,8 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 }
 
 // MatchAtIdentical is part of the TypeList interface.
-func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
-	return i < len(p) && (typ.Family() == types.UnknownFamily ||
-		p[i].Typ.Identical(typ) ||
-		// Special case for CHAR, CHAR(N), and BPCHAR which are not "identical"
-		// but have the same OID. See #129007.
-		(p[i].Typ.Oid() == oid.T_bpchar && typ.Oid() == oid.T_bpchar) ||
-		// Special case for BIT, BIT(N), and BIT(0) which are not "identical"
-		// but have the same OID. See #132944.
-		(p[i].Typ.Oid() == oid.T_bit && typ.Oid() == oid.T_bit))
+func (p ParamTypes) MatchAtOid(typ *types.T, i int) bool {
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Oid() == typ.Oid())
 }
 
 // MatchLen is part of the TypeList interface.
@@ -580,7 +573,7 @@ func (HomogeneousType) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (HomogeneousType) MatchIdentical(types []*types.T) bool {
+func (HomogeneousType) MatchOid(types []*types.T) bool {
 	return true
 }
 
@@ -590,7 +583,7 @@ func (HomogeneousType) MatchAt(typ *types.T, i int) bool {
 }
 
 // MatchAtIdentical is part of the TypeList interface.
-func (HomogeneousType) MatchAtIdentical(typ *types.T, i int) bool {
+func (HomogeneousType) MatchAtOid(typ *types.T, i int) bool {
 	return true
 }
 
@@ -637,7 +630,7 @@ func (v VariadicType) Match(types []*types.T) bool {
 }
 
 // MatchIdentical is part of the TypeList interface.
-func (VariadicType) MatchIdentical(types []*types.T) bool {
+func (VariadicType) MatchOid(types []*types.T) bool {
 	return true
 }
 
@@ -651,7 +644,7 @@ func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 
 // MatchAtIdentical is part of the TypeList interface.
 // TODO(mgartner): This will be incorrect once we add support for variadic UDFs
-func (VariadicType) MatchAtIdentical(typ *types.T, i int) bool {
+func (VariadicType) MatchAtOid(typ *types.T, i int) bool {
 	return true
 }
 

@@ -1004,3 +1004,14 @@ PREPARE p AS SELECT f($1::REGCLASS::INT)
 
 statement ok
 EXECUTE p(10)
+
+# Regression test for #142886 - we should not be able to create an overload that
+# differs only in the type width of the input type.
+statement ok
+CREATE FUNCTION f142886(p VARCHAR(10)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement error pgcode 42723 function "f142886" already exists with same argument types
+CREATE FUNCTION f142886(p VARCHAR(100)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP FUNCTION f142886;
