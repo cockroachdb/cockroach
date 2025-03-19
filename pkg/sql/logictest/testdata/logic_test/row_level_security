@@ -2054,6 +2054,295 @@ DROP TABLE multip;
 statement ok
 DROP USER multi_user;
 
-subtest multiple_insert_policies
+# This is another test for multiple policies. But the focus here is how multiple
+# policies are applied when they apply for other commands. For example, having
+# a policy that applies to SELECT and a policy that applies to DELETE.
+subtest multi_policies_multi_cmd
+
+statement ok
+create table r1 (c1 int);
+
+statement ok
+alter table r1 enable row level security;
+
+statement ok
+insert into r1 values (0),(1),(2),(3),(4),(5),(22);
+
+statement ok
+create policy sel1 on r1 for select using (c1 % 2 = 0);
+
+statement ok
+create policy upd1 on r1 for update using (c1 between 0 and 20);
+
+statement ok
+create user r1_user;
+
+statement ok
+grant all on r1 to r1_user;
+
+statement ok
+set role r1_user;
+
+# UPDATE should only apply to the combination of both policies.
+statement ok
+update r1 set c1 = c1 ;
+
+query I rowsort
+update r1 set c1 = c1 returning c1;
+----
+0
+2
+4
+
+statement error pq: new row violates row-level security policy for table "r1"
+update r1 set c1 = c1 + 1;
+
+statement error pq: new row violates row-level security policy for table "r1"
+update r1 set c1 = c1 + 1 where c1 between 1 and 3;
+
+statement ok
+update r1 set c1 = c1 + 2 where c1 between 1 and 10;
+
+query I rowsort
+update r1 set c1 = c1 + 2 where c1 between 1 and 10 returning c1;
+----
+6
+8
+
+query I
+update r1 set c1 = c1 + 2 where c1 > 20 returning c1;
+----
+
+query I rowsort
+SELECT * FROM r1;
+----
+0
+6
+8
+22
+
+statement ok
+SET ROLE root;
+
+query I rowsort
+SELECT * FROM r1;
+----
+0
+1
+3
+5
+6
+8
+22
+
+statement ok
+DROP TABLE r1;
+
+# Do another test of select and update policies, but use simple expressions and
+# try out different combinations of those expressions.
+statement ok
+CREATE TABLE cnt (counter INT);
+
+statement ok
+INSERT INTO cnt VALUES (1);
+
+statement ok
+GRANT ALL ON cnt TO r1_user;
+
+statement ok
+ALTER TABLE cnt ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE cnt OWNER TO r1_user;
+
+statement ok
+SET ROLE r1_user;
+
+statement ok
+CREATE POLICY upd1 ON cnt FOR UPDATE USING (true);
+
+# Only an UPDATE policy and no SELECT policy. Nothing is updated.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now create only a SELECT policy. Same behaviour as before.
+statement ok
+DROP POLICY upd1 ON cnt;
+
+statement ok
+CREATE POLICY sel1 ON cnt FOR SELECT USING (true);
+
+query I
+SELECT * FROM cnt;
+----
+1
+
+# Any locking modes on the query will cause the UPDATE policies to be applied,
+# which will filter out the row.
+query I
+SELECT * FROM cnt FOR UPDATE;
+----
+
+
+query I
+SELECT * FROM cnt FOR SHARE;
+----
+
+
+let $cnt_oid
+SELECT 'cnt'::REGCLASS::OID;
+
+query I
+SELECT * FROM [$cnt_oid as t];
+----
+1
+
+query I
+SELECT * FROM [$cnt_oid as t] FOR UPDATE;
+----
+
+query I
+SELECT * FROM [$cnt_oid as t] FOR SHARE;
+----
+
+# Update with a SELECT policy but no UPDATE policy. Nothing should be returned.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now add a SELECT policy, but it still filters everything out.
+statement ok
+CREATE POLICY upd1 ON cnt FOR UPDATE USING (false);
+
+# Same as before, no update occurs because the reading of existing rows filters
+# everything out.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now replace the UPDATE policy with one that allows everything.
+statement ok
+DROP POLICY upd1 ON cnt;
+
+statement ok
+CREATE POLICY upd1 ON cnt FOR UPDATE USING (true);
+
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+2
+
+# Update the UPDATE policy so that it allows old rows but blocks all new rows.
+statement ok
+DROP POLICY upd1 ON cnt;
+
+statement ok
+CREATE POLICY upd1 ON cnt FOR UPDATE USING (true) WITH CHECK (false);
+
+# We are able to read the row but cannot write a new row as it violates the
+# update policy.
+statement error pq: new row violates row-level security policy for table "cnt"
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+
+# Verify that select policy (true) with no delete policy will not delete anything.
+query I
+delete from cnt where counter is not null returning counter;
+----
+
+statement ok
+delete from cnt;
+
+query I
+select counter from cnt;
+----
+2
+
+# Now change the select policy to be always false, and delete policy to be always true.
+statement ok
+DROP POLICY sel1 ON cnt;
+
+statement ok
+CREATE POLICY sel1 ON cnt FOR SELECT USING (false);
+
+statement ok
+CREATE POLICY del1 ON cnt FOR DELETE USING (true);
+
+query I
+delete from cnt where counter > 0 returning counter;
+----
+
+statement ok
+delete from cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+# Drop the select policy entirely. It should be no different than a deny-all select policy.
+statement ok
+DROP POLICY sel1 ON cnt;
+
+statement ok
+ALTER TABLE cnt FORCE ROW LEVEL SECURITY;
+
+query I
+delete from cnt where counter > 0 returning counter;
+----
+
+statement ok
+delete from cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+statement ok
+ALTER TABLE cnt FORCE ROW LEVEL SECURITY;
+
+# Now change the select policy to always return true, and delete policy to always return false.
+statement ok
+DROP POLICY del1 ON cnt;
+
+statement ok
+CREATE POLICY sel1 ON cnt FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY del1 ON cnt FOR DELETE USING (false);
+
+query I
+DELETE FROM cnt WHERE counter > 0 RETURNING counter;
+----
+
+statement ok
+DELETE FROM cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE cnt;
+
+statement ok
+DROP USER r1_user;
 
 subtest end
