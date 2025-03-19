@@ -171,6 +171,8 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %token <str> CURRENT
 
+%token <str> STRING
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -447,20 +449,22 @@ scalar_value:
   {
     $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
   }
-// TODO(normanchenn): support strings, null.
+| STRING
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+// TODO(normanchenn): support null.
 ;
 
 any_identifier:
   IDENT
+| STRING
 | unreserved_keyword
 ;
 
 unreserved_keyword:
-  AND
-| FALSE
+  FALSE
 | LAX
-| NOT
-| OR
 | STRICT
 | TO
 | TRUE

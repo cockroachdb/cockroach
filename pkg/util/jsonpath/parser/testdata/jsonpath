@@ -418,6 +418,24 @@ $.c[$.b - $.a to $.d - $.b]
 ----
 $."c"[($."b" - $."a") to ($."d" - $."b")] -- normalized!
 
+parse
+"hello" == "hello"
+----
+("hello" == "hello") -- normalized!
+
+parse
+$.a ? (@.b == "string")
+----
+$."a"?((@."b" == "string")) -- normalized!
+
+error
+"a" && "b"
+----
+at or near "&": syntax error
+DETAIL: source SQL:
+"a" && "b"
+    ^
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

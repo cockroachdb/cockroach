@@ -47,7 +47,7 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	case identQuote:
 		// "[^"]"
 		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.IDENT)
+			lval.SetID(lexbase.STRING)
 		}
 		return
 	case '=':
