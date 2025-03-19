@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -40,6 +41,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+// ttlMaxKVAutoRetry is the maximum number of times a TTL operation will
+// automatically retry in the KV layer before reducing the batch size to handle
+// contention.
+var ttlMaxKVAutoRetry = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.ttl.max_kv_auto_retries",
+	"the number of times a TTL operation will automatically retry in the KV layer before reducing the batch size",
+	10,
+	settings.PositiveInt,
 )
 
 // ttlProcessor manages the work managed by a single node for a job run by
@@ -420,6 +432,11 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 					var batchRowCount int64
 					do := func(ctx context.Context, txn isql.Txn) error {
 						txn.KV().SetDebugName("ttljob-delete-batch")
+						// We explicitly specify a low retry limit because this operation is
+						// wrapped with its own retry function that will also take care of
+						// adjusting the batch size on each retry.
+						maxAutoRetries := ttlMaxKVAutoRetry.Get(&flowCtx.Cfg.Settings.SV)
+						txn.KV().SetMaxAutoRetries(int(maxAutoRetries))
 						if ttlSpec.DisableChangefeedReplication {
 							txn.KV().SetOmitInRangefeeds()
 						}

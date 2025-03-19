@@ -20,6 +20,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
