@@ -1397,6 +1397,9 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 		func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 			if _, ok := filterArgs.Req.(*kvpb.GCRequest); ok {
 				atomic.AddInt32(&gcRequests, 1)
+				// Verify that all MVCC GC requests have their admission control header
+				// populated.
+				assert.NotZero(t, filterArgs.AdmissionHdr.CreateTime)
 				return nil
 			}
 			return nil
