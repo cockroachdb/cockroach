@@ -24,6 +24,7 @@ const (
 	OpMult
 	OpDiv
 	OpMod
+	OpLikeRegex
 )
 
 var OperationTypeStrings = map[OperationType]string{
@@ -41,6 +42,7 @@ var OperationTypeStrings = map[OperationType]string{
 	OpMult:             "*",
 	OpDiv:              "/",
 	OpMod:              "%",
+	OpLikeRegex:        "like_regex",
 }
 
 type Operation struct {
