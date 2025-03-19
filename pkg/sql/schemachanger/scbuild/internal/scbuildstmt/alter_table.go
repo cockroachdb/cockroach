@@ -123,7 +123,11 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", n.Table.Object()))
 	}
-	panicIfSchemaChangeIsDisallowed(elts, n)
+	checkTableSchemaChangePrerequisites(b, elts, n)
+	if schemaLockedElts := elts.FilterTableSchemaLocked().MustHaveZeroOrOne(); !schemaLockedElts.IsEmpty() {
+		_, _, schemaLocked := schemaLockedElts.Get(0)
+		b.DropTransient(schemaLocked)
+	}
 	tn.ObjectNamePrefix = b.NamePrefix(tbl)
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
