@@ -2899,13 +2899,6 @@ type ConditionalPutWriteOptions struct {
 	// See the comment on the OriginTimestamp field of
 	// kvpb.ConditionalPutRequest for more details.
 	OriginTimestamp hlc.Timestamp
-	// ShouldWinOriginTimestampTie indicates whether the value should be
-	// accepted if the origin timestamp is the same as the
-	// origin_timestamp/mvcc_timestamp of the existing value.
-	//
-	// See the comment on the ShouldWinOriginTimestampTie field of
-	// kvpb.ConditionalPutRequest for more details.
-	ShouldWinOriginTimestampTie bool
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the expected
@@ -3035,8 +3028,7 @@ func mvccConditionalPutUsingIter(
 		}
 	} else {
 		valueFn = func(existVal optionalValue) (roachpb.Value, error) {
-			originTSWinner, existTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp,
-				opts.ShouldWinOriginTimestampTie)
+			originTSWinner, existTS := existVal.isOriginTimestampWinner(opts.OriginTimestamp, false)
 			if !originTSWinner {
 				return roachpb.Value{}, &kvpb.ConditionFailedError{
 					OriginTimestampOlderThan: existTS,

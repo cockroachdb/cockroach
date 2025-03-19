@@ -79,9 +79,8 @@ func ConditionalPut(
 			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			Category:                       fs.BatchEvalReadCategory,
 		},
-		AllowIfDoesNotExist:         storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
-		OriginTimestamp:             args.OriginTimestamp,
-		ShouldWinOriginTimestampTie: args.ShouldWinOriginTimestampTie,
+		AllowIfDoesNotExist: storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
+		OriginTimestamp:     args.OriginTimestamp,
 	}
 
 	var err error
