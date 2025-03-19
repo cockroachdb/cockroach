@@ -399,7 +399,9 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 			if s.DeploymentMode().IsExternal() {
 				expectedCount--
 			}
-			require.Len(t, files, expectedCount)
+			if len(files) != expectedCount {
+				return errors.Newf("expected %d files, got %d: %v", expectedCount, len(files), files)
+			}
 			return nil
 		})
 
@@ -418,7 +420,9 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 			if s.DeploymentMode().IsExternal() {
 				expectedCount = 8
 			}
-			require.Len(t, files, expectedCount)
+			if len(files) != expectedCount {
+				return errors.Newf("expected %d files, got %d: %v", expectedCount, len(files), files)
+			}
 			return nil
 		})
 		patterns = []string{
