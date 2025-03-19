@@ -2304,24 +2304,26 @@ func mvccPutInternal(
 			return false, roachpb.LockAcquisition{}, errors.Errorf("%q: put is inline=%t, but existing value is inline=%t",
 				metaKey, putIsInline, meta.IsInline())
 		}
-		if ok && !meta.IsInline() {
+
+		// If at least one version is found, scan the lock table for conflicting
+		// locks and/or an intent on the key from different transactions. If any
+		// such conflicts are found, the lock table scanner will return a
+		// LockConflictError.
+		mustScanLockTable := ok && !meta.IsInline()
+		// We now (20-02-2025) allow locks on non-existing keys. Unfortunately, this
+		// means we must also scan the lock table even if we haven't found a key. As a result,
+		// writes to non-existent keys now perform 2 seeks rather than 1.
+		//
+		// We need to double check that the put isn't inline so that our assumption
+		// that the ltScanner scanner is non-nil holds.
+		mustScanLockTable = mustScanLockTable || (!putIsInline && lock.LockNonExistentKeys)
+		if mustScanLockTable {
 			// INVARIANTS:
 			//   !putIsBlind
 			//   !meta.IsInline()
 			//   !meta.IsInline() => !putIsInline (due to previous if-block)
 			//   !putIsInline && !putIsBlind => ltScanner != nil (due to error check earlier in function)
 			//   So we can use ltScanner safely.
-			//
-			// If at least one version is found, scan the lock table for conflicting
-			// locks and/or an intent on the key from different transactions. If any
-			// such conflicts are found, the lock table scanner will return a
-			// LockConflictError.
-			//
-			// We only need to scan the lock table if we find at least one version.
-			// This is because locks cannot be acquired on non-existent keys. This
-			// constraint permits an important performance optimization — writes to
-			// non-existent keys only perform a single seek (of the MVCC keyspace) and
-			// no second seek (of the lock table keyspace).
 			err = ltScanner.scan(key)
 			if err != nil {
 				return false, roachpb.LockAcquisition{}, err

@@ -120,7 +120,7 @@ var UnreplicatedLockReliability = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.enabled",
 	"whether the replica should attempt to keep unreplicated locks during various node operations",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability_upgrade.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.enabled", true),
 )
 
 // managerImpl implements the Manager interface.
