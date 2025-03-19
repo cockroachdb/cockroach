@@ -30,6 +30,11 @@ import (
 
 const gcpBucket = "cockroach-godeps"
 
+type versionedDependency struct {
+	Path    string
+	Version string
+}
+
 // downloadedModule captures `go mod download -json` output.
 type downloadedModule struct {
 	Path    string `json:"Path"`
@@ -134,7 +139,7 @@ func createTmpDir() (tmpdir string, err error) {
 
 func downloadZips(
 	tmpdir string, listed map[string]listedModule,
-) (map[string]downloadedModule, error) {
+) (map[versionedDependency]downloadedModule, error) {
 	gobin, err := bazel.Runfile("bin/go")
 	if err != nil {
 		return nil, err
@@ -160,7 +165,7 @@ func downloadZips(
 			downloadArgs, string(jsonBytes), string(stderr), err)
 	}
 	var jsonBuilder strings.Builder
-	ret := make(map[string]downloadedModule)
+	ret := make(map[versionedDependency]downloadedModule)
 	for _, line := range strings.Split(string(jsonBytes), "\n") {
 		jsonBuilder.WriteString(line)
 		if strings.HasPrefix(line, "}") {
@@ -168,7 +173,14 @@ func downloadZips(
 			if err := json.Unmarshal([]byte(jsonBuilder.String()), &mod); err != nil {
 				return nil, err
 			}
-			ret[mod.Path] = mod
+			key := versionedDependency{
+				Path:    mod.Path,
+				Version: mod.Version,
+			}
+			if _, ok := ret[key]; ok {
+				panic(fmt.Sprintf("found entry in `go mod download -json` with duplicate key %+v", key))
+			}
+			ret[key] = mod
 			jsonBuilder.Reset()
 		}
 	}
@@ -205,6 +217,19 @@ func listAllModules(tmpdir string) (map[string]listedModule, error) {
 			// can just throw it away.
 			if mod.Path == "github.com/cockroachdb/cockroach" {
 				continue
+			}
+			// Sanity check: we expect the paths for all modules in
+			// this set to be unique. This is true of the output of
+			// `go list` but notably NOT the output of `go mod download`!!!
+			// `go list` lists modules by their imported names,
+			// and `go mod download` lists modules by their "real"
+			// names. For example, if you do `replace A => B`, the
+			// imported name is A but the "real" name is B. The
+			// imported name (A) is unique, but the "real" name is
+			// not. We can import B many times under different
+			// imported names.
+			if _, ok := ret[mod.Path]; ok {
+				panic(fmt.Sprintf("found duplicate imported path: %s. This is a bug. Go tell dev-inf about it.", mod.Path))
 			}
 			ret[mod.Path] = mod
 		}
@@ -307,7 +332,7 @@ func dumpBuildNamingConventionArgsForRepo(repoName string) {
 
 func dumpNewDepsBzl(
 	listed map[string]listedModule,
-	downloaded map[string]downloadedModule,
+	downloaded map[versionedDependency]downloadedModule,
 	existingMirrors map[string]starlarkutil.DownloadableArtifact,
 ) error {
 	var sorted []string
@@ -363,6 +388,10 @@ def go_deps():
 		replaced := &mod
 		if mod.Replace != nil {
 			replaced = mod.Replace
+			// Sanity check: there should not be multiple levels of "replace".
+			if replaced.Replace != nil {
+				panic(fmt.Sprintf("replaced module %s is replaced itself?? This is a bug. Go talk to dev-inf.", replaced.Replace))
+			}
 		}
 		fmt.Printf(`    go_repository(
         name = "%s",
@@ -387,7 +416,10 @@ def go_deps():
 `, oldMirror.Sha256, replaced.Path, replaced.Version, oldMirror.URL)
 		} else if canMirror() {
 			// We'll have to mirror our copy of the zip ourselves.
-			d := downloaded[replaced.Path]
+			d := downloaded[versionedDependency{
+				Path:    replaced.Path,
+				Version: replaced.Version,
+			}]
 			sha, err := getSha256OfFile(d.Zip)
 			if err != nil {
 				return fmt.Errorf("could not get zip for %v: %w", *replaced, err)
@@ -404,7 +436,10 @@ def go_deps():
 		} else {
 			// We don't have a mirror and can't upload one, so just
 			// have Gazelle pull the repo for us.
-			d := downloaded[replaced.Path]
+			d := downloaded[versionedDependency{
+				Path:    replaced.Path,
+				Version: replaced.Version,
+			}]
 			if mod.Replace != nil {
 				fmt.Printf("        replace = \"%s\",\n", replaced.Path)
 			}
