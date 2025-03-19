@@ -41,7 +41,7 @@ project
       └── filters
            └── false
 
-# Add a policy with a USING expression to see that a SELECT fill include that
+# Add a policy with a USING expression to see that a SELECT will include that
 # expression in its filter.
 
 exec-ddl
@@ -64,7 +64,7 @@ exec-ddl
 DROP POLICY p1 on t1;
 ----
 
-# Verify that a policy for SELECT isn't used for UPDATE.
+# Verify that having only a SELECT policy will prevent an UPDATE.
 
 exec-ddl
 CREATE POLICY p1 on t1 FOR SELECT USING (c1 % 2 = 0);
@@ -97,7 +97,7 @@ update t1
       │    └── projections
       │         └── c1:7 * 2 [as=c1_new:13]
       └── projections
-           └── false [as=rls:14]
+           └── ((c1_new:13 % 2) = 0) AND false [as=rls:14]
 
 exec-ddl
 CREATE POLICY p2 on t1 FOR UPDATE USING (c1 < 100);
@@ -124,15 +124,15 @@ update t1
       │    │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── filters
-      │    │    │         └── c1:7 < 100
+      │    │    │         └── ((c1:7 % 2) = 0) AND (c1:7 < 100)
       │    │    └── filters
       │    │         └── c1:7 > 0
       │    └── projections
       │         └── c1:7 * 2 [as=c1_new:13]
       └── projections
-           └── c1_new:13 < 100 [as=rls:14]
+           └── ((c1_new:13 % 2) = 0) AND (c1_new:13 < 100) [as=rls:14]
 
-# Verify a DELETE won't use policies for SELECT or UPDATE.
+# Verify a DELETE won't use policies for UPDATE.
 
 build
 DELETE FROM T1 WHERE c1 BETWEEN 0 AND 20;
@@ -170,7 +170,7 @@ delete t1
       │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    └── flags: avoid-full-scan
       │    └── filters
-      │         └── (c1:7 >= 8) AND (c1:7 <= 12)
+      │         └── ((c1:7 % 2) = 0) AND ((c1:7 >= 8) AND (c1:7 <= 12))
       └── filters
            └── (c1:7 >= 0) AND (c1:7 <= 20)
 
@@ -357,11 +357,11 @@ update t1
       │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    └── flags: avoid-full-scan
       │    │    └── filters
-      │    │         └── (c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24')
+      │    │         └── (true OR ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2:8 = 'Hello, World') OR (c3:9 = '2024-12-24'))
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── (c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24') [as=rls:14]
+           └── (true OR ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24'))) AND ((c2_new:13 = 'Hello, World') OR (c3:9 = '2024-12-24')) [as=rls:14]
 
 # Verify insert and update code path when no policy applies to role.
 
@@ -417,7 +417,7 @@ update t1
       │    └── projections
       │         └── 'new val' [as=c2_new:13]
       └── projections
-           └── false [as=rls:14]
+           └── true AND false [as=rls:14]
 
 # Verify that an INSERT ... SELECT statement applies the RLS check constraint
 # and uses different policies for the SELECT and INSERT portions of the query.
@@ -474,6 +474,10 @@ DROP POLICY p_insert on t1;
 # the column itself is not being modified.
 
 exec-ddl
+CREATE POLICY p_select on t1 FOR SELECT USING (true);
+----
+
+exec-ddl
 CREATE POLICY p_update on t1 FOR UPDATE USING (c3 in ('2025-01-01', '2024-12-31')) WITH CHECK (c2 like '%');
 ----
 
@@ -496,11 +500,38 @@ update t1
       │    │    │    ├── columns: c1:7 c2:8 c3:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    └── flags: avoid-full-scan
       │    │    └── filters
-      │    │         └── c3:9 IN ('2025-01-01', '2024-12-31')
+      │    │         └── true AND (c3:9 IN ('2025-01-01', '2024-12-31'))
       │    └── projections
       │         └── c1:7 + 1 [as=c1_new:13]
       └── projections
-           └── c2:8 LIKE '%' [as=rls:14]
+           └── true AND (c2:8 LIKE '%') [as=rls:14]
+
+# Show that SELECT with the locking clauses causes the UPDATE policies to be applied.
+build
+SELECT c2 FROM t1 FOR SHARE
+----
+project
+ ├── columns: c2:2
+ └── select
+      ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── scan t1
+      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── locking: for-share
+      └── filters
+           └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
+
+build
+SELECT c3 FROM t1 FOR UPDATE
+----
+project
+ ├── columns: c3:3!null
+ └── select
+      ├── columns: c1:1 c2:2 c3:3!null rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── scan t1
+      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    └── locking: for-update
+      └── filters
+           └── true AND (c3:3 IN ('2025-01-01', '2024-12-31'))
 
 exec-ddl
 DROP POLICY p_update on t1;
@@ -714,13 +745,13 @@ update t1_explicit_pk
       │    │    │    │    ├── columns: c1:6!null c2:7 c3:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── filters
-      │    │    │         └── (((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)
+      │    │    │         └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0))
       │    │    └── filters
       │    │         └── c1:6 = 18
       │    └── projections
       │         └── now() [as=c3_new:11]
       └── projections
-           └── (((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0) [as=rls:12]
+           └── ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) AND ((((((c1:6 = 1) OR (c1:6 = 2)) OR (c1:6 = 3)) OR (c1:6 = 4)) AND ((c1:6 % 2) = 0)) AND ((c1:6 % 3) = 0)) [as=rls:12]
 
 # Show that the owner, who is not admin, is exempt from policies unless FORCE
 # option is set.
@@ -786,13 +817,13 @@ SELECT c1 FROM t1 where C1 between 0 and 9;
 project
  ├── columns: c1:1!null
  └── select
-      ├── columns: c1:1!null c2:2!null c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      ├── columns: c1:1!null c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       ├── select
-      │    ├── columns: c1:1 c2:2!null c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+      │    ├── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       │    ├── scan t1
       │    │    └── columns: c1:1 c2:2 c3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
       │    └── filters
-      │         └── c2:2 != 'out of policy'
+      │         └── true OR (c2:2 != 'out of policy')
       └── filters
            └── (c1:1 >= 0) AND (c1:1 <= 9)
 
