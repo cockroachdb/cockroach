@@ -1754,7 +1754,7 @@ GRANT ALL on rlsInsert TO buck;
 
 # Sanity that the admin can insert anything
 statement ok
-INSERT INTO rlsInsert VALUES (1, 'first', '2012-06-30');
+INSERT INTO rlsInsert VALUES (1, 'first', '2012-06-30'),(0, 'zero', NULL);
 
 statement ok
 SET ROLE buck;
@@ -1769,6 +1769,10 @@ INSERT INTO rlsInsert VALUES (3, 'third', '2012-07-08');
 # Violates policy because date is in 2012.
 statement error pq: new row violates row-level security policy for table "rlsinsert"
 INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert;
+
+# Violates policy because date is NULL
+statement error pq: new row violates row-level security policy for table "rlsinsert"
+INSERT INTO rlsInsert VALUES (4, 'four', NULL)
 
 statement ok
 INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert WHERE c3 not between '2012-01-01' and '2012-12-31';
@@ -1803,6 +1807,7 @@ INSERT INTO rlsInsert VALUES (4, 'fourth', '2022-10-08');
 query I
 select c1 from rlsInsert ORDER BY c1;
 ----
+0
 1
 2
 7
