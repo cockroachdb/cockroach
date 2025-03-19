@@ -6,12 +6,14 @@
 package mma
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
@@ -969,6 +971,8 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 		// replicas.
 		cs.applyChangeLoadDelta(change.replicaChange)
 	}
+	log.Infof(context.Background(), "s%d load %s(%s) adjusted %s", storeMsg.StoreID,
+		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
