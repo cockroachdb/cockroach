@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,12 +187,17 @@ func Subsume(
 	if args.PreserveUnreplicatedLocks {
 		acquisitions := cArgs.EvalCtx.GetConcurrencyManager().OnRangeSubsumeEval()
 		log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
+		statsDelta := enginepb.MVCCStats{}
 		for _, acq := range acquisitions {
 			if err := storage.MVCCAcquireLock(ctx, readWriter,
-				&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, &stats, 0, 0); err != nil {
+				&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, &statsDelta, 0, 0); err != nil {
 				return result.Result{}, err
 			}
 		}
+		// Apply the stats delta to both the stats snapshot we are sending in the
+		// response and to the stats update we expect as part of this proposal.
+		stats.Add(statsDelta)
+		cArgs.Stats.Add(statsDelta)
 	}
 
 	// Now that the range is frozen, collect some information to ship to the LHS
