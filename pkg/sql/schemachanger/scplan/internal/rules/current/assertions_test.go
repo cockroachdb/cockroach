@@ -92,6 +92,13 @@ func checkToAbsentCategories(e scpb.Element) error {
 		if isSimpleDependent(e) {
 			return nil
 		}
+		// TableSchemaLocked is subject to the two version invariant rule, so that
+		// toggling the lock will have descriptor version bumps in between.
+		// However, it is allowed direct transitions from PUBLIC -> ABSENT /
+		// ABSENT -> PUBLIC.
+		if isTableSchemaLocked(e) {
+			return nil
+		}
 	}
 	return errors.Newf("unexpected transition %s -> %s in direction ABSENT", s0, s1)
 }
