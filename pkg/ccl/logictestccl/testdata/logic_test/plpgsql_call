@@ -451,3 +451,45 @@ statement ok
 DROP PROCEDURE p_nested;
 
 subtest end
+
+# Regression test for #143171 - do not drop a CALL statement with unused OUT
+# parameters.
+subtest regression_143171
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE PROCEDURE p_143171(OUT foo INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO xy VALUES (1, 2) RETURNING x INTO foo;
+  END;
+$$;
+
+statement ok
+CREATE PROCEDURE p2_143171() LANGUAGE PLpgSQL AS $$
+  DECLARE foo INT;
+  BEGIN
+    CALL p_143171(foo);
+  END;
+$$;
+
+statement ok
+CALL p2_143171();
+
+# The result of the insert should be visible here.
+query II
+SELECT * FROM xy;
+----
+1  2
+
+statement ok
+DROP PROCEDURE p2_143171;
+
+statement ok
+DROP PROCEDURE p_143171;
+
+statement ok
+DROP TABLE xy;
+
+subtest end
