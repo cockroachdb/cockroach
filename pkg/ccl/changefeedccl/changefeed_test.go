@@ -10794,6 +10794,58 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
+func TestCDCQuerySelectSingleRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	errCh := make(chan error, 1)
+	knobsFn := func(knobs *base.TestingKnobs) {
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		cfKnobs.HandleDistChangefeedError = func(err error) error {
+			errCh <- err
+			return err
+		}
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		db.Exec(t, `INSERT INTO foo VALUES (1), (2), (3);`)
+
+		// initial_scan='only' is not required, but it makes testing this easier.
+		foo := feed(t, f, `CREATE CHANGEFEED WITH initial_scan='only' AS SELECT * FROM foo WHERE key = 1`)
+		defer closeFeed(t, foo)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			assertPayloads(t, foo, []string{`foo: [1]->{"key": 1}`})
+		}()
+
+		select {
+		case err := <-errCh:
+			// Ignore any error after the above assertion completed, because
+			// it's likely just due to feed shutdown.
+			select {
+			case <-done:
+			default:
+				t.Fatalf("unexpected error: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("timed out")
+		case <-done:
+			return
+		}
+	}
+	cdcTest(t, testFn, withKnobsFn(knobsFn))
+}
+
 func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	epochNanos := parseTimeToHLC(t, ts).WallTime
 	now := timeutil.Now()
