@@ -8,7 +8,11 @@ package rangefeed_test
 import (
 	"context"
 	"fmt"
+	"maps"
 	"runtime/pprof"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -39,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -770,36 +775,58 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// otherwise we will trigger processor restarts later and this test can't
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Settings: settings,
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						SmallEngineBlocks: smallEngineBlocks,
-					},
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+		closedts.TargetDuration.Override(ctx, &settings.SV, 100*time.Millisecond)
+
+		tsrv := serverutils.StartServerOnly(t, base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					SmallEngineBlocks: smallEngineBlocks,
 				},
 			},
 		})
-		defer tc.Stopper().Stop(ctx)
-		tsrv := tc.Server(0)
+		defer tsrv.Stopper().Stop(ctx)
 		srv := tsrv.ApplicationLayer()
 		db := srv.DB()
 
-		_, _, err := tc.SplitRange(roachpb.Key("a"))
-		require.NoError(t, err)
-		require.NoError(t, tc.WaitForFullReplication())
-
-		for _, l := range []serverutils.ApplicationLayerInterface{srv, tsrv.SystemLayer()} {
-			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-		}
-
-		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
+		_, _, err := tsrv.SplitRange(roachpb.Key("a"))
 		require.NoError(t, err)
 
 		mkKey := func(s string) string {
 			return string(append(srv.Codec().TenantPrefix(), roachpb.Key(s)...))
 		}
+
+		// events tracks the observed events during a test run.
+		events := &testEvents{
+			t:      t,
+			events: make(map[hlc.Timestamp][]string),
+		}
+
+		// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
+		// to ensure the DeleteRange event is truncated to the registration span.
+		spans := []roachpb.Span{{
+			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
+			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+		}}
+
+		// To coordinate updates that occur after the rangefeed starts, we track a
+		// frontier on the span.
+		checkpointC := make(chan struct{})
+		fr, err := span.MakeFrontier(spans...)
+		require.NoError(t, err)
+		rfFrontier := span.MakeConcurrentFrontier(fr)
+		require.NoError(t, err)
+		waitForFrontier := func(ts hlc.Timestamp) {
+			for {
+				if rfFrontier.Frontier().Less(ts) {
+					<-checkpointC
+				} else {
+					break
+				}
+			}
+		}
+
 		// We lay down a few MVCC range tombstones and points. The first range
 		// tombstone should not be visible, because initial scans do not emit
 		// tombstones, nor should the points covered by it. The second range tombstone
@@ -810,138 +837,105 @@ func TestWithOnDeleteRange(t *testing.T) {
 		require.NoError(t, db.Put(ctx, mkKey("foo"), "covered"))
 		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
 		require.NoError(t, db.Put(ctx, mkKey("foo"), "initial"))
-		rangeFeedTS := db.Clock().Now()
+		rangeFeedTS0 := db.Clock().Now()
 		require.NoError(t, db.Put(ctx, mkKey("covered"), "catchup"))
 		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
 		require.NoError(t, db.Put(ctx, mkKey("foo"), "catchup"))
-
-		// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
-		// to ensure the DeleteRange event is truncated to the registration span.
-		var checkpointOnce sync.Once
-		checkpointC := make(chan struct{})
-		deleteRangeC := make(chan *kvpb.RangeFeedDeleteRange)
-		rowC := make(chan *kvpb.RangeFeedValue)
-
-		spans := []roachpb.Span{{
-			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
-			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
-		}}
-		r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS,
-			func(ctx context.Context, e *kvpb.RangeFeedValue) {
-				select {
-				case rowC <- e:
-				case <-ctx.Done():
-				}
-			},
+		rangeFeedTS1 := db.Clock().Now()
+		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
+		require.NoError(t, err)
+		r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS0,
+			events.appendRow,
 			rangefeed.WithDiff(true),
 			rangefeed.WithInitialScan(nil),
 			rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-				checkpointOnce.Do(func() {
-					close(checkpointC)
-				})
-			}),
-			rangefeed.WithOnDeleteRange(func(ctx context.Context, e *kvpb.RangeFeedDeleteRange) {
+				_, err := rfFrontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+				require.NoError(t, err)
 				select {
-				case deleteRangeC <- e:
-				case <-ctx.Done():
+				case checkpointC <- struct{}{}:
+				default:
 				}
 			}),
+			rangefeed.WithOnDeleteRange(events.appendRangeDelete),
 		)
 		require.NoError(t, err)
 		defer r.Close()
 
-		// Wait for initial scan. We should see the foo=initial point, but not the
-		// range tombstone nor the covered points.
-		select {
-		case e := <-rowC:
-			require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
-			value, err := e.Value.GetBytes()
-			require.NoError(t, err)
-			require.Equal(t, "initial", string(value))
-			prevValue, err := e.PrevValue.GetBytes()
-			require.NoError(t, err)
-			require.Equal(t, "initial", string(prevValue)) // initial scans supply current as prev
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for initial scan event")
-		}
-
-		// Wait for catchup scan. We should see the second range tombstone, truncated
-		// to the rangefeed bounds (c-g), and it should be ordered before the points
-		// covered=catchup and foo=catchup. both points should have a tombstone as the
-		// previous value.
-		select {
-		case e := <-deleteRangeC:
-			require.Equal(t, roachpb.Span{
-				Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
-				EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
-			}, e.Span)
-			require.NotEmpty(t, e.Timestamp)
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for DeleteRange event")
-		}
-
-		select {
-		case e := <-rowC:
-			require.Equal(t, roachpb.Key(mkKey("covered")), e.Key)
-			value, err := e.Value.GetBytes()
-			require.NoError(t, err)
-			require.Equal(t, "catchup", string(value))
-			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
-			require.NoError(t, err)
-			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for foo=catchup event")
-		}
-
-		select {
-		case e := <-rowC:
-			require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
-			value, err := e.Value.GetBytes()
-			require.NoError(t, err)
-			require.Equal(t, "catchup", string(value))
-			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
-			require.NoError(t, err)
-			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for foo=catchup event")
-		}
-
 		// Wait for checkpoint after catchup scan.
-		select {
-		case <-checkpointC:
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for checkpoint")
-		}
-
-		// Send another DeleteRange, and wait for the rangefeed event. This should
-		// be truncated to the rangefeed bounds (c-g).
+		waitForFrontier(rangeFeedTS1)
 		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
-		select {
-		case e := <-deleteRangeC:
-			require.Equal(t, roachpb.Span{
-				Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
-				EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
-			}, e.Span)
-			require.NotEmpty(t, e.Timestamp)
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for DeleteRange event")
-		}
+		waitForFrontier(db.Clock().Now())
+		r.Close()
 
-		// A final point write should be emitted with a tombstone as the previous value.
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "final"))
-		select {
-		case e := <-rowC:
-			require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
-			value, err := e.Value.GetBytes()
-			require.NoError(t, err)
-			require.Equal(t, "final", string(value))
-			prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
-			require.NoError(t, err)
-			require.True(t, prevValue.IsTombstone())
-		case <-time.After(3 * time.Second):
-			require.Fail(t, "timed out waiting for foo=final event")
-		}
+		expected := `
+0
+ Put foo -> initial
+1
+ Put covered -> catchup
+2
+ DeleteRange [c, g)
+3
+ Put foo -> catchup
+4
+ DeleteRange [c, g)
+`
+		require.Equal(t, expected, events.String())
 	})
+}
+
+// testEvents tracks rangefeed events that are observed over a test run. Callers
+// compared their expected event history to the history provided by the String()
+// method.
+type testEvents struct {
+	syncutil.Mutex
+	t      *testing.T
+	events map[hlc.Timestamp][]string
+}
+
+func (events *testEvents) appendRow(_ context.Context, v *kvpb.RangeFeedValue) {
+	events.Lock()
+	defer events.Unlock()
+	valBytes, err := v.Value.GetBytes()
+	require.NoError(events.t, err)
+	noPrefixKey, err := keys.StripTenantPrefix(v.Key)
+	require.NoError(events.t, err)
+	evt := fmt.Sprintf("Put %s -> %s", noPrefixKey, valBytes)
+	events.events[v.Value.Timestamp] = append(events.events[v.Value.Timestamp], evt)
+}
+
+func (events *testEvents) appendRangeDelete(_ context.Context, v *kvpb.RangeFeedDeleteRange) {
+	events.Lock()
+	defer events.Unlock()
+	noPrefixStartKey, err := keys.StripTenantPrefix(v.Span.Key)
+	require.NoError(events.t, err)
+	noPrefixEndKey, err := keys.StripTenantPrefix(v.Span.EndKey)
+	require.NoError(events.t, err)
+	evt := fmt.Sprintf("DeleteRange [%s, %s)", noPrefixStartKey, noPrefixEndKey)
+	events.events[v.Timestamp] = append(events.events[v.Timestamp], evt)
+}
+
+func (events *testEvents) String() string {
+	events.Lock()
+	defer events.Unlock()
+	var buf strings.Builder
+
+	timestamps := slices.SortedFunc(maps.Keys(events.events), func(a hlc.Timestamp, b hlc.Timestamp) int {
+		return a.Compare(b)
+	})
+	fmt.Fprint(&buf, "\n")
+	for i, ts := range timestamps {
+		fmt.Fprintf(&buf, "%d\n", i)
+
+		last := ""
+		sort.Strings(events.events[ts])
+		for _, evt := range events.events[ts] {
+			if evt != last {
+				fmt.Fprintf(&buf, " %s\n", evt)
+			}
+			last = evt
+		}
+	}
+	return buf.String()
 }
 
 // TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced
