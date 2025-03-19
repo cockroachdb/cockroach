@@ -81,7 +81,11 @@ message BackfillerSpec {
   // AddSSTableRequest.SSTTimestampToRequestTimestamp.
   optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
 
-  // NEXTID: 15.
+  // SourceIndexID is the source index that will be used for this backfill. If
+  // the value of 0 is specified then the primary index will be used implicitly.
+  optional uint32 source_index_id = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+
+  // NEXTID: 17.
 }
 
 // JobProgress identifies the job to report progress on. This reporting

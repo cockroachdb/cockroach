@@ -1791,13 +1791,10 @@ func (desc *wrapper) validateTableIndexes(
 			}
 
 			// When newPKColIDs is not empty, it means there is an in-progress `ALTER
-			// PRIMARY KEY`. We don't allow queueing schema changes when there's a
-			// primary key mutation, so it's safe to make the assumption that `Adding`
-			// indexes are associated with the new primary key because they are
-			// rewritten and `Non-adding` indexes should only contain virtual column
-			// from old primary key.
+			// PRIMARY KEY`. Certain schema changes will make the new virtual columns
+			// public earlier than the new primary key, which should be acceptable.
 			isOldPKCol := !idx.Adding() && curPKColIDs.Contains(colID)
-			isNewPKCol := idx.Adding() && newPKColIDs.Contains(colID)
+			isNewPKCol := newPKColIDs.Contains(colID)
 			if newPKColIDs.Len() > 0 && (isOldPKCol || isNewPKCol) {
 				continue
 			}

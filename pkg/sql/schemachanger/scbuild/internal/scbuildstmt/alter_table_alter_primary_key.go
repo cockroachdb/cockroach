@@ -738,6 +738,7 @@ func recreateAllSecondaryIndexes(
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
 		in.secondary.RecreateSourceIndexID = out.indexID()
+		in.secondary.RecreateTargetIndexID = newPrimaryIndex.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
