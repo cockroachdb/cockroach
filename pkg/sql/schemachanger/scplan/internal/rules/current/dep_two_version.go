@@ -116,6 +116,10 @@ func init() {
 		if opgen.HasTransient(el) {
 			addRules(el, scpb.Transient)
 		}
+		if opgen.HasTransientPublic(el) {
+			addRules(el, scpb.TransientPublic)
+		}
+
 		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})
