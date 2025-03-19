@@ -48,6 +48,12 @@ const (
 	// existence before disappearing again. Otherwise, an element whose current
 	// and target statuses are both ABSENT won't experience any state transitions.
 	Transient TargetStatus = TargetStatus(Status_TRANSIENT_ABSENT)
+
+	// TransientPublic is similar to ToPublic in that the element should persist after
+	// the schema change is completed. The element is assumed to exist before the schema
+	// change; therefore, this target status is used to ensure it becomes absent and
+	// becomes public at a later stage.
+	TransientPublic TargetStatus = TargetStatus(Status_TRANSIENT_PUBLIC)
 )
 
 // Status returns the TargetStatus as a Status.
@@ -63,7 +69,7 @@ func (t TargetStatus) Status() Status {
 // InitialStatus returns the initial status for this TargetStatus.
 func (t TargetStatus) InitialStatus() Status {
 	switch t {
-	case ToAbsent:
+	case ToAbsent, TransientPublic:
 		return Status_PUBLIC
 	case ToPublic, Transient:
 		return Status_ABSENT
@@ -81,6 +87,8 @@ func AsTargetStatus(s Status) TargetStatus {
 		return ToPublic
 	case Status_TRANSIENT_ABSENT:
 		return Transient
+	case Status_TRANSIENT_PUBLIC:
+		return TransientPublic
 	default:
 		return InvalidTarget
 	}

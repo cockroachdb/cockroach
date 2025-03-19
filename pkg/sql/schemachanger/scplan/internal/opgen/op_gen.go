@@ -47,6 +47,12 @@ func HasTransient(elType scpb.Element) bool {
 	return hasTarget(elType, scpb.Transient)
 }
 
+// HasTransientPublic returns true if the element of this type
+// has TransientPublic transitions.
+func HasTransientPublic(elType scpb.Element) bool {
+	return hasTarget(elType, scpb.TransientPublic)
+}
+
 // HasPublic returns true if the element of this type has
 // ToPublic transitions
 func HasPublic(elType scpb.Element) bool {

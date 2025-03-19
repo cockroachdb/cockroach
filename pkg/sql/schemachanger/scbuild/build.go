@@ -450,6 +450,10 @@ func (b buildCtx) AddTransient(element scpb.Element) {
 	b.Ensure(element, scpb.Transient, b.TargetMetadata())
 }
 
+func (b buildCtx) DropTransient(element scpb.Element) {
+	b.Ensure(element, scpb.TransientPublic, b.TargetMetadata())
+}
+
 // Drop implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Drop(element scpb.Element) {
 	b.Ensure(element, scpb.ToAbsent, b.TargetMetadata())
