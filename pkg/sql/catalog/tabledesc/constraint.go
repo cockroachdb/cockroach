@@ -81,6 +81,14 @@ func (c checkConstraint) IsNotNullColumnConstraint() bool {
 // IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
 func (c checkConstraint) IsRLSConstraint() bool { return false }
 
+// IsCheckFailed implements the catalog.CheckConstraintValidator interface.
+func (c checkConstraint) IsCheckFailed(boolVal, isNull bool) bool {
+	// This is a standard CHECK constraint.
+	// The constraint fails only if the check explicitly evaluates to FALSE.
+	// If the result is NULL (UNKNOWN), the constraint does not fail.
+	return !boolVal && !isNull
+}
+
 // IsHashShardingConstraint implements the catalog.CheckConstraint interface.
 func (c checkConstraint) IsHashShardingConstraint() bool {
 	return c.desc.FromHashShardedColumn
@@ -140,6 +148,22 @@ func (r rlsSyntheticCheckConstraint) GetExpr() string {
 
 // IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
 func (r rlsSyntheticCheckConstraint) IsRLSConstraint() bool { return true }
+
+// IsCheckFailed implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) IsCheckFailed(boolVal, isNull bool) bool {
+	// The WITH CHECK expression for RLS differs from a standard CHECK constraint.
+	//
+	// A standard CHECK constraint fails only if the result is explicitly FALSE.
+	// If the result is NULL (i.e., unknown), the constraint does not fail.
+	//
+	// However, WITH CHECK expressions for RLS enforce stricter validation:
+	// - The check fails if the result is FALSE or NULL.
+	// - The check passes only if the result is explicitly TRUE.
+	//
+	// This behaviour ensures that unknown (NULL) values do not bypass row-level
+	// security policies, aligning with postgres' implementation.
+	return !boolVal || isNull
+}
 
 // GetName implements the catalog.CheckConstraintValidator interface.
 func (r rlsSyntheticCheckConstraint) GetName() string {
