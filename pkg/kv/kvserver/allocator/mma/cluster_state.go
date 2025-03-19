@@ -322,11 +322,16 @@ func (prc PendingRangeChange) String() string {
 // previous state and next state.
 func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("r%v=[", prc.RangeID)
+	found := false
 	if prc.IsTransferLease() {
 		w.Printf("transfer_to=%v", prc.LeaseTransferTarget())
-	} else if prc.IsChangeReplicas() {
+		found = true
+	}
+	if prc.IsChangeReplicas() {
 		w.Printf("change_replicas=%v", prc.ReplicationChanges())
-	} else {
+		found = true
+	}
+	if !found {
 		panic("unknown change type")
 	}
 	w.Print("]")
