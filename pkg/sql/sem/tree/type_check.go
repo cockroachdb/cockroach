@@ -3522,7 +3522,7 @@ func getMostSignificantOverload(
 		for k, idx := range oImpls {
 			candidate := overloads[idx]
 			srcParams := candidate.params()
-			matches := srcParams.MatchIdentical(allArgTypes)
+			matches := srcParams.MatchOid(allArgTypes)
 			if !matches {
 				routineType, outParamOrdinals, _ := candidate.outParamInfo()
 				defaultExprs := candidate.defaultExprs()
@@ -3565,7 +3565,7 @@ func getMostSignificantOverload(
 						ovInputTypes = ovInputTypes[:len(ovInputTypes)-numOmittedExprs]
 					}
 				}
-				matches = ovInputTypes.MatchIdentical(inputTypes)
+				matches = ovInputTypes.MatchOid(inputTypes)
 			}
 			if matches {
 				if foundMatch {
