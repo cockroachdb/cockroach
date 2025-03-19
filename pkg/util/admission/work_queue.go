@@ -527,7 +527,20 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 		return
 	}
 	q.mu.closedEpochThreshold = epoch
-	doLog := q.logThreshold.ShouldLog()
+	initializedDoLog := false
+	doLog := false
+	// doLogFunc is called inside the for loop, whenever a caller has something
+	// interesting to log. It delays sampling logThreshold until it is actually
+	// needed. Once logThreshold is sampled, it is not sampled again.
+	doLogFunc := func() bool {
+		if initializedDoLog {
+			return doLog
+		}
+		initializedDoLog = true
+		// Log only if epochLIFOEnabled.
+		doLog = epochLIFOEnabled && q.logThreshold.ShouldLog()
+		return doLog
+	}
 	for _, tenant := range q.mu.tenants {
 		prevThreshold := tenant.fifoPriorityThreshold
 		tenant.fifoPriorityThreshold =
@@ -536,7 +549,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 		if !epochLIFOEnabled {
 			tenant.fifoPriorityThreshold = int(admissionpb.LowPri)
 		}
-		if tenant.fifoPriorityThreshold != prevThreshold || doLog {
+		if tenant.fifoPriorityThreshold != prevThreshold && doLogFunc() {
 			logVerb := redact.SafeString("is")
 			if tenant.fifoPriorityThreshold != prevThreshold {
 				logVerb = "changed to"
