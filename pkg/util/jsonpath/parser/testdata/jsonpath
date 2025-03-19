@@ -454,6 +454,11 @@ DETAIL: source SQL:
 !null
  ^
 
+parse
+$.a ? (@.b like_regex "^[aeiou]")
+----
+$."a"?((@."b" like_regex "^[aeiou]")) -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

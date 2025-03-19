@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
@@ -69,7 +70,7 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		res, err := ctx.evalComparison(op, jsonValue, true /* unwrapRight */)
+		res, err := ctx.evalComparison(op, jsonValue)
 		if err != nil {
 			return convertFromBool(jsonpathBoolUnknown), err
 		}
@@ -77,9 +78,53 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpAdd, jsonpath.OpSub, jsonpath.OpMult,
 		jsonpath.OpDiv, jsonpath.OpMod:
 		return ctx.evalArithmetic(op, jsonValue)
+	case jsonpath.OpLikeRegex:
+		res, err := ctx.evalRegex(op, jsonValue)
+		if err != nil {
+			return convertFromBool(jsonpathBoolUnknown), err
+		}
+		return convertFromBool(res), nil
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func stripQuotes(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+func (ctx *jsonpathCtx) evalRegex(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if len(l) != 1 {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a single string")
+	}
+	if l[0].Type() != json.StringJSONType {
+		return jsonpathBoolUnknown, nil
+	}
+	text := stripQuotes(l[0].String())
+
+	regex := op.Right.(jsonpath.Regex)
+	regex.Regex, err = eval.UnescapePattern(regex.Regex, `\`, false)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	r, err := ctx.evalCtx.ReCache.GetRegexp(regex)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	res := r.MatchString(text)
+	if !res {
+		return jsonpathBoolFalse, nil
+	}
+	return jsonpathBoolTrue, nil
 }
 
 func (ctx *jsonpathCtx) evalLogical(
@@ -143,17 +188,14 @@ func (ctx *jsonpathCtx) evalLogical(
 // right paths satisfy the condition. In strict mode, even if a pair has been
 // found, all pairs need to be checked for errors.
 func (ctx *jsonpathCtx) evalComparison(
-	op jsonpath.Operation, jsonValue json.JSON, unwrapRight bool,
+	op jsonpath.Operation, jsonValue json.JSON,
 ) (jsonpathBool, error) {
-	// The left argument results are always auto-unwrapped.
+	// The left and right argument results are always auto-unwrapped.
 	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
-	// The right argument results are conditionally unwrapped. Currently, it is
-	// always unwrapped, but in the future for operations like like_regex, we
-	// don't want to unwrap the right argument.
-	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
+	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, true /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}

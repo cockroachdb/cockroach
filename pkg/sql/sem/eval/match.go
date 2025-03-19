@@ -205,7 +205,7 @@ func optimizedLikeFunc(
 			// This is required since we do direct string
 			// comparison.
 			var err error
-			if pattern, err = unescapePattern(pattern, string(escape), true /* emitEscapeCharacterLastError */); err != nil {
+			if pattern, err = UnescapePattern(pattern, string(escape), true /* emitEscapeCharacterLastError */); err != nil {
 				return nil, err
 			}
 			switch {
@@ -322,7 +322,7 @@ func LikeEscape(pattern string) (string, error) {
 	return re, err
 }
 
-// unescapePattern unescapes a pattern for a given escape token.
+// UnescapePattern unescapes a pattern for a given escape token.
 // It handles escaped escape tokens properly by maintaining them as the escape
 // token in the return string.
 // For example, suppose we have escape token `\` (e.g. `B` is escaped in
@@ -340,7 +340,7 @@ func LikeEscape(pattern string) (string, error) {
 //
 //	`\\` --> ``
 //	`\\\\` --> `\\`
-func unescapePattern(
+func UnescapePattern(
 	pattern, escapeToken string, emitEscapeCharacterLastError bool,
 ) (string, error) {
 	escapedEscapeToken := escapeToken + escapeToken
@@ -758,7 +758,7 @@ func (k likeKey) patternNoAnchor() (string, error) {
 		// an actual escape character is handled in replaceCustomEscape. For example, with '-' as
 		// the escape character on pattern 'abc\\' we do not want to return an error 'pattern ends
 		// with escape character' because '\\' is not an escape character in this case.
-		if pattern, err = unescapePattern(
+		if pattern, err = UnescapePattern(
 			pattern,
 			`\\`,
 			k.escape == '\\', /* emitEscapeCharacterLastError */
