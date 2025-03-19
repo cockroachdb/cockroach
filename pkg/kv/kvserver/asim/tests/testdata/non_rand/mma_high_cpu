@@ -13,10 +13,6 @@ setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false
 gen_load rate=7000 rw_ratio=0.95 access_skew=true min_block=128 max_block=256
 ----
 
-# TODO(kvoli): We are now generating changes, so this test is failing. Investigate:
-#
-# panic: programming error: unexpected multiple snapshot targets for replica change (+voter=[n1,s1 n7,s7] +non-voter=[]) changes=[{ADD_VOTER n1,s1} {ADD_VOTER n7,s7}] [recovered]
-
 eval duration=5m samples=1 seed=42
 ----
 OK
