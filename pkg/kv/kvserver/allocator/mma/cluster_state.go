@@ -284,6 +284,9 @@ func makeRebalanceReplicaChanges(
 			remove = replica
 		}
 	}
+	if remove == (StoreIDAndReplicaState{}) {
+		log.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
+	}
 
 	addReplicaChange := makeAddReplicaChange(rangeID, rLoad, remove.ReplicaType.ReplicaType, addTarget)
 	removeReplicaChange := makeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
@@ -1008,7 +1011,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
 		}
-		rs.replicas = rangeMsg.Replicas
+		rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
 		for _, replica := range rangeMsg.Replicas {
 			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
 		}
