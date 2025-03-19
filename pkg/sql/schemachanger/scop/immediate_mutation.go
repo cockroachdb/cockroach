@@ -1148,3 +1148,22 @@ type ForcedRowLevelSecurityMode struct {
 	TableID descpb.ID
 	Forced  bool
 }
+
+// MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated
+// after a primary key swap as invisible. This is to prevent their use before
+// primary key swap is complete.
+type MarkRecreatedIndexAsInvisible struct {
+	immediateMutationOp
+	TableID              descpb.ID
+	IndexID              descpb.IndexID
+	TargetPrimaryIndexID descpb.IndexID
+}
+
+// MarkRecreatedIndexesAsVisible is used to mark secondary indexes recreated
+// after a primary key swap as visible. This is to allow their use after
+// primary key swap is complete.
+type MarkRecreatedIndexesAsVisible struct {
+	immediateMutationOp
+	TableID           descpb.ID
+	IndexVisibilities map[descpb.IndexID]float64
+}

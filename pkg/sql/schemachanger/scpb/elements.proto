@@ -346,6 +346,10 @@ message SecondaryIndex {
   // secondary index that we are trying to replace (this
   // is done for primary key changes).
   uint32 recreate_source_id = 4 [(gogoproto.customname) = "RecreateSourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // If an index is being recreated, this is the final primary
+  // index that will make it usable (i.e. the columns required
+  // to back this index will be public in this index)
+  uint32 recreate_target_id = 5 [(gogoproto.customname) = "RecreateTargetIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message TemporaryIndex {

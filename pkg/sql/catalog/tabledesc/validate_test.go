@@ -1949,7 +1949,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 3,
 				Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			}},
-		{err: `index "sec" cannot store virtual column "c3"`,
+		{err: ``,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,

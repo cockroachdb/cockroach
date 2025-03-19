@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -138,11 +137,6 @@ func TestExplainGist(t *testing.T) {
 
 	skip.UnderDeadlock(t, "the test is too slow")
 	skip.UnderRace(t, "the test is too slow")
-
-	// Use the release-build panic-catching behavior instead of the
-	// crdb_test-build behavior. This is needed so that some known bugs like
-	// #119045 and #133129 don't result in a test failure.
-	defer colexecerror.ProductionBehaviorForTests()()
 
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
