@@ -171,6 +171,19 @@ oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithch
 7    policy7  110       r       true           {0}            NULL     NULL
 8    policy8  110       *       true           {0,835509264}  NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab1
+----
+name     cmd     type         roles                using_expr  with_check_expr
+policy8  ALL     permissive   {papa_roach,public}  ·           ·
+policy1  ALL     permissive   {public}             ·           ·
+policy2  ALL     restrictive  {public}             ·           ·
+policy3  ALL     permissive   {public}             ·           ·
+policy4  INSERT  permissive   {public}             ·           ·
+policy5  UPDATE  permissive   {public}             ·           ·
+policy6  DELETE  permissive   {public}             ·           ·
+policy7  SELECT  permissive   {public}             ·           ·
+
 statement ok
 CREATE TABLE multi_pol_tab2 (c1 INT NOT NULL PRIMARY KEY)
 
@@ -216,6 +229,19 @@ oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
 1    policy11  112       *       true           {0}       NULL     NULL
 2    policy12  112       *       true           {0}       NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab2
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy9   ALL  permissive  {public}  ·           ·
+policy10  ALL  permissive  {public}  ·           ·
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR public.multi_pol_tab3
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy11  ALL  permissive  {public}  ·           ·
+policy12  ALL  permissive  {public}  ·           ·
 
 statement ok
 DROP POLICY "policy1" ON multi_pol_tab1
@@ -398,6 +424,11 @@ select polwithcheck from pg_catalog.pg_policy
 ----
 c1::public.greeting = 'hi':::public.greeting
 
+query T rowsort
+select with_check_expr from [SHOW POLICIES FOR z1];
+----
+c1::public.greeting = 'hi':::public.greeting
+
 statement error pq: cannot drop type "greeting" because other objects \(\[db1\.public\.z1\]\) still depend on it
 DROP TYPE greeting;
 
@@ -462,6 +493,11 @@ CREATE POLICY pol1 on funcref USING (is_valid(c1)) WITH CHECK (is_valid(c1));
 
 query T
 select polqual from pg_catalog.pg_policy
+----
+public.is_valid(c1)
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR funcref];
 ----
 public.is_valid(c1)
 
@@ -825,6 +861,11 @@ GRANT USAGE ON seq1 TO buck;
 
 statement ok
 create policy restrict_select on bbteams for select to buck,current_user,session_user using (is_valid(league) and nextval('seq1') < 1000);
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR bbteams];
+----
+public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8)
 
 # confirm admin can see all
 query TT
@@ -2094,6 +2135,25 @@ CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
 statement ok
 CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
 
+query TTTTT colnames,rowsort
+select name, cmd, type, roles, with_check_expr from [SHOW POLICIES FOR multip];
+----
+name  cmd  type         roles     with_check_expr
+and1  ALL  restrictive  {public}  ·
+and2  ALL  restrictive  {public}  ·
+or1   ALL  permissive   {public}  ·
+or2   ALL  permissive   {public}  ·
+or3   ALL  permissive   {public}  ·
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR multip];
+----
+value NOT LIKE '%sensitive%':::STRING
+value NOT LIKE '%confidential%':::STRING
+key = 1:::INT8
+key = 2:::INT8
+key = 3:::INT8
+
 statement ok
 SET ROLE multi_user;
 
@@ -2127,7 +2187,7 @@ INSERT INTO multip VALUES (4, 'confidential');
 statement ok
 SET ROLE root;
 
-query IT
+query IT rowsort
 select * FROM multip ORDER BY key, value;
 ----
 1  okay
@@ -2139,6 +2199,38 @@ DROP TABLE multip;
 
 statement ok
 DROP USER multi_user;
+
+subtest show_policies_edge_cases
+
+statement error pq: relation "nonexistent_table" does not exist
+SHOW POLICIES FOR nonexistent_table;
+
+statement ok
+CREATE TABLE rls_disabled (id INT PRIMARY KEY);
+
+statement ok
+CREATE POLICY p1 ON rls_disabled USING (true);
+
+statement ok
+ALTER TABLE rls_disabled DISABLE ROW LEVEL SECURITY;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR rls_disabled;
+----
+name  cmd  type        roles     using_expr  with_check_expr
+p1    ALL  permissive  {public}  true        ·
+
+# Test case 3: Show policies for a table with no policies
+statement ok
+CREATE TABLE no_policies (id INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE no_policies ENABLE ROW LEVEL SECURITY;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR no_policies;
+----
+name  cmd  type  roles  using_expr  with_check_expr
 
 # This is another test for multiple policies. But the focus here is how multiple
 # policies are applied when they apply for other commands. For example, having
