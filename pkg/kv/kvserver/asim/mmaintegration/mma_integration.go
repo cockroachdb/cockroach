@@ -20,7 +20,7 @@ func MakeStoreLeaseholderMsgFromState(
 ) mma.StoreLeaseholderMsg {
 	var rangeMessages []mma.RangeMsg
 	for _, replica := range s.Replicas(storeID) {
-		if replica.HoldsLease() {
+		if !replica.HoldsLease() {
 			// We only want to send messages for ranges that have a leaseholder
 			// replica on this store.
 			continue
@@ -46,17 +46,17 @@ func MakeStoreLeaseholderMsgFromState(
 			}
 			if rs.StoreID == roachpb.StoreID(storeID) {
 				if !rs.IsLeaseholder {
-					// TODO: change to panic once fixed.
-					fmt.Printf("simulator state inconsistent for r%d when constructing leaseholder msg for s%d: "+
-						"local store is not leaseholder\n",
-						replica.Range(), storeID)
+					panic(fmt.Sprintf(
+						"simulator state inconsistent for r%d when constructing "+
+							"leaseholder msg for s%d: local store is not leaseholder",
+						replica.Range(), storeID))
 				}
 			}
 			if rs.IsLeaseholder && rs.StoreID != roachpb.StoreID(storeID) {
-				// TODO: change to panic once fixed.
-				fmt.Printf("simulator state inconsistent for r%d when constructing leaseholder msg for s%d: "+
-					"remote store s%d is leaseholder\n",
-					replica.Range(), storeID, rs.StoreID)
+				panic(fmt.Sprintf(
+					"simulator state inconsistent for r%d when constructing leaseholder "+
+						"msg for s%d: remote store s%d is leaseholder",
+					replica.Range(), storeID, rs.StoreID))
 			}
 			replicas = append(replicas, rs)
 		}
