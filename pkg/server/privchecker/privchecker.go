@@ -88,36 +88,6 @@ func (c *adminPrivilegeChecker) RequireViewActivityOrViewActivityRedactedPermiss
 		roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 }
 
-// RequireViewClusterSettingOrModifyClusterSettingPermission's error return is a gRPC error.
-func (c *adminPrivilegeChecker) RequireViewClusterSettingOrModifyClusterSettingPermission(
-	ctx context.Context,
-) (err error) {
-	userName, isAdmin, err := c.GetUserAndRole(ctx)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if isAdmin {
-		return nil
-	}
-	hasView, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWCLUSTERSETTING)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if hasView {
-		return nil
-	}
-	hasModify, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.MODIFYCLUSTERSETTING)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if hasModify {
-		return nil
-	}
-	return grpcstatus.Errorf(
-		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
-		privilege.VIEWCLUSTERSETTING.DisplayName(), privilege.MODIFYCLUSTERSETTING.DisplayName())
-}
-
 // RequireViewActivityAndNoViewActivityRedactedPermission requires
 // that the user have the VIEWACTIVITY role, but does not have the
 // VIEWACTIVITYREDACTED role. This function's error return is a gRPC
