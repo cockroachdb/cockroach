@@ -31,7 +31,7 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 	b.IncrementSchemaChangeCreateCounter("policy")
 
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{
-		RequiredPrivilege: privilege.CREATE,
+		RequireOwnership: true,
 	})
 	panicIfSchemaChangeIsDisallowed(tableElems, n)
 	tbl := tableElems.FilterTable().MustGetOneElement()
