@@ -279,6 +279,7 @@ go_test(
         "client_decommission_test.go",
         "client_invalidsplit_test.go",
         "client_lease_test.go",
+        "client_lock_table_test.go",
         "client_manual_proposal_test.go",
         "client_merge_test.go",
         "client_metrics_test.go",

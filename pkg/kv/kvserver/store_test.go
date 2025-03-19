@@ -2174,7 +2174,7 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 				req, resp := ba.Requests[i].GetInner(), ru.GetInner()
 				require.NoError(t, kvpb.ResponseKeyIterate(req, resp, func(k roachpb.Key) {
 					respKeys = append(respKeys, string(k))
-				}))
+				}, false /* includeLockedNonExisting */))
 			}
 			sort.Strings(respKeys) // normalize reverse scan
 			require.Equal(t, []string{"a", "c"}, respKeys)
