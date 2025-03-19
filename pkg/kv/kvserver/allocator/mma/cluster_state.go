@@ -144,16 +144,36 @@ type replicaChange struct {
 	next ReplicaIDAndType
 }
 
+func (rc replicaChange) String() string {
+	return redact.StringWithoutMarkers(rc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rc replicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%v %v (%v)->(%v)", rc.rangeID, rc.target, rc.prev, rc.next)
+}
+
+// isRemoval returns true if the change is a removal of a replica.
 func (rc replicaChange) isRemoval() bool {
 	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID == noReplicaID
 }
 
+// isAddition returns true if the change is an addition of a replica.
 func (rc replicaChange) isAddition() bool {
 	return rc.prev.ReplicaID == noReplicaID && rc.next.ReplicaID == unknownReplicaID
 }
 
+// isUpdate returns true if the change is an update to the replica type or
+// leaseholder status. This includes promotion/demotion changes.
 func (rc replicaChange) isUpdate() bool {
 	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0
+}
+
+// isPromoDemo returns true if the change is a promotion or demotion of a
+// replica.
+func (rc replicaChange) isPromoDemo() bool {
+	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0 &&
+		rc.prev.ReplicaType.ReplicaType != rc.next.ReplicaType.ReplicaType
 }
 
 func makeLeaseTransferChanges(
@@ -337,6 +357,13 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	if !found {
 		panic("unknown change type")
 	}
+	w.Print(" cids=")
+	for i, c := range prc.pendingReplicaChanges {
+		if i > 0 {
+			w.Print(",")
+		}
+		w.Printf("%v", c.changeID)
+	}
 	w.Print("]")
 }
 
@@ -344,7 +371,7 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 // replicas operation.
 func (prc PendingRangeChange) IsChangeReplicas() bool {
 	for _, c := range prc.pendingReplicaChanges {
-		if c.isAddition() || c.isRemoval() || c.isUpdate() {
+		if c.isAddition() || c.isRemoval() || c.isPromoDemo() {
 			continue
 		} else {
 			return false
@@ -361,6 +388,11 @@ func (prc PendingRangeChange) IsTransferLease() bool {
 	}
 	var foundAddLease, foundRemoveLease bool
 	for _, c := range prc.pendingReplicaChanges {
+		if c.isAddition() || c.isRemoval() || c.isPromoDemo() {
+			// Any changes to the replica type or replicaID are not lease transfers,
+			// since they require a replication change.
+			return false
+		}
 		if c.prev.IsLeaseholder && !c.next.IsLeaseholder {
 			foundRemoveLease = true
 		} else if !c.prev.IsLeaseholder && c.next.IsLeaseholder {
@@ -398,7 +430,7 @@ func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
 // lease operation.
 func (prc PendingRangeChange) LeaseTransferTarget() roachpb.StoreID {
 	if !prc.IsTransferLease() {
-		panic("pendingRangeChange is not a lease transfer ")
+		panic("pendingRangeChange is not a lease transfer")
 	}
 	for _, c := range prc.pendingReplicaChanges {
 		if !c.prev.IsLeaseholder && c.next.IsLeaseholder {
