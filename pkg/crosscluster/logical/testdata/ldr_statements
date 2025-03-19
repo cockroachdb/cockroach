@@ -1,0 +1,153 @@
+exec
+CREATE TABLE basic_table (
+  id INT PRIMARY KEY,
+  name STRING,
+  value INT,
+  data BYTES
+);
+----
+ok
+
+show-insert table=basic_table
+----
+INSERT INTO [104 AS replication_target](id, name, value, data) VALUES ($1::INT8, $2::STRING, $3::INT8, $4::BYTES)
+
+show-update table=basic_table
+----
+UPDATE [104 AS replication_target] SET id = $5::INT8, name = $6::STRING, value = $7::INT8, data = $8::BYTES WHERE (((id IS NOT DISTINCT FROM $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES)
+
+show-delete table=basic_table
+----
+DELETE FROM [104 AS replication_target] WHERE (((id IS NOT DISTINCT FROM $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES)
+
+exec
+CREATE TYPE status AS ENUM ('pending', 'active', 'completed', 'cancelled');
+----
+ok
+
+# Create a table that uses a user defined type.
+exec
+CREATE TABLE tasks (
+  id INT PRIMARY KEY,
+  title STRING NOT NULL,
+  description STRING,
+  status status NOT NULL DEFAULT 'pending',
+  priority INT,
+  created_at TIMESTAMP DEFAULT now()
+);
+----
+ok
+
+show-insert table=tasks
+----
+INSERT INTO [107 AS replication_target](id, title, description, status, priority, created_at) VALUES ($1::INT8, $2::STRING, $3::STRING, $4::@100105, $5::INT8, $6::TIMESTAMP)
+
+show-update table=tasks
+----
+UPDATE [107 AS replication_target] SET id = $7::INT8, title = $8::STRING, description = $9::STRING, status = $10::@100105, priority = $11::INT8, created_at = $12::TIMESTAMP WHERE (((((id IS NOT DISTINCT FROM $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP)
+
+show-delete table=tasks
+----
+DELETE FROM [107 AS replication_target] WHERE (((((id IS NOT DISTINCT FROM $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP)
+
+# Test a table with a stored and virtual computed column. Note that the
+# computed columns are not included in the INSERT/UPDATE/DELETE statements.
+exec
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  name STRING NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  quantity INT NOT NULL,
+  total_value DECIMAL(10,2) GENERATED ALWAYS AS (unit_price * quantity) STORED,
+  discount_price DECIMAL(10,2) GENERATED ALWAYS AS (unit_price * 0.9) VIRTUAL,
+  last_updated TIMESTAMP DEFAULT now()
+);
+----
+ok
+
+show-insert table=products
+----
+INSERT INTO [108 AS replication_target](id, name, unit_price, quantity, last_updated) VALUES ($1::INT8, $2::STRING, $3::DECIMAL(10,2), $4::INT8, $5::TIMESTAMP)
+
+show-update table=products
+----
+UPDATE [108 AS replication_target] SET id = $6::INT8, name = $7::STRING, unit_price = $8::DECIMAL(10,2), quantity = $9::INT8, last_updated = $10::TIMESTAMP WHERE ((((id IS NOT DISTINCT FROM $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $5::TIMESTAMP)
+
+show-delete table=products
+----
+DELETE FROM [108 AS replication_target] WHERE ((((id IS NOT DISTINCT FROM $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $5::TIMESTAMP)
+
+# Test a table with an expression, inverted index, and partial index. The
+# indexes are not expected to impact the INSERT/UPDATE/DELETE statements.
+exec
+CREATE TABLE employees (
+  id INT PRIMARY KEY,
+  first_name STRING NOT NULL,
+  last_name STRING NOT NULL,
+  email STRING UNIQUE,
+  salary DECIMAL(12,2) NOT NULL,
+  department STRING,
+  hire_date DATE NOT NULL
+);
+----
+ok
+
+# Create an expression index on the table.
+exec
+CREATE INDEX idx_employees_full_name ON employees ((first_name || ' ' || last_name));
+----
+ok
+
+# Create an inverted index on the department column.
+exec
+CREATE INVERTED INDEX idx_employees_department ON employees(department gin_trgm_ops);
+----
+ok
+
+# Create a partial index for high-salary employees.
+exec
+CREATE INDEX idx_employees_high_salary ON employees(salary) WHERE salary > 100000;
+----
+ok
+
+show-insert table=employees
+----
+INSERT INTO [109 AS replication_target](id, first_name, last_name, email, salary, department, hire_date) VALUES ($1::INT8, $2::STRING, $3::STRING, $4::STRING, $5::DECIMAL(12,2), $6::STRING, $7::DATE)
+
+show-update table=employees
+----
+UPDATE [109 AS replication_target] SET id = $8::INT8, first_name = $9::STRING, last_name = $10::STRING, email = $11::STRING, salary = $12::DECIMAL(12,2), department = $13::STRING, hire_date = $14::DATE WHERE ((((((id IS NOT DISTINCT FROM $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE)
+
+show-delete table=employees
+----
+DELETE FROM [109 AS replication_target] WHERE ((((((id IS NOT DISTINCT FROM $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE)
+
+exec
+ALTER DATABASE defaultdb PRIMARY REGION "us-east1";
+----
+ok
+
+# Test a REGIONAL BY ROW table
+exec
+CREATE TABLE user_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id INT NOT NULL,
+  event_type STRING NOT NULL,
+  event_data JSONB,
+  created_at TIMESTAMP DEFAULT now(),
+  region crdb_internal_region NOT NULL DEFAULT 'us-east1'
+) LOCALITY REGIONAL BY ROW AS region;
+----
+ok
+
+show-insert table=user_events
+----
+INSERT INTO [112 AS replication_target](id, user_id, event_type, event_data, created_at, region) VALUES ($1::UUID, $2::INT8, $3::STRING, $4::JSONB, $5::TIMESTAMP, $6::@100110)
+
+show-update table=user_events
+----
+UPDATE [112 AS replication_target] SET id = $7::UUID, user_id = $8::INT8, event_type = $9::STRING, event_data = $10::JSONB, created_at = $11::TIMESTAMP, region = $12::@100110 WHERE (((((id IS NOT DISTINCT FROM $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region IS NOT DISTINCT FROM $6::@100110)
+
+show-delete table=user_events
+----
+DELETE FROM [112 AS replication_target] WHERE (((((id IS NOT DISTINCT FROM $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region IS NOT DISTINCT FROM $6::@100110)
