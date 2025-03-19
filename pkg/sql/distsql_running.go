@@ -751,8 +751,10 @@ func (dsp *DistSQLPlanner) Run(
 	// then we are ignorant of the details of the execution plan, so we choose
 	// to be on the safe side and mark 'noMutations' as 'false'.
 	noMutations := planCtx.planner != nil && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+	log.VEventf(ctx, 3, "noMutations = %t", noMutations)
 
 	if txn == nil {
+		log.VEventf(ctx, 3, "nil txn")
 		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
@@ -795,6 +797,7 @@ func (dsp *DistSQLPlanner) Run(
 			// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
 			// txns and remove this check. See #94290.
 			containsLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
+			log.VEventf(ctx, 3, "containsLocking = %t", containsLocking)
 
 			// We also currently disable the usage of the Streamer API whenever
 			// we have a wrapped planNode. This is done to prevent scenarios
@@ -809,8 +812,15 @@ func (dsp *DistSQLPlanner) Run(
 			// cases.
 			mustUseRootTxn := func() bool {
 				for _, p := range plan.Processors {
-					if p.Spec.Core.LocalPlanNode != nil {
-						return true
+					if n := p.Spec.Core.LocalPlanNode; n != nil {
+						switch n.Name {
+						case "scan buffer", "buffer":
+							// scanBufferNode and bufferNode don't interact with
+							// txns directly, so they are safe.
+						default:
+							log.VEventf(ctx, 3, "must use root txn due to %q wrapped planNode", n.Name)
+							return true
+						}
 					}
 				}
 				return false
