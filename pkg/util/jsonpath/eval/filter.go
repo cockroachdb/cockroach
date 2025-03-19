@@ -8,33 +8,23 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
-	"github.com/cockroachdb/errors"
 )
 
-func (ctx *jsonpathCtx) evalFilter(p jsonpath.Filter, current []json.JSON) ([]json.JSON, error) {
-	// TODO(normanchenn): clean up.
-	var unwrapped []json.JSON
-	for _, j := range current {
-		unwrapped = append(unwrapped, ctx.unwrap(j)...)
+func (ctx *jsonpathCtx) evalFilter(
+	p jsonpath.Filter, current json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	if unwrap && current.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(p, current, false /* unwrapNext */)
 	}
-	current = unwrapped
-	var filtered []json.JSON
-	// unwrap before
-	for _, j := range current {
-		results, err := ctx.eval(p.Condition, []json.JSON{j})
-		if err != nil {
-			// Postgres doesn't error when there's a structural error within
-			// filter condition, and will return nothing instead.
-			return []json.JSON{}, nil //nolint:returnerrcheck
-		}
-		if len(results) != 1 || !isBool(results[0]) {
-			return nil, errors.New("filter condition must evaluate to a boolean")
-		}
-
-		condition, _ := results[0].AsBool()
-		if condition {
-			filtered = append(filtered, j)
-		}
+	results, err := ctx.eval(p.Condition, current, !ctx.strict /* unwrap */)
+	if err != nil || len(results) != 1 || !isBool(results[0]) {
+		// Postgres doesn't error when there's a structure error within filter
+		// conditions, and will return nothing instead.
+		return []json.JSON{}, nil //nolint:returnerrcheck
 	}
-	return filtered, nil
+	condition, _ := results[0].AsBool()
+	if condition {
+		return []json.JSON{current}, nil
+	}
+	return []json.JSON{}, nil
 }
