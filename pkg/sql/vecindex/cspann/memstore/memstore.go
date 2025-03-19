@@ -331,7 +331,6 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 
 	// Update incoming stats with global stats.
 	stats.NumPartitions = s.mu.stats.NumPartitions
-	stats.VectorsPerPartition = s.mu.stats.VectorsPerPartition
 
 	extra := len(s.mu.stats.CVStats) - len(stats.CVStats)
 	if extra > 0 {
@@ -533,21 +532,6 @@ func (s *Store) tickLocked() uint64 {
 func (s *Store) updatedStructureLocked(tx *memTxn) {
 	tx.updated = true
 	tx.current = s.tickLocked()
-}
-
-// reportPartitionSizeLocked updates the vectors per partition statistic. It is
-// called with the count of vectors in a partition when a partition is inserted
-// or updated.
-// NOTE: Callers must have locked the s.mu mutex.
-func (s *Store) reportPartitionSizeLocked(count int) {
-	if s.mu.stats.VectorsPerPartition == 0 {
-		// Use first value if this is the first update.
-		s.mu.stats.VectorsPerPartition = float64(count)
-	} else {
-		// Calculate exponential moving average.
-		s.mu.stats.VectorsPerPartition = (1 - storeStatsAlpha) * s.mu.stats.VectorsPerPartition
-		s.mu.stats.VectorsPerPartition += storeStatsAlpha * float64(count)
-	}
 }
 
 // getPartition returns a partition by its key, or ErrPartitionNotFound if no
