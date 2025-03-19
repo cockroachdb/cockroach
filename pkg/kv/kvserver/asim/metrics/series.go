@@ -24,6 +24,7 @@ func MakeTS(metrics [][]StoreMetrics) map[string][][]float64 {
 	ret["cpu"] = make([][]float64, stores)
 	ret["write"] = make([][]float64, stores)
 	ret["write_b"] = make([][]float64, stores)
+	ret["write_bytes_per_second"] = make([][]float64, stores)
 	ret["read"] = make([][]float64, stores)
 	ret["read_b"] = make([][]float64, stores)
 	ret["replicas"] = make([][]float64, stores)
@@ -39,6 +40,7 @@ func MakeTS(metrics [][]StoreMetrics) map[string][][]float64 {
 		for i, sm := range sms {
 			ret["qps"][i] = append(ret["qps"][i], float64(sm.QPS))
 			ret["cpu"][i] = append(ret["cpu"][i], float64(sm.CPU))
+			ret["write_bytes_per_second"][i] = append(ret["write_bytes_per_second"][i], float64(sm.WriteBytesPerSecond))
 			ret["write"][i] = append(ret["write"][i], float64(sm.WriteKeys))
 			ret["write_b"][i] = append(ret["write_b"][i], float64(sm.WriteBytes))
 			ret["read"][i] = append(ret["read"][i], float64(sm.ReadKeys))
