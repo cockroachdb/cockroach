@@ -141,7 +141,6 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				roachpb.StoreID(msr.localStoreID),
 				curChange.LeaseTransferTarget(),
 			)
-			msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 		} else if curChange.IsChangeReplicas() {
 			curOp = op.NewChangeReplicasOp(
 				tick,
