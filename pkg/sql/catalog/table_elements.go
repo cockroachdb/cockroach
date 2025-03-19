@@ -564,6 +564,10 @@ type CheckConstraintValidator interface {
 	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
 	// to enforce row-level security policies.
 	IsRLSConstraint() bool
+
+	// IsCheckFailed returns true if the constraint was violated based on the
+	// input given.
+	IsCheckFailed(boolVal, isNull bool) bool
 }
 
 // ForeignKeyConstraint is an interface around a check constraint.
