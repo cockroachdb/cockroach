@@ -3,14 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package security_test
+package clientcert_test
 
 import (
 	"context"
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -271,14 +271,14 @@ func BenchmarkCertExpirationCacheInsert(b *testing.B) {
 
 func newCache(
 	ctx context.Context, st *cluster.Settings, capacity int, clock *timeutil.ManualTime,
-) (*security.ClientCertExpirationCache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
+) (*clientcert.ClientCertExpirationCache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	security.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
+	clientcert.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 	parentMon := mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     mon.MakeMonitorName("test"),
 		Settings: st,
 	})
-	cache := security.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
-	return cache, aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{}), aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{})
+	cache := clientcert.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
+	return cache, aggmetric.MakeBuilder("user").Gauge(metric.Metadata{}), aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
 }
