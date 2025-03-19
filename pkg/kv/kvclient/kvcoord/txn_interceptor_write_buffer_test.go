@@ -1039,3 +1039,64 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 		require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 	})
 }
+
+// TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow verifies
+// that conditional puts are decomposed into a locking Get with
+// LockNonExisting set when the expected ConditionalPut expects no
+// existing row.
+func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
+		return nil
+	}
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(cputArgs(keyA, "val", "", txn.Sequence))
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		getReq := ba.Requests[0].GetInner().(*kvpb.GetRequest)
+		require.Equal(t, keyA, getReq.Key)
+		require.Equal(t, txn.Sequence, getReq.Sequence)
+		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
+		require.True(t, getReq.LockNonExisting)
+		return ba.CreateReply(), nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though we may have flushed the buffer, responses from the blind writes should
+	// not be returned.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
