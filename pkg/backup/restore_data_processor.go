@@ -191,6 +191,11 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	rd.cancelWorkersAndWait = func() {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Fatalf(ctx, "restore worker hit panic: %+v", p)
+			}
+		}()
 		cancel()
 		_ = rd.phaseGroup.Wait()
 	}
