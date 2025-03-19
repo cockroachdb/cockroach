@@ -237,6 +237,13 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					RangeID:               rangeID,
 					pendingReplicaChanges: pendingChanges[:],
 				})
+				if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
+					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
+				}
+				log.Infof(context.Background(),
+					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v]",
+					localNodeID, localStoreID, ss.NodeID, store.StoreID,
+					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1])
 				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 				if doneShedding {
 					break
@@ -375,10 +382,11 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				pendingReplicaChanges: pendingChanges[:],
 			})
 			log.Infof(context.Background(),
-				"local=n%vs%v shedding=n%vs%v range %v(%s) from store %v to store %v [%v] with resulting loads %v %v",
+				"local=n%vs%v shedding=n%vs%v range %v(%s) from store %v to store %v "+
+					"[%v] with resulting loads %v %v",
 				localNodeID, localStoreID, ss.NodeID, store.StoreID,
-				rangeID, addedLoad, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
-				ss.adjusted.load, targetSS.adjusted.load)
+				rangeID, addedLoad, removeTarget.StoreID, addTarget.StoreID,
+				changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
