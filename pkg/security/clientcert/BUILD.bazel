@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "clientcert",
+    srcs = ["cert_expiry_cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/clientcert",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/cache",
+        "//pkg/util/log",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "clientcert_test",
+    srcs = ["cert_expiry_cache_test.go"],
+    deps = [
+        ":clientcert",
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)
