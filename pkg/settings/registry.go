@@ -259,6 +259,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 25.2
 	"kv.snapshot_receiver.excise.enabled":                    {},
+	"kv.mvcc_gc.queue_kv_admission_control.enabled":          {},
 	"sql.catalog.experimental_use_session_based_leasing":     {},
 	"bulkio.backup.merge_file_buffer_size":                   {},
 	"changefeed.new_webhook_sink_enabled":                    {},
