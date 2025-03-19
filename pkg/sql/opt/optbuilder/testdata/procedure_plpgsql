@@ -732,3 +732,148 @@ call
                 │                                                           ├── variable: x:6
                 │                                                           └── variable: y:7
                 └── const: 1
+
+exec-ddl
+CREATE PROCEDURE p_143171(OUT foo INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t VALUES (1, 2, 'foo') RETURNING i INTO foo;
+  END;
+$$;
+----
+
+exec-ddl
+CREATE PROCEDURE p2_143171() LANGUAGE PLpgSQL AS $$
+  DECLARE foo INT;
+  BEGIN
+    CALL p_143171(foo);
+  END;
+$$;
+----
+
+# Regression test for #143171 - do not drop the routine invocation that
+# corresponds to the p_143171 CALL statement.
+build format=show-scalars
+CALL p2_143171();
+----
+call
+ └── procedure: p2_143171
+      └── body
+           └── limit
+                ├── columns: "_stmt_call_1":23
+                ├── project
+                │    ├── columns: "_stmt_call_1":23
+                │    ├── barrier
+                │    │    ├── columns: foo:1
+                │    │    └── project
+                │    │         ├── columns: foo:1
+                │    │         ├── values
+                │    │         │    └── tuple
+                │    │         └── projections
+                │    │              └── cast: INT8 [as=foo:1]
+                │    │                   └── null
+                │    └── projections
+                │         └── udf: _stmt_call_1 [as="_stmt_call_1":23]
+                │              ├── args
+                │              │    └── variable: foo:1
+                │              ├── params: foo:2
+                │              └── body
+                │                   └── project
+                │                        ├── columns: "_stmt_call_ret_3":22
+                │                        ├── project
+                │                        │    ├── columns: foo:19
+                │                        │    ├── barrier
+                │                        │    │    ├── columns: stmt_call_2:3
+                │                        │    │    └── project
+                │                        │    │         ├── columns: stmt_call_2:3
+                │                        │    │         ├── values
+                │                        │    │         │    └── tuple
+                │                        │    │         └── projections
+                │                        │    │              └── udf: p_143171 [as=stmt_call_2:3]
+                │                        │    │                   └── body
+                │                        │    │                        └── limit
+                │                        │    │                             ├── columns: "_stmt_exec_1":18
+                │                        │    │                             ├── project
+                │                        │    │                             │    ├── columns: "_stmt_exec_1":18
+                │                        │    │                             │    ├── barrier
+                │                        │    │                             │    │    ├── columns: foo:4
+                │                        │    │                             │    │    └── project
+                │                        │    │                             │    │         ├── columns: foo:4
+                │                        │    │                             │    │         ├── values
+                │                        │    │                             │    │         │    └── tuple
+                │                        │    │                             │    │         └── projections
+                │                        │    │                             │    │              └── cast: INT8 [as=foo:4]
+                │                        │    │                             │    │                   └── null
+                │                        │    │                             │    └── projections
+                │                        │    │                             │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":18]
+                │                        │    │                             │              ├── args
+                │                        │    │                             │              │    └── variable: foo:4
+                │                        │    │                             │              ├── params: foo:5
+                │                        │    │                             │              └── body
+                │                        │    │                             │                   └── project
+                │                        │    │                             │                        ├── columns: "_stmt_exec_ret_2":17
+                │                        │    │                             │                        ├── project
+                │                        │    │                             │                        │    ├── columns: foo:16
+                │                        │    │                             │                        │    ├── right-join (cross)
+                │                        │    │                             │                        │    │    ├── columns: i:7
+                │                        │    │                             │                        │    │    ├── barrier
+                │                        │    │                             │                        │    │    │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │    │    └── limit
+                │                        │    │                             │                        │    │    │         ├── columns: i:7!null
+                │                        │    │                             │                        │    │    │         ├── project
+                │                        │    │                             │                        │    │    │         │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │    │         │    └── insert t
+                │                        │    │                             │                        │    │    │         │         ├── columns: k:6!null i:7!null s:8!null
+                │                        │    │                             │                        │    │    │         │         ├── insert-mapping:
+                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │    │         │         ├── return-mapping:
+                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │    │         │         └── values
+                │                        │    │                             │                        │    │    │         │              ├── columns: column1:11!null column2:12!null column3:13!null
+                │                        │    │                             │                        │    │    │         │              └── tuple
+                │                        │    │                             │                        │    │    │         │                   ├── const: 1
+                │                        │    │                             │                        │    │    │         │                   ├── const: 2
+                │                        │    │                             │                        │    │    │         │                   └── const: 'foo'
+                │                        │    │                             │                        │    │    │         └── const: 1
+                │                        │    │                             │                        │    │    ├── values
+                │                        │    │                             │                        │    │    │    └── tuple
+                │                        │    │                             │                        │    │    └── filters (true)
+                │                        │    │                             │                        │    └── projections
+                │                        │    │                             │                        │         └── variable: i:7 [as=foo:16]
+                │                        │    │                             │                        └── projections
+                │                        │    │                             │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":17]
+                │                        │    │                             │                                  ├── tail-call
+                │                        │    │                             │                                  ├── args
+                │                        │    │                             │                                  │    └── variable: foo:16
+                │                        │    │                             │                                  ├── params: foo:14
+                │                        │    │                             │                                  └── body
+                │                        │    │                             │                                       └── project
+                │                        │    │                             │                                            ├── columns: "_implicit_return":15
+                │                        │    │                             │                                            ├── values
+                │                        │    │                             │                                            │    └── tuple
+                │                        │    │                             │                                            └── projections
+                │                        │    │                             │                                                 └── cast: RECORD [as="_implicit_return":15]
+                │                        │    │                             │                                                      └── tuple
+                │                        │    │                             │                                                           └── variable: foo:14
+                │                        │    │                             └── const: 1
+                │                        │    └── projections
+                │                        │         └── column-access: 0 [as=foo:19]
+                │                        │              └── variable: stmt_call_2:3
+                │                        └── projections
+                │                             └── udf: _stmt_call_ret_3 [as="_stmt_call_ret_3":22]
+                │                                  ├── tail-call
+                │                                  ├── args
+                │                                  │    └── variable: foo:19
+                │                                  ├── params: foo:20
+                │                                  └── body
+                │                                       └── project
+                │                                            ├── columns: "_implicit_return":21
+                │                                            ├── values
+                │                                            │    └── tuple
+                │                                            └── projections
+                │                                                 └── cast: VOID [as="_implicit_return":21]
+                │                                                      └── null
+                └── const: 1
