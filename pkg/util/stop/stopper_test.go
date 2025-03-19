@@ -574,53 +574,6 @@ func maybePrint(context.Context) {
 	}
 }
 
-func BenchmarkDirectCall(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	s := stop.NewStopper()
-	ctx := context.Background()
-	defer s.Stop(ctx)
-	for i := 0; i < b.N; i++ {
-		maybePrint(ctx)
-	}
-}
-
-func BenchmarkStopper(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	ctx := context.Background()
-	s := stop.NewStopper()
-	defer s.Stop(ctx)
-	for i := 0; i < b.N; i++ {
-		if err := s.RunTask(ctx, "test", maybePrint); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-func BenchmarkDirectCallPar(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	s := stop.NewStopper()
-	ctx := context.Background()
-	defer s.Stop(ctx)
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			maybePrint(ctx)
-		}
-	})
-}
-
-func BenchmarkStopperPar(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	ctx := context.Background()
-	s := stop.NewStopper()
-	defer s.Stop(ctx)
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := s.RunTask(ctx, "test", maybePrint); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
 func TestCancelInCloser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
