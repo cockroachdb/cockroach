@@ -1540,7 +1540,7 @@ leaseholder are not colocated, or the request is proposed from a follower.
 Commands that use async consensus will still cause a measurement that reflects
 the actual replication latency, despite returning early to the client.`,
 		Measurement: "Latency",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftSchedulerLatency = metric.Metadata{
 		Name: "raft.scheduler.latency",
