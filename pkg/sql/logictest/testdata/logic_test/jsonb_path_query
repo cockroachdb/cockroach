@@ -761,12 +761,30 @@ SELECT jsonb_path_query('{"a": "hello"}', '$.a / 2');
 statement error pgcode 22038 pq: right operand of jsonpath operator \+ is not a single numeric value
 SELECT jsonb_path_query('{"a": null}', '2 + $.a');
 
-# when string literals are supported
-# query T rowsort
-# SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}'::jsonb, '$.data ? (@.val == "a")'::jsonpath);
-# ----
-# {"num": 1, "val": "a"}
-# {"num": 3, "val": "a"}
+query T
+SELECT jsonb_path_query('{}', '"a" == "b"');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', '"a" < "b"');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', '"a" > "b"');
+----
+false
+
+statement error pgcode 22038 pq: left operand of jsonpath operator \+ is not a single numeric value
+SELECT jsonb_path_query('{}', '"a" + "b"');
+
+query T rowsort
+SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}', '$.data ? (@.val == "a")');
+----
+{"num": 1, "val": "a"}
+{"num": 3, "val": "a"}
+
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 
