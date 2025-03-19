@@ -199,11 +199,11 @@ func (ri *Inserter) InsertRow(
 	}
 
 	// Add the new values.
-	ri.valueBuf, err = prepareInsertOrUpdateBatch(ctx, b,
-		&ri.Helper, primaryIndexKey, ri.InsertCols,
-		values, ri.InsertColIDtoRowIndex,
-		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, kvOp, traceKV)
+	ri.valueBuf, err = prepareInsertOrUpdateBatch(
+		ctx, b, &ri.Helper, primaryIndexKey, ri.InsertCols, values, ri.InsertColIDtoRowIndex,
+		ri.InsertColIDtoRowIndex, &ri.key, &ri.value, ri.valueBuf, oth, nil, /* oldValues */
+		kvOp, false /* oldKeysLocked */, traceKV,
+	)
 	if err != nil {
 		return err
 	}

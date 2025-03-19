@@ -901,8 +901,8 @@ Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
 fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
 fetched: /tu/tu_pkey/1/b:cf=1 -> 2
 fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
-Del (locking) /Table/115/1/1/1/1
-Del (locking) /Table/115/1/1/2/1
+Del /Table/115/1/1/1/1
+Del /Table/115/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -1050,9 +1050,9 @@ EXECUTE p(1, 10)
 ----
 Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
-Del (locking) /Table/118/2/2/1/0
+Del /Table/118/2/2/1/0
 CPut /Table/118/2/3/1/0 -> /BYTES/
-Del (locking) /Table/118/3/3/1/0
+Del /Table/118/3/3/1/0
 CPut /Table/118/3/10/1/0 -> /BYTES/
 
 statement ok
@@ -1132,9 +1132,9 @@ EXECUTE p(10, 100)
 Scan /Table/118/2/1{0-1} lock Exclusive (Block, Unreplicated)
 Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/100
-Del (locking) /Table/118/2/10/1/0
+Del /Table/118/2/10/1/0
 CPut /Table/118/2/11/1/0 -> /BYTES/
-Del (locking) /Table/118/3/3/1/0
+Del /Table/118/3/3/1/0
 CPut /Table/118/3/100/1/0 -> /BYTES/
 
 statement ok
@@ -1202,9 +1202,9 @@ EXECUTE p(1, 10)
 ----
 Scan /Table/118/1/1/0
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
-Del (locking) /Table/118/2/2/1/0
+Del /Table/118/2/2/1/0
 CPut /Table/118/2/3/1/0 -> /BYTES/
-Del (locking) /Table/118/3/3/1/0
+Del /Table/118/3/3/1/0
 CPut /Table/118/3/10/1/0 -> /BYTES/
 
 statement ok
@@ -1320,9 +1320,9 @@ Scan /Table/118/1/1/0
 Scan /Table/118/2/{1-2}
 Scan /Table/118/1/1/0
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
-Del (locking) /Table/118/2/1/1/0
+Del /Table/118/2/1/1/0
 CPut /Table/118/2/2/1/0 -> /BYTES/
-Del (locking) /Table/118/3/1/1/0
+Del /Table/118/3/1/1/0
 CPut /Table/118/3/2/1/0 -> /BYTES/
 
 statement ok
@@ -1368,7 +1368,7 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
@@ -1385,8 +1385,8 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE k = 1
 ----
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
-Del (locking) /Table/119/1/1/1/1
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
@@ -1428,7 +1428,7 @@ Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
@@ -1446,8 +1446,8 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE i = 2
 Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
-Del (locking) /Table/119/1/1/1/1
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
@@ -1490,9 +1490,9 @@ Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
-Del (locking) /Table/119/3/3/0
+Del /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
@@ -1508,10 +1508,10 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE u = 3
 Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
-Del (locking) /Table/119/1/1/1/1
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
-Del (locking) /Table/119/3/3/0
+Del /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
@@ -1552,11 +1552,11 @@ Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
-Del (locking) /Table/119/4/4/0
+Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
 statement ok
@@ -1570,12 +1570,12 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE v = 4
 Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
 Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
-Del (locking) /Table/119/1/1/1/1
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
-Del (locking) /Table/119/4/4/0
+Del /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
 statement ok
@@ -1610,7 +1610,7 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
 Scan /Table/119/{1-2}
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
@@ -1628,7 +1628,7 @@ UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE w = 5
 Scan /Table/119/{1-2}
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del (locking) /Table/119/1/1/1/1
-Del (locking) /Table/119/2/2/1/0
+Del /Table/119/2/2/1/0
 CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306

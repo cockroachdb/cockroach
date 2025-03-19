@@ -497,10 +497,11 @@ func (rh *RowHelper) deleteIndexEntry(
 	b Putter,
 	index catalog.Index,
 	key *roachpb.Key,
-	needsLock bool,
+	alreadyLocked bool,
 	traceKV bool,
 	valDirs []encoding.Direction,
 ) error {
+	needsLock := !alreadyLocked && index.IsUnique()
 	if index.UseDeletePreservingEncoding() {
 		if traceKV {
 			var suffix string
@@ -515,8 +516,6 @@ func (rh *RowHelper) deleteIndexEntry(
 			b.Put(key, deleteEncoding)
 		}
 	} else {
-		// TODO(yuzefovich): consider not acquiring the locks for non-unique
-		// indexes at all.
 		delFn(ctx, b, key, needsLock, traceKV, valDirs)
 	}
 	return nil
