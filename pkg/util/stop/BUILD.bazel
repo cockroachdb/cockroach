@@ -28,10 +28,11 @@ go_test(
     size = "small",
     srcs = [
         "main_test.go",
+        "stopper_bench_test.go",
         "stopper_test.go",
     ],
+    embed = [":stop"],
     deps = [
-        ":stop",
         "//pkg/kv/kvpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",

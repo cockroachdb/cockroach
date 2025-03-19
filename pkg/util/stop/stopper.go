@@ -429,13 +429,13 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
-	handle, err := s.GetHandle(ctx, opt)
+	hdl, err := s.GetHandle(ctx, opt)
 	if err != nil {
 		return err
 	}
 	go func(ctx context.Context) {
-		ctx, release := handle.Activate(ctx)
-		defer release(ctx)
+		ctx, release := hdl.Activate(ctx)
+		defer release(ctx, hdl)
 		f(ctx)
 	}(ctx)
 	return nil
