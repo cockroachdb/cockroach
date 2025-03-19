@@ -171,6 +171,19 @@ oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithch
 7    policy7  110       r       true           {0}            NULL     NULL
 8    policy8  110       *       true           {0,835509264}  NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab1
+----
+name     cmd     type         roles                using_expr  with_check_expr
+policy8  ALL     permissive   {papa_roach,public}  ·           ·
+policy1  ALL     permissive   {public}             ·           ·
+policy2  ALL     restrictive  {public}             ·           ·
+policy3  ALL     permissive   {public}             ·           ·
+policy4  INSERT  permissive   {public}             ·           ·
+policy5  UPDATE  permissive   {public}             ·           ·
+policy6  DELETE  permissive   {public}             ·           ·
+policy7  SELECT  permissive   {public}             ·           ·
+
 statement ok
 CREATE TABLE multi_pol_tab2 (c1 INT NOT NULL PRIMARY KEY)
 
@@ -216,6 +229,19 @@ oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
 1    policy11  112       *       true           {0}       NULL     NULL
 2    policy12  112       *       true           {0}       NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab2
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy9   ALL  permissive  {public}  ·           ·
+policy10  ALL  permissive  {public}  ·           ·
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR public.multi_pol_tab3
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy11  ALL  permissive  {public}  ·           ·
+policy12  ALL  permissive  {public}  ·           ·
 
 statement ok
 DROP POLICY "policy1" ON multi_pol_tab1
