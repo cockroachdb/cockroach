@@ -528,7 +528,6 @@ func (rh *RowHelper) deleteIndexEntry(
 // option set.
 type OriginTimestampCPutHelper struct {
 	OriginTimestamp hlc.Timestamp
-	ShouldWinTie    bool
 	// PreviousWasDeleted is used to indicate that the expected
 	// value is non-existent. This is helpful in Deleter to
 	// distinguish between a delete of a value that had no columns
@@ -551,7 +550,7 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
 	}
-	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
 }
 
 func (oh *OriginTimestampCPutHelper) DelWithCPut(
@@ -560,7 +559,7 @@ func (oh *OriginTimestampCPutHelper) DelWithCPut(
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
 	}
-	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp)
 }
 
 func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {
