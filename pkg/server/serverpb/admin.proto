@@ -650,6 +650,11 @@ message HealthRequest {
 message HealthResponse {
 }
 
+message DrainPlanBatch {
+  repeated roachpb.NodeDescriptor drainCohort = 1;
+  bool moreBatches = 2;
+}
+
 // LivenessRequest requests liveness data for all nodes on the cluster.
 message LivenessRequest {
 }
