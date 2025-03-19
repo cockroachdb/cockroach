@@ -785,6 +785,29 @@ SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2
 {"num": 1, "val": "a"}
 {"num": 3, "val": "a"}
 
+query T
+SELECT jsonb_path_query('{}', 'null == null');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', 'null != null');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', 'null != 1');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', 'null <= "null"');
+----
+false
+
+statement error pgcode 22038 pq: left operand of jsonpath operator \% is not a single numeric value
+SELECT jsonb_path_query('{}', 'null % 1');
+
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 
