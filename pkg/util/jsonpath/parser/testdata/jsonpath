@@ -436,6 +436,24 @@ DETAIL: source SQL:
 "a" && "b"
     ^
 
+parse
+null == null
+----
+(null == null) -- normalized!
+
+parse
+null + null
+----
+(null + null) -- normalized!
+
+error
+!null
+----
+at or near "null": syntax error
+DETAIL: source SQL:
+!null
+ ^
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
