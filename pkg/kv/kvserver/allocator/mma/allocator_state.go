@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,6 +109,9 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 		storeLoadSummary
 	}
 	var sheddingStores []sheddingStore
+	log.Infof(context.Background(), "cluster means (cap): store %s(%s) node-cpu %d(%d)",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity, clusterMeans.nodeLoad.loadCPU,
+		clusterMeans.nodeLoad.capacityCPU)
 	// TODO: change clusterState load stuff so that cpu util is distributed
 	// across the stores. If cpu util of a node is higher than the mean across
 	// nodes of the cluster, then cpu util of at least one store on that node
@@ -260,6 +264,15 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 		// Iterate over top-K ranges first and try to move them.
 		topKRanges := ss.adjusted.topKRanges[localStoreID]
 		n := topKRanges.len()
+		if n > 0 {
+			var b strings.Builder
+			for i := 0; i < n; i++ {
+				rangeID := topKRanges.index(i)
+				rstate := a.cs.ranges[rangeID]
+				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, rstate.load.Load, rstate.load.RaftCPU)
+			}
+			log.Infof(context.Background(), "top-K ranges %s", b.String())
+		}
 		for i := 0; i < n; i++ {
 			rangeID := topKRanges.index(i)
 			// TODO(sumeer): the following code belongs in a closure, since we will
@@ -362,9 +375,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				pendingReplicaChanges: pendingChanges[:],
 			})
 			log.Infof(context.Background(),
-				"local=n%vs%v shedding=n%vs%v range %v from store %v to store %v [%v]",
+				"local=n%vs%v shedding=n%vs%v range %v(%s) from store %v to store %v [%v] with resulting loads %v %v",
 				localNodeID, localStoreID, ss.NodeID, store.StoreID,
-				rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1])
+				rangeID, addedLoad, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
+				ss.adjusted.load, targetSS.adjusted.load)
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
