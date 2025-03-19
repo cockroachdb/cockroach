@@ -115,9 +115,6 @@ func (c *controller) Tick(ctx context.Context, tick time.Time, state state.State
 // If the ticket exists, it returns the operation and true, else false.
 func (c *controller) Check(ticket DispatchedTicket) (op ControlledOperation, ok bool) {
 	op, ok = c.tickets[ticket]
-	if ok {
-		delete(c.tickets, ticket)
-	}
 	return op, ok
 }
 

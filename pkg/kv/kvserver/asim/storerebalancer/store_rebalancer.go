@@ -7,6 +7,7 @@ package storerebalancer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -139,17 +140,17 @@ func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOpti
 	}
 }
 
-func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Time, _ error) {
+func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
 	if !ok {
-		return true, time.Time{}, nil
+		panic(fmt.Sprintf("operation not found for ticket %v", ticket))
 	}
-	done, next = op.Done()
+	done, _ = op.Done()
 	if !done {
-		return false, op.Next(), nil
+		return false, nil
 	}
-	return true, next, op.Errors()
+	return true, op.Errors()
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
@@ -207,7 +208,7 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Contex
 		return true
 	}
 
-	done, _, err := src.checkPendingTicket()
+	done, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// transfer to complete.
@@ -298,7 +299,7 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance(ctx context.Contex
 		return true
 	}
 
-	done, _, err := src.checkPendingTicket()
+	done, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// relocate to complete.
