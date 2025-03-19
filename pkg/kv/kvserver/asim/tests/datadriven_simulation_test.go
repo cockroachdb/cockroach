@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -140,10 +141,12 @@ import (
 //     samples=1 seed=random.
 //
 //   - "plot" stat=<string> [sample=<int>] [height=<int>] [width=<int>]
+//     [show_last_value=<bool>]
 //     Visually renders the stat (e.g. stat=qps) as a series where the x axis
 //     is the simulated time and the y axis is the stat value. A series is
 //     rendered per-store, so if there are 10 stores, 10 series will be
-//     rendered.
+//     rendered. When show_last_value is true, the last value of the series is
+//     shown for each store.
 //
 //   - "topology" [sample=<int>]
 //     Print the cluster locality topology of the sample given (default=last).
@@ -449,12 +452,14 @@ func TestDataDriven(t *testing.T) {
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1
+				var showLastValue bool
 				var buf strings.Builder
 
 				scanArg(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
+				scanIfExists(t, d, "show_last_value", &showLastValue)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
@@ -469,6 +474,32 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Width(width),
 				))
 				buf.WriteString("\n")
+
+				if showLastValue {
+					type storeIDWithStat struct {
+						StoreID int64
+						Value   float64
+					}
+					lastTick := history.Recorded[len(history.Recorded)-1]
+					orderedStoreIDs := make([]storeIDWithStat, 0, len(lastTick))
+					for i, sm := range lastTick {
+						orderedStoreIDs = append(orderedStoreIDs, storeIDWithStat{
+							StoreID: sm.StoreID,
+							Value:   statTS[i][len(statTS[i])-1],
+						})
+					}
+					sort.Slice(orderedStoreIDs, func(i, j int) bool {
+						return orderedStoreIDs[i].Value < orderedStoreIDs[j].Value
+					})
+					fmt.Fprintf(&buf, "\nlast store values: [")
+					for i, store := range orderedStoreIDs {
+						if i > 0 {
+							fmt.Fprintf(&buf, " ")
+						}
+						fmt.Fprintf(&buf, "s%v=%.0f", store.StoreID, store.Value)
+					}
+					fmt.Fprintf(&buf, "]")
+				}
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
