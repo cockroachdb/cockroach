@@ -109,9 +109,9 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 		storeLoadSummary
 	}
 	var sheddingStores []sheddingStore
-	log.Infof(context.Background(), "cluster means (cap): store %s(%s) node-cpu %d(%d)",
-		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity, clusterMeans.nodeLoad.loadCPU,
-		clusterMeans.nodeLoad.capacityCPU)
+	log.Infof(context.Background(), "local=n%vs%v cluster means (cap): store %s(%s) node-cpu %d(%d)",
+		localNodeID, localStoreID, clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
 	// TODO: change clusterState load stuff so that cpu util is distributed
 	// across the stores. If cpu util of a node is higher than the mean across
 	// nodes of the cluster, then cpu util of at least one store on that node
