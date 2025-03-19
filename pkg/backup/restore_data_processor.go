@@ -191,6 +191,14 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	rd.cancelWorkersAndWait = func() {
+		defer func() {
+			// A panic here will not have a useful stack trace. If the panic is an
+			// error that contains a stack trace, we want those full details.
+			// TODO(jeffswenson): improve panic recovery more generally.
+			if p := recover(); p != nil {
+				panic(fmt.Sprintf("restore worker hit panic: %+v", p))
+			}
+		}()
 		cancel()
 		_ = rd.phaseGroup.Wait()
 	}
