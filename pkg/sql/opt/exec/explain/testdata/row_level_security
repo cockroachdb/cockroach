@@ -181,6 +181,10 @@ exec-ddl
 ALTER TABLE writer ENABLE ROW LEVEL SECURITY;
 ----
 
+exec-ddl
+CREATE POLICY p_select ON writer FOR SELECT USING (true);
+----
+
 plan
 INSERT INTO writer VALUES (0, 'zero')
 ----
@@ -244,7 +248,7 @@ UPDATE writer SET key = key * 10;
 │ table: writer
 │ set: key
 │ auto commit
-│ policies: row-level security enabled, no policies applied.
+│ policies: p_select
 │
 └── • render
     │
@@ -266,7 +270,7 @@ UPDATE writer SET key = key * 11;
 │ table: writer
 │ set: key
 │ auto commit
-│ policies: p_update1, p_update2
+│ policies: p_select, p_update1, p_update2
 │
 └── • render
     │
@@ -274,7 +278,7 @@ UPDATE writer SET key = key * 11;
           table: writer@writer_pkey
           spans: 1+ spans
           locking strength: for update
-          policies: p_update1
+          policies: p_select, p_update1
 
 plan
 UPDATE writer SET key = key * 15 WHERE value = 'some-val' or value = 'other-val';
@@ -283,7 +287,7 @@ UPDATE writer SET key = key * 15 WHERE value = 'some-val' or value = 'other-val'
 │ table: writer
 │ set: key
 │ auto commit
-│ policies: p_update1, p_update2
+│ policies: p_select, p_update1, p_update2
 │
 └── • render
     │
@@ -293,7 +297,7 @@ UPDATE writer SET key = key * 15 WHERE value = 'some-val' or value = 'other-val'
         └── • scan
               table: writer@writer_pkey
               spans: 1+ spans
-              policies: p_update1
+              policies: p_select, p_update1
 
 plan
 UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
@@ -302,7 +306,7 @@ UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
 │ table: writer
 │ set: value
 │ auto commit
-│ policies: p_update1, p_update2
+│ policies: p_select, p_update1, p_update2
 │
 └── • render
     │
@@ -310,7 +314,7 @@ UPDATE writer SET value = 'updated' WHERE key between 1 and 100;
           table: writer@writer_pkey
           spans: 1+ spans
           locking strength: for update
-          policies: p_update1
+          policies: p_select, p_update1
 
 plan
 UPDATE writer SET value = value WHERE key = 5;
@@ -319,7 +323,7 @@ UPDATE writer SET value = value WHERE key = 5;
 │ table: writer
 │ set: value
 │ auto commit
-│ policies: p_update1, p_update2
+│ policies: p_select, p_update1, p_update2
 │
 └── • render
     │
@@ -327,7 +331,7 @@ UPDATE writer SET value = value WHERE key = 5;
           table: writer@writer_pkey
           spans: 1+ spans
           locking strength: for update
-          policies: p_update1
+          policies: p_select, p_update1
 
 # Show policy information for delete
 # ----------------------------------------------------------------------
@@ -353,7 +357,7 @@ DELETE FROM writer WHERE key = 1;
   from: writer
   auto commit
   spans: 1+ spans
-  policies: p_delete
+  policies: p_select, p_delete
 
 plan
 DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';
@@ -368,7 +372,7 @@ DELETE FROM writer WHERE value = 'some-val' or value = 'other-val';
     └── • scan
           table: writer@writer_pkey
           spans: 1+ spans
-          policies: p_delete
+          policies: p_select, p_delete
 
 # Show that policies are exempt when the table owner queries the table, unless
 # the FORCE option is used.
