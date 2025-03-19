@@ -795,3 +795,26 @@ Scan /Table/115/{1-2}
 Del /Table/115/2/2/1/0
 Del (locking) /Table/115/3/3/0
 Del (locking) /Table/115/1/1/0
+
+statement ok
+CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2);
+
+query T
+EXPLAIN DELETE FROM t139105 WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• delete range
+  from: t139105
+  auto commit
+  spans: [/1 - /1]
+
+# Delete fast-path - we need locking Del.
+query T kvtrace
+DELETE FROM t139105 WHERE k = 1
+----
+Del (locking) /Table/116/1/1/0
