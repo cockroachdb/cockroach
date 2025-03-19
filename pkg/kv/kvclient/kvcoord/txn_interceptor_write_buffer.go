@@ -347,13 +347,12 @@ func (twb *txnWriteBuffer) applyTransformations(
 				index:       i,
 				origRequest: req,
 			})
-			// TODO(arul,ssd): Once we are able to acquire locks on non-existing keys,
-			// we'll need that here in cases where the CPut expects no value to exist.
 			getReq := &kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
 					Key:      t.Key,
 					Sequence: t.Sequence,
 				},
+				LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
 				KeyLockingStrength: lock.Exclusive,
 			}
 			var getReqU kvpb.RequestUnion
@@ -363,7 +362,6 @@ func (twb *txnWriteBuffer) applyTransformations(
 			baRemote.Requests = append(baRemote.Requests, getReqU)
 			// TODO(arul): We're not handling the case where this Get needs to
 			// be served locally from the buffer yet.
-
 		case *kvpb.PutRequest:
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.PutResponse{})
