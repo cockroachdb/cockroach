@@ -6,6 +6,8 @@
 package mmaintegration
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,7 +19,7 @@ func MakeStoreLeaseholderMsgFromState(
 	s state.State, storeID state.StoreID,
 ) mma.StoreLeaseholderMsg {
 	var rangeMessages []mma.RangeMsg
-	for _, replica := range s.Replicas(state.StoreID(storeID)) {
+	for _, replica := range s.Replicas(storeID) {
 		if replica.HoldsLease() {
 			// We only want to send messages for ranges that have a leaseholder
 			// replica on this store.
@@ -29,19 +31,34 @@ func MakeStoreLeaseholderMsgFromState(
 		}
 		simReplicas := rng.Replicas()
 		replicas := make([]mma.StoreIDAndReplicaState, 0, len(simReplicas))
-		for _, replica := range simReplicas {
-			replicas = append(replicas, mma.StoreIDAndReplicaState{
-				StoreID: roachpb.StoreID(replica.StoreID()),
+		for _, r := range simReplicas {
+			rs := mma.StoreIDAndReplicaState{
+				StoreID: roachpb.StoreID(r.StoreID()),
 				ReplicaState: mma.ReplicaState{
 					ReplicaIDAndType: mma.ReplicaIDAndType{
-						ReplicaID: roachpb.ReplicaID(replica.ReplicaID()),
+						ReplicaID: roachpb.ReplicaID(r.ReplicaID()),
 						ReplicaType: mma.ReplicaType{
-							ReplicaType:   replica.Descriptor().Type,
-							IsLeaseholder: rng.Leaseholder() == replica.ReplicaID(),
+							ReplicaType:   r.Descriptor().Type,
+							IsLeaseholder: rng.Leaseholder() == r.ReplicaID(),
 						},
 					},
 				},
-			})
+			}
+			if rs.StoreID == roachpb.StoreID(storeID) {
+				if !rs.IsLeaseholder {
+					// TODO: change to panic once fixed.
+					fmt.Printf("simulator state inconsistent for r%d when constructing leaseholder msg for s%d: "+
+						"local store is not leaseholder\n",
+						replica.Range(), storeID)
+				}
+			}
+			if rs.IsLeaseholder && rs.StoreID != roachpb.StoreID(storeID) {
+				// TODO: change to panic once fixed.
+				fmt.Printf("simulator state inconsistent for r%d when constructing leaseholder msg for s%d: "+
+					"remote store s%d is leaseholder\n",
+					replica.Range(), storeID, rs.StoreID)
+			}
+			replicas = append(replicas, rs)
 		}
 
 		var rl mma.RangeLoad
