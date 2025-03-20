@@ -11,7 +11,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"gopkg.in/yaml.v2"
 )
 
@@ -87,7 +87,7 @@ func IsWithdrawn(v *version.Version) (bool, error) {
 // only happen if one of the versions passed is very old).
 func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
 	older, newer := v1, v2
-	if v1.AtLeast(v2) {
+	if v1.AtLeast(*v2) {
 		older, newer = v2, v1
 	}
 
@@ -199,14 +199,15 @@ func activePatchReleases(releaseSeries Series) []string {
 
 	latestVersion := mustParseVersion(releaseSeries.Latest)
 	var releases []string
-	if latestVersion.PreRelease() != "" {
+	if latestVersion.IsPrerelease() {
 		// If the latest version for this series is a pre-release, don't
 		// try to enumerate all releases in this series. Instead, just
 		// return the latest pre-release defined.
 		releases = append(releases, strings.TrimPrefix(latestVersion.String(), "v"))
 	} else {
+		series := latestVersion.Format("%X.%Y")
 		for patch := 0; patch <= latestVersion.Patch(); patch++ {
-			patchVersion := fmt.Sprintf("%d.%d.%d", latestVersion.Major(), latestVersion.Minor(), patch)
+			patchVersion := fmt.Sprintf("%s.%d", series, patch)
 			if !isWithdrawn(patchVersion) {
 				releases = append(releases, patchVersion)
 			}
@@ -239,9 +240,10 @@ func predecessorSeries(v *version.Version) (Series, error) {
 }
 
 func mustParseVersion(str string) *version.Version {
-	return version.MustParse("v" + str)
+	v := version.MustParse("v" + str)
+	return &v
 }
 
 func VersionSeries(v *version.Version) string {
-	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	return v.Format("%X.%Y")
 }

@@ -12,8 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 )
@@ -23,7 +23,7 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 	tests := []struct {
 		cloud        spec.Cloud
 		spec         spec.ClusterSpec
-		buildVersion *version.Version
+		buildVersion version.Version
 		expected     int
 	}{
 		{spec.Local, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v2.1.0`), 15},
@@ -36,17 +36,17 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		{spec.AWS, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v19.1.0`), 2100},
 
 		{spec.GCE, spec.MakeClusterSpec(5, spec.CPU(160)), version.MustParse(`v2.1.0`), expectPanic},
-		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v1.0.0`), expectPanic},
+		{spec.GCE, spec.MakeClusterSpec(4, spec.CPU(16)), version.MustParse(`v1.1.0`), expectPanic},
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			if test.expected == expectPanic {
 				require.Panics(t, func() {
-					w := maxSupportedTPCCWarehouses(*test.buildVersion, test.cloud, test.spec)
+					w := maxSupportedTPCCWarehouses(test.buildVersion, test.cloud, test.spec)
 					t.Errorf("%s %s got unexpected result %d", test.cloud, &test.spec, w)
 				})
 			} else {
-				require.Equal(t, test.expected, maxSupportedTPCCWarehouses(*test.buildVersion, test.cloud, test.spec))
+				require.Equal(t, test.expected, maxSupportedTPCCWarehouses(test.buildVersion, test.cloud, test.spec))
 			}
 		})
 	}

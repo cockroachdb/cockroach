@@ -324,6 +324,9 @@ statement ok
 GRANT ALL ON db1.* to john;
 
 statement ok
+ALTER TABLE target OWNER TO john;
+
+statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
 
 user testuser
@@ -1236,6 +1239,78 @@ DROP FUNCTION my_non_sec_definer_reader_function;
 statement ok
 DROP TABLE sensitive_data_table CASCADE;
 
+# Verify that you need to be the table owner to do any of the RLS DDLs
+subtest table_owner_and_rls_ddl
+
+statement ok
+CREATE USER tab_owner;
+
+statement ok
+CREATE USER nontab_owner;
+
+statement ok
+CREATE TABLE table_owner_test ();
+
+statement ok
+ALTER TABLE table_owner_test OWNER TO tab_owner;
+
+statement ok
+GRANT ALL ON table_owner_test TO nontab_owner;
+
+statement ok
+SET ROLE tab_owner;
+
+statement ok
+ALTER TABLE table_owner_test ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p1 on table_owner_test;
+
+statement ok
+DROP POLICY p1 on table_owner_test;
+
+statement ok
+CREATE POLICY new_p1 on table_owner_test;
+
+statement error pq: unimplemented: ALTER POLICY is not yet implemented
+ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
+
+statement error pq: unimplemented: ALTER POLICY is not yet implemented
+ALTER POLICY p1 on table_owner_test RENAME TO new_p1;
+
+statement error pq: unimplemented: ALTER POLICY is not yet implemented
+ALTER POLICY p1 on table_owner_test USING (true);
+
+statement ok
+SET ROLE nontab_owner;
+
+statement error pq: must be owner of relation table_owner_test
+ALTER TABLE table_owner_test DISABLE ROW LEVEL SECURITY;
+
+statement error pq: must be owner of relation table_owner_test
+ALTER TABLE table_owner_test NO FORCE ROW LEVEL SECURITY;
+
+statement error pq: must be owner of relation table_owner_test
+CREATE POLICY p2 on table_owner_test;
+
+statement error pq: must be owner of relation table_owner_test
+DROP POLICY new_p1 on table_owner_test;
+
+statement error pq: unimplemented: ALTER POLICY is not yet implemented
+ALTER POLICY new_p1 on table_owner_test WITH CHECK (true);
+
+statement error pq: unimplemented: ALTER POLICY is not yet implemented
+ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE table_owner_test;
+
+statement ok
+DROP ROLE nontab_owner, tab_owner;
+
 subtest force
 
 statement ok
@@ -1366,9 +1441,15 @@ SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
 ----
 50 fifty
 
+statement ok
+SET ROLE root;
+
 # Turn on force again, but it shouldn't matter because we aren't the owner anymore
 statement ok
 ALTER TABLE force_check FORCE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE forcer;
 
 # q2 - should not reuse because table version change
 query IT
