@@ -201,6 +201,9 @@ type State interface {
 	RegisterConfigChangeListener(ConfigChangeListener)
 	// NodeCapacity returns the capacity of the node with ID NodeID.
 	NodeCapacity(NodeID) roachpb.NodeCapacity
+	// SetNodeCPURateCapacity sets the CPU rate capacity for the node with ID
+	// NodeID to be equal to the value given.
+	SetNodeCPURateCapacity(NodeID, int64)
 }
 
 // Node is a container for stores and is part of a cluster.
