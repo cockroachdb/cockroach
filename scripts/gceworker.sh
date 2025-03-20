@@ -34,6 +34,10 @@ function user_domain_suffix() {
 	gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.\-]/_/g'
 }
 
+function gcloud_compute_ssh() {
+	gcloud compute ssh --ssh-flag="-o StrictHostKeyChecking=no" --ssh-flag="-o UserKnownHostsFile=/dev/null" "$@"
+}
+
 function start_and_wait() {
 	gcloud compute instances start "${1}"
 	if [ -z "${GCEWORKER_NO_FIREWALL_WARNING-}" ]; then
@@ -49,7 +53,7 @@ EOF
 	fi
 	echo "waiting for node to finish starting..."
 	# Wait for vm and sshd to start up.
-	retry gcloud compute ssh "${1}" --command=true || true
+	retry gcloud_compute_ssh "${1}" --command=true || true
 }
 
 function refresh_ssh_config() {
@@ -120,17 +124,17 @@ create)
 	start_and_wait "${NAME}"
 
 	gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
-	gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
+	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
 	if [[ "$COCKROACH_DEV_LICENSE" ]]; then
-		gcloud compute ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
+		gcloud_compute_ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
 	fi
 	# https://cockroachlabs.slack.com/archives/C023S0V4YEB/p1725353536265029?thread_ts=1673575342.188709&cid=C023S0V4YEB
-	gcloud compute ssh "${NAME}" --command="echo ROACHPROD_EMAIL_DOMAIN=developer.gserviceaccount.com >> ~/.bashrc_bootstrap"
+	gcloud_compute_ssh "${NAME}" --command="echo ROACHPROD_EMAIL_DOMAIN=developer.gserviceaccount.com >> ~/.bashrc_bootstrap"
 
 	# Install automatic shutdown after ten minutes of operation without a
 	# logged in user. To disable this, `sudo touch /.active`.
-	gcloud compute ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+	gcloud_compute_ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
 	;;
 update-firewall)
@@ -180,7 +184,7 @@ resume)
 	gcloud compute instances resume "${NAME}"
 	echo "waiting for node to finish starting..."
 	# Wait for vm and sshd to start up.
-	retry gcloud compute ssh "${NAME}" --command=true || true
+	retry gcloud_compute_ssh "${NAME}" --command=true || true
 	refresh_ssh_config
 	# SSH into the node, since that's probably why we resumed it.
 	$0 ssh
@@ -211,10 +215,10 @@ delete | destroy)
 	exit ${status}
 	;;
 ssh)
-	gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+	gcloud_compute_ssh "${NAME}" --ssh-flag="-A" "$@"
 	;;
 mosh)
-	mosh "$(user_domain_suffix)@${FQNAME}"
+	mosh --ssh "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" "$(user_domain_suffix)@${FQNAME}"
 	;;
 gcloud)
 	gcloud "$@"
@@ -293,7 +297,7 @@ sync)
 	;;
 vscode)
 	start_and_wait "${NAME}"
-	HOST=$(gcloud compute ssh --dry-run ${NAME} | awk '{print $NF}')
+	HOST=$(gcloud_compute_ssh --dry-run ${NAME} | awk '{print $NF}')
 	code --wait --remote ssh-remote+$HOST "$@"
 	;;
 status)
