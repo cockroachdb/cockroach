@@ -53,36 +53,35 @@ func convertToBool(j json.JSON) jsonpathBool {
 }
 
 func (ctx *jsonpathCtx) evalOperation(
-	p jsonpath.Operation, current []json.JSON,
-) ([]json.JSON, error) {
-	switch p.Type {
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	switch op.Type {
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
-		res, err := ctx.evalLogical(p, current)
+		res, err := ctx.evalLogical(op, jsonValue)
 		if err != nil {
-			return nil, err
+			return jsonpathBoolUnknown, err
 		}
-		return convertFromBool(res), nil
+		return res, nil
 	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
 		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
 		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		res, err := ctx.evalComparison(p, current)
+		res, err := ctx.evalComparison(op, jsonValue, true /* unwrapRight */)
 		if err != nil {
-			return nil, err
+			return jsonpathBoolUnknown, err
 		}
-		return convertFromBool(res), nil
+		return res, nil
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
 }
 
 func (ctx *jsonpathCtx) evalLogical(
-	op jsonpath.Operation, current []json.JSON,
+	op jsonpath.Operation, current json.JSON,
 ) (jsonpathBool, error) {
-	left, err := ctx.eval(op.Left, current)
+	left, err := ctx.eval(op.Left, current, !ctx.strict /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
-
 	if len(left) != 1 || !isBool(left[0]) {
 		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
 	}
@@ -108,16 +107,14 @@ func (ctx *jsonpathCtx) evalLogical(
 		panic(errors.AssertionFailedf("unhandled logical operation type"))
 	}
 
-	right, err := ctx.eval(op.Right, current)
+	right, err := ctx.eval(op.Right, current, !ctx.strict /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
-
 	if len(right) != 1 || !isBool(right[0]) {
 		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
 	}
 	rightBool := convertToBool(right[0])
-
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
 		if rightBool == jsonpathBoolTrue {
@@ -139,13 +136,17 @@ func (ctx *jsonpathCtx) evalLogical(
 // right paths satisfy the condition. In strict mode, even if a pair has been
 // found, all pairs need to be checked for errors.
 func (ctx *jsonpathCtx) evalComparison(
-	p jsonpath.Operation, current []json.JSON,
+	op jsonpath.Operation, jsonValue json.JSON, unwrapRight bool,
 ) (jsonpathBool, error) {
-	left, err := ctx.evalAndUnwrap(p.Left, current)
+	// The left argument results are always auto-unwrapped.
+	left, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
-	right, err := ctx.evalAndUnwrap(p.Right, current)
+	// The right argument results are conditionally unwrapped. Currently, it is
+	// always unwrapped, but in the future for operations like like_regex, we
+	// don't want to unwrap the right argument.
+	right, err := ctx.evalAndUnwrapResult(op.Right, jsonValue, unwrapRight)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
@@ -154,7 +155,7 @@ func (ctx *jsonpathCtx) evalComparison(
 	found := false
 	for _, l := range left {
 		for _, r := range right {
-			res, err := execComparison(l, r, p.Type)
+			res, err := execComparison(l, r, op.Type)
 			if err != nil {
 				return jsonpathBoolUnknown, err
 			}

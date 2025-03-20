@@ -39,13 +39,12 @@ func JsonpathQuery(
 		vars:   vars.JSON,
 		strict: expr.Strict,
 	}
-
 	// When silent is true, overwrite the strict mode.
 	if bool(silent) {
 		ctx.strict = false
 	}
 
-	j, err := ctx.eval(expr.Path, []json.JSON{ctx.root})
+	j, err := ctx.eval(expr.Path, ctx.root, !ctx.strict /* unwrap */)
 	if err != nil {
 		return nil, err
 	}
@@ -56,56 +55,132 @@ func JsonpathQuery(
 	return res, nil
 }
 
-func (ctx *jsonpathCtx) eval(jp jsonpath.Path, current []json.JSON) ([]json.JSON, error) {
-	switch p := jp.(type) {
+func (ctx *jsonpathCtx) eval(
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	switch path := jsonPath.(type) {
 	case jsonpath.Paths:
-		// Evaluate each path within the path list, update the current JSON
-		// object after each evaluation.
-		for _, path := range p {
-			results, err := ctx.eval(path, current)
+		results := []json.JSON{jsonValue}
+		var err error
+		for _, p := range path {
+			results, err = ctx.evalArray(p, results, unwrap)
 			if err != nil {
 				return nil, err
 			}
-			current = results
 		}
-		return current, nil
+		return results, nil
 	case jsonpath.Root:
 		return []json.JSON{ctx.root}, nil
+	case jsonpath.Current:
+		return []json.JSON{jsonValue}, nil
 	case jsonpath.Key:
-		return ctx.evalKey(p, current)
+		return ctx.evalKey(path, jsonValue, unwrap)
 	case jsonpath.Wildcard:
-		return ctx.evalArrayWildcard(current)
+		return ctx.evalArrayWildcard(jsonValue)
 	case jsonpath.ArrayList:
-		return ctx.evalArrayList(p, current)
+		return ctx.evalArrayList(path, jsonValue)
 	case jsonpath.Scalar:
-		resolved, err := ctx.resolveScalar(p)
+		resolved, err := ctx.resolveScalar(path)
 		if err != nil {
 			return nil, err
 		}
 		return []json.JSON{resolved}, nil
 	case jsonpath.Operation:
-		return ctx.evalOperation(p, current)
+		res, err := ctx.evalOperation(path, jsonValue)
+		if err != nil {
+			return nil, err
+		}
+		return convertFromBool(res), nil
+	case jsonpath.Filter:
+		return ctx.evalFilter(path, jsonValue, unwrap)
 	default:
 		return nil, errUnimplemented
 	}
 }
 
-func (ctx *jsonpathCtx) evalAndUnwrap(path jsonpath.Path, inputs []json.JSON) ([]json.JSON, error) {
-	results, err := ctx.eval(path, inputs)
+func (ctx *jsonpathCtx) evalArray(
+	jsonPath jsonpath.Path, jsonValue []json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	var agg []json.JSON
+	for _, j := range jsonValue {
+		arr, err := ctx.eval(jsonPath, j, unwrap)
+		if err != nil {
+			return nil, err
+		}
+		agg = append(agg, arr...)
+	}
+	return agg, nil
+}
+
+// unwrapCurrentTargetAndEval is used to unwrap the current json array and evaluate
+// the jsonpath query on each element. It is similar to executeItemUnwrapTargetArray
+// in postgres/src/backend/utils/adt/jsonpath_exec.c.
+func (ctx *jsonpathCtx) unwrapCurrentTargetAndEval(
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
+) ([]json.JSON, error) {
+	if jsonValue.Type() != json.ArrayJSONType {
+		return nil, errors.AssertionFailedf("unwrapCurrentTargetAndEval can only be applied to an array")
+	}
+	return ctx.executeAnyItem(jsonPath, jsonValue, unwrapNext)
+}
+
+func (ctx *jsonpathCtx) executeAnyItem(
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrapNext bool,
+) ([]json.JSON, error) {
+	childItems, err := json.AllPathsWithDepth(jsonValue, 1 /* depth */)
 	if err != nil {
 		return nil, err
 	}
-	if ctx.strict {
-		return results, nil
-	}
-	var unwrapped []json.JSON
-	for _, result := range results {
-		if result.Type() == json.ArrayJSONType {
-			array, _ := result.AsArray()
-			unwrapped = append(unwrapped, array...)
+	var agg []json.JSON
+	for _, item := range childItems {
+		if item.Len() != 1 {
+			return nil, errors.AssertionFailedf("unexpected path length")
+		}
+		unwrappedItem, err := item.FetchValIdx(0 /* idx */)
+		if err != nil {
+			return nil, err
+		}
+		if unwrappedItem == nil {
+			return nil, errors.AssertionFailedf("unwrapping json element")
+		}
+		if jsonPath == nil {
+			agg = append(agg, unwrappedItem)
 		} else {
-			unwrapped = append(unwrapped, result)
+			evalResults, err := ctx.eval(jsonPath, unwrappedItem, unwrapNext)
+			if err != nil {
+				return nil, err
+			}
+			agg = append(agg, evalResults...)
 		}
 	}
-	return unwrapped, nil
+	return agg, nil
+}
+
+// evalAndUnwrapResult is used to evaluate the jsonpath query and unwrap the result
+// if the unwrap flag is true. It is similar to executeItemOptUnwrapResult
+// in postgres/src/backend/utils/adt/jsonpath_exec.c.
+func (ctx *jsonpathCtx) evalAndUnwrapResult(
+	jsonPath jsonpath.Path, jsonValue json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	evalResults, err := ctx.eval(jsonPath, jsonValue, !ctx.strict /* unwrap */)
+	if err != nil {
+		return nil, err
+	}
+	if unwrap && !ctx.strict {
+		var agg []json.JSON
+		for _, j := range evalResults {
+			if j.Type() == json.ArrayJSONType {
+				// Pass in nil to just unwrap the array.
+				arr, err := ctx.unwrapCurrentTargetAndEval(nil /* jsonPath */, j, false /* unwrapNext */)
+				if err != nil {
+					return nil, err
+				}
+				agg = append(agg, arr...)
+			} else {
+				agg = append(agg, j)
+			}
+		}
+		return agg, nil
+	}
+	return evalResults, nil
 }
