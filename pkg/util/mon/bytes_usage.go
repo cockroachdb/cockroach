@@ -360,17 +360,8 @@ const (
 	expectedAccountSize = 24
 )
 
-func init() {
-	monitorSize := unsafe.Sizeof(BytesMonitor{})
-	if !util.RaceEnabled {
-		if monitorSize != expectedMonitorSize {
-			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
-		}
-	}
-	if accountSize := unsafe.Sizeof(BoundAccount{}); accountSize != expectedAccountSize {
-		panic(errors.AssertionFailedf("expected account size to be %d, found %d", expectedAccountSize, accountSize))
-	}
-}
+var _ [0]struct{} = [expectedMonitorSize - unsafe.Sizeof(BytesMonitor{})]struct{}{}
+var _ [0]struct{} = [expectedAccountSize - unsafe.Sizeof(BoundAccount{})]struct{}{}
 
 // enableMonitorTreeTrackingEnvVar indicates whether tracking of all children of
 // a BytesMonitor (which is what powers TraverseTree) is enabled.
