@@ -281,8 +281,6 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowExternalConnection(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
-	case *tree.ShowPolicies:
-		return p.ShowPolicies(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTenant:
@@ -423,7 +421,6 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
 		&tree.ShowHistogram{},
-		&tree.ShowPolicies{},
 		&tree.ShowTableStats{},
 		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},

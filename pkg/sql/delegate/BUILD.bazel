@@ -19,6 +19,7 @@ go_library(
         "show_jobs.go",
         "show_logical_replication_jobs.go",
         "show_partitions.go",
+        "show_policies.go",
         "show_queries.go",
         "show_range_for_row.go",
         "show_ranges.go",
