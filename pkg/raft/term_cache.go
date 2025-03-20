@@ -77,8 +77,10 @@ func (tc *termCache) term(index uint64) (uint64, bool) {
 // suffix is overwritten accordingly.
 func (tc *termCache) truncateAndAppend(ls LogSlice) {
 	tc.truncateFrom(ls.prev)
-	// TODO(hakuuww): in most cases, all the entries in the slice have the same
-	// term, and this term is already cached. In this case we can skip the scan.
+	if ls.lastEntryID().term == tc.last().term {
+		// NB: Common case, there are no new terms in the appended slice.
+		return
+	}
 	for _, entry := range ls.Entries() {
 		tc.append(entryID{term: entry.Term, index: entry.Index})
 	}
