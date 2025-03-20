@@ -283,18 +283,40 @@ type BytesMonitor struct {
 //   - a string prefix
 //   - an optional int32 processor ID
 //   - an optional uuid.Short
-//   - an optional string suffix
+//   - an optional suffix
 //   - an optional int32
 //
 // When printed, the fields are separated by "-", if present.
-//
-// TODO(mgartner): Reduce the size of this struct.
 type MonitorName struct {
 	prefix      redact.SafeString
 	processorID int32
 	uuid        uuid.Short
-	suffix      redact.SafeString
+	suffix      monitorNameSuffix
 	i           int32
+}
+
+// monitorNameSuffix is an enum the represents one of a finite list of possible
+// monitor name suffixes.
+type monitorNameSuffix uint8
+
+const (
+	monitorNameSuffixNone monitorNameSuffix = iota
+	monitorNameSuffixLimited
+	monitorNameSuffixUnlimited
+	monitorNameSuffixDisk
+)
+
+func (mns monitorNameSuffix) safeString() redact.SafeString {
+	switch mns {
+	case monitorNameSuffixLimited:
+		return "limited"
+	case monitorNameSuffixUnlimited:
+		return "unlimited"
+	case monitorNameSuffixDisk:
+		return "disk"
+	default:
+		return "unknown-suffix"
+	}
 }
 
 // MakeMonitorName constructs a MonitorName with the given prefix.
@@ -315,8 +337,26 @@ func (mn MonitorName) WithUUID(uuid uuid.Short) MonitorName {
 	return mn
 }
 
+// Limited sets the suffix to "limited".
+func (mn MonitorName) Limited() MonitorName {
+	mn.suffix = monitorNameSuffixLimited
+	return mn
+}
+
+// Unlimited sets the suffix to "unlimited".
+func (mn MonitorName) Unlimited() MonitorName {
+	mn.suffix = monitorNameSuffixUnlimited
+	return mn
+}
+
+// Disk sets the suffix to "disk".
+func (mn MonitorName) Disk() MonitorName {
+	mn.suffix = monitorNameSuffixDisk
+	return mn
+}
+
 // WithSuffix returns a new MonitorName with the given suffix attached.
-func (mn MonitorName) WithSuffix(suffix redact.SafeString) MonitorName {
+func (mn MonitorName) WithSuffix(suffix monitorNameSuffix) MonitorName {
 	mn.suffix = suffix
 	return mn
 }
@@ -344,9 +384,9 @@ func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
 		w.SafeString("-")
 		w.SafeString(redact.SafeString(mn.uuid.String()))
 	}
-	if mn.suffix != "" {
+	if mn.suffix != monitorNameSuffixNone {
 		w.SafeString("-")
-		w.SafeString(mn.suffix)
+		w.SafeString(mn.suffix.safeString())
 	}
 	if mn.i != 0 {
 		w.SafeString("-")
@@ -356,7 +396,7 @@ func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize = 192
+	expectedMonitorSize = 176
 	expectedAccountSize = 24
 )
 

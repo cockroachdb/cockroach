@@ -44,11 +44,10 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 // getMemMonitorNameLocked returns a unique (for this MonitorRegistry) memory
 // monitor name.
 func (r *MonitorRegistry) getMemMonitorNameLocked(
-	opName redact.SafeString, processorID int32, suffix redact.SafeString,
+	opName redact.SafeString, processorID int32,
 ) mon.MonitorName {
 	r.mu.AssertHeld()
-	return mon.MakeMonitorName(opName).WithProcessorID(processorID).
-		WithSuffix(suffix).WithInt(int32(len(r.monitors)))
+	return mon.MakeMonitorName(opName).WithProcessorID(processorID).WithInt(int32(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -61,7 +60,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategy(
 ) (*mon.BoundAccount, mon.MonitorName) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	monitorName := r.getMemMonitorNameLocked(opName, processorID, "limited" /* suffix */)
+	monitorName := r.getMemMonitorNameLocked(opName, processorID).Limited()
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
 		ctx, flowCtx.Mon, flowCtx, monitorName,
 	)
@@ -91,7 +90,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 			))
 		}
 	}
-	monitorName := r.getMemMonitorNameLocked(opName, processorID, "limited" /* suffix */)
+	monitorName := r.getMemMonitorNameLocked(opName, processorID).Limited()
 	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.Mon, false /* longLiving */)
 	bufferingOpMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	r.monitors = append(r.monitors, bufferingOpMemMonitor)
@@ -138,7 +137,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
 ) []*mon.BoundAccount {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	monitorName := r.getMemMonitorNameLocked(opName, processorID, "unlimited" /* suffix */)
+	monitorName := r.getMemMonitorNameLocked(opName, processorID).Unlimited()
 	_, accounts := r.createUnlimitedMemAccountsLocked(ctx, flowCtx, monitorName, numAccounts)
 	return accounts
 }
@@ -158,7 +157,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.createUnlimitedMemAccountsLocked(ctx, flowCtx, name.WithSuffix("unlimited"), numAccounts)
+	return r.createUnlimitedMemAccountsLocked(ctx, flowCtx, name.Unlimited(), numAccounts)
 }
 
 func (r *MonitorRegistry) createUnlimitedMemAccountsLocked(
@@ -190,7 +189,7 @@ func (r *MonitorRegistry) createDiskMonitorLocked(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
 ) *mon.BytesMonitor {
 	r.mu.AssertHeld()
-	monitorName := r.getMemMonitorNameLocked(opName, processorID, "disk" /* suffix */)
+	monitorName := r.getMemMonitorNameLocked(opName, processorID).Disk()
 	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
 	r.monitors = append(r.monitors, opDiskMonitor)
 	return opDiskMonitor
