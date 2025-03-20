@@ -217,6 +217,9 @@ const (
 	// will be used to log the results of INSPECT jobs.
 	V25_4_InspectErrorsTable
 
+	// V25_4_SQLInstancesAddLocalityAddresses is the migration to add the `locality_addresses`
+	// column to the system.sql_instances table.
+	V25_4_SQLInstancesAddLocalityAddresses
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -273,6 +276,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_4_PebbleFormatV2BlobFiles:                      {Major: 25, Minor: 3, Internal: 6},
 
 	V25_4_InspectErrorsTable: {Major: 25, Minor: 3, Internal: 8},
+
+	V25_4_SQLInstancesAddLocalityAddresses: {Major: 25, Minor: 3, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
