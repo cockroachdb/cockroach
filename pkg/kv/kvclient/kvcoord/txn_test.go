@@ -1862,3 +1862,108 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestsTxnBufferedWritesConditionalPuts verifies that conditional puts behave correctly with
+// buffered writes. In particular, it verifies that the condition is evaluated in the CPut's
+// batch, even though the write is flushed at commit time.
+func TestTxnBufferedWritesConditionalPuts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := createTestDB(t)
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+		ctx := context.Background()
+
+		value1Str := "value1"
+		value2Str := "value2"
+
+		value1 := []byte(value1Str)
+		valueTxn := []byte("valueTxn")
+
+		keyA := []byte("keyA")
+		keyB := []byte("keyB")
+
+		for _, tc := range []struct {
+			key       roachpb.Key
+			value     []byte
+			origValue string
+			condValue string
+		}{
+			{
+				key:       keyA,
+				origValue: value1Str,
+				condValue: value1Str,
+			},
+			{
+				key:       keyA,
+				origValue: value1Str,
+				condValue: value2Str,
+			},
+			{
+				key:       keyB,
+				origValue: "",
+				condValue: value2Str,
+			},
+			{
+				key:       keyB,
+				origValue: "",
+				condValue: "",
+			},
+		} {
+			// Before the test begins, write a value to keyA.
+			txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+			require.NoError(t, txn.Put(ctx, keyA, value1))
+			require.NoError(t, txn.Commit(ctx))
+
+			// Expect an error if the original value doesn't match the one we're supplying
+			// in the CPut expectation.
+			expErr := tc.origValue != tc.condValue
+			err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				txn.SetBufferedWritesEnabled(true)
+
+				expValue := kvclientutils.StrToCPutExistingValue(tc.condValue)
+				if tc.condValue == "" {
+					// Handle empty strings specially.
+					expValue = nil
+				}
+
+				err := txn.CPut(ctx, tc.key, valueTxn, expValue)
+				if expErr {
+					require.Error(t, err)
+					require.IsType(t, &kvpb.ConditionFailedError{}, err)
+				} else {
+					require.NoError(t, err)
+				}
+
+				if commit {
+					return nil
+				} else {
+					return errors.New("abort")
+				}
+			})
+
+			if commit {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				testutils.IsError(err, "abort")
+			}
+
+			// Verify the values are visible only if the transaction commited
+			// and the CPut expectation was satisfied. Otherwise, the original
+			// value remains.
+			gr, err := s.DB.Get(ctx, tc.key)
+			require.NoError(t, err)
+			if commit && !expErr {
+				require.Equal(t, valueTxn, gr.ValueBytes())
+			} else {
+				if tc.origValue == "" {
+					require.False(t, gr.Exists())
+				} else {
+					require.Equal(t, []byte(tc.origValue), gr.ValueBytes())
+				}
+			}
+		}
+	})
+}

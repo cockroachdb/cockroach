@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -114,11 +115,15 @@ type txnWriteBuffer struct {
 	bufferIDAlloc uint64
 
 	wrapped lockedSender
+
+	// testingOverrideCPutEvalFn is used to mock the evaluation function for
+	// conditional puts. Intended only for tests.
+	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
 }
 
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, *kvpb.Error) {
+) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
 	if !twb.enabled {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
@@ -138,11 +143,10 @@ func (twb *txnWriteBuffer) SendLocked(
 		// left with an empty batch after applying transformations, eschew sending
 		// anything to KV.
 		br := ba.CreateReply()
-		var err error
 		for i, t := range ts {
-			br.Responses[i], err = t.toResp(twb, kvpb.ResponseUnion{})
-			if err != nil {
-				return nil, kvpb.NewError(err)
+			br.Responses[i], pErr = t.toResp(twb, kvpb.ResponseUnion{}, ba.Txn)
+			if pErr != nil {
+				return nil, pErr
 			}
 		}
 		return br, nil
@@ -153,11 +157,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return nil, twb.adjustError(ctx, transformedBa, ts, pErr)
 	}
 
-	resp, err := twb.mergeResponseWithTransformations(ctx, ts, br)
-	if err != nil {
-		return nil, kvpb.NewError(err)
-	}
-	return resp, nil
+	return twb.mergeResponseWithTransformations(ctx, ts, br)
 }
 
 // adjustError adjusts the provided error based on the transformations made by
@@ -321,6 +321,9 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // their response needs to be merged with any buffered writes. The only
 // difference is the direction in which the buffer is iterated when doing the
 // merge. As a result, they're also collected as tranformations.
+// 5. Conditional Puts are decomposed into a locking Get followed by a Put. The
+// Put is buffered locally if the condition evaluates successfully using the
+// Get's response. Otherwise, a ConditionFailedError is returned.
 //
 // TODO(arul): Augment this comment as these expand.
 func (twb *txnWriteBuffer) applyTransformations(
@@ -338,6 +341,28 @@ func (twb *txnWriteBuffer) applyTransformations(
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
 		switch t := req.(type) {
+		case *kvpb.ConditionalPutRequest:
+			ts = append(ts, transformation{
+				stripped:    false,
+				index:       i,
+				origRequest: req,
+			})
+			getReq := &kvpb.GetRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:      t.Key,
+					Sequence: t.Sequence,
+				},
+				LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
+				KeyLockingStrength: lock.Exclusive,
+			}
+			var getReqU kvpb.RequestUnion
+			getReqU.MustSetInner(getReq)
+			// Send a locking Get request to the KV layer; we'll evaluate the
+			// condition locally based on the response.
+			baRemote.Requests = append(baRemote.Requests, getReqU)
+			// TODO(arul): We're not handling the case where this Get needs to
+			// be served locally from the buffer yet.
+
 		case *kvpb.PutRequest:
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.PutResponse{})
@@ -670,7 +695,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 // oblivious to its decision to buffer any writes.
 func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 	ctx context.Context, ts transformations, br *kvpb.BatchResponse,
-) (_ *kvpb.BatchResponse, err error) {
+) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
 	if ts.Empty() && br == nil {
 		log.Fatal(ctx, "unexpectedly found no transformations and no batch response")
 	} else if ts.Empty() {
@@ -692,15 +717,15 @@ func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 				// we received a response for it, which then needs to be combined with
 				// what's in the write buffer.
 				resp := br.Responses[0]
-				mergedResps[i], err = ts[0].toResp(twb, resp)
-				if err != nil {
-					return nil, err
+				mergedResps[i], pErr = ts[0].toResp(twb, resp, br.Txn)
+				if pErr != nil {
+					return nil, pErr
 				}
 				br.Responses = br.Responses[1:]
 			} else {
-				mergedResps[i], err = ts[0].toResp(twb, kvpb.ResponseUnion{})
-				if err != nil {
-					return nil, err
+				mergedResps[i], pErr = ts[0].toResp(twb, kvpb.ResponseUnion{}, br.Txn)
+				if pErr != nil {
+					return nil, pErr
 				}
 			}
 
@@ -738,18 +763,44 @@ type transformation struct {
 // toResp returns the response that should be added to the batch response as
 // a result of applying the transformation.
 func (t transformation) toResp(
-	twb *txnWriteBuffer, br kvpb.ResponseUnion,
-) (kvpb.ResponseUnion, error) {
+	twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
+) (kvpb.ResponseUnion, *kvpb.Error) {
 	if t.stripped {
 		return t.resp, nil
 	}
 
 	var ru kvpb.ResponseUnion
 	switch t.origRequest.(type) {
+	case *kvpb.ConditionalPutRequest:
+		// Evaluate the condition.
+		evalFn := mvcceval.MaybeConditionFailedError
+		if twb.testingOverrideCPutEvalFn != nil {
+			evalFn = twb.testingOverrideCPutEvalFn
+		}
+		cputReq := t.origRequest.(*kvpb.ConditionalPutRequest)
+		getResp := br.GetInner().(*kvpb.GetResponse)
+		condFailedErr := evalFn(
+			cputReq.ExpBytes,
+			getResp.Value,
+			getResp.Value.IsPresent(),
+			cputReq.AllowIfDoesNotExist,
+		)
+		if condFailedErr != nil {
+			pErr := kvpb.NewErrorWithTxn(condFailedErr, txn)
+			pErr.SetErrorIndex(int32(t.index))
+			return kvpb.ResponseUnion{}, pErr
+		}
+		// The condition was satisfied; buffer a Put, and return a synthesized
+		// response.
+		twb.addToBuffer(cputReq.Key, cputReq.Value, cputReq.Sequence)
+		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
+
 	case *kvpb.PutRequest:
 		ru = t.resp
+
 	case *kvpb.DeleteRequest:
 		ru = t.resp
+
 	case *kvpb.GetRequest:
 		// Get requests must be served from the local buffer if a transaction
 		// performed a previous write to the key being read. However, Get requests
@@ -759,20 +810,22 @@ func (t transformation) toResp(
 		assertTrue(t.stripped == (req.KeyLockingStrength == lock.None),
 			"Get requests should either be stripped or be locking")
 		ru = t.resp
+
 	case *kvpb.ScanRequest:
 		scanResp, err := twb.mergeWithScanResp(
 			t.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
 		)
 		if err != nil {
-			return kvpb.ResponseUnion{}, err
+			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
 		ru.MustSetInner(scanResp)
+
 	case *kvpb.ReverseScanRequest:
 		reverseScanResp, err := twb.mergeWithReverseScanResp(
 			t.origRequest.(*kvpb.ReverseScanRequest), br.GetInner().(*kvpb.ReverseScanResponse),
 		)
 		if err != nil {
-			return kvpb.ResponseUnion{}, err
+			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
 		ru.MustSetInner(reverseScanResp)
 
