@@ -242,14 +242,18 @@ func (c *controller) processChangeReplicas(
 	if !ok {
 		panic(errors.Newf("programming error: range %d not found", cro.rangeID))
 	}
+	// We need to check if the change is already complete. If it is, we can
+	// skip the operation. This is the case where the change didn't apply
+	// instantly and processChangeReplicas is called over multiple ticks.
+	if (cro.complete != time.Time{}) && !tick.Before(cro.complete) {
+		cro.done = true
+	}
 
-	// Apply the change
 	change := state.ReplicaChange{
 		RangeID: cro.rangeID,
 		Author:  c.storeID,
 		Changes: cro.changes,
 	}
-
 	targets := kvserver.SynthesizeTargetsByChangeType(cro.changes)
 	if len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0 {
 		change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(), true /* use range size */)
@@ -259,10 +263,11 @@ func (c *controller) processChangeReplicas(
 	if !ok {
 		return errors.Newf("tick %d: Changer did not accept change for range %d", tick, cro.rangeID)
 	}
+	cro.complete = completeAt
 
-	// If the change was applied instantly or the operation is already complete
-	if completeAt.Equal(tick) || completeAt.Before(tick) {
-		cro.Complete(tick)
+	if !tick.Before(completeAt) {
+		// If the change was applied instantly (only promotion/demotion).
+		cro.done = true
 	} else {
 		cro.next = completeAt
 	}
