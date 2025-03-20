@@ -2803,7 +2803,7 @@ CREATE TABLE t.test (
 	UPDATE t.test SET y = 3 WHERE y = 2;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put %[1]s/%%' OR
+		message LIKE 'Put %%%[1]s/%%' OR
 		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/%%';`, tablePrefixStr))
 	if err != nil {
@@ -2811,12 +2811,16 @@ CREATE TABLE t.test (
 	}
 
 	expected = []string{
-		// The primary index should see the update
+		// The primary index should see the update.
 		fmt.Sprintf("Put %s/1/1/1/1 -> /INT/3", tablePrefixStr),
-		// The temporary index for the newly added index sees
-		// a Put in all families.
+		// The temporary index for the newly added index sees a Put in all
+		// families (except for the 1st family only consisting of the PK and the
+		// 3rd family KV for which is elided due to NULL).
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/0", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/0 -> /BYTES/0x0a030a1302", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/2/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/2/1 -> /BYTES/0x0a030a3306", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/4/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/4/1 -> /BYTES/0x0a02010c", tablePrefixStr),
 	}
 	require.Equal(t, expected, scanToArray(rows))
@@ -2827,7 +2831,7 @@ CREATE TABLE t.test (
 	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put %[1]s/%%' OR
+		message LIKE 'Put %%%[1]s/%%' OR
 		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/2%%';`, tablePrefixStr))
 	if err != nil {
@@ -2842,7 +2846,9 @@ CREATE TABLE t.test (
 		// The temporary index sees a Put in all families even though
 		// only some are changing. This is expected.
 		fmt.Sprintf("Put %s/5/3/0 -> /BYTES/0x0a030a1302", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/3/2/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/3/1 -> /BYTES/0x0a02010a", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/3/4/1", tablePrefixStr),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
