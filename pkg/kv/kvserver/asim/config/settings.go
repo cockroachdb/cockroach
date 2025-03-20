@@ -114,6 +114,8 @@ type SimulationSettings struct {
 	ReplicateQueueEnabled bool
 	// LeaseQueueEnabled controls whether the lease queue is enabled.
 	LeaseQueueEnabled bool
+	// SplitQueueEnabled controls whether the split queue is enabled.
+	SplitQueueEnabled bool
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
@@ -142,6 +144,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
 		ReplicateQueueEnabled:   true,
 		LeaseQueueEnabled:       true,
+		SplitQueueEnabled:       true,
 	}
 }
 
