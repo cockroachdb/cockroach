@@ -15,7 +15,8 @@ CREATE TABLE rtable(
   geom geometry,
   rk2 string,
   PRIMARY KEY (rk1, rk2),
-  INVERTED INDEX geom_index(geom)
+  INVERTED INDEX geom_index(geom),
+  FAMILY (rk1, rk2, geom)
 )
 
 query T
