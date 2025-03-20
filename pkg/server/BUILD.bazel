@@ -452,6 +452,7 @@ go_test(
         "get_local_files_test.go",
         "graphite_test.go",
         "grpc_gateway_test.go",
+        "grpc_server_test.go",
         "helpers_test.go",
         "http_metrics_test.go",
         "index_usage_stats_test.go",
