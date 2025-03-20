@@ -1051,9 +1051,9 @@ EXECUTE p(1, 10)
 Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
 Del /Table/118/2/2/1/0
-CPut /Table/118/2/3/1/0 -> /BYTES/
+Put /Table/118/2/3/1/0 -> /BYTES/
 Del /Table/118/3/3/1/0
-CPut /Table/118/3/10/1/0 -> /BYTES/
+Put /Table/118/3/10/1/0 -> /BYTES/
 
 statement ok
 DEALLOCATE p
@@ -1133,9 +1133,9 @@ Scan /Table/118/2/1{0-1} lock Exclusive (Block, Unreplicated)
 Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
 Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/100
 Del /Table/118/2/10/1/0
-CPut /Table/118/2/11/1/0 -> /BYTES/
+Put /Table/118/2/11/1/0 -> /BYTES/
 Del /Table/118/3/3/1/0
-CPut /Table/118/3/100/1/0 -> /BYTES/
+Put /Table/118/3/100/1/0 -> /BYTES/
 
 statement ok
 DEALLOCATE p
@@ -1201,11 +1201,11 @@ query T kvtrace
 EXECUTE p(1, 10)
 ----
 Scan /Table/118/1/1/0
-Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
+Put (locking) /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
 Del /Table/118/2/2/1/0
-CPut /Table/118/2/3/1/0 -> /BYTES/
+Put /Table/118/2/3/1/0 -> /BYTES/
 Del /Table/118/3/3/1/0
-CPut /Table/118/3/10/1/0 -> /BYTES/
+Put /Table/118/3/10/1/0 -> /BYTES/
 
 statement ok
 DEALLOCATE p
@@ -1319,11 +1319,11 @@ EXECUTE p(1)
 Scan /Table/118/1/1/0
 Scan /Table/118/2/{1-2}
 Scan /Table/118/1/1/0
-Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
+Put (locking) /Table/118/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
 Del /Table/118/2/1/1/0
-CPut /Table/118/2/2/1/0 -> /BYTES/
+Put /Table/118/2/2/1/0 -> /BYTES/
 Del /Table/118/3/1/1/0
-CPut /Table/118/3/2/1/0 -> /BYTES/
+Put /Table/118/3/2/1/0 -> /BYTES/
 
 statement ok
 CREATE TABLE t139160 (
@@ -1369,7 +1369,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1387,7 +1387,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1429,7 +1429,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1448,7 +1448,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1491,7 +1491,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1510,7 +1510,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1553,7 +1553,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Put /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
@@ -1572,7 +1572,7 @@ Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del /Table/119/4/4/0
@@ -1608,10 +1608,10 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
 ----
 Scan /Table/119/{1-2}
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
-Put /Table/119/1/1/1/1 -> /INT/6
+Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put (locking) /Table/119/1/1/1/1 -> /INT/6
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0
@@ -1626,10 +1626,10 @@ query T kvtrace
 UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE w = 5
 ----
 Scan /Table/119/{1-2}
-Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put (locking) /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
 Del (locking) /Table/119/1/1/1/1
 Del /Table/119/2/2/1/0
-CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Put /Table/119/2/3/1/0 -> /BYTES/0x3308
 Del (locking) /Table/119/3/3/0
 CPut /Table/119/3/4/0 -> /BYTES/0x892306
 Del (locking) /Table/119/4/4/0

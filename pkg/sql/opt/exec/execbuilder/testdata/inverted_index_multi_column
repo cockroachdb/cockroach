@@ -31,8 +31,8 @@ query T kvtrace
 INSERT INTO t VALUES (1, 333, 'foo', '{"a": "b"}'::json)
 ----
 CPut /Table/106/1/1/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
-CPut /Table/106/2/333/"a"/"b"/1/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/"a"/"b"/1/0 -> /BYTES/
+Put /Table/106/2/333/"a"/"b"/1/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/"a"/"b"/1/0 -> /BYTES/
 
 # This test shows an inverted index scan followed by a primary index scan to
 # retrieve all the table's columns.
@@ -47,19 +47,19 @@ query T kvtrace
 INSERT INTO t VALUES (2, 333, 'foo', '[7, 0, 7]'::json)
 ----
 CPut /Table/106/1/2/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/[7, 0, 7]
-CPut /Table/106/2/333/Arr/0/2/0 -> /BYTES/
-CPut /Table/106/2/333/Arr/7/2/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/Arr/0/2/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/Arr/7/2/0 -> /BYTES/
+Put /Table/106/2/333/Arr/0/2/0 -> /BYTES/
+Put /Table/106/2/333/Arr/7/2/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/Arr/0/2/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/Arr/7/2/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO t VALUES (3, 333, 'foo', '[{"a": "b"}, 3, {"a": "b"}]'::json)
 ----
 CPut /Table/106/1/3/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/[{"a": "b"}, 3, {"a": "b"}]
-CPut /Table/106/2/333/Arr/3/3/0 -> /BYTES/
-CPut /Table/106/2/333/Arr/"a"/"b"/3/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/Arr/3/3/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/Arr/"a"/"b"/3/0 -> /BYTES/
+Put /Table/106/2/333/Arr/3/3/0 -> /BYTES/
+Put /Table/106/2/333/Arr/"a"/"b"/3/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/Arr/3/3/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/Arr/"a"/"b"/3/0 -> /BYTES/
 
 # Don't delete duplicate values.
 query T kvtrace
@@ -94,8 +94,8 @@ UPDATE t SET j = '[1]' WHERE k = 4
 ----
 Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/[1]
-CPut /Table/106/2/333/Arr/1/4/0 -> /BYTES/
-CPut /Table/106/3/333/"foo"/Arr/1/4/0 -> /BYTES/
+Put /Table/106/2/333/Arr/1/4/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/Arr/1/4/0 -> /BYTES/
 
 # Update back to NULL.
 query T kvtrace
@@ -118,8 +118,8 @@ query T kvtrace
 INSERT INTO t VALUES (5, NULL, 'foo', '{"a": "b"}'::json)
 ----
 CPut /Table/106/1/5/0 -> /TUPLE/3:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
-CPut /Table/106/2/NULL/"a"/"b"/5/0 -> /BYTES/
-CPut /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/2/NULL/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 
 # Update away from NULL.
 query T kvtrace
@@ -128,9 +128,9 @@ UPDATE t SET i = 333 WHERE k = 5
 Scan /Table/106/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/5/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
 Del /Table/106/2/NULL/"a"/"b"/5/0
-CPut /Table/106/2/333/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/2/333/"a"/"b"/5/0 -> /BYTES/
 Del /Table/106/3/NULL/"foo"/"a"/"b"/5/0
-CPut /Table/106/3/333/"foo"/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/3/333/"foo"/"a"/"b"/5/0 -> /BYTES/
 
 # Update back to NULL.
 query T kvtrace
@@ -139,9 +139,9 @@ UPDATE t SET i = NULL WHERE k = 5
 Scan /Table/106/1/5/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/5/0 -> /TUPLE/3:3:Bytes/foo/1:4:SentinelType/{"a": "b"}
 Del /Table/106/2/333/"a"/"b"/5/0
-CPut /Table/106/2/NULL/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/2/NULL/"a"/"b"/5/0 -> /BYTES/
 Del /Table/106/3/333/"foo"/"a"/"b"/5/0
-CPut /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
+Put /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 
 # Delete row with NULL non-inverted row.
 query T kvtrace
