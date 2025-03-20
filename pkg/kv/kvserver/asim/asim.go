@@ -194,6 +194,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	store, _ := s.state.Store(storeID)
 	s.mmSRs[storeID] = mmaintegration.NewMMAStoreRebalancer(
 		storeID,
+		store.NodeID(),
 		s.state.Node(store.NodeID()).MMAllocator(),
 		s.controllers[storeID],
 		s.settings,

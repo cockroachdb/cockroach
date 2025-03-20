@@ -37,9 +37,3 @@ func (cro *ChangeReplicasOp) error(err error) {
 		cro.rangeID, cro.changes)
 	cro.errs = append(cro.errs, augmentedErr)
 }
-
-// Complete marks the change replicas operation as complete.
-func (cro *ChangeReplicasOp) Complete(tick time.Time) {
-	cro.done = true
-	cro.complete = tick
-}

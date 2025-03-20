@@ -16,5 +16,6 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
         "//pkg/util/log",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
