@@ -1100,3 +1100,75 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
+
+// TestTxnWriteBufferRespectsMustAcquireExclusiveLock verifies that Put and
+// Delete requests that have the MustAcquireExclusiveLock are decomposed into a
+// locking Get and a buffered write.
+func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	val := "val"
+
+	// Blindly write to keys A.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	delA := delArgs(keyA, txn.Sequence)
+	putB := putArgs(keyB, val, txn.Sequence)
+
+	ba.Add(delA)
+	ba.Add(putB)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		getReq := ba.Requests[0].GetInner().(*kvpb.GetRequest)
+		require.Equal(t, keyA, getReq.Key)
+		require.Equal(t, txn.Sequence, getReq.Sequence)
+		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
+		require.True(t, getReq.LockNonExisting)
+
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
+		getReq = ba.Requests[1].GetInner().(*kvpb.GetRequest)
+		require.Equal(t, keyB, getReq.Key)
+		require.Equal(t, txn.Sequence, getReq.Sequence)
+		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
+		require.True(t, getReq.LockNonExisting)
+		return ba.CreateReply(), nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Lastly, commit the transaction. A put should only be flushed if the condition
+	// evaluated successfully.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though we may have flushed the buffer, responses from the blind writes should
+	// not be returned.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}

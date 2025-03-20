@@ -144,7 +144,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		// anything to KV.
 		br := ba.CreateReply()
 		for i, t := range ts {
-			br.Responses[i], pErr = t.toResp(twb, kvpb.ResponseUnion{}, ba.Txn)
+			br.Responses[i], pErr = t.toResp(ctx, twb, kvpb.ResponseUnion{}, ba.Txn)
 			if pErr != nil {
 				return nil, pErr
 			}
@@ -364,31 +364,58 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// be served locally from the buffer yet.
 
 		case *kvpb.PutRequest:
+			// If the MustAcquireExclusiveLock flag is set on the Put, then we need to
+			// add a locking Get to the BatchRequest, including if the key doesn't
+			// exist.
+			if t.MustAcquireExclusiveLock {
+				// TODO(yuzefovich,ssd): ensure that we elide the lock acquisition
+				// whenever possible (e.g. blind UPSERT in an implicit txn).
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(&kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    true,
+					KeyLockingStrength: lock.Exclusive,
+				})
+				baRemote.Requests = append(baRemote.Requests, getReqU)
+			}
+
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.PutResponse{})
-			// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on the
-			// Put, then we need to add a locking Get to the BatchRequest,
-			// including if the key doesn't exist (#139232).
-			// TODO(yuzefovich): ensure that we elide the lock acquisition
-			// whenever possible (e.g. blind UPSERT in an implicit txn).
 			ts = append(ts, transformation{
-				stripped:    true,
+				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
 				origRequest: req,
 				resp:        ru,
 			})
 			twb.addToBuffer(t.Key, t.Value, t.Sequence)
-
 		case *kvpb.DeleteRequest:
+			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
+			// need to add a locking Get to the BatchRequest, including if the key
+			// doesn't exist.
+			if t.MustAcquireExclusiveLock {
+				// TODO(ssd): ensure that we elide the lock acquisition
+				// whenever possible.
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(&kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    true,
+					KeyLockingStrength: lock.Exclusive,
+				})
+				baRemote.Requests = append(baRemote.Requests, getReqU)
+			}
+
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.DeleteResponse{
-				// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on
-				// the Del, then we need to add a locking Get to the
-				// BatchRequest, including if the key doesn't exist (#139232).
 				FoundKey: false,
 			})
 			ts = append(ts, transformation{
-				stripped:    true,
+				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
 				origRequest: req,
 				resp:        ru,
@@ -717,13 +744,13 @@ func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 				// we received a response for it, which then needs to be combined with
 				// what's in the write buffer.
 				resp := br.Responses[0]
-				mergedResps[i], pErr = ts[0].toResp(twb, resp, br.Txn)
+				mergedResps[i], pErr = ts[0].toResp(ctx, twb, resp, br.Txn)
 				if pErr != nil {
 					return nil, pErr
 				}
 				br.Responses = br.Responses[1:]
 			} else {
-				mergedResps[i], pErr = ts[0].toResp(twb, kvpb.ResponseUnion{}, br.Txn)
+				mergedResps[i], pErr = ts[0].toResp(ctx, twb, kvpb.ResponseUnion{}, br.Txn)
 				if pErr != nil {
 					return nil, pErr
 				}
@@ -763,7 +790,7 @@ type transformation struct {
 // toResp returns the response that should be added to the batch response as
 // a result of applying the transformation.
 func (t transformation) toResp(
-	twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
+	ctx context.Context, twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
 ) (kvpb.ResponseUnion, *kvpb.Error) {
 	if t.stripped {
 		return t.resp, nil
@@ -799,7 +826,10 @@ func (t transformation) toResp(
 		ru = t.resp
 
 	case *kvpb.DeleteRequest:
+		getResp := br.GetInner().(*kvpb.GetResponse)
 		ru = t.resp
+		log.VEventf(ctx, 2, "synthesizing DeleteResponse from GetReponse: %#v", getResp)
+		ru.GetDelete().FoundKey = getResp.Value.IsPresent()
 
 	case *kvpb.GetRequest:
 		// Get requests must be served from the local buffer if a transaction
