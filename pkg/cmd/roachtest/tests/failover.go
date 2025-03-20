@@ -270,6 +270,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place 5 replicas of all ranges on n3-n9, keeping n1-n2 as SQL gateways.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
@@ -455,6 +456,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3 to start with.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -600,6 +602,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -721,6 +724,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -837,6 +841,7 @@ func runFailoverNonSystem(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -944,6 +949,7 @@ func runFailoverLiveness(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -1057,6 +1063,7 @@ func runFailoverSystemNonLiveness(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
@@ -1860,4 +1867,11 @@ func getKVLabels(concurrency int, insertCount int, readPercent int) map[string]s
 		"insert_count": fmt.Sprintf("%d", insertCount),
 		"read_percent": fmt.Sprintf("%d", readPercent),
 	}
+}
+
+func setMaxLifetime(conn *gosql.DB) {
+	// See https://github.com/cockroachdb/cockroach/issues/143121#issuecomment-2739835367.
+	// This is out of an abundance of caution, since we are often introducing network
+	// issues in failover tests.
+	conn.SetConnMaxLifetime(10 * time.Second)
 }
