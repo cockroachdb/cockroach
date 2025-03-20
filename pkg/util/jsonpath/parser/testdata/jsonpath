@@ -342,6 +342,27 @@ parse
 ----
 ((1 == 1) || (1 != 1)) -- normalized!
 
+parse
+$.abc ? ($.a[1] > 2)
+----
+$."abc"?(($."a"[1] > 2)) -- normalized!
+
+# TODO(normanchenn): this should be not allowed
+parse
+@
+----
+@
+
+parse
+$.a[*] ? (@.b > 100)
+----
+$."a"[*]?((@."b" > 100)) -- normalized!
+
+parse
+$.a[*] ? (@.b > 100 || (@.c < 100))
+----
+$."a"[*]?(((@."b" > 100) || (@."c" < 100))) -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

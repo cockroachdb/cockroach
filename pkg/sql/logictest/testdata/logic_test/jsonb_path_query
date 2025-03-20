@@ -108,7 +108,6 @@ SELECT jsonb_path_query(data, 'strict $.aa.aaa.aaaa') FROM a
 query empty
 SELECT jsonb_path_query('{}', '$.a')
 
-
 statement ok
 CREATE TABLE b (j JSONB)
 
@@ -196,7 +195,6 @@ SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[1 to 3, 2, 1 to 3]');
 query empty
 SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[3 to 1]');
 
-
 query T rowsort
 SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[4 to 4]');
 ----
@@ -254,7 +252,6 @@ SELECT jsonb_path_query('{"a": [1, 2, 3, 4, 5]}', 'strict $[3 to 1]');
 
 query empty
 SELECT jsonb_path_query('{"a": [1, 2, 3]}', '$.a.b');
-
 
 statement error pgcode 2203A jsonpath member accessor can only be applied to an object
 SELECT jsonb_path_query('{"a": [1, 2, 3]}', 'strict $.a.b');
@@ -612,6 +609,104 @@ query T
 SELECT jsonb_path_query('{"a": 5, "b": 10}', '(1.5 > 1.2 && (!($.a == 1) || $.b == 1))');
 ----
 true
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1,2,3]}', '$.a ? (1 == 1)');
+----
+1
+2
+3
+
+query empty
+SELECT jsonb_path_query('{"a": [1,2,3]}', '$.a ? (1 != 1)');
+
+query T
+SELECT jsonb_path_query('{"a": [1,2,3]}', 'strict $.a ? (1 == 1)');
+----
+[1, 2, 3]
+
+query empty
+SELECT jsonb_path_query('{"a": [1,2,3]}', 'strict $.a ? (1 != 1)');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]}', '$.a[*] ? (@.b == 1)');
+----
+{"b": 1, "c": "hello"}
+{"b": 1, "c": "!"}
+
+query empty
+SELECT jsonb_path_query('{"a": [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]}', 'strict $.a ? (@.b == 1)');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]}', '$.a ? (@.b == 1)');
+----
+{"b": 1, "c": "hello"}
+{"b": 1, "c": "!"}
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]}', '$.a ? (@.b == 1)');
+----
+[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]
+[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]}', '$.a[*] ? (@.b == 1)');
+----
+{"b": 1, "c": "hello"}
+{"b": 1, "c": "!"}
+{"b": 1, "c": "hello"}
+{"b": 1, "c": "!"}
+
+query empty
+SELECT jsonb_path_query('{"a": [[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]}', 'strict $.a ? (@.b == 1)');
+
+query empty
+SELECT jsonb_path_query('{"a": [[{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}], [{"b": 1, "c": "hello"}, {"b": 2, "c": "world"}, {"b": 1, "c": "!"}]]}', 'strict $.a[*] ? (@.b == 1)');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1,2,3,4,5]}', '$.a ? (@ > 3)');
+----
+4
+5
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [{"b": 1, "c": 10}, {"b": 2, "c": 20}, {"b": 3, "c": 30}]}', '$.a ? (@.c > 15)');
+----
+{"b": 2, "c": 20}
+{"b": 3, "c": 30}
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [{"b": "x", "c": true}, {"b": "y", "c": false}, {"b": "z", "c": true}]}', '$.a ? (@.c == true)');
+----
+{"b": "x", "c": true}
+{"b": "z", "c": true}
+
+query T
+SELECT jsonb_path_query('{"c": {"a": 1, "b":1}}', '$.c ? ($.c.a == @.b)');
+----
+{"a": 1, "b": 1}
+
+query empty
+SELECT jsonb_path_query('{"a": [1,2,3]}', '$.a ? (@ > 10)');
+
+query empty
+SELECT jsonb_path_query('{"a": [{"b": 1, "c": 10}, {"b": 2, "c": 20}]}', '$.a ? (@.c > 100)');
+
+query empty
+SELECT jsonb_path_query('{"a": [[[{"b": 1}], [{"b": 2}]], [[{"b": 2}], [{"b": 1}]]]}', '$.a ? (@.b == 1)');
+
+query empty
+SELECT jsonb_path_query('{"a": [[[[[[{"b": 1}]]]]]]}', '$.a ? (@.b == 1)');
+
+query empty
+SELECT jsonb_path_query('{"a": [[[{"b": 1}], [{"b": 2}]]]}', '$.a ? (@.b == 1)');
+
+# when string literals are supported
+# query T rowsort
+# SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}'::jsonb, '$.data ? (@.val == "a")'::jsonpath);
+# ----
+# {"num": 1, "val": "a"}
+# {"num": 3, "val": "a"}
 
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');

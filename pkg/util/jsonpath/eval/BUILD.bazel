@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "array.go",
         "eval.go",
+        "filter.go",
         "key.go",
         "operation.go",
         "scalar.go",

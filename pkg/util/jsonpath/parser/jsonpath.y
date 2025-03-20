@@ -169,6 +169,8 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %token <str> OR
 %token <str> NOT
 
+%token <str> CURRENT
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -251,6 +253,10 @@ path_primary:
   {
     $$.val = jsonpath.Root{}
   }
+| CURRENT
+  {
+    $$.val = jsonpath.Current{}
+  }
 | scalar_value
   {
     $$.val = $1.path()
@@ -266,6 +272,10 @@ accessor_op:
 | array_accessor
   {
     $$.val = $1.path()
+  }
+| '?' '(' predicate ')'
+  {
+    $$.val = jsonpath.Filter{Condition: $3.path()}
   }
 ;
 

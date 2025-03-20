@@ -12,16 +12,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
 )
 
-func (ctx *jsonpathCtx) resolveScalar(s jsonpath.Scalar) (json.JSON, error) {
-	if s.Type == jsonpath.ScalarVariable {
-		val, err := ctx.vars.FetchValKey(s.Variable)
+func (ctx *jsonpathCtx) resolveScalar(scalar jsonpath.Scalar) (json.JSON, error) {
+	if scalar.Type == jsonpath.ScalarVariable {
+		val, err := ctx.vars.FetchValKey(scalar.Variable)
 		if err != nil {
 			return nil, err
 		}
 		if val == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", s.Variable)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "could not find jsonpath variable %q", scalar.Variable)
 		}
 		return val, nil
 	}
-	return s.Value, nil
+	return scalar.Value, nil
 }
