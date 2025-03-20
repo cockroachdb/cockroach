@@ -24,6 +24,8 @@ import (
 // The default subdirectory for incremental backups.
 const (
 	incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
+	// incBackupSubdirGlobWithSuffix is used for all backups taken on or after v25.2.
+	incBackupSubdirGlobWithSuffix = "/[0-9]*/[0-9]*.[0-9][0-9]-[0-9]*.[0-9][0-9]/"
 )
 
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
@@ -70,6 +72,8 @@ func CollectionsAndSubdir(paths []string, subdir string) ([]string, string, erro
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
 // If includeManifest is true the returned paths are to the manifests for the
 // prior backup, otherwise it is just to the backup path.
+//
+// The backup paths are returned in ascending end time order.
 func FindPriorBackups(
 	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
 ) ([]string, error) {
@@ -78,15 +82,24 @@ func FindPriorBackups(
 
 	var prev []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
+		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p)
+		if err != nil {
 			return err
-		} else if ok {
+		} else if !matchesGlob {
+			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.BackupManifestName, p)
+			if err != nil {
+				return err
+			}
+		}
+
+		if matchesGlob {
 			if !includeManifest {
 				p = strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
 			}
 			prev = append(prev, p)
 			return nil
 		}
+
 		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
 			return err
 		} else if ok {
