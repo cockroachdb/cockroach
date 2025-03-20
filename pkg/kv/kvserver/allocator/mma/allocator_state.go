@@ -512,7 +512,7 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
 			// Since we have already excluded overloaded nodes, we only consider sls.
-			return cmp.Or(-cmp.Compare(a.sls, b.sls), cmp.Compare(a.StoreID, b.StoreID))
+			return cmp.Or(cmp.Compare(a.sls, b.sls), cmp.Compare(a.StoreID, b.StoreID))
 		}
 		return -cmp.Compare(a.diversityScore, b.diversityScore)
 	})
@@ -655,24 +655,17 @@ func (a *allocatorState) computeCandidatesForRange(
 	expr constraintsDisj, storesToExclude storeIDPostingList, loadSheddingStore roachpb.StoreID,
 ) candidateSet {
 	means := a.cs.meansMemo.getMeans(expr)
-	sheddingThreshold := overloadUrgent
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
 		sheddingSLS := a.cs.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
-		if sheddingSLS.sls < sheddingThreshold {
-			sheddingThreshold = sheddingSLS.sls
-		}
-		if sheddingSLS.nls < sheddingThreshold {
-			sheddingThreshold = sheddingSLS.nls
-		}
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
 			return candidateSet{}
 		}
 	}
-	// Not going to try to add to stores that are <= sheddingThreshold.
+	// Not going to try to add to stores that are > loadNormal.
 	//
-	// TODO: Early filtering based on sheddingThreshold is not desirable when we
+	// TODO: Early filtering based on load is not desirable when we
 	// are unwilling to reduce diversity. For instance, we are already not
 	// filtering below based on maxFractionPending. Figure out which situations
 	// are ok with early filtering and only do those here (based on a parameter
@@ -685,7 +678,7 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.cs.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
-		if csls.sls >= sheddingThreshold || csls.nls >= sheddingThreshold || csls.fd != fdOK {
+		if csls.sls > loadNormal || csls.nls > loadNormal || csls.fd != fdOK {
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
