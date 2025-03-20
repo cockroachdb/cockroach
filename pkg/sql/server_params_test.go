@@ -17,6 +17,7 @@ import (
 // enables some EndTxn sanity checking and installs a flexible
 // TestingEvalFilter.
 // TODO(andrei): this function is not used consistently by SQL tests.
+// TODO(ssd,shubham): Rename this to `createTestServerParams`
 func createTestServerParamsAllowTenants() (base.TestServerArgs, *tests.CommandFilters) {
 	var cmdFilters tests.CommandFilters
 	params := base.TestServerArgs{}
@@ -27,17 +28,4 @@ func createTestServerParamsAllowTenants() (base.TestServerArgs, *tests.CommandFi
 		},
 	}
 	return params, &cmdFilters
-}
-
-// createTestServerParams creates a set of params suitable for SQL
-// tests with randomized tenant testing disabled. New tests should
-// prefer createTestServerParamsAllowTenants(). See
-// createTestServerParamsAllowTenants for additional details.
-//
-// TODO(ssd): Rename this and createTestServerParamsAllowTenants once
-// disabling tenant testing is less common than enabling it.
-func createTestServerParams() (base.TestServerArgs, *tests.CommandFilters) {
-	params, cmdFilters := createTestServerParamsAllowTenants()
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
-	return params, cmdFilters
 }
