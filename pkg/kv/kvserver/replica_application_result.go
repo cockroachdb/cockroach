@@ -517,11 +517,11 @@ func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	isDeltaTrusted bool,
 ) {
 	r.raftMu.AssertHeld()
-	// NB: The expected first index is zero if this proposal is from before v22.1
-	// that added it, when all truncations were strongly coupled.
-	// TODO(pav-kv): remove the zero check after any below-raft migration.
-	expectedFirstIndexWasAccurate := expectedFirstIndexPreTruncation == 0 ||
-		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
+	// NB: The expected first index can be zero if this proposal is from before
+	// v22.1 that added it, when all truncations were strongly coupled. It is not
+	// safe to consider the log size delta trusted in this case. Conveniently,
+	// this doesn't need any special casing.
+	expectedFirstIndexWasAccurate := r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
 	isRaftLogTruncationDeltaTrusted := isDeltaTrusted && expectedFirstIndexWasAccurate
 
 	// TODO(#132114, #131063): updating the truncated state after the storage
