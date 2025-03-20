@@ -1972,6 +1972,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_version",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/version",
+        sha256 = "4e734ab8c4e4ff81003fedffa30dc5727f9b210c72a188ee3127eeedea09f644",
+        strip_prefix = "github.com/cockroachdb/version@v0.0.0-20250314144055-3860cd14adf2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/version/com_github_cockroachdb_version-v0.0.0-20250314144055-3860cd14adf2.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_codahale_hdrhistogram",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/codahale/hdrhistogram",
@@ -8586,10 +8596,10 @@ def go_deps():
         name = "com_github_stretchr_testify",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/stretchr/testify",
-        sha256 = "ee5d4f73cb689b1b5432c6908a189f9fbdb172507c49c32dbdf79b239ea9b8e0",
-        strip_prefix = "github.com/stretchr/testify@v1.9.0",
+        sha256 = "36c87573527a97ce97fc15ce2a101e65e5ebb350db142d09f633580cb8d5c839",
+        strip_prefix = "github.com/stretchr/testify@v1.10.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.9.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.10.0.zip",
         ],
     )
     go_repository(

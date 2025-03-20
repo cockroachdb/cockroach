@@ -37,6 +37,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_version//:version",
         "@org_golang_x_exp//maps",
     ],
 )
@@ -72,9 +73,9 @@ go_test(
         "//pkg/util/intsets",
         "//pkg/util/randutil",
         "//pkg/util/retry",
-        "//pkg/util/version",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_version//:version",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
