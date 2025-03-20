@@ -2507,7 +2507,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 		return errors.New("No command passed")
 	}
 	nodes := option.FromInstallNodes(options.Nodes)
-	l, logFile, err := c.loggerForCmd(nodes, args...)
+	l, logFile, err := roachtestutil.LoggerForCmd(c.l, nodes, args...)
 	if err != nil {
 		return err
 	}
@@ -2575,7 +2575,7 @@ func (c *clusterImpl) RunWithDetails(
 		return nil, errors.New("No command passed")
 	}
 	nodes := option.FromInstallNodes(options.Nodes)
-	l, logFile, err := c.loggerForCmd(nodes, args...)
+	l, logFile, err := roachtestutil.LoggerForCmd(c.l, nodes, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -2657,30 +2657,6 @@ func (c *clusterImpl) Install(
 		return errors.New("Error running cluster.Install: no software passed")
 	}
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
-}
-
-// cmdLogFileName comes up with a log file to use for the given argument string.
-func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
-	logFile := fmt.Sprintf(
-		"run_%s_n%s_%s",
-		t.Format(`150405.000000000`),
-		nodes.String()[1:],
-		install.GenFilenameFromArgs(20, args...),
-	)
-	return logFile
-}
-
-func (c *clusterImpl) loggerForCmd(
-	node option.NodeListOption, args ...string,
-) (*logger.Logger, string, error) {
-	logFile := cmdLogFileName(timeutil.Now(), node, args...)
-
-	// NB: we set no prefix because it's only going to a file anyway.
-	l, err := c.l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
-	if err != nil {
-		return nil, "", err
-	}
-	return l, logFile, nil
 }
 
 // pgURLErr returns the Postgres endpoint for the specified nodes. It accepts a

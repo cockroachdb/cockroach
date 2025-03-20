@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -218,6 +219,31 @@ func IfLocal(c cluster.Cluster, trueVal, falseVal string) string {
 	return falseVal
 }
 
+// LoggerForCmd creates a logger to a file with quiet stdout and stderr.
+func LoggerForCmd(
+	l *logger.Logger, node option.NodeListOption, args ...string,
+) (*logger.Logger, string, error) {
+	logFile := cmdLogFileName(timeutil.Now(), node, args...)
+
+	// NB: we set no prefix because it's only going to a file anyway.
+	l, err := l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		return nil, "", err
+	}
+	return l, logFile, nil
+}
+
+// cmdLogFileName comes up with a log file to use for the given argument string.
+func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
+	logFile := fmt.Sprintf(
+		"run_%s_n%s_%s",
+		t.Format(`150405.000000000`),
+		nodes.String()[1:],
+		install.GenFilenameFromArgs(20, args...),
+	)
+	return logFile
+}
+
 // CheckPortBlocked returns true if a connection from a node to a port on another node
 // can be established. Requires nmap to be installed.
 func CheckPortBlocked(
@@ -236,4 +262,20 @@ func CheckPortBlocked(
 		return false, err
 	}
 	return strings.Contains(res.Stdout, "filtered"), nil
+}
+
+// PortLatency returns the latency from one node to another port.
+// Requires nmap to be installed.
+func PortLatency(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, fromNode, toNode option.NodeListOption,
+) (time.Duration, error) {
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(fromNode), fmt.Sprintf("nmap -p {pgport%[1]s} -Pn {ip%[1]s} -oG - | grep 'scanned in' | awk '{print $(NF-1)}'", toNode))
+	if err != nil {
+		return 0, err
+	}
+	avgRTT, err := strconv.ParseFloat(strings.TrimSpace(res.Stdout), 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(avgRTT * float64(time.Second)), nil
 }
