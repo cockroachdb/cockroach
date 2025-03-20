@@ -423,8 +423,9 @@ const (
 	// loadNormal represents that the load is within normal bounds.
 	loadNormal
 	// loadNoChange represents that no load should be added or removed from this
-	// store. This is typically only used when there are enough pending changes
-	// at this store that we want to let them finish.
+	// store. This is used when (a) there are enough pending changes at this
+	// store that we want to let them finish, (b) we don't want to add load to
+	// this store because it is above the mean.
 	loadNoChange
 	// overloadSlow is a state where the store is overloaded, but not so much
 	// that it is urgent to shed load.
@@ -482,6 +483,8 @@ func loadSummaryForDimension(
 		loadSummary = overloadSlow
 	} else if fractionAbove < -0.2 {
 		loadSummary = loadLow
+	} else if fractionAbove >= 0 {
+		loadSummary = loadNoChange
 	} else {
 		loadSummary = loadNormal
 	}
