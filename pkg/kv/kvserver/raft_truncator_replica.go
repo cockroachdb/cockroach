@@ -29,33 +29,9 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 	return r.shMu.raftTruncState
 }
 
-func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
-	ctx context.Context,
-	trunc *kvserverpb.RaftTruncatedState,
-	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (expectedFirstIndexWasAccurate bool) {
-	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
-		ctx, trunc, expectedFirstIndexPreTruncation)
-	return expectedFirstIndexAccurate
-}
-
-func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
-	r.raftMu.AssertHeld()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.shMu.raftLogSize += deltaBytes
-	r.shMu.raftLogLastCheckSize += deltaBytes
-	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
-	// between server restarts.
-	if r.shMu.raftLogSize < 0 {
-		r.shMu.raftLogSize = 0
-	}
-	if r.shMu.raftLogLastCheckSize < 0 {
-		r.shMu.raftLogLastCheckSize = 0
-	}
-	if !isDeltaTrusted {
-		r.shMu.raftLogSizeTrusted = false
-	}
+func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
+	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx, pt.RaftTruncatedState,
+		pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
@@ -65,7 +41,8 @@ func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 func (r *raftTruncatorReplica) sideloadedBytesIfTruncatedFromTo(
 	ctx context.Context, span kvpb.RaftSpan,
 ) (freed int64, err error) {
-	return r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, span)
+	_, freed, err = r.raftMu.sideloaded.Stats(ctx, span)
+	return freed, err
 }
 
 func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {

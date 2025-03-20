@@ -44,16 +44,11 @@ type SideloadStorage interface {
 	Purge(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
-	// HasAnyEntry returns whether there is any entry in the given log span.
-	HasAnyEntry(_ context.Context, _ kvpb.RaftSpan) (bool, error)
 	// TruncateTo removes all files belonging to an index <= the given index.
-	// Returns the number of bytes freed, or an error.
-	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed int64, _ error)
-	// BytesIfTruncatedFromTo returns the number of bytes that would be freed, if
-	// one were to truncate the given (from, to] log span.
-	// TODO(pav-kv): merge this with HasAnyEntry into a single "stats" call. The
-	// truncation path needs both anyway.
-	BytesIfTruncatedFromTo(_ context.Context, _ kvpb.RaftSpan) (freed int64, _ error)
+	TruncateTo(_ context.Context, index kvpb.RaftIndex) error
+	// Stats returns the number and the total size of the sideloaded entries in
+	// the given log span.
+	Stats(_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (string, error)
