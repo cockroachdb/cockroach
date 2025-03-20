@@ -1538,6 +1538,241 @@ SET ROLE root
 statement ok
 DROP TABLE force_check CASCADE;
 
+# Test to make sure that the scan to enforce uniqueness is done without RLS policies.
+subtest uniq
+
+statement ok
+CREATE TABLE uniq (rls_col TEXT, uniq_col INT8 UNIQUE);
+
+statement ok
+CREATE USER uniq_user;
+
+statement ok
+GRANT ALL ON uniq TO uniq_user;
+
+statement ok
+ALTER TABLE uniq OWNER TO uniq_user;
+
+statement ok
+SET ROLE uniq_user;
+
+statement ok
+ALTER TABLE uniq NO FORCE ROW LEVEL SECURITY, ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY access ON uniq USING (rls_col = 'cat');
+
+statement ok
+INSERT INTO uniq VALUES ('cat', 1), ('cat', 2), ('dog', 3), ('cat', 4), ('hamster', 5);
+
+statement ok
+ALTER TABLE uniq FORCE ROW LEVEL SECURITY;
+
+statement error pq: duplicate key value violates unique constraint "uniq_uniq_col_key"\nDETAIL: Key \(uniq_col\)=\(3\) already exists.
+INSERT INTO uniq VALUES ('cat', 3);
+
+statement ok
+INSERT INTO uniq VALUES ('cat', 6);
+
+statement error pq: new row violates row-level security policy for table "uniq"
+INSERT INTO uniq VALUES ('dog', 6);
+
+statement error pq: duplicate key value violates unique constraint "uniq_uniq_col_key"\nDETAIL: Key \(uniq_col\)=\(5\) already exists.
+UPDATE uniq SET uniq_col = 5 WHERE uniq_col = 1;
+
+statement ok
+UPDATE uniq SET uniq_col = 7 WHERE uniq_col = 1;
+
+# Ensure that any attempts to update an invisible row will be a no-op
+query TI
+UPDATE uniq SET uniq_col = 8 WHERE uniq_col = 5 RETURNING rls_col, uniq_col;
+----
+
+statement ok
+ALTER TABLE uniq NO FORCE ROW LEVEL SECURITY;
+
+query TI
+select rls_col, uniq_col FROM uniq ORDER BY uniq_col;
+----
+cat      2
+dog      3
+cat      4
+hamster  5
+cat      6
+cat      7
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE uniq;
+
+statement ok
+DROP USER uniq_user;
+
+# Test to make sure that the scan to enforce foreign keys is exempt from RLS policies.
+subtest fk
+
+statement ok
+CREATE TABLE parent (key INT8 NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE child (
+  rls_col TEXT,
+  key INT8 NOT NULL,
+  CONSTRAINT fk FOREIGN KEY (key) REFERENCES parent(key) ON DELETE CASCADE
+);
+
+statement ok
+CREATE USER fk_user;
+
+statement ok
+GRANT ALL ON parent TO fk_user;
+
+statement ok
+GRANT ALL ON child TO fk_user;
+
+statement ok
+ALTER TABLE parent OWNER TO fk_user;
+
+statement ok
+ALTER TABLE child OWNER TO fk_user;
+
+statement ok
+SET ROLE fk_user;
+
+statement ok
+INSERT INTO parent SELECT * FROM generate_series(1,6);
+
+statement ok
+INSERT INTO child VALUES ('bedroom', 1), ('office', 2)
+
+# Set RLS at the parent and ensure FK still enforced.
+statement ok
+ALTER TABLE parent ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement error pq: insert on table "child" violates foreign key constraint "fk"
+INSERT INTO child VALUES ('hall', 7);
+
+statement ok
+INSERT INTO child VALUES ('hall', 3);
+
+# mimic the FK lookup to show that the given RLS policies will hide the value
+query I
+SELECT 1 FROM parent WHERE key = 3;
+----
+
+query I
+SELECT key FROM child ORDER BY key;
+----
+1
+2
+3
+
+# Set RLS at the child and ensure FK still enforced
+statement ok
+ALTER TABLE child ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY ins1 ON child FOR INSERT WITH CHECK (rls_col = 'bedroom');
+
+statement error pq: insert on table "child" violates foreign key constraint "fk"
+INSERT INTO child VALUES ('bedroom', 7);
+
+statement error pq: new row violates row-level security policy for table "child"
+INSERT INTO child VALUES ('deck', 7);
+
+statement ok
+INSERT INTO child VALUES ('bedroom', 4);
+
+# Disable RLS at the parent so that we can do a delete and have it cascade down
+statement ok
+ALTER TABLE parent NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+DELETE FROM parent WHERE key = 1;
+
+statement ok
+CREATE POLICY sel1 ON child FOR SELECT USING (true);
+
+query I
+SELECT key FROM child ORDER BY key;
+----
+2
+3
+4
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE child;
+
+statement ok
+DROP TABLE parent;
+
+statement ok
+DROP USER fk_user;
+
+# Ensure CHECK constraints can work alongside RLS policies
+subtest check_constraint
+
+statement ok
+CREATE TABLE rgb_only (col text, check (col = 'red' or col = 'green' or col = 'blue'));
+
+statement ok
+CREATE USER rgb_only_user;
+
+statement ok
+ALTER TABLE rgb_only OWNER TO rgb_only_user;
+
+statement ok
+SET ROLE rgb_only_user;
+
+statement ok
+ALTER TABLE rgb_only ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_sel ON rgb_only FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY p_subset ON rgb_only FOR INSERT WITH CHECK (col = 'red' or col = 'brown');
+
+statement ok
+INSERT INTO rgb_only VALUES ('red')
+
+# Allowed by policy, reject by CHECK constraint
+statement error pq: failed to satisfy CHECK constraint \(\(\(col = 'red':::STRING\) OR \(col = 'green':::STRING\)\) OR \(col = 'blue':::STRING\)\)
+INSERT INTO rgb_only VALUES ('brown')
+
+# Disallowed by policy, accepted by CHECK constraint
+statement error pq: new row violates row-level security policy for table "rgb_only"
+INSERT INTO rgb_only VALUES ('green')
+
+statement ok
+DROP POLICY p_subset ON rgb_only;
+
+statement ok
+CREATE POLICY p_disjoint ON rgb_only FOR INSERT WITH CHECK (col = 'black');
+
+# Disallowed by both.
+statement error pq: new row violates row-level security policy for table "rgb_only"
+INSERT INTO rgb_only VALUES ('blue')
+
+query T
+SELECT col FROM rgb_only ORDER BY col;
+----
+red
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE rgb_only;
+
+statement ok
+DROP USER rgb_only_user;
+
 subtest truncate
 
 statement ok
