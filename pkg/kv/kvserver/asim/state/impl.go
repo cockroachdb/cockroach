@@ -558,6 +558,14 @@ func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
 	store.desc.Capacity.Capacity = capacity
 }
 
+func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.cpuRateCapacity = cpuRateCapacity
+}
+
 func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 	node := s.nodes[nodeID]
 	stores := node.Stores()
@@ -568,11 +576,10 @@ func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 	}
 
 	return roachpb.NodeCapacity{
-		StoresCPURate:    int64(cpuRate),
-		NumStores:        int32(len(stores)),
-		NodeCPURateUsage: int64(cpuRate),
-		// TODO: Add support for node CPU capacity.
-		NodeCPURateCapacity: 2 * int64(cpuRate),
+		StoresCPURate:       int64(cpuRate),
+		NumStores:           int32(len(stores)),
+		NodeCPURateUsage:    int64(cpuRate),
+		NodeCPURateCapacity: node.cpuRateCapacity,
 	}
 }
 
@@ -1361,8 +1368,9 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 
 // node is an implementation of the Node interface.
 type node struct {
-	nodeID NodeID
-	desc   roachpb.NodeDescriptor
+	nodeID          NodeID
+	desc            roachpb.NodeDescriptor
+	cpuRateCapacity int64
 
 	stores      []StoreID
 	mmAllocator mma.Allocator

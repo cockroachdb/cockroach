@@ -44,11 +44,11 @@ import (
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
-//     [store_byte_capacity=<int>]
+//     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity=256<<30.
+//     store_byte_capacity=256<<32, node_cpu_rate_capacity=0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -236,13 +236,16 @@ func TestDataDriven(t *testing.T) {
 				var nodes = 3
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
+				var nodeCPURateCapacity int64
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
+				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
 				clusterGen = gen.BasicCluster{
-					Nodes:             nodes,
-					StoresPerNode:     storesPerNode,
-					StoreByteCapacity: int64(storeByteCapacity),
+					Nodes:               nodes,
+					StoresPerNode:       storesPerNode,
+					StoreByteCapacity:   int64(storeByteCapacity),
+					NodeCPURateCapacity: nodeCPURateCapacity,
 				}
 				return ""
 			case "load_cluster":
