@@ -336,7 +336,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		//
 		// First, apply regular postgres resolution approach of using only
 		// the input types.
-		if ol.params().MatchIdentical(paramTypes) {
+		if ol.params().MatchOid(paramTypes) {
 			return true
 		}
 		if tryDefaultExprs && len(ol.defaultExprs()) > 0 {
@@ -346,7 +346,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 				numOmittedExprs := len(inputTypes) - len(paramTypes)
 				if numOmittedExprs > 0 && numOmittedExprs <= len(inputTypes) {
 					inputTypes = inputTypes[:len(inputTypes)-numOmittedExprs]
-					if inputTypes.MatchIdentical(paramTypes) {
+					if inputTypes.MatchOid(paramTypes) {
 						return true
 					}
 				}
@@ -373,7 +373,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 				allParams[i] = ParamType{Typ: ol.Types.GetAt(i - outParamsSeen)}
 			}
 		}
-		match := allParams.MatchIdentical(allParamTypes)
+		match := allParams.MatchOid(allParamTypes)
 		if firstMatchParamTypes == nil && match {
 			firstMatchParamTypes = allParamTypes
 		}
