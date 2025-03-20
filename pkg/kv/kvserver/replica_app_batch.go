@@ -481,7 +481,6 @@ func (b *replicaAppBatch) stageTruncation(
 	ctx context.Context, res *kvserverpb.ReplicatedEvalResult,
 ) error {
 	truncatedState := res.GetRaftTruncatedState() // NB: not nil
-	var err error
 	// Use loosely-coupled truncations if configured by the setting. Otherwise,
 	// perform a tightly-coupled truncation, i.e. apply it immediately.
 	looselyCoupledTruncation := looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
@@ -500,12 +499,14 @@ func (b *replicaAppBatch) stageTruncation(
 	// TODO(pav-kv): make the size delta untrusted on expected first index == 0.
 	apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 	if apply {
-		if apply, err = handleTruncatedStateBelowRaftPreApply(
+		if err := handleTruncatedStateBelowRaftPreApply(
 			ctx, b.truncState, truncatedState,
 			b.r.raftMu.stateLoader.StateLoader, b.batch,
 		); err != nil {
 			return errors.Wrap(err, "unable to handle truncated state")
 		}
+		// TODO(pav-kv): untangle the logic relying on this "apply" change.
+		apply = truncatedState.Index > b.truncState.Index
 	} else {
 		b.r.store.raftTruncator.addPendingTruncation(
 			ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
