@@ -1917,10 +1917,14 @@ func TestRangefeedCatchupStarvation(t *testing.T) {
 		f, err := rangefeed.NewFactory(s.AppStopper(), db, s.ClusterSettings(), nil)
 		require.NoError(t, err)
 
-		blocked := make(chan struct{})
+		blocked := make(chan struct{}, 1)
 		r1, err := f.RangeFeed(ctx, "consumer-1-rf-1", []roachpb.Span{span}, ts,
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {
-				blocked <- struct{}{}
+				select {
+				case blocked <- struct{}{}:
+				default:
+					// We can hit this case on retries.
+				}
 				<-ctx.Done()
 			},
 			rangefeed.WithConsumerID(1),
