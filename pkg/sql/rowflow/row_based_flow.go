@@ -463,12 +463,12 @@ func (f *rowBasedFlow) setupRouter(
 	for i := range spec.Streams {
 		memoryMonitors[i] = execinfra.NewLimitedMonitor(
 			ctx, f.Mon, &f.FlowCtx,
-			"router-limited-"+redact.SafeString(spec.Streams[i].StreamID.String()),
+			mon.MakeMonitorName("router-limited-"+redact.SafeString(spec.Streams[i].StreamID.String())),
 		)
-		unlimitedMemMonitors[i] = execinfra.NewMonitor(
+		unlimitedMemMonitors[i] = execinfra.NewMonitorWithStringName(
 			ctx, f.Mon, "router-unlimited-"+redact.SafeString(spec.Streams[i].StreamID.String()),
 		)
-		diskMonitors[i] = execinfra.NewMonitor(
+		diskMonitors[i] = execinfra.NewMonitorWithStringName(
 			ctx, f.DiskMonitor,
 			"router-disk-"+redact.SafeString(spec.Streams[i].StreamID.String()),
 		)

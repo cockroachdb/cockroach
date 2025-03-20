@@ -83,7 +83,7 @@ func newIndexBackfiller(
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 ) (*indexBackfiller, error) {
-	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
+	indexBackfillerMon := execinfra.NewMonitorWithStringName(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),

@@ -7,7 +7,6 @@ package colexecargs
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -46,10 +45,10 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 // monitor name.
 func (r *MonitorRegistry) getMemMonitorNameLocked(
 	opName redact.SafeString, processorID int32, suffix redact.SafeString,
-) redact.SafeString {
+) mon.MonitorName {
 	r.mu.AssertHeld()
-	return opName + "-" + redact.SafeString(strconv.Itoa(int(processorID))) + "-" +
-		suffix + "-" + redact.SafeString(strconv.Itoa(len(r.monitors)))
+	return mon.MakeMonitorName(opName).WithProcessorID(processorID).
+		WithSuffix(suffix).WithInt(int32(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -59,7 +58,7 @@ func (r *MonitorRegistry) getMemMonitorNameLocked(
 // objects. Memory monitor name is also returned.
 func (r *MonitorRegistry) CreateMemAccountForSpillStrategy(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
-) (*mon.BoundAccount, redact.SafeString) {
+) (*mon.BoundAccount, mon.MonitorName) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	monitorName := r.getMemMonitorNameLocked(opName, processorID, "limited" /* suffix */)
@@ -82,7 +81,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 	limit int64,
 	opName redact.SafeString,
 	processorID int32,
-) (*mon.BoundAccount, redact.SafeString) {
+) (*mon.BoundAccount, mon.MonitorName) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
@@ -106,14 +105,14 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 // is expected that such a monitor with a such name was already created by the
 // MonitorRegistry. If no such monitor is found, then nil is returned.
 func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
-	monitorName redact.SafeString,
+	name mon.MonitorName,
 ) *mon.BoundAccount {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Iterate backwards since most likely that we want to create an account
 	// bound to the most recently created monitor.
 	for i := len(r.monitors) - 1; i >= 0; i-- {
-		if r.monitors[i].Name() == mon.MakeMonitorName(monitorName) {
+		if r.monitors[i].Name() == name {
 			bufferingMemAccount := r.monitors[i].MakeBoundAccount()
 			r.accounts = append(r.accounts, &bufferingMemAccount)
 			return &bufferingMemAccount
@@ -155,19 +154,19 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccount(
 // CreateUnlimitedMemAccountsWithName is similar to CreateUnlimitedMemAccounts
 // with the only difference that the monitor name is provided by the caller.
 func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.SafeString, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.createUnlimitedMemAccountsLocked(ctx, flowCtx, name+"-unlimited", numAccounts)
+	return r.createUnlimitedMemAccountsLocked(ctx, flowCtx, name.WithSuffix("unlimited"), numAccounts)
 }
 
 func (r *MonitorRegistry) createUnlimitedMemAccountsLocked(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, monitorName redact.SafeString, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.AssertHeld()
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.Mon, monitorName,
+		ctx, flowCtx.Mon, name,
 	)
 	r.monitors = append(r.monitors, bufferingOpUnlimitedMemMonitor)
 	oldLen := len(r.accounts)
@@ -216,7 +215,7 @@ func (r *MonitorRegistry) CreateDiskAccount(
 // CreateDiskAccounts instantiates an unlimited disk monitor and disk accounts
 // to be used for disk spilling infrastructure in vectorized engine.
 func (r *MonitorRegistry) CreateDiskAccounts(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.SafeString, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
