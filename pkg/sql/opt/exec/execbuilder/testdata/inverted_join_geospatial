@@ -15,7 +15,8 @@ CREATE TABLE rtable(
   geom geometry,
   rk2 string,
   PRIMARY KEY (rk1, rk2),
-  INVERTED INDEX geom_index(geom)
+  INVERTED INDEX geom_index(geom),
+  FAMILY (rk1, rk2, geom)
 )
 
 query T
@@ -295,7 +296,7 @@ vectorized: true
                       spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE)
+EXPLAIN ANALYZE
 WITH q AS (
   SELECT * FROM ltable WHERE lk > 2
 )
@@ -305,53 +306,63 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
   LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
 ) GROUP BY lk
 ----
-distribution: local
-vectorized: true
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • root
-│ columns: (count, count)
 │
 ├── • render
-│   │ columns: (count, count)
-│   │ render count: @S2
-│   │ render count_rows: count_rows
 │   │
 │   └── • group (hash)
-│       │ columns: (lk, count_rows)
-│       │ estimated row count: 333 (missing stats)
-│       │ aggregate 0: count_rows()
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 0
+│       │ estimated max memory allocated: 0 B
+│       │ estimated max sql temp disk usage: 0 B
 │       │ group by: lk
 │       │
-│       └── • project
-│           │ columns: (lk)
+│       └── • lookup join (left outer) (streamer)
+│           │ sql nodes: <hidden>
+│           │ regions: <hidden>
+│           │ actual row count: 0
+│           │ KV time: 0µs
+│           │ KV contention time: 0µs
+│           │ KV rows decoded: 0
+│           │ KV bytes read: 0 B
+│           │ KV gRPC calls: 0
+│           │ estimated max memory allocated: 0 B
+│           │ table: rtable@rtable_pkey
+│           │ equality: (rk1, rk2) = (rk1, rk2)
+│           │ equality cols are key
+│           │ pred: st_intersects(geom1, geom)
 │           │
-│           └── • project
-│               │ columns: (lk, geom1, geom)
+│           └── • inverted join (left outer)
+│               │ sql nodes: <hidden>
+│               │ regions: <hidden>
+│               │ actual row count: 0
+│               │ KV time: 0µs
+│               │ KV contention time: 0µs
+│               │ KV rows decoded: 0
+│               │ KV bytes read: 0 B
+│               │ KV gRPC calls: 0
+│               │ estimated max memory allocated: 0 B
+│               │ estimated max sql temp disk usage: 0 B
+│               │ table: rtable@geom_index
 │               │
-│               └── • lookup join (left outer)
-│                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
-│                   │ estimated row count: 3,333 (missing stats)
-│                   │ table: rtable@rtable_pkey
-│                   │ equality: (rk1, rk2) = (rk1, rk2)
-│                   │ equality cols are key
-│                   │ pred: st_intersects(geom1, geom)
-│                   │
-│                   └── • project
-│                       │ columns: (lk, geom1, rk1, rk2, cont)
-│                       │
-│                       └── • inverted join (left outer)
-│                           │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
-│                           │ estimated row count: 3,333 (missing stats)
-│                           │ table: rtable@geom_index
-│                           │ inverted expr: st_intersects(geom1, geom_inverted_key)
-│                           │
-│                           └── • project
-│                               │ columns: (lk, geom1)
-│                               │
-│                               └── • scan buffer
-│                                     columns: (lk, geom1, geom2)
-│                                     estimated row count: 333 (missing stats)
-│                                     label: buffer 1 (q)
+│               └── • scan buffer
+│                     sql nodes: <hidden>
+│                     regions: <hidden>
+│                     actual row count: 0
+│                     label: buffer 1 (q)
 │
 ├── • subquery
 │   │ id: @S1
@@ -359,14 +370,25 @@ vectorized: true
 │   │ exec mode: discard all rows
 │   │
 │   └── • buffer
-│       │ columns: (lk, geom1, geom2)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 0
 │       │ label: buffer 1 (q)
 │       │
 │       └── • scan
-│             columns: (lk, geom1, geom2)
-│             estimated row count: 333 (missing stats)
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             actual row count: 0
+│             KV time: 0µs
+│             KV contention time: 0µs
+│             KV rows decoded: 0
+│             KV bytes read: 0 B
+│             KV gRPC calls: 0
+│             estimated max memory allocated: 0 B
+│             missing stats
 │             table: ltable@ltable_pkey
-│             spans: /3-
+│             spans: [/3 - ]
 │
 └── • subquery
     │ id: @S2
@@ -374,17 +396,15 @@ vectorized: true
     │ exec mode: one row
     │
     └── • group (scalar)
-        │ columns: (count_rows)
-        │ estimated row count: 1 (missing stats)
-        │ aggregate 0: count_rows()
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 1
         │
-        └── • project
-            │ columns: ()
-            │
-            └── • scan buffer
-                  columns: (lk, geom1, geom2)
-                  estimated row count: 333 (missing stats)
-                  label: buffer 1 (q)
+        └── • scan buffer
+              sql nodes: <hidden>
+              regions: <hidden>
+              actual row count: 0
+              label: buffer 1 (q)
 
 # Anti joins are also converted to paired joins by the optimizer.
 query T
