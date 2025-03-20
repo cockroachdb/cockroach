@@ -1,4 +1,4 @@
-gen_cluster nodes=7
+gen_cluster nodes=7 node_cpu_rate_capacity=700000000
 ----
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have every

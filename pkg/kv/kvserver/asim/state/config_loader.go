@@ -276,8 +276,9 @@ type Region struct {
 // ClusterInfo contains cluster information needed for allocation decisions.
 // TODO(lidor): add cross region network latencies.
 type ClusterInfo struct {
-	StoreDiskCapacityBytes int64
-	Regions                []Region
+	StoreDiskCapacityBytes   int64
+	NodeCPURateCapacityNanos int64
+	Regions                  []Region
 }
 
 func (c ClusterInfo) String() (s string) {
@@ -340,6 +341,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
 				s.SetNodeLocality(node.NodeID(), locality)
+				s.SetNodeCPURateCapacity(node.NodeID(), c.NodeCPURateCapacityNanos)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))

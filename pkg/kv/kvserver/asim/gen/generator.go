@@ -163,9 +163,10 @@ func (lc LoadedCluster) Regions() []state.Region {
 
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
-	Nodes             int
-	StoresPerNode     int
-	StoreByteCapacity int64
+	Nodes               int
+	StoresPerNode       int
+	StoreByteCapacity   int64
+	NodeCPURateCapacity int64
 }
 
 func (bc BasicCluster) String() string {
@@ -179,6 +180,7 @@ func (bc BasicCluster) String() string {
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
 	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
+	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
 	return state.LoadClusterInfo(info, settings)
 }
 
