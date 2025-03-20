@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/logtags"
 )
 
 // MMAStoreRebalancer is a rebalancer that uses the MMA allocator to rebalance
 // a store.
 type MMAStoreRebalancer struct {
+	log.AmbientContext
 	localStoreID state.StoreID
 	controller   op.Controller
 	allocator    mma.Allocator
@@ -45,11 +47,13 @@ type MMAStoreRebalancer struct {
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
 func NewMMAStoreRebalancer(
 	localStoreID state.StoreID,
+	localNodeID state.NodeID,
 	allocator mma.Allocator,
 	controller op.Controller,
 	settings *config.SimulationSettings,
 ) *MMAStoreRebalancer {
-	return &MMAStoreRebalancer{
+	msr := &MMAStoreRebalancer{
+		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
 		localStoreID:     localStoreID,
 		allocator:        allocator,
 		controller:       controller,
@@ -57,11 +61,15 @@ func NewMMAStoreRebalancer(
 		pendingChangeIdx: 0,
 		pendingTicket:    -1,
 	}
+	msr.AddLogTag(fmt.Sprintf("n%ds%d", localNodeID, localStoreID), "")
+	return msr
 }
 
 // Tick is called periodically to check for and apply rebalancing operations
 // using mma.Allocator.
 func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state.State) {
+	ctx = msr.ResetAndAnnotateCtx(ctx)
+	ctx = logtags.AddTag(ctx, "t", tick.Sub(msr.settings.StartTime))
 	if msr.pendingTicket == -1 &&
 		tick.Sub(msr.lastRebalanceTime) < msr.settings.LBRebalancingInterval {
 		// We are waiting out the rebalancing interval. Nothing to do.
@@ -82,7 +90,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
 		msr.lastRebalanceTime = tick
 		msr.pendingChangeIdx = 0
-		msr.pendingChanges = msr.allocator.ComputeChanges(mma.ChangeOptions{
+		msr.pendingChanges = msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 			LocalStoreID: roachpb.StoreID(msr.localStoreID),
 		})
 		log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
@@ -111,6 +119,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 					[]mma.PendingRangeChange{curChange}, success)
 				msr.pendingChangeIdx++
 			} else {
+				log.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange)
 				// Operation is still in progress, nothing to do this tick.
 				return
 			}
@@ -120,17 +129,13 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			// No more pending changes to process.
 			msr.pendingChanges = nil
 			msr.pendingChangeIdx = 0
+			log.VInfof(ctx, 1, "no more pending changes to process")
 			return
 		}
 
 		curChange := msr.pendingChanges[msr.pendingChangeIdx]
-		rng := s.RangeFor(state.Key(curChange.RangeID))
-		if rng == nil {
-			// Range not found, adjust pending changes disposition to indicate failure.
-			msr.allocator.AdjustPendingChangesDisposition(
-				[]mma.PendingRangeChange{curChange}, false)
-			msr.pendingChangeIdx++
-			continue
+		if _, ok := s.Range(state.RangeID(curChange.RangeID)); !ok {
+			panic(fmt.Sprintf("range doesn't exist returned from change=%v", curChange))
 		}
 
 		var curOp op.ControlledOperation

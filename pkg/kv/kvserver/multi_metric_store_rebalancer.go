@@ -68,7 +68,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) {
 	// allocator state.
 	storeLeaseholderMsg := m.store.MakeStoreLeaseholderMsg()
 	m.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
-	changes := m.allocator.ComputeChanges(mma.ChangeOptions{
+	changes := m.allocator.ComputeChanges(ctx, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
 

@@ -78,7 +78,9 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 //   of cpu overload.
 
 // Called periodically, say every 10s.
-func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []PendingRangeChange {
+func (a *allocatorState) rebalanceStores(
+	ctx context.Context, localStoreID roachpb.StoreID,
+) []PendingRangeChange {
 	now := timeutil.Now()
 	// NB: We interpret the local NodeID based on the given localStoreID because
 	// the allocator is initialized when starting a server so the NodeID is not
@@ -109,8 +111,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 		storeLoadSummary
 	}
 	var sheddingStores []sheddingStore
-	log.Infof(context.Background(), "local=n%vs%v cluster means (cap): store %s(%s) node-cpu %d(%d)",
-		localNodeID, localStoreID, clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
+	log.Infof(ctx, "cluster means (cap): store %s(%s) node-cpu %d(%d)",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
 	// TODO: change clusterState load stuff so that cpu util is distributed
 	// across the stores. If cpu util of a node is higher than the mean across
@@ -161,8 +163,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	rangeMoveCount := 0
 	leaseTransferCount := 0
 	for _, store := range sheddingStores {
-		log.Infof(context.Background(), "local=n%vs%v shedding store %v sls=%v",
-			localNodeID, localStoreID, store.StoreID, store.storeLoadSummary)
+		log.Infof(ctx, "shedding store %v sls=%v", store.StoreID, store.storeLoadSummary)
 		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
 		// to shed leases first. See earlier longer to do.
 
@@ -181,7 +182,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				}
 				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
 			}
-			log.Infof(context.Background(), "top-K ranges %s: %s", topKRanges.dim, b.String())
+			log.Infof(ctx, "top-K ranges %s: %s", topKRanges.dim, b.String())
 		}
 
 		if ss.NodeID == localNodeID && store.storeCPUSummary >= overloadSlow {
@@ -217,9 +218,9 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK ||
 						sls.maxFractionPending >= maxFractionPendingThreshold {
 						log.Infof(
-							context.Background(),
-							"local=n%vs%v shedding=n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
-							localNodeID, localStoreID, ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
+							ctx,
+							"shedding=n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
+							ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
@@ -232,8 +233,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				}
 				if len(candsSet.candidates) == 0 {
 					log.Infof(
-						context.Background(),
-						"local=n%vs%v shedding=n%vs%v no candidates to move lease for r%v [pre_filter_candidates=%v]",
+						ctx,
+						"shedding=n%vs%v no candidates to move lease for r%v [pre_filter_candidates=%v]",
 						localNodeID, localNodeID, ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
@@ -245,7 +246,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				// different use cases. And we possibly don't want to pick just one
 				// since we can possibly afford to go through all (since a range has
 				// few replicas).
-				targetStoreID := sortTargetCandidateSetAndPick(candsSet, a.rand)
+				targetStoreID := sortTargetCandidateSetAndPick(ctx, candsSet, a.rand)
 				if targetStoreID == 0 {
 					continue
 				}
@@ -272,11 +273,11 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
-				log.Infof(context.Background(),
-					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v] with"+
+				log.Infof(ctx,
+					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with"+
 						"resulting load %v %v (means: %v)",
-					localNodeID, localStoreID, ss.NodeID, store.StoreID,
-					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
+					ss.NodeID, store.StoreID, rangeID,
+					removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
 					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load)
 				if leaseTransferCount >= maxLeaseTransferCount {
 					return changes
@@ -376,7 +377,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				cand.diversityScore = localities.getScoreChangeForRebalance(
 					ss.localityTiers, a.cs.stores[cand.StoreID].localityTiers)
 			}
-			targetStoreID := sortTargetCandidateSetAndPick(cands, a.rand)
+			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}
@@ -410,12 +411,12 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				pendingReplicaChanges: pendingChanges[:],
 			})
 			rangeMoveCount++
-			log.Infof(context.Background(),
-				"local=n%vs%v shedding=n%vs%v range %v(%s) from store %v to store %v "+
+			log.Infof(ctx,
+				"shedding=n%vs%v range %v(%s) from store %v to store %v "+
 					"[%v] with resulting loads %v %v",
-				localNodeID, localStoreID, ss.NodeID, store.StoreID,
-				rangeID, addedLoad, removeTarget.StoreID, addTarget.StoreID,
-				changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
+				ss.NodeID, store.StoreID, rangeID, addedLoad, removeTarget.StoreID,
+				addTarget.StoreID, changes[len(changes)-1], ss.adjusted.load,
+				targetSS.adjusted.load)
 			if rangeMoveCount >= maxRangeMoveCount {
 				return changes
 			}
@@ -436,7 +437,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	return changes
 }
 
-// ComputeChanges implements the Allocator interface.
+// SetStore implements the Allocator interface.
 func (a *allocatorState) SetStore(store roachpb.StoreDescriptor) {
 	a.cs.setStore(store)
 }
@@ -479,8 +480,10 @@ func (a *allocatorState) AdjustPendingChangesDisposition(
 }
 
 // ComputeChanges implements the Allocator interface.
-func (a *allocatorState) ComputeChanges(opts ChangeOptions) []PendingRangeChange {
-	return a.rebalanceStores(opts.LocalStoreID)
+func (a *allocatorState) ComputeChanges(
+	ctx context.Context, opts ChangeOptions,
+) []PendingRangeChange {
+	return a.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
 // AdminRelocateOne implements the Allocator interface.
@@ -534,7 +537,9 @@ type candidateSet struct {
 //
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
-func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.StoreID {
+func sortTargetCandidateSetAndPick(
+	ctx context.Context, cands candidateSet, rng *rand.Rand,
+) roachpb.StoreID {
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
 			// Since we have already excluded overloaded nodes, we only consider sls.
@@ -584,7 +589,7 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
 	}
 	j = rng.Intn(j)
-	log.Infof(context.Background(), "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
+	log.Infof(ctx, "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
 	return cands.candidates[j].StoreID
 }
 
