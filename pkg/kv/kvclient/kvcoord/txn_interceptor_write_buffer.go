@@ -144,7 +144,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		// anything to KV.
 		br := ba.CreateReply()
 		for i, t := range ts {
-			br.Responses[i], pErr = t.toResp(twb, kvpb.ResponseUnion{}, ba.Txn)
+			br.Responses[i], pErr = t.toResp(ctx, twb, kvpb.ResponseUnion{}, ba.Txn)
 			if pErr != nil {
 				return nil, pErr
 			}
@@ -310,8 +310,9 @@ func (twb *txnWriteBuffer) closeLocked() {}
 //
 // Some examples of transformations include:
 //
-// 1. Blind writes (Put/Delete requests) are stripped from the batch and
-// buffered locally.
+// 1. Blind writes (Put/Delete requests) are buffered locally. When they the
+// original request has MustAcquireExclusiveLock set, a locking Get is used to
+// acquire the lock.
 // 2. Point reads (Get requests) are served from the buffer and stripped from
 // the batch iff the key has seen a buffered write.
 // 3. Scans are always sent to the KV layer, but if the key span being scanned
@@ -364,15 +365,28 @@ func (twb *txnWriteBuffer) applyTransformations(
 			// be served locally from the buffer yet.
 
 		case *kvpb.PutRequest:
+			// If the MustAcquireExclusiveLock flag is set on the Put, then we need to
+			// add a locking Get to the BatchRequest, including if the key doesn't
+			// exist.
+			if t.MustAcquireExclusiveLock {
+				// TODO(yuzefovich,ssd): ensure that we elide the lock acquisition
+				// whenever possible (e.g. blind UPSERT in an implicit txn).
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(&kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    true,
+					KeyLockingStrength: lock.Exclusive,
+				})
+				baRemote.Requests = append(baRemote.Requests, getReqU)
+			}
+
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.PutResponse{})
-			// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on the
-			// Put, then we need to add a locking Get to the BatchRequest,
-			// including if the key doesn't exist (#139232).
-			// TODO(yuzefovich): ensure that we elide the lock acquisition
-			// whenever possible (e.g. blind UPSERT in an implicit txn).
 			ts = append(ts, transformation{
-				stripped:    true,
+				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
 				origRequest: req,
 				resp:        ru,
@@ -380,15 +394,30 @@ func (twb *txnWriteBuffer) applyTransformations(
 			twb.addToBuffer(t.Key, t.Value, t.Sequence)
 
 		case *kvpb.DeleteRequest:
+			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
+			// need to add a locking Get to the BatchRequest, including if the key
+			// doesn't exist.
+			if t.MustAcquireExclusiveLock {
+				// TODO(ssd): ensure that we elide the lock acquisition
+				// whenever possible.
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(&kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    true,
+					KeyLockingStrength: lock.Exclusive,
+				})
+				baRemote.Requests = append(baRemote.Requests, getReqU)
+			}
+
 			var ru kvpb.ResponseUnion
 			ru.MustSetInner(&kvpb.DeleteResponse{
-				// TODO(yuzefovich): if MustAcquireExclusiveLock flag is set on
-				// the Del, then we need to add a locking Get to the
-				// BatchRequest, including if the key doesn't exist (#139232).
 				FoundKey: false,
 			})
 			ts = append(ts, transformation{
-				stripped:    true,
+				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
 				origRequest: req,
 				resp:        ru,
@@ -717,13 +746,13 @@ func (twb *txnWriteBuffer) mergeResponseWithTransformations(
 				// we received a response for it, which then needs to be combined with
 				// what's in the write buffer.
 				resp := br.Responses[0]
-				mergedResps[i], pErr = ts[0].toResp(twb, resp, br.Txn)
+				mergedResps[i], pErr = ts[0].toResp(ctx, twb, resp, br.Txn)
 				if pErr != nil {
 					return nil, pErr
 				}
 				br.Responses = br.Responses[1:]
 			} else {
-				mergedResps[i], pErr = ts[0].toResp(twb, kvpb.ResponseUnion{}, br.Txn)
+				mergedResps[i], pErr = ts[0].toResp(ctx, twb, kvpb.ResponseUnion{}, br.Txn)
 				if pErr != nil {
 					return nil, pErr
 				}
@@ -763,27 +792,26 @@ type transformation struct {
 // toResp returns the response that should be added to the batch response as
 // a result of applying the transformation.
 func (t transformation) toResp(
-	twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
+	ctx context.Context, twb *txnWriteBuffer, br kvpb.ResponseUnion, txn *roachpb.Transaction,
 ) (kvpb.ResponseUnion, *kvpb.Error) {
 	if t.stripped {
 		return t.resp, nil
 	}
 
 	var ru kvpb.ResponseUnion
-	switch t.origRequest.(type) {
+	switch req := t.origRequest.(type) {
 	case *kvpb.ConditionalPutRequest:
 		// Evaluate the condition.
 		evalFn := mvcceval.MaybeConditionFailedError
 		if twb.testingOverrideCPutEvalFn != nil {
 			evalFn = twb.testingOverrideCPutEvalFn
 		}
-		cputReq := t.origRequest.(*kvpb.ConditionalPutRequest)
 		getResp := br.GetInner().(*kvpb.GetResponse)
 		condFailedErr := evalFn(
-			cputReq.ExpBytes,
+			req.ExpBytes,
 			getResp.Value,
 			getResp.Value.IsPresent(),
-			cputReq.AllowIfDoesNotExist,
+			req.AllowIfDoesNotExist,
 		)
 		if condFailedErr != nil {
 			pErr := kvpb.NewErrorWithTxn(condFailedErr, txn)
@@ -792,21 +820,25 @@ func (t transformation) toResp(
 		}
 		// The condition was satisfied; buffer a Put, and return a synthesized
 		// response.
-		twb.addToBuffer(cputReq.Key, cputReq.Value, cputReq.Sequence)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence)
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
 
 	case *kvpb.PutRequest:
 		ru = t.resp
 
 	case *kvpb.DeleteRequest:
+		getResp := br.GetInner().(*kvpb.GetResponse)
 		ru = t.resp
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
+		}
+		ru.GetDelete().FoundKey = getResp.Value.IsPresent()
 
 	case *kvpb.GetRequest:
 		// Get requests must be served from the local buffer if a transaction
 		// performed a previous write to the key being read. However, Get requests
 		// must be sent to the KV layer (i.e. not be stripped) iff they are locking
 		// in nature.
-		req := t.origRequest.(*kvpb.GetRequest)
 		assertTrue(t.stripped == (req.KeyLockingStrength == lock.None),
 			"Get requests should either be stripped or be locking")
 		ru = t.resp
