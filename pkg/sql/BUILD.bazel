@@ -233,7 +233,6 @@ go_library(
         "show_external_connection.go",
         "show_fingerprints.go",
         "show_histogram.go",
-        "show_policies.go",
         "show_stats.go",
         "show_tenant.go",
         "show_trace.go",
