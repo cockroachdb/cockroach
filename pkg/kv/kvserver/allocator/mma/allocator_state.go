@@ -168,6 +168,22 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 
 		doneShedding := false
 		ss := a.cs.stores[store.StoreID]
+		topKRanges := ss.adjusted.topKRanges[localStoreID]
+		n := topKRanges.len()
+		if n > 0 {
+			var b strings.Builder
+			for i := 0; i < n; i++ {
+				rangeID := topKRanges.index(i)
+				rstate := a.cs.ranges[rangeID]
+				load := rstate.load.Load
+				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+					load[CPURate] = rstate.load.RaftCPU
+				}
+				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
+			}
+			log.Infof(context.Background(), "top-K ranges %s: %s", topKRanges.dim, b.String())
+		}
+
 		if ss.NodeID == localNodeID && store.storeCPUSummary >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
@@ -256,9 +272,11 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
 				log.Infof(context.Background(),
-					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v]",
+					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v] with"+
+						"resulting load %v %v",
 					localNodeID, localStoreID, ss.NodeID, store.StoreID,
-					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1])
+					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
+					ss.adjusted.load, targetSS.adjusted.load)
 				if leaseTransferCount >= maxLeaseTransferCount {
 					return changes
 				}
@@ -287,21 +305,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 		}
 
 		// Iterate over top-K ranges first and try to move them.
-		topKRanges := ss.adjusted.topKRanges[localStoreID]
-		n := topKRanges.len()
-		if n > 0 {
-			var b strings.Builder
-			for i := 0; i < n; i++ {
-				rangeID := topKRanges.index(i)
-				rstate := a.cs.ranges[rangeID]
-				load := rstate.load.Load
-				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-					load[CPURate] = rstate.load.RaftCPU
-				}
-				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
-			}
-			log.Infof(context.Background(), "top-K ranges %s", b.String())
-		}
+		topKRanges = ss.adjusted.topKRanges[localStoreID]
+		n = topKRanges.len()
 		for i := 0; i < n; i++ {
 			rangeID := topKRanges.index(i)
 			// TODO(sumeer): the following code belongs in a closure, since we will
