@@ -2812,7 +2812,7 @@ CREATE TABLE t.test (
 
 	expected = []string{
 		// The primary index should see the update.
-		fmt.Sprintf("Put %s/1/1/1/1 -> /INT/3", tablePrefixStr),
+		fmt.Sprintf("Put (locking) %s/1/1/1/1 -> /INT/3", tablePrefixStr),
 		// The temporary index for the newly added index sees a Put in all
 		// families (except for the 1st family only consisting of the PK and the
 		// 3rd family KV for which is elided due to NULL).
@@ -2841,7 +2841,7 @@ CREATE TABLE t.test (
 	expected = []string{
 
 		fmt.Sprintf("Del (locking) %s/1/1/2/1", tablePrefixStr),
-		fmt.Sprintf("Put %s/1/1/3/1 -> /INT/5", tablePrefixStr),
+		fmt.Sprintf("Put (locking) %s/1/1/3/1 -> /INT/5", tablePrefixStr),
 		fmt.Sprintf("Del (locking) %s/1/1/4/1", tablePrefixStr),
 		// The temporary index sees a Put in all families even though
 		// only some are changing. This is expected.

@@ -23,11 +23,11 @@ CPut /Table/106/1/1/0 -> /TUPLE/
 CPut /Table/106/1/1/1/1 -> /INT/1
 CPut /Table/106/1/1/2/1 -> /INT/1
 CPut /Table/106/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
-CPut /Table/106/2/1/1/0 -> /BYTES/
+Put /Table/106/2/1/1/0 -> /BYTES/
 CPut /Table/106/3/1/0 -> /BYTES/0x89
-CPut /Table/106/4/1/1/0 -> /BYTES/
-CPut /Table/106/4/1/1/2/1 -> /TUPLE/3:3:Int/1
-CPut /Table/106/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+Put /Table/106/4/1/1/0 -> /BYTES/
+Put /Table/106/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+Put /Table/106/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
 CPut /Table/106/5/1/0 -> /BYTES/0x89
 CPut /Table/106/5/1/2/1 -> /TUPLE/3:3:Int/1
 CPut /Table/106/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
@@ -162,10 +162,10 @@ message LIKE 'Del %/Table/106/3/%' OR
 message LIKE '%Put /Table/106/3/%'
 ORDER BY message
 ----
-CPut /Table/106/2/2/2/0 -> /BYTES/
 CPut /Table/106/3/2/0 -> /BYTES/0x8a
 Del (locking) /Table/106/3/1/0
 Del /Table/106/2/1/1/0
+Put /Table/106/2/2/2/0 -> /BYTES/
 
 # Updates on nonuniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -174,12 +174,12 @@ message LIKE 'Del %/Table/106/4/%' OR
 message LIKE '%Put /Table/106/4/%'
 ORDER BY message
 ----
-CPut /Table/106/4/2/2/0 -> /BYTES/
-CPut /Table/106/4/2/2/2/1 -> /TUPLE/3:3:Int/2
-CPut /Table/106/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 Del /Table/106/4/1/1/0
 Del /Table/106/4/1/1/2/1
 Del /Table/106/4/1/1/3/1
+Put /Table/106/4/2/2/0 -> /BYTES/
+Put /Table/106/4/2/2/2/1 -> /TUPLE/3:3:Int/2
+Put /Table/106/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 
 # Updates on uniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -249,7 +249,7 @@ query T kvtrace(prefix=/Table/107)
 UPDATE t SET y = 5 WHERE x = 1
 ----
 Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/107/1/0/1/1 -> /INT/5
+Put (locking) /Table/107/1/0/1/1 -> /INT/5
 Put /Table/107/2/1/1/1 -> /TUPLE/3:3:Int/5
 Put /Table/107/3/1/0/1/1 -> /TUPLE/3:3:Int/5
 
@@ -257,7 +257,7 @@ query T kvtrace(prefix=/Table/107)
 UPDATE t SET z = 6 WHERE x = 1
 ----
 Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/107/1/0/2/1 -> /INT/6
+Put (locking) /Table/107/1/0/2/1 -> /INT/6
 Put /Table/107/2/1/2/1 -> /TUPLE/4:4:Int/6
 Put /Table/107/3/1/0/2/1 -> /TUPLE/4:4:Int/6
 
@@ -392,7 +392,7 @@ query T kvtrace(prefix=/Table/111)
 UPDATE t SET z = 3 WHERE y = 2
 ----
 Scan /Table/111/{1-2}
-Put /Table/111/1/1/2/1 -> /INT/3
+Put (locking) /Table/111/1/1/2/1 -> /INT/3
 Del /Table/111/3/2/1/0
 Del /Table/111/3/2/1/2/1
 Del /Table/111/3/2/1/3/1
@@ -425,10 +425,10 @@ CPut /Table/112/1/1/1/1 -> /INT/2
 CPut /Table/112/1/1/2/1 -> /TUPLE/3:3:Int/3
 CPut /Table/112/1/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
 CPut /Table/112/1/1/5/1 -> /INT/8
-CPut /Table/112/2/2/1/0 -> /BYTES/
-CPut /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3
-CPut /Table/112/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
-CPut /Table/112/2/2/1/5/1 -> /TUPLE/8:8:Int/8
+Put /Table/112/2/2/1/0 -> /BYTES/
+Put /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3
+Put /Table/112/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
+Put /Table/112/2/2/1/5/1 -> /TUPLE/8:8:Int/8
 CPut /Table/112/3/2/0 -> /BYTES/0x89
 CPut /Table/112/3/2/2/1 -> /TUPLE/3:3:Int/3
 CPut /Table/112/3/2/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
@@ -443,15 +443,15 @@ query T kvtrace(prefix=/Table/112)
 UPDATE t SET b = 4, c = NULL, d = NULL, e = 7, f = NULL WHERE y = 2
 ----
 Scan /Table/112/2/{2-3} lock Exclusive (Block, Unreplicated)
-Put /Table/112/1/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
+Put (locking) /Table/112/1/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
 Del (locking) /Table/112/1/1/3/1
-Put /Table/112/1/1/4/1 -> /INT/7
+Put (locking) /Table/112/1/1/4/1 -> /INT/7
 Del (locking) /Table/112/1/1/5/1
 Put /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
 Del /Table/112/2/2/1/3/1
-CPut /Table/112/2/2/1/4/1 -> /TUPLE/7:7:Int/7
+Put /Table/112/2/2/1/4/1 -> /TUPLE/7:7:Int/7
 Del /Table/112/2/2/1/5/1
-Put /Table/112/3/2/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
+Put (locking) /Table/112/3/2/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
 Del (locking) /Table/112/3/2/3/1
 CPut /Table/112/3/2/4/1 -> /TUPLE/7:7:Int/7
 Del (locking) /Table/112/3/2/5/1
@@ -470,14 +470,14 @@ query T kvtrace(prefix=/Table/112)
 UPDATE t SET a = 10, b = 11, c = 12, d = 13, e = 14, f = 15 WHERE y = 3
 ----
 Scan /Table/112/2/{3-4} lock Exclusive (Block, Unreplicated)
-Put /Table/112/1/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
-Put /Table/112/1/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
-Put /Table/112/1/3/4/1 -> /INT/14
-Put /Table/112/1/3/5/1 -> /INT/15
-CPut /Table/112/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
-CPut /Table/112/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
-CPut /Table/112/2/3/3/4/1 -> /TUPLE/7:7:Int/14
-CPut /Table/112/2/3/3/5/1 -> /TUPLE/8:8:Int/15
+Put (locking) /Table/112/1/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
+Put (locking) /Table/112/1/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
+Put (locking) /Table/112/1/3/4/1 -> /INT/14
+Put (locking) /Table/112/1/3/5/1 -> /INT/15
+Put /Table/112/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
+Put /Table/112/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
+Put /Table/112/2/3/3/4/1 -> /TUPLE/7:7:Int/14
+Put /Table/112/2/3/3/5/1 -> /TUPLE/8:8:Int/15
 CPut /Table/112/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
 CPut /Table/112/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
 CPut /Table/112/3/3/4/1 -> /TUPLE/7:7:Int/14
@@ -512,15 +512,15 @@ query T kvtrace(prefix=/Table/112)
 UPDATE t SET y = 22 WHERE y = 21
 ----
 Scan /Table/112/2/2{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/112/1/20/1/1 -> /INT/22
+Put (locking) /Table/112/1/20/1/1 -> /INT/22
 Del /Table/112/2/21/20/0
-CPut /Table/112/2/22/20/0 -> /BYTES/
+Put /Table/112/2/22/20/0 -> /BYTES/
 Del /Table/112/2/21/20/2/1
-CPut /Table/112/2/22/20/2/1 -> /TUPLE/3:3:Int/22
+Put /Table/112/2/22/20/2/1 -> /TUPLE/3:3:Int/22
 Del /Table/112/2/21/20/3/1
-CPut /Table/112/2/22/20/3/1 -> /TUPLE/6:6:Int/25
+Put /Table/112/2/22/20/3/1 -> /TUPLE/6:6:Int/25
 Del /Table/112/2/21/20/5/1
-CPut /Table/112/2/22/20/5/1 -> /TUPLE/8:8:Int/27
+Put /Table/112/2/22/20/5/1 -> /TUPLE/8:8:Int/27
 Del (locking) /Table/112/3/21/0
 CPut /Table/112/3/22/0 -> /BYTES/0x9c
 Del (locking) /Table/112/3/21/2/1
@@ -564,14 +564,14 @@ query T kvtrace(prefix=/Table/113)
 UPDATE t SET y = 5 where y = 2
 ----
 Scan /Table/113/2/{2-3} lock Exclusive (Block, Unreplicated)
-Put /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/3/1:4:Int/4
+Put (locking) /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/3/1:4:Int/4
 Del /Table/113/2/2/1/0
-CPut /Table/113/2/5/1/0 -> /BYTES/0x33061308
+Put /Table/113/2/5/1/0 -> /BYTES/0x33061308
 
 # Changing the value just results in a cput.
 query T kvtrace(prefix=/Table/113)
 UPDATE t SET z = 5 where y = 5
 ----
 Scan /Table/113/2/{5-6} lock Exclusive (Block, Unreplicated)
-Put /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/5/1:4:Int/4
+Put (locking) /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/5/1:4:Int/4
 Put /Table/113/2/5/1/0 -> /BYTES/0x330a1308
