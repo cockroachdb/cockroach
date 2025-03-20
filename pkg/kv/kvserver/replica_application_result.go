@@ -498,44 +498,88 @@ func (r *Replica) handleLeaseResult(
 		assertNoLeaseJump)
 }
 
-func (r *Replica) handleTruncatedStateResult(
+// handleTruncatedStateResultRaftMuLocked is a post-apply handler for the raft
+// log truncation command. It updates the in-memory state of the Replica with
+// the new RaftTruncatedState and log size delta, and removes obsolete entries
+// from the raft log cache and sideloaded storage.
+//
+// The isDeltaTrusted flag specifies whether the raftLogDelta has been correctly
+// computed. The loosely coupled truncations stack sets it to false if, for
+// example, it failed to account for the sideloaded entries. The tightly coupled
+// truncations have correct stats.
+//
+// TODO(pav-kv): simplify this.
+func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	ctx context.Context,
-	t *kvserverpb.RaftTruncatedState,
+	t kvserverpb.RaftTruncatedState,
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
-	r.mu.Lock()
-	expectedFirstIndexWasAccurate =
+	raftLogDelta int64,
+	isDeltaTrusted bool,
+) {
+	r.raftMu.AssertHeld()
+	// NB: The expected first index is zero if this proposal is from before v22.1
+	// that added it, when all truncations were strongly coupled.
+	// TODO(pav-kv): remove the zero check after any below-raft migration.
+	expectedFirstIndexWasAccurate := expectedFirstIndexPreTruncation == 0 ||
 		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
-	r.shMu.raftTruncState = *t
+	isRaftLogTruncationDeltaTrusted := isDeltaTrusted && expectedFirstIndexWasAccurate
+
+	// TODO(#132114, #131063): updating the truncated state after the storage
+	// writes leads to a necessity of the ErrCompacted handling in raft, when
+	// reads are made under Replica.mu. This error API can be removed entirely if
+	// the truncated state is updated first. The semantics would be that the log
+	// is truncated "logically" first, and then physically under raftMu.
+	r.mu.Lock()
+	r.shMu.raftTruncState = t
+	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
+		raftLogDelta, isRaftLogTruncationDeltaTrusted)
 	r.mu.Unlock()
 
-	// Clear any entries in the Raft log entry cache for this range up to and
-	// including the most recently truncated index.
+	// Clear any entries in the Raft log entry cache for this range up
+	// to and including the most recently truncated index.
+	//
+	// It is safe to do this here, after the storage write. Before this line, raft
+	// log reads under Replica.mu (from within RawNode) may temporarily return
+	// cached entries that are already removed from storage. It appears as if the
+	// read is performed right before the truncation batch was written.
 	r.store.raftEntryCache.Clear(r.RangeID, t.Index)
 
-	// Truncate the sideloaded storage. This is safe only if the new truncated
-	// state is durably stored on disk, i.e. synced.
-	// TODO(#38566, #113135): this is unfortunately not true, need to fix this.
-	//
-	// TODO(sumeer): once we remove the legacy caller of
-	// handleTruncatedStateResult, stop calculating the size of the removed
-	// files and the remaining files.
+	// Truncate the sideloaded storage. This is safe because the new truncated
+	// state is already synced. If it wasn't, a crash right after removing the
+	// sideloaded entries could result in missing entries in the log.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
-	size, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index)
-	if err != nil {
-		// We don't *have* to remove these entries for correctness. Log a
-		// loud error, but keep humming along.
+	if err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index); err != nil {
+		// We don't *have* to remove these entries for correctness. Log a loud
+		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
 	// NB: we don't sync the sideloaded entry files removal here for performance
-	// reasons. If a crash occurs, and these files get recovered after a restart,
-	// we should clean them up on the server startup.
-	//
-	// TODO(#113135): this removal survives process crashes though, and system
-	// crashes if the filesystem is quick enough to sync it for us. Add a test
-	// that syncs the files removal here, and "crashes" right after, to help
-	// reproduce and fix #113135.
-	return -size, expectedFirstIndexWasAccurate
+	// reasons.
+	// TODO(#136416): If a crash occurs before the files are durably removed,
+	// there will be dangling files at the next start. Clean them up at startup.
+}
+
+// handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked updates the raft log
+// stats with the given delta. Both Replica.{raftMu,mu} must be held.
+func (r *Replica) handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
+	delta int64, isDeltaTrusted bool,
+) {
+	r.raftMu.AssertHeld()
+	r.mu.AssertHeld()
+
+	r.shMu.raftLogSize += delta
+	r.shMu.raftLogLastCheckSize += delta
+	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+	// between server restarts.
+	if r.shMu.raftLogSize < 0 {
+		r.shMu.raftLogSize = 0
+	}
+	if r.shMu.raftLogLastCheckSize < 0 {
+		r.shMu.raftLogLastCheckSize = 0
+	}
+	if !isDeltaTrusted {
+		r.shMu.raftLogSizeTrusted = false
+	}
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -616,9 +660,4 @@ func (r *Replica) handleChangeReplicasResult(
 	}
 
 	return true
-}
-
-// TODO(sumeer): remove method when all truncation is loosely coupled.
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, isDeltaTrusted bool) {
-	(*raftTruncatorReplica)(r).setTruncationDeltaAndTrusted(delta, isDeltaTrusted)
 }
