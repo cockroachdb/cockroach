@@ -510,8 +510,7 @@ func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	expectedFirstIndexWasAccurate := r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
-	isRaftLogTruncationDeltaTrusted := pt.isDeltaTrusted && expectedFirstIndexWasAccurate
+	isDeltaTrusted := pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
 
 	// TODO(#132114, #131063): updating the truncated state after the storage
 	// writes leads to a necessity of the ErrCompacted handling in raft, when
@@ -520,8 +519,7 @@ func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	// is truncated "logically" first, and then physically under raftMu.
 	r.mu.Lock()
 	r.shMu.raftTruncState = pt.RaftTruncatedState
-	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
-		pt.logDeltaBytes, isRaftLogTruncationDeltaTrusted)
+	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(pt.logDeltaBytes, isDeltaTrusted)
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up
