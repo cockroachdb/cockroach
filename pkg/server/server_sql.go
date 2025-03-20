@@ -688,7 +688,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the
 	// ParentMemoryMonitor.
-	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit(
+	bulkMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
 		"bulk-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
@@ -696,12 +696,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
 	bulkMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
-	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
+	backfillMemoryMonitor := execinfra.NewMonitorWithStringName(ctx, bulkMemoryMonitor, "backfill-mon")
 	backfillMemoryMonitor.MarkLongLiving()
-	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
+	backupMemoryMonitor := execinfra.NewMonitorWithStringName(ctx, bulkMemoryMonitor, "backup-mon")
 	backupMemoryMonitor.MarkLongLiving()
 
-	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimit(
+	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
 		"changefeed-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	if jobs.MakeChangefeedMemoryMetricsHook != nil {
@@ -710,7 +710,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	changefeedMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
-	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
+	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	serverCacheMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
@@ -842,7 +842,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		) (kvserverbase.BulkAdder, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
-			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
+			bulkMon := execinfra.NewMonitorWithStringName(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
 			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon, bulkSenderLimiter)
 		},
 

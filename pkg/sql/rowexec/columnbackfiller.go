@@ -59,7 +59,7 @@ func newColumnBackfiller(
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 ) (*columnBackfiller, error) {
-	columnBackfillerMon := execinfra.NewMonitor(
+	columnBackfillerMon := execinfra.NewMonitorWithStringName(
 		ctx, flowCtx.Cfg.BackfillerMonitor, "column-backfill-mon",
 	)
 	cb := &columnBackfiller{

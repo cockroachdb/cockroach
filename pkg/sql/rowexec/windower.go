@@ -173,8 +173,8 @@ func newWindower(
 		return nil, err
 	}
 
-	w.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "windower-unlimited")
-	w.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "windower-disk")
+	w.unlimitedMemMonitor = execinfra.NewMonitorWithStringName(ctx, flowCtx.Mon, "windower-unlimited")
+	w.diskMonitor = execinfra.NewMonitorWithStringName(ctx, flowCtx.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
 		w.evalCtx, w.MemMonitor, w.unlimitedMemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
 	)

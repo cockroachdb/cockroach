@@ -358,7 +358,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	rf.args = args
 
 	if args.MemMonitor != nil {
-		rf.mon = mon.NewMonitorInheritWithLimit(
+		rf.mon = mon.NewMonitorInheritWithLimitAndStringName(
 			"fetcher-mem", 0 /* limit */, args.MemMonitor, false, /* longLiving */
 		)
 		rf.mon.StartNoReserved(ctx, args.MemMonitor)

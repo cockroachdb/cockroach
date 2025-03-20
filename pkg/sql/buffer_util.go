@@ -83,13 +83,13 @@ func (c *rowContainerHelper) InitWithParentMon(
 	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, parent, distSQLCfg, evalContext.SessionData(),
-		opName+"-limited",
+		mon.MakeMonitorName(opName).WithSuffix("limited"),
 	)
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
-		ctx, parent, opName+"-unlimited",
+		ctx, parent, mon.MakeMonitorName(opName).WithSuffix("unlimited"),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, opName+"-disk",
+		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeMonitorName(opName).WithSuffix("disk"),
 	)
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
@@ -108,13 +108,13 @@ func (c *rowContainerHelper) initMonitors(
 	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
-		opName+"-limited",
+		mon.MakeMonitorName(opName).WithSuffix("limited"),
 	)
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
-		ctx, evalContext.Planner.Mon(), opName+"-unlimited",
+		ctx, evalContext.Planner.Mon(), mon.MakeMonitorName(opName).WithSuffix("unlimited"),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, opName+"-disk",
+		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeMonitorName(opName).WithSuffix("disk"),
 	)
 }
 
