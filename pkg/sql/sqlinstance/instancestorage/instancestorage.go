@@ -93,15 +93,16 @@ type Storage struct {
 
 // instancerow encapsulates data for a single row within the sql_instances table.
 type instancerow struct {
-	region        []byte
-	instanceID    base.SQLInstanceID
-	sqlAddr       string
-	rpcAddr       string
-	sessionID     sqlliveness.SessionID
-	locality      roachpb.Locality
-	binaryVersion roachpb.Version
-	isDraining    bool
-	timestamp     hlc.Timestamp
+	region              []byte
+	instanceID          base.SQLInstanceID
+	sqlAddr             string
+	rpcAddr             string
+	sessionID           sqlliveness.SessionID
+	locality            roachpb.Locality
+	binaryVersion       roachpb.Version
+	isDraining          bool
+	localityAddressList []roachpb.LocalityAddress
+	timestamp           hlc.Timestamp
 }
 
 // isAvailable returns true if the instance row hasn't been claimed by a SQL pod
