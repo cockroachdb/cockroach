@@ -557,7 +557,7 @@ COPY tpartial FROM STDIN
 CPut /Table/<>/1/-1/0 -> /TUPLE/
 CPut /Table/<>/1/0/0 -> /TUPLE/
 CPut /Table/<>/1/1/0 -> /TUPLE/
-CPut /Table/<>/2/1/0 -> /BYTES/
+Put /Table/<>/2/1/0 -> /BYTES/
 
 exec-ddl
 CREATE TABLE tpartial2 (i INT PRIMARY KEY, b INT, index(b) WHERE i > 0, FAMILY (i), FAMILY (b))
@@ -585,7 +585,7 @@ COPY tpartial2 FROM STDIN
 ----
 CPut /Table/<>/1/1/0 -> /TUPLE/
 CPut /Table/<>/1/1/1/1 -> /INT/2
-CPut /Table/<>/2/2/1/0 -> /BYTES/
+Put /Table/<>/2/2/1/0 -> /BYTES/
 
 exec-ddl
 CREATE TYPE testenum AS ENUM('cat','dog','bear');
@@ -625,7 +625,7 @@ COPY tenum2 FROM STDIN
 1	cat
 ----
 CPut /Table/<>/1/1/0 -> /TUPLE/2:2:Bytes/@
-CPut /Table/<>/2/"@"/1/0 -> /BYTES/
+Put /Table/<>/2/"@"/1/0 -> /BYTES/
 
 exec-ddl
 CREATE TABLE tenum3 (i INT PRIMARY KEY, c1 testenum, UNIQUE INDEX(c1))
@@ -702,9 +702,9 @@ CPut /Table/<>/1/2/2/1 -> /INT/3
 CPut /Table/<>/1/3/0 -> /TUPLE/2:2:Int/5
 CPut /Table/<>/1/3/1/1 -> /INT/2
 CPut /Table/<>/1/3/2/1 -> /INT/1
-CPut /Table/<>/2/1/2/4/1/0 -> /BYTES/
-CPut /Table/<>/2/2/1/3/2/0 -> /BYTES/
-CPut /Table/<>/2/2/5/1/3/0 -> /BYTES/
+Put /Table/<>/2/1/2/4/1/0 -> /BYTES/
+Put /Table/<>/2/2/1/3/2/0 -> /BYTES/
+Put /Table/<>/2/2/5/1/3/0 -> /BYTES/
 
 query
 SELECT * FROM tfam2
@@ -757,8 +757,8 @@ CPut /Table/<>/1/1/0 -> /TUPLE/2:2:Bytes/running
 CPut /Table/<>/1/1/1/1 -> /INT/3
 CPut /Table/<>/1/2/0 -> /TUPLE/2:2:Bytes/succeed
 CPut /Table/<>/1/2/1/1 -> /INT/1
-CPut /Table/<>/2/"running"/1/0 -> /BYTES/
-CPut /Table/<>/2/"running"/1/1/1 -> /TUPLE/3:3:Int/3
+Put /Table/<>/2/"running"/1/0 -> /BYTES/
+Put /Table/<>/2/"running"/1/1/1 -> /TUPLE/3:3:Int/3
 
 # Ensure RLS policies are applied for COPY FROM
 exec-ddl
