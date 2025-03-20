@@ -1,0 +1,43 @@
+run ok
+put k=a v=wow ts=3
+----
+>> at end:
+data: "a"/3.000000000,0 -> /BYTES/wow
+
+# deleting with a younger origin time should lose LWW
+run error
+del k=a ts=4 origin_ts=2
+----
+>> at end:
+data: "a"/3.000000000,0 -> /BYTES/wow
+error: (*kvpb.ConditionFailedError:) OriginTimestamp older than 3.000000000,0
+
+run ok
+del k=a ts=5 origin_ts=4
+----
+del: "a": found key true
+>> at end:
+data: "a"/5.000000000,0 -> {originTs=4.000000000,0}/<empty>
+data: "a"/3.000000000,0 -> /BYTES/wow
+
+# it should be possible to write over an existing tombstone with a newer origin
+# timestamp
+run ok
+del k=a ts=6 origin_ts=5
+----
+del: "a": found key false
+>> at end:
+data: "a"/6.000000000,0 -> {originTs=5.000000000,0}/<empty>
+data: "a"/5.000000000,0 -> {originTs=4.000000000,0}/<empty>
+data: "a"/3.000000000,0 -> /BYTES/wow
+
+# it is possible to write a tombstone for a value that does not exist locally
+run ok
+del k=notfound ts=7 origin_ts=5
+----
+del: "notfound": found key false
+>> at end:
+data: "a"/6.000000000,0 -> {originTs=5.000000000,0}/<empty>
+data: "a"/5.000000000,0 -> {originTs=4.000000000,0}/<empty>
+data: "a"/3.000000000,0 -> /BYTES/wow
+data: "notfound"/7.000000000,0 -> {originTs=5.000000000,0}/<empty>

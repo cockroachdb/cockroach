@@ -58,12 +58,14 @@ func ConditionalPut(
 		return result.Result{}, err
 	}
 
-	originTimestampForValueHeader := h.WriteOptions.GetOriginTimestamp()
+	originTimestamp := h.WriteOptions.GetOriginTimestamp()
 	if args.OriginTimestamp.IsSet() {
-		originTimestampForValueHeader = args.OriginTimestamp
-	}
-	if args.OriginTimestamp.IsSet() && h.WriteOptions.GetOriginTimestamp().IsSet() {
-		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
+		// NOTE: this is a work around for old clients. As of 25.2, the
+		// OriginTimestamp is deprecated.
+		if originTimestamp.IsSet() && args.OriginTimestamp != originTimestamp {
+			return result.Result{}, errors.AssertionFailedf("origin timestamp mismatch")
+		}
+		originTimestamp = args.OriginTimestamp
 	}
 
 	opts := storage.ConditionalPutWriteOptions{
@@ -74,13 +76,12 @@ func ConditionalPut(
 			ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 			OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 			OriginID:                       h.WriteOptions.GetOriginID(),
-			OriginTimestamp:                originTimestampForValueHeader,
+			OriginTimestamp:                originTimestamp,
 			MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 			Category:                       fs.BatchEvalReadCategory,
 		},
 		AllowIfDoesNotExist: storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
-		OriginTimestamp:     args.OriginTimestamp,
 	}
 
 	var err error
