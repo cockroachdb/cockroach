@@ -15,7 +15,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 
@@ -37,16 +36,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type testResult int
-
-const (
-	// NB: These are in a particular order corresponding to the order we
-	// want these tests to appear in the generated Markdown report.
-	testResultFailure testResult = iota
-	testResultSuccess
-	testResultSkip
-)
-
 type ddEventType int
 
 const (
@@ -55,12 +44,6 @@ const (
 	eventOpFinishedCleanup
 	eventOpError
 )
-
-type testReportForGitHub struct {
-	name     string
-	duration time.Duration
-	status   testResult
-}
 
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
@@ -208,12 +191,20 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		// Collect the runner logs.
 		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
-
-	if summaryErr := maybeDumpSummaryMarkdown(runner); summaryErr != nil {
-		shout(ctx, l, os.Stdout, "failed to write to GITHUB_STEP_SUMMARY file (%+v)", summaryErr)
-	}
+	runner.writeTestReports(ctx, l, artifactsDir)
 
 	return err
+}
+
+func skipDetails(spec *registry.TestSpec) string {
+	if spec.Skip == "" {
+		return ""
+	}
+	details := spec.Skip
+	if spec.SkipDetails != "" {
+		details += " (" + spec.SkipDetails + ")"
+	}
+	return details
 }
 
 // getUser takes the value passed on the command line and comes up with the
@@ -385,85 +376,6 @@ func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
 	}
 	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
 	return l
-}
-
-func maybeDumpSummaryMarkdown(r *testRunner) error {
-	if !roachtestflags.GitHubActions {
-		return nil
-	}
-	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
-	if summaryPath == "" {
-		return nil
-	}
-	summaryFile, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-
-	_, err = summaryFile.WriteString(`| TestName | Status | Duration |
-| --- | --- | --- |
-`)
-	if err != nil {
-		return err
-	}
-
-	var allTests []testReportForGitHub
-	for test := range r.status.pass {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultSuccess,
-		})
-	}
-
-	for test := range r.status.fail {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultFailure,
-		})
-	}
-
-	for test := range r.status.skip {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultSkip,
-		})
-	}
-
-	// Sort the test results: first fails, then successes, then skips, and
-	// within each category sort by test duration in descending order.
-	// Ties are very unlikely to happen but we break them by test name.
-	slices.SortFunc(allTests, func(a, b testReportForGitHub) int {
-		if a.status < b.status {
-			return -1
-		} else if a.status > b.status {
-			return 1
-		} else if a.duration > b.duration {
-			return -1
-		} else if a.duration < b.duration {
-			return 1
-		}
-		return strings.Compare(a.name, b.name)
-	})
-
-	for _, test := range allTests {
-		var statusString string
-		if test.status == testResultFailure {
-			statusString = "❌ FAILED"
-		} else if test.status == testResultSuccess {
-			statusString = "✅ SUCCESS"
-		} else {
-			statusString = "🟨 SKIPPED"
-		}
-		_, err := fmt.Fprintf(summaryFile, "| `%s` | %s | `%s` |\n", test.name, statusString, test.duration.String())
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // maybeEmitDatadogEvent sends an event to Datadog if the passed in ctx has the
