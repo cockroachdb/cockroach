@@ -103,6 +103,9 @@
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-foundations
 /pkg/sql/ttl                 @cockroachdb/sql-foundations
 
+/pkg/sql/syntheticprivilege/      @cockroachdb/sql-foundations
+/pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations
+
 /pkg/ccl/schemachangerccl/   @cockroachdb/sql-foundations
 /pkg/sql/catalog/            @cockroachdb/sql-foundations
 /pkg/sql/catalog/multiregion @cockroachdb/sql-foundations
