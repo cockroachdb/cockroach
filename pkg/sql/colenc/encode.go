@@ -500,7 +500,11 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 	if err := b.writeColumnValues(kys, values, ind, cols); err != nil {
 		return err
 	}
-	b.p.CPutBytesEmpty(kys, values)
+	if ind.IsUnique() {
+		b.p.CPutBytesEmpty(kys, values)
+	} else {
+		b.p.PutBytes(kys, values)
+	}
 	return nil
 }
 
@@ -562,9 +566,17 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 		// include encoded primary key columns. For other families,
 		// use the tuple encoding for the value.
 		if familyID == 0 {
-			b.p.CPutBytesEmpty(kys, values)
+			if ind.IsUnique() {
+				b.p.CPutBytesEmpty(kys, values)
+			} else {
+				b.p.PutBytes(kys, values)
+			}
 		} else {
-			b.p.CPutTuplesEmpty(kys, values)
+			if ind.IsUnique() {
+				b.p.CPutTuplesEmpty(kys, values)
+			} else {
+				b.p.PutTuples(kys, values)
+			}
 		}
 		if err := b.checkMemory(); err != nil {
 			return err
