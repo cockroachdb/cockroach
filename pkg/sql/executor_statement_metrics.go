@@ -22,11 +22,11 @@ import (
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
 	// The subset of SELECTs that are requested to be processed through DistSQL.
-	DistSQLSelectCount *metric.Counter
+	DistSQLSelectCount *SQLCounter
 	// The subset of SELECTs that were executed by DistSQL with full or partial
 	// distribution.
 	DistSQLSelectDistributedCount *metric.Counter
-	SQLOptPlanCacheHits           *metric.Counter
+	SQLOptPlanCacheHits           *SQLCounter
 	SQLOptPlanCacheMisses         *metric.Counter
 	StatementFingerprintCount     *metric.UniqueCounter
 
@@ -301,7 +301,8 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 
 		if flags.ShouldBeDistributed() {
 			if _, ok := stmt.AST.(*tree.Select); ok {
-				m.DistSQLSelectCount.Inc(1)
+				m.DistSQLSelectCount.Inc(ex.sessionData().Database, ex.sessionData().ApplicationName)
+
 				if flags.IsSet(planFlagDistributedExecution) {
 					m.DistSQLSelectDistributedCount.Inc(1)
 				}
@@ -328,7 +329,7 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	m := &ex.metrics.EngineMetrics
 
 	if planFlags.IsSet(planFlagOptCacheHit) {
-		m.SQLOptPlanCacheHits.Inc(1)
+		m.SQLOptPlanCacheHits.Inc(ex.sessionData().Database, ex.sessionData().ApplicationName)
 	} else if planFlags.IsSet(planFlagOptCacheMiss) {
 		m.SQLOptPlanCacheMisses.Inc(1)
 	}

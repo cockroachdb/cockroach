@@ -1,0 +1,22 @@
+sql_counter appName=test_app1 appNameMetricsEnabled=false dbNameMetricsEnabled=false
+----
+value=3.000000
+
+
+sql_counter appName=test_app2 appNameMetricsEnabled=true dbNameMetricsEnabled=false
+----
+app_name=test_app2
+value=4.000000
+
+
+sql_counter appName=test_app3 appNameMetricsEnabled=true dbNameMetricsEnabled=true
+----
+db_name=defaultdb
+app_name=test_app3
+value=4.000000
+
+
+sql_counter appName=test_app4 appNameMetricsEnabled=false dbNameMetricsEnabled=true
+----
+db_name=defaultdb
+value=4.000000
