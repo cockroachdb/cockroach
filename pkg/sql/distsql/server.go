@@ -239,7 +239,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorNameWithID("flow ", req.Flow.FlowID.Short()),
+		Name:     mon.MakeMonitorName("flow").WithUUID(req.Flow.FlowID.Short()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
