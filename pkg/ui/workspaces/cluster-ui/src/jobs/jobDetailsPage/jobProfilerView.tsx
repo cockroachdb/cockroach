@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Button, InlineAlert, Icon } from "@cockroachlabs/ui-components";
+import { InlineAlert, Icon } from "@cockroachlabs/ui-components";
 import { Space } from "antd";
 import classNames from "classnames";
 import classnames from "classnames/bind";
@@ -19,8 +19,10 @@ import {
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api/jobProfilerApi";
+import { Button } from "src/button";
 import { DownloadFile, DownloadFileRef } from "src/downloadFile";
 import { EmptyTable } from "src/empty";
+import SpinIcon from "src/icon/spin";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
@@ -60,7 +62,7 @@ export function JobProfilerView({
       refreshInterval: 10 * 1000, // 10s polling interval
     },
   );
-  const { trigger } = useSwrMutationWithClusterId(
+  const { trigger, isMutating: isCollecting } = useSwrMutationWithClusterId(
     { name: "collectExecutionDetails", jobID },
     async () => {
       const resp = await onCollectExecutionDetails({ job_id: jobID });
@@ -96,7 +98,12 @@ export function JobProfilerView({
         />
       </SummaryCard>
       <Space direction="vertical" align="end" className={cx("full-width")}>
-        <Button intent="secondary" onClick={trigger}>
+        <Button
+          type="secondary"
+          onClick={trigger}
+          disabled={isCollecting}
+          icon={isCollecting ? <SpinIcon width={16} height={16} /> : undefined}
+        >
           Request Execution Details
         </Button>
       </Space>
@@ -157,9 +164,8 @@ function makeJobProfilerViewColumns(
           <div className={cx("crl-job-profiler-view__actions-column")}>
             <DownloadFile ref={downloadRef} />
             <Button
-              as="a"
               size="small"
-              intent="tertiary"
+              type="unstyled-link"
               className={cx("view-execution-detail-button")}
               onClick={() => {
                 const req =
@@ -183,9 +189,8 @@ function makeJobProfilerViewColumns(
               View
             </Button>
             <Button
-              as="a"
+              type="unstyled-link"
               size="small"
-              intent="tertiary"
               className={cx("download-execution-detail-button")}
               onClick={() => {
                 const req =
