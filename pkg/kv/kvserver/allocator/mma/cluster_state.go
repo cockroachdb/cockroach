@@ -8,6 +8,7 @@ package mma
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -722,7 +723,7 @@ type storeState struct {
 	// storeLoadSummary stored in meansForStoreSet.
 	loadSeqNum uint64
 
-	// max(|1-(adjustedLoad[i]/reportedLoad[i])|)
+	// max(|1-(adjusted.load[i]/reportedLoad[i])|)
 	//
 	// If maxFractionPending is greater than some threshold, we don't add or
 	// remove more load unless we are shedding load due to failure detection.
@@ -730,6 +731,10 @@ type storeState struct {
 	// adjustments to load vectors are estimates, and there can be overhead on
 	// these nodes due to making the change.
 	maxFractionPending float64
+
+	// TODO: also need a maxFractionPending at the node level since with many
+	// stores on a node, some stores may have used up all the budget for changes
+	// at the node.
 
 	localityTiers
 }
@@ -768,6 +773,21 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 		}
 	}
 	return changes
+}
+
+func (ss *storeState) computeMaxFractionPending() {
+	frac := 0.0
+	for i := range ss.reportedLoad {
+		if ss.reportedLoad[i] == 0 {
+			frac = 1000
+			break
+		}
+		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
+		if f > frac {
+			frac = f
+		}
+	}
+	ss.maxFractionPending = frac
 }
 
 func newStoreState(storeID roachpb.StoreID, nodeID roachpb.NodeID) *storeState {
@@ -994,6 +1014,7 @@ func (cs *clusterState) processStoreLoadMsg(storeMsg *StoreLoadMsg) {
 	// remaining pending change deltas to the updated adjusted load.
 	ss.adjusted.load = storeMsg.Load
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
+	ss.maxFractionPending = 0
 
 	// Find any pending changes for range's which involve this store. These
 	// pending changes can now be removed from the loadPendingChanges. We don't
@@ -1303,7 +1324,7 @@ func (cs *clusterState) applyChangeLoadDelta(change replicaChange) {
 	ss.adjusted.load.add(change.loadDelta)
 	ss.adjusted.secondaryLoad.add(change.secondaryLoadDelta)
 	ss.loadSeqNum++
-
+	ss.computeMaxFractionPending()
 	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[CPURate]
 }
 
@@ -1314,7 +1335,7 @@ func (cs *clusterState) undoChangeLoadDelta(change replicaChange) {
 	ss.adjusted.load.subtract(change.loadDelta)
 	ss.adjusted.secondaryLoad.subtract(change.secondaryLoadDelta)
 	ss.loadSeqNum++
-
+	ss.computeMaxFractionPending()
 	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[CPURate]
 }
 
