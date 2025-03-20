@@ -1387,6 +1387,9 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 func (cs *clusterState) canAddLoad(ss *storeState, delta LoadVector, means *meansForStoreSet) bool {
 	ns := cs.nodes[ss.NodeID]
 	// Add the delta.
+	//
+	// TODO: consider adding more than the delta, say 1.1x the delta, in case
+	// our estimates are slightly lower than actual.
 	for i := range delta {
 		ss.adjusted.load[i] += delta[i]
 	}
@@ -1398,9 +1401,10 @@ func (cs *clusterState) canAddLoad(ss *storeState, delta LoadVector, means *mean
 	}
 	ns.adjustedCPU -= delta[CPURate]
 	// We already filtered out stores >= loadNoChange before attempting to add
-	// this load, so we allow everyone <= loadNoChange now, since those equal to
-	// loadNoChange must be due to this addition.
-	return sls.sls <= loadNoChange && sls.nls <= loadNoChange
+	// this load, so we could allow everyone <= loadNoChange now, since those
+	// equal to loadNoChange must be due to this addition. But loadNoChange
+	// implies this addition is going above the mean, so don't allow that.
+	return sls.sls < loadNoChange && sls.nls < loadNoChange
 }
 
 func (cs *clusterState) computeLoadSummary(
