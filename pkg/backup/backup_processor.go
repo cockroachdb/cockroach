@@ -605,7 +605,8 @@ func runBackupProcessor(
 								if recording != nil {
 									log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 								}
-								return errors.Wrap(exportRequestErr, "KV storage layer did not respond to BACKUP within timeout")
+								log.Errorf(ctx, "%s", exportRequestErr.Error())
+								return errors.New("KV storage layer did not respond to BACKUP within timeout: node may be overloaded")
 							}
 							// BatchTimestampBeforeGCError is returned if the ExportRequest
 							// attempts to read below the range's GC threshold.
@@ -622,8 +623,10 @@ func runBackupProcessor(
 
 							if recording != nil {
 								log.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
+							} else {
+								log.Errorf(ctx, "failed export request %s", span.span)
 							}
-							return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
+							return exportRequestErr
 						}
 
 						resp := rawResp.(*kvpb.ExportResponse)
@@ -751,7 +754,8 @@ func reserveWorkerMemory(
 	// in-flight SSTs unaccounted for.
 	// perWorkerMemory = perWorkerMemory + batcheval.ExportRequestTargetFileSize.Get(&settings.SV)
 	if err := memAcc.Grow(ctx, minimumWorkerCount*perWorkerMemory); err != nil {
-		return 0, nil, errors.Wrapf(err, "could not reserve memory for minimum number of backup workers (%d * %d)", minimumWorkerCount, perWorkerMemory)
+		log.Errorf(ctx, "could not reserve memory for minimum number of backup workers (%d * %d)", minimumWorkerCount, perWorkerMemory)
+		return 0, nil, err
 	}
 
 	workerCount := minimumWorkerCount

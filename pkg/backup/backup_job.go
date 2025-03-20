@@ -180,7 +180,8 @@ func backup(
 		ctx, evalCtx, execCtx.ExecCfg(), oracle, execLocality,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
+		log.Error(ctx, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, 0, err
 	}
 
 	job := resumer.job
@@ -222,7 +223,11 @@ func backup(
 			// Currently the granularity of backup progress is the % of spans
 			// exported. Would improve accuracy if we tracked the actual size of each
 			// file.
-			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "updating job progress")
+			err := progressLogger.Loop(ctx, requestFinishedCh)
+			if err != nil {
+				log.Error(ctx, "error updating job progress")
+			}
+			return err
 		}
 	}
 
@@ -339,7 +344,7 @@ func backup(
 	}
 
 	runBackup := func(ctx context.Context) error {
-		return errors.Wrapf(distBackup(
+		err := distBackup(
 			ctx,
 			execCtx,
 			planCtx,
@@ -347,7 +352,11 @@ func backup(
 			progCh,
 			tracingAggCh,
 			backupSpecs,
-		), "running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
+		)
+		if err != nil {
+			log.Errorf(ctx, "error running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
+		}
+		return err
 	}
 
 	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
@@ -657,11 +666,13 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// details.URI.
 	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI, p.User())
 	if err != nil {
-		return errors.Wrapf(err, "export configuration")
+		log.Error(ctx, "error parsing export configuration")
+		return err
 	}
 	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
 	if err != nil {
-		return errors.Wrapf(err, "make storage")
+		log.Error(ctx, "error making storage client")
+		return err
 	}
 	defer defaultStore.Close()
 
@@ -672,7 +683,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if err := backupencryption.WriteEncryptionInfoIfNotExists(
 			ctx, details.EncryptionInfo, defaultStore,
 		); err != nil {
-			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
+			log.Errorf(ctx, "error creating encryption info file to %s", redactedURI)
+			return err
 		}
 	}
 
@@ -739,14 +751,16 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		if joberror.IsPermanentBulkJobError(err) {
-			return errors.Wrap(err, "failed to run backup")
+			log.Error(ctx, "failed to run backup")
+			return err
 		}
 
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
 		if p.ExecCfg().JobRegistry.IsDraining() {
-			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
+			log.Error(ctx, "job encountered retryable error on draining node")
+			return jobs.MarkAsRetryJobError(err)
 		}
 
 		log.Warningf(ctx, "encountered retryable error: %+v", err)
@@ -758,7 +772,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
-			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
+			log.Error(ctx, "could not reload backup manifest when retrying")
+			return reloadBackupErr
 		}
 		// Re-load the job in order to update our progress object, which
 		// may have been updated since the flow started.
@@ -786,7 +801,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// ensure that any alerting on failures is triggered and that any subsequent
 	// schedule runs are not blocked.
 	if err != nil {
-		return errors.Wrap(err, "exhausted retries")
+		log.Error(ctx, "exhausted retries")
+		return err
 	}
 
 	var jobDetails jobspb.BackupDetails
@@ -1168,12 +1184,14 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	// Load the schedule that has spawned this job.
 	sj, err := storage.Load(ctx, env, scheduleID)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to load scheduled job %d", scheduleID)
+		log.Errorf(ctx, "failed to load scheduled job %d", scheduleID)
+		return nil, nil, err
 	}
 
 	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := types.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
-		return nil, nil, errors.Wrap(err, "un-marshaling args")
+		log.Error(ctx, "error un-marshalling args")
+		return nil, nil, err
 	}
 
 	return sj, args, nil
@@ -1362,7 +1380,8 @@ func maybeRelocateJobExecution(
 				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, jobID, dest.InstanceID, dest.SessionID)
 				return err
 			}); err != nil {
-				return errors.Wrapf(err, "failed to relocate job coordinator to %d", dest.InstanceID)
+				log.Errorf(ctx, "failed to relocate job coordinator to %d", dest.InstanceID)
+				return err
 			}
 			return res
 		}
@@ -1643,7 +1662,8 @@ func createBackupManifest(
 		ElidedPrefix:        elide,
 	}
 	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
-		return backuppb.BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+		log.Error(ctx, "error in checking coverage, new backup would not cover expected time")
+		return backuppb.BackupManifest{}, err
 	}
 	return backupManifest, nil
 }
@@ -1839,7 +1859,8 @@ func (b *backupResumer) readManifestOnResume(
 		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions, kmsEnv)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
+			log.Error(ctx, "error reading backup checkpoint")
+			return nil, 0, err
 		}
 		// Try reading temp checkpoint.
 		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
@@ -1853,7 +1874,8 @@ func (b *backupResumer) readManifestOnResume(
 			ctx, details.URI, details.EncryptionOptions, kmsEnv, &desc, cfg, user,
 		); err != nil {
 			mem.Shrink(ctx, memSize)
-			return nil, 0, errors.Wrapf(err, "renaming temp checkpoint file")
+			log.Error(ctx, "error renaming temp checkpoint file")
+			return nil, 0, err
 		}
 		// Best effort remove temp checkpoint.
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
@@ -1893,7 +1915,8 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 				env.SystemJobsTableName()),
 			b.job.ID(), jobs.CreatedByScheduledJobs)
 		if err != nil {
-			return errors.Wrap(err, "schedule info lookup")
+			log.Error(ctx, "schedule info lookup")
+			return err
 		}
 		if datums == nil {
 			// Not a scheduled backup.
@@ -1902,8 +1925,8 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 
 		scheduleID := jobspb.ScheduleID(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(ctx, txn, env, b.job.ID(), jobState, b.job.Details(), scheduleID); err != nil {
-			return errors.Wrapf(err,
-				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
+			log.Errorf(ctx, "failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
+			return err
 		}
 		return nil
 	})

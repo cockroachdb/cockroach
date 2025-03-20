@@ -265,10 +265,12 @@ func checkPrivilegesForBackup(
 			if err := p.CheckPrivilegeForUser(
 				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.BACKUP, p.User(),
 			); err != nil {
-				return pgerror.Wrapf(
+				log.Warning(ctx, "only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
+				return pgerror.Wrap(
 					err,
 					pgcode.InsufficientPrivilege,
-					"only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups")
+					"",
+				)
 			}
 			return sql.CheckDestinationPrivileges(ctx, p, to)
 		}
@@ -561,7 +563,8 @@ func backupPlanHook(
 			var err error
 			targetDescs, completeDBs, requestedDBs, descsByTablePattern, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
-				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
+				log.Error(ctx, "failed to resolve targets specified in the BACKUP stmt")
+				return err
 			}
 		case tree.AllDescriptors:
 			var err error
@@ -656,7 +659,8 @@ func backupPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
 		if err := logAndSanitizeBackupDestinations(ctx, to...); err != nil {
-			return errors.Wrap(err, "logging backup destinations")
+			log.Error(ctx, "error logging backup destinations")
+			return err
 		}
 
 		description, err := backupJobDescription(p,

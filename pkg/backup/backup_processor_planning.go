@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 )
 
 func distBackupPlanSpecs(
@@ -80,8 +79,8 @@ func distBackupPlanSpecs(
 
 		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
 		if err != nil {
-			return nil, errors.Wrap(err,
-				"failed to decrypt data key before starting BackupDataProcessor")
+			log.Error(ctx, "failed to decrypt data key before starting BackupDataProcessor")
+			return nil, err
 		}
 	}
 	// Wrap the relevant BackupEncryptionOptions to be used by the Backup

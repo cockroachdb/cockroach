@@ -2078,7 +2078,7 @@ table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc
 		{
 			// We have to qualify the table correctly to back it up. d.tb1 resolves
 			// to d.public.tb1.
-			sqlDB.ExpectErr(t, `pq: failed to resolve targets specified in the BACKUP stmt: table "d.tb1" does not exist`, `BACKUP TABLE d.tb1 INTO 'nodelocal://1/test/'`)
+			sqlDB.ExpectErr(t, `pq: table "d.tb1" does not exist`, `BACKUP TABLE d.tb1 INTO 'nodelocal://1/test/'`)
 			// Backup tb1.
 			sqlDB.Exec(t, `BACKUP TABLE d.sc.tb1 INTO 'nodelocal://1/test/'`)
 			// Create a new database to restore into. This restore should restore the
@@ -7561,7 +7561,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP TABLE data.bank INTO 'nodelocal://1/timeout'")
 	require.Regexp(t,
-		`running distributed backup to export.*/Table/\d+/.*\: context deadline exceeded`,
+		`pq: KV storage layer did not respond to BACKUP within timeout: node may be overloaded`,
 		err.Error())
 }
 
