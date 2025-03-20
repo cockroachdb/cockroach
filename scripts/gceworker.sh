@@ -182,12 +182,9 @@ suspend)
 	;;
 resume)
 	gcloud compute instances resume "${NAME}"
-	echo "waiting for node to finish starting..."
-	# Wait for vm and sshd to start up.
-	retry gcloud_compute_ssh "${NAME}" --command=true || true
-	refresh_ssh_config
-	# SSH into the node, since that's probably why we resumed it.
-	$0 ssh
+	# This conveniently waits until the VM is ready and then drops
+	# us into a ssh session.
+	$0 start
 	;;
 reset)
 	read -r -p "This will hard reset (\"powercycle\") the VM. Are you sure? [yes] " response
