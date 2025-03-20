@@ -278,7 +278,11 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 			for i := 0; i < n; i++ {
 				rangeID := topKRanges.index(i)
 				rstate := a.cs.ranges[rangeID]
-				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, rstate.load.Load, rstate.load.RaftCPU)
+				load := rstate.load.Load
+				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+					load[CPURate] = rstate.load.RaftCPU
+				}
+				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
 			}
 			log.Infof(context.Background(), "top-K ranges %s", b.String())
 		}
@@ -508,7 +512,7 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
 			// Since we have already excluded overloaded nodes, we only consider sls.
-			return -cmp.Compare(a.sls, b.sls)
+			return cmp.Or(-cmp.Compare(a.sls, b.sls), cmp.Compare(a.StoreID, b.StoreID))
 		}
 		return -cmp.Compare(a.diversityScore, b.diversityScore)
 	})
@@ -549,7 +553,12 @@ func sortTargetCandidateSetAndPick(cands candidateSet, rng *rand.Rand) roachpb.S
 		}
 	}
 	cands.candidates = cands.candidates[:j]
+	var b strings.Builder
+	for i := range cands.candidates {
+		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
+	}
 	j = rng.Intn(j)
+	log.Infof(context.Background(), "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
 	return cands.candidates[j].StoreID
 }
 
