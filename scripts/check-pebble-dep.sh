@@ -9,7 +9,7 @@
 set -euo pipefail
 #set -x
 
-RELEASES="23.1 23.2 24.1 24.2 24.3 master"
+RELEASES="23.2 24.1 24.3 25.1 master"
 
 for REL in $RELEASES; do
   if [ "$REL" == "master" ]; then
