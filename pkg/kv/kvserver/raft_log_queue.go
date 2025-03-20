@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -724,10 +723,4 @@ func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 
 func (*raftLogQueue) updateChan() <-chan time.Time {
 	return nil
-}
-
-func isLooselyCoupledRaftLogTruncationEnabled(
-	ctx context.Context, settings *cluster.Settings,
-) bool {
-	return looselyCoupledTruncationEnabled.Get(&settings.SV)
 }

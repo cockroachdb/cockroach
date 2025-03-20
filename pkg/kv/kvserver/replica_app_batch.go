@@ -484,7 +484,7 @@ func (b *replicaAppBatch) stageTruncation(
 	var err error
 	// Use loosely-coupled truncations if configured by the setting. Otherwise,
 	// perform a tightly-coupled truncation, i.e. apply it immediately.
-	looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
+	looselyCoupledTruncation := looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
 	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
 	// comment in that proto). It is possible that a replica still has a
 	// truncation sitting in the raft log that never populated this field.
