@@ -498,24 +498,24 @@ func (b *replicaAppBatch) stageTruncation(
 	//
 	// TODO(pav-kv): make the size delta untrusted on expected first index == 0.
 	apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
-	if apply {
+	// Discard tightly-coupled truncations not moving the truncated index forward.
+	discard := apply && truncatedState.Index <= b.truncState.Index
+
+	if !apply {
+		b.r.store.raftTruncator.addPendingTruncation(
+			ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
+			res.RaftLogDelta)
+	} else if !discard {
+		// This truncation will apply synchronously in this batch. Stage the
+		// write into the batch, and compute metadata used after applying it.
 		if err := handleTruncatedStateBelowRaftPreApply(
 			ctx, b.truncState, truncatedState,
 			b.r.raftMu.stateLoader.StateLoader, b.batch,
 		); err != nil {
 			return errors.Wrap(err, "unable to handle truncated state")
 		}
-		// TODO(pav-kv): untangle the logic relying on this "apply" change.
-		apply = truncatedState.Index > b.truncState.Index
-	} else {
-		b.r.store.raftTruncator.addPendingTruncation(
-			ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
-			res.RaftLogDelta)
-	}
-	if apply {
-		// This truncation will apply synchronously in this batch. Determine if
-		// there are any sideloaded entries that will be removed as a side effect,
-		// and the total size of these entries.
+		// Determine if there are any sideloaded entries that will be removed as a side
+		// effect, and the total size of these entries.
 		//
 		// If any sideloaded entries are to be removed, the log engine write must be
 		// synced first. Not doing so can lead to losing the entries during an
@@ -531,7 +531,8 @@ func (b *replicaAppBatch) stageTruncation(
 			b.changeTruncatesSideloadedFiles = true
 			b.truncatedSideloadedSize = size
 		}
-	} else {
+	}
+	if !apply || discard {
 		// The truncated state was discarded, or we are queuing a pending
 		// truncation, so make sure we don't apply it to our in-memory state.
 		if res.State != nil {
