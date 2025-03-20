@@ -245,7 +245,7 @@ func (ds *ServerImpl) setupFlow(
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
-	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
+	diskMonitor = execinfra.NewMonitorWithStringName(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
 
 	makeLeaf := func(ctx context.Context) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState

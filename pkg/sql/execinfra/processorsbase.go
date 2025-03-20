@@ -964,9 +964,19 @@ func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
 func NewMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, name redact.SafeString,
+	ctx context.Context, parent *mon.BytesMonitor, name mon.MonitorName,
 ) *mon.BytesMonitor {
 	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent, false /* longLiving */)
+	monitor.StartNoReserved(ctx, parent)
+	return monitor
+}
+
+// NewMonitorWithStringName is the same as NewMonitor but accepts a string name.
+// Deprecated: NewMonitor should be used instead.
+func NewMonitorWithStringName(
+	ctx context.Context, parent *mon.BytesMonitor, name redact.SafeString,
+) *mon.BytesMonitor {
+	monitor := mon.NewMonitorInheritWithLimitAndStringName(name, 0 /* limit */, parent, false /* longLiving */)
 	monitor.StartNoReserved(ctx, parent)
 	return monitor
 }
@@ -978,7 +988,7 @@ func NewMonitor(
 // ServerConfig.TestingKnobs.ForceDiskSpill is set or
 // ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.SafeString,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name mon.MonitorName,
 ) *mon.BytesMonitor {
 	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, parent)
@@ -995,7 +1005,7 @@ func NewLimitedMonitorWithLowerBound(
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, memoryLimit, flowCtx.Mon, false /* longLiving */)
+	limitedMon := mon.NewMonitorInheritWithLimitAndStringName(name, memoryLimit, flowCtx.Mon, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	return limitedMon
 }
@@ -1007,7 +1017,7 @@ func NewLimitedMonitorNoFlowCtx(
 	parent *mon.BytesMonitor,
 	config *ServerConfig,
 	sd *sessiondata.SessionData,
-	name redact.SafeString,
+	name mon.MonitorName,
 ) *mon.BytesMonitor {
 	// Create a fake FlowCtx populating only the required fields.
 	flowCtx := &FlowCtx{

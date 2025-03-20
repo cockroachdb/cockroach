@@ -531,14 +531,14 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
+	name MonitorName, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {
 		res = DiskResource
 	}
 	return NewMonitor(Options{
-		Name:       MakeMonitorName(name),
+		Name:       name,
 		Res:        res,
 		Limit:      limit,
 		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
@@ -547,6 +547,15 @@ func NewMonitorInheritWithLimit(
 		Settings:   m.settings,
 		LongLiving: longLiving,
 	})
+}
+
+// NewMonitorInheritWithLimitAndStringName is the same as
+// NewMonitorInheritWithLimit but accept a string name.
+// Deprecated: NewMonitorInheritWithLimit should be used instead.
+func NewMonitorInheritWithLimitAndStringName(
+	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
+) *BytesMonitor {
+	return NewMonitorInheritWithLimit(MakeMonitorName(name), limit, m, longLiving)
 }
 
 func (mm *BytesMonitor) MarkAsRootSQLMonitor() {
