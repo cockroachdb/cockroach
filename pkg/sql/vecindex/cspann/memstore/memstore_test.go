@@ -204,7 +204,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(1.05), stats.VectorsPerPartition)
 	require.Equal(t, []cspann.CVStats{}, stats.CVStats)
 
 	// Upsert new root partition with higher level and check stats.
@@ -219,7 +218,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(1.0975), stats.VectorsPerPartition)
 	require.Equal(t, []cspann.CVStats{{Mean: 2.5, Variance: 0}, {Mean: 1, Variance: 0}}, roundCVStats(stats.CVStats))
 
 	// Insert new partition with lower level and check stats.
@@ -235,7 +233,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.0926), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
@@ -248,7 +245,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1380), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
@@ -260,7 +256,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1311), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 
@@ -269,7 +264,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, true /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1311), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 }
@@ -326,9 +320,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		string([]byte{3, 4}): {12, 13},
 	}
 	store.mu.stats = cspann.IndexStats{
-		NumPartitions:       2,
-		VectorsPerPartition: 100,
-		CVStats:             []cspann.CVStats{{Mean: 0.5, Variance: 0.25}},
+		NumPartitions: 2,
+		CVStats:       []cspann.CVStats{{Mean: 0.5, Variance: 0.25}},
 	}
 
 	// Round-trip the data.
@@ -349,7 +342,6 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.Equal(t, cspann.PartitionKey(100), store2.mu.nextKey)
 	require.Len(t, store2.mu.vectors, 2)
 	require.Equal(t, vector.T{12, 13}, store2.mu.vectors[string([]byte{3, 4})])
-	require.Equal(t, float64(100), store2.mu.stats.VectorsPerPartition)
 	require.Equal(t, int64(42), store2.seed)
 }
 

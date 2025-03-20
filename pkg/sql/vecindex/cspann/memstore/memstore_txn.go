@@ -103,8 +103,6 @@ func (tx *memTxn) SetRootPartition(
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
 
-	tx.store.reportPartitionSizeLocked(partition.Count())
-
 	// Grow or shrink CVStats slice if a new level is being added or removed.
 	expectedLevels := int(partition.Level() - 1)
 	if expectedLevels > len(tx.store.mu.stats.CVStats) {
@@ -142,7 +140,6 @@ func (tx *memTxn) InsertPartition(
 
 	// Update stats.
 	tx.store.mu.stats.NumPartitions++
-	tx.store.reportPartitionSizeLocked(partition.Count())
 
 	tx.store.updatedStructureLocked(tx)
 	return partitionKey, nil
@@ -236,7 +233,6 @@ func (tx *memTxn) AddToPartition(
 	if partition.Add(&tx.workspace, vec, childKey, valueBytes) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
-		tx.store.reportPartitionSizeLocked(partition.Count())
 		memPart.count.Add(1)
 	}
 
@@ -274,7 +270,6 @@ func (tx *memTxn) RemoveFromPartition(
 	if partition.ReplaceWithLastByKey(childKey) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
-		tx.store.reportPartitionSizeLocked(partition.Count())
 		memPart.count.Add(-1)
 	}
 

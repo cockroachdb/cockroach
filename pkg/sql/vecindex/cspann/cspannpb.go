@@ -16,17 +16,16 @@ import (
 // not affect the other.
 func (s *IndexStats) Clone() IndexStats {
 	return IndexStats{
-		NumPartitions:       s.NumPartitions,
-		VectorsPerPartition: s.VectorsPerPartition,
-		CVStats:             slices.Clone(s.CVStats),
+		NumPartitions: s.NumPartitions,
+		CVStats:       slices.Clone(s.CVStats),
 	}
 }
 
 // String returns a human-readable representation of the index stats.
 func (s *IndexStats) String() string {
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("%d levels, %d partitions, %.2f vectors/partition.\n",
-		len(s.CVStats)+1, s.NumPartitions, s.VectorsPerPartition))
+	buf.WriteString(fmt.Sprintf("%d levels, %d partitions.\n",
+		len(s.CVStats)+1, s.NumPartitions))
 	buf.WriteString("CV stats:\n")
 	for i, cvstats := range s.CVStats {
 		stdev := math.Sqrt(cvstats.Variance)

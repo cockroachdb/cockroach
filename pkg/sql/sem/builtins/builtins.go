@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -4138,7 +4139,49 @@ value if you rely on the HLC for accuracy.`,
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
 	// similar to the behavior of the JSONB data type in Postgres.
 
-	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
+	// See https://www.postgresql.org/docs/current/functions-json.html#SQLJSON-QUERY-FUNCTIONS
+	"jsonb_path_exists": makeBuiltin(jsonpathProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathExists,
+			Info:       "Checks whether the JSON path returns any item for the specified JSON value.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathExists,
+			Info: `Checks whether the JSON path returns any item for the specified JSON value.
+			The vars argument must be a JSON object, and its fields provide named
+			values to be substituted into the jsonpath expression.`,
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "target", Typ: types.Jsonb},
+				{Name: "path", Typ: types.Jsonpath},
+				{Name: "vars", Typ: types.Jsonb},
+				{Name: "silent", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn:         makeJsonpathExists,
+			Info: `Checks whether the JSON path returns any item for the specified JSON value.
+			The vars argument must be a JSON object, and its fields provide named
+			values to be substituted into the jsonpath expression. If the silent
+			argument is true, the function suppresses the following errors:
+			missing object field or array element, unexpected JSON item type,
+			datetime and numeric errors.`,
+			Volatility: volatility.Immutable,
+		},
+	),
 	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
 	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
 	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
@@ -12135,4 +12178,22 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 		Info:       info,
 		Volatility: vol,
 	}
+}
+
+func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+	target := tree.MustBeDJSON(args[0])
+	path := tree.MustBeDJsonpath(args[1])
+	vars := tree.EmptyDJSON
+	silent := tree.DBool(false)
+	if len(args) > 2 {
+		vars = tree.MustBeDJSON(args[2])
+	}
+	if len(args) > 3 {
+		silent = tree.MustBeDBool(args[3])
+	}
+	exists, err := jsonpath.JsonpathExists(target, path, vars, silent)
+	if err != nil {
+		return nil, err
+	}
+	return tree.MakeDBool(exists), nil
 }

@@ -208,10 +208,15 @@ func (fw *fixupWorker) splitPartition(
 
 	// Determine which partition children should go into the left split partition
 	// and which should go into the right split partition.
+	tempLeftCentroid := fw.workspace.AllocVector(vectors.Dims)
+	defer fw.workspace.FreeVector(tempLeftCentroid)
+	tempRightCentroid := fw.workspace.AllocVector(vectors.Dims)
+	defer fw.workspace.FreeVector(tempRightCentroid)
 	tempOffsets := fw.workspace.AllocUint64s(vectors.Count)
 	defer fw.workspace.FreeUint64s(tempOffsets)
 	kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
-	tempLeftOffsets, tempRightOffsets := kmeans.Compute(&vectors, tempOffsets)
+	tempLeftOffsets, tempRightOffsets := kmeans.ComputeCentroids(
+		vectors, tempLeftCentroid, tempRightCentroid, tempOffsets)
 
 	leftSplit, rightSplit := splitPartitionData(
 		&fw.workspace, fw.index.quantizer, partition, vectors,
