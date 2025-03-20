@@ -169,12 +169,31 @@ type seenTracker interface {
 type seenTrackerMap map[string]struct{}
 
 func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
+	var valueMap map[string]interface{}
+	normalizedValue := m.Value
+
+	if err := gojson.Unmarshal(m.Value, &valueMap); err == nil {
+		// The ts_ns field, which is present in the enriched envelope,
+		// is simply the current time when we create the message.
+		// The second time we see a duplicated message, this field is not
+		// necessarily the same, so we remove it before marking it as seen.
+		delete(valueMap, "ts_ns")
+
+		if marshalledValue, err := gojson.Marshal(valueMap); err == nil {
+			normalizedValue = marshalledValue
+		} else {
+			log.Infof(context.Background(), "could not marshal test feed message %v", err)
+		}
+	} else {
+		log.Infof(context.Background(), "could not unmarshal test feed message %v", err)
+	}
+
 	// TODO(dan): This skips duplicates, since they're allowed by the
 	// semantics of our changefeeds. Now that we're switching to RangeFeed,
 	// this can actually happen (usually because of splits) and cause flakes.
 	// However, we really should be de-duping key+ts, this is too coarse.
 	// Fixme.
-	seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
+	seenKey := m.Topic + m.Partition + string(m.Key) + string(normalizedValue)
 	if _, ok := t[seenKey]; ok {
 		if log.V(1) {
 			log.Infof(context.Background(), "skip dup %s", seenKey)
