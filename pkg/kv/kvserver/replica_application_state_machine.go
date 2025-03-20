@@ -329,9 +329,12 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	if truncState != nil {
 		// The size delta in the proposal is accurate, but does not account for the
 		// sideloaded entries, so we fix it up.
-		logDelta := rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize
-		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, *truncState,
-			rResult.RaftExpectedFirstIndex, logDelta, true /* isDeltaTrusted */)
+		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, pendingTruncation{
+			RaftTruncatedState: *truncState,
+			expectedFirstIndex: rResult.RaftExpectedFirstIndex,
+			logDeltaBytes:      rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize,
+			isDeltaTrusted:     true,
+		})
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
 	}
