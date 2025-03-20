@@ -333,8 +333,8 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// for the sideloaded entries.
 		// TODO(pav-kv): remove the zero clause after any below-raft migration.
 		logDelta := rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize
-		sm.r.handleTruncatedStateResult(ctx, *truncState, rResult.RaftExpectedFirstIndex,
-			logDelta, true /* isDeltaTrusted */)
+		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, *truncState,
+			rResult.RaftExpectedFirstIndex, logDelta, true /* isDeltaTrusted */)
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
 	}

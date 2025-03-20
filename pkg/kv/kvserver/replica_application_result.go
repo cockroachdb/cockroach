@@ -498,10 +498,10 @@ func (r *Replica) handleLeaseResult(
 		assertNoLeaseJump)
 }
 
-// handleTruncatedStateResult is a post-apply handler for the raft log
-// truncation command. It updates the in-memory state of the Replica with the
-// new RaftTruncatedState and log size delta, and removes obsolete entries from
-// the raft log cache and sideloaded storage.
+// handleTruncatedStateResultRaftMuLocked is a post-apply handler for the raft
+// log truncation command. It updates the in-memory state of the Replica with
+// the new RaftTruncatedState and log size delta, and removes obsolete entries
+// from the raft log cache and sideloaded storage.
 //
 // The isDeltaTrusted flag specifies whether the raftLogDelta has been correctly
 // computed. The loosely coupled truncations stack sets it to false if, for
@@ -509,7 +509,7 @@ func (r *Replica) handleLeaseResult(
 // truncations have correct stats.
 //
 // TODO(pav-kv): simplify this.
-func (r *Replica) handleTruncatedStateResult(
+func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	ctx context.Context,
 	t kvserverpb.RaftTruncatedState,
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
@@ -531,7 +531,8 @@ func (r *Replica) handleTruncatedStateResult(
 	// is truncated "logically" first, and then physically under raftMu.
 	r.mu.Lock()
 	r.shMu.raftTruncState = t
-	r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
+	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
+		raftLogDelta, isRaftLogTruncationDeltaTrusted)
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up
@@ -558,9 +559,11 @@ func (r *Replica) handleTruncatedStateResult(
 	// there will be dangling files at the next start. Clean them up at startup.
 }
 
-// handleRaftLogDeltaResult updates the raft log stats with the given delta.
-// Both Replica.{raftMu,mu} must be held.
-func (r *Replica) handleRaftLogDeltaResult(delta int64, isDeltaTrusted bool) {
+// handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked updates the raft log
+// stats with the given delta. Both Replica.{raftMu,mu} must be held.
+func (r *Replica) handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
+	delta int64, isDeltaTrusted bool,
+) {
 	r.raftMu.AssertHeld()
 	r.mu.AssertHeld()
 
