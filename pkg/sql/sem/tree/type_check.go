@@ -96,6 +96,12 @@ type SemaProperties struct {
 	// IgnoreUnpreferredOverloads is set to true when "unpreferred" overloads
 	// should not be used during type-checking and overload resolution.
 	IgnoreUnpreferredOverloads bool
+
+	// RoutineUseResolvedType is set to true when type-checking for a routine
+	// should reuse the already resolved type, if any. This is used to handle
+	// "re-type-checking" that occurs for a RECORD-returning routine, for which
+	// the return type is not known until the routine body is built.
+	RoutineUseResolvedType bool
 }
 
 type semaRequirements struct {
@@ -1179,9 +1185,10 @@ func (expr *FuncExpr) typeCheckWithFuncAncestor(semaCtx *SemaContext, fn func() 
 func (expr *FuncExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	if expr.fn != nil && expr.fn.Type != BuiltinRoutine && expr.typ != nil {
-		// Don't overwrite the resolved properties for a user-defined routine if the
-		// routine has already been resolved.
+	if semaCtx != nil && semaCtx.Properties.RoutineUseResolvedType &&
+		expr.typ != nil && !expr.typ.IsWildcardType() {
+		// Don't overwrite the resolved properties for a routine if the routine has
+		// already been resolved (and we are in a context that needs this behavior).
 		return expr, nil
 	}
 
