@@ -53,10 +53,12 @@ go_test(
     srcs = [
         "commandbuilder_test.go",
         "load_group_test.go",
+        "utils_test.go",
     ],
     embed = [":roachtestutil"],
     deps = [
         "//pkg/cmd/roachtest/option",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
