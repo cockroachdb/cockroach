@@ -148,6 +148,18 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 	var storesToExclude storeIDPostingList
 	var storesToExcludeForRange storeIDPostingList
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
+	// The caller has a fixed concurrency limit it can move ranges at, when it
+	// is the sender of the snapshot. So we don't want to create too many
+	// changes, since then the allocator gets too far ahead of what has been
+	// enacted, and its decision-making is no longer based on recent
+	// information. We don't have this issue with lease transfers since they are
+	// very fast, so we set a much higher limit.
+	//
+	// TODO: revisit these constants.
+	const maxRangeMoveCount = 2
+	const maxLeaseTransferCount = 8
+	rangeMoveCount := 0
+	leaseTransferCount := 0
 	for _, store := range sheddingStores {
 		log.Infof(context.Background(), "local=n%vs%v shedding store %v sls=%v",
 			localNodeID, localStoreID, store.StoreID, store.storeLoadSummary)
@@ -239,6 +251,7 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					RangeID:               rangeID,
 					pendingReplicaChanges: pendingChanges[:],
 				})
+				leaseTransferCount++
 				if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
@@ -246,6 +259,9 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v]",
 					localNodeID, localStoreID, ss.NodeID, store.StoreID,
 					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1])
+				if leaseTransferCount >= maxLeaseTransferCount {
+					return changes
+				}
 				doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 				if doneShedding {
 					break
@@ -387,12 +403,16 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				RangeID:               rangeID,
 				pendingReplicaChanges: pendingChanges[:],
 			})
+			rangeMoveCount++
 			log.Infof(context.Background(),
 				"local=n%vs%v shedding=n%vs%v range %v(%s) from store %v to store %v "+
 					"[%v] with resulting loads %v %v",
 				localNodeID, localStoreID, ss.NodeID, store.StoreID,
 				rangeID, addedLoad, removeTarget.StoreID, addTarget.StoreID,
 				changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
+			if rangeMoveCount >= maxRangeMoveCount {
+				return changes
+			}
 			doneShedding = ss.maxFractionPending >= maxFractionPendingThreshold
 			if doneShedding {
 				break
