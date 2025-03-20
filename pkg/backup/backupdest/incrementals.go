@@ -24,6 +24,8 @@ import (
 // The default subdirectory for incremental backups.
 const (
 	incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
+	// incBackupSubdirGlobWithSuffix is used for all backups taken on or after v25.2.
+	incBackupSubdirGlobWithSuffix = "/[0-9]*/[0-9]*.[0-9][0-9]-[0-9]*.[0-9][0-9]/"
 )
 
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
@@ -78,15 +80,24 @@ func FindPriorBackups(
 
 	var prev []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
+		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p)
+		if err != nil {
 			return err
-		} else if ok {
+		} else if !matchesGlob {
+			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.BackupManifestName, p)
+			if err != nil {
+				return err
+			}
+		}
+
+		if matchesGlob {
 			if !includeManifest {
 				p = strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
 			}
 			prev = append(prev, p)
 			return nil
 		}
+
 		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
 			return err
 		} else if ok {

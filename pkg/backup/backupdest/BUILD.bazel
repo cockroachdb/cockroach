@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/backup/backupbase",
+        "//pkg/backup/backupencryption",
         "//pkg/backup/backupinfo",
         "//pkg/backup/backuppb",
         "//pkg/backup/backuputils",
@@ -47,8 +48,10 @@ go_test(
     deps = [
         ":backupdest",
         "//pkg/backup/backupbase",
+        "//pkg/backup/backuppb",
         "//pkg/backup/backuptestutils",
         "//pkg/backup/backuputils",
+        "//pkg/base",
         "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
@@ -63,6 +66,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],
