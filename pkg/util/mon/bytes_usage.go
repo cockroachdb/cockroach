@@ -278,34 +278,34 @@ type BytesMonitor struct {
 }
 
 // MonitorName is used to identify monitors in logging messages. It consists of
-// a string name and an optional ID.
+// a string prefix and an optional uuid.Short.
 type MonitorName struct {
-	name redact.SafeString
-	id   uuid.Short
+	prefix redact.SafeString
+	uuid   uuid.Short
 }
 
-// MakeMonitorName constructs a MonitorName with the given name.
-func MakeMonitorName(name redact.SafeString) MonitorName {
-	return MonitorName{name: name}
+// MakeMonitorName constructs a MonitorName with the given prefix.
+func MakeMonitorName(prefix redact.SafeString) MonitorName {
+	return MonitorName{prefix: prefix}
 }
 
-// MakeMonitorNameWithID constructs a MonitorName with the given name and
+// MakeMonitorNameWithID constructs a MonitorName with the given prefix and
 // ID.
-func MakeMonitorNameWithID(name redact.SafeString, id uuid.Short) MonitorName {
-	return MonitorName{name: name, id: id}
+func MakeMonitorNameWithID(prefix redact.SafeString, uuid uuid.Short) MonitorName {
+	return MonitorName{prefix: prefix, uuid: uuid}
 }
 
-// String returns the monitor name as a string.
+// String returns the monitor prefix as a string.
 func (mn MonitorName) String() string {
 	return redact.StringWithoutMarkers(mn)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
-	w.SafeString(mn.name)
+	w.SafeString(mn.prefix)
 	var nullShort uuid.Short
-	if mn.id != nullShort {
-		w.SafeString(redact.SafeString(mn.id.String()))
+	if mn.uuid != nullShort {
+		w.SafeString(redact.SafeString(mn.uuid.String()))
 	}
 }
 
@@ -621,7 +621,7 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 	mm.doStop(ctx, true)
 }
 
-// Name returns the name of the monitor.
+// Name returns the prefix of the monitor.
 func (mm *BytesMonitor) Name() MonitorName {
 	return mm.name
 }
