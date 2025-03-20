@@ -238,14 +238,14 @@ func (c *controller) processTransferLease(
 func (c *controller) processChangeReplicas(
 	ctx context.Context, tick time.Time, s state.State, cro *ChangeReplicasOp,
 ) error {
-	rng := s.RangeFor(state.Key(cro.rangeID))
-	if rng == nil {
-		return errors.Errorf("range %d not found", cro.rangeID)
+	rng, ok := s.Range(cro.rangeID)
+	if !ok {
+		panic(errors.Newf("programming error: range %d not found", cro.rangeID))
 	}
 
 	// Apply the change
 	change := state.ReplicaChange{
-		RangeID: rng.RangeID(),
+		RangeID: cro.rangeID,
 		Author:  c.storeID,
 		Changes: cro.changes,
 	}
