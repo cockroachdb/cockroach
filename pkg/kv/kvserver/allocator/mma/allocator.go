@@ -5,7 +5,11 @@
 
 package mma
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
 type ChangeOptions struct {
@@ -79,7 +83,7 @@ type Allocator interface {
 	// Unless ChangeOptions.DryRun is true, changes returned are remembered by
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
-	ComputeChanges(opts ChangeOptions) []PendingRangeChange
+	ComputeChanges(ctx context.Context, opts ChangeOptions) []PendingRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//
