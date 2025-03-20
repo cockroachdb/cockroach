@@ -759,3 +759,86 @@ CPut /Table/<>/1/2/0 -> /TUPLE/2:2:Bytes/succeed
 CPut /Table/<>/1/2/1/1 -> /INT/1
 CPut /Table/<>/2/"running"/1/0 -> /BYTES/
 CPut /Table/<>/2/"running"/1/1/1 -> /TUPLE/3:3:Int/3
+
+# Ensure RLS policies are applied for COPY FROM
+exec-ddl
+CREATE TABLE rls_table (id INT NOT NULL PRIMARY KEY, val TEXT);
+----
+
+exec-ddl
+CREATE ROLE copier
+----
+
+exec-ddl
+ALTER TABLE rls_table OWNER TO copier;
+----
+
+exec-ddl
+SET ROLE copier
+----
+
+exec-ddl
+ALTER TABLE rls_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+----
+
+# Deny all
+copy-from-error
+COPY rls_table FROM STDIN WITH CSV
+1,"one"
+2,"two"
+----
+ERROR: new row violates row-level security policy for table "rls_table" (SQLSTATE 42501)
+
+exec-ddl
+CREATE POLICY p_ins ON rls_table FOR INSERT WITH CHECK (id > 10);
+----
+
+exec-ddl
+CREATE POLICY p_sel ON rls_table FOR SELECT USING (true);
+----
+
+# Deny some
+copy-from-error
+COPY rls_table FROM STDIN WITH CSV
+20,"twenty"
+4,"four (violates rls policy)"
+----
+ERROR: new row violates row-level security policy for table "rls_table" (SQLSTATE 42501)
+
+query
+SELECT * FROM rls_table ORDER BY id
+----
+
+# Deny none
+copy-from
+COPY rls_table FROM STDIN WITH CSV
+20,"twenty"
+24,"twenty-four"
+----
+2
+
+query
+SELECT * FROM rls_table ORDER BY id
+----
+20|twenty
+24|twenty-four
+
+# Owner with force can insert rows that would have violated policies
+exec-ddl
+ALTER TABLE rls_table NO FORCE ROW LEVEL SECURITY
+----
+
+copy-from
+COPY rls_table FROM STDIN WITH CSV
+28,"twenty-eight"
+4,"four (violates rls policy, but okay because inserted by owner and force is off)"
+----
+2
+
+query
+SELECT * FROM rls_table ORDER BY id
+----
+4|four (violates rls policy, but okay because inserted by owner and force is off)
+20|twenty
+24|twenty-four
+28|twenty-eight

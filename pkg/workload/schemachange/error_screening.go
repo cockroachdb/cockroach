@@ -856,23 +856,35 @@ func (og *operationGenerator) canApplyUniqueConstraint(
 		}
 	}
 
-	return og.scanBool(ctx, tx,
+	// We will compare counts of distinct rows with all rows. We pull out each
+	// component separately, even though we only care about the (distinct == all)
+	// boolean result so that it gets logged in the test output.
+	type countComp struct {
+		DistinctCount     int
+		AllCount          int
+		DistinctEqualsAll bool
+	}
+	res, err := CollectOne(ctx, og, tx, pgx.RowToStructByPos[countComp],
 		fmt.Sprintf(`
-		SELECT (
+		WITH distinct_count AS (
 	       SELECT count(*)
 	         FROM (
 	               SELECT DISTINCT %s
 	                 FROM %s
 	                WHERE %s
 	              )
-	      )
-	      = (
+    ), all_count AS (
 	        SELECT count(*)
 	          FROM %s
 	         WHERE %s
-	       );
+		)
+    SELECT dc.count, ac.count, dc.count = ac.count
+		FROM distinct_count dc, all_count ac;
 	`, columnNames, tableName.String(), whereNotNullClause.String(), tableName.String(), whereNotNullClause.String()))
-
+	if err != nil {
+		return false, errors.Wrapf(err, "count query failure: %q", err)
+	}
+	return res.DistinctEqualsAll, err
 }
 
 func (og *operationGenerator) columnContainsNull(
