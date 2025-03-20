@@ -487,16 +487,7 @@ func (b *replicaAppBatch) stageTruncation(
 	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
 	// comment in that proto). It is possible that a replica still has a
 	// truncation sitting in the raft log that never populated this field.
-	//
-	// The current state of the RaftExpectedFirstIndex == 0 quirk:
-	//   - Loosely-coupled code marks the log size as untrusted which triggers an
-	//     eventual size re-computation. However, this path is never taken here.
-	//   - Tightly-coupled code marks the size trusted. There is a bug here that
-	//     leads to incorrect stats. The proposer's "base" truncated index for
-	//     computing the size delta could be different from the one on this
-	//     replica, and there is no way to tell.
-	//
-	// TODO(pav-kv): make the size delta untrusted on expected first index == 0.
+	// TODO(pav-kv): remove the zero check after any below-raft migration.
 	apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 	// Discard tightly-coupled truncations not moving the truncated index forward.
 	discard := apply && truncatedState.Index <= b.truncState.Index
@@ -541,24 +532,6 @@ func (b *replicaAppBatch) stageTruncation(
 		res.RaftTruncatedState = nil
 		res.RaftLogDelta = 0
 		res.RaftExpectedFirstIndex = 0
-		if !looselyCoupledTruncation {
-			// TODO(ajwerner): consider moving this code.
-			// We received a truncation that doesn't apply to us, so we know that
-			// there's a leaseholder out there with a log that has earlier entries
-			// than ours. That leader also guided our log size computations by
-			// giving us RaftLogDeltas for past truncations, and this was likely
-			// off. Mark our Raft log size is not trustworthy so that, assuming
-			// we step up as leader at some point in the future, we recompute
-			// our numbers.
-			// TODO(sumeer): this code will be deleted when there is no
-			// !looselyCoupledTruncation code path.
-			// TODO(pav-kv): this code should be deleted since it covers only a subset
-			// of cases, and is not correct. We only should distrust the size delta if
-			// RaftExpectedFirstIndex is unknown or doesn't match our first index.
-			b.r.mu.Lock()
-			b.r.shMu.raftLogSizeTrusted = false
-			b.r.mu.Unlock()
-		}
 	}
 	return nil
 }
