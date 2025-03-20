@@ -687,8 +687,6 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 			}
 			labels[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
-		// Append workload generator name as a tag
-		labels["workload"] = gen.Meta().Name
 		openMetricsExporter := exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = &openMetricsExporter
