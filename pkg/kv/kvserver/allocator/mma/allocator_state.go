@@ -214,7 +214,8 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
-					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK {
+					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK ||
+						sls.maxFractionPending >= maxFractionPendingThreshold {
 						log.Infof(
 							context.Background(),
 							"local=n%vs%v shedding=n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
@@ -273,10 +274,10 @@ func (a *allocatorState) rebalanceStores(localStoreID roachpb.StoreID) []Pending
 				}
 				log.Infof(context.Background(),
 					"local=n%vs%v shedding=n%vs%v range %v lease from store %v to store %v [%v] with"+
-						"resulting load %v %v",
+						"resulting load %v %v (means: %v)",
 					localNodeID, localStoreID, ss.NodeID, store.StoreID,
 					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
-					ss.adjusted.load, targetSS.adjusted.load)
+					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load)
 				if leaseTransferCount >= maxLeaseTransferCount {
 					return changes
 				}
@@ -703,7 +704,8 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.cs.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
-		if csls.sls > loadNormal || csls.nls > loadNormal || csls.fd != fdOK {
+		if csls.sls > loadNormal || csls.nls > loadNormal || csls.fd != fdOK ||
+			csls.maxFractionPending >= maxFractionPendingThreshold {
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
