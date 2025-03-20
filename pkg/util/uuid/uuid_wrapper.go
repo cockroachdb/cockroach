@@ -21,6 +21,7 @@ const (
 	shortStrSize = 8
 )
 
+// Short is an abbreviated version of a UUID containing the first four bytes.
 type Short struct {
 	b [shortSize]byte
 }
