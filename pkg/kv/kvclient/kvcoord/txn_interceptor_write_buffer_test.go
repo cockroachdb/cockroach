@@ -36,6 +36,16 @@ func putArgs(key roachpb.Key, value string, seq enginepb.TxnSeq) *kvpb.PutReques
 	}
 }
 
+func cputArgs(
+	key roachpb.Key, value string, expValue string, seq enginepb.TxnSeq,
+) *kvpb.ConditionalPutRequest {
+	return &kvpb.ConditionalPutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key, Sequence: seq},
+		Value:         roachpb.MakeValueFromString(value),
+		ExpBytes:      []byte(expValue),
+	}
+}
+
 func delArgs(key roachpb.Key, seq enginepb.TxnSeq) *kvpb.DeleteRequest {
 	return &kvpb.DeleteRequest{
 		RequestHeader: kvpb.RequestHeader{Key: key, Sequence: seq},
@@ -858,7 +868,7 @@ func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
 	keyA := roachpb.Key("a")
 	valA := "val"
 
-	// Blindly write to keys A.
+	// Blindly write to key A.
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	putA := putArgs(keyA, valA, txn.Sequence)
@@ -944,6 +954,148 @@ func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Even though we flushed the buffer, responses from the blind writes should
+	// not be returned.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
+
+// TestTxnWriteBufferDecomposesConditionalPuts verifies that conditional puts
+// are decomposed into a locking Get, which is sent to KV, and a Put, which is
+// buffered locally. Additionally, we also test that the Put is only buffered, and
+// flushed to KV, if the condition evaluates successfully.
+func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	testutils.RunTrueAndFalse(t, "condEvalSuccessful", func(t *testing.T, condEvalSuccessful bool) {
+		twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
+			if condEvalSuccessful {
+				return nil
+			}
+			return &kvpb.ConditionFailedError{}
+		}
+
+		txn := makeTxnProto()
+		txn.Sequence = 10
+		keyA := roachpb.Key("a")
+		valA := "val"
+
+		// Blindly write to keys A.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		cputA := cputArgs(keyA, valA, valA, txn.Sequence)
+		ba.Add(cputA)
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+			getReq := ba.Requests[0].GetInner().(*kvpb.GetRequest)
+			require.Equal(t, keyA, getReq.Key)
+			require.Equal(t, txn.Sequence, getReq.Sequence)
+			require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
+
+			return ba.CreateReply(), nil
+		})
+
+		br, pErr := twb.SendLocked(ctx, ba)
+		if condEvalSuccessful {
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+		} else {
+			require.NotNil(t, pErr)
+			require.IsType(t, &kvpb.ConditionFailedError{}, pErr.GoError())
+		}
+
+		// Lastly, commit the transaction. A put should only be flushed if the condition
+		// evaluated successfully.
+		ba = &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			if condEvalSuccessful {
+				require.Len(t, ba.Requests, 2)
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+			} else {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			}
+
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		br, pErr = twb.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// Even though we may have flushed the buffer, responses from the blind writes should
+		// not be returned.
+		require.Len(t, br.Responses, 1)
+		require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+	})
+}
+
+// TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow verifies
+// that conditional puts are decomposed into a locking Get with
+// LockNonExisting set when the expected ConditionalPut expects no
+// existing row.
+func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
+		return nil
+	}
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(cputArgs(keyA, "val", "", txn.Sequence))
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+		getReq := ba.Requests[0].GetInner().(*kvpb.GetRequest)
+		require.Equal(t, keyA, getReq.Key)
+		require.Equal(t, txn.Sequence, getReq.Sequence)
+		require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
+		require.True(t, getReq.LockNonExisting)
+		return ba.CreateReply(), nil
+	})
+
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Even though we may have flushed the buffer, responses from the blind writes should
 	// not be returned.
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
