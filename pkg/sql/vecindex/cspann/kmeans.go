@@ -47,55 +47,53 @@ type BalancedKmeans struct {
 	// random number generator is used instead. Setting this to non-nil is useful
 	// for generating deterministic random numbers during testing.
 	Rand *rand.Rand
-
-	// vectors is the set of input vectors.
-	vectors *vector.Set
-	// offsets stores offsets into the set of input vectors, and is repeatedly
-	// updated as the algorithm converges to a local optimum.
-	offsets []uint64
-	// leftCentroid is the mean value of vectors in the left partition, and is
-	// repeatedly updated as the algorithm converges to a local optimum.
-	leftCentroid vector.T
-	// rightCentroid is the mean value of vectors in the right partition, and is
-	// repeatedly updated as the algorithm converges to a local optimum.
-	rightCentroid vector.T
 }
 
-// Compute separates the given set of input vectors into a left and right
-// partition. It returns two offset slices that identify which vectors go into
-// which partition, by their offset in the input set. Both offset slices are in
+// ComputeCentroids separates the given set of input vectors into a left and
+// right partition using the K-means algorithm. It sets the leftCentroid and
+// rightCentroid inputs to the centroids of those partitions, respectively.
+//
+// NOTE: The caller is responsible for allocating the input centroids with
+// dimensions equal to the dimensions of the input vector set.
+//
+// TODO(andyk): Remove this once we don't need the offsets anymore.
+// It returns two offset slices that identify which vectors go into which
+// partition, by their offset in the input set. Both offset slices are in
 // sorted order.
 //
-// The caller is responsible for allocating "offsets" with length equal to the
-// size of the input vector set. Compute returns sub-slices of the allocated
+// NOTE: The caller is responsible for allocating "offsets" with length equal to
+// the size of the input vector set. Compute returns sub-slices of the allocated
 // "offsets" slice.
-func (km *BalancedKmeans) Compute(
-	vectors *vector.Set, offsets []uint64,
+func (km *BalancedKmeans) ComputeCentroids(
+	vectors vector.Set, leftCentroid, rightCentroid vector.T, offsets []uint64,
 ) (leftOffsets, rightOffsets []uint64) {
 	if vectors.Count < 2 {
 		panic(errors.AssertionFailedf("k-means requires at least 2 vectors"))
 	}
 
-	km.vectors = vectors
-	km.offsets = offsets
+	// TODO(andyk): Allocate temporary offsets once we don't need need to return
+	// offsets.
+	tempOffsets := offsets
 
-	tolerance := km.calculateTolerance()
+	tolerance := km.calculateTolerance(vectors)
 
 	// Pick 2 centroids to start, using the K-means++ algorithm.
-	tempVectorSet := km.Workspace.AllocVectorSet(4, vectors.Dims)
-	defer km.Workspace.FreeVectorSet(tempVectorSet)
-	km.leftCentroid = tempVectorSet.At(0)
-	km.rightCentroid = tempVectorSet.At(1)
-	newLeftCentroid := tempVectorSet.At(2)
-	newRightCentroid := tempVectorSet.At(3)
-	km.selectInitialCentroids()
+	tempLeftCentroid := km.Workspace.AllocVector(vectors.Dims)
+	defer km.Workspace.FreeVector(tempLeftCentroid)
+	newLeftCentroid := tempLeftCentroid
+
+	tempRightCentroid := km.Workspace.AllocVector(vectors.Dims)
+	defer km.Workspace.FreeVector(tempRightCentroid)
+	newRightCentroid := tempRightCentroid
+
+	km.selectInitialCentroids(vectors, leftCentroid, rightCentroid)
 
 	// calcPartitionCentroid finds the mean of the vectors referenced by the
 	// provided offsets.
 	calcPartitionCentroid := func(centroid vector.T, offsets []uint64) {
-		copy(centroid, km.vectors.At(int(offsets[0])))
+		copy(centroid, vectors.At(int(offsets[0])))
 		for _, offset := range offsets[1:] {
-			num32.Add(centroid, km.vectors.At(int(offset)))
+			num32.Add(centroid, vectors.At(int(offset)))
 		}
 		num32.Scale(1/float32(len(offsets)), centroid)
 	}
@@ -107,22 +105,23 @@ func (km *BalancedKmeans) Compute(
 
 	for i := 0; i < maxIterations; i++ {
 		// Assign vectors to one of the partitions.
-		leftOffsets, rightOffsets = km.assignPartitions()
+		leftOffsets, rightOffsets = km.AssignPartitions(
+			vectors, leftCentroid, rightCentroid, tempOffsets)
 
 		// Calculate new centroids of the left and right partitions.
 		calcPartitionCentroid(newLeftCentroid, leftOffsets)
 		calcPartitionCentroid(newRightCentroid, rightOffsets)
 
 		// Check if algorithm has converged.
-		leftCentroidShift := num32.L2SquaredDistance(newLeftCentroid, km.leftCentroid)
-		rightCentroidShift := num32.L2SquaredDistance(newRightCentroid, km.rightCentroid)
+		leftCentroidShift := num32.L2SquaredDistance(leftCentroid, newLeftCentroid)
+		rightCentroidShift := num32.L2SquaredDistance(rightCentroid, newRightCentroid)
 		if leftCentroidShift <= tolerance && rightCentroidShift <= tolerance {
 			break
 		}
 
 		// Swap old and new centroids.
-		km.leftCentroid, newLeftCentroid = newLeftCentroid, km.leftCentroid
-		km.rightCentroid, newRightCentroid = newRightCentroid, km.rightCentroid
+		newLeftCentroid, leftCentroid = leftCentroid, newLeftCentroid
+		newRightCentroid, rightCentroid = rightCentroid, newRightCentroid
 	}
 
 	// Sort left and right offsets.
@@ -132,16 +131,57 @@ func (km *BalancedKmeans) Compute(
 	return leftOffsets, rightOffsets
 }
 
+// AssignPartitions assigns the input vectors into either the left or right
+// partition, based on which partition's centroid they're closer to. It also
+// enforces a constraint that one partition will never be more than 2x as large
+// as the other.
+func (km *BalancedKmeans) AssignPartitions(
+	vectors vector.Set, leftCentroid, rightCentroid vector.T, offsets []uint64,
+) (leftOffsets, rightOffsets []uint64) {
+	count := vectors.Count
+	tempDistances := km.Workspace.AllocFloats(count)
+	defer km.Workspace.FreeFloats(tempDistances)
+
+	// Calculate difference between squared distance of each vector to the left
+	// and right centroids.
+	for i := 0; i < count; i++ {
+		tempDistances[i] = num32.L2SquaredDistance(vectors.At(i), leftCentroid) -
+			num32.L2SquaredDistance(vectors.At(i), rightCentroid)
+		offsets[i] = uint64(i)
+	}
+
+	// Arg sort by the distance differences in order of increasing distance to
+	// the left centroid, relative to the right centroid. Use a stable sort to
+	// ensure that tests are deterministic.
+	slices.SortStableFunc(offsets, func(i, j uint64) int {
+		return cmp.Compare(tempDistances[i], tempDistances[j])
+	})
+
+	// Find split between distances, with negative distances going to the left
+	// centroid and others going to the right. Enforce imbalance limit, such that
+	// at least (allowImbalance / 100)% of the vectors go to each side.
+	start := (count*allowImbalance + 99) / 100
+	split := start
+	for split < count-start {
+		if tempDistances[offsets[split]] >= 0 {
+			break
+		}
+		split++
+	}
+
+	return offsets[:split], offsets[split:]
+}
+
 // calculateTolerance computes a threshold distance value. Once new centroids
 // are less than this distance from the old centroids, the K-means algorithm
 // terminates.
-func (km *BalancedKmeans) calculateTolerance() float32 {
-	tempVectorSet := km.Workspace.AllocVectorSet(4, km.vectors.Dims)
+func (km *BalancedKmeans) calculateTolerance(vectors vector.Set) float32 {
+	tempVectorSet := km.Workspace.AllocVectorSet(4, vectors.Dims)
 	defer km.Workspace.FreeVectorSet(tempVectorSet)
 
 	// Use tolerance algorithm from scikit-learn:
 	//   tolerance = mean(variances(vectors, axis=0)) * 1e-4
-	return km.calculateMeanOfVariances() * 1e-4
+	return km.calculateMeanOfVariances(vectors) * 1e-4
 }
 
 // selectInitialCentroids uses the K-means++ algorithm to select the initial
@@ -155,8 +195,10 @@ func (km *BalancedKmeans) calculateTolerance() float32 {
 // set. The next centroid is randomly selected from the remaining vectors, but
 // with probability that is proportional to their distances from the first
 // centroid.
-func (km *BalancedKmeans) selectInitialCentroids() {
-	count := km.vectors.Count
+func (km *BalancedKmeans) selectInitialCentroids(
+	vectors vector.Set, leftCentroid, rightCentroid vector.T,
+) {
+	count := vectors.Count
 	tempDistances := km.Workspace.AllocFloats(count)
 	defer km.Workspace.FreeFloats(tempDistances)
 
@@ -167,12 +209,12 @@ func (km *BalancedKmeans) selectInitialCentroids() {
 	} else {
 		leftOffset = rand.Intn(count)
 	}
-	copy(km.leftCentroid, km.vectors.At(leftOffset))
+	copy(leftCentroid, vectors.At(leftOffset))
 
 	// Calculate distance of each vector in the set from the left centroid.
 	var distanceSum float32
 	for i := 0; i < count; i++ {
-		tempDistances[i] = num32.L2SquaredDistance(km.vectors.At(i), km.leftCentroid)
+		tempDistances[i] = num32.L2SquaredDistance(vectors.At(i), leftCentroid)
 		distanceSum += tempDistances[i]
 	}
 
@@ -195,46 +237,7 @@ func (km *BalancedKmeans) selectInitialCentroids() {
 			break
 		}
 	}
-	copy(km.rightCentroid, km.vectors.At(rightOffset))
-}
-
-// assignPartitions assigns the input vectors into either the left or right
-// partition, based on which partition's centroid they're closer to. It also
-// enforces a constraint that one partition will never be more than 2x as large
-// as the other.
-func (km *BalancedKmeans) assignPartitions() (leftOffsets, rightOffsets []uint64) {
-	count := km.vectors.Count
-	tempDistances := km.Workspace.AllocFloats(count)
-	defer km.Workspace.FreeFloats(tempDistances)
-
-	// Calculate difference between squared distance of each vector to the left
-	// and right centroids.
-	for i := 0; i < count; i++ {
-		tempDistances[i] = num32.L2SquaredDistance(km.vectors.At(i), km.leftCentroid) -
-			num32.L2SquaredDistance(km.vectors.At(i), km.rightCentroid)
-		km.offsets[i] = uint64(i)
-	}
-
-	// Arg sort by the distance differences in order of increasing distance to
-	// the left centroid, relative to the right centroid. Use a stable sort to
-	// ensure that tests are deterministic.
-	slices.SortStableFunc(km.offsets, func(i, j uint64) int {
-		return cmp.Compare(tempDistances[i], tempDistances[j])
-	})
-
-	// Find split between distances, with negative distances going to the left
-	// centroid and others going to the right. Enforce imbalance limit, such that
-	// at least (allowImbalance / 100)% of the vectors go to each side.
-	start := (count*allowImbalance + 99) / 100
-	split := start
-	for split < count-start {
-		if tempDistances[km.offsets[split]] >= 0 {
-			break
-		}
-		split++
-	}
-
-	return km.offsets[:split], km.offsets[split:]
+	copy(rightCentroid, vectors.At(rightOffset))
 }
 
 // calculateMeanOfVariances calculates the variance in each dimension of the
@@ -257,13 +260,13 @@ func (km *BalancedKmeans) assignPartitions() (leftOffsets, rightOffsets []uint64
 // The first term is the two-pass algorithm from figure 1.1a. The second term
 // is for error correction of the first term that can result from floating-point
 // precision loss during intermediate calculations.
-func (km *BalancedKmeans) calculateMeanOfVariances() float32 {
-	tempVectorSet := km.Workspace.AllocVectorSet(4, km.vectors.Dims)
+func (km *BalancedKmeans) calculateMeanOfVariances(vectors vector.Set) float32 {
+	tempVectorSet := km.Workspace.AllocVectorSet(4, vectors.Dims)
 	defer km.Workspace.FreeVectorSet(tempVectorSet)
 
 	// Start with the mean of the vectors.
 	tempMean := tempVectorSet.At(0)
-	km.vectors.Centroid(tempMean)
+	vectors.Centroid(tempMean)
 
 	// Prepare temp vector storage.
 	tempVariance := tempVectorSet.At(1)
@@ -274,9 +277,9 @@ func (km *BalancedKmeans) calculateMeanOfVariances() float32 {
 	num32.Zero(tempCompensation)
 
 	// Compute the first term and part of second term.
-	for i := 0; i < km.vectors.Count; i++ {
+	for i := 0; i < vectors.Count; i++ {
 		// First: x[i]
-		vector := km.vectors.At(i)
+		vector := vectors.At(i)
 		// First: x[i] - mean(x)
 		num32.SubTo(tempDiff, vector, tempMean)
 		// Second: sum[i=1..N](x[i] - mean(x))
@@ -291,13 +294,13 @@ func (km *BalancedKmeans) calculateMeanOfVariances() float32 {
 	// Second: (sum[i=1..N](x[i] - mean(x)))**2
 	num32.Mul(tempCompensation, tempCompensation)
 	// Second: 1/N * (sum[i=1..N](x[i] - mean(x)))**2
-	num32.Scale(1/float32(km.vectors.Count), tempCompensation)
+	num32.Scale(1/float32(vectors.Count), tempCompensation)
 	// S = First - Second
 	num32.Sub(tempVariance, tempCompensation)
 
 	// Variance = S / (N-1)
-	num32.Scale(1/float32(km.vectors.Count-1), tempVariance)
+	num32.Scale(1/float32(vectors.Count-1), tempVariance)
 
 	// Calculate the mean of the variance elements.
-	return num32.Sum(tempVariance) / float32(km.vectors.Dims)
+	return num32.Sum(tempVariance) / float32(vectors.Dims)
 }

@@ -29,7 +29,7 @@ func TestStatsManager(t *testing.T) {
 
 	var stats statsManager
 	require.NoError(t, stats.Init(ctx, mergeStats))
-	require.Equal(t, "1 levels, 1 partitions, 0.00 vectors/partition.\nCV stats:\n", stats.Format())
+	require.Equal(t, "1 levels, 1 partitions.\nCV stats:\n", stats.Format())
 	require.True(t, skippedMerge)
 
 	// Get zero, negative, positive z-scores.
@@ -60,7 +60,7 @@ func TestStatsManager(t *testing.T) {
 
 	// Format stats.
 	require.Equal(t,
-		"3 levels, 1 partitions, 0.00 vectors/partition.\n"+
+		"3 levels, 1 partitions.\n"+
 			"CV stats:\n"+
 			"  level 2 - mean: 0.4987, stdev: 0.2960\n"+
 			"  level 3 - mean: 0.5000, stdev: 0.0000\n", stats.Format())

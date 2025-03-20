@@ -2649,6 +2649,9 @@ var builtinOidsArray = []string{
 	2686: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) -> jsonb`,
 	2687: `jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> jsonb`,
 	2688: `crdb_internal.backup_compaction(backup_stmt: string, start_time: decimal, end_time: decimal) -> int`,
+	2689: `jsonb_path_exists(target: jsonb, path: jsonpath) -> bool`,
+	2690: `jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb) -> bool`,
+	2691: `jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb, silent: bool) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

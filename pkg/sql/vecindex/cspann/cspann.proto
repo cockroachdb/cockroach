@@ -42,10 +42,7 @@ message IndexStats {
   // NumPartitions tracks the total number of partitions in the index. Unlike
   // the other statistics, this number is exact rather than an estimate.
   int64 num_partitions = 1;
-  // VectorsPerPartition is the estimated average number of vectors in each
-  // partition.
-  double vectors_per_partition = 2;
   // CVStats is a list of statistics for each non-leaf level of the K-means
   // tree that determine how many partitions to search at each level.
-  repeated CVStats c_v_stats = 3 [(gogoproto.nullable) = false];
+  repeated CVStats c_v_stats = 2 [(gogoproto.nullable) = false];
 }

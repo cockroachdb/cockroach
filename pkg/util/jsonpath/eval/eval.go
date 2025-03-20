@@ -55,6 +55,16 @@ func JsonpathQuery(
 	return res, nil
 }
 
+func JsonpathExists(
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+) (tree.DBool, error) {
+	j, err := JsonpathQuery(target, path, vars, silent)
+	if err != nil {
+		return false, err
+	}
+	return len(j) > 0, nil
+}
+
 func (ctx *jsonpathCtx) eval(
 	jsonPath jsonpath.Path, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
