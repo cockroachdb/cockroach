@@ -14,12 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 // pendingLogTruncations tracks proposed truncations for a replica that have
@@ -542,21 +539,11 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// (this subsumes all the preceding queued truncations).
 	batch := t.store.getEngine().NewUnindexedBatch()
 	defer batch.Close()
-	apply, err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
+	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		&pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
-		stateLoader.StateLoader, batch)
-	if err != nil || !apply {
-		if err != nil {
-			log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
-		} else {
-			err := errors.AssertionFailedf(
-				"unexpected !apply from handleTruncatedStateBelowRaftPreApply")
-			if buildutil.CrdbTestBuild || util.RaceEnabled {
-				log.Fatalf(ctx, "%s", err)
-			} else {
-				log.Errorf(ctx, "%s", err)
-			}
-		}
+		stateLoader.StateLoader, batch,
+	); err != nil {
+		log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()
 		return
 	}

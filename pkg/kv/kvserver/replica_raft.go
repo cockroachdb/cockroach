@@ -3055,7 +3055,7 @@ func handleTruncatedStateBelowRaftPreApply(
 	next *kvserverpb.RaftTruncatedState,
 	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
-) (_apply bool, _ error) {
+) error {
 	return logstore.Compact(ctx, prev, next, loader, readWriter)
 }
 
