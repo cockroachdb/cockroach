@@ -2086,6 +2086,21 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
+// clusterOptDisableUseMVCCRangeTombstonesForPointDeletes corresponds
+// to the disable-mvcc-range-tombstones-for-point-deletes directive.
+type clusterOptDisableUseMVCCRangeTombstonesForPointDeletes struct{}
+
+var _ clusterOpt = clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptDisableUseMVCCRangeTombstonesForPointDeletes) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !ok {
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
+	}
+	args.Knobs.Store.(*kvserver.StoreTestingKnobs).EvalKnobs.UseRangeTombstonesForPointDeletes = false
+}
+
 // knobOptDisableCorpusGeneration disables corpus generation for declarative
 // schema changer.
 type knobOptDisableCorpusGeneration struct{}
@@ -2230,6 +2245,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-mvcc-range-tombstones-for-point-deletes":
+			res = append(res, clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
