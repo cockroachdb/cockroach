@@ -184,6 +184,29 @@ func TestVectorManager(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("test GetWithDesc functionality", func(t *testing.T) {
+		var tableDesc catalog.TableDescriptor
+		err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			var err error
+			tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, 141)
+			return err
+		})
+		require.NoError(t, err)
+		var idxDesc catalog.Index
+		for _, desc := range tableDesc.DeletableNonPrimaryIndexes() {
+			if desc.GetID() == 2 {
+				idxDesc = desc
+				break
+			}
+		}
+		// Pull an index using descriptors.
+		_, err = vectorMgr.GetWithDesc(ctx, tableDesc, idxDesc)
+		require.NoError(t, err)
+		// Pull the index again.
+		_, err = vectorMgr.GetWithDesc(ctx, tableDesc, idxDesc)
+		require.NoError(t, err)
+	})
+
 	t.Run("test multiple threaded functionality", func(t *testing.T) {
 		pullDelayer := sync.WaitGroup{}
 		pullDelayer.Add(10)
