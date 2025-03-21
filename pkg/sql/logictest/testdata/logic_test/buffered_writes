@@ -1,11 +1,12 @@
-
-subtest point_delete
+# cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok
 SET kv_transaction_buffered_writes_enabled=true
 
 statement ok
-CREATE TABLE t1 (pk int primary key, v int)
+CREATE TABLE t1 (pk int primary key, v int, FAMILY (pk, v))
+
+subtest point_delete
 
 statement ok
 INSERT INTO t1 VALUES (1,1)
@@ -18,6 +19,44 @@ DELETE FROM t1 WHERE pk = 1
 
 statement count 0
 DELETE FROM t1 WHERE pk = 3
+
+statement ok
+COMMIT
+
+subtest repeated_point_delete
+
+statement ok
+INSERT INTO t1 VALUES (1,1)
+
+statement ok
+BEGIN
+
+statement count 1
+DELETE FROM t1 WHERE pk = 1
+
+# The second delete should be served from the write buffer and observe
+# the buffered tombstone.
+statement count 0
+DELETE FROM t1 WHERE pk = 1
+
+statement ok
+COMMIT
+
+subtest point_delete_after_write
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t1 VALUES (1,1)
+
+statement count 1
+DELETE FROM t1 WHERE pk = 1
+
+# The second delete should be served from the write buffer and observe
+# the buffered tombstone.
+statement count 0
+DELETE FROM t1 WHERE pk = 1
 
 statement ok
 COMMIT
