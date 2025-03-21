@@ -19,6 +19,7 @@ import (
 
 type sqlRowReader struct {
 	selectStatement statements.Statement[tree.Statement]
+	sessionOverride sessiondata.InternalExecutorOverride
 	// keyColumnIndices is the index of the datums that are part of the primary key.
 	keyColumnIndices []int
 	columns          []columnSchema
@@ -39,7 +40,9 @@ type priorRow struct {
 	isLocal bool
 }
 
-func newSQLRowReader(table catalog.TableDescriptor) (*sqlRowReader, error) {
+func newSQLRowReader(
+	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
+) (*sqlRowReader, error) {
 	cols := getPhysicalColumnsSchema(table)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
@@ -55,6 +58,7 @@ func newSQLRowReader(table catalog.TableDescriptor) (*sqlRowReader, error) {
 
 	return &sqlRowReader{
 		selectStatement:  selectStatement,
+		sessionOverride:  sessionOverride,
 		keyColumnIndices: keyColumns,
 		columns:          cols,
 	}, nil
@@ -93,7 +97,7 @@ func (r *sqlRowReader) ReadRows(
 	// This is okay since we already know the batch is small enough to fit in
 	// memory.
 	rows, err := txn.QueryBufferedEx(ctx, "replication-read-refresh", txn.KV(),
-		sessiondata.NoSessionDataOverride,
+		r.sessionOverride,
 		r.selectStatement.SQL,
 		params...,
 	)
