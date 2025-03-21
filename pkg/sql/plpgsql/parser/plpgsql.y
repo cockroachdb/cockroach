@@ -351,7 +351,7 @@ func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <*tree.NumVal> foreach_slice
 %type <plpgsqltree.ForLoopControl> for_control
 
-%type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
+%type <str> any_identifier opt_block_label opt_loop_label opt_label
 %type <str> opt_error_level option_type
 
 %type <tree.DoBlockOptions> do_stmt_opt_list
@@ -368,6 +368,7 @@ func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <plpgsqltree.Statement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
 %type <plpgsqltree.Statement>	stmt_commit stmt_rollback
 %type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
+%type <plpgsqltree.Statement> return_query
 
 %type <plpgsqltree.Statement> decl_statement
 %type <[]plpgsqltree.Statement> decl_sect opt_decl_stmts decl_stmts
@@ -1163,10 +1164,10 @@ stmt_return: RETURN return_expr ';'
   {
     $$.val = &plpgsqltree.ReturnNext{Expr: $3.expr()}
   }
-| RETURN_QUERY QUERY
- {
-   return unimplemented (plpgsqllex, "return query")
- }
+| RETURN_QUERY QUERY return_query ';'
+  {
+    $$.val = $3.statement()
+  }
 ;
 
 return_expr:
@@ -1179,19 +1180,19 @@ return_expr:
   }
 ;
 
-query_options:
+return_query:
   {
-    _, terminator, err := plpgsqllex.(*lexer).ReadSqlExpr(EXECUTE, ';')
-    if err != nil {
-      return setErr(plpgsqllex, err)
-    }
-    if terminator == EXECUTE {
+    if plpgsqllex.(*lexer).peekForExecute() {
+      // Advance the lexer by one token so that the error correctly points to
+      // the EXECUTE keyword.
+      plpgsqllex.(*lexer).Advance(1)
       return unimplemented (plpgsqllex, "return dynamic sql query")
     }
-    _, _, err = plpgsqllex.(*lexer).ReadSqlExpr(';')
+    retQuery, err := plpgsqllex.(*lexer).ParseReturnQuery()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    $$.val = retQuery
   }
 ;
 

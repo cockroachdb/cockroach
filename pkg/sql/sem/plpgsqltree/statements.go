@@ -852,12 +852,21 @@ func (s *ReturnNext) WalkStmt(visitor StatementVisitor) Statement {
 
 type ReturnQuery struct {
 	StatementImpl
-	Query        Expr
-	DynamicQuery Expr
-	Params       []Expr
+	SqlStmt tree.Statement
+}
+
+func (s *ReturnQuery) CopyNode() *ReturnQuery {
+	copyNode := *s
+	return &copyNode
 }
 
 func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("RETURN QUERY")
+	if s.SqlStmt != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(s.SqlStmt)
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *ReturnQuery) PlpgSQLStatementTag() string {
@@ -865,7 +874,8 @@ func (s *ReturnQuery) PlpgSQLStatementTag() string {
 }
 
 func (s *ReturnQuery) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
+	newStmt, _ := visitor.Visit(s)
+	return newStmt
 }
 
 // stmt_raise
