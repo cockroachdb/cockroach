@@ -47,7 +47,7 @@ func (r *MonitorRegistry) getMemMonitorNameLocked(
 	opName redact.SafeString, processorID int32,
 ) mon.MonitorName {
 	r.mu.AssertHeld()
-	return mon.MakeMonitorName(opName).WithProcessorID(processorID).WithInt(int32(len(r.monitors)))
+	return mon.MakeMonitorName(opName).WithID(processorID).WithInt(uint16(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
