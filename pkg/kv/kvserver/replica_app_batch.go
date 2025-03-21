@@ -496,35 +496,37 @@ func (b *replicaAppBatch) stageTruncation(
 			ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
 			res.RaftLogDelta)
 		res.DiscardRaftTruncation()
-	} else if truncatedState.Index > b.truncState.Index {
-		// This truncation will apply synchronously in this batch. Stage the
-		// write into the batch, and compute metadata used after applying it.
-		if err := handleTruncatedStateBelowRaftPreApply(
-			ctx, b.truncState, *truncatedState,
-			b.r.raftMu.stateLoader.StateLoader, b.batch,
-		); err != nil {
-			return errors.Wrap(err, "unable to handle truncated state")
-		}
-		// Determine if there are any sideloaded entries that will be removed as a side
-		// effect, and the total size of these entries.
-		//
-		// If any sideloaded entries are to be removed, the log engine write must be
-		// synced first. Not doing so can lead to losing the entries during an
-		// inopportune crash, and log remaining in an inconsistent state. See the
-		// usage of changeTruncatesSideloadedFiles flag at the other end.
-		//
-		// The size computation feeds into maintaining the log size in memory.
-		if entries, size, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
-			After: b.truncState.Index, Last: truncatedState.Index,
-		}); err != nil {
-			return errors.Wrap(err, "failed searching for sideloaded entries")
-		} else if entries != 0 {
-			b.changeTruncatesSideloadedFiles = true
-			b.truncatedSideloadedSize = size
-		}
-	} else {
+		return nil
+	} else if truncatedState.Index <= b.truncState.Index {
 		// The truncated index does not move forward. The truncation is a no-op.
 		res.DiscardRaftTruncation()
+		return nil
+	}
+
+	// This truncation will apply synchronously in this batch. Stage the write
+	// into the batch, and compute metadata used after applying it.
+	if err := handleTruncatedStateBelowRaftPreApply(
+		ctx, b.truncState, *truncatedState,
+		b.r.raftMu.stateLoader.StateLoader, b.batch,
+	); err != nil {
+		return errors.Wrap(err, "unable to handle truncated state")
+	}
+	// Determine if there are any sideloaded entries that will be removed as a
+	// side effect, and the total size of these entries.
+	//
+	// If any sideloaded entries are to be removed, the log engine write must be
+	// synced first. Not doing so can lead to losing the entries during an
+	// inopportune crash, and log remaining in an inconsistent state. See the
+	// usage of changeTruncatesSideloadedFiles flag at the other end.
+	//
+	// The size computation feeds into maintaining the log size in memory.
+	if entries, size, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
+		After: b.truncState.Index, Last: truncatedState.Index,
+	}); err != nil {
+		return errors.Wrap(err, "failed searching for sideloaded entries")
+	} else if entries != 0 {
+		b.changeTruncatesSideloadedFiles = true
+		b.truncatedSideloadedSize = size
 	}
 	return nil
 }
