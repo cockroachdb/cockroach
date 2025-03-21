@@ -1456,13 +1456,13 @@ func TestTombstoneUpdate(t *testing.T) {
 
 	// 5. Replicate the delete from 'src-a' -> 'dst'
 	var jobIDSrcA jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcA, start.AsOfSystemTime()).Scan(&jobIDSrcA)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcA)
 
 	// 6. Replicate the update from 'src-b' -> 'dst'
 	var jobIDSrcB jobspb.JobID
-	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR = $2",
 		urlSrcB, start.AsOfSystemTime()).Scan(&jobIDSrcB)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcB)
 
