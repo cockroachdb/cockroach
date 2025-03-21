@@ -688,8 +688,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// bulkMemoryMonitor is the parent to all child SQL monitors tracking bulk
 	// operations (IMPORT, index backfill). It is itself a child of the
 	// ParentMemoryMonitor.
-	bulkMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
-		"bulk-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	bulkMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		mon.MakeName("bulk-mon"), 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
@@ -701,8 +701,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, mon.MakeName("backup-mon"))
 	backupMemoryMonitor.MarkLongLiving()
 
-	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
-		"changefeed-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		mon.MakeName("changefeed-mon"), 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	if jobs.MakeChangefeedMemoryMetricsHook != nil {
 		changefeedCurCount, changefeedMaxHist := jobs.MakeChangefeedMemoryMetricsHook(cfg.HistogramWindowInterval())
@@ -710,8 +710,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	changefeedMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
-	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
-		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		mon.MakeName("server-cache-mon"), 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
 	serverCacheMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 

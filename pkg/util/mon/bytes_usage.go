@@ -595,15 +595,6 @@ func NewMonitorInheritWithLimit(
 	})
 }
 
-// NewMonitorInheritWithLimitAndStringName is the same as
-// NewMonitorInheritWithLimit but accept a string name.
-// Deprecated: NewMonitorInheritWithLimit should be used instead.
-func NewMonitorInheritWithLimitAndStringName(
-	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
-) *BytesMonitor {
-	return NewMonitorInheritWithLimit(MakeName(name), limit, m, longLiving)
-}
-
 func (mm *BytesMonitor) MarkAsRootSQLMonitor() {
 	if mm.mu.tracksDisk {
 		panic(errors.AssertionFailedf("root SQL memory monitor cannot track disk resources"))
