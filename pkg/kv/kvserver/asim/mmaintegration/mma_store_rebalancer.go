@@ -115,6 +115,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 					log.VInfof(ctx, 1, "operation for pendingChange=%v failed: %v", curChange, err)
 					success = false
 				}
+				log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
 				msr.allocator.AdjustPendingChangesDisposition(
 					[]mma.PendingRangeChange{curChange}, success)
 				msr.pendingChangeIdx++
