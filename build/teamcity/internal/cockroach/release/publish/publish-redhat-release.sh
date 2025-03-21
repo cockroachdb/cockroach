@@ -77,7 +77,7 @@ mkdir -p artifacts
 docker run \
   --rm \
   --security-opt=label=disable \
-  --env PFLT_LOGLEVEL=trace \
+  --env PFLT_LOGLEVEL=error \
   --env PFLT_ARTIFACTS=/artifacts \
   --env PFLT_LOGFILE=/artifacts/preflight.log \
   --env PFLT_CERTIFICATION_PROJECT_ID="$rhel_project_id" \
