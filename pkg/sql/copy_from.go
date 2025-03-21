@@ -522,7 +522,7 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
 	memMetrics := &MemoryMetrics{}
 	c.copyMon = mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("copy"),
+		Name:     mon.MakeName("copy"),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: c.p.ExecCfg().Settings,

@@ -148,11 +148,11 @@ func newHashJoiner(
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The hashJoiner will overflow to disk if this limit is not enough.
 	h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx,
-		mon.MakeMonitorName("hashjoiner").Limited())
+		mon.MakeName("hashjoiner").Limited())
 	h.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
-		mon.MakeMonitorName("hashjoiner").Unlimited())
+		mon.MakeName("hashjoiner").Unlimited())
 	h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
-		mon.MakeMonitorName("hashjoiner").Disk())
+		mon.MakeName("hashjoiner").Disk())
 	h.hashTable = rowcontainer.NewHashDiskBackedRowContainer(
 		h.FlowCtx.EvalCtx, h.MemMonitor, h.unlimitedMemMonitor, h.diskMonitor, h.FlowCtx.Cfg.TempStorage,
 	)

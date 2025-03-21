@@ -591,7 +591,7 @@ func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("in-mem temp storage"),
+		Name:      mon.MakeName("in-mem temp storage"),
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
 		Settings:  st,

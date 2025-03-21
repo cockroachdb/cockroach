@@ -41,7 +41,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		CurCount: g,
 		Settings: st,
 	})
@@ -234,7 +234,7 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		CurCount: g,
 		Settings: st,
 	})
@@ -297,7 +297,7 @@ func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		CurCount: g,
 		Settings: st,
 	})
