@@ -521,12 +521,12 @@ func logAppend(
 // which is aware of the current log state.
 func Compact(
 	ctx context.Context,
-	currentTruncatedState kvserverpb.RaftTruncatedState,
-	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	prev kvserverpb.RaftTruncatedState,
+	next *kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	readWriter storage.ReadWriter,
 ) (apply bool, _ error) {
-	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
+	if next.Index <= prev.Index {
 		// The suggested truncated state moves us backwards; instruct the caller to
 		// not update the in-memory state.
 		return false, nil
@@ -537,26 +537,26 @@ func Compact(
 	// command application so that the TruncatedState index is always consistent
 	// with the state of the Raft log itself.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := suggestedTruncatedState.Index - currentTruncatedState.Index
+	numTruncatedEntries := next.Index - prev.Index
 	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
+		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
+		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
 		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
 			return false, errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
-				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
+				"unable to clear truncated Raft entries for %+v after index %d",
+				next, prev.Index)
 		}
 	} else {
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
 		// allocating when constructing Raft log keys (16 bytes).
 		prefix := prefixBuf.RaftLogPrefix()
-		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
+		for idx := prev.Index + 1; idx <= next.Index; idx++ {
 			if err := readWriter.ClearUnversioned(
 				keys.RaftLogKeyFromPrefix(prefix, idx),
 				storage.ClearOptions{},
 			); err != nil {
 				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					suggestedTruncatedState, idx)
+					next, idx)
 			}
 		}
 	}
@@ -568,7 +568,7 @@ func Compact(
 		readWriter,
 		prefixBuf.RaftTruncatedStateKey(),
 		hlc.Timestamp{},
-		suggestedTruncatedState,
+		next,
 		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
 	); err != nil {
 		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
