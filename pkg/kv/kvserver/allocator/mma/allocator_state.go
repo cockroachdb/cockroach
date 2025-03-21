@@ -269,7 +269,7 @@ func (a *allocatorState) rebalanceStores(
 				}
 				leaseChanges := makeLeaseTransferChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-				pendingChanges := a.cs.createPendingChanges(rangeID, leaseChanges[:]...)
+				pendingChanges := a.cs.createPendingChanges(leaseChanges[:]...)
 				changes = append(changes, PendingRangeChange{
 					RangeID:               rangeID,
 					pendingReplicaChanges: pendingChanges[:],
@@ -410,7 +410,7 @@ func (a *allocatorState) rebalanceStores(
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-			pendingChanges := a.cs.createPendingChanges(rangeID, replicaChanges[:]...)
+			pendingChanges := a.cs.createPendingChanges(replicaChanges[:]...)
 			changes = append(changes, PendingRangeChange{
 				RangeID:               rangeID,
 				pendingReplicaChanges: pendingChanges[:],
