@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -1709,9 +1711,37 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
+	extractKVs := func(rows []roachpb.KeyValue, batchResponses [][]byte) []roachpb.KeyValue {
+		if rows != nil {
+			return rows
+		}
+		var kvs []roachpb.KeyValue
+		err := storage.MVCCScanDecodeKeyValues(batchResponses, func(key storage.MVCCKey, rawBytes []byte) error {
+			kvs = append(kvs, roachpb.KeyValue{Key: key.Key, Value: roachpb.Value{RawBytes: rawBytes}})
+			return nil
+		})
+		require.NoError(t, err)
+		return kvs
+	}
+
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+		// valueTxn is a special value that indicates that a particular KV has
+		// been modified in the current txn but hasn't been committed yet.
+		valueTxn := []byte("valueTxn")
 		makeKV := func(key []byte, val []byte) roachpb.KeyValue {
-			return roachpb.KeyValue{Key: key, Value: roachpb.Value{RawBytes: val}}
+			var ts hlc.Timestamp
+			if !bytes.Equal(val, valueTxn) {
+				// If we have a value other than valueTxn, it means that the KV
+				// has been committed. As such, it'll have the Timestamp set, so
+				// we simulate that here (this is needed to get the correct
+				// NumBytes estimate). (A particular timestamp doesn't matter,
+				// just that both WallTime and Logical parts are set.)
+				ts = hlc.Timestamp{WallTime: 1, Logical: 1}
+			}
+			var value roachpb.Value
+			value.SetBytes(val)
+			value.Timestamp = ts
+			return roachpb.KeyValue{Key: key, Value: value}
 		}
 
 		ctx := context.Background()
@@ -1719,7 +1749,6 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 		valueC := []byte("valueC")
 		valueF := []byte("valueF")
 		valueG := []byte("valueG")
-		valueTxn := []byte("valueTxn")
 
 		keyA := []byte("keyA")
 		keyB := []byte("keyB")
@@ -1799,6 +1828,14 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 					},
 				},
 				{
+					// Entirely within the buffer and the server response is empty.
+					key:    keyB,
+					endKey: keyC,
+					expRes: []roachpb.KeyValue{
+						makeKV(keyB, valueTxn),
+					},
+				},
+				{
 					// End key is present in the buffer, but isn't returned because the scan
 					// is exclusive.
 					key:    keyA,
@@ -1834,27 +1871,69 @@ func TestTxnBufferedWritesOverlappingScan(t *testing.T) {
 					},
 				},
 			} {
-				var res []kv.KeyValue
-				var err error
-				if reverse {
-					res, err = txn.ReverseScan(ctx, tc.key, tc.endKey, 0 /* maxRows */)
-					require.NoError(t, err)
-				} else {
-					res, err = txn.Scan(ctx, tc.key, tc.endKey, 0 /* maxRows */)
-					require.NoError(t, err)
-				}
-				if reverse {
-					// Reverse the expected result.
-					sort.Slice(tc.expRes, func(i, j int) bool {
-						return bytes.Compare(tc.expRes[i].Key, tc.expRes[j].Key) > 0
-					})
-				}
-				require.Len(t, res, len(tc.expRes), "failed %d", i)
-				for i, exp := range tc.expRes {
-					require.Equal(t, exp.Key, res[i].Key, "failed %d", i)
-					val, err := res[i].Value.GetBytes()
-					require.NoError(t, err)
-					require.Equal(t, exp.Value.RawBytes, val)
+				for _, sf := range []kvpb.ScanFormat{
+					kvpb.KEY_VALUES,
+					kvpb.BATCH_RESPONSE,
+				} {
+					var req kvpb.Request
+					if reverse {
+						req = &kvpb.ReverseScanRequest{
+							RequestHeader: kvpb.RequestHeader{
+								Key:    tc.key,
+								EndKey: tc.endKey,
+							},
+							ScanFormat: sf,
+						}
+					} else {
+						req = &kvpb.ScanRequest{
+							RequestHeader: kvpb.RequestHeader{
+								Key:    tc.key,
+								EndKey: tc.endKey,
+							},
+							ScanFormat: sf,
+						}
+					}
+					b := txn.NewBatch()
+					b.AddRawRequest(req)
+					require.NoError(t, txn.Run(ctx, b))
+					br := b.RawResponse()
+
+					require.Equal(t, 1, len(br.Responses))
+					var kvs []roachpb.KeyValue
+					var numKeys, numBytes int
+					if reverse {
+						rsr := br.Responses[0].GetInner().(*kvpb.ReverseScanResponse)
+						kvs = extractKVs(rsr.Rows, rsr.BatchResponses)
+						numKeys, numBytes = int(rsr.NumKeys), int(rsr.NumBytes)
+					} else {
+						sr := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+						kvs = extractKVs(sr.Rows, sr.BatchResponses)
+						numKeys, numBytes = int(sr.NumKeys), int(sr.NumBytes)
+					}
+					if reverse {
+						// Reverse the expected result.
+						sort.Slice(tc.expRes, func(i, j int) bool {
+							return bytes.Compare(tc.expRes[i].Key, tc.expRes[j].Key) > 0
+						})
+					}
+					require.Len(t, kvs, len(tc.expRes), "failed %d", i)
+					for i, exp := range tc.expRes {
+						require.Equal(t, exp.Key, kvs[i].Key, "failed %d", i)
+						expVal, err := exp.Value.GetBytes()
+						require.NoError(t, err)
+						val, err := kvs[i].Value.GetBytes()
+						require.NoError(t, err)
+						require.Equal(t, expVal, val)
+					}
+					// Additionally verify NumKeys and NumBytes fields.
+					require.Equal(t, len(tc.expRes), numKeys, "incorrect NumKeys value")
+					var expNumBytes int
+					for _, r := range tc.expRes {
+						// See encKVLength in txn_interceptor_write_buffer.go
+						// for more details on the expected sizing.
+						expNumBytes += 8 + mvccencoding.EncodedMVCCKeyLength(r.Key, r.Value.Timestamp) + len(r.Value.RawBytes)
+					}
+					require.Equal(t, expNumBytes, numBytes, "incorrect NumBytes value")
 				}
 			}
 			return nil
