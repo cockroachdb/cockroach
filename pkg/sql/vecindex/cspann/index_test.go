@@ -141,7 +141,7 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 	}
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
-	s.InMemStore = memstore.New(dims, 42)
+	s.InMemStore = memstore.New(s.Quantizer, 42)
 	s.Index, err = cspann.NewIndex(s.Ctx, s.InMemStore, s.Quantizer, 42, &s.Options, s.Stopper)
 	require.NoError(s.T, err)
 
@@ -758,7 +758,7 @@ func TestRandomizeVector(t *testing.T) {
 	const dims = 97
 	const count = 5
 	quantizer := quantize.NewRaBitQuantizer(dims, 46)
-	inMemStore := memstore.New(dims, 42)
+	inMemStore := memstore.New(quantizer, 42)
 	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
 	require.NoError(t, err)
 
@@ -828,8 +828,8 @@ func TestIndexConcurrency(t *testing.T) {
 			QualitySamples:   4,
 		}
 		seed := int64(i)
-		store := memstore.New(vectors.Dims, seed)
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
+		store := memstore.New(quantizer, seed)
 		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
 		require.NoError(t, err)
 
