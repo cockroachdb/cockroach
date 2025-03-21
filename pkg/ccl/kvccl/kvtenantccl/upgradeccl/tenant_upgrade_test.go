@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -219,7 +218,9 @@ func TestTenantAutoUpgrade(t *testing.T) {
 		UpgradeTo roachpb.Version
 	}
 	succeedsSoon := 20 * time.Second
-	if util.RaceEnabled || skip.Stress() {
+
+	// Test is slower under race, deadlock or stress, so increase timeout.
+	if skip.Duress() {
 		succeedsSoon = 60 * time.Second
 	}
 	// Wait for auto upgrade status to be received by the testing knob.
