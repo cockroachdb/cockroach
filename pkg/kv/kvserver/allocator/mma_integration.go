@@ -34,7 +34,16 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 	// 1% of capacity) and is for use in an emergency.
 	byteSizeUtil :=
 		float64(desc.Capacity.Capacity-desc.Capacity.Available) / float64(desc.Capacity.Capacity)
-	capacity[mma.ByteSize] = mma.LoadValue(float64(load[mma.ByteSize]) / byteSizeUtil)
+	almostZeroUtil := byteSizeUtil < 0.01
+	if load[mma.ByteSize] != 0 && !almostZeroUtil {
+		// Normal case. The store has some ranges, and is not almost empty.
+		capacity[mma.ByteSize] = mma.LoadValue(float64(load[mma.ByteSize]) / byteSizeUtil)
+	} else {
+		// Has no ranges or is almost empty. This is likely a new store. Since
+		// LogicalBytes are uncompressed, we start with the compressed available,
+		// which is desirably pessimistic.
+		capacity[mma.ByteSize] = mma.LoadValue(desc.Capacity.Available)
+	}
 	var secondaryLoad mma.SecondaryLoadVector
 	secondaryLoad[mma.LeaseCount] = mma.LoadValue(desc.Capacity.LeaseCount)
 	return mma.StoreLoadMsg{
