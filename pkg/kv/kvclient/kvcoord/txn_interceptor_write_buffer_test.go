@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -670,8 +671,9 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
-// TestTxnWriteBufferServesOverlappingReadsCorrectly ensures that Scan requests
-// that overlap with buffered writes are correctly served from the buffer.
+// TestTxnWriteBufferServesOverlappingReadsCorrectly ensures that Scan and
+// ReverseScan requests that overlap with buffered writes are correctly served
+// from the buffer.
 func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -723,7 +725,7 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 
 	// Verify the writes were buffered correctly.
 	expBufferedWrites := []bufferedWrite{
-		makeBufferedWrite(keyA, makeBufferedValue("valA10", 10)),
+		makeBufferedWrite(keyA, makeBufferedValue(valA10, 10)),
 		makeBufferedWrite(keyB, makeBufferedValue("", 10)),
 	}
 	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
@@ -743,21 +745,101 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 	}
 	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
 
-	// First up, perform reads on key A at various sequence numbers and ensure the
-	// correct value is served from the buffer.
-	for seq, expVal := range map[enginepb.TxnSeq]string{
-		10: valA10, 11: valA10, 12: valA12, 13: valA12, 14: valA14, 15: valA14,
+	for _, tc := range []struct {
+		scanFormat kvpb.ScanFormat
+		numKVs     func(rows []roachpb.KeyValue, batchResponses [][]byte) int
+		firstKV    func(rows []roachpb.KeyValue, batchResponses [][]byte) (roachpb.Key, roachpb.Value)
+	}{
+		{
+			scanFormat: kvpb.KEY_VALUES,
+			numKVs: func(rows []roachpb.KeyValue, _ [][]byte) int {
+				return len(rows)
+			},
+			firstKV: func(rows []roachpb.KeyValue, _ [][]byte) (roachpb.Key, roachpb.Value) {
+				return rows[0].Key, rows[0].Value
+			},
+		},
+		{
+			scanFormat: kvpb.BATCH_RESPONSE,
+			numKVs: func(_ []roachpb.KeyValue, batchResponses [][]byte) int {
+				var numKVs int
+				err := enginepb.ScanDecodeKeyValues(batchResponses, func([]byte, hlc.Timestamp, []byte) error {
+					numKVs++
+					return nil
+				})
+				require.NoError(t, err)
+				return numKVs
+			},
+			firstKV: func(_ []roachpb.KeyValue, batchResponses [][]byte) (roachpb.Key, roachpb.Value) {
+				key, rawBytes, _, err := enginepb.ScanDecodeKeyValueNoTS(batchResponses[0])
+				require.NoError(t, err)
+				return key, roachpb.Value{RawBytes: rawBytes}
+			},
+		},
 	} {
+		// First up, perform reads on key A at various sequence numbers and
+		// ensure the correct value is served from the buffer.
+		for seq, expVal := range map[enginepb.TxnSeq]string{
+			10: valA10, 11: valA10, 12: valA12, 13: valA12, 14: valA14, 15: valA14,
+		} {
+			ba = &kvpb.BatchRequest{}
+			txn.Sequence = seq
+			ba.Header = kvpb.Header{Txn: &txn}
+			scan := &kvpb.ScanRequest{
+				RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				ScanFormat:    tc.scanFormat,
+			}
+			reverseScan := &kvpb.ReverseScanRequest{
+				RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+				ScanFormat:    tc.scanFormat,
+			}
+			ba.Add(scan)
+			ba.Add(reverseScan)
+
+			numCalled = mockSender.NumCalled()
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 2)
+				require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[1].GetInner())
+
+				br = ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			br, pErr = twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+			require.Len(t, br.Responses, 2)
+			// There should only be a single response, for Key A, as Key B was
+			// deleted.
+			sr := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+			require.Equal(t, 1, tc.numKVs(sr.Rows, sr.BatchResponses))
+			rsr := br.Responses[1].GetInner().(*kvpb.ReverseScanResponse)
+			require.Equal(t, 1, tc.numKVs(rsr.Rows, rsr.BatchResponses))
+			sk, sv := tc.firstKV(sr.Rows, sr.BatchResponses)
+			require.Equal(t, keyA, sk)
+			require.Equal(t, roachpb.MakeValueFromString(expVal), sv)
+			rsk, rsv := tc.firstKV(rsr.Rows, rsr.BatchResponses)
+			require.Equal(t, keyA, rsk)
+			require.Equal(t, roachpb.MakeValueFromString(expVal), rsv)
+			// Assert that the request was sent to the KV layer.
+			require.Equal(t, mockSender.NumCalled(), numCalled+1)
+		}
+
+		// Perform a scan at a lower sequence number than the minimum buffered
+		// write. This should be sent to the KV layer, like above, but the
+		// result shouldn't include any buffered writes.
+		txn.Sequence = 9
 		ba = &kvpb.BatchRequest{}
-		txn.Sequence = seq
 		ba.Header = kvpb.Header{Txn: &txn}
 		scan := &kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-			ScanFormat:    kvpb.KEY_VALUES,
+			ScanFormat:    tc.scanFormat,
 		}
 		reverseScan := &kvpb.ReverseScanRequest{
 			RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-			ScanFormat:    kvpb.KEY_VALUES,
+			ScanFormat:    tc.scanFormat,
 		}
 		ba.Add(scan)
 		ba.Add(reverseScan)
@@ -772,58 +854,18 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 			br.Txn = ba.Txn
 			return br, nil
 		})
-
 		br, pErr = twb.SendLocked(ctx, ba)
 		require.Nil(t, pErr)
 		require.NotNil(t, br)
 		require.Len(t, br.Responses, 2)
-		// There should only be a single response, for Key A, as Key B was deleted.
-		require.Len(t, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows, 1)
-		require.Len(t, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows, 1)
-		require.Equal(t, keyA, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows[0].Key)
-		require.Equal(t, roachpb.MakeValueFromString(expVal), br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows[0].Value)
-		require.Equal(t, keyA, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows[0].Key)
-		require.Equal(t, roachpb.MakeValueFromString(expVal), br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows[0].Value)
+		// Assert that no buffered write was returned.
+		sr := br.Responses[0].GetInner().(*kvpb.ScanResponse)
+		require.Equal(t, 0, tc.numKVs(sr.Rows, sr.BatchResponses))
+		rsr := br.Responses[1].GetInner().(*kvpb.ReverseScanResponse)
+		require.Equal(t, 0, tc.numKVs(rsr.Rows, rsr.BatchResponses))
 		// Assert that the request was sent to the KV layer.
 		require.Equal(t, mockSender.NumCalled(), numCalled+1)
 	}
-
-	// Perform a scan at a lower sequence number than the minimum buffered write.
-	// This should be sent to the KV layer, like above, but the result shouldn't
-	// include any buffered writes.
-	txn.Sequence = 9
-	ba = &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: &txn}
-	scan := &kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-		ScanFormat:    kvpb.KEY_VALUES,
-	}
-	reverseScan := &kvpb.ReverseScanRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
-		ScanFormat:    kvpb.KEY_VALUES,
-	}
-	ba.Add(scan)
-	ba.Add(reverseScan)
-
-	numCalled = mockSender.NumCalled()
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 2)
-		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[1].GetInner())
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-	br, pErr = twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Len(t, br.Responses, 2)
-	// Assert that no buffered write was returned.
-	require.Len(t, br.Responses[0].GetInner().(*kvpb.ScanResponse).Rows, 0)
-	require.Len(t, br.Responses[1].GetInner().(*kvpb.ReverseScanResponse).Rows, 0)
-	// Assert that the request was sent to the KV layer.
-	require.Equal(t, mockSender.NumCalled(), numCalled+1)
 
 	// Lastly, for completeness, commit the transaction and ensure that the buffer
 	// is correctly flushed.
