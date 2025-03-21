@@ -507,7 +507,10 @@ func (p *kvTableWriter) updateRow(
 		// and destination clusters.
 		// ShouldWinTie: true,
 	}
-	_, err := p.ru.UpdateRow(ctx, b, p.oldVals, p.newVals, ph, vh, oth, false)
+	_, err := p.ru.UpdateRow(
+		ctx, b, p.oldVals, p.newVals, ph, vh, oth, false, /* mustValidateOldValues */
+		false, /* traceKV */
+	)
 	return err
 }
 
@@ -530,7 +533,9 @@ func (p *kvTableWriter) deleteRow(
 		// ShouldWinTie: true,
 	}
 
-	return p.rd.DeleteRow(ctx, b, p.oldVals, ph, vh, oth, false)
+	return p.rd.DeleteRow(
+		ctx, b, p.oldVals, ph, vh, oth, false /* mustValidateOldValues */, false, /* traceKV */
+	)
 }
 
 func (p *kvTableWriter) fillOld(vals cdcevent.Row) error {

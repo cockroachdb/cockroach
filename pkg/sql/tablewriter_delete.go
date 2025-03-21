@@ -53,10 +53,11 @@ func (td *tableDeleter) row(
 	values tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	mustValidateOldValues bool,
 	traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, mustValidateOldValues, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the

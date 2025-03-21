@@ -492,6 +492,24 @@ func delFn(
 	}
 }
 
+func delWithCPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	expVal []byte,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if traceKV {
+		if keyEncodingDirs != nil {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", keys.PrettyPrint(keyEncodingDirs, *key))
+		} else {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", *key)
+		}
+	}
+	b.CPut(key, nil, expVal)
+}
+
 func (rh *RowHelper) deleteIndexEntry(
 	ctx context.Context,
 	b Putter,
@@ -548,7 +566,7 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 	traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
+		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s (swap) @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
 	}
 	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
 }

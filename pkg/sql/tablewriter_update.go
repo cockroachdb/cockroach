@@ -51,7 +51,7 @@ func (tu *tableUpdater) rowForUpdate(
 	traceKV bool,
 ) (tree.Datums, error) {
 	tu.currentBatchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, vh, nil, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, vh, nil, false, traceKV)
 }
 
 // tableDesc returns the TableDescriptor for the table that the tableUpdater

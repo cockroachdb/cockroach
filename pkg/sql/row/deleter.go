@@ -135,6 +135,7 @@ func (rd *Deleter) DeleteRow(
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
+	mustValidateOldValues bool,
 	traceKV bool,
 ) error {
 	b := &KVBatchAdapter{Batch: batch}
@@ -202,6 +203,16 @@ func (rd *Deleter) DeleteRow(
 				}
 			}
 			oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
+		} else if mustValidateOldValues {
+			var expValue []byte
+			prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
+			if err != nil {
+				return err
+			}
+			if prevValue.IsPresent() {
+				expValue = prevValue.TagAndDataBytes()
+			}
+			delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, rd.Helper.primIndexValDirs)
 		} else {
 			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, rd.Helper.primIndexValDirs)
 		}

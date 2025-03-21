@@ -203,7 +203,8 @@ func (ri *Inserter) InsertRow(
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex,
-		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, kvOp, traceKV)
+		&ri.key, &ri.value, ri.valueBuf, oth, nil /* oldValues */, kvOp,
+		false /* mustValidateOldValues */, traceKV)
 	if err != nil {
 		return err
 	}
