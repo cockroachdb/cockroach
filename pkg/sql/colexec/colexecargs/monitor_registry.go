@@ -167,9 +167,10 @@ func (r *MonitorRegistry) createUnlimitedMemAccountsLocked(
 	)
 	r.monitors = append(r.monitors, bufferingOpUnlimitedMemMonitor)
 	oldLen := len(r.accounts)
-	for i := 0; i < numAccounts; i++ {
-		acc := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
-		r.accounts = append(r.accounts, &acc)
+	newAccounts := make([]mon.BoundAccount, numAccounts)
+	for i := range newAccounts {
+		newAccounts[i] = bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
+		r.accounts = append(r.accounts, &newAccounts[i])
 	}
 	return bufferingOpUnlimitedMemMonitor, r.accounts[oldLen:len(r.accounts)]
 }
