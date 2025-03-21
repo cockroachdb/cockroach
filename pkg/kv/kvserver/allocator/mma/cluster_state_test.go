@@ -421,7 +421,7 @@ func TestClusterState(t *testing.T) {
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
-					cs.createPendingChanges(rangeID, changes...)
+					cs.createPendingChanges(changes...)
 					return printPendingChanges(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
