@@ -374,7 +374,7 @@ func TestMultiSharedGauge(t *testing.T) {
 	})
 	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
-	child := NewMonitorInheritWithLimitAndStringName("child", 20000, parent, false /* longLiving */)
+	child := NewMonitorInheritWithLimit(MakeName("child"), 20000, parent, false /* longLiving */)
 	child.StartNoReserved(ctx, parent)
 
 	acc := child.MakeBoundAccount()

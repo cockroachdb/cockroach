@@ -993,7 +993,8 @@ func NewLimitedMonitorWithLowerBound(
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
-	limitedMon := mon.NewMonitorInheritWithLimitAndStringName(name, memoryLimit, flowCtx.Mon, false /* longLiving */)
+	limitedMon := mon.NewMonitorInheritWithLimit(mon.MakeName(name), memoryLimit, flowCtx.Mon,
+		false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	return limitedMon
 }

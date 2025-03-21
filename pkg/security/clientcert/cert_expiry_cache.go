@@ -97,8 +97,8 @@ func NewClientCertExpirationCache(
 			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*metrics)))
 		},
 	})
-	c.mon = mon.NewMonitorInheritWithLimitAndStringName(
-		"client-expiration-cache", 0 /* limit */, parentMon, true, /* longLiving */
+	c.mon = mon.NewMonitorInheritWithLimit(
+		mon.MakeName("client-expiration-cache"), 0 /* limit */, parentMon, true, /* longLiving */
 	)
 	c.mu.acc = c.mon.MakeBoundAccount()
 	c.mon.StartNoReserved(ctx, parentMon)
