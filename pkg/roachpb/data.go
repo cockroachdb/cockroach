@@ -1554,6 +1554,29 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
 		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+
+	// Print observed timestamps (limited to 5 for readability).
+	if obsCount := len(t.ObservedTimestamps); obsCount > 0 {
+		w.Printf(" obs={")
+		limit := obsCount
+		if limit > 5 {
+			limit = 5
+		}
+
+		for i := 0; i < limit; i++ {
+			if i > 0 {
+				w.Printf(" ")
+			}
+			obs := t.ObservedTimestamps[i]
+			w.Printf("n%d@%s", obs.NodeID, obs.Timestamp)
+		}
+
+		if obsCount > 5 {
+			w.Printf(", ...")
+		}
+		w.Printf("}")
+	}
+
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		w.Printf(" int=%d", ni)
 	}
