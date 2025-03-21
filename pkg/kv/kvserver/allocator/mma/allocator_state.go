@@ -202,6 +202,11 @@ func (a *allocatorState) rebalanceStores(
 				if !a.ensureAnalyzedConstraints(rstate) {
 					continue
 				}
+				if rstate.constraints.leaseholderID != store.StoreID {
+					panic(fmt.Sprintf("internal state inconsistency: "+
+						"store=%v range_id=%v should be leaseholder but isn't",
+						store.StoreID, rangeID))
+				}
 				cands, _ := rstate.constraints.candidatesToMoveLease()
 				var candsPL storeIDPostingList
 				for _, cand := range cands {
