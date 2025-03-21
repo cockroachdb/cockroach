@@ -200,8 +200,22 @@ func makeLeaseTransferChanges(
 		panic(fmt.Sprintf(
 			"new leaseholder replica doesn't exist on store %v", addTarget))
 	}
+
 	remove := existingReplicas[removeIdx]
 	add := existingReplicas[addIdx]
+	// Sanity check the lease transfer, we cannot transfer a lease to a replica
+	// that is already a leaseholder, nor can we transfer a lease from a replica
+	// that is not the leaseholder.
+	if !remove.IsLeaseholder {
+		panic(fmt.Sprintf(
+			"r%v lease transfer-from target %v isn't the leaseholder %v replicas=%v",
+			rangeID, removeTarget, remove.ReplicaState, existingReplicas))
+	}
+	if add.IsLeaseholder {
+		panic(fmt.Sprintf(
+			"r%v lease transfer-to target %v is already the leaseholder %v replicas=%v",
+			rangeID, addTarget, add.ReplicaState, existingReplicas))
+	}
 
 	removeLease := replicaChange{
 		target:  removeTarget,
@@ -1139,7 +1153,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	// undone. So if s10 is a replica for range r1 whose leaseholder is the
 	// local store s1 that is trying to transfer the lease away, s10 will not
 	// see r1 below.
-	for rangeID := range localss.adjusted.replicas {
+	for rangeID, state := range localss.adjusted.replicas {
+		if !state.IsLeaseholder {
+			// We may have transferred the lease away previously but still have a
+			// replica. We don't want to add this replica to the topKReplicas as it
+			// controls which ranges are eligible to be shed. When no longer the
+			// leaseholder, we cannot shed a replica or lease.
+			continue
+		}
 		rs := cs.ranges[rangeID]
 		// TODO: replicas is also already adjusted.
 		for _, replica := range rs.replicas {
@@ -1221,12 +1242,10 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 	delete(cs.pendingChanges, change.changeID)
 }
 
-// createPendingChanges takes a set of changes for a range and applies the
-// changes as pending. The application updates the adjusted load, tracked
-// pending changes and changeID to reflect the pending application.
-func (cs *clusterState) createPendingChanges(
-	rangeID roachpb.RangeID, changes ...replicaChange,
-) []*pendingReplicaChange {
+// createPendingChanges takes a set of changes applies the changes as pending.
+// The application updates the adjusted load, tracked pending changes and
+// changeID to reflect the pending application.
+func (cs *clusterState) createPendingChanges(changes ...replicaChange) []*pendingReplicaChange {
 	var pendingChanges []*pendingReplicaChange
 	now := cs.ts.Now()
 
