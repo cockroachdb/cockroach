@@ -563,6 +563,9 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// sync=false since we don't need a guarantee that the truncation is
 	// durable. Loss of a truncation means we have more of the suffix of the
 	// raft log, which does not affect correctness.
+	// TODO(pav-kv): there is a bug here. When a truncation removes sideloaded
+	// entries, there must be a log engine sync preceding the file removals. This
+	// is the same issue as #38566 and #113135 in the tightly-coupled stack.
 	if err := batch.Commit(false /* sync */); err != nil {
 		log.Errorf(ctx, "while committing batch to truncate raft log: %+v", err)
 		pendingTruncs.reset()

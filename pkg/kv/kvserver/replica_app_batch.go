@@ -482,23 +482,22 @@ func (b *replicaAppBatch) stageTruncation(
 ) error {
 	truncatedState := res.GetRaftTruncatedState() // NB: not nil
 	var err error
-	// Typically one should not be checking the cluster version below raft,
-	// since it can cause state machine divergence. However, this check is
-	// only for deciding how to truncate the raft log, which is not part of
-	// the state machine. Also, we will eventually eliminate this check by
-	// only supporting loosely coupled truncation.
+	// Use loosely-coupled truncations if configured by the setting. Otherwise,
+	// perform a tightly-coupled truncation, i.e. apply it immediately.
 	looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
-	// In addition to cluster version and cluster settings, we also apply
-	// immediately if RaftExpectedFirstIndex is not populated (see comment in
-	// that proto).
+	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
+	// comment in that proto). It is possible that a replica still has a
+	// truncation sitting in the raft log that never populated this field.
 	//
-	// In the release following LooselyCoupledRaftLogTruncation, we will
-	// retire the strongly coupled path. It is possible that some replica
-	// still has a truncation sitting in a raft log that never populated
-	// RaftExpectedFirstIndex, which will be interpreted as 0. When applying
-	// it, the loosely coupled code will mark the log size as untrusted and
-	// will recompute the size. This has no correctness impact, so we are not
-	// going to bother with a long-running migration.
+	// The current state of the RaftExpectedFirstIndex == 0 quirk:
+	//   - Loosely-coupled code marks the log size as untrusted which triggers an
+	//     eventual size re-computation. However, this path is never taken here.
+	//   - Tightly-coupled code marks the size trusted. There is a bug here that
+	//     leads to incorrect stats. The proposer's "base" truncated index for
+	//     computing the size delta could be different from the one on this
+	//     replica, and there is no way to tell.
+	//
+	// TODO(pav-kv): make the size delta untrusted on expected first index == 0.
 	apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 	if apply {
 		if apply, err = handleTruncatedStateBelowRaftPreApply(
@@ -513,17 +512,16 @@ func (b *replicaAppBatch) stageTruncation(
 			res.RaftLogDelta)
 	}
 	if apply {
-		// This truncation command will apply synchronously in this batch.
-		// Determine if there are any sideloaded entries that will be removed as a
-		// side effect.
+		// This truncation will apply synchronously in this batch. Determine if
+		// there are any sideloaded entries that will be removed as a side effect,
+		// and the total size of these entries.
 		//
-		// We must sync state machine batch application if the command removes any
-		// sideloaded log entries. Not doing so can lead to losing the entries.
-		// See the usage of changeTruncatesSideloadedFiles flag at the other end.
+		// If any sideloaded entries are to be removed, the log engine write must be
+		// synced first. Not doing so can lead to losing the entries during an
+		// inopportune crash, and log remaining in an inconsistent state. See the
+		// usage of changeTruncatesSideloadedFiles flag at the other end.
 		//
-		// We only need to check sideloaded entries in this path. The loosely
-		// coupled truncation mechanism in the other branch already ensures
-		// enacting truncations only after state machine synced.
+		// The size computation feeds into maintaining the log size in memory.
 		if entries, size, err := b.r.raftMu.sideloaded.Stats(ctx, kvpb.RaftSpan{
 			After: b.truncState.Index, Last: truncatedState.Index,
 		}); err != nil {
@@ -552,6 +550,9 @@ func (b *replicaAppBatch) stageTruncation(
 			// our numbers.
 			// TODO(sumeer): this code will be deleted when there is no
 			// !looselyCoupledTruncation code path.
+			// TODO(pav-kv): this code should be deleted since it covers only a subset
+			// of cases, and is not correct. We only should distrust the size delta if
+			// RaftExpectedFirstIndex is unknown or doesn't match our first index.
 			b.r.mu.Lock()
 			b.r.shMu.raftLogSizeTrusted = false
 			b.r.mu.Unlock()
