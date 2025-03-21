@@ -195,7 +195,7 @@ func newChangeAggregatorProcessor(
 		}
 	}()
 
-	memMonitor := execinfra.NewMonitorWithStringName(ctx, flowCtx.Mon, "changeagg-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
 	ca := &changeAggregator{
 		spec:              spec,
 		memAcc:            memMonitor.MakeBoundAccount(),
@@ -1193,7 +1193,7 @@ func newChangeFrontierProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	memMonitor := execinfra.NewMonitorWithStringName(ctx, flowCtx.Mon, "changefntr-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changefntr-mem"))
 
 	cf := &changeFrontier{
 		// We might modify the ChangefeedState field in the eval.Context, so we

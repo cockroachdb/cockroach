@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -119,7 +120,8 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	defer span.Finish()
 	// This method blocks until all worker goroutines exit, so it's safe to
 	// close memory monitoring infra in defers.
-	mergerMon := execinfra.NewMonitorWithStringName(ctx, ibm.flowCtx.Cfg.BackfillerMonitor, "index-backfiller-merger-mon")
+	mergerMon := execinfra.NewMonitor(ctx, ibm.flowCtx.Cfg.BackfillerMonitor,
+		mon.MakeName("index-backfiller-merger-mon"))
 	defer mergerMon.Stop(ctx)
 	ibm.muBoundAccount.boundAccount = mergerMon.MakeBoundAccount()
 	defer func() {
