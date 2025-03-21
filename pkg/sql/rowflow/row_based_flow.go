@@ -461,17 +461,12 @@ func (f *rowBasedFlow) setupRouter(
 	unlimitedMemMonitors := make([]*mon.BytesMonitor, len(spec.Streams))
 	diskMonitors := make([]*mon.BytesMonitor, len(spec.Streams))
 	for i := range spec.Streams {
-		memoryMonitors[i] = execinfra.NewLimitedMonitor(
-			ctx, f.Mon, &f.FlowCtx,
-			mon.MakeName("router-limited-"+redact.SafeString(spec.Streams[i].StreamID.String())),
-		)
-		unlimitedMemMonitors[i] = execinfra.NewMonitorWithStringName(
-			ctx, f.Mon, "router-unlimited-"+redact.SafeString(spec.Streams[i].StreamID.String()),
-		)
-		diskMonitors[i] = execinfra.NewMonitorWithStringName(
-			ctx, f.DiskMonitor,
-			"router-disk-"+redact.SafeString(spec.Streams[i].StreamID.String()),
-		)
+		// TODO(mgartner): Is a StreamID ever greater than math.MaxInt32? If
+		// not, we can use (*mon.Name).WithID() instead of allocating a string.
+		mn := mon.MakeName("router" + redact.SafeString(spec.Streams[i].StreamID.String()))
+		memoryMonitors[i] = execinfra.NewLimitedMonitor(ctx, f.Mon, &f.FlowCtx, mn.Limited())
+		unlimitedMemMonitors[i] = execinfra.NewMonitor(ctx, f.Mon, mn.Unlimited())
+		diskMonitors[i] = execinfra.NewMonitor(ctx, f.DiskMonitor, mn.Disk())
 	}
 	f.monitors = append(f.monitors, memoryMonitors...)
 	f.monitors = append(f.monitors, unlimitedMemMonitors...)

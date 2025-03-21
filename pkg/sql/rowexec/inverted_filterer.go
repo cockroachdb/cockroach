@@ -111,12 +111,10 @@ func newInvertedFilterer(
 	}
 
 	// Initialize memory monitor and row container for input rows.
-	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx,
-		mon.MakeName("inverted-filterer").Limited())
-	ifr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
-		mon.MakeName("inverted-filterer").Unlimited())
-	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
-		mon.MakeName("inverted-filterer").Disk())
+	mn := mon.MakeName("inverted-filterer")
+	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, mn.Limited())
+	ifr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
+	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
 	ifr.rc = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
 		rcColTypes,

@@ -969,16 +969,6 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name mon.Name) *m
 	return monitor
 }
 
-// NewMonitorWithStringName is the same as NewMonitor but accepts a string name.
-// Deprecated: NewMonitor should be used instead.
-func NewMonitorWithStringName(
-	ctx context.Context, parent *mon.BytesMonitor, name redact.SafeString,
-) *mon.BytesMonitor {
-	monitor := mon.NewMonitorInheritWithLimitAndStringName(name, 0 /* limit */, parent, false /* longLiving */)
-	monitor.StartNoReserved(ctx, parent)
-	return monitor
-}
-
 // NewLimitedMonitor is a utility function used by processors to create a new
 // limited memory monitor with the given name and start it. The returned monitor
 // must be closed. The limit is determined by SessionData.WorkMemLimit (stored

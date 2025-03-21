@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -59,8 +60,8 @@ func newColumnBackfiller(
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 ) (*columnBackfiller, error) {
-	columnBackfillerMon := execinfra.NewMonitorWithStringName(
-		ctx, flowCtx.Cfg.BackfillerMonitor, "column-backfill-mon",
+	columnBackfillerMon := execinfra.NewMonitor(
+		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("column-backfill-mon"),
 	)
 	cb := &columnBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
