@@ -36,6 +36,10 @@ func (ts *testStore) AllowMultipleTrees() bool {
 	return true
 }
 
+func (ts *testStore) SupportsTry() bool {
+	return true
+}
+
 func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
 	return ToTreeKey(TreeID(treeID))
 }
@@ -55,12 +59,13 @@ func TestMemStore(t *testing.T) {
 	ctx := context.Background()
 
 	makeStore := func(quantizer quantize.Quantizer) commontest.TestStore {
-		return &testStore{Store: New(2, 42)}
+		return &testStore{Store: New(quantizer, 42)}
 	}
 
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 
-	store := New(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 	testPKs := []cspann.KeyBytes{{11}, {12}}
 	testVectors := []vector.T{{100, 200}, {300, 400}}
@@ -119,7 +124,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	valueBytes2 := cspann.ValueBytes{3, 4}
 
 	// Insert root partition into new store.
-	store := New(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
 	var wait sync.WaitGroup
@@ -174,8 +180,8 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 
 	ctx := context.Background()
 	var workspace workspace.T
-	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
 	txn := commontest.BeginTransaction(ctx, t, store)
@@ -274,7 +280,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42)
 	unquantizer := quantize.NewUnQuantizer(2)
-	store := New(2, 42)
+	store := New(raBitQuantizer, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
 	centroid := []float32{4, 3}
 
@@ -414,6 +420,29 @@ func TestInMemoryLock(t *testing.T) {
 		var acquired atomic.Bool
 		go func() {
 			l.AcquireShared(2)
+			acquired.Store(true)
+			l.ReleaseShared()
+		}()
+
+		runtime.Gosched()
+		require.False(t, acquired.Load())
+
+		l.Release()
+	})
+
+	t.Run("uniqueOwner does not support reentrancy", func(t *testing.T) {
+		var l memLock
+		l.Acquire(uniqueOwner)
+		require.False(t, l.IsAcquiredBy(uniqueOwner))
+
+		var acquired atomic.Bool
+		go func() {
+			l.Acquire(uniqueOwner)
+			acquired.Store(true)
+			l.Release()
+		}()
+		go func() {
+			l.AcquireShared(uniqueOwner)
 			acquired.Store(true)
 			l.ReleaseShared()
 		}()

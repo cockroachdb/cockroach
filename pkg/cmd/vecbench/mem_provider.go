@@ -233,13 +233,14 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 	if m.index != nil {
 		return nil
 	}
+
+	quantizer := quantize.NewRaBitQuantizer(m.dims, seed)
 	if m.store == nil {
 		// Construct empty store if one doesn't yet exist.
-		m.store = memstore.New(m.dims, seed)
+		m.store = memstore.New(quantizer, seed)
 	}
 
 	var err error
-	quantizer := quantize.NewRaBitQuantizer(m.dims, seed)
 	m.index, err = cspann.NewIndex(ctx, m.store, quantizer, seed, &m.options, m.stopper)
 	return err
 }
