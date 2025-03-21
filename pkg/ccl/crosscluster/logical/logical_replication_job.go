@@ -422,6 +422,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress.ReplicatedTime,
 		progress.Checkpoint,
 		tableMetadataByDestID,
+		plan.SourceTypes,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
 		payload.Discard,
