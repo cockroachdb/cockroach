@@ -3051,13 +3051,12 @@ func (r *Replica) acquireMergeLock(
 // snapshot.
 func handleTruncatedStateBelowRaftPreApply(
 	ctx context.Context,
-	currentTruncatedState kvserverpb.RaftTruncatedState,
-	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	prev kvserverpb.RaftTruncatedState,
+	next kvserverpb.RaftTruncatedState,
 	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
-) (_apply bool, _ error) {
-	return logstore.Compact(ctx, currentTruncatedState, suggestedTruncatedState,
-		loader, readWriter)
+) error {
+	return logstore.Compact(ctx, prev, next, loader, readWriter)
 }
 
 // shouldCampaignAfterConfChange returns true if the current replica should

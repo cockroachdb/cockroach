@@ -275,6 +275,9 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
+//      - match(<regexp>): returned rows with string representations that do not
+//            satisfy the given regexp are excluded from the test output. This
+//            is useful for condensing the output of EXPLAIN ANALYZE queries.
 //      - nosort: sorts neither the returned or expected rows. Skips the
 //            flakiness check that forces either rowsort, valuesort,
 //            partialsort, or an ORDER BY clause to be present.
@@ -895,6 +898,9 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// match filters result rows such that only rows that have at least one
+	// column matching the regexp are included.
+	match *regexp.Regexp
 	// noSort is true if the nosort option was explicitly provided in the test.
 	noSort bool
 	// empty indicates whether the result is expected to be empty (i.e. 0 rows
@@ -2842,6 +2848,18 @@ func (t *logicTest) processSubtest(
 							continue
 						}
 
+						if strings.HasPrefix(opt, "match(") && strings.HasSuffix(opt, ")") {
+							s := opt
+							s = strings.TrimPrefix(s, "match(")
+							s = strings.TrimSuffix(s, ")")
+							var err error
+							query.match, err = regexp.Compile(s)
+							if err != nil {
+								return errors.Errorf("%s: invalid match regexp: %s", query.pos, opt)
+							}
+							continue
+						}
+
 						switch opt {
 						case "nosort":
 							query.sorter = nil
@@ -3714,6 +3732,22 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				if err := rows.Scan(vals...); err != nil {
 					return err
 				}
+
+				if query.match != nil {
+					// Exclude rows that don't match the regexp.
+					match := false
+					for _, v := range vals {
+						val := *v.(*interface{})
+						if val != nil && query.match.MatchString(fmt.Sprint(val)) {
+							match = true
+							break
+						}
+					}
+					if !match {
+						continue
+					}
+				}
+
 				rowCount++
 				for i, v := range vals {
 					colT := query.colTypes[i]

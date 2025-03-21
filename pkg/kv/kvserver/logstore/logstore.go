@@ -513,68 +513,65 @@ func logAppend(
 	}, nil
 }
 
-// Compact constructs a write that compacts the raft log from
-// currentTruncatedState up to suggestedTruncatedState. Returns (true, nil) iff
-// the compaction can proceed, and the write has been constructed.
+// Compact prepares a write that removes entries (prev.Index, next.Index] from
+// the raft log, and updates the truncated state to the next one. Does nothing
+// if the interval is empty.
 //
 // TODO(#136109): make this a method of a write-through LogStore data structure,
 // which is aware of the current log state.
 func Compact(
 	ctx context.Context,
-	currentTruncatedState kvserverpb.RaftTruncatedState,
-	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	prev kvserverpb.RaftTruncatedState,
+	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	readWriter storage.ReadWriter,
-) (apply bool, _ error) {
-	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
-		// The suggested truncated state moves us backwards; instruct the caller to
-		// not update the in-memory state.
-		return false, nil
+) error {
+	if next.Index <= prev.Index {
+		// TODO(pav-kv): return an assertion failure error.
+		return nil
 	}
-
 	// Truncate the Raft log from the entry after the previous truncation index to
-	// the new truncation index. This is performed atomically with the raft
-	// command application so that the TruncatedState index is always consistent
-	// with the state of the Raft log itself.
+	// the new truncation index. This is performed atomically with updating the
+	// RaftTruncatedState so that the state of the log is consistent.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := suggestedTruncatedState.Index - currentTruncatedState.Index
+	numTruncatedEntries := next.Index - prev.Index
 	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
+		start := prefixBuf.RaftLogKey(prev.Index + 1).Clone()
+		end := prefixBuf.RaftLogKey(next.Index + 1).Clone() // end is exclusive
 		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
-			return false, errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
-				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
+			return errors.Wrapf(err,
+				"unable to clear truncated Raft entries for %+v after index %d",
+				next, prev.Index)
 		}
 	} else {
 		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to avoid
 		// allocating when constructing Raft log keys (16 bytes).
 		prefix := prefixBuf.RaftLogPrefix()
-		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
+		for idx := prev.Index + 1; idx <= next.Index; idx++ {
 			if err := readWriter.ClearUnversioned(
 				keys.RaftLogKeyFromPrefix(prefix, idx),
 				storage.ClearOptions{},
 			); err != nil {
-				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					suggestedTruncatedState, idx)
+				return errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
+					next, idx)
 			}
 		}
 	}
 
-	// The suggested truncated state moves us forward; apply it and tell the
-	// caller as much.
-	if err := storage.MVCCPutProto(
-		ctx,
-		readWriter,
-		prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{},
-		suggestedTruncatedState,
+	key := prefixBuf.RaftTruncatedStateKey()
+	var value roachpb.Value
+	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+
+	if _, err := storage.MVCCPut(
+		ctx, readWriter, key, hlc.Timestamp{}, value,
 		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
 	); err != nil {
-		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
+		return errors.Wrap(err, "unable to write RaftTruncatedState")
 	}
-
-	return true, nil
+	return nil
 }
 
 // ComputeSize computes the size (in bytes) of the raft log from the storage

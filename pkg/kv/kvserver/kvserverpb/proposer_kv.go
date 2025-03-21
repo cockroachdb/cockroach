@@ -107,3 +107,14 @@ func (r *ReplicatedEvalResult) GetRaftTruncatedState() *RaftTruncatedState {
 	}
 	return r.State.TruncatedState
 }
+
+// DiscardRaftTruncation discards the RaftTruncatedState and the associated
+// metadata from this ReplicatedEvalResult.
+func (r *ReplicatedEvalResult) DiscardRaftTruncation() {
+	if r.State != nil {
+		r.State.TruncatedState = nil
+	}
+	r.RaftTruncatedState = nil
+	r.RaftLogDelta = 0
+	r.RaftExpectedFirstIndex = 0
+}

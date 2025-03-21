@@ -517,6 +517,15 @@ func (v *Value) SetBytes(b []byte) {
 	v.setTag(ValueType_BYTES)
 }
 
+// AllocBytes allocates space for a BYTES value of the given size and clears the
+// checksum. The caller must populate the returned slice with exactly the same
+// number of bytes.
+func (v *Value) AllocBytes(size int) []byte {
+	v.ensureRawBytes(headerSize + size)
+	v.setTag(ValueType_BYTES)
+	return v.RawBytes[headerSize:]
+}
+
 // SetTagAndData copies the bytes and tag field to the receiver and clears the
 // checksum. As opposed to SetBytes, b is assumed to contain the tag too, not
 // just the data.

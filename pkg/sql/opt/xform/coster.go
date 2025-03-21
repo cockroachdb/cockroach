@@ -890,9 +890,12 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	extraCost := c.distributionCost(regionsAccessed)
 	cost.Add(extraCost)
 
-	// Apply a penalty for a full scan if needed.
-	if scan.Flags.AvoidFullScan && isFullScan {
-		cost.Flags.FullScanPenalty = true
+	if isFullScan {
+		cost.IncrFullScanCount()
+		if scan.Flags.AvoidFullScan {
+			// Apply a penalty for a full scan if needed.
+			cost.Flags.FullScanPenalty = true
+		}
 	}
 
 	return cost
