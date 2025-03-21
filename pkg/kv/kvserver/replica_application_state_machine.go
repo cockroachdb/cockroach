@@ -139,6 +139,9 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
+	// TODO(pav-kv): replicaAppBatch initialization below is bug-prone, we need to
+	// not forget resetting the fields that are local to one batch. Find a way to
+	// make it safer.
 	b.r = r
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
@@ -148,6 +151,9 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
+	b.changeRemovesReplica = false
+	b.changeTruncatesSideloadedFiles = false
+	// TODO(pav-kv): what about b.ab and b.followerStoreWriteBytes?
 	b.start = timeutil.Now()
 	return b
 }
