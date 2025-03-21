@@ -319,11 +319,11 @@ func newInvertedJoiner(
 
 	// Initialize memory monitors and row container for index rows.
 	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx,
-		mon.MakeMonitorName("invertedjoiner").Limited())
+		mon.MakeName("invertedjoiner").Limited())
 	ij.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
-		mon.MakeMonitorName("invertedjoiner").Unlimited())
+		mon.MakeName("invertedjoiner").Unlimited())
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
-		mon.MakeMonitorName("invertedjoiner").Disk())
+		mon.MakeName("invertedjoiner").Disk())
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
 		rightColTypes,

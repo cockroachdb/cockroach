@@ -92,7 +92,7 @@ func newTimeSeriesMaintenanceQueue(
 		replicaCountFn: store.ReplicaCount,
 		db:             db,
 		mem: mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-			Name:     mon.MakeMonitorName("timeseries-maintenance-queue"),
+			Name:     mon.MakeName("timeseries-maintenance-queue"),
 			Settings: store.cfg.Settings,
 		}),
 	}

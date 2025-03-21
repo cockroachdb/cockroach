@@ -45,9 +45,9 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 // monitor name.
 func (r *MonitorRegistry) getMemMonitorNameLocked(
 	opName redact.SafeString, processorID int32,
-) mon.MonitorName {
+) mon.Name {
 	r.mu.AssertHeld()
-	return mon.MakeMonitorName(opName).WithID(processorID).WithInt(uint16(len(r.monitors)))
+	return mon.MakeName(opName).WithID(processorID).WithInt(uint16(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -57,7 +57,7 @@ func (r *MonitorRegistry) getMemMonitorNameLocked(
 // objects. Memory monitor name is also returned.
 func (r *MonitorRegistry) CreateMemAccountForSpillStrategy(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
-) (*mon.BoundAccount, mon.MonitorName) {
+) (*mon.BoundAccount, mon.Name) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	monitorName := r.getMemMonitorNameLocked(opName, processorID).Limited()
@@ -80,7 +80,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 	limit int64,
 	opName redact.SafeString,
 	processorID int32,
-) (*mon.BoundAccount, mon.MonitorName) {
+) (*mon.BoundAccount, mon.Name) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
@@ -103,9 +103,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 // account that is bound to the memory monitor specified by the monitorName. It
 // is expected that such a monitor with a such name was already created by the
 // MonitorRegistry. If no such monitor is found, then nil is returned.
-func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
-	name mon.MonitorName,
-) *mon.BoundAccount {
+func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(name mon.Name) *mon.BoundAccount {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Iterate backwards since most likely that we want to create an account
@@ -153,7 +151,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccount(
 // CreateUnlimitedMemAccountsWithName is similar to CreateUnlimitedMemAccounts
 // with the only difference that the monitor name is provided by the caller.
 func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.Name, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -161,7 +159,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
 }
 
 func (r *MonitorRegistry) createUnlimitedMemAccountsLocked(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.Name, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.AssertHeld()
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
@@ -214,7 +212,7 @@ func (r *MonitorRegistry) CreateDiskAccount(
 // CreateDiskAccounts instantiates an unlimited disk monitor and disk accounts
 // to be used for disk spilling infrastructure in vectorized engine.
 func (r *MonitorRegistry) CreateDiskAccounts(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.MonitorName, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name mon.Name, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -236,7 +234,7 @@ func (r *MonitorRegistry) AssertInvariants() {
 	// Check that all memory monitor names are unique (colexec.diskSpillerBase
 	// relies on this in order to catch "memory budget exceeded" errors only
 	// from "its own" component).
-	names := make(map[mon.MonitorName]struct{}, len(r.monitors))
+	names := make(map[mon.Name]struct{}, len(r.monitors))
 	for _, m := range r.monitors {
 		if _, seen := names[m.Name()]; seen {
 			colexecerror.InternalError(errors.AssertionFailedf("monitor named %q encountered twice", m.Name()))

@@ -247,7 +247,7 @@ type BytesMonitor struct {
 	}
 
 	// name identifies this monitor in logging messages.
-	name MonitorName
+	name Name
 
 	// reserved indicates how many bytes were already reserved for this
 	// monitor before it was instantiated. Allocations registered to
@@ -278,7 +278,7 @@ type BytesMonitor struct {
 	settings *cluster.Settings
 }
 
-// MonitorName is used to identify monitors in logging messages. It consists of:
+// Name is used to identify monitors in logging messages. It consists of:
 //
 //   - a string prefix
 //   - an optional int32 id or uuid.Short
@@ -286,98 +286,98 @@ type BytesMonitor struct {
 //   - an optional uint16
 //
 // When printed, the fields are separated by "-", if present.
-type MonitorName struct {
+type Name struct {
 	prefix redact.SafeString
 	// id contains either an int32 or a uuid.Short, depending on the value of
 	// the uuid boolean.
 	id     int32
 	uuid   bool
-	suffix monitorNameSuffix
+	suffix nameSuffix
 	i      uint16
 }
 
-// monitorNameSuffix is an enum the represents one of a finite list of possible
+// nameSuffix is an enum the represents one of a finite list of possible
 // monitor name suffixes.
-type monitorNameSuffix uint8
+type nameSuffix uint8
 
 const (
-	monitorNameSuffixNone monitorNameSuffix = iota
-	monitorNameSuffixLimited
-	monitorNameSuffixUnlimited
-	monitorNameSuffixDisk
+	nameSuffixNone nameSuffix = iota
+	nameSuffixLimited
+	nameSuffixUnlimited
+	nameSuffixDisk
 )
 
-func (mns monitorNameSuffix) safeString() redact.SafeString {
+func (mns nameSuffix) safeString() redact.SafeString {
 	switch mns {
-	case monitorNameSuffixLimited:
+	case nameSuffixLimited:
 		return "limited"
-	case monitorNameSuffixUnlimited:
+	case nameSuffixUnlimited:
 		return "unlimited"
-	case monitorNameSuffixDisk:
+	case nameSuffixDisk:
 		return "disk"
 	default:
 		return "unknown-suffix"
 	}
 }
 
-// MakeMonitorName constructs a MonitorName with the given prefix.
-func MakeMonitorName(prefix redact.SafeString) MonitorName {
-	return MonitorName{prefix: prefix}
+// MakeName constructs a Name with the given prefix.
+func MakeName(prefix redact.SafeString) Name {
+	return Name{prefix: prefix}
 }
 
-// WithID returns a new MonitorName with the given ID attached. A previously set
+// WithID returns a new Name with the given ID attached. A previously set
 // UUID is cleared.
-func (mn MonitorName) WithID(id int32) MonitorName {
+func (mn Name) WithID(id int32) Name {
 	mn.id = id
 	mn.uuid = false
 	return mn
 }
 
-// WithUUID returns a new MonitorName with the given uuid.Short attached.
+// WithUUID returns a new Name with the given uuid.Short attached.
 // A previously set ID is cleared.
-func (mn MonitorName) WithUUID(uuid uuid.Short) MonitorName {
+func (mn Name) WithUUID(uuid uuid.Short) Name {
 	mn.id = uuid.ToInt32()
 	mn.uuid = true
 	return mn
 }
 
 // Limited sets the suffix to "limited".
-func (mn MonitorName) Limited() MonitorName {
-	mn.suffix = monitorNameSuffixLimited
+func (mn Name) Limited() Name {
+	mn.suffix = nameSuffixLimited
 	return mn
 }
 
 // Unlimited sets the suffix to "unlimited".
-func (mn MonitorName) Unlimited() MonitorName {
-	mn.suffix = monitorNameSuffixUnlimited
+func (mn Name) Unlimited() Name {
+	mn.suffix = nameSuffixUnlimited
 	return mn
 }
 
 // Disk sets the suffix to "disk".
-func (mn MonitorName) Disk() MonitorName {
-	mn.suffix = monitorNameSuffixDisk
+func (mn Name) Disk() Name {
+	mn.suffix = nameSuffixDisk
 	return mn
 }
 
-// WithSuffix returns a new MonitorName with the given suffix attached.
-func (mn MonitorName) WithSuffix(suffix monitorNameSuffix) MonitorName {
+// WithSuffix returns a new Name with the given suffix attached.
+func (mn Name) WithSuffix(suffix nameSuffix) Name {
 	mn.suffix = suffix
 	return mn
 }
 
-// WithInt returns a new MonitorName with the given integer attached.
-func (mn MonitorName) WithInt(i uint16) MonitorName {
+// WithInt returns a new Name with the given integer attached.
+func (mn Name) WithInt(i uint16) Name {
 	mn.i = i
 	return mn
 }
 
 // String returns the monitor prefix as a string.
-func (mn MonitorName) String() string {
+func (mn Name) String() string {
 	return redact.StringWithoutMarkers(mn)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
+func (mn Name) SafeFormat(w redact.SafePrinter, r rune) {
 	w.SafeString(mn.prefix)
 	if mn.id != 0 {
 		w.SafeString("-")
@@ -389,7 +389,7 @@ func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
 			w.SafeString(redact.SafeString(strconv.Itoa(int(mn.id))))
 		}
 	}
-	if mn.suffix != monitorNameSuffixNone {
+	if mn.suffix != nameSuffixNone {
 		w.SafeString("-")
 		w.SafeString(mn.suffix.safeString())
 	}
@@ -428,7 +428,7 @@ type MonitorState struct {
 	// root.
 	Level int
 	// Name is the name of the monitor.
-	Name MonitorName
+	Name Name
 	// ID is the "id" of the monitor (its address converted to int64).
 	ID int64
 	// ParentID is the "id" of the parent monitor (parent's address converted to
@@ -528,7 +528,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 type Options struct {
 	// Name is used to annotate log messages, can be used to distinguish
 	// monitors.
-	Name MonitorName
+	Name Name
 	// Res specifies what kind of resource the monitor is tracking allocations
 	// for (e.g. memory or disk). If unset, MemoryResource is assumed.
 	Res   Resource
@@ -576,7 +576,7 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name MonitorName, limit int64, m *BytesMonitor, longLiving bool,
+	name Name, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {
@@ -600,7 +600,7 @@ func NewMonitorInheritWithLimit(
 func NewMonitorInheritWithLimitAndStringName(
 	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
-	return NewMonitorInheritWithLimit(MakeMonitorName(name), limit, m, longLiving)
+	return NewMonitorInheritWithLimit(MakeName(name), limit, m, longLiving)
 }
 
 func (mm *BytesMonitor) MarkAsRootSQLMonitor() {
@@ -712,7 +712,7 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 }
 
 // Name returns the prefix of the monitor.
-func (mm *BytesMonitor) Name() MonitorName {
+func (mm *BytesMonitor) Name() Name {
 	return mm.name
 }
 

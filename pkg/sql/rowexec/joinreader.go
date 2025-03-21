@@ -727,15 +727,15 @@ func (jr *joinReader) initJoinReaderStrategy(
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
 	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx,
-		mon.MakeMonitorName("joinreader").Limited())
+		mon.MakeName("joinreader").Limited())
 	// We want to make sure that if the disk-backed container is spilled to
 	// disk, it releases all of the memory reservations, so we make the
 	// corresponding memory monitor not hold on to any bytes.
 	jr.limitedMemMonitor.RelinquishAllOnReleaseBytes()
 	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
-		mon.MakeMonitorName("joinreader").Unlimited())
+		mon.MakeName("joinreader").Unlimited())
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
-		mon.MakeMonitorName("joinreader").Disk())
+		mon.MakeName("joinreader").Disk())
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,

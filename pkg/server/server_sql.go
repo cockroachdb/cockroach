@@ -440,7 +440,7 @@ var vmoduleSetting = settings.RegisterStringSetting(
 func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	rootSQLMetrics := sql.MakeBaseMemMetrics("root", opts.histogramWindowInterval)
 	rootSQLMemoryMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("root"),
+		Name:     mon.MakeName("root"),
 		CurCount: rootSQLMetrics.CurBytesCount,
 		MaxHist:  rootSQLMetrics.MaxBytesHist,
 		Settings: opts.settings,
@@ -1187,7 +1187,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// returning the memory allocated to internalDBMonitor since the
 	// parent monitor is being closed anyway.
 	internalDBMonitor := mon.NewMonitor(mon.Options{
-		Name:       mon.MakeMonitorName("internal sql executor"),
+		Name:       mon.MakeName("internal sql executor"),
 		CurCount:   internalMemMetrics.CurBytesCount,
 		MaxHist:    internalMemMetrics.MaxBytesHist,
 		Settings:   cfg.Settings,
