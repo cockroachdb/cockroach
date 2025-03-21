@@ -70,8 +70,8 @@ type ClosedSessionCache struct {
 func NewClosedSessionCache(
 	st *cluster.Settings, parentMon *mon.BytesMonitor, timeSrc timeSource,
 ) *ClosedSessionCache {
-	monitor := mon.NewMonitorInheritWithLimitAndStringName(
-		"closed-session-cache", 0 /* limit */, parentMon, true, /* longLiving */
+	monitor := mon.NewMonitorInheritWithLimit(
+		mon.MakeName("closed-session-cache"), 0 /* limit */, parentMon, true, /* longLiving */
 	)
 
 	c := &ClosedSessionCache{st: st, timeSrc: timeSrc}

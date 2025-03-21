@@ -719,8 +719,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		histogramWindowInterval: cfg.HistogramWindowInterval(),
 		settings:                cfg.Settings,
 	})
-	kvMemoryMonitor := mon.NewMonitorInheritWithLimitAndStringName(
-		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor, true, /* longLiving */
+	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		mon.MakeName("kv-mem"), 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor,
+		true, /* longLiving */
 	)
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(

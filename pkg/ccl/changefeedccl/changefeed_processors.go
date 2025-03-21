@@ -444,7 +444,7 @@ func (ca *changeAggregator) startKVFeed(
 	opts changefeedbase.StatementOptions,
 ) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.FlowCtx.Cfg
-	kvFeedMemMon := mon.NewMonitorInheritWithLimitAndStringName("kvFeed", memLimit, parentMemMon, false /* longLiving */)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit(mon.MakeName("kvFeed"), memLimit, parentMemMon, false /* longLiving */)
 	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics.AggregatorBufferMetricsWithCompat),
