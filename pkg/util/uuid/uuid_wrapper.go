@@ -39,6 +39,16 @@ func (s Short) String() string {
 	return string(b[:])
 }
 
+// ToInt32 returns an int32 representation of the abbreviated UUID.
+func (s Short) ToInt32() int32 {
+	return int32(binary.BigEndian.Uint32(s.b[:]))
+}
+
+// FromInt32 sets the abbreviated UUID from an int32.
+func (s *Short) FromInt32(i int32) {
+	binary.BigEndian.PutUint32(s.b[:], uint32(i))
+}
+
 // Short returns an abbreviated version of the UUID containing the first four
 // bytes.
 func (u UUID) Short() Short {
