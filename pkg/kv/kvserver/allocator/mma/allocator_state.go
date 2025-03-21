@@ -235,7 +235,7 @@ func (a *allocatorState) rebalanceStores(
 					log.Infof(
 						ctx,
 						"shedding=n%vs%v no candidates to move lease for r%v [pre_filter_candidates=%v]",
-						localNodeID, localNodeID, ss.NodeID, ss.StoreID, rangeID, candsPL)
+						ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
 				// Have underloaded candidates.
