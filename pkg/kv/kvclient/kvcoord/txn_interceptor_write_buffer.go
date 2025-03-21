@@ -345,10 +345,21 @@ func (twb *txnWriteBuffer) applyTransformations(
 		req := ru.GetInner()
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
+			var resp kvpb.ResponseUnion
+			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			if served {
+				// TODO(ssd): If we tracked locked information here, we could avoid the
+				// locking Get below.
+				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
+				resp.MustSetInner(&kvpb.GetResponse{
+					Value: val,
+				})
+			}
 			ts = append(ts, transformation{
 				stripped:    false,
 				index:       i,
 				origRequest: req,
+				resp:        resp,
 			})
 			getReq := &kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
@@ -809,7 +820,16 @@ func (t transformation) toResp(
 		if twb.testingOverrideCPutEvalFn != nil {
 			evalFn = twb.testingOverrideCPutEvalFn
 		}
-		getResp := br.GetInner().(*kvpb.GetResponse)
+
+		var getResp *kvpb.GetResponse
+		if bufResp := t.resp.GetGet(); bufResp != nil {
+			// If we served the response out of the buffer, we don't care what came
+			// back from KV.
+			getResp = bufResp
+		} else {
+			getResp = br.GetInner().(*kvpb.GetResponse)
+		}
+
 		condFailedErr := evalFn(
 			req.ExpBytes,
 			getResp.Value,
