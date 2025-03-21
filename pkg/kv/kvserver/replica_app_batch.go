@@ -526,12 +526,7 @@ func (b *replicaAppBatch) stageTruncation(
 	if !apply || discard {
 		// The truncated state was discarded, or we are queuing a pending
 		// truncation, so make sure we don't apply it to our in-memory state.
-		if res.State != nil {
-			res.State.TruncatedState = nil
-		}
-		res.RaftTruncatedState = nil
-		res.RaftLogDelta = 0
-		res.RaftExpectedFirstIndex = 0
+		res.DiscardRaftTruncation()
 	}
 	return nil
 }
