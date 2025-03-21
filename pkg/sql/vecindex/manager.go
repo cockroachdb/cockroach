@@ -88,11 +88,14 @@ func (m *Manager) Metrics() metric.Struct {
 	return &m.metrics
 }
 
-// Get returns the vector index for the given DB table and index. If the DB
+// getImpl returns the vector index for the given DB table and index. If the DB
 // index does not currently have an active vector index, one is created and
 // cached.
-func (m *Manager) Get(
-	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
+func (m *Manager) getImpl(
+	ctx context.Context,
+	tableID catid.DescID,
+	indexID catid.IndexID,
+	makeIndex func() (*cspann.Index, error),
 ) (*cspann.Index, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -129,22 +132,8 @@ func (m *Manager) Get(
 		if m.testingKnobs != nil && m.testingKnobs.DuringVecIndexPull != nil {
 			m.testingKnobs.DuringVecIndexPull()
 		}
-		config, err := m.getVecConfig(ctx, tableID, indexID)
-		if err != nil {
-			return nil, err
-		}
-		// TODO(drewk): use the config to populate the index options as well.
-		quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
-		store, err := vecstore.New(ctx, m.db, quantizer, m.codec, tableID, indexID)
-		if err != nil {
-			return nil, err
-		}
-		// Use the stored context so that the vector index can outlive the context
-		// of the Get call. The fixup process gets a child context from the context
-		// passed to cspann.NewIndex, and we don't want that to be the context of
-		// the Get call.
-		idx, err := cspann.NewIndex(
-			m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+
+		idx, err := makeIndex()
 		if err != nil {
 			return nil, err
 		}
@@ -166,6 +155,59 @@ func (m *Manager) Get(
 		m.mu.indexes[idxKey] = nil
 	}
 	return idx, err
+}
+
+// GetWithDesc returns a cached cspann vector index for a given table and index
+// using the provided table descriptor and index.
+func (m *Manager) GetWithDesc(
+	ctx context.Context, desc catalog.TableDescriptor, index catalog.Index,
+) (*cspann.Index, error) {
+	return m.getImpl(
+		ctx,
+		desc.GetID(),
+		index.GetID(),
+		func() (*cspann.Index, error) {
+			// TODO(drewk): use the config to populate the index options as well.
+			config := index.GetVecConfig()
+			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
+			store, err := vecstore.NewWithColumnID(m.db, quantizer, m.codec, desc, index.GetID(), index.VectorColumnID())
+			if err != nil {
+				return nil, err
+			}
+
+			return cspann.NewIndex(m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		},
+	)
+}
+
+// Get returns a cached cspann vector index for a given table and index using the
+// descriptor IDs for both.
+func (m *Manager) Get(
+	ctx context.Context, tableID catid.DescID, indexID catid.IndexID,
+) (*cspann.Index, error) {
+	return m.getImpl(
+		ctx,
+		tableID,
+		indexID,
+		func() (*cspann.Index, error) {
+			config, err := m.getVecConfig(ctx, tableID, indexID)
+			if err != nil {
+				return nil, err
+			}
+			// TODO(drewk): use the config to populate the index options as well.
+			quantizer := quantize.NewRaBitQuantizer(int(config.Dims), config.Seed)
+			store, err := vecstore.New(ctx, m.db, quantizer, m.codec, tableID, indexID)
+			if err != nil {
+				return nil, err
+			}
+			// Use the stored context so that the vector index can outlive the context
+			// of the Get call. The fixup process gets a child context from the context
+			// passed to cspann.NewIndex, and we don't want that to be the context of
+			// the Get call.
+			return cspann.NewIndex(
+				m.ctx, store, quantizer, config.Seed, &cspann.IndexOptions{}, m.stopper)
+		},
+	)
 }
 
 func (m *Manager) getVecConfig(
