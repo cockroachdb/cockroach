@@ -7,7 +7,7 @@ gen_ranges ranges=100
 # Set the rebalance mode to use the mma store rebalancer and disable the lease
 # and replicate queues so that only the mma store rebalancer is moving replicas
 # or leases.
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
 ----
 
 gen_load rate=7000 rw_ratio=0.95 access_skew=true min_block=128 max_block=256
