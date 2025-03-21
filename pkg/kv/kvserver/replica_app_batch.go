@@ -483,20 +483,20 @@ func (b *replicaAppBatch) stageTruncation(
 	truncatedState := res.GetRaftTruncatedState() // NB: not nil
 	// Use loosely-coupled truncations if configured by the setting. Otherwise,
 	// perform a tightly-coupled truncation, i.e. apply it immediately.
-	looselyCoupledTruncation := looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
+	//
 	// We also apply immediately if RaftExpectedFirstIndex is not populated (see
 	// comment in that proto). It is possible that a replica still has a
 	// truncation sitting in the raft log that never populated this field.
 	// TODO(pav-kv): remove the zero check after any below-raft migration.
-	apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
-	// Discard tightly-coupled truncations not moving the truncated index forward.
-	discard := apply && truncatedState.Index <= b.truncState.Index
+	useLooselyCoupled := res.RaftExpectedFirstIndex != 0 &&
+		looselyCoupledTruncationEnabled.Get(&b.r.ClusterSettings().SV)
 
-	if !apply {
+	if useLooselyCoupled {
 		b.r.store.raftTruncator.addPendingTruncation(
 			ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
 			res.RaftLogDelta)
-	} else if !discard {
+		res.DiscardRaftTruncation()
+	} else if truncatedState.Index > b.truncState.Index {
 		// This truncation will apply synchronously in this batch. Stage the
 		// write into the batch, and compute metadata used after applying it.
 		if err := handleTruncatedStateBelowRaftPreApply(
@@ -522,10 +522,8 @@ func (b *replicaAppBatch) stageTruncation(
 			b.changeTruncatesSideloadedFiles = true
 			b.truncatedSideloadedSize = size
 		}
-	}
-	if !apply || discard {
-		// The truncated state was discarded, or we are queuing a pending
-		// truncation, so make sure we don't apply it to our in-memory state.
+	} else {
+		// The truncated index does not move forward. The truncation is a no-op.
 		res.DiscardRaftTruncation()
 	}
 	return nil
