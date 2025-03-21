@@ -20,6 +20,7 @@ go_library(
         "//pkg/util/container/list",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
     ],
