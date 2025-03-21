@@ -1055,6 +1055,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				col.scalar = b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
 			})
 			b.ob.constructProjectForScope(callCon.s, callScope)
+			if overload.Volatility == volatility.Volatile {
+				b.ob.addBarrier(callScope)
+			}
 
 			// Collect any target variables in OUT-parameter position. The result of
 			// the procedure will be assigned to these variables, if any.
