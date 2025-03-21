@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path"
 
@@ -65,6 +66,22 @@ func (c *CompareResult) status(metricName string) Status {
 		status = Improved
 	} else if cc.Delta*float64(entry.Better) < 0 {
 		status = Regressed
+	}
+
+	// Check if the metric has a delta cutoff threshold.
+	threshold := 0.0
+	for _, metric := range c.Benchmark.Metrics {
+		if metric.Name == metricName {
+			threshold = metric.Threshold
+			break
+		}
+	}
+	// If the threshold is set and the delta is less than the threshold, we
+	// consider the metric to have no change. This accounts for compiler induced
+	// variance, where the regression might be reproducible, but the change is
+	// unrelated to the changes in the code.
+	if math.Abs(cc.Delta) < threshold {
+		status = NoChange
 	}
 	return status
 }
