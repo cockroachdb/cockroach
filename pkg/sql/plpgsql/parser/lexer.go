@@ -373,6 +373,17 @@ func makeDoStmt(options tree.DoBlockOptions) (*plpgsqltree.DoBlock, error) {
 	return &plpgsqltree.DoBlock{Block: parsedStmt.AST}, nil
 }
 
+// ParseReturnExpr handles reading and parsing the expression for a RETURN or
+// RETURN NEXT statement, which can be nonexistent.
+func (l *lexer) ParseReturnExpr() (plpgsqltree.Expr, error) {
+	startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
+	if err != nil || startPos == endPos {
+		return nil, err
+	}
+	exprStr := l.getStr(startPos, endPos)
+	return l.ParseExpr(exprStr)
+}
+
 func (l *lexer) ReadSqlExpr(
 	terminator1 int, terminators ...int,
 ) (sqlStr string, terminatorMet int, err error) {
@@ -381,17 +392,6 @@ func (l *lexer) ReadSqlExpr(
 		true /* isExpr */, false /* allowEmpty */, terminator1, terminators...,
 	)
 	return l.getStr(startPos, endPos), terminatorMet, err
-}
-
-// ReadReturnExpr handles reading the expression for a RETURN statement, which
-// can be nonexistent.
-func (l *lexer) ReadReturnExpr() (sqlStr string, err error) {
-	var startPos, endPos int
-	startPos, endPos, _, err = l.readSQLConstruct(true /* isExpr */, true /* allowEmpty */, ';')
-	if err != nil || startPos == endPos {
-		return "", err
-	}
-	return l.getStr(startPos, endPos), err
 }
 
 func (l *lexer) ReadSqlStatement(
