@@ -167,9 +167,21 @@ type pendingTruncation struct {
 	isDeltaTrusted bool
 }
 
-func (pt *pendingTruncation) compactedIndex() kvpb.RaftIndex {
+func (pt pendingTruncation) compactedIndex() kvpb.RaftIndex {
 	// Reminder: RaftTruncatedState.Index is inclusive.
 	return pt.Index
+}
+
+// merge returns the result of merging this pendingTruncation with the one that
+// precedes it.
+func (pt pendingTruncation) merge(prev pendingTruncation) pendingTruncation {
+	res := prev
+	res.RaftTruncatedState = pt.RaftTruncatedState
+	res.logDeltaBytes += pt.logDeltaBytes
+	if !pt.isDeltaTrusted || prev.compactedIndex()+1 != pt.expectedFirstIndex {
+		res.isDeltaTrusted = false
+	}
+	return res
 }
 
 // raftLogTruncator is responsible for actually enacting truncations.
@@ -322,13 +334,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 	if mergeWithPending {
 		// Merge the existing entry into the new one.
 		// No need to acquire pendingTruncs.mu for read in this case.
-		pendingTrunc.isDeltaTrusted = pendingTrunc.isDeltaTrusted &&
-			pendingTruncs.mu.truncs[pos].isDeltaTrusted
-		if pendingTruncs.mu.truncs[pos].compactedIndex()+1 != pendingTrunc.expectedFirstIndex {
-			pendingTrunc.isDeltaTrusted = false
-		}
-		pendingTrunc.logDeltaBytes += pendingTruncs.mu.truncs[pos].logDeltaBytes
-		pendingTrunc.expectedFirstIndex = pendingTruncs.mu.truncs[pos].expectedFirstIndex
+		pendingTrunc = pendingTrunc.merge(pendingTruncs.mu.truncs[pos])
 	}
 	pendingTruncs.mu.Lock()
 	// Install the new pending truncation.
