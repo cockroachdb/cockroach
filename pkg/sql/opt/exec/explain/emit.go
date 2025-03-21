@@ -735,12 +735,8 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case limitOp:
 		a := n.args.(*limitArgs)
-		if a.Limit != nil {
-			ob.Expr("count", a.Limit, nil /* columns */)
-		}
-		if a.Offset != nil {
-			ob.Expr("offset", a.Offset, nil /* columns */)
-		}
+		ob.Expr("count", a.Limit, nil /* columns */)
+		ob.Expr("offset", a.Offset, nil /* columns */)
 
 	case sortOp:
 		a := n.args.(*sortArgs)
@@ -843,9 +839,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
-		if a.OnCond != nil {
-			ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
-		}
+		ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
 
 	case lookupJoinOp:
 		a := n.args.(*lookupJoinArgs)
