@@ -25,17 +25,18 @@ func (t *topKReplicas) startInit() {
 }
 
 func (t *topKReplicas) addReplica(rangeID roachpb.RangeID, loadValue LoadValue) {
+	rl := replicaLoad{
+		RangeID: rangeID,
+		load:    loadValue,
+	}
 	if t.replicaHeap.Len() >= t.k {
-		if loadValue > t.replicaHeap[0].load {
+		if less(t.replicaHeap[0], rl) {
 			heap.Pop(&t.replicaHeap)
 		} else {
 			return
 		}
 	}
-	heap.Push(&t.replicaHeap, replicaLoad{
-		RangeID: rangeID,
-		load:    loadValue,
-	})
+	heap.Push(&t.replicaHeap, rl)
 }
 
 func (t *topKReplicas) doneInit() {
@@ -72,7 +73,14 @@ func (h *replicaHeap) Len() int {
 }
 
 func (h *replicaHeap) Less(i, j int) bool {
-	return (*h)[i].load < (*h)[j].load
+	return less((*h)[i], (*h)[j])
+}
+
+func less(a, b replicaLoad) bool {
+	if a.load == b.load {
+		return a.RangeID < b.RangeID
+	}
+	return a.load < b.load
 }
 
 func (h *replicaHeap) Swap(i, j int) {
