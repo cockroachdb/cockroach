@@ -17,6 +17,7 @@ go_library(
         "purgatory.go",
         "range_stats.go",
         "replication_statements.go",
+        "sql_crud_writer.go",
         "sql_row_reader.go",
         "sql_row_writer.go",
         "table_batch_handler.go",

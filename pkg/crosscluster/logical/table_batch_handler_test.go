@@ -83,7 +83,7 @@ func newTestTableHandler(
 	t *testing.T, descID descpb.ID, s serverutils.ApplicationLayerInterface,
 ) *tableHandler {
 	sd := sql.NewInternalSessionData(context.Background(), s.ClusterSettings(), "" /* opName */)
-	handler, err := newTableHandler(descID, s.InternalDB().(descs.DB), s.Codec(), sd, s.LeaseManager().(*lease.Manager), s.ClusterSettings())
+	handler, err := newTableHandler(context.Background(), descID, s.InternalDB().(descs.DB), s.Codec(), sd, 1337, s.LeaseManager().(*lease.Manager), s.ClusterSettings())
 	require.NoError(t, err)
 	return handler
 }
