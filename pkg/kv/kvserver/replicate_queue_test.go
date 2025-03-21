@@ -2126,17 +2126,17 @@ func iterateOverAllStores(
 //
 // ZONE survival configuration:
 // Region 1: 3 of [n1 (voter) n2 (voter) n3 (voter)]
-// Region 2: 1 of [n4 (non-voter) n5 (non-voter)]
-// Region 3: 1 of [n6 (non-voter) n7 (non-voter)]
+// Region 2: 1 of [n4 or n5 (non-voter)]
+// Region 3: 1 of [n6 or n7 (non-voter)]
 // to REGION survival configuration:
-// Region 1: 2 of [n1 (voter) n2 (voter) n3 (voter)]
-// Region 2: 2 of [n4 (voter) n5 (voter)]
-// Region 3: 1 of [n6 (voter) n7 (voter)]
+// Region 1: 2 of [two of n1-n3 (voter)]
+// Region 2: 2 of [n4 (voter) and n5 (voter)]
+// Region 3: 1 of [n6 or n7 (voter)]
 //
 // Here we have 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
 //
-// The expected behaviour is that there should not be any add voter events in
-// the range log where the added replica type is a LEARNER.
+// What the test wants to see is that when we switch from ZONE to REGION,
+// the non-voters in Region 2 and Region 3 are promoted to voters.
 func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	scope := log.Scope(t)
@@ -2196,18 +2196,18 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
 			return err
 		}
-		rangeCount := -1
-		allEqualRangeCount := true
-		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-			if rangeCount == -1 {
-				rangeCount = s.ReplicaCount()
-			} else if rangeCount != s.ReplicaCount() {
-				allEqualRangeCount = false
-			}
-			return nil
-		})
-		if !allEqualRangeCount {
-			return errors.New("Range counts are not all equal")
+		s, err := sqlutils.RowsToDataDrivenOutput(sqlutils.MakeSQLRunner(tc.Conns[0]).Query(t, `
+SELECT * FROM (
+    SELECT
+        range_id,
+        array_length(voting_replicas, 1) AS vc,
+        COALESCE(array_length(non_voting_replicas, 1), 0) AS nvc
+    FROM crdb_internal.ranges_no_leases
+) WHERE vc != 7 OR nvc > 0 ORDER BY range_id ASC LIMIT 1
+`))
+		require.NoError(t, err)
+		if len(s) > 0 {
+			return errors.Errorf("still upreplicating:\n%s", s)
 		}
 		return nil
 	})
@@ -2216,6 +2216,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
 	require.NoError(t, err)
 
+	log.Infof(ctx, "test setting ZONE survival configuration")
 	// ZONE survival configuration.
 	setConstraintFn("TABLE t", 5, 3,
 		", constraints = '{\"+region=2\": 1, \"+region=3\": 1}', voter_constraints = '{\"+region=1\": 3}'")
@@ -2260,6 +2261,11 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	})
 
 	// REGION survival configuration.
+	log.Infof(ctx, "test setting REGION survival configuration")
+	// Clear the rangelog so that we can rest assured to only pick up events
+	// resulting from the zone config change.
+	_, err = tc.Conns[0].ExecContext(ctx, `DELETE FROM system.rangelog WHERE TRUE`)
+	require.NoError(t, err)
 	setConstraintFn("TABLE t", 5, 5,
 		", constraints = '{}', voter_constraints = '{\"+region=1\": 2, \"+region=2\": 2, \"+region=3\": 1}'")
 	require.NoError(t, err)
