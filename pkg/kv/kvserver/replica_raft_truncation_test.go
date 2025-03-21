@@ -73,7 +73,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
 
-				suggestedTruncatedState := &kvserverpb.RaftTruncatedState{
+				suggestedTruncatedState := kvserverpb.RaftTruncatedState{
 					Index: kvpb.RaftIndex(index),
 					Term:  kvpb.RaftTerm(term),
 				}

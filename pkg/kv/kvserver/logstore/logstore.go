@@ -522,7 +522,7 @@ func logAppend(
 func Compact(
 	ctx context.Context,
 	prev kvserverpb.RaftTruncatedState,
-	next *kvserverpb.RaftTruncatedState,
+	next kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	readWriter storage.ReadWriter,
 ) error {
@@ -557,12 +557,16 @@ func Compact(
 			}
 		}
 	}
-	if err := storage.MVCCPutProto(
-		ctx,
-		readWriter,
-		prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{},
-		next,
+
+	key := prefixBuf.RaftTruncatedStateKey()
+	var value roachpb.Value
+	if _, err := next.MarshalToSizedBuffer(value.AllocBytes(next.Size())); err != nil {
+		return err
+	}
+	value.InitChecksum(key)
+
+	if _, err := storage.MVCCPut(
+		ctx, readWriter, key, hlc.Timestamp{}, value,
 		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
 	); err != nil {
 		return errors.Wrap(err, "unable to write RaftTruncatedState")
