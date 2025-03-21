@@ -140,6 +140,7 @@ func (p *pendingLogTruncations) capacity() int {
 	return len(p.mu.truncs)
 }
 
+// TODO(pav-kv): refresh this struct comments.
 type pendingTruncation struct {
 	// The pending truncation will truncate entries up to
 	// RaftTruncatedState.Index, inclusive.
@@ -150,12 +151,11 @@ type pendingTruncation struct {
 	// originates in ReplicatedEvalResult, where it is accurate.
 	// There are two reasons isDeltaTrusted could be considered false here:
 	// - The original "accurate" delta does not account for sideloaded files. It
-	//   is adjusted on this replica using
-	//   SideloadStorage.BytesIfTruncatedFromTo, but it is possible that the
-	//   truncated state of this replica is already > expectedFirstIndex. We
-	//   don't actually set isDeltaTrusted=false for this case since we will
-	//   change Replica.raftLogSizeTrusted to false after enacting this
-	//   truncation.
+	//   is adjusted on this replica using SideloadStorage.Stats, but it is
+	//   possible that the truncated state of this replica is already >
+	//   expectedFirstIndex. We don't actually set isDeltaTrusted=false for this
+	//   case since we will change Replica.raftLogSizeTrusted to false after
+	//   enacting this truncation.
 	// - We merge pendingTruncation entries in the pendingTruncations struct. We
 	//   are making an effort to have consecutive TruncateLogRequests provide us
 	//   stats for index intervals that are adjacent and non-overlapping, but
@@ -165,6 +165,9 @@ type pendingTruncation struct {
 	// ReplicatedEvalResult.RaftLogDelta, this is <= 0.
 	logDeltaBytes  int64
 	isDeltaTrusted bool
+	// hasSideloaded is true if the truncated interval contains at least one
+	// sideloaded entry.
+	hasSideloaded bool
 }
 
 func (pt pendingTruncation) compactedIndex() kvpb.RaftIndex {
@@ -178,6 +181,7 @@ func (pt pendingTruncation) merge(prev pendingTruncation) pendingTruncation {
 	res := prev
 	res.RaftTruncatedState = pt.RaftTruncatedState
 	res.logDeltaBytes += pt.logDeltaBytes
+	res.hasSideloaded = prev.hasSideloaded || pt.hasSideloaded
 	if !pt.isDeltaTrusted || prev.compactedIndex()+1 != pt.expectedFirstIndex {
 		res.isDeltaTrusted = false
 	}
@@ -259,8 +263,8 @@ type replicaForTruncator interface {
 	getPendingTruncs() *pendingLogTruncations
 	// Returns the sideloaded bytes that would be freed if we were to truncate
 	// (from, to].
-	sideloadedBytesIfTruncatedFromTo(
-		_ context.Context, _ kvpb.RaftSpan) (freed int64, _ error)
+	sideloadedStats(
+		_ context.Context, _ kvpb.RaftSpan) (entries uint64, size int64, _ error)
 	getStateLoader() stateloader.StateLoader
 	// NB: Setting the persistent raft state is via the Engine exposed by
 	// storeForTruncator.
@@ -322,15 +326,16 @@ func (t *raftLogTruncator) addPendingTruncation(
 	// In the common case of alreadyTruncIndex+1 == raftExpectedFirstIndex, the
 	// computation returns the same result regardless of which is plugged in as
 	// the lower bound.
-	sideloadedFreed, err := r.sideloadedBytesIfTruncatedFromTo(ctx, kvpb.RaftSpan{
+	if entries, size, err := r.sideloadedStats(ctx, kvpb.RaftSpan{
 		After: alreadyTruncIndex, Last: pendingTrunc.compactedIndex(),
-	})
-	if err != nil {
+	}); err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
 		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
 		pendingTrunc.isDeltaTrusted = false
+	} else if entries != 0 {
+		pendingTrunc.logDeltaBytes -= size
+		pendingTrunc.hasSideloaded = true
 	}
-	pendingTrunc.logDeltaBytes -= sideloadedFreed
 	if mergeWithPending {
 		// Merge the existing entry into the new one.
 		// No need to acquire pendingTruncs.mu for read in this case.
@@ -566,10 +571,14 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		pendingTruncs.reset()
 		return
 	}
-	// sync=false since we don't need a guarantee that the truncation is
-	// durable. Loss of a truncation means we have more of the suffix of the
-	// raft log, which does not affect correctness.
-	if err := batch.Commit(false /* sync */); err != nil {
+	// Most of the time, sync=false since we don't need a guarantee that the
+	// truncation is durable. Loss of a truncation means we have more of the
+	// suffix of the raft log, which does not affect correctness.
+	//
+	// If the truncated log interval contains sideloaded entries, we need to sync
+	// so that the subsequent removals from the sideloaded storage are safe.
+	sync := pendingTruncs.mu.truncs[enactIndex].hasSideloaded
+	if err := batch.Commit(sync); err != nil {
 		log.Errorf(ctx, "while committing batch to truncate raft log: %+v", err)
 		pendingTruncs.reset()
 		return
