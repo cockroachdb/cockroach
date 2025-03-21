@@ -110,7 +110,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 func waitRangeFeed(
 	t *testing.T, store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
 ) error {
-	if err := store.RangeFeed(req, stream); err != nil {
+	if err := store.RangeFeed(req, stream, nil /* perConsumerCatchupLimiter */); err != nil {
 		return err
 	}
 	return stream.WaitForError(t)
