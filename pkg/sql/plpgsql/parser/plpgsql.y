@@ -338,14 +338,14 @@ func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
 }
 
 %type <str> decl_varname decl_defkey
-%type <bool>	decl_const decl_notnull
+%type <bool> decl_const decl_notnull
 %type <plpgsqltree.Expr>	decl_defval decl_cursor_query
 %type <tree.ResolvableTypeReference>	decl_datatype
-%type <str>		decl_collate
+%type <str>	decl_collate
 
-%type <str>	expr_until_semi expr_until_paren stmt_until_semi return_expr
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
-%type <plpgsqltree.Expr>	opt_exitcond
+%type <plpgsqltree.Expr> return_expr opt_exitcond
 
 %type <[]plpgsqltree.Variable> for_target
 %type <*tree.NumVal> foreach_slice
@@ -1157,19 +1157,11 @@ stmt_continue: CONTINUE opt_label opt_exitcond
 
 stmt_return: RETURN return_expr ';'
   {
-    var expr plpgsqltree.Expr
-    if $2 != "" {
-      var err error
-      expr, err = plpgsqllex.(*lexer).ParseExpr($2)
-      if err != nil {
-        return setErr(plpgsqllex, err)
-      }
-    }
-    $$.val = &plpgsqltree.Return{Expr: expr}
+    $$.val = &plpgsqltree.Return{Expr: $2.expr()}
   }
-| RETURN_NEXT NEXT
+| RETURN_NEXT NEXT return_expr ';'
   {
-    return unimplemented(plpgsqllex, "return next")
+    $$.val = &plpgsqltree.ReturnNext{Expr: $3.expr()}
   }
 | RETURN_QUERY QUERY
  {
@@ -1179,11 +1171,11 @@ stmt_return: RETURN return_expr ';'
 
 return_expr:
   {
-    sqlStr, err := plpgsqllex.(*lexer).ReadReturnExpr()
+    retExpr, err := plpgsqllex.(*lexer).ParseReturnExpr()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$ = sqlStr
+    $$.val = retExpr
   }
 ;
 

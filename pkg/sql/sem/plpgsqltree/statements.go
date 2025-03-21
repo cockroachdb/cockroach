@@ -824,11 +824,21 @@ func (s *Return) WalkStmt(visitor StatementVisitor) Statement {
 
 type ReturnNext struct {
 	StatementImpl
-	Expr   Expr
-	RetVar Variable
+	Expr Expr
+}
+
+func (s *ReturnNext) CopyNode() *ReturnNext {
+	copyNode := *s
+	return &copyNode
 }
 
 func (s *ReturnNext) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("RETURN NEXT")
+	if s.Expr != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(s.Expr)
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *ReturnNext) PlpgSQLStatementTag() string {
@@ -836,7 +846,8 @@ func (s *ReturnNext) PlpgSQLStatementTag() string {
 }
 
 func (s *ReturnNext) WalkStmt(visitor StatementVisitor) Statement {
-	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
+	newStmt, _ := visitor.Visit(s)
+	return newStmt
 }
 
 type ReturnQuery struct {
