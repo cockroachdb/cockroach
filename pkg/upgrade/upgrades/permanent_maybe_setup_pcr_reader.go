@@ -23,7 +23,7 @@ func maybeSetupPCRStandbyReader(
 	if d.TenantInfoAccessor == nil {
 		return nil
 	}
-	id, ts, err := d.TenantInfoAccessor.ReadFromTenantInfo(ctx)
+	id, ts, err := readerTenantInfo(ctx, d)
 	if err != nil {
 		return err
 	}
