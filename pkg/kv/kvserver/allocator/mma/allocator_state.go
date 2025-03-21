@@ -251,7 +251,7 @@ func (a *allocatorState) rebalanceStores(
 					continue
 				}
 				targetSS := a.cs.stores[targetStoreID]
-				if !a.cs.canAddLoad(targetSS, rstate.load.Load, &means) {
+				if !a.cs.canAddLoad(ctx, targetSS, rstate.load.Load, &means) {
 					continue
 				}
 				addTarget := roachpb.ReplicationTarget{
@@ -387,7 +387,7 @@ func (a *allocatorState) rebalanceStores(
 			if !isLeaseholder {
 				addedLoad[CPURate] = rstate.load.RaftCPU
 			}
-			if !a.cs.canAddLoad(targetSS, addedLoad, cands.means) {
+			if !a.cs.canAddLoad(ctx, targetSS, addedLoad, cands.means) {
 				continue
 			}
 			addTarget := roachpb.ReplicationTarget{

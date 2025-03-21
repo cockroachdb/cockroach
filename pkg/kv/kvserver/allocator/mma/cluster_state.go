@@ -1405,7 +1405,9 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 // canAddLoad returns true if the delta can be added to the store without
 // causing it to be overloaded (or the node to be overloaded). It does not
 // change any state between the call and return.
-func (cs *clusterState) canAddLoad(ss *storeState, delta LoadVector, means *meansForStoreSet) bool {
+func (cs *clusterState) canAddLoad(
+	ctx context.Context, ss *storeState, delta LoadVector, means *meansForStoreSet,
+) bool {
 	ns := cs.nodes[ss.NodeID]
 	// Add the delta.
 	//
@@ -1425,7 +1427,10 @@ func (cs *clusterState) canAddLoad(ss *storeState, delta LoadVector, means *mean
 	// this load, so we could allow everyone <= loadNoChange now, since those
 	// equal to loadNoChange must be due to this addition. But loadNoChange
 	// implies this addition is going above the mean, so don't allow that.
-	return sls.sls < loadNoChange && sls.nls < loadNoChange
+	canAddLoad := sls.sls < loadNoChange && sls.nls < loadNoChange
+	log.Infof(ctx, "can add load to n%vs%v: %v sls[%v]",
+		ns.NodeID, ss.StoreID, canAddLoad, sls)
+	return canAddLoad
 }
 
 func (cs *clusterState) computeLoadSummary(
