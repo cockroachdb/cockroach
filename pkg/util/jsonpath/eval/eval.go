@@ -100,7 +100,7 @@ func (ctx *jsonpathCtx) eval(
 		if err != nil {
 			return nil, err
 		}
-		return convertFromBool(res), nil
+		return []json.JSON{res}, nil
 	case jsonpath.Filter:
 		return ctx.evalFilter(path, jsonValue, unwrap)
 	default:
