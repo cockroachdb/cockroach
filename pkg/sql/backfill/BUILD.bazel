@@ -40,6 +40,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/sql/vecindex",
+        "//pkg/sql/vecindex/cspann",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,8 +94,15 @@ func newIndexBackfiller(
 		filter:      backfill.IndexMutationFilter,
 	}
 
-	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc,
-		ib.spec.IndexesToBackfill, ib.spec.SourceIndexID, indexBackfillerMon); err != nil {
+	if err := ib.IndexBackfiller.InitForDistributedUse(
+		ctx,
+		flowCtx,
+		ib.desc,
+		ib.spec.IndexesToBackfill,
+		ib.spec.SourceIndexID,
+		indexBackfillerMon,
+		flowCtx.Cfg.VecIndexManager.(*vecindex.Manager),
+	); err != nil {
 		return nil, err
 	}
 

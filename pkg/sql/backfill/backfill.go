@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -458,6 +460,39 @@ type muBoundAccount struct {
 	boundAccount mon.BoundAccount
 }
 
+type vectorSearchHelper struct {
+	vectorColOrd  int
+	prefixKeyCols []fetchpb.IndexFetchSpec_KeyColumn
+	vectorIndex   *cspann.Index
+}
+
+func (vsh *vectorSearchHelper) search(
+	ctx context.Context,
+	searcher *vecindex.MutationSearcher,
+	rowVals tree.Datums,
+	colIdxMap catalog.TableColMap,
+) (_ tree.Datum, _ tree.Datum, err error) {
+	if rowVals[vsh.vectorColOrd] == tree.DNull {
+		return tree.DNull, tree.DNull, nil
+	}
+
+	var prefix roachpb.Key
+	if len(vsh.prefixKeyCols) > 0 {
+		prefix, _, err = rowenc.EncodePartialIndexKey(vsh.prefixKeyCols, colIdxMap, rowVals, []byte{})
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	queryVector := tree.MustBeDPGVector(rowVals[vsh.vectorColOrd]).T
+	err = searcher.SearchForInsert(ctx, prefix, queryVector)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return searcher.PartitionKey(), searcher.EncodedVector(), nil
+}
+
 // IndexBackfiller is capable of backfilling all the added index.
 type IndexBackfiller struct {
 	indexBackfillerCols
@@ -493,6 +528,9 @@ type IndexBackfiller struct {
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
 	mon            *mon.BytesMonitor
 	muBoundAccount muBoundAccount
+
+	vh                  rowenc.VectorIndexEncodingHelper
+	vectorSearchHelpers map[descpb.IndexID]vectorSearchHelper
 }
 
 // ContainsInvertedIndex returns true if backfilling an inverted index.
@@ -514,10 +552,20 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	vecIndexMgr *vecindex.Manager,
 ) error {
 
 	// Initialize ib.added.
-	ib.initIndexes(evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/)
+	if err := ib.initIndexes(
+		ctx,
+		evalCtx.Codec,
+		desc,
+		nil, /* allowList */
+		0,   /*sourceIndex*/
+		vecIndexMgr,
+	); err != nil {
+		return err
+	}
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -655,13 +703,23 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	allowList []catid.IndexID,
 	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
+	vecIndexMgr *vecindex.Manager,
 ) error {
 	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
 	// to make a copy.
 	evalCtx := flowCtx.NewEvalCtx()
 
 	// Initialize ib.added.
-	ib.initIndexes(evalCtx.Codec, desc, allowList, sourceIndexID)
+	if err := ib.initIndexes(
+		ctx,
+		evalCtx.Codec,
+		desc,
+		allowList,
+		sourceIndexID,
+		vecIndexMgr,
+	); err != nil {
+		return err
+	}
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
@@ -751,11 +809,13 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 // If `allowList` is non-nil, we only add those in this list.
 // If `allowList` is nil, we add all adding index mutations.
 func (ib *IndexBackfiller) initIndexes(
+	ctx context.Context,
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
 	allowList []catid.IndexID,
 	sourceIndexID catid.IndexID,
-) {
+	vecIndexMgr *vecindex.Manager,
+) error {
 	var allowListAsSet catid.IndexSet
 	if len(allowList) > 0 {
 		allowListAsSet = catid.MakeIndexIDSet(allowList...)
@@ -783,6 +843,29 @@ func (ib *IndexBackfiller) initIndexes(
 			ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 		}
 	}
+
+	// Initialize vectorSearchHelpers for each vector index.
+	ib.vectorSearchHelpers = make(map[descpb.IndexID]vectorSearchHelper)
+	for _, idx := range ib.added {
+		if idx.GetType() != idxtype.VECTOR {
+			continue
+		}
+		vectorColID := idx.VectorColumnID()
+		vectorCol, err := catalog.MustFindColumnByID(desc, vectorColID)
+		if err != nil {
+			return err
+		}
+		vecIndex, err := vecIndexMgr.GetWithDesc(ctx, desc, idx)
+		if err != nil {
+			return err
+		}
+		ib.vectorSearchHelpers[idx.GetID()] = vectorSearchHelper{
+			vectorColOrd:  vectorCol.Ordinal(),
+			prefixKeyCols: desc.IndexFetchSpecKeyAndSuffixColumns(idx)[:idx.NumKeyColumns()-1],
+			vectorIndex:   vecIndex,
+		}
+	}
+	return nil
 }
 
 // init completes the initialization of an IndexBackfiller.
@@ -907,6 +990,16 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	}
 	ib.evalCtx.IVarContainer = iv
 
+	var vectorMutationSearchers map[descpb.IndexID]*vecindex.MutationSearcher
+	if len(ib.vectorSearchHelpers) > 0 {
+		vectorMutationSearchers = make(map[descpb.IndexID]*vecindex.MutationSearcher)
+		for indexID, vsh := range ib.vectorSearchHelpers {
+			searcher := vecindex.MutationSearcher{}
+			searcher.Init(vsh.vectorIndex, txn)
+			vectorMutationSearchers[indexID] = &searcher
+		}
+	}
+
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
 	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
 		return nil, nil, memUsedPerChunk, errors.Wrap(err,
@@ -1006,9 +1099,25 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 		}
 
-		// TODO(drewk, mw5h): perform a vector search for each affected vector index, and
-		// fill out the helper.
-		var vh rowenc.VectorIndexEncodingHelper
+		// Search for the proper CSPANN partition in each vector index.
+		firstVectorIndex := true
+		for indexID, vsh := range ib.vectorSearchHelpers {
+			if firstVectorIndex {
+				ib.vh.InitForPut()
+				firstVectorIndex = false
+			}
+			vectorPartitionKey, quantizedVector, err := vsh.search(
+				ctx,
+				vectorMutationSearchers[indexID],
+				ib.rowVals,
+				ib.colIdxMap,
+			)
+			if err != nil {
+				return nil, nil, memUsedPerChunk, err
+			}
+			ib.vh.PartitionKeys[indexID] = vectorPartitionKey
+			ib.vh.QuantizedVecs[indexID] = quantizedVector
+		}
 
 		// We're resetting the length of this slice for variable length indexes such as inverted
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
@@ -1030,12 +1139,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
-				vh,
+				ib.vh,
 				buffer,
 				false, /* includeEmpty */
 				&ib.muBoundAccount.boundAccount,
 			)
 		}(buffer)
+
 		// Account for memory use prior to error checking
 		memUsedPerChunk += memUsedDuringEncoding
 		if err != nil {
