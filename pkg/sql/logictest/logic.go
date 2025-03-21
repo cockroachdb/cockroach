@@ -625,6 +625,10 @@ type logicStatement struct {
 	expectAsync bool
 	// the name key to use for the pendingStatement.
 	statementName string
+
+	// noRewrite prevents rewriting the statement using the column
+	// family mutator.
+	noRewrite bool
 }
 
 // pendingExecResult represents the asynchronous result of a logicStatement
@@ -2086,6 +2090,21 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
+// clusterOptDisableUseMVCCRangeTombstonesForPointDeletes corresponds
+// to the disable-mvcc-range-tombstones-for-point-deletes directive.
+type clusterOptDisableUseMVCCRangeTombstonesForPointDeletes struct{}
+
+var _ clusterOpt = clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptDisableUseMVCCRangeTombstonesForPointDeletes) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !ok {
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
+	}
+	args.Knobs.Store.(*kvserver.StoreTestingKnobs).EvalKnobs.UseRangeTombstonesForPointDeletes = false
+}
+
 // knobOptDisableCorpusGeneration disables corpus generation for declarative
 // schema changer.
 type knobOptDisableCorpusGeneration struct{}
@@ -2230,6 +2249,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-mvcc-range-tombstones-for-point-deletes":
+			res = append(res, clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
@@ -2659,6 +2680,12 @@ func (t *logicTest) processSubtest(
 				// Consume 'async <name>'.
 				copy(fields[1:], fields[3:])
 				fields = fields[:len(fields)-2]
+			}
+			if len(fields) >= 3 && fields[1] == "no-rewrite" {
+				stmt.noRewrite = true
+				// Consume 'no-rewrite'.
+				copy(fields[1:], fields[2:])
+				fields = fields[:len(fields)-1]
 			}
 			if len(fields) >= 3 && fields[1] == "count" {
 				n, err := strconv.ParseInt(fields[2], 10, 64)
@@ -3522,7 +3549,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
 	// be parsable because constraints do not support all the options that
 	// indexes do.
-	if !uniqueHashPattern.MatchString(stmt.sql) {
+	if !stmt.noRewrite && !uniqueHashPattern.MatchString(stmt.sql) {
 		var changed bool
 		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
 		if changed {
