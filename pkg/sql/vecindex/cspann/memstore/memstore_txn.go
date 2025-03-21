@@ -75,7 +75,8 @@ func (tx *memTxn) GetPartition(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so return empty partition.
-			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel), nil
+			metadata := tx.store.makeEmptyRootPartitionMetadata()
+			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata), nil
 		}
 		return nil, err
 	}
@@ -230,7 +231,7 @@ func (tx *memTxn) AddToPartition(
 			level, partition.Level()))
 	}
 
-	if partition.Add(&tx.workspace, vec, childKey, valueBytes) {
+	if partition.Add(&tx.workspace, vec, childKey, valueBytes, true /* overwrite */) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
 		memPart.count.Add(1)
@@ -386,10 +387,12 @@ func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartiti
 		return memPart, err
 	}
 
+	metadata := tx.store.makeEmptyRootPartitionMetadata()
+	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
+
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
 
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel)
 	memPart = tx.store.insertPartitionLocked(treeKey, cspann.RootKey, root)
 	memPart.lock.Acquire(tx.id)
 

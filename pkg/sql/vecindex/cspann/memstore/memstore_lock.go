@@ -10,6 +10,11 @@ import (
 	"sync/atomic"
 )
 
+// uniqueOwner is a special value that indicates this owner is always considered
+// distinct from every other owner, including itself. Using this value reduces
+// memLock to a "regular" RWMutex, without ownership tracking or reentrancy.
+const uniqueOwner = uint64(0)
+
 // memLock wraps a read-write memLock, adding support for reentrancy and
 // ownership tracking.
 // NOTE: This is only used in testing and benchmarking code.
@@ -36,14 +41,14 @@ type memLock struct {
 // IsAcquiredBy returns true if the lock is exclusively owned by the given
 // owner, or false if not.
 func (pl *memLock) IsAcquiredBy(owner uint64) bool {
-	return pl.exclusiveOwner.Load() == owner
+	return owner != uniqueOwner && pl.exclusiveOwner.Load() == owner
 }
 
 // Acquire obtains exclusive write access to the resource protected by this
 // lock. The same owner can obtain the lock multiple times. The caller must
 // ensure that Release is called for each call to Acquire.
 func (pl *memLock) Acquire(owner uint64) {
-	if pl.exclusiveOwner.Load() == owner {
+	if owner != uniqueOwner && pl.exclusiveOwner.Load() == owner {
 		// Exclusive lock has already been acquired by this owner.
 		pl.mu.reentrancy++
 		return
@@ -58,7 +63,7 @@ func (pl *memLock) Acquire(owner uint64) {
 // lock. The same owner can obtain the lock multiple times. The caller must
 // ensure that ReleaseShared is called for each all to AcquireShared.
 func (pl *memLock) AcquireShared(owner uint64) {
-	if owner != 0 && pl.exclusiveOwner.Load() == owner {
+	if owner != uniqueOwner && pl.exclusiveOwner.Load() == owner {
 		// Exclusive lock has already been acquired by this owner.
 		pl.mu.reentrancy++
 		return
@@ -78,7 +83,7 @@ func (pl *memLock) Release() {
 	}
 
 	// No remaining reentrancy, so release lock.
-	pl.exclusiveOwner.Store(0)
+	pl.exclusiveOwner.Store(uniqueOwner)
 	pl.mu.Unlock()
 }
 
