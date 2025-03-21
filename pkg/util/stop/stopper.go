@@ -429,13 +429,12 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
-	hdl, err := s.GetHandle(ctx, opt)
+	ctx, hdl, err := s.GetHandle(ctx, opt)
 	if err != nil {
 		return err
 	}
 	go func(ctx context.Context) {
-		ctx, release := hdl.Activate(ctx)
-		defer release(ctx, hdl)
+		defer hdl.Activate(ctx).Release(ctx)
 		f(ctx)
 	}(ctx)
 	return nil
@@ -446,21 +445,23 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 // to launch a task (a goroutine) decorated with the handle's Activate and
 // release functions:
 //
-//		hdl, err := s.GetHandle(ctx, opt)
+//		ctx, hdl, err := s.GetHandle(ctx, opt)
 //		if err != nil {
 //			return err
 //		}
 //		go func(ctx context.Context, hdl *Handle) {
-//			ctx, release := hdl.Activate(ctx)
-//			defer release(ctx, hdl)
-//	    // Do more.
+//			defer hdl.Activate(ctx).Release(ctx)
+//	    // Do work.
 //		}(ctx, hdl)
 //
 // A Handle must only be used in the above manner. In particular, it is illegal
 // to access the handle outside of the single spawned goroutine that activates
 // it. Handles must always be released.
 //
-// The above code allocates only once (`go` always allocates) save for any
+// A handle always returns a valid Context derived from the input, even on
+// error.
+//
+// The above example allocates only once (`go` always allocates) save for any
 // context or execution trace region allocations that may occur when such
 // functionality is enabled.
 //
@@ -468,7 +469,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 // observability because it records the caller's call frame as the creating
 // goroutine (as opposed to some location in the stopper code). This makes it
 // straightforward to discover spawned goroutines in Go execution traces.
-func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (*Handle, error) {
+func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (context.Context, *Handle, error) {
 	var alloc *quotapool.IntAlloc
 	taskStarted := false
 	if opt.Sem != nil {
@@ -485,7 +486,7 @@ func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (*Handle, error) 
 			err = ErrUnavailable
 		}
 		if err != nil {
-			return nil, err
+			return ctx, nil, err
 		}
 		defer func() {
 			// If the task is started, the alloc will be released async.
@@ -497,12 +498,29 @@ func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (*Handle, error) 
 		// Check for canceled context: it's possible to get the semaphore even
 		// if the context is canceled.
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return ctx, nil, ctx.Err()
 		}
 	}
 
 	if !s.runPrelude() {
-		return nil, ErrUnavailable
+		return ctx, nil, ErrUnavailable
+	}
+
+	// If the caller has a span, the task gets a child span.
+	//
+	// Because we're in the spawned async goroutine, the parent span might get
+	// Finish()ed by then. That's okay, if the parent goes away without waiting
+	// for the child, it will not collect the child anyway.
+	var sp *tracing.Span
+	switch opt.SpanOpt {
+	case FollowsFromSpan:
+		ctx, sp = tracing.ForkSpan(ctx, opt.TaskName)
+	case ChildSpan:
+		ctx, sp = tracing.ChildSpan(ctx, opt.TaskName)
+	case SterileRootSpan:
+		ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
+	default:
+		panic(fmt.Sprintf("unsupported SpanOption: %v", opt.SpanOpt))
 	}
 
 	// Call f on another goroutine.
@@ -514,12 +532,12 @@ func (s *Stopper) GetHandle(ctx context.Context, opt TaskOpts) (*Handle, error) 
 		taskName: opt.TaskName,
 		spanOpt:  opt.SpanOpt,
 		alloc:    alloc,
+		sp:       sp,
 
-		sp:     nil, // in Activate
 		region: nil, // in Activate
 	}
 
-	return hdl, nil
+	return ctx, hdl, nil
 }
 
 func (s *Stopper) runPrelude() bool {

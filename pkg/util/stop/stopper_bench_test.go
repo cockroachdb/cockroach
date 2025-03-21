@@ -50,8 +50,7 @@ func BenchmarkStopper(b *testing.B) {
 	})
 
 	hdlf := func(ctx context.Context, hdl *Handle, wg *sync.WaitGroup) {
-		ctx, release := hdl.Activate(ctx)
-		defer release(ctx, hdl)
+		defer hdl.Activate(ctx).Release(ctx)
 		defer wg.Done()
 	}
 
@@ -59,7 +58,7 @@ func BenchmarkStopper(b *testing.B) {
 		b.ReportAllocs()
 		var wg sync.WaitGroup
 		for i := 0; i < b.N; i++ {
-			hdl, err := s.GetHandle(ctx, opts)
+			ctx, hdl, err := s.GetHandle(ctx, opts)
 			if err != nil {
 				b.Fatal(err)
 			}

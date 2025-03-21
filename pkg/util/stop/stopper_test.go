@@ -674,3 +674,27 @@ func TestStopperRunAsyncTaskCreatesRootSpans(t *testing.T) {
 		require.Equal(t, hasSpan, <-c != nil)
 	})
 }
+
+// TestHandleOnFinishedTraceSpan shows that we can successfully use the Stopper
+// in situations in which the trace span gets finished after creating the Handle
+// but before launching the task.
+func TestHandleOnFinishedTraceSpan(t *testing.T) {
+	tr := tracing.NewTracer()
+	ctx := context.Background()
+	s := stop.NewStopper(stop.WithTracer(tr))
+	defer s.Stop(ctx)
+
+	ctx, sp := tr.StartSpanCtx(ctx, "root", tracing.WithForceRealSpan())
+	// NB: can't `defer sp.Finish()` here since we'd then double-finish the span
+	// in this test and trip the assertion.
+	ctx, hdl, err := s.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "test",
+		SpanOpt:  stop.ChildSpan,
+	})
+	require.NoError(t, err)
+
+	sp.Finish()
+	go func(ctx context.Context, hdl *stop.Handle) {
+		defer hdl.Activate(ctx).Release(ctx)
+	}(ctx, hdl)
+}

@@ -308,14 +308,13 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 	for _, shard := range s.shards {
 		s.done.Add(shard.numWorkers)
 		f := func(ctx context.Context, hdl *stop.Handle) {
-			ctx, release := hdl.Activate(ctx)
-			defer release(ctx, hdl)
+			defer hdl.Activate(ctx).Release(ctx)
 			defer s.done.Done()
 			shard.worker(ctx, s.processor, s.metrics)
 		}
 
 		for i := 0; i < shard.numWorkers; i++ {
-			hdl, err := stopper.GetHandle(ctx,
+			ctx, hdl, err := stopper.GetHandle(ctx,
 				stop.TaskOpts{
 					TaskName: "raft-worker",
 					// This task doesn't reference a parent because it runs for the server's
