@@ -281,18 +281,19 @@ type BytesMonitor struct {
 // MonitorName is used to identify monitors in logging messages. It consists of:
 //
 //   - a string prefix
-//   - an optional int32 processor ID
-//   - an optional uuid.Short
+//   - an optional int32 id or uuid.Short
 //   - an optional suffix
-//   - an optional int32
+//   - an optional uint16
 //
 // When printed, the fields are separated by "-", if present.
 type MonitorName struct {
-	prefix      redact.SafeString
-	processorID int32
-	uuid        uuid.Short
-	suffix      monitorNameSuffix
-	i           int32
+	prefix redact.SafeString
+	// id contains either an int32 or a uuid.Short, depending on the value of
+	// the uuid boolean.
+	id     int32
+	uuid   bool
+	suffix monitorNameSuffix
+	i      uint16
 }
 
 // monitorNameSuffix is an enum the represents one of a finite list of possible
@@ -324,16 +325,19 @@ func MakeMonitorName(prefix redact.SafeString) MonitorName {
 	return MonitorName{prefix: prefix}
 }
 
-// WithProcessorID returns a new MonitorName with the given processor ID
-// attached.
-func (mn MonitorName) WithProcessorID(id int32) MonitorName {
-	mn.processorID = id
+// WithID returns a new MonitorName with the given ID attached. A previously set
+// UUID is cleared.
+func (mn MonitorName) WithID(id int32) MonitorName {
+	mn.id = id
+	mn.uuid = false
 	return mn
 }
 
 // WithUUID returns a new MonitorName with the given uuid.Short attached.
+// A previously set ID is cleared.
 func (mn MonitorName) WithUUID(uuid uuid.Short) MonitorName {
-	mn.uuid = uuid
+	mn.id = uuid.ToInt32()
+	mn.uuid = true
 	return mn
 }
 
@@ -362,7 +366,7 @@ func (mn MonitorName) WithSuffix(suffix monitorNameSuffix) MonitorName {
 }
 
 // WithInt returns a new MonitorName with the given integer attached.
-func (mn MonitorName) WithInt(i int32) MonitorName {
+func (mn MonitorName) WithInt(i uint16) MonitorName {
 	mn.i = i
 	return mn
 }
@@ -375,14 +379,15 @@ func (mn MonitorName) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
 	w.SafeString(mn.prefix)
-	var nullShort uuid.Short
-	if mn.processorID != 0 {
+	if mn.id != 0 {
 		w.SafeString("-")
-		w.SafeString(redact.SafeString(strconv.Itoa(int(mn.processorID))))
-	}
-	if mn.uuid != nullShort {
-		w.SafeString("-")
-		w.SafeString(redact.SafeString(mn.uuid.String()))
+		if mn.uuid {
+			var u uuid.Short
+			u.FromInt32(mn.id)
+			w.SafeString(redact.SafeString(u.String()))
+		} else {
+			w.SafeString(redact.SafeString(strconv.Itoa(int(mn.id))))
+		}
 	}
 	if mn.suffix != monitorNameSuffixNone {
 		w.SafeString("-")
@@ -396,7 +401,7 @@ func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize = 176
+	expectedMonitorSize = 168
 	expectedAccountSize = 24
 )
 
