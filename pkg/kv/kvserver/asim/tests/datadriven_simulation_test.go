@@ -499,7 +499,11 @@ func TestDataDriven(t *testing.T) {
 						if i > 0 {
 							fmt.Fprintf(&buf, " ")
 						}
-						fmt.Fprintf(&buf, "s%v=%.0f", store.StoreID, store.Value)
+						if stat == "disk_fraction_used" {
+							fmt.Fprintf(&buf, "s%v=%.2f", store.StoreID, store.Value)
+						} else {
+							fmt.Fprintf(&buf, "s%v=%.0f", store.StoreID, store.Value)
+						}
 					}
 					fmt.Fprintf(&buf, "]")
 				}
