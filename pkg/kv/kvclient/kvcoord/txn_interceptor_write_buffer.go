@@ -503,6 +503,15 @@ func (twb *txnWriteBuffer) applyTransformations(
 	return baRemote, ts
 }
 
+// seekItemForSpan returns a bufferedWrite appropriate for use with a
+// write-buffer iterator. Point lookups should use a nil end key.
+func (twb *txnWriteBuffer) seekItemForSpan(key, endKey roachpb.Key) *bufferedWrite {
+	seek := &twb.bufferSeek
+	seek.key = key
+	seek.endKey = endKey
+	return seek
+}
+
 // maybeServeRead serves the supplied read request from the buffer if a write or
 // deletion tombstone on the key is present in the buffer. Additionally, a
 // boolean indicating whether the read request was served or not is also
@@ -511,9 +520,7 @@ func (twb *txnWriteBuffer) maybeServeRead(
 	key roachpb.Key, seq enginepb.TxnSeq,
 ) (*roachpb.Value, bool) {
 	it := twb.buffer.MakeIter()
-	seek := &twb.bufferSeek
-	seek.key = key
-
+	seek := twb.seekItemForSpan(key, nil)
 	it.FirstOverlap(seek)
 	if it.Valid() {
 		bufferedVals := it.Cur().vals
@@ -543,11 +550,7 @@ func (twb *txnWriteBuffer) maybeServeRead(
 // write.
 func (twb *txnWriteBuffer) scanOverlaps(key roachpb.Key, endKey roachpb.Key) bool {
 	it := twb.buffer.MakeIter()
-	seek := &twb.bufferSeek
-	seek.key = key
-	seek.endKey = endKey
-
-	it.FirstOverlap(seek)
+	it.FirstOverlap(twb.seekItemForSpan(key, endKey))
 	return it.Valid()
 }
 
@@ -617,9 +620,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 	reverse bool,
 ) {
 	it := twb.buffer.MakeIter()
-	seek := &twb.bufferSeek
-	seek.key = respIter.startKey()
-	seek.endKey = respIter.endKey()
+	seek := twb.seekItemForSpan(respIter.startKey(), respIter.endKey())
 
 	if reverse {
 		it.LastOverlap(seek)
@@ -871,8 +872,7 @@ func (t transformations) Empty() bool {
 // addToBuffer adds a write to the given key to the buffer.
 func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq enginepb.TxnSeq) {
 	it := twb.buffer.MakeIter()
-	seek := &twb.bufferSeek
-	seek.key = key
+	seek := twb.seekItemForSpan(key, nil)
 
 	it.FirstOverlap(seek)
 	if it.Valid() {

@@ -671,6 +671,65 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
+// TestTxnWriteBufferServesPointReadsAfterScan is a regression test
+// for a bug in which reused iterator state resulted in the end key of
+// a scan affecting subsequent GetRequests.
+func TestTxnWriteBufferServesPointReadsAfterScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(putArgs(keyA, "valA", txn.Sequence))
+	ba.Add(putArgs(keyB, "valB", txn.Sequence))
+	ba.Add(putArgs(keyC, "valC", txn.Sequence))
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// All writes should be buffered.
+	require.Equal(t, numCalled, mockSender.NumCalled())
+
+	// First, read [a, c) via ScanRequest.
+	txn.Sequence = 10
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: txn.Sequence},
+	})
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[0].GetInner())
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.Equal(t, int64(2), br.Responses[0].GetScan().NumKeys)
+
+	// Perform a read on keyC.
+	ba = &kvpb.BatchRequest{}
+	getC := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, Sequence: txn.Sequence}}
+	ba.Add(getC)
+
+	numCalled = mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.True(t, br.Responses[0].GetGet().Value.IsPresent())
+	require.Equal(t, mockSender.NumCalled(), numCalled)
+}
+
 // TestTxnWriteBufferServesOverlappingReadsCorrectly ensures that Scan and
 // ReverseScan requests that overlap with buffered writes are correctly served
 // from the buffer.
