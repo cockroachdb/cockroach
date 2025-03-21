@@ -290,6 +290,13 @@ func TestLogic_bpchar(
 	runLogicTest(t, "bpchar")
 }
 
+func TestLogic_buffered_writes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "buffered_writes")
+}
+
 func TestLogic_builtin_function(
 	t *testing.T,
 ) {
