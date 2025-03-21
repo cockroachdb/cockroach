@@ -160,6 +160,15 @@ func (r prRepo) apply() error {
 }
 
 func (r prRepo) commit() error {
+	if updateVersionsFlags.dryRun {
+		cmd := exec.Command("git", "diff")
+		cmd.Dir = r.checkoutDir()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed running `%s` with output '%s': %w", cmd.String(), string(out), err)
+		}
+		log.Printf("git diff for %s: %s\n", r.name(), string(out))
+	}
 	parts := []string{"git", "commit", "-a", "-m", r.commitMessage}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	cmd.Dir = r.checkoutDir()
@@ -297,6 +306,10 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 
 	// Now that our local changes are staged, we can try and publish them.
 	for _, repo := range reposToWorkOn {
+		if updateVersionsFlags.dryRun {
+			log.Printf("PR creation skipped due to dry-run mode")
+			continue
+		}
 		if repo.workOnRepoError != nil {
 			log.Printf("PR creation skipped due to previous errors while working on %s: %s", repo.name(), repo.workOnRepoError)
 			continue
@@ -334,10 +347,12 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		prs = append(prs, pr)
 	}
 
-	if err := sendPrReport(releasedVersion, prs, smtpPassword); err != nil {
-		err = fmt.Errorf("error sending email: %w", err)
-		workOnRepoErrors = append(workOnRepoErrors, err)
-		log.Printf("%s", err)
+	if !updateVersionsFlags.dryRun {
+		if err := sendPrReport(releasedVersion, prs, smtpPassword); err != nil {
+			err = fmt.Errorf("error sending email: %w", err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+		}
 	}
 	if artifactsDir != "" {
 		if err := saveMetadata(artifactsDir, metadata{PRs: prs}); err != nil {
@@ -410,6 +425,8 @@ func generateRepoList(
 ) ([]prRepo, error) {
 	owner := "cockroachdb"
 	prefix := ""
+	// TODO: remove this once we have a way to test the command without creating PRs.
+	dryRun = true
 	if dryRun {
 		// For test/dry-run purposes, we need to create "base repos" and "forked repos". The PRs will be submitted against the
 		// base repos and the branches will be created in the forked repos.
@@ -455,6 +472,10 @@ func generateRepoList(
 	log.Printf("will bump version in the following branches: %s", strings.Join(maybeVersionBumpBranches, ", "))
 
 	for _, branch := range maybeVersionBumpBranches {
+		if dryRun {
+			log.Printf("skipping version bump on branch %s, because dry-run is enabled", branch)
+			continue
+		}
 		// skip extraordinary branches
 		if strings.HasPrefix(branch, "staging-") {
 			log.Printf("not bumping version on staging branch %s", branch)
@@ -492,7 +513,7 @@ func generateRepoList(
 	}
 
 	// 2. Brew. Update for all stable releases
-	if releasedVersion.Prerelease() == "" {
+	if releasedVersion.Prerelease() == "" && !dryRun {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "homebrew-tap",
@@ -511,7 +532,7 @@ func generateRepoList(
 		})
 	}
 	// 3. Helm. Only for latest stable releases
-	if isLatest && releasedVersion.Prerelease() == "" {
+	if isLatest && releasedVersion.Prerelease() == "" && !dryRun {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "helm-charts",
@@ -526,7 +547,7 @@ func generateRepoList(
 		})
 	}
 	// 4. Orchestration. Only for latest stable releases
-	if isLatest && releasedVersion.Prerelease() == "" {
+	if isLatest && releasedVersion.Prerelease() == "" && !dryRun {
 		reposToWorkOn = append(reposToWorkOn, prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
