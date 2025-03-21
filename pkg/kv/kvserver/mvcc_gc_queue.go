@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -584,6 +585,11 @@ func (r *replicaGCer) template() kvpb.GCRequest {
 	desc := r.repl.Desc()
 	var template kvpb.GCRequest
 	template.Key = desc.StartKey.AsRawKey()
+	if r.repl.RangeID == 1 {
+		// r1 should really start at LocalMax but it starts "officially" at KeyMin
+		// which is not addressable.
+		template.Key = keys.LocalMax
+	}
 	template.EndKey = desc.EndKey.AsRawKey()
 
 	return template
@@ -593,31 +599,11 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	n := atomic.AddInt32(&r.count, 1)
 	log.Eventf(ctx, "sending batch %d (%d keys, %d rangekeys)", n, len(req.Keys), len(req.RangeKeys))
 
-	ba := &kvpb.BatchRequest{}
-	// Technically not needed since we're talking directly to the Replica.
-	ba.RangeID = r.repl.Desc().RangeID
-	ba.Timestamp = r.repl.Clock().Now()
-	ba.Add(&req)
-	// Since we are talking directly to the replica, we need to explicitly do
-	// admission control here, as we are bypassing server.Node.
-	var admissionHandle kvadmission.Handle
-	if r.admissionController != nil {
-		ba.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
-		ba.Replica.StoreID = r.storeID
-		var err error
-		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, ba)
-		if err != nil {
-			return err
-		}
-	}
-	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
-	defer writeBytes.Release()
-	if r.admissionController != nil {
-		r.admissionController.AdmittedKVWorkDone(admissionHandle, writeBytes)
-	}
-	if pErr != nil {
-		log.VErrEventf(ctx, 2, "%v", pErr.String())
-		return pErr.GoError()
+	var b kv.Batch
+	b.AddRawRequest(&req)
+	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
+		log.VErrEventf(ctx, 2, "%s", err)
+		return err
 	}
 	return nil
 }
