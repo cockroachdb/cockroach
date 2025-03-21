@@ -547,8 +547,8 @@ func newJoinReader(
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
 			diskBufferMemAcc := jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
-			jr.streamerInfo.diskMonitor = execinfra.NewMonitorWithStringName(
-				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
+				ctx, jr.FlowCtx.DiskMonitor, mon.MakeName("streamer-disk"),
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 				jr.FlowCtx.Cfg.TempStorage, diskBufferMemAcc, jr.streamerInfo.diskMonitor, spec.ReverseScans,
@@ -729,16 +729,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
-	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx,
-		mon.MakeName("joinreader").Limited())
+	mn := mon.MakeName("joinreader")
+	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, mn.Limited())
 	// We want to make sure that if the disk-backed container is spilled to
 	// disk, it releases all of the memory reservations, so we make the
 	// corresponding memory monitor not hold on to any bytes.
 	jr.limitedMemMonitor.RelinquishAllOnReleaseBytes()
-	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
-		mon.MakeName("joinreader").Unlimited())
-	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
-		mon.MakeName("joinreader").Disk())
+	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
+	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,
