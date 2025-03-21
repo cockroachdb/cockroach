@@ -17,11 +17,22 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
 		cpuUtil :=
 			float64(desc.NodeCapacity.NodeCPURateUsage) / float64(desc.NodeCapacity.NodeCPURateCapacity)
-		nodeCapacity := float64(desc.NodeCapacity.StoresCPURate) / cpuUtil
-		storeCapacity := nodeCapacity / float64(desc.NodeCapacity.NumStores)
-		capacity[mma.CPURate] = mma.LoadValue(storeCapacity)
+		// cpuUtil can be zero or close to zero.
+		almostZeroUtil := cpuUtil < 0.01
+		if desc.NodeCapacity.StoresCPURate != 0 && !almostZeroUtil {
+			nodeCapacity := float64(desc.NodeCapacity.StoresCPURate) / cpuUtil
+			storeCapacity := nodeCapacity / float64(desc.NodeCapacity.NumStores)
+			capacity[mma.CPURate] = mma.LoadValue(storeCapacity)
+		} else {
+			// almostZeroUtil or StoresCPURate is zero. We assume that only 50% of
+			// the usage can be accounted for in StoresCPURate, so we divide 50% of
+			// the NodeCPURateCapacity among all the stores.
+			capacity[mma.CPURate] = mma.LoadValue(
+				float64(desc.NodeCapacity.NodeCPURateCapacity/2) / float64(desc.NodeCapacity.NumStores))
+		}
 	} else {
-		// TODO(sumeer): remove this hack of defaulting to 50% utilization.
+		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
+		// NodeCPURateCapacity should never be 0.
 		capacity[mma.CPURate] = load[mma.CPURate] * 2
 	}
 	load[mma.WriteBandwidth] = mma.LoadValue(desc.Capacity.WriteBytesPerSecond)
