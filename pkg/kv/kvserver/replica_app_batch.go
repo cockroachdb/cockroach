@@ -500,7 +500,7 @@ func (b *replicaAppBatch) stageTruncation(
 		// This truncation will apply synchronously in this batch. Stage the
 		// write into the batch, and compute metadata used after applying it.
 		if err := handleTruncatedStateBelowRaftPreApply(
-			ctx, b.truncState, truncatedState,
+			ctx, b.truncState, *truncatedState,
 			b.r.raftMu.stateLoader.StateLoader, b.batch,
 		); err != nil {
 			return errors.Wrap(err, "unable to handle truncated state")

@@ -3052,7 +3052,7 @@ func (r *Replica) acquireMergeLock(
 func handleTruncatedStateBelowRaftPreApply(
 	ctx context.Context,
 	prev kvserverpb.RaftTruncatedState,
-	next *kvserverpb.RaftTruncatedState,
+	next kvserverpb.RaftTruncatedState,
 	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
 ) error {
