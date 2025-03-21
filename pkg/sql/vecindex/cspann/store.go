@@ -9,20 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
-	"github.com/cockroachdb/errors"
 )
-
-// ErrPartitionNotFound is returned by the store when the requested partition
-// cannot be found because it has been deleted by another agent.
-var ErrPartitionNotFound = errors.New("partition not found")
-
-// ErrRestartOperation is returned by the store when it needs the last index
-// operation (e.g. search or insert) to be restarted. This should only be
-// returned in situations where restarting the operation is guaranteed to make
-// progress, in order to avoid an infinite loop. An example is a stale root
-// partition, where a restarted operation can make progress after the cache has
-// been refreshed.
-var ErrRestartOperation = errors.New("conflict detected, restart operation")
 
 // VectorWithKey contains an original, full-size vector and its referencing key.
 type VectorWithKey struct {
@@ -33,17 +20,6 @@ type VectorWithKey struct {
 	Key ChildKey
 	// Vector is the original, full-size vector that the key references.
 	Vector vector.T
-}
-
-// PartitionMetadata includes the size of the partition, as well as information
-// from the metadata record.
-type PartitionMetadata struct {
-	// Level is the level of the partition in the K-means tree.
-	Level Level
-	// Centroid is the centroid for vectors in the partition. It is calculated
-	// once when the partition is created and never changes, even if additional
-	// vectors are added later.
-	Centroid vector.T
 }
 
 // PartitionToSearch contains information about a partition to be searched by
@@ -62,8 +38,8 @@ type PartitionToSearch struct {
 	Count int
 }
 
-// Store encapsulates the component that’s actually storing the vectors, whether
-// that’s in a CRDB cluster for production or in memory for testing and
+// Store encapsulates the component that's actually storing the vectors, whether
+// that's in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
 // the store that update its structure and contents.
 //
@@ -82,6 +58,11 @@ type Store interface {
 	// Begin.
 	AbortTransaction(ctx context.Context, txn Txn) error
 
+	// RunTransaction invokes the given function in the scope of a new
+	// transaction. If the function returns an error, the transaction is aborted,
+	// else it is committed.
+	RunTransaction(ctx context.Context, fn func(txn Txn) error) error
+
 	// EstimatePartitionCount returns the approximate number of vectors in the
 	// given partition. The estimate can be based on a (bounded) stale copy of
 	// the partition.
@@ -93,6 +74,87 @@ type Store interface {
 	// stats if "skipMerge" is false. "stats" is updated with the latest global
 	// stats.
 	MergeStats(ctx context.Context, stats *IndexStats, skipMerge bool) error
+
+	// TryCreateEmptyPartition constructs a new partition containing no vectors,
+	// having the specified key and metadata. It returns a ConditionFailedError
+	// if the partition already exists.
+	TryCreateEmptyPartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, metadata PartitionMetadata,
+	) error
+
+	// TryDeletePartition deletes the specified partition. It returns
+	// ErrPartitionNotFound if the partition does not exist.
+	TryDeletePartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) error
+
+	// TryGetPartition returns the requested partition, if it exists, else it
+	// returns ErrPartitionNotFound.
+	TryGetPartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (*Partition, error)
+
+	// TryGetPartitionMetadata returns just the metadata of the requested
+	// partition, if it exists, else it returns ErrPartitionNotFound. This is
+	// more efficient than loading the entire partition when only metadata is
+	// needed.
+	TryGetPartitionMetadata(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (PartitionMetadata, error)
+
+	// TryUpdatePartitionMetadata updates the partition's metadata only if it's
+	// equal to the expected value, else it returns a ConditionFailedError. If
+	// the partition does not exist, it returns ErrPartitionNotFound.
+	TryUpdatePartitionMetadata(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		metadata PartitionMetadata,
+		expected PartitionMetadata,
+	) error
+
+	// TryAddToPartition adds the given vectors (and associated keys/values) to
+	// the specified partition. If a vector's key already exists in
+	// the partition, the vector is not added.
+	//
+	// Before performing any action, TryAddToPartition checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If the partition does not exist, it returns
+	// ErrPartitionNotFound.
+	//
+	// NOTE: Individual adds do not need to share a transaction. If an error
+	// occurs in the middle of the operation, vectors that have already been added
+	// are not guaranteed to roll back.
+	TryAddToPartition(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		vectors vector.Set,
+		childKeys []ChildKey,
+		valueBytes []ValueBytes,
+		expected PartitionMetadata,
+	) (added bool, err error)
+
+	// TryRemoveFromPartition removes vectors from the given partition by their
+	// child keys. If a key is not present in the partition, it is a no-op. If
+	// an attempt is made to remove all vectors in a non-leaf partition, then
+	// ErrRemoveNotAllowed is returned.
+	//
+	// Before performing any action, TryRemoveFromPartition checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If the partition does not exist, it returns
+	// ErrPartitionNotFound.
+	//
+	// NOTE: Individual removes do not need to share a transaction. If an error
+	// occurs in the middle of the operation, vectors that have already been
+	// removed are not guaranteed to roll back.
+	TryRemoveFromPartition(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		childKeys []ChildKey,
+		expected PartitionMetadata,
+	) (removed bool, err error)
 }
 
 // Txn enables callers to make changes to the stored index in a transactional

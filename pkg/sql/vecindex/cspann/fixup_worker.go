@@ -576,7 +576,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 		}
 
 		// Add the vector to the split partition.
-		partition.Add(&fw.workspace, vector, result.ChildKey, result.ValueBytes)
+		partition.Add(&fw.workspace, vector, result.ChildKey, result.ValueBytes, true /* overwrite */)
 	}
 
 	return nil
