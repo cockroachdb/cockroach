@@ -389,3 +389,50 @@ func printTruncatorState(t *testing.T, buf *strings.Builder, truncator *raftLogT
 		prefixStr = ", "
 	}
 }
+
+func (pt pendingTruncation) delta(delta int64, trusted bool) pendingTruncation {
+	pt.logDeltaBytes = delta
+	pt.isDeltaTrusted = trusted
+	return pt
+}
+
+func TestPendingTruncationMerge(t *testing.T) {
+	pt := func(from, to, term uint64) pendingTruncation {
+		return pendingTruncation{
+			RaftTruncatedState: kvserverpb.RaftTruncatedState{
+				Index: kvpb.RaftIndex(to),
+				Term:  kvpb.RaftTerm(term),
+			},
+			expectedFirstIndex: kvpb.RaftIndex(from + 1),
+		}
+	}
+	for _, tt := range []struct {
+		prev pendingTruncation
+		next pendingTruncation
+		want pendingTruncation
+	}{{
+		prev: pt(100, 200, 10).delta(1024, true),
+		next: pt(200, 300, 11).delta(1024, true),
+		want: pt(100, 300, 11).delta(2048, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, false),
+		next: pt(200, 300, 11).delta(1024, true),
+		want: pt(100, 300, 11).delta(2048, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, true),
+		next: pt(200, 300, 11).delta(1024, false),
+		want: pt(100, 300, 11).delta(2048, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, true),
+		next: pt(150, 300, 11).delta(2048, true),
+		want: pt(100, 300, 11).delta(3072, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, false),
+		next: pt(250, 400, 11).delta(2048, true),
+		want: pt(100, 400, 11).delta(3072, false),
+	}} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tt.want, tt.next.merge(tt.prev))
+		})
+	}
+}
