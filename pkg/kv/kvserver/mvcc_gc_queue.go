@@ -123,6 +123,16 @@ var EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSetting
 	false,
 )
 
+// See https://github.com/cockroachdb/cockroach/pull/143122.
+var mvccGCQueueFullyEnableAC = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_kv_admission_control.enabled",
+	"when true, MVCC GC queue operations are subject to store admission control. If set to false, "+
+		"since store admission control will be disabled, replication flow control will also be effectively disabled. "+
+		"This setting does not affect CPU admission control.",
+	true,
+)
+
 func largeAbortSpan(ms enginepb.MVCCStats) bool {
 	// Checks if the size of the abort span exceeds the given threshold.
 	// The abort span is not supposed to become that large, but it does
@@ -608,6 +618,9 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, ba)
 		if err != nil {
 			return err
+		}
+		if mvccGCQueueFullyEnableAC.Get(&r.repl.ClusterSettings().SV) {
+			ctx = admissionHandle.AnnotateCtx(ctx)
 		}
 	}
 	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
