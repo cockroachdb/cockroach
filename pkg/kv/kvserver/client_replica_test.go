@@ -2738,9 +2738,12 @@ func TestChangeReplicasGeneration(t *testing.T) {
 func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Increase the verbosity of the test to help investigate failures.
+	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
+
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
@@ -2788,6 +2791,7 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
+	log.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
 	tc.StopServer(stoppedNodeInx)
 	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 
