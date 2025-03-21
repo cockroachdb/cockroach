@@ -321,6 +321,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			expectedFirstIndex: rResult.RaftExpectedFirstIndex,
 			logDeltaBytes:      rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize,
 			isDeltaTrusted:     true,
+			hasSideloaded:      false, // unused, but listed here for completeness
 		})
 		rResult.DiscardRaftTruncation()
 	}
