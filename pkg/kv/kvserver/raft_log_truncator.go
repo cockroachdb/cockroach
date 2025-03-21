@@ -92,7 +92,7 @@ func (p *pendingLogTruncations) nextCompactedIndex(compIndex kvpb.RaftIndex) kvp
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.iterateLocked(func(_ int, trunc pendingTruncation) {
-		compIndex = max(compIndex, trunc.compactedIndex())
+		compIndex = max(compIndex, trunc.Index)
 	})
 	return compIndex
 }
@@ -170,11 +170,6 @@ type pendingTruncation struct {
 	hasSideloaded bool
 }
 
-func (pt pendingTruncation) compactedIndex() kvpb.RaftIndex {
-	// Reminder: RaftTruncatedState.Index is inclusive.
-	return pt.Index
-}
-
 // merge returns the result of merging this pendingTruncation with the one that
 // precedes it.
 func (pt pendingTruncation) merge(prev pendingTruncation) pendingTruncation {
@@ -182,7 +177,7 @@ func (pt pendingTruncation) merge(prev pendingTruncation) pendingTruncation {
 	res.RaftTruncatedState = pt.RaftTruncatedState
 	res.logDeltaBytes += pt.logDeltaBytes
 	res.hasSideloaded = prev.hasSideloaded || pt.hasSideloaded
-	if !pt.isDeltaTrusted || prev.compactedIndex()+1 != pt.expectedFirstIndex {
+	if !pt.isDeltaTrusted || prev.Index+1 != pt.expectedFirstIndex {
 		res.isDeltaTrusted = false
 	}
 	return res
@@ -327,7 +322,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 	// computation returns the same result regardless of which is plugged in as
 	// the lower bound.
 	if entries, size, err := r.sideloadedStats(ctx, kvpb.RaftSpan{
-		After: alreadyTruncIndex, Last: pendingTrunc.compactedIndex(),
+		After: alreadyTruncIndex, Last: pendingTrunc.Index,
 	}); err != nil {
 		// Log a loud error since we need to continue enqueuing the truncation.
 		log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
