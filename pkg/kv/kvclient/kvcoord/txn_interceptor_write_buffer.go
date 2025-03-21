@@ -513,6 +513,7 @@ func (twb *txnWriteBuffer) maybeServeRead(
 	it := twb.buffer.MakeIter()
 	seek := &twb.bufferSeek
 	seek.key = key
+	seek.endKey = nil
 
 	it.FirstOverlap(seek)
 	if it.Valid() {
