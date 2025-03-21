@@ -140,12 +140,14 @@ func (r *replicaTruncatorTest) getPendingTruncs() *pendingLogTruncations {
 	return &r.pendingTruncs
 }
 
-func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
+func (r *replicaTruncatorTest) sideloadedStats(
 	_ context.Context, span kvpb.RaftSpan,
-) (freed int64, _ error) {
-	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n",
-		r.rangeID, span.After, span.Last)
-	return r.sideloadedFreed, r.sideloadedErr
+) (entries uint64, size int64, _ error) {
+	fmt.Fprintf(r.buf, "r%d.sideloadedStats(%d, %d)\n", r.rangeID, span.After, span.Last)
+	if r.sideloadedFreed != 0 {
+		entries = 1 // Make it look like we are removing some sideloaded entries.
+	}
+	return entries, r.sideloadedFreed, r.sideloadedErr
 }
 
 func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
@@ -387,5 +389,69 @@ func printTruncatorState(t *testing.T, buf *strings.Builder, truncator *raftLogT
 	for _, id := range ranges {
 		fmt.Fprintf(buf, "%s%d", prefixStr, id)
 		prefixStr = ", "
+	}
+}
+
+func (pt pendingTruncation) delta(delta int64, hasSideloaded, trusted bool) pendingTruncation {
+	pt.logDeltaBytes = delta
+	pt.isDeltaTrusted = trusted
+	pt.hasSideloaded = hasSideloaded
+	return pt
+}
+
+func TestPendingTruncationMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pt := func(from, to, term uint64) pendingTruncation {
+		return pendingTruncation{
+			RaftTruncatedState: kvserverpb.RaftTruncatedState{
+				Index: kvpb.RaftIndex(to),
+				Term:  kvpb.RaftTerm(term),
+			},
+			expectedFirstIndex: kvpb.RaftIndex(from + 1),
+		}
+	}
+	const hasSL, noSL = true, false
+	for _, tt := range []struct {
+		prev pendingTruncation
+		next pendingTruncation
+		want pendingTruncation
+	}{{
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, noSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, false),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, false),
+		want: pt(100, 300, 11).delta(2048, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, hasSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, hasSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, hasSL, true),
+		next: pt(200, 300, 11).delta(1024, hasSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(150, 300, 11).delta(2048, noSL, true),
+		want: pt(100, 300, 11).delta(3072, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, false),
+		next: pt(250, 400, 11).delta(2048, noSL, true),
+		want: pt(100, 400, 11).delta(3072, noSL, false),
+	}} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tt.want, tt.next.merge(tt.prev))
+		})
 	}
 }
