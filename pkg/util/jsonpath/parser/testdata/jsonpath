@@ -363,6 +363,61 @@ $.a[*] ? (@.b > 100 || (@.c < 100))
 ----
 $."a"[*]?(((@."b" > 100) || (@."c" < 100))) -- normalized!
 
+parse
+1 + 1
+----
+(1 + 1) -- normalized!
+
+parse
+1 + 1 * 2
+----
+(1 + (1 * 2)) -- normalized!
+
+parse
+1 + 2 - 3 * 4 / 5 % 6
+----
+((1 + 2) - (((3 * 4) / 5) % 6)) -- normalized!
+
+parse
+(1 + 2) * (3 - 4) / 5
+----
+(((1 + 2) * (3 - 4)) / 5) -- normalized!
+
+parse
+1 * 2 + 3 * 4
+----
+((1 * 2) + (3 * 4)) -- normalized!
+
+parse
+1 + 2 * (3 - 4) / (5 + 6) - 7 % 8
+----
+((1 + ((2 * (3 - 4)) / (5 + 6))) - (7 % 8)) -- normalized!
+
+parse
+1 * (2 + 3) - 4 / (5 - 6) % 7
+----
+((1 * (2 + 3)) - ((4 / (5 - 6)) % 7)) -- normalized!
+
+parse
+((1 + 2) * 3) - (4 % 5) * 6
+----
+(((1 + 2) * 3) - ((4 % 5) * 6)) -- normalized!
+
+parse
+1 + 2 - 3 + 4 - 5
+----
+((((1 + 2) - 3) + 4) - 5) -- normalized!
+
+parse
+$.c[$.b - $.a]
+----
+$."c"[($."b" - $."a")] -- normalized!
+
+parse
+$.c[$.b - $.a to $.d - $.b]
+----
+$."c"[($."b" - $."a") to ($."d" - $."b")] -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
