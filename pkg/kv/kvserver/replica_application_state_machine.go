@@ -289,24 +289,11 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
-	truncState := rResult.RaftTruncatedState
-	if truncState != nil {
-		rResult.RaftTruncatedState = nil
-	}
-
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
 			rResult.State.Lease = nil
 			rResult.PriorReadSummary = nil
-		}
-
-		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			if truncState != nil {
-				log.Fatalf(ctx, "double RaftTruncatedState in ReplicatedEvalResult")
-			}
-			truncState = newTruncState
-			rResult.State.TruncatedState = nil
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
@@ -326,17 +313,16 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 
 	// TODO(#93248): the strongly coupled truncation code will be removed once the
 	// loosely coupled truncations are the default.
-	if truncState != nil {
-		// NB: The RaftExpectedFirstIndex field is zero if this proposal is from
-		// before v22.1 that added it, when all truncations were strongly coupled.
-		// The delta in these historical proposals is accurate, but does not account
-		// for the sideloaded entries.
-		// TODO(pav-kv): remove the zero clause after any below-raft migration.
-		logDelta := rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize
-		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, *truncState,
-			rResult.RaftExpectedFirstIndex, logDelta, true /* isDeltaTrusted */)
-		rResult.RaftLogDelta = 0
-		rResult.RaftExpectedFirstIndex = 0
+	if truncState := rResult.GetRaftTruncatedState(); truncState != nil {
+		// The size delta in the proposal is accurate, but does not account for the
+		// sideloaded entries, so we fix it up.
+		sm.r.handleTruncatedStateResultRaftMuLocked(ctx, pendingTruncation{
+			RaftTruncatedState: *truncState,
+			expectedFirstIndex: rResult.RaftExpectedFirstIndex,
+			logDeltaBytes:      rResult.RaftLogDelta - sm.batch.truncatedSideloadedSize,
+			isDeltaTrusted:     true,
+		})
+		rResult.DiscardRaftTruncation()
 	}
 
 	// The rest of the actions are "nontrivial" and may have large effects on the

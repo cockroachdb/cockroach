@@ -30,8 +30,7 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 }
 
 func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
-	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx, pt.RaftTruncatedState,
-		pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted)
+	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx, pt)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {

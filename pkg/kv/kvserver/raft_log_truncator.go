@@ -14,12 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 // pendingLogTruncations tracks proposed truncations for a replica that have
@@ -542,27 +539,20 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// (this subsumes all the preceding queued truncations).
 	batch := t.store.getEngine().NewUnindexedBatch()
 	defer batch.Close()
-	apply, err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
-		&pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
-		stateLoader.StateLoader, batch)
-	if err != nil || !apply {
-		if err != nil {
-			log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
-		} else {
-			err := errors.AssertionFailedf(
-				"unexpected !apply from handleTruncatedStateBelowRaftPreApply")
-			if buildutil.CrdbTestBuild || util.RaceEnabled {
-				log.Fatalf(ctx, "%s", err)
-			} else {
-				log.Errorf(ctx, "%s", err)
-			}
-		}
+	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
+		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,
+		stateLoader.StateLoader, batch,
+	); err != nil {
+		log.Errorf(ctx, "while attempting to truncate raft log: %+v", err)
 		pendingTruncs.reset()
 		return
 	}
 	// sync=false since we don't need a guarantee that the truncation is
 	// durable. Loss of a truncation means we have more of the suffix of the
 	// raft log, which does not affect correctness.
+	// TODO(pav-kv): there is a bug here. When a truncation removes sideloaded
+	// entries, there must be a log engine sync preceding the file removals. This
+	// is the same issue as #38566 and #113135 in the tightly-coupled stack.
 	if err := batch.Commit(false /* sync */); err != nil {
 		log.Errorf(ctx, "while committing batch to truncate raft log: %+v", err)
 		pendingTruncs.reset()

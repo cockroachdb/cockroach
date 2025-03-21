@@ -32,7 +32,7 @@ func TestPlanCosts(t *testing.T) {
 	}
 	var pc planCosts
 	for _, tc := range testCases {
-		pc.ClearCustom()
+		pc.Reset()
 		for _, cost := range tc.input {
 			pc.AddCustom(memo.Cost{C: cost})
 		}
@@ -40,8 +40,8 @@ func TestPlanCosts(t *testing.T) {
 			t.Errorf("expected Len() to be %d, got %d", tc.expectedNum, pc.NumCustom())
 		}
 		expectedAvgCost := memo.Cost{C: tc.expectedAvg}
-		if pc.AvgCustom() != expectedAvgCost {
-			t.Errorf("expected Avg() to be %f, got %f", tc.expectedAvg, pc.AvgCustom().C)
+		if pc.avgCustom() != expectedAvgCost {
+			t.Errorf("expected Avg() to be %f, got %f", tc.expectedAvg, pc.avgCustom().C)
 		}
 	}
 }
