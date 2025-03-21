@@ -64,11 +64,6 @@ type replicaAppBatch struct {
 	// sideloaded storage file. Such commands may apply side effects only after
 	// their application to state machine is synced.
 	changeTruncatesSideloadedFiles bool
-	// truncatedSideloadedSize is set when changeTruncatesSideloadedFiles is true,
-	// and contains the total size of the removed sideloaded entry files.
-	// TODO(pav-kv): make a type for the truncation-related parameters.
-	// Potentially, can use the pendingTruncation type here.
-	truncatedSideloadedSize int64
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
@@ -511,6 +506,13 @@ func (b *replicaAppBatch) stageTruncation(
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}
+
+	pt := pendingTruncation{
+		RaftTruncatedState: *truncatedState,
+		expectedFirstIndex: res.RaftExpectedFirstIndex,
+		logDeltaBytes:      res.RaftLogDelta,
+		isDeltaTrusted:     true,
+	}
 	// Determine if there are any sideloaded entries that will be removed as a
 	// side effect, and the total size of these entries.
 	//
@@ -526,8 +528,11 @@ func (b *replicaAppBatch) stageTruncation(
 		return errors.Wrap(err, "failed searching for sideloaded entries")
 	} else if entries != 0 {
 		b.changeTruncatesSideloadedFiles = true
-		b.truncatedSideloadedSize = size
+		pt.logDeltaBytes -= size
+		pt.hasSideloaded = true
 	}
+
+	b.r.stageTruncatedStateRaftMuLocked(pt)
 	return nil
 }
 
