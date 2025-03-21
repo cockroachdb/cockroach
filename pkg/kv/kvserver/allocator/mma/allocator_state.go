@@ -274,8 +274,8 @@ func (a *allocatorState) rebalanceStores(
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
 				log.Infof(ctx,
-					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with"+
-						"resulting load %v %v (means: %v)",
+					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with "+
+						"resulting loads %v %v (means: %v)",
 					ss.NodeID, store.StoreID, rangeID,
 					removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
 					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load)
