@@ -289,7 +289,7 @@ func listRemoteBranches(pattern string) ([]string, error) {
 	if err != nil {
 		return []string{}, fmt.Errorf("git ls-remote: %w", err)
 	}
-	log.Printf("git ls-remote returned: %s", out)
+	log.Printf("git ls-remote for %s returned: %s", pattern, out)
 	var remoteBranches []string
 	// Example output:
 	// $ git ls-remote origin "refs/heads/release-23.1*"
@@ -322,6 +322,7 @@ func fileContent(ref string, f string) (string, error) {
 // Returns true if ref1 is an ancestor of ref2, false if not, and error if the command fails.
 func isAncestor(ref1, ref2 string) (bool, error) {
 	cmd := exec.Command("git", "merge-base", "--is-ancestor", remoteOrigin+"/"+ref1, remoteOrigin+"/"+ref2)
+	log.Printf("git merge-base --is-ancestor %s %s", remoteOrigin+"/"+ref1, remoteOrigin+"/"+ref2)
 	err := cmd.Run()
 	if err != nil {
 		var exitErr *exec.ExitError
