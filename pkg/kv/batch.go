@@ -376,7 +376,10 @@ func (b *Batch) AddRawRequest(reqs ...kvpb.Request) {
 }
 
 func (b *Batch) get(
-	key interface{}, str kvpb.KeyLockingStrengthType, dur kvpb.KeyLockingDurabilityType,
+	key interface{},
+	str kvpb.KeyLockingStrengthType,
+	dur kvpb.KeyLockingDurabilityType,
+	lockNonExisting bool,
 ) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -387,7 +390,7 @@ func (b *Batch) get(
 	case kvpb.NonLocking:
 		b.appendReqs(kvpb.NewGet(k))
 	case kvpb.ForShare, kvpb.ForUpdate:
-		b.appendReqs(kvpb.NewLockingGet(k, str, dur))
+		b.appendReqs(kvpb.NewLockingGet(k, str, dur, lockNonExisting))
 	default:
 		panic(errors.AssertionFailedf("unknown str %d", str))
 	}
@@ -402,7 +405,7 @@ func (b *Batch) get(
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
-	b.get(key, kvpb.NonLocking, kvpb.Invalid)
+	b.get(key, kvpb.NonLocking, kvpb.Invalid, false /* lockNonExisting */)
 }
 
 // GetForUpdate retrieves the value for a key, returning the retrieved key/value
@@ -415,7 +418,13 @@ func (b *Batch) Get(key interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) GetForUpdate(key interface{}, dur kvpb.KeyLockingDurabilityType) {
-	b.get(key, kvpb.ForUpdate, dur)
+	b.get(key, kvpb.ForUpdate, dur, false /* lockNonExisting */)
+}
+
+// GetForUpdateLockNonExisting is similar to GetForUpdate, but it will acquire a
+// lock on the key even if it does not exist.
+func (b *Batch) GetForUpdateLockNonExisting(key interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.get(key, kvpb.ForUpdate, dur, true /* lockNonExisting */)
 }
 
 // GetForShare retrieves the value for a key. A shared lock with the supplied
@@ -427,7 +436,13 @@ func (b *Batch) GetForUpdate(key interface{}, dur kvpb.KeyLockingDurabilityType)
 //
 // key can be either a byte slice or a string.
 func (b *Batch) GetForShare(key interface{}, dur kvpb.KeyLockingDurabilityType) {
-	b.get(key, kvpb.ForShare, dur)
+	b.get(key, kvpb.ForShare, dur, false /* lockNonExisting */)
+}
+
+// GetForShareLockNonExisting is similar to GetForShare, but it will acquire a
+// lock on the key even if it does not exist.
+func (b *Batch) GetForShareLockNonExisting(key interface{}, dur kvpb.KeyLockingDurabilityType) {
+	b.get(key, kvpb.ForShare, dur, true /* lockNonExisting */)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool, mustAcquireExclusiveLock bool) {

@@ -1592,7 +1592,7 @@ func (r *IsSpanEmptyResponse) ShallowCopy() Response {
 // corresponding to the supplied lock strength and durability is acquired on the
 // key, if it exists.
 func NewLockingGet(
-	key roachpb.Key, str KeyLockingStrengthType, dur KeyLockingDurabilityType,
+	key roachpb.Key, str KeyLockingStrengthType, dur KeyLockingDurabilityType, lockNonExisting bool,
 ) Request {
 	return &GetRequest{
 		RequestHeader: RequestHeader{
@@ -1600,6 +1600,7 @@ func NewLockingGet(
 		},
 		KeyLockingStrength:   scanLockStrength(str),
 		KeyLockingDurability: scanLockDurability(dur),
+		LockNonExisting:      lockNonExisting,
 	}
 }
 
