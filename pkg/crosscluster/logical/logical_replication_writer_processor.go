@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -180,11 +181,17 @@ func newLogicalReplicationWriterProcessor(
 
 	procConfigByDestTableID := make(map[descpb.ID]sqlProcessorTableConfig)
 	destTableBySrcID := make(map[descpb.ID]dstTableMetadata)
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(spec.TypeDescriptors)
 	for dstTableID, md := range spec.TableMetadataByDestID {
+		srcDesc := tabledesc.NewBuilder(&md.SourceDescriptor).BuildImmutableTable()
+		if err := typedesc.HydrateTypesInDescriptor(ctx, srcDesc, crossClusterResolver); err != nil {
+			return nil, err
+		}
 		procConfigByDestTableID[descpb.ID(dstTableID)] = sqlProcessorTableConfig{
-			srcDesc: tabledesc.NewBuilder(&md.SourceDescriptor).BuildImmutableTable(),
+			srcDesc: srcDesc,
 			dstOID:  md.DestinationFunctionOID,
 		}
+
 		destTableBySrcID[md.SourceDescriptor.GetID()] = dstTableMetadata{
 			database: md.DestinationParentDatabaseName,
 			schema:   md.DestinationParentSchemaName,
