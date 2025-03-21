@@ -652,8 +652,8 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 		require.Len(t, ba.Requests, 3)
 
 		// We now expect the buffer to be flushed along with the commit.
-		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
 		br = ba.CreateReply()
@@ -936,8 +936,8 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 		require.Len(t, ba.Requests, 3)
 
 		// We now expect the buffer to be flushed along with the commit.
-		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
 
 		br = ba.CreateReply()
@@ -1271,4 +1271,61 @@ func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
 	// not be returned.
 	require.Len(t, br.Responses, 1)
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
+
+// TestTxnWriteBufferMustSortBatchesBySequenceNumber verifies that flushed
+// batches are sorted in sequence number order, as currently required by the txn
+// pipeliner interceptor.
+func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer()
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("b")
+	val := "val"
+
+	// Send a batch that should be completely buffered.
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(putArgs(keyC, val, txn.Sequence))
+	ba.Add(putArgs(keyB, val, txn.Sequence+1))
+	ba.Add(putArgs(keyA, val, txn.Sequence+2))
+
+	prevNumCalled := mockSender.numCalled
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, prevNumCalled, mockSender.numCalled, "batch sent unexpectedly")
+
+	// Commit the batch to flush the buffer.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{Sequence: txn.Sequence + 4},
+		Commit:        true,
+	})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+		lastSeq := enginepb.TxnSeq(0)
+		for _, r := range ba.Requests {
+			seq := r.GetInner().Header().Sequence
+			if seq >= lastSeq {
+				lastSeq = seq
+			} else {
+				t.Fatal("expected batch to be sorted by sequence number")
+			}
+		}
+		br = ba.CreateReply()
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
 }
