@@ -347,7 +347,7 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if ru.Helper.Indexes[i].GetType() == idxtype.INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() {
+		if ru.Helper.Indexes[i].GetType() == idxtype.INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() && !ru.Helper.Indexes[i].Merging() {
 			// Deduplicate the keys we're adding and removing if we're updating an
 			// inverted index. For example, imagine a table with an inverted index on j:
 			//
@@ -448,14 +448,16 @@ func (ru *Updater) UpdateRow(
 						}
 					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
 						sameKey = true
-					} else if !index.IsTemporaryIndexForBackfill() {
+					} else if !index.IsTemporaryIndexForBackfill() && !index.Merging() {
 						// If this is a temporary index for backfill, we want to make sure we write out all
 						// index values even in the case where they should be the same. We do this because the
 						// temporary index is eventually merged into a newly added index that might be in a
 						// DELETE_ONLY state at the time of this update and thus the temporary index needs to
 						// have all of the entries.
 						//
-						// Otherwise, skip this put since the key and value are the same.
+						// For merging indexes we will compare timestamps during the merge process so all
+						// updates should always be captured into the final secondary index that is being
+						// merged.  Otherwise, skip this put since the key and value are the same.
 						continue
 					}
 
