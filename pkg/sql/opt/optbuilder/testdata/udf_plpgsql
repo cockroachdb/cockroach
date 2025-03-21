@@ -7013,106 +7013,91 @@ values
                                                    │    ├── le
                                                    │    │    ├── variable: "_loop_counter":14
                                                    │    │    └── variable: "_loop_upper":12
-                                                   │    └── subquery
+                                                   │    └── udf: _stmt_raise_9
                                                    │         ├── tail-call
-                                                   │         └── values
-                                                   │              ├── columns: "_stmt_raise_9":33
-                                                   │              └── tuple
-                                                   │                   └── udf: _stmt_raise_9
-                                                   │                        ├── tail-call
-                                                   │                        ├── args
-                                                   │                        │    ├── variable: i:10
-                                                   │                        │    ├── variable: "_loop_lower":11
-                                                   │                        │    ├── variable: "_loop_upper":12
-                                                   │                        │    ├── variable: "_loop_step":13
-                                                   │                        │    └── variable: "_loop_counter":14
-                                                   │                        ├── params: i:26 "_loop_lower":27 "_loop_upper":28 "_loop_step":29 "_loop_counter":30
-                                                   │                        └── body
-                                                   │                             ├── values
-                                                   │                             │    ├── columns: stmt_raise_10:31
-                                                   │                             │    └── tuple
-                                                   │                             │         └── function: crdb_internal.plpgsql_raise
-                                                   │                             │              ├── const: 'NOTICE'
-                                                   │                             │              ├── concat
-                                                   │                             │              │    ├── concat
-                                                   │                             │              │    │    ├── const: 'i: '
-                                                   │                             │              │    │    └── coalesce
-                                                   │                             │              │    │         ├── cast: STRING
-                                                   │                             │              │    │         │    └── variable: i:26
-                                                   │                             │              │    │         └── const: '<NULL>'
-                                                   │                             │              │    └── const: ''
-                                                   │                             │              ├── const: ''
-                                                   │                             │              ├── const: ''
-                                                   │                             │              └── const: '00000'
-                                                   │                             └── values
-                                                   │                                  ├── columns: stmt_if_8:32
-                                                   │                                  └── tuple
-                                                   │                                       └── subquery
-                                                   │                                            ├── tail-call
-                                                   │                                            └── values
-                                                   │                                                 ├── columns: stmt_loop_inc_7:25
-                                                   │                                                 └── tuple
-                                                   │                                                      └── udf: stmt_loop_inc_7
-                                                   │                                                           ├── tail-call
-                                                   │                                                           ├── args
-                                                   │                                                           │    ├── variable: i:26
-                                                   │                                                           │    ├── variable: "_loop_lower":27
-                                                   │                                                           │    ├── variable: "_loop_upper":28
-                                                   │                                                           │    ├── variable: "_loop_step":29
-                                                   │                                                           │    └── variable: "_loop_counter":30
-                                                   │                                                           ├── params: i:15 "_loop_lower":16 "_loop_upper":17 "_loop_step":18 "_loop_counter":19
-                                                   │                                                           └── body
-                                                   │                                                                └── project
-                                                   │                                                                     ├── columns: stmt_loop_6:38
-                                                   │                                                                     ├── barrier
-                                                   │                                                                     │    ├── columns: "_loop_counter":36 i:37
-                                                   │                                                                     │    └── project
-                                                   │                                                                     │         ├── columns: i:37 "_loop_counter":36
-                                                   │                                                                     │         ├── values
-                                                   │                                                                     │         │    ├── columns: "_loop_counter":36
-                                                   │                                                                     │         │    └── tuple
-                                                   │                                                                     │         │         └── plus
-                                                   │                                                                     │         │              ├── variable: "_loop_counter":19
-                                                   │                                                                     │         │              └── variable: "_loop_step":18
-                                                   │                                                                     │         └── projections
-                                                   │                                                                     │              └── variable: "_loop_counter":36 [as=i:37]
-                                                   │                                                                     └── projections
-                                                   │                                                                          └── udf: stmt_loop_6 [as=stmt_loop_6:38]
-                                                   │                                                                               ├── tail-call
-                                                   │                                                                               ├── args
-                                                   │                                                                               │    ├── variable: i:37
-                                                   │                                                                               │    ├── variable: "_loop_lower":16
-                                                   │                                                                               │    ├── variable: "_loop_upper":17
-                                                   │                                                                               │    ├── variable: "_loop_step":18
-                                                   │                                                                               │    └── variable: "_loop_counter":36
-                                                   │                                                                               └── recursive-call
-                                                   └── subquery
+                                                   │         ├── args
+                                                   │         │    ├── variable: i:10
+                                                   │         │    ├── variable: "_loop_lower":11
+                                                   │         │    ├── variable: "_loop_upper":12
+                                                   │         │    ├── variable: "_loop_step":13
+                                                   │         │    └── variable: "_loop_counter":14
+                                                   │         ├── params: i:26 "_loop_lower":27 "_loop_upper":28 "_loop_step":29 "_loop_counter":30
+                                                   │         └── body
+                                                   │              ├── values
+                                                   │              │    ├── columns: stmt_raise_10:31
+                                                   │              │    └── tuple
+                                                   │              │         └── function: crdb_internal.plpgsql_raise
+                                                   │              │              ├── const: 'NOTICE'
+                                                   │              │              ├── concat
+                                                   │              │              │    ├── concat
+                                                   │              │              │    │    ├── const: 'i: '
+                                                   │              │              │    │    └── coalesce
+                                                   │              │              │    │         ├── cast: STRING
+                                                   │              │              │    │         │    └── variable: i:26
+                                                   │              │              │    │         └── const: '<NULL>'
+                                                   │              │              │    └── const: ''
+                                                   │              │              ├── const: ''
+                                                   │              │              ├── const: ''
+                                                   │              │              └── const: '00000'
+                                                   │              └── values
+                                                   │                   ├── columns: stmt_if_8:32
+                                                   │                   └── tuple
+                                                   │                        └── udf: stmt_loop_inc_7
+                                                   │                             ├── tail-call
+                                                   │                             ├── args
+                                                   │                             │    ├── variable: i:26
+                                                   │                             │    ├── variable: "_loop_lower":27
+                                                   │                             │    ├── variable: "_loop_upper":28
+                                                   │                             │    ├── variable: "_loop_step":29
+                                                   │                             │    └── variable: "_loop_counter":30
+                                                   │                             ├── params: i:15 "_loop_lower":16 "_loop_upper":17 "_loop_step":18 "_loop_counter":19
+                                                   │                             └── body
+                                                   │                                  └── project
+                                                   │                                       ├── columns: stmt_loop_6:38
+                                                   │                                       ├── barrier
+                                                   │                                       │    ├── columns: "_loop_counter":36 i:37
+                                                   │                                       │    └── project
+                                                   │                                       │         ├── columns: i:37 "_loop_counter":36
+                                                   │                                       │         ├── values
+                                                   │                                       │         │    ├── columns: "_loop_counter":36
+                                                   │                                       │         │    └── tuple
+                                                   │                                       │         │         └── plus
+                                                   │                                       │         │              ├── variable: "_loop_counter":19
+                                                   │                                       │         │              └── variable: "_loop_step":18
+                                                   │                                       │         └── projections
+                                                   │                                       │              └── variable: "_loop_counter":36 [as=i:37]
+                                                   │                                       └── projections
+                                                   │                                            └── udf: stmt_loop_6 [as=stmt_loop_6:38]
+                                                   │                                                 ├── tail-call
+                                                   │                                                 ├── args
+                                                   │                                                 │    ├── variable: i:37
+                                                   │                                                 │    ├── variable: "_loop_lower":16
+                                                   │                                                 │    ├── variable: "_loop_upper":17
+                                                   │                                                 │    ├── variable: "_loop_step":18
+                                                   │                                                 │    └── variable: "_loop_counter":36
+                                                   │                                                 └── recursive-call
+                                                   └── udf: loop_exit_1
                                                         ├── tail-call
-                                                        └── values
-                                                             ├── columns: loop_exit_1:34
-                                                             └── tuple
-                                                                  └── udf: loop_exit_1
-                                                                       ├── tail-call
-                                                                       └── body
-                                                                            └── values
-                                                                                 ├── columns: "_stmt_raise_2":3
-                                                                                 └── tuple
-                                                                                      └── udf: _stmt_raise_2
-                                                                                           ├── tail-call
-                                                                                           └── body
-                                                                                                ├── values
-                                                                                                │    ├── columns: stmt_raise_3:1
-                                                                                                │    └── tuple
-                                                                                                │         └── function: crdb_internal.plpgsql_raise
-                                                                                                │              ├── const: 'NOTICE'
-                                                                                                │              ├── const: 'DONE'
-                                                                                                │              ├── const: ''
-                                                                                                │              ├── const: ''
-                                                                                                │              └── const: '00000'
-                                                                                                └── values
-                                                                                                     ├── columns: stmt_return_4:2!null
-                                                                                                     └── tuple
-                                                                                                          └── const: 0
+                                                        └── body
+                                                             └── values
+                                                                  ├── columns: "_stmt_raise_2":3
+                                                                  └── tuple
+                                                                       └── udf: _stmt_raise_2
+                                                                            ├── tail-call
+                                                                            └── body
+                                                                                 ├── values
+                                                                                 │    ├── columns: stmt_raise_3:1
+                                                                                 │    └── tuple
+                                                                                 │         └── function: crdb_internal.plpgsql_raise
+                                                                                 │              ├── const: 'NOTICE'
+                                                                                 │              ├── const: 'DONE'
+                                                                                 │              ├── const: ''
+                                                                                 │              ├── const: ''
+                                                                                 │              └── const: '00000'
+                                                                                 └── values
+                                                                                      ├── columns: stmt_return_4:2!null
+                                                                                      └── tuple
+                                                                                           └── const: 0
 
 # DO statements execute a PL/pgSQL code block inline. This is effectively an
 # anonymous function with no arguments.
