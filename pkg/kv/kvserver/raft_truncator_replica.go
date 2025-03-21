@@ -29,8 +29,12 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 	return r.shMu.raftTruncState
 }
 
-func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
-	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx, pt)
+func (r *raftTruncatorReplica) stageTruncatedState(_ context.Context, pt pendingTruncation) {
+	(*Replica)(r).stageTruncatedStateRaftMuLocked(pt)
+}
+
+func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context) {
+	(*Replica)(r).handleTruncatedStateResultRaftMuLocked(ctx)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {

@@ -155,7 +155,7 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 	return r.stateLoader
 }
 
-func (r *replicaTruncatorTest) handleTruncationResult(_ context.Context, pt pendingTruncation) {
+func (r *replicaTruncatorTest) stageTruncatedState(_ context.Context, pt pendingTruncation) {
 	expectedFirstIndexWasAccurate := r.truncState.Index+1 == pt.expectedFirstIndex
 	r.truncState = pt.RaftTruncatedState
 	// TODO(pav-kv): this is printing the legacy func names. Fix.
@@ -165,6 +165,9 @@ func (r *replicaTruncatorTest) handleTruncationResult(_ context.Context, pt pend
 	deltaTrusted := pt.isDeltaTrusted && expectedFirstIndexWasAccurate
 	fmt.Fprintf(r.buf, "r%d.setTruncationDeltaAndTrusted(delta:%d, trusted:%t)\n",
 		r.rangeID, pt.logDeltaBytes, deltaTrusted)
+}
+
+func (r *replicaTruncatorTest) handleTruncationResult(_ context.Context) {
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
