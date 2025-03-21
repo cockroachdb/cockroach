@@ -183,3 +183,23 @@ statement ok
 DROP USER IF EXISTS a_user_that_does_not_exist;
 
 subtest end
+
+# Verify that a granting default privileges to the same role the defaults are
+# being defined for has no undesirable side effect.
+subtest default_priv_granted_to_self
+
+statement ok
+CREATE ROLE self_referencing_role
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE self_referencing_role GRANT INSERT ON TABLES TO self_referencing_role
+
+statement ok
+DROP ROLE self_referencing_role
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects
+----
+0
+
+subtest end
