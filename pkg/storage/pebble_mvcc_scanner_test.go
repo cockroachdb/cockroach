@@ -183,7 +183,7 @@ func scannerWithAccount(
 	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
 	m := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("test"),
+		Name:      mon.MakeName("test"),
 		Increment: 1,
 		Settings:  st,
 	})
