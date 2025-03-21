@@ -7,7 +7,6 @@ package stop_test
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -565,12 +564,6 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	}
 	if a, e := atomic.LoadInt32(&workersCanceled), int32(maxConcurrency); a != e {
 		t.Fatalf("%d workers canceled after context close, expected exactly %d", a, e)
-	}
-}
-
-func maybePrint(context.Context) {
-	if testing.Verbose() { // This just needs to be complicated enough not to inline.
-		fmt.Println("blah")
 	}
 }
 
