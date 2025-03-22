@@ -11,12 +11,14 @@ package aggmetric
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+const cacheSize = 5000
 
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
@@ -63,13 +65,19 @@ type childSet struct {
 	labels []string
 	mu     struct {
 		syncutil.Mutex
-		tree *btree.BTree
+		children *cache.UnorderedCache
 	}
 }
 
 func (cs *childSet) init(labels []string) {
 	cs.labels = labels
-	cs.mu.tree = btree.New(8)
+	cs.mu.children = cache.NewUnorderedCache(cache.Config{
+		Policy: cache.CacheLRU,
+		//TODO (aa-joshi) : make it configurable
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return size > cacheSize
+		},
+	})
 }
 
 func (cs *childSet) Each(
@@ -77,8 +85,8 @@ func (cs *childSet) Each(
 ) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	cs.mu.tree.Ascend(func(item btree.Item) (wantMore bool) {
-		cm := item.(childMetric)
+	cs.mu.children.Do(func(e *cache.Entry) {
+		cm := e.Value.(childMetric)
 		pm := cm.ToPrometheusMetric()
 		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
 		childLabels = append(childLabels, labels...)
@@ -91,17 +99,15 @@ func (cs *childSet) Each(
 		}
 		pm.Label = childLabels
 		f(pm)
-		return true
 	})
 }
 
 // apply applies the given applyFn to every item in the childSet
-func (cs *childSet) apply(applyFn func(item btree.Item)) {
+func (cs *childSet) apply(applyFn func(item MetricItem)) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	cs.mu.tree.Ascend(func(item btree.Item) bool {
-		applyFn(item)
-		return true
+	cs.mu.children.Do(func(e *cache.Entry) {
+		applyFn(e.Value.(MetricItem))
 	})
 }
 
@@ -114,24 +120,41 @@ func (cs *childSet) add(metric childMetric) {
 	}
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if cs.mu.tree.Has(metric) {
+
+	key := metricKey(lvs...)
+	if _, ok := cs.mu.children.Get(key); ok {
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
-	cs.mu.tree.ReplaceOrInsert(metric)
+	cs.mu.children.Add(key, metric)
 }
 
 func (cs *childSet) remove(metric childMetric) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	if existing := cs.mu.tree.Delete(metric); existing == nil {
-		panic(errors.AssertionFailedf(
-			"child %v does not exists", metric.labelValues()))
+
+	key := metricKey(metric.labelValues()...)
+	if _, ok := cs.mu.children.Get(key); ok {
+		cs.mu.children.Del(key)
 	}
 }
 
-type childMetric interface {
-	btree.Item
+func (cs *childSet) get(labelVals ...string) (childMetric, bool) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	if v, ok := cs.mu.children.Get(metricKey(labelVals...)); ok {
+		return v.(childMetric), true
+	}
+
+	return nil, false
+}
+
+type MetricItem interface {
 	labelValuer
+}
+
+type childMetric interface {
+	MetricItem
 	ToPrometheusMetric() *io_prometheus_client.Metric
 }
 
@@ -143,16 +166,6 @@ type labelValuesSlice []string
 
 func (lv *labelValuesSlice) labelValues() []string { return []string(*lv) }
 
-func (lv *labelValuesSlice) Less(o btree.Item) bool {
-	ov := o.(labelValuer).labelValues()
-	if len(ov) != len(*lv) {
-		panic(errors.AssertionFailedf("mismatch in label values lengths %v vs %v",
-			ov, *lv))
-	}
-	for i := range ov {
-		if cmp := strings.Compare((*lv)[i], ov[i]); cmp != 0 {
-			return cmp < 0
-		}
-	}
-	return false // eq
+func metricKey(labels ...string) string {
+	return strings.Join(labels, ",")
 }

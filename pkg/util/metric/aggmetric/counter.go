@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -80,6 +81,28 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 	}
 	c.add(child)
 	return child
+}
+
+// Inc increments the counter value by i for the given label values. If a
+// counter with the given label values doesn't exist yet, it creates a new
+// counter and increments it. Panics if the number of label values doesn't
+// match the number of labels defined for this counter.
+func (c *AggCounter) Inc(i int64, labelVals ...string) {
+	if len(c.labels) != len(labelVals) {
+		panic(errors.AssertionFailedf(
+			"cannot increment child with %d label values %v to a metric with %d labels %v",
+			len(labelVals), labelVals, len(c.labels), c.labels))
+	}
+
+	// If the child already exists, increment it.
+	if child, ok := c.get(labelVals...); ok {
+		child.(*Counter).Inc(i)
+		return
+	}
+
+	// Otherwise, create a new child and increment it.
+	child := c.AddChild(labelVals...)
+	child.Inc(i)
 }
 
 // Counter is a child of a AggCounter. When it is incremented, so too is the
