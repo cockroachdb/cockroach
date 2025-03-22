@@ -562,6 +562,20 @@ SELECT json_build_object('a', '0100110'::varbit)
 ----
 {"a": "0100110"}
 
+statement ok
+CREATE TABLE foo (a INT);
+
+statement ok
+INSERT INTO foo VALUES (42);
+
+statement ok
+PREPARE jbo_stmt AS SELECT json_build_object('a', a, 'b', $1::STRING) FROM foo;
+
+query T
+EXECUTE jbo_stmt(':');
+----
+{"a": 42, "b": ":"}
+
 # Regression for an internal error when using an enum and void in the key.
 statement ok
 CREATE TYPE e AS ENUM ('e');
@@ -712,6 +726,14 @@ query T
 SELECT json_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
 ----
 [1, 1, 1.2, null, ["x", "y"]]
+
+statement ok
+PREPARE jba_stmt AS SELECT json_build_array(a, $1::STRING) FROM foo;
+
+query T
+EXECUTE jba_stmt(':');
+----
+[42, ":"]
 
 query T
 SELECT jsonb_build_array()
