@@ -434,7 +434,7 @@ func MakeServer(
 		},
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
-		Name: mon.MakeMonitorName("sql"),
+		Name: mon.MakeName("sql"),
 		// Note that we don't report metrics on this monitor. The reason for this is
 		// that we report metrics on the sum of all the child monitors of this pool.
 		// This monitor is the "main sql" monitor. It's a child of the root memory
@@ -450,7 +450,7 @@ func MakeServer(
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.Options{
-		Name:       mon.MakeMonitorName("conn"),
+		Name:       mon.MakeName("conn"),
 		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,

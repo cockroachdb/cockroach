@@ -185,13 +185,13 @@ func MakeServer(
 		stopper:        stopper,
 		nodeCountFn:    nodeCountFn,
 		workerMemMonitor: mon.NewMonitorInheritWithLimit(
-			"timeseries-workers",
+			mon.MakeName("timeseries-workers"),
 			queryMemoryMax*2,
 			memoryMonitor,
 			true, /* longLiving */
 		),
 		resultMemMonitor: mon.NewMonitorInheritWithLimit(
-			"timeseries-results",
+			mon.MakeName("timeseries-results"),
 			math.MaxInt64,
 			memoryMonitor,
 			true, /* longLiving */

@@ -274,7 +274,7 @@ func TestExplainPlanIsMemoryMonitored(t *testing.T) {
 	})
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-sc-plan-mon"),
+		Name:     mon.MakeName("test-sc-plan-mon"),
 		Settings: tt.ClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5.243e+6 /* 5MiB */))
