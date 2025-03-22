@@ -2540,7 +2540,7 @@ type SchemaChangerTestingKnobs struct {
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
 
-	// RunBeforeIndexBackfill is called after the index backfill
+	// RunAfterIndexBackfill is called after the index backfill
 	// process is complete (including the temporary index merge)
 	// but before the final validation of the indexes.
 	RunAfterIndexBackfill func()
