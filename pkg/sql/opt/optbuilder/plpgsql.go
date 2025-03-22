@@ -156,7 +156,8 @@ import (
 // not follow here, although they may be good routes for optimization in the
 // future.
 type plpgsqlBuilder struct {
-	ob *Builder
+	ob      *Builder
+	options plOptions
 
 	// colRefs, if non-nil, tracks the set of columns referenced by scalar
 	// expressions.
@@ -190,10 +191,51 @@ type plpgsqlBuilder struct {
 	outScope *scope
 
 	routineName  string
-	isProcedure  bool
-	isDoBlock    bool
-	buildSQL     bool
 	identCounter int
+}
+
+// plOptions is a set of options that can be used to modify the behavior of the
+// PLpgSQL builder.
+type plOptions struct {
+	isProcedure bool
+	isDoBlock   bool
+
+	// skipSQL is true if SQL statements and expressions should not be built.
+	// This is used during trigger function creation.
+	skipSQL bool
+}
+
+// basePLOptions returns a new plOptions struct with default values.
+func basePLOptions() plOptions {
+	return plOptions{}
+}
+
+// WithIsProcedure returns a new plOptions struct with the isProcedure flag set
+// to true.
+func (opts plOptions) WithIsProcedure() plOptions {
+	opts.isProcedure = true
+	return opts
+}
+
+// SetIsProcedure returns a new plOptions struct with the isProcedure flag set
+// to the given value.
+func (opts plOptions) SetIsProcedure(isProcedure bool) plOptions {
+	opts.isProcedure = isProcedure
+	return opts
+}
+
+// WithIsDoBlock returns a new plOptions struct with the isDoBlock flag set to
+// true.
+func (opts plOptions) WithIsDoBlock() plOptions {
+	opts.isDoBlock = true
+	return opts
+}
+
+// SetSkipSQL returns a new plOptions struct with the skipSQL flag set to the
+// given value.
+func (opts plOptions) SetSkipSQL(skipSQL bool) plOptions {
+	opts.skipSQL = skipSQL
+	return opts
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -205,23 +247,21 @@ type routineParam struct {
 
 func newPLpgSQLBuilder(
 	ob *Builder,
+	options plOptions,
 	routineName, rootBlockLabel string,
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
-	isProcedure, isDoBlock, buildSQL bool,
 	outScope *scope,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
 		ob:          ob,
+		options:     options,
 		colRefs:     colRefs,
 		returnType:  returnType,
 		blocks:      make([]plBlock, 0, initialBlocksCap),
 		routineName: routineName,
-		isProcedure: isProcedure,
-		isDoBlock:   isDoBlock,
-		buildSQL:    buildSQL,
 		outScope:    outScope,
 	}
 	// Build the initial block for the routine parameters, which are considered
@@ -318,7 +358,7 @@ func (b *plpgsqlBuilder) buildRootBlock(
 			s, param.name, &tree.CastExpr{Expr: tree.DNull, Type: param.typ}, noIndirection,
 		)
 	}
-	if b.isProcedure {
+	if b.options.isProcedure {
 		var tc transactionControlVisitor
 		ast.Walk(&tc, astBlock)
 		if tc.foundTxnControlStatement {
@@ -331,7 +371,7 @@ func (b *plpgsqlBuilder) buildRootBlock(
 					"transaction control statements in nested routines",
 				))
 			}
-			if b.isDoBlock {
+			if b.options.isDoBlock {
 				// Disallow transaction control statements in DO blocks for now.
 				panic(unimplemented.NewWithIssue(138704,
 					"transaction control statements in DO blocks",
@@ -519,7 +559,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				expr = b.makeReturnForOutParams()
 			} else if b.returnType.Family() == types.VoidFamily {
 				if expr != nil {
-					if b.isProcedure {
+					if b.options.isProcedure {
 						panic(returnWithVoidParameterProcedureErr)
 					} else {
 						panic(returnWithVoidParameterErr)
@@ -1004,7 +1044,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if b.hasExceptionHandler() {
 				panic(txnControlWithExceptionErr)
 			}
-			if !b.isProcedure {
+			if !b.options.isProcedure {
 				panic(txnInUDFErr)
 			}
 			name := "_stmt_commit"
@@ -1423,7 +1463,7 @@ func (b *plpgsqlBuilder) handleIndirectionForAssign(
 
 	// We do not yet support qualifying a variable with a block label.
 	b.checkBlockLabelReference(elemName)
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
@@ -2202,7 +2242,7 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 // buildSQLExpr type-checks and builds the given SQL expression into a
 // ScalarExpr within the given scope.
 func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt.ScalarExpr {
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
@@ -2239,7 +2279,7 @@ func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt
 // buildSQLStatement type-checks and builds the given SQL statement into a
 // RelExpr within the given scope.
 func (b *plpgsqlBuilder) buildSQLStatement(stmt tree.Statement, inScope *scope) (outScope *scope) {
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all statements with a single row without
 		// any columns.
 		outScope = inScope.push()
@@ -2413,7 +2453,7 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 			exprs[i] = tree.DNull
 		}
 	}
-	if len(exprs) == 1 && !b.isProcedure {
+	if len(exprs) == 1 && !b.options.isProcedure {
 		// For procedures, even a single column is wrapped in a tuple.
 		return exprs[0]
 	}
