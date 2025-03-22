@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -43,15 +44,34 @@ type mockReplica struct {
 	canBump        bool
 	cantBumpReason CantCloseReason
 	lai            kvpb.LeaseAppliedIndex
-	policy         roachpb.RangeClosedTimestampPolicy
+	policy         ctpb.LatencyBasedRangeClosedTimestampPolicy
 }
 
 var _ Replica = &mockReplica{}
 
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
+
+func (m *mockReplica) RefreshLatency(latencyInfo map[roachpb.NodeID]time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	desc := m.mu.desc
+	res := ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+	for _, peer := range desc.InternalReplicas {
+		peerLatency, ok := latencyInfo[peer.NodeID]
+		if !ok {
+			continue
+		}
+		latencyBucket := closedts.FindBucketBasedOnNetworkRTT(peerLatency)
+		res = max(res, latencyBucket)
+	}
+	m.policy = res
+}
+
 func (m *mockReplica) BumpSideTransportClosed(
-	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	_ context.Context,
+	_ hlc.ClockTimestamp,
+	_ map[ctpb.LatencyBasedRangeClosedTimestampPolicy]hlc.Timestamp,
 ) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -120,7 +140,7 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 		rangeID: id,
 		canBump: true,
 		lai:     5,
-		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
+		policy:  ctpb.LAG_BY_CLUSTER_SETTING,
 	}
 	r.mu.desc = desc
 	return r
@@ -137,14 +157,14 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 		rangeID: id,
 		canBump: true,
 		lai:     5,
-		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
+		policy:  ctpb.LAG_BY_CLUSTER_SETTING,
 	}
 	r.mu.desc = desc
 	return r
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
+	targetForPolicy := func(pol ctpb.LatencyBasedRangeClosedTimestampPolicy) hlc.Timestamp {
 		return closedts.TargetForPolicy(
 			now,
 			s.clock.MaxOffset(),
@@ -155,8 +175,24 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 		)
 	}
 	return []ctpb.Update_GroupUpdate{
-		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
-		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
+		{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(ctpb.LAG_BY_CLUSTER_SETTING)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS)},
+		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS)},
 	}
 }
 
@@ -190,7 +226,7 @@ func TestSenderBasic(t *testing.T) {
 	now = s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policy: ctpb.LAG_BY_CLUSTER_SETTING},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	require.Len(t, s.connsMu.conns, 2)
@@ -204,7 +240,7 @@ func TestSenderBasic(t *testing.T) {
 	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
 	require.Nil(t, up.Removed)
 	require.Equal(t, []ctpb.Update_RangeUpdate{
-		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 15, LAI: 5, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
 	}, up.AddedOrUpdated)
 
 	c2, ok := s.connsMu.conns[2]
@@ -287,7 +323,7 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	now := s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policy: ctpb.LAG_BY_CLUSTER_SETTING},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	// Ensure that we have two connections, one for remote node and one for local.
@@ -304,8 +340,112 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
 	require.Nil(t, up.Removed)
 	require.Equal(t, []ctpb.Update_RangeUpdate{
-		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 15, LAI: 5, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
 	}, up.AddedOrUpdated)
+}
+
+func TestSenderWithLatencyTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+
+	st := cluster.MakeTestingClusterSettings()
+	var furthestNodeLatency = 100 * time.Millisecond
+	extendCrossRegionLatency := func() {
+		furthestNodeLatency = 200 * time.Millisecond
+	}
+
+	// Mock latency function that simulates network latency between nodes.
+	getLatencyFn := func() map[roachpb.NodeID]time.Duration {
+		return map[roachpb.NodeID]time.Duration{
+			1: 1 * time.Millisecond,
+			2: 50 * time.Millisecond,
+			3: furthestNodeLatency,
+		}
+	}
+
+	// Add a leaseholder with replicas in different regions.
+	r := newMockReplica(15, 1, 2, 3)
+
+	getReplicas := func() []multiregion.Replica {
+		return []multiregion.Replica{r}
+	}
+
+	s, stopper := newMockSender(connFactory)
+	policyRefresher := multiregion.NewPolicyRefresher(stopper, st, getReplicas, getLatencyFn)
+	defer stopper.Stop(ctx)
+
+	// No leaseholders.
+	now := s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 0)
+	require.Len(t, s.trackedMu.lastClosed, int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY))
+	require.Len(t, s.leaseholdersMu.leaseholders, 0)
+	require.Len(t, s.connsMu.conns, 0)
+
+	require.Equal(t, ctpb.SeqNum(1), s.trackedMu.lastSeqNum)
+	up, ok := s.buf.GetBySeq(ctx, 1)
+	require.True(t, ok)
+	require.Equal(t, roachpb.NodeID(1), up.NodeID)
+	require.Equal(t, ctpb.SeqNum(1), up.SeqNum)
+	require.True(t, up.Snapshot)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Nil(t, up.Removed)
+	require.Nil(t, up.AddedOrUpdated)
+
+	// Add a leaseholder with replicas in different regions.
+	s.RegisterLeaseholder(ctx, r, 1)
+	policyRefresher.RefreshPolicies([]multiregion.Replica{r})
+	now = s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 1)
+	require.Len(t, s.trackedMu.lastClosed, int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY))
+	require.Equal(t, map[roachpb.RangeID]trackedRange{
+		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS},
+	}, s.trackedMu.tracked)
+	require.Len(t, s.leaseholdersMu.leaseholders, 1)
+	require.Len(t, s.connsMu.conns, 2)
+
+	require.Equal(t, ctpb.SeqNum(2), s.trackedMu.lastSeqNum)
+	up, ok = s.buf.GetBySeq(ctx, 2)
+	require.True(t, ok)
+	require.Equal(t, roachpb.NodeID(1), up.NodeID)
+	require.Equal(t, ctpb.SeqNum(2), up.SeqNum)
+	require.Equal(t, false, up.Snapshot)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Nil(t, up.Removed)
+	require.Equal(t, []ctpb.Update_RangeUpdate{
+		{RangeID: 15, LAI: 5, Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS},
+	}, up.AddedOrUpdated)
+
+	extendCrossRegionLatency()
+	policyRefresher.RefreshPolicies([]multiregion.Replica{r})
+	now = s.publish(ctx)
+	require.Equal(t, ctpb.SeqNum(3), s.trackedMu.lastSeqNum)
+	up, ok = s.buf.GetBySeq(ctx, 3)
+	require.True(t, ok)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Equal(t, map[roachpb.RangeID]trackedRange{
+		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS},
+	}, s.trackedMu.tracked)
+
+	// Remove node 3 and verify policy updates to lower network latency.
+	r.removeReplica(3)
+	policyRefresher.RefreshPolicies([]multiregion.Replica{r})
+	now = s.publish(ctx)
+	require.Equal(t, ctpb.SeqNum(4), s.trackedMu.lastSeqNum)
+	up, ok = s.buf.GetBySeq(ctx, 4)
+	require.True(t, ok)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Equal(t, map[roachpb.RangeID]trackedRange{
+		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS},
+	}, s.trackedMu.tracked)
+
+	// Cleanup.
+	s.UnregisterLeaseholder(ctx, 1, 15)
+	s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 0)
+	require.Len(t, s.leaseholdersMu.leaseholders, 0)
+	require.Len(t, s.connsMu.conns, 0)
 }
 
 func TestSenderSameRangeDifferentStores(t *testing.T) {
