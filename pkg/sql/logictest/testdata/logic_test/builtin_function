@@ -203,6 +203,14 @@ SELECT concat('foo'::concat_enum, ' ', 64.532, ' ', 'baz'::concat_enum, ' ', 42,
 ----
 foo 64.532 baz 42 f {"foo": "bar"} {1,2,3}
 
+statement ok
+PREPARE concat_stmt AS SELECT concat("foo"."a", $1::STRING) FROM foo
+
+query T
+EXECUTE concat_stmt(':')
+----
+1:
+
 query T
 SELECT substr('RoacH', 2, 3)
 ----
@@ -420,8 +428,10 @@ SELECT concat_ws(',', 'abcde', '2')
 ----
 abcde,2
 
-statement error unknown signature: concat_ws\(string, string, int, unknown, int\)
+query T
 SELECT concat_ws(',', 'abcde', 2, NULL, 22)
+----
+abcde,2,22
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
@@ -2672,6 +2682,19 @@ SELECT format('|%-*s|', -10, 'foo')
 ----
 |foo       |
 
+statement
+PREPARE format_stmt AS SELECT format('|%*s|', $1::INT, $2::STRING)
+
+query T
+EXECUTE format_stmt(10, 'foo')
+----
+|       foo|
+
+query T
+EXECUTE format_stmt(-10, 'foo')
+----
+|foo       |
+
 # Escaping $ into \x24 only needed in testlogic or prepared statements
 query T
 SELECT format(E'Testing %3\x24s, %2\x24s, %1\x24s', 'one', 'two', 'three')
@@ -3054,6 +3077,33 @@ SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
 1  1
 1  1
 2  0
+
+statement ok
+PREPARE nn_stmt AS SELECT num_nulls(42, $1::STRING, a, b),
+                          num_nulls(b, $1, 42, a),
+                          num_nulls(a, b, $1, 42),
+                          num_nulls($1, a, b, 42),
+                          num_nonnulls(42, $1, a, b),
+                          num_nonnulls(b, $1, 42, a),
+                          num_nonnulls(a, b, $1, 42),
+                          num_nonnulls($1, a, b, 42)
+                     FROM nulls_test
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt(NULL)
+----
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
+2  2  2  2  2  2  2  2
+3  3  3  3  1  1  1  1
+
+query IIIIIIII rowsort
+EXECUTE nn_stmt('foo')
+----
+0  0  0  0  4  4  4  4
+1  1  1  1  3  3  3  3
+1  1  1  1  3  3  3  3
+2  2  2  2  2  2  2  2
 
 subtest pb_to_json
 

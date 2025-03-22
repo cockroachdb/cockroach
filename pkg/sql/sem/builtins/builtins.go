@@ -438,7 +438,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.AnyElement},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
@@ -472,7 +472,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat_ws": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
+			Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
@@ -481,25 +481,24 @@ var regularBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
-				sep := string(tree.MustBeDString(args[0]))
-				var buf bytes.Buffer
-				prefix := ""
-				length := 0
+				sep := tree.MustBeDString(args[0])
+				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
+				prefix := false
 				for _, d := range args[1:] {
 					if d == tree.DNull {
 						continue
 					}
-					length += len(prefix) + len(string(tree.MustBeDString(d)))
-					if length > builtinconstants.MaxAllocatedStringSize {
+					if ctx.Buffer.Len()+int(d.Size())+int(sep.Size()) > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
-					// Note: we can't use the range index here because that
-					// would break when the 2nd argument is NULL.
-					buf.WriteString(prefix)
-					prefix = sep
-					buf.WriteString(string(tree.MustBeDString(d)))
+					if prefix {
+						sep.Format(ctx)
+					} else {
+						prefix = true
+					}
+					d.Format(ctx)
 				}
-				return tree.NewDString(buf.String()), nil
+				return tree.NewDString(ctx.CloseAndGetString()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
@@ -4539,7 +4538,7 @@ value if you rely on the HLC for accuracy.`,
 			// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 			Info: "Converts datums into key-encoded bytes. " +
 				"Supports NULLs and all data types which may be used in index keys",
-			Types:      tree.VariadicType{VarType: types.AnyElement},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var out []byte
@@ -5301,7 +5300,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
+			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'service_mode',
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
@@ -5314,7 +5313,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'name', $2::STRING))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
 			Language:   tree.RoutineLangSQL,
@@ -5325,7 +5324,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1::STRING))`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Volatile,
@@ -7049,7 +7048,7 @@ SELECT
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1, 'counts', array[$2]))`,
+json_build_object('names', $1::STRING, 'counts', array[$2::INT]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, num) is an alias for
@@ -7065,7 +7064,7 @@ generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1, 'counts', $2))`,
+json_build_object('names', $1::STRING, 'counts', $2::INT[]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, counts) is an alias for
@@ -7293,7 +7292,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -7316,7 +7315,7 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -9387,7 +9386,7 @@ func makeSubStringImpls() builtinDefinition {
 
 var formatImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
-		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.AnyElement},
+		Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
 		ReturnType: tree.FixedReturnType(types.String),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if args[0] == tree.DNull {
@@ -10098,7 +10097,7 @@ func jsonProps() tree.FunctionProperties {
 }
 
 var jsonBuildObjectImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
@@ -10176,7 +10175,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonBuildArrayImpl = tree.Overload{
-	Types:      tree.VariadicType{VarType: types.AnyElement},
+	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
