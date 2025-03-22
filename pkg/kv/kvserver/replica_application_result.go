@@ -506,7 +506,7 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	// v22.1 that added it, when all truncations were strongly coupled. It is not
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
-	isDeltaTrusted := pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
+	pt.isDeltaTrusted = pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
 
 	r.mu.Lock()
 	r.shMu.raftTruncState = pt.RaftTruncatedState
@@ -515,7 +515,7 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	// TODO(pav-kv): should we distrust the log size if it goes negative?
 	r.shMu.raftLogSize = max(r.shMu.raftLogSize+pt.logDeltaBytes, 0)
 	r.shMu.raftLogLastCheckSize = max(r.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
-	if !isDeltaTrusted {
+	if !pt.isDeltaTrusted {
 		r.shMu.raftLogSizeTrusted = false
 	}
 	r.mu.Unlock()
