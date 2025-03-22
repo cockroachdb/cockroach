@@ -48,10 +48,13 @@ func (tu *tableUpdater) rowForUpdate(
 	oldValues, updateValues tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	mustValidateOldValues bool,
 	traceKV bool,
 ) (tree.Datums, error) {
 	tu.currentBatchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, vh, nil, false, traceKV)
+	return tu.ru.UpdateRow(
+		ctx, tu.b, oldValues, updateValues, pm, vh, nil, mustValidateOldValues, traceKV,
+	)
 }
 
 // tableDesc returns the TableDescriptor for the table that the tableUpdater

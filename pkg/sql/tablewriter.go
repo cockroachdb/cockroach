@@ -153,6 +153,14 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	return nil
 }
 
+func (tb *tableWriterBase) createSavepoint(ctx context.Context) (kv.SavepointToken, error) {
+	return tb.txn.CreateSavepoint(ctx)
+}
+
+func (tb *tableWriterBase) rollbackToSavepoint(ctx context.Context, s kv.SavepointToken) error {
+	return tb.txn.RollbackToSavepoint(ctx, s)
+}
+
 // finalize shares the common finalize() code between tableWriters.
 func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control

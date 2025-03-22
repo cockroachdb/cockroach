@@ -279,6 +279,7 @@ go_library(
         "unsplit.go",
         "unsupported_vars.go",
         "update.go",
+        "update_fast_path.go",
         "upsert.go",
         "user.go",
         "values.go",
