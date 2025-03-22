@@ -396,6 +396,7 @@ func makeOptionalValue(v MVCCValue) optionalValue {
 
 func (v *optionalValue) IsPresent() bool {
 	return v.exists && v.Value.IsPresent()
+
 }
 
 func (v *optionalValue) IsTombstone() bool {
@@ -1196,7 +1197,7 @@ func MVCCBlindPutInlineWithPrev(
 		iter, err := newMVCCIterator(
 			ctx, rw, hlc.Timestamp{}, false /* rangeKeyMasking */, false, /* noInterleavedIntents */
 			IterOptions{
-				KeyTypes: IterKeyTypePointsAndRanges,
+				KeyTypes: IterKeyTypePointsOnly,
 				Prefix:   true,
 				// Don't bother with ReadCategory.
 			},
@@ -1512,7 +1513,7 @@ func MVCCGetWithValueHeader(
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents,
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.ReadCategory,
 		},
@@ -1565,10 +1566,10 @@ func mvccGet(
 		return optionalValue{}, nil, err
 	}
 
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer mvccScanner.release()
+	scanner := pointScannerPool.Get().(*pointScanner)
+	defer scanner.release()
 
-	memAccount := mvccScanner.memAccount
+	memAccount := scanner.memAccount
 	if opts.MemoryAccount != nil {
 		memAccount = opts.MemoryAccount
 	}
@@ -1576,10 +1577,10 @@ func mvccGet(
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
 	// specify an empty key for the end key which will ensure we don't retrieve a
 	// key different than the start key. This is a bit of a hack.
-	*mvccScanner = pebbleMVCCScanner{
+	*scanner = pointScanner{
 		parent:            iter,
 		memAccount:        memAccount,
-		unlimitedMemAcc:   mvccScanner.unlimitedMemAcc,
+		unlimitedMemAcc:   scanner.unlimitedMemAcc,
 		lockTable:         opts.LockTable,
 		start:             key,
 		ts:                timestamp,
@@ -1589,25 +1590,25 @@ func mvccGet(
 		tombstones:        opts.Tombstones,
 		rawMVCCValues:     opts.ReturnRawMVCCValues,
 		failOnMoreRecent:  opts.FailOnMoreRecent,
-		keyBuf:            mvccScanner.keyBuf,
+		keyBuf:            scanner.keyBuf,
 		decodeMVCCHeaders: true,
 	}
 
-	results := &mvccScanner.alloc.pebbleResults
+	results := &scanner.alloc.pebbleResults
 	*results = pebbleResults{}
-	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
-	mvccScanner.get(ctx)
+	scanner.init(opts.Txn, opts.Uncertainty, results)
+	scanner.get(ctx)
 
 	// If we're tracking the ScanStats, include the stats from this Get.
 	if opts.ScanStats != nil {
-		recordIteratorStats(mvccScanner.parent, opts.ScanStats)
+		recordIteratorStats(scanner.parent, opts.ScanStats)
 		opts.ScanStats.NumGets++
 	}
 
-	if mvccScanner.err != nil {
-		return optionalValue{}, nil, mvccScanner.err
+	if scanner.err != nil {
+		return optionalValue{}, nil, scanner.err
 	}
-	intents, err := buildScanIntents(mvccScanner.intentsRepr())
+	intents, err := buildScanIntents(scanner.intentsRepr())
 	if err != nil {
 		return optionalValue{}, nil, err
 	}
@@ -1637,7 +1638,7 @@ func mvccGet(
 	value = makeOptionalValue(MVCCValue{Value: roachpb.Value{
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
-	}, MVCCValueHeader: mvccScanner.curUnsafeValue.MVCCValueHeader})
+	}, MVCCValueHeader: scanner.curUnsafeValue.MVCCValueHeader})
 
 	return value, intent, nil
 }
@@ -1963,7 +1964,7 @@ func MVCCPut(
 		iter, err = newMVCCIterator(
 			ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 			IterOptions{
-				KeyTypes:     IterKeyTypePointsAndRanges,
+				KeyTypes:     IterKeyTypePointsOnly,
 				Prefix:       true,
 				ReadCategory: opts.Category,
 			},
@@ -2034,7 +2035,7 @@ func MVCCDelete(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -2869,7 +2870,7 @@ func MVCCIncrement(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -2969,7 +2970,7 @@ func MVCCConditionalPut(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -3083,7 +3084,7 @@ func MVCCInitPut(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -3754,7 +3755,7 @@ func MVCCDeleteRange(
 	iter, err := newMVCCIterator(
 		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
 		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			Prefix:       true,
 			ReadCategory: opts.Category,
 		},
@@ -4528,7 +4529,7 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 // If ok=false is returned, then the returned result and the error are the
 // result of the scan.
 func mvccScanInit(
-	mvccScanner *pebbleMVCCScanner,
+	scanner *pointScanner,
 	iter MVCCIterator,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -4554,14 +4555,14 @@ func mvccScanInit(
 		}, nil
 	}
 
-	memAccount := mvccScanner.memAccount
+	memAccount := scanner.memAccount
 	if opts.MemoryAccount != nil {
 		memAccount = opts.MemoryAccount
 	}
-	*mvccScanner = pebbleMVCCScanner{
+	*scanner = pointScanner{
 		parent:           iter,
 		memAccount:       memAccount,
-		unlimitedMemAcc:  mvccScanner.unlimitedMemAcc,
+		unlimitedMemAcc:  scanner.unlimitedMemAcc,
 		lockTable:        opts.LockTable,
 		reverse:          opts.Reverse,
 		start:            key,
@@ -4577,16 +4578,16 @@ func mvccScanInit(
 		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
-		keyBuf:           mvccScanner.keyBuf,
+		keyBuf:           scanner.keyBuf,
 		// NB: If the `results` argument passed to this function is a pointer to
 		// mvccScanner.alloc.pebbleResults, we don't want to overwrite any
 		// initialization of the pebbleResults struct performed by the caller.
 		// The struct should not contain any stale buffers from previous uses,
 		// because pebbleMVCCScanner.release zeros it.
-		alloc: mvccScanner.alloc,
+		alloc: scanner.alloc,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
+	scanner.init(opts.Txn, opts.Uncertainty, results)
 	return true /* ok */, MVCCScanResult{}, nil
 }
 
@@ -4597,27 +4598,27 @@ func mvccScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	results := &mvccScanner.alloc.pebbleResults
+	scanner := pointScannerPool.Get().(*pointScanner)
+	results := &scanner.alloc.pebbleResults
 	*results = pebbleResults{}
 	if opts.WholeRowsOfSize > 1 {
 		results.lastOffsetsEnabled = true
 		results.lastOffsets = make([]int, opts.WholeRowsOfSize)
 	}
-	ok, res, err := mvccScanInit(mvccScanner, iter, key, endKey, timestamp, opts, results)
+	ok, res, err := mvccScanInit(scanner, iter, key, endKey, timestamp, opts, results)
 	if !ok {
 		return res, err
 	}
-	defer mvccScanner.release()
+	defer scanner.release()
 
-	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.scan(ctx)
+	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = scanner.scan(ctx)
 
 	if err != nil {
 		return MVCCScanResult{}, err
 	}
 
 	res.KVData = results.finish()
-	if err = finalizeScanResult(mvccScanner, &res, opts); err != nil {
+	if err = finalizeScanResult(scanner, &res, opts); err != nil {
 		return MVCCScanResult{}, err
 	}
 	return res, nil
@@ -4627,7 +4628,7 @@ func mvccScanToBytes(
 // completed successfully. It also performs some additional auxiliary tasks
 // (like recording iterators stats).
 func finalizeScanResult(
-	mvccScanner *pebbleMVCCScanner, res *MVCCScanResult, opts MVCCScanOptions,
+	mvccScanner *pointScanner, res *MVCCScanResult, opts MVCCScanOptions,
 ) error {
 	res.NumKeys, res.NumBytes, _ = mvccScanner.results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
 
@@ -4933,7 +4934,7 @@ func MVCCScan(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			LowerBound:   key,
 			UpperBound:   endKey,
 			ReadCategory: opts.ReadCategory,
@@ -4956,7 +4957,7 @@ func MVCCScanToBytes(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
+			KeyTypes:     IterKeyTypePointsOnly,
 			LowerBound:   key,
 			UpperBound:   endKey,
 			ReadCategory: opts.ReadCategory,
@@ -5248,7 +5249,7 @@ func MVCCResolveWriteIntent(
 			var iter MVCCIterator
 			iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
 				Prefix:       true,
-				KeyTypes:     IterKeyTypePointsAndRanges,
+				KeyTypes:     IterKeyTypePointsOnly,
 				ReadCategory: fs.IntentResolutionReadCategory,
 			})
 			if err != nil {
