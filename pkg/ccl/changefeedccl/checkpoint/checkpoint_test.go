@@ -257,6 +257,23 @@ func TestCheckpointRestore(t *testing.T) {
 	}
 }
 
+func TestCheckpointRestoreForTest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ts := func(wt int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: wt}
+	}
+
+	t.Run("name", func(t *testing.T) {
+		_, err := span.MakeFrontierAt(ts(1),
+			roachpb.Spans{{
+				Key: roachpb.Key("a"),
+			}}...)
+		require.Error(t, err, `inverted span`)
+	})
+}
+
 func TestCheckpointMakeRestoreRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
