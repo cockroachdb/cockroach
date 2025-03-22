@@ -100,6 +100,7 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
 #!/usr/bin/env bash
 
 ./drtprod sync
+$([ "$execute_script" = "true" ] && [ "$NODE" -eq 0 ] && echo "${pwd}/tpcc_init_${suffix}.sh")
 PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
 read -r -a PGURLS_ARR <<< "\$PGURLS"
 j=0
