@@ -1,6 +1,6 @@
-# ----------
+# ----------------------------------------------------------------------
 # Search tree with multiple partitions and duplicate data.
-# ----------
+# ----------------------------------------------------------------------
 new-index dims=2 min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (1, 2)
 vec2: (7, 4)

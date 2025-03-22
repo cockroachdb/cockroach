@@ -152,7 +152,7 @@ func TestVectorManager(t *testing.T) {
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
 		require.NoError(t, err)
-		idx.ForceSplitOrMerge(ctx, nil, 0, cspann.RootKey)
+		idx.ForceSplit(ctx, nil, 0, cspann.RootKey, false /* singleStep */)
 
 		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
 		require.Equal(t, int64(1), metrics.FixupsAdded.Count())

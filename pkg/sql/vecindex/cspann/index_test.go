@@ -63,6 +63,9 @@ func TestIndex(t *testing.T) {
 			case "new-index":
 				return state.NewIndex(d)
 
+			case "load-index":
+				return state.LoadIndex(d)
+
 			case "format-tree":
 				return state.FormatTree(d)
 
@@ -81,7 +84,7 @@ func TestIndex(t *testing.T) {
 			case "delete":
 				return state.Delete(d)
 
-			case "force-split-or-merge":
+			case "force-split", "force-merge":
 				return state.ForceSplitOrMerge(d)
 
 			case "recall":
@@ -118,43 +121,20 @@ type testState struct {
 }
 
 func (s *testState) NewIndex(d *datadriven.TestData) string {
-	var err error
-	dims := 2
-	s.Options = cspann.IndexOptions{IsDeterministic: true}
-	for _, arg := range d.CmdArgs {
-		switch arg.Key {
-		case "min-partition-size":
-			s.Options.MinPartitionSize = s.parseInt(arg)
-
-		case "max-partition-size":
-			s.Options.MaxPartitionSize = s.parseInt(arg)
-
-		case "quality-samples":
-			s.Options.QualitySamples = s.parseInt(arg)
-
-		case "dims":
-			dims = s.parseInt(arg)
-
-		case "beam-size":
-			s.Options.BaseBeamSize = s.parseInt(arg)
-		}
-	}
-
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
-	s.MemStore = memstore.New(s.Quantizer, 42)
-	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, 42, &s.Options, s.Stopper)
-	require.NoError(s.T, err)
-
-	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
-	s.Index.Fixups().OnFixupAdded(func() { s.FixupsAdded++ })
-	s.Index.Fixups().OnFixupProcessed(func() { s.FixupsProcessed++ })
-
-	// Suspend background fixups until ProcessFixups is explicitly called, so
-	// that vector index operations can be deterministic.
-	s.Index.SuspendFixups()
+	s.makeNewIndex(d)
 
 	// Insert initial vectors.
 	return s.Insert(d)
+}
+
+func (s *testState) LoadIndex(d *datadriven.TestData) string {
+	s.makeNewIndex(d)
+
+	var treeKey cspann.TreeKey
+	lines := strings.Split(d.Input, "\n")
+	s.loadIndexFromFormat(treeKey, lines, 0)
+
+	return fmt.Sprintf("Loaded %d vectors.\n", len(s.MemStore.GetAllVectors()))
 }
 
 func (s *testState) Reset() {
@@ -390,8 +370,8 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 		idxCtx.Init(txn)
 		s.MemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
-		require.NoError(s.T,
-			s.Index.Insert(s.Ctx, &idxCtx, treeKey, vectors.At(i), childKeys[i].KeyBytes))
+		err := s.Index.Insert(s.Ctx, &idxCtx, treeKey, vectors.At(i), childKeys[i].KeyBytes)
+		require.NoError(s.T, err)
 		commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
@@ -465,6 +445,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 	var parentPartitionKey, partitionKey cspann.PartitionKey
+	var steps int
 	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -474,17 +455,25 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 		case "partition-key":
 			partitionKey = cspann.PartitionKey(s.parseInt(arg))
 
+		case "steps":
+			steps = s.parseInt(arg)
+
 		case "tree":
 			treeKey = s.parseTreeID(arg)
 		}
 	}
 
-	if d.Cmd == "force-split-or-merge" {
-		s.Index.ForceSplitOrMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey)
-	}
+	// Perform N steps in a split or merge operation.
+	for range max(steps, 1) {
+		if d.Cmd == "force-split" {
+			s.Index.ForceSplit(s.Ctx, treeKey, parentPartitionKey, partitionKey, steps > 0)
+		} else {
+			s.Index.ForceMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey, steps > 0)
+		}
 
-	// Ensure the fixup runs.
-	s.Index.ProcessFixups()
+		// Ensure the fixup runs.
+		s.Index.ProcessFixups()
+	}
 
 	return s.FormatTree(d)
 }
@@ -666,6 +655,46 @@ func (s *testState) ShowMetrics(d *datadriven.TestData) string {
 	return buf.String()
 }
 
+func (s *testState) makeNewIndex(d *datadriven.TestData) {
+	var err error
+	dims := 2
+	s.Options = cspann.IndexOptions{IsDeterministic: true}
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "min-partition-size":
+			s.Options.MinPartitionSize = s.parseInt(arg)
+
+		case "max-partition-size":
+			s.Options.MaxPartitionSize = s.parseInt(arg)
+
+		case "quality-samples":
+			s.Options.QualitySamples = s.parseInt(arg)
+
+		case "dims":
+			dims = s.parseInt(arg)
+
+		case "beam-size":
+			s.Options.BaseBeamSize = s.parseInt(arg)
+
+		case "new-fixups":
+			s.Options.UseNewFixups = true
+		}
+	}
+
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
+	s.MemStore = memstore.New(s.Quantizer, 42)
+	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, 42, &s.Options, s.Stopper)
+	require.NoError(s.T, err)
+
+	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
+	s.Index.Fixups().OnFixupAdded(func() { s.FixupsAdded++ })
+	s.Index.Fixups().OnFixupProcessed(func() { s.FixupsProcessed++ })
+
+	// Suspend background fixups until ProcessFixups is explicitly called, so
+	// that vector index operations can be deterministic.
+	s.Index.SuspendFixups()
+}
+
 func (s *testState) parseInt(arg datadriven.CmdArg) int {
 	require.Len(s.T, arg.Vals, 1)
 	val, err := strconv.Atoi(arg.Vals[0])
@@ -721,6 +750,122 @@ func (s *testState) parseKeyAndVector(line string) (cspann.KeyBytes, vector.T) {
 	require.Len(s.T, parts, 2)
 	key := cspann.KeyBytes(parts[0])
 	return key, s.parseVector(parts[1])
+}
+
+func (s *testState) loadIndexFromFormat(
+	treeKey cspann.TreeKey, lines []string, indent int,
+) (remaining []string, level cspann.Level, centroid vector.T, childKey cspann.ChildKey) {
+	// Ensure line contains "• ", note that the '•' rune is 3 UTF-8 bytes.
+	idx := strings.Index(lines[0], "• ")
+	require.NotEqual(s.T, -1, idx)
+	line := lines[0][idx+4:]
+	idx = strings.Index(line, " ")
+
+	if line[0] < '0' || line[0] > '9' {
+		// This is a leaf vector.
+		keyBytes := []byte(strings.TrimSpace(line[:idx]))
+		line = strings.TrimSpace(line[idx:])
+		vec := s.parseVector(line)
+		s.MemStore.InsertVector(keyBytes, vec)
+		randomized := s.Index.RandomizeVector(vec, make(vector.T, len(vec)))
+		return lines[1:], cspann.LeafLevel, randomized, cspann.ChildKey{KeyBytes: keyBytes}
+	}
+
+	// This is an interior partition.
+	val, err := strconv.Atoi(line[:idx])
+	require.NoError(s.T, err)
+	partitionKey := cspann.PartitionKey(val)
+	s.MemStore.EnsureUniquePartitionKey(treeKey, partitionKey)
+	line = line[idx:]
+
+	// Parse centroid and state.
+	details := cspann.MakeReadyDetails()
+	idx = strings.Index(line, "[")
+	if idx != -1 {
+		require.True(s.T, strings.HasSuffix(line, "]"))
+		details = parsePartitionStateDetails(line[idx+1 : len(line)-1])
+		line = line[:idx-1]
+	}
+	centroid = s.parseVector(line)
+	centroid = s.Index.RandomizeVector(centroid, make(vector.T, len(centroid)))
+
+	lines = lines[1:]
+
+	childLevel := cspann.LeafLevel
+	childVectors := vector.MakeSet(len(centroid))
+	childKeys := []cspann.ChildKey(nil)
+	childIndent := 0
+
+	// Loop over children.
+	for len(lines) > 0 && len(lines[0]) > indent {
+		if strings.HasSuffix(lines[0], "│") {
+			childIndent = len(lines[0])
+			lines = lines[1:]
+		}
+		require.Greater(s.T, childIndent, 0)
+
+		var childVector vector.T
+		lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
+		childVectors.Add(childVector)
+		childKeys = append(childKeys, childKey)
+	}
+
+	metadata := cspann.PartitionMetadata{
+		Level:        childLevel,
+		Centroid:     centroid,
+		StateDetails: details,
+	}
+	err = s.MemStore.TryCreateEmptyPartition(s.Ctx, treeKey, partitionKey, metadata)
+	require.NoError(s.T, err)
+
+	if len(childKeys) > 0 {
+		valueBytes := make([]cspann.ValueBytes, len(childKeys))
+		added, err := s.MemStore.TryAddToPartition(
+			s.Ctx, treeKey, partitionKey, childVectors, childKeys, valueBytes, metadata)
+		require.NoError(s.T, err)
+		require.True(s.T, added)
+	}
+
+	return lines, childLevel + 1, centroid, cspann.ChildKey{PartitionKey: partitionKey}
+}
+
+// parsePartitionStateDetails parses a partition state details string in this
+// format:
+//
+//	Ready
+//	DrainingForSplit:1,2
+//	Merging:1
+func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
+	var details cspann.PartitionStateDetails
+	idx := strings.Index(s, ":")
+	if idx == -1 {
+		details.State = cspann.ParsePartitionState(s)
+		return details
+	}
+	details.State = cspann.ParsePartitionState(s[:idx])
+
+	// Parse the partition keys after the colon.
+	remaining := s[idx+1:]
+	if comma := strings.Index(remaining, ","); comma != -1 {
+		// Two keys means we're parsing targets.
+		if num, err := strconv.Atoi(remaining[:comma]); err == nil {
+			details.Target1 = cspann.PartitionKey(num)
+		}
+		if num, err := strconv.Atoi(remaining[comma+1:]); err == nil {
+			details.Target2 = cspann.PartitionKey(num)
+		}
+	} else if num, err := strconv.Atoi(remaining); err == nil {
+		// Has one parameter - set as Source for merge operations, Target1
+		// otherwise.
+		switch details.State {
+		case cspann.MergingState, cspann.DrainingForMergeState, cspann.RemovingLevelState:
+			details.Source = cspann.PartitionKey(num)
+		default:
+			details.Target1 = cspann.PartitionKey(num)
+		}
+	}
+
+	return details
 }
 
 // findMAP returns mean average precision, which compares a set of predicted
