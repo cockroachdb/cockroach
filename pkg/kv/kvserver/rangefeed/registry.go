@@ -8,6 +8,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"sync"
 	"sync/atomic"
 
@@ -35,7 +36,7 @@ type Disconnector interface {
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
 	Disconnector
-
+	getRangefeedInfo() rangefeedpb.InspectStoreRangefeedsResponse
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
@@ -81,6 +82,7 @@ type registration interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
+	consumerID     int64
 	streamCtx      context.Context
 	span           roachpb.Span
 	withDiff       bool
@@ -96,6 +98,14 @@ type baseRegistration struct {
 	id               int64         // internal
 	keys             interval.Range
 	shouldUnreg      atomic.Bool
+}
+
+func (r *baseRegistration) getRangefeedInfo() rangefeedpb.InspectStoreRangefeedsResponse {
+	return rangefeedpb.InspectStoreRangefeedsResponse{
+		//ConsumerID:       r.consumerID,
+		//Span:             r.span,
+		//CatchUpTimestamp: r.catchUpTimestamp,
+	}
 }
 
 // ID implements interval.Interface.
@@ -387,6 +397,18 @@ func (reg *registry) PublishToOverlapping(
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
 	reg.DisconnectWithErr(ctx, all, pErr)
+}
+
+func (reg *registry) CollectAllStats(ctx context.Context) []rangefeedpb.InspectStoreRangefeedsResponse {
+	return reg.CollectStats(ctx, all)
+}
+
+func (reg *registry) CollectStats(ctx context.Context, span roachpb.Span) (infos []rangefeedpb.InspectStoreRangefeedsResponse) {
+	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
+		infos = append(infos, r.getRangefeedInfo())
+		return false, nil
+	})
+	return
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified

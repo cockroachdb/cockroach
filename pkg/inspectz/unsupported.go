@@ -7,6 +7,7 @@ package inspectz
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
@@ -59,5 +60,11 @@ func (u Unsupported) StoreLivenessSupportFrom(
 func (u Unsupported) StoreLivenessSupportFor(
 	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
 ) (*slpb.InspectStoreLivenessResponse, error) {
+	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+}
+
+func (u Unsupported) Rangefeed(
+	_ context.Context, _ *rangefeedpb.InspectStoreRangefeedsRequest,
+) (*rangefeedpb.InspectStoreRangefeedsResponse, error) {
 	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }
