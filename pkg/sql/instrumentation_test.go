@@ -207,12 +207,12 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 
 	testApp := `sampling-test`
 	ctx := context.Background()
-	var collectedTxnStats []sqlstats.RecordedTxnStats
+	var collectedTxnStats []*sqlstats.RecordedTxnStats
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
 				DisableProbabilisticSampling: true,
-				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats) {
+				OnRecordTxnFinish: func(isInternal bool, _ *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats) {
 					// We won't run into a race here because we'll only observe
 					// txns from a single connection.
 					if txnStats.Application == testApp {

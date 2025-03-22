@@ -473,7 +473,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		defer func() {
 			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
-				statsCollector.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+				statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 					FingerprintID:  txnFingerprintID,
 					UserNormalized: username.RootUser,
 					Application:    "appname_findme",
@@ -481,13 +481,11 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		}()
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, testCase.implicit, "defaultdb")
-			err := statsCollector.RecordStatement(
-				ctx, sqlstats.RecordedStmtStats{
-					FingerprintID: stmtFingerprintID,
-					Query:         fingerprint,
-					ImplicitTxn:   testCase.implicit,
-				},
-			)
+			err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+				FingerprintID: stmtFingerprintID,
+				Query:         fingerprint,
+				ImplicitTxn:   testCase.implicit,
+			})
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
@@ -592,16 +590,17 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			txnFingerprintIDHash := util.MakeFNV64()
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
-				err := statsCollector.RecordStatement(
-					ctx, sqlstats.RecordedStmtStats{FingerprintID: stmtFingerprintID, Query: fingerprint},
-				)
+				err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+					FingerprintID: stmtFingerprintID,
+					Query:         fingerprint,
+				})
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
 			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID)
-			err := statsCollector.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+			err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 				FingerprintID:  transactionFingerprintID,
 				UserNormalized: username.RootUser,
 				Application:    "appname_findme",
@@ -727,7 +726,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 				finishedExecute.Store(true)
 			}
 		},
-		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ *sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
 			if !isInternal && tc.query == stmt && finishedExecute.Load() {

@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
+func makeTxnInsight(value *sqlstats.RecordedTxnStats) *Transaction {
 	var retryReason string
 	if value.AutoRetryReason != nil {
 		retryReason = value.AutoRetryReason.Error()
@@ -59,7 +59,7 @@ func MakeTxnInsight(value sqlstats.RecordedTxnStats) *Transaction {
 	return insight
 }
 
-func MakeStmtInsight(value sqlstats.RecordedStmtStats) *Statement {
+func makeStmtInsight(value *sqlstats.RecordedStmtStats) *Statement {
 	var autoRetryReason string
 	if value.AutoRetryReason != nil {
 		autoRetryReason = value.AutoRetryReason.Error()

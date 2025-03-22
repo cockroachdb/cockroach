@@ -40,7 +40,8 @@ func TestRecordStatement(t *testing.T) {
 			"test-app",
 			nil,
 		)
-		err := memContainer.RecordStatement(ctx, sqlstats.RecordedStmtStats{
+		// Record a statement, ensure no insights are generated.
+		err := memContainer.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			Query: "SELECT _",
 		})
 		require.NoError(t, err)
@@ -65,7 +66,7 @@ func TestRecordTransaction(t *testing.T) {
 			nil,
 		)
 		// Record a transaction, ensure no insights are generated.
-		require.NoError(t, memContainer.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+		require.NoError(t, memContainer.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 			FingerprintID: appstatspb.TransactionFingerprintID(123),
 		}))
 	})
@@ -102,7 +103,7 @@ func TestContainer_Add(t *testing.T) {
 		mockedStmtKey := stmtKey{
 			fingerprintID: 1,
 		}
-		stmtStats := sqlstats.RecordedStmtStats{
+		stmtStats := &sqlstats.RecordedStmtStats{
 			FingerprintID:      1,
 			Query:              "SELECT * FROM test_table",
 			Database:           "test_db",
@@ -123,7 +124,7 @@ func TestContainer_Add(t *testing.T) {
 
 		// Add some transaction stats to the source container
 		txnFingerprintID := appstatspb.TransactionFingerprintID(123)
-		txnStats := sqlstats.RecordedTxnStats{
+		txnStats := &sqlstats.RecordedTxnStats{
 			FingerprintID:  txnFingerprintID,
 			RowsAffected:   10,
 			ServiceLatency: 1,
@@ -144,7 +145,7 @@ func TestContainer_Add(t *testing.T) {
 		emptyStmtStatsKey := stmtKey{
 			fingerprintID: 321,
 		}
-		reducedStmtStats := sqlstats.RecordedStmtStats{
+		reducedStmtStats := &sqlstats.RecordedStmtStats{
 			FingerprintID:      appstatspb.StmtFingerprintID(321),
 			Query:              "SELECT * FROM test_table",
 			ServiceLatencySec:  50,
@@ -161,7 +162,7 @@ func TestContainer_Add(t *testing.T) {
 			StatementError:     errors.New("test error"),
 		}
 		reducedTxnFingerprintID := appstatspb.TransactionFingerprintID(321)
-		reducedTxnStats := sqlstats.RecordedTxnStats{
+		reducedTxnStats := &sqlstats.RecordedTxnStats{
 			FingerprintID:  reducedTxnFingerprintID,
 			RowsAffected:   100,
 			ServiceLatency: 500 * time.Millisecond,
@@ -175,20 +176,20 @@ func TestContainer_Add(t *testing.T) {
 		}
 		require.NoError(t, dest.RecordStatement(ctx, reducedStmtStats))
 		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnStats))
-		require.NoError(t, src.RecordStatement(ctx, sqlstats.RecordedStmtStats{
+		require.NoError(t, src.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
 			FingerprintID: appstatspb.StmtFingerprintID(321),
 		}))
-		require.NoError(t, src.RecordTransaction(ctx, sqlstats.RecordedTxnStats{
+		require.NoError(t, src.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
 			FingerprintID: reducedTxnFingerprintID,
 		}))
 
 		for i := 0; i < 10; i++ {
 			require.NoError(t, dest.Add(ctx, src))
 			// Check results.
-			verifyStmtStatsMultiple(t, i+1, &stmtStats, dest.getStatsForStmtWithKey(mockedStmtKey))
-			verifyStmtStatsReduced(t, i+2, &reducedStmtStats, dest.getStatsForStmtWithKey(emptyStmtStatsKey))
-			verifyTxnStatsMultiple(t, i+1, &txnStats, dest.getStatsForTxnWithKey(txnFingerprintID))
-			verifyTxnStatsReduced(t, i+2, &reducedTxnStats, dest.getStatsForTxnWithKey(reducedTxnFingerprintID))
+			verifyStmtStatsMultiple(t, i+1, stmtStats, dest.getStatsForStmtWithKey(mockedStmtKey))
+			verifyStmtStatsReduced(t, i+2, reducedStmtStats, dest.getStatsForStmtWithKey(emptyStmtStatsKey))
+			verifyTxnStatsMultiple(t, i+1, txnStats, dest.getStatsForTxnWithKey(txnFingerprintID))
+			verifyTxnStatsReduced(t, i+2, reducedTxnStats, dest.getStatsForTxnWithKey(reducedTxnStats.FingerprintID))
 		}
 	})
 }
@@ -298,7 +299,7 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	container := New(st, nil, memMonitor, "test-app", nil)
 
 	// Create statement keys
-	stmt1Stats := sqlstats.RecordedStmtStats{
+	stmt1Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(1),
 		Query:                    "SELECT * FROM table1",
 		ImplicitTxn:              true,
@@ -306,7 +307,7 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 		TransactionFingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
 
-	stmt2Stats := sqlstats.RecordedStmtStats{
+	stmt2Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(2),
 		Query:                    "SELECT * FROM table2",
 		ImplicitTxn:              true,
@@ -322,7 +323,7 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	require.NoError(t, err)
 
 	// Record a transaction to allocate more memory.
-	txnStats := sqlstats.RecordedTxnStats{
+	txnStats := &sqlstats.RecordedTxnStats{
 		FingerprintID: appstatspb.TransactionFingerprintID(100),
 	}
 
@@ -341,7 +342,7 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 	require.Equal(t, int64(0), memUsedAfterClear, "Memory account should be cleared after Clear")
 
 	// Add more statements to allocate memory again.
-	stmt3Stats := sqlstats.RecordedStmtStats{
+	stmt3Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(3),
 		Query:                    "SELECT * FROM table3",
 		ImplicitTxn:              true,
@@ -365,7 +366,7 @@ func TestContainerMemoryAccountClearing(t *testing.T) {
 
 	// Verify that the container can still be used after Free
 	// by adding more statements.
-	stmt4Stats := sqlstats.RecordedStmtStats{
+	stmt4Stats := &sqlstats.RecordedStmtStats{
 		FingerprintID:            appstatspb.StmtFingerprintID(4),
 		Query:                    "SELECT * FROM table4",
 		ImplicitTxn:              true,
