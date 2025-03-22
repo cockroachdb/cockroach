@@ -507,10 +507,19 @@ func (r *Replica) stagePendingTruncationRaftMuLocked(pt pendingTruncation) {
 	// safe to consider the log size delta trusted in this case. Conveniently,
 	// this doesn't need any special casing.
 	isDeltaTrusted := pt.isDeltaTrusted && r.shMu.raftTruncState.Index+1 == pt.expectedFirstIndex
+
 	r.mu.Lock()
 	r.shMu.raftTruncState = pt.RaftTruncatedState
-	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(pt.logDeltaBytes, isDeltaTrusted)
+	// Ensure the raft log size is not negative since it isn't persisted between
+	// server restarts.
+	// TODO(pav-kv): should we distrust the log size if it goes negative?
+	r.shMu.raftLogSize = max(r.shMu.raftLogSize+pt.logDeltaBytes, 0)
+	r.shMu.raftLogLastCheckSize = max(r.shMu.raftLogLastCheckSize+pt.logDeltaBytes, 0)
+	if !isDeltaTrusted {
+		r.shMu.raftLogSizeTrusted = false
+	}
 	r.mu.Unlock()
+
 	// Clear entries in the raft log entry cache for this range up to and
 	// including the truncated index. Ordering this after updating the truncated
 	// state matters here. At this point, there can not be a concurrent reader of
@@ -541,29 +550,6 @@ func (r *Replica) finalizeTruncationRaftMuLocked(ctx context.Context) {
 	// reasons.
 	// TODO(#136416): If a crash occurs before the files are durably removed,
 	// there will be dangling files at the next start. Clean them up at startup.
-}
-
-// handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked updates the raft log
-// stats with the given delta. Both Replica.{raftMu,mu} must be held.
-func (r *Replica) handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(
-	delta int64, isDeltaTrusted bool,
-) {
-	r.raftMu.AssertHeld()
-	r.mu.AssertHeld()
-
-	r.shMu.raftLogSize += delta
-	r.shMu.raftLogLastCheckSize += delta
-	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
-	// between server restarts.
-	if r.shMu.raftLogSize < 0 {
-		r.shMu.raftLogSize = 0
-	}
-	if r.shMu.raftLogLastCheckSize < 0 {
-		r.shMu.raftLogLastCheckSize = 0
-	}
-	if !isDeltaTrusted {
-		r.shMu.raftLogSizeTrusted = false
-	}
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
