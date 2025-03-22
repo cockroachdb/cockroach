@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -1000,6 +1003,13 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// cachedLocalityProximity is the cached result of the locality comparison
+		// result between the local node and other replicas. It is only updated and
+		// used for leaseholder replicas. It is used to estimate network latency and
+		// time it takes to propagate closed timestamp from leaseholder replicas to
+		// follower replicas.
+		cachedLocality ctpb.LatencyBasedRangeClosedTimestampPolicy
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1296,24 +1306,58 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.shMu.state.Desc
 }
 
+// toClientClosedTsPolicy converts a side-transport closed timestamp policy (ctpb)
+// to its client-facing equivalent (roachpb).
+func toClientClosedTsPolicy(
+	policy ctpb.LatencyBasedRangeClosedTimestampPolicy,
+) roachpb.RangeClosedTimestampPolicy {
+	switch policy {
+	case ctpb.LAG_BY_CLUSTER_SETTING:
+		return roachpb.LAG_BY_CLUSTER_SETTING
+	case ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO:
+		return roachpb.LEAD_FOR_GLOBAL_READS
+	default:
+		panic(fmt.Sprintf("unknown policy locality %s", policy))
+	}
+}
+
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
 // range, which is updated asynchronously by listening in on span configuration
 // changes.
 //
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
-func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
-		if !r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
-			return roachpb.LEAD_FOR_GLOBAL_READS
-		}
+func (r *Replica) closedTimestampPolicyRLocked() ctpb.LatencyBasedRangeClosedTimestampPolicy {
+	r.mu.AssertRHeld()
+	if !r.mu.conf.GlobalReads || r.shMu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 		// The node liveness range ignores zone configs and always uses a
 		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
 		// closing timestamps in the future, it would break liveness updates,
 		// which perform a 1PC transaction with a commit trigger and can not
 		// tolerate being pushed into the future.
+		return ctpb.LAG_BY_CLUSTER_SETTING
 	}
-	return roachpb.LAG_BY_CLUSTER_SETTING
+	if !r.store.policyRefresher.IsEnabled() {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+	}
+	return r.mu.cachedLocality
+}
+
+func (r *Replica) RefreshLatency(latencies map[roachpb.NodeID]time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	desc := r.descRLocked()
+	res := ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
+	for _, peer := range desc.InternalReplicas {
+		peerLatency, ok := latencies[peer.NodeID]
+		if !ok {
+			continue
+		}
+		// Calculate latency bucket by dividing latency by interval size and adding base policy
+		latencyBucket := closedts.FindBucketBasedOnNetworkRTT(peerLatency)
+		res = max(res, latencyBucket)
+	}
+	r.mu.cachedLocality = res
 }
 
 // NodeID returns the ID of the node this replica belongs to.
@@ -1449,7 +1493,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	defer r.mu.RUnlock()
 	desc := r.descRLocked()
 	l, _ /* nextLease */ := r.getLeaseRLocked()
-	closedts := r.closedTimestampPolicyRLocked()
+	closedts := toClientClosedTsPolicy(r.closedTimestampPolicyRLocked())
 
 	// Sanity check the lease.
 	if !l.Empty() {
@@ -1838,7 +1882,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}
-	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
+	ri.ClosedTimestampPolicy = toClientClosedTsPolicy(r.closedTimestampPolicyRLocked())
 	r.sideTransportClosedTimestamp.mu.Lock()
 	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.sideTransportClosedTimestamp.mu.cur.ts
 	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.sideTransportClosedTimestamp.mu.cur.lai
@@ -2157,7 +2201,7 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, r.closedTimestampPolicyRLocked())
+		r.shMu.state.Lease, toClientClosedTsPolicy(r.closedTimestampPolicyRLocked()))
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
