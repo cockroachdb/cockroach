@@ -959,11 +959,34 @@ type execNodeTraceMetadata map[exec.Node][]execComponents
 type execComponents []execinfrapb.ComponentID
 
 // associateNodeWithComponents is called during planning, as processors are
-// planned for an execution operator.
+// planned for an execution operator. This function can be called multiple times
+// for the same exec.Node and execComponents.
 func (m execNodeTraceMetadata) associateNodeWithComponents(
 	node exec.Node, components execComponents,
 ) {
 	if prevComponents, ok := m[node]; ok {
+		// We already have some components associated with this node. Check
+		// whether this is a duplicate association (that should be a no-op).
+		for _, oldComponents := range prevComponents {
+			if len(oldComponents) != len(components) {
+				continue
+			}
+			dup := true
+			for i := range oldComponents {
+				// Duplicate association can only happen when component IDs are
+				// in exactly the same order.
+				if oldComponents[i] != components[i] {
+					dup = false
+					break
+				}
+			}
+			if dup {
+				// This association has already been performed.
+				return
+			}
+		}
+		// This must be a new stage in the physical plan, so we want to extend
+		// the mapping for the exec.Node.
 		m[node] = append(prevComponents, components)
 	} else {
 		m[node] = []execComponents{components}
