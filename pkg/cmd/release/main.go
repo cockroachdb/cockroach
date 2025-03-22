@@ -8,6 +8,11 @@ package main
 import "github.com/spf13/cobra"
 
 var rootCmd = &cobra.Command{Use: "release"}
+var artifactsDir string
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&artifactsDir, "artifacts-dir", "", "artifacts directory")
+}
 
 const (
 	envSMTPUser     = "SMTP_USER"
