@@ -1,0 +1,77 @@
+exec
+CREATE TABLE basic_table (
+  id INT PRIMARY KEY,
+  name STRING,
+  value INT,
+  data BYTES
+);
+----
+ok
+
+show-insert table=basic_table
+----
+INSERT INTO [104 AS replication_target](id, name, value, data) VALUES ($1, $2, $3, $4)
+
+show-update table=basic_table
+----
+UPDATE [104 AS replication_target] SET id = $5::INT8, name = $6::STRING, value = $7::INT8, data = $8::BYTES WHERE (((id = $1) AND (name = $2)) AND (value = $3)) AND (data = $4)
+
+show-delete table=basic_table
+----
+DELETE FROM [104 AS replication_target] WHERE (((id = $1) AND (name = $2)) AND (value = $3)) AND (data = $4)
+
+exec
+CREATE TYPE status AS ENUM ('pending', 'active', 'completed', 'cancelled');
+----
+ok
+
+# Create a table that uses a user defined type.
+exec
+CREATE TABLE tasks (
+  id INT PRIMARY KEY,
+  title STRING NOT NULL,
+  description STRING,
+  status status NOT NULL DEFAULT 'pending',
+  priority INT,
+  created_at TIMESTAMP DEFAULT now()
+);
+----
+ok
+
+show-insert table=tasks
+----
+INSERT INTO [107 AS replication_target](id, title, description, status, priority, created_at) VALUES ($1, $2, $3, $4, $5, $6)
+
+show-update table=tasks
+----
+UPDATE [107 AS replication_target] SET id = $7::INT8, title = $8::STRING, description = $9::STRING, status = $10::@100105, priority = $11::INT8, created_at = $12::TIMESTAMP WHERE (((((id = $1) AND (title = $2)) AND (description = $3)) AND (status = $4)) AND (priority = $5)) AND (created_at = $6)
+
+show-delete table=tasks
+----
+DELETE FROM [107 AS replication_target] WHERE (((((id = $1) AND (title = $2)) AND (description = $3)) AND (status = $4)) AND (priority = $5)) AND (created_at = $6)
+
+# Test a table with a computed column. Note that the computed column is
+# not included in the INSERT/UPDATE/DELETE statements.
+exec
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  name STRING NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  quantity INT NOT NULL,
+  total_value DECIMAL(10,2) GENERATED ALWAYS AS (unit_price * quantity) STORED,
+  last_updated TIMESTAMP DEFAULT now()
+);
+----
+ok
+
+show-insert table=products
+----
+INSERT INTO [108 AS replication_target](id, name, unit_price, quantity, last_updated) VALUES ($1, $2, $3, $4, $5)
+
+show-update table=products
+----
+UPDATE [108 AS replication_target] SET id = $6::INT8, name = $7::STRING, unit_price = $8::DECIMAL(10,2), quantity = $9::INT8, last_updated = $10::TIMESTAMP WHERE ((((id = $1) AND (name = $2)) AND (unit_price = $3)) AND (quantity = $4)) AND (last_updated = $5)
+
+show-delete table=products
+----
+DELETE FROM [108 AS replication_target] WHERE ((((id = $1) AND (name = $2)) AND (unit_price = $3)) AND (quantity = $4)) AND (last_updated = $5)
