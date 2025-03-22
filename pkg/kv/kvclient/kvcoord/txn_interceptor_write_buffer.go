@@ -345,10 +345,21 @@ func (twb *txnWriteBuffer) applyTransformations(
 		req := ru.GetInner()
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
+			var resp kvpb.ResponseUnion
+			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			if served {
+				// TODO(ssd): If we tracked locked information here, we could avoid the
+				// locking Get below.
+				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
+				resp.MustSetInner(&kvpb.GetResponse{
+					Value: val,
+				})
+			}
 			ts = append(ts, transformation{
 				stripped:    false,
 				index:       i,
 				origRequest: req,
+				resp:        resp,
 			})
 			getReq := &kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
@@ -396,6 +407,15 @@ func (twb *txnWriteBuffer) applyTransformations(
 			twb.addToBuffer(t.Key, t.Value, t.Sequence)
 
 		case *kvpb.DeleteRequest:
+			// To correctly populate FoundKey in the response, we need to look in our
+			// write buffer to see if there is a tombstone.
+			var foundKey bool
+			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			if served {
+				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
+				foundKey = val.IsPresent()
+			}
+
 			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
 			// need to add a locking Get to the BatchRequest, including if the key
 			// doesn't exist.
@@ -414,10 +434,19 @@ func (twb *txnWriteBuffer) applyTransformations(
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
 
+			// If we found a key in our write buffer we use that result regardless of
+			// what the GetResponse that we might have sent says.
+			//
+			// TODO(review): If we didn't serve the request and we also haven't been
+			// asked to acquire the exclusive lock, can we assume the caller doesn't
+			// care about the FoundKey response?
 			var ru kvpb.ResponseUnion
-			ru.MustSetInner(&kvpb.DeleteResponse{
-				FoundKey: false,
-			})
+			if served || !t.MustAcquireExclusiveLock {
+				ru.MustSetInner(&kvpb.DeleteResponse{
+					FoundKey: foundKey,
+				})
+			}
+
 			ts = append(ts, transformation{
 				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
@@ -791,7 +820,16 @@ func (t transformation) toResp(
 		if twb.testingOverrideCPutEvalFn != nil {
 			evalFn = twb.testingOverrideCPutEvalFn
 		}
-		getResp := br.GetInner().(*kvpb.GetResponse)
+
+		var getResp *kvpb.GetResponse
+		if bufResp := t.resp.GetGet(); bufResp != nil {
+			// If we served the response out of the buffer, we don't care what came
+			// back from KV.
+			getResp = bufResp
+		} else {
+			getResp = br.GetInner().(*kvpb.GetResponse)
+		}
+
 		condFailedErr := evalFn(
 			req.ExpBytes,
 			getResp.Value,
@@ -812,13 +850,19 @@ func (t transformation) toResp(
 		ru = t.resp
 
 	case *kvpb.DeleteRequest:
-		getResp := br.GetInner().(*kvpb.GetResponse)
 		ru = t.resp
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
+		// If the deletion response is already set, it means we served response from
+		// the write buffer. We can still be here because we happened to need to
+		// send a GetRequest solely for the locking behaviour.
+		if ru.GetDelete() == nil {
+			getResp := br.GetInner().(*kvpb.GetResponse)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
+			}
+			ru.MustSetInner(&kvpb.DeleteResponse{
+				FoundKey: getResp.Value.IsPresent(),
+			})
 		}
-		ru.GetDelete().FoundKey = getResp.Value.IsPresent()
-
 	case *kvpb.GetRequest:
 		// Get requests must be served from the local buffer if a transaction
 		// performed a previous write to the key being read. However, Get requests
