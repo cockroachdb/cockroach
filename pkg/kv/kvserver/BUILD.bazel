@@ -272,6 +272,7 @@ go_test(
     size = "enormous",
     srcs = [
         "addressing_test.go",
+        "deleted_external_sstable_test.go",
         "allocator_impl_test.go",
         "batch_spanset_test.go",
         "below_raft_protos_test.go",
