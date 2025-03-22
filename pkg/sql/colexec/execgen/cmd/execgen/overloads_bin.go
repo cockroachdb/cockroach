@@ -26,7 +26,7 @@ var binaryOpDecMethod = map[treebin.BinaryOperatorSymbol]string{
 	treebin.Div:      "Quo",
 	treebin.FloorDiv: "QuoInteger",
 	treebin.Mod:      "Rem",
-	treebin.Pow:      "Pow",
+	treebin.Pow:      "DecimalPow",
 }
 
 var binaryOpFloatMethod = map[treebin.BinaryOperatorSymbol]string{
@@ -324,24 +324,48 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Right":            rightElem,
 		}
 		buf := strings.Builder{}
-		t := template.Must(template.New("").Parse(`
-			{
-				{{if .CheckRightIsZero}}
-				if {{.Right}}.IsZero() && {{.Left}}.Form != apd.NaN {
-					colexecerror.ExpectedError(tree.ErrDivByZero)
+
+		var t *template.Template
+		switch binOp {
+		case treebin.Pow:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}}.IsZero() && {{.Left}}.Form != apd.NaN {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &{{.Right}})
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					{{if .CheckRightIsInf}}
+					if {{.Right}}.Form == apd.Infinite && {{.Left}}.Form == apd.Finite {
+						{{.Target}} = apd.Decimal{}
+					}
+					{{end}}
 				}
-				{{end}}
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
-				if err != nil {
-					colexecerror.ExpectedError(err)
+			`))
+		default:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}}.IsZero() && {{.Left}}.Form != apd.NaN {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					{{if .CheckRightIsInf}}
+					if {{.Right}}.Form == apd.Infinite && {{.Left}}.Form == apd.Finite {
+						{{.Target}} = apd.Decimal{}
+					}
+					{{end}}
 				}
-				{{if .CheckRightIsInf}}
-				if {{.Right}}.Form == apd.Infinite && {{.Left}}.Form == apd.Finite {
-					{{.Target}} = apd.Decimal{}
-				}
-				{{end}}
-			}
-		`))
+			`))
+		}
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -489,7 +513,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+				if err := eval.DecimalPow(tree.{{.Ctx}}, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 				resultInt, err := leftTmpDec.Int64()
@@ -544,20 +568,40 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			"Right":            rightElem,
 		}
 		buf := strings.Builder{}
-		t := template.Must(template.New("").Parse(`
-			{
-				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0 && {{.Left}}.Form != apd.NaN {
-					colexecerror.ExpectedError(tree.ErrDivByZero)
+
+		var t *template.Template
+		switch binOp {
+		case treebin.Pow:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}} == 0 && {{.Left}}.Form != apd.NaN {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					var tmpDec apd.Decimal //gcassert:noescape
+					tmpDec.SetInt64(int64({{.Right}}))
+					if err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
-				{{end}}
-				var tmpDec apd.Decimal //gcassert:noescape
-				tmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
-					colexecerror.ExpectedError(err)
+			`))
+		default:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}} == 0 && {{.Left}}.Form != apd.NaN {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					var tmpDec apd.Decimal //gcassert:noescape
+					tmpDec.SetInt64(int64({{.Right}}))
+					if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
+						colexecerror.ExpectedError(err)
+					}
 				}
-			}
-		`))
+			`))
+		}
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -578,26 +622,52 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Right":            rightElem,
 		}
 		buf := strings.Builder{}
-		t := template.Must(template.New("").Parse(`
-			{
-				{{if .CheckRightIsZero}}
-				if {{.Right}}.IsZero() {
-					colexecerror.ExpectedError(tree.ErrDivByZero)
+
+		var t *template.Template
+		switch binOp {
+		case treebin.Pow:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}}.IsZero() {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					var tmpDec apd.Decimal //gcassert:noescape
+					tmpDec.SetInt64(int64({{.Left}}))
+					err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &tmpDec, &{{.Right}})
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					{{if .CheckRightIsInf}}
+					if {{.Right}}.Form == apd.Infinite {
+						{{.Target}} = apd.Decimal{}
+					}
+					{{end}}
 				}
-				{{end}}
-				var tmpDec apd.Decimal //gcassert:noescape
-				tmpDec.SetInt64(int64({{.Left}}))
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &tmpDec, &{{.Right}})
-				if err != nil {
-					colexecerror.ExpectedError(err)
+			`))
+		default:
+			t = template.Must(template.New("").Parse(`
+				{
+					{{if .CheckRightIsZero}}
+					if {{.Right}}.IsZero() {
+						colexecerror.ExpectedError(tree.ErrDivByZero)
+					}
+					{{end}}
+					var tmpDec apd.Decimal //gcassert:noescape
+					tmpDec.SetInt64(int64({{.Left}}))
+					_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &tmpDec, &{{.Right}})
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+					{{if .CheckRightIsInf}}
+					if {{.Right}}.Form == apd.Infinite {
+						{{.Target}} = apd.Decimal{}
+					}
+					{{end}}
 				}
-				{{if .CheckRightIsInf}}
-				if {{.Right}}.Form == apd.Infinite {
-					{{.Target}} = apd.Decimal{}
-				}
-				{{end}}
-			}
-		`))
+			`))
+		}
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}
