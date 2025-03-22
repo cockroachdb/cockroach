@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -287,8 +286,7 @@ func (tx *Txn) SetRootPartition(
 func (tx *Txn) InsertPartition(
 	ctx context.Context, treeKey cspann.TreeKey, partition *cspann.Partition,
 ) (cspann.PartitionKey, error) {
-	instanceID := tx.store.db.KV().Context().NodeID.SQLInstanceID()
-	partitionID := cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
+	partitionID := tx.store.MakePartitionKey()
 	return partitionID, tx.insertPartition(ctx, treeKey, partitionID, partition)
 }
 
@@ -458,6 +456,10 @@ func (tx *Txn) SearchPartitions(
 				"caller already searched a partition at level %d, cannot search at level %d",
 				level, searchLevel))
 		}
+
+		// TODO(andyk): Set this to the actual partition state once that's
+		// implemented in vecstore.
+		toSearch[i].StateDetails = cspann.MakeReadyDetails()
 		toSearch[i].Count = partitionCount
 	}
 

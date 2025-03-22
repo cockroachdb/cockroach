@@ -1,6 +1,7 @@
+# ----------------------------------------------------------------------
 # Load 1000 512-dimension features and search them. Use small partition size to
 # ensure a deeper tree.
-
+# ----------------------------------------------------------------------
 new-index dims=512 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 load-features=1000 hide-tree
 ----
 Created index with 1000 vectors with 512 dimensions.

@@ -19,6 +19,41 @@ import (
 // governs building and maintaining a K-means tree in the C-SPANN index.
 type PartitionState int
 
+// ParsePartitionState returns the given string as a PartitionState. If the
+// string is not recognized, it returns MissingState.
+func ParsePartitionState(s string) PartitionState {
+	switch s {
+	case "Ready":
+		return ReadyState
+	case "Splitting":
+		return SplittingState
+	case "Merging":
+		return MergingState
+	case "Updating":
+		return UpdatingState
+	case "DrainingForSplit":
+		return DrainingForSplitState
+	case "DrainingForMerge":
+		return DrainingForMergeState
+	case "AddingLevel":
+		return AddingLevelState
+	case "RemovingLevel":
+		return RemovingLevelState
+	}
+	return MissingState
+}
+
+// AllowAddOrRemove returns true if vectors can be added or removed to/from the
+// partition in this state.
+func (s PartitionState) AllowAddOrRemove() bool {
+	switch s {
+	case ReadyState, SplittingState, MergingState, UpdatingState,
+		AddingLevelState, RemovingLevelState:
+		return true
+	}
+	return false
+}
+
 // String returns the state formatted as a string.
 func (s PartitionState) String() string {
 	switch s {
@@ -44,41 +79,6 @@ func (s PartitionState) String() string {
 	return "Unknown"
 }
 
-// Here is the state transition diagram for partition states. There are a few
-// possible flows:
-// TODO(andyk): Separate each flow into its own diagram.
-//
-//	New Root      : Missing => Ready
-//	Splitting     : Ready => Splitting => DrainingForSplit => Missing
-//	Splitting Root: Ready => Splitting => DrainingForSplit => AddingLevel => Ready
-//	Split Target  : Missing => Updating => Ready
-//	Merging       : Ready => Merging => DrainingForMerge => Missing
-//	Merge Target  : Ready => Updating => Ready
-//	Merging Root  : Ready => DrainingForMerge => RemovingLevel => Ready
-//
-// .            +-------------------+
-// +----------->|      Missing      |<---------------------+
-// |            +----+---------+----+                      |
-// |                 |         |                           |
-// |          +------v-----+   |                           |
-// |          |  Updating  |   |                           |
-// |          +--+------^--+   |                           |
-// |             |      |      |                           |
-// |         +---v------+------v-----------+ if Root       |
-// |         |            Ready            |-------+       |
-// |         +---+---------------------+---+       |       |
-// |             |                     |           |       |
-// |     +-------v--------+    +-------v--------+  |       |
-// |     |    Splitting   |    |    Merging     |  |       |
-// |     +-------+--------+    +-------+--------+  |       |
-// |             |                     |           |       |
-// |     +-------v--------+    +-------v-----------v-+     |
-// +-----|DrainingForSplit|    |  DrainingForMerge   |-----+
-// |     +-------+--------+    +-------+-------------+
-// |             | if Root             | if Root
-// |     +-------v--------+    +-------v--------+
-// +-----|  AddingLevel   |    | RemovingLevel  |----> Ready
-// .     +----------------+    +----------------+
 const (
 	// MissingState indicates that the partition does not exist, either because
 	// it was deleted or because it never existed in the first place.
@@ -188,6 +188,33 @@ func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
 		Source:    source,
 		Timestamp: timeutil.Now(),
 	}
+}
+
+// stalledOpTimeout specifies how long a partition can remain in a non-ready
+// state before other fixup workers conclude a fixup has stalled (e.g. because
+// the original worker crashed) and attempt to assist. If this is set too high,
+// then a fixup can get stuck for too long. If it is set too low, then multiple
+// workers can assist at the same time, resulting in duplicate work.
+// TODO(andyk): Consider making this more dynamic, e.g. with
+// livenesspb.NodeVitalityInterface. Also, consider making a cluster setting.
+var stalledOpTimeout = 100 * time.Millisecond
+
+// MaybeSplitStalled returns true if this partition has been in a splitting
+// state for longer than the timeout, possibly indicating the fixup is stalled.
+func (psd *PartitionStateDetails) MaybeSplitStalled() bool {
+	if psd.State == SplittingState || psd.State == DrainingForSplitState {
+		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
+	}
+	return false
+}
+
+// MaybeMergeStalled returns true if this partition has been in a merging
+// state for longer than the timeout, possibly indicating the fixup is stalled.
+func (psd *PartitionStateDetails) MaybeMergeStalled() bool {
+	if psd.State == MergingState || psd.State == DrainingForMergeState {
+		return timeutil.Since(psd.Timestamp) > stalledOpTimeout
+	}
+	return false
 }
 
 // String returns the partition state details formatted as a string in this
