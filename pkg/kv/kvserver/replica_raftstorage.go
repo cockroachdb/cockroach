@@ -279,14 +279,13 @@ type IncomingSnapshot struct {
 	// Size of the key-value pairs.
 	DataSize int64
 	// Size of the ssts containing these key-value pairs.
-	SSTSize                     int64
-	SharedSize                  int64
-	placeholder                 *ReplicaPlaceholder
-	raftAppliedIndex            kvpb.RaftIndex      // logging only
-	msgAppRespCh                chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs                  []pebble.SharedSSTMeta
-	externalSSTs                []pebble.ExternalFile
-	includesRangeDelForLastSpan bool
+	SSTSize          int64
+	SharedSize       int64
+	placeholder      *ReplicaPlaceholder
+	raftAppliedIndex kvpb.RaftIndex      // logging only
+	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs       []pebble.SharedSSTMeta
+	externalSSTs     []pebble.ExternalFile
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -582,28 +581,14 @@ func (r *Replica) applySnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/93251
 	if len(inSnap.externalSSTs) > 0 || len(inSnap.sharedSSTs) > 0 {
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-			ctx,
-			inSnap.SSTStorageScratch.SSTs(),
-			inSnap.sharedSSTs,
-			inSnap.externalSSTs,
-			exciseSpan,
-			inSnap.includesRangeDelForLastSpan,
-		); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
 		if inSnap.SSTSize > snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) {
 			exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
-				ctx,
-				inSnap.SSTStorageScratch.SSTs(),
-				nil, /* sharedSSTs */
-				nil, /* externalSSTs */
-				exciseSpan,
-				inSnap.includesRangeDelForLastSpan,
-			); err != nil {
+			if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), nil, nil, exciseSpan); err != nil {
 				return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 					inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 			}

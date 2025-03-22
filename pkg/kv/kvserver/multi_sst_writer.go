@@ -49,17 +49,15 @@ type multiSSTWriter struct {
 	sstSize int64
 	// Incremental count of number of bytes written to disk.
 	writeBytes int64
-	// if skipClearForMVCCSpan is true, the MVCC span is not ClearEngineRange()d in
-	// the same sstable. We rely on the caller to take care of clearing this span
-	// through a different process (eg. IngestAndExcise on pebble). Note that
-	// having this bool to true also disables all range key fragmentation
-	// and splitting of sstables in the mvcc span.
-	skipClearForMVCCSpan bool
 	// maxSSTSize is the maximum size to use for SSTs containing MVCC/user keys.
 	// Once the sstable writer reaches this size, it will be finalized and a new
 	// sstable will be created.
 	maxSSTSize int64
 	// rangeKeyFrag is used to fragment range keys across the mvcc key spans.
+	// For each SST, it's initialized with a range key del for the entire span,
+	// but the incoming stream of data may also contain new range keys. The
+	// fragmenter is emits these range keys into the SST at finalization
+	// time.
 	rangeKeyFrag rangekey.Fragmenter
 }
 
@@ -70,7 +68,6 @@ func newMultiSSTWriter(
 	localKeySpans []roachpb.Span,
 	mvccKeySpan roachpb.Span,
 	sstChunkSize int64,
-	skipClearForMVCCSpan bool,
 	rangeKeysInOrder bool,
 ) (*multiSSTWriter, error) {
 	msstw := &multiSSTWriter{
@@ -82,15 +79,10 @@ func newMultiSSTWriter(
 			Start: storage.EngineKey{Key: mvccKeySpan.Key},
 			End:   storage.EngineKey{Key: mvccKeySpan.EndKey},
 		}},
-		sstChunkSize:         sstChunkSize,
-		skipClearForMVCCSpan: skipClearForMVCCSpan,
+		sstChunkSize: sstChunkSize,
 	}
-	if !skipClearForMVCCSpan && rangeKeysInOrder {
-		// If skipClearForMVCCSpan is true, we don't split the MVCC span across
-		// multiple sstables, as addClearForMVCCSpan could be called by the caller
-		// at any time.
-		//
-		// We also disable snapshot sstable splitting unless the sender has
+	if rangeKeysInOrder {
+		// We disable snapshot sstable splitting unless the sender has
 		// specified in its snapshot header that it is sending range keys in
 		// key order alongside point keys, as opposed to sending them at the end
 		// of the snapshot. This is necessary to efficiently produce fragmented
@@ -142,17 +134,26 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	}
 	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
 	msstw.currSST = newSST
-	if !msstw.currSpanIsMVCCSpan() || (!msstw.skipClearForMVCCSpan && msstw.currSpan <= len(msstw.localKeySpans)) {
-		// We're either in a local key span, or we're in the first MVCC sstable
-		// span (before any splits). Add a RangeKeyDel for the whole span. If this
-		// is the MVCC span, we don't need to keep re-adding it to the fragmenter
-		// as the fragmenter will take care of splits. Note that currentSpan()
-		// will return the entire mvcc span in the case we're at an MVCC span.
-		startKey := storage.EngineKey{Key: msstw.currentSpan().Key}.Encode()
-		endKey := storage.EngineKey{Key: msstw.currentSpan().EndKey}.Encode()
+
+	// Add a RangeKeyDel as well as a range del for the entire bounds of the SST,
+	// meaning upon ingestion any range and point keys existing in the span will
+	// be deleted.
+	// Note that the MVCC span will be excised on ingest, so this step is skipped
+	// for it.
+	if !msstw.currSpanIsMVCCSpan() {
+		sp := msstw.currentSpan()
+		startKey := storage.EngineKey{Key: sp.Key}
+		endKey := storage.EngineKey{Key: sp.EndKey}
 		trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-		s := rangekey.Span{Start: startKey, End: endKey, Keys: []rangekey.Key{{Trailer: trailer}}}
+		s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
 		msstw.rangeKeyFrag.Add(s)
+
+		if err := msstw.currSST.ClearEngineRange(
+			startKey, endKey,
+		); err != nil {
+			msstw.currSST.Close()
+			return errors.Wrap(err, "failed to clear range on sst file writer")
+		}
 	}
 	return nil
 }
@@ -160,29 +161,16 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 // NB: when nextKey is non-nil, do not do anything in this function to cause
 // nextKey at the caller to escape to the heap.
 func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.EngineKey) error {
-	currSpan := msstw.currentSpan()
+	var currEngineSpan storage.EngineKeyRange
 	if msstw.currSpanIsMVCCSpan() {
-		// We're in the MVCC span (ie. MVCC / user keys). If skipClearForMVCCSpan
-		// is true, we don't write a clearRange for the last span at all. Otherwise,
-		// we need to write a clearRange for all keys leading up to the current key
-		// we're writing.
-		currEngineSpan := msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)]
-		if !msstw.skipClearForMVCCSpan {
-			if err := msstw.currSST.ClearEngineRange(
-				currEngineSpan.Start, currEngineSpan.End,
-			); err != nil {
-				msstw.currSST.Close()
-				return errors.Wrap(err, "failed to clear range on sst file writer")
-			}
-		}
+		currEngineSpan = msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)]
 	} else {
-		if err := msstw.currSST.ClearRawRange(
-			currSpan.Key, currSpan.EndKey,
-			true /* pointKeys */, false, /* rangeKeys */
-		); err != nil {
-			msstw.currSST.Close()
-			return errors.Wrap(err, "failed to clear range on sst file writer")
+		cur := msstw.currentSpan()
+		currEngineSpan = storage.EngineKeyRange{
+			Start: storage.EngineKey{Key: cur.Key},
+			End:   storage.EngineKey{Key: cur.EndKey},
 		}
+
 	}
 
 	// If we're at the last span, call Finish on the fragmenter. If we're not at the
@@ -190,11 +178,7 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 	if msstw.currSpan == len(msstw.localKeySpans)+len(msstw.mvccSSTSpans)-1 {
 		msstw.rangeKeyFrag.Finish()
 	} else {
-		endKey := storage.EngineKey{Key: currSpan.EndKey}
-		if msstw.currSpanIsMVCCSpan() {
-			endKey = msstw.mvccSSTSpans[msstw.currSpan-len(msstw.localKeySpans)].End
-		}
-		msstw.rangeKeyFrag.Truncate(endKey.Encode())
+		msstw.rangeKeyFrag.Truncate(currEngineSpan.End.Encode())
 	}
 
 	err := msstw.currSST.Finish()
@@ -398,15 +382,6 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	}
 	if err := msstw.rolloverSST(ctx, storage.EngineKey{Key: start}, storage.EngineKey{Key: end}); err != nil {
 		return err
-	}
-	if msstw.skipClearForMVCCSpan {
-		prevWriteBytes := msstw.currSST.EstimatedSize()
-		// Skip the fragmenter. See the comment in skipClearForMVCCSpan.
-		if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
-			return errors.Wrap(err, "failed to put range key in sst")
-		}
-		msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
-		return nil
 	}
 
 	startKey, endKey := storage.EngineKey{Key: start}.Encode(), storage.EngineKey{Key: end}.Encode()
