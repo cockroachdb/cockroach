@@ -48,6 +48,10 @@ func (ts *testStore) AllowMultipleTrees() bool {
 	return ts.usePrefix
 }
 
+func (ts *testStore) SupportsTry() bool {
+	return false
+}
+
 func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
 	if !ts.usePrefix {
 		return nil
