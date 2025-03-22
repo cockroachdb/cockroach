@@ -23,7 +23,7 @@ import (
 // values tailored to the access patterns of the storage package.
 // Cache is safe for concurrent access.
 type Cache struct {
-	metrics  Metrics
+	Metric   Metrics
 	maxBytes int32
 
 	// accessed with atomics
@@ -113,14 +113,14 @@ func NewCache(maxBytes uint64) *Cache {
 	}
 	return &Cache{
 		maxBytes: int32(maxBytes),
-		metrics:  makeMetrics(),
+		Metric:   makeMetrics(),
 		parts:    map[roachpb.RangeID]*partition{},
 	}
 }
 
-// Metrics returns a struct which contains metrics for the raft entry cache.
+// Metrics returns a struct which contains Metric for the raft entry cache.
 func (c *Cache) Metrics() Metrics {
-	return c.metrics
+	return c.Metric
 }
 
 // Drop drops all cached entries associated with the specified range.
@@ -211,7 +211,7 @@ func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
 // Get returns the entry for the specified index and true for the second return
 // value. If the index is not present in the cache, false is returned.
 func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
-	c.metrics.Accesses.Inc(1)
+	c.Metric.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
 	c.mu.Unlock()
@@ -222,8 +222,8 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 	defer p.mu.RUnlock()
 	e, ok = p.get(idx)
 	if ok {
-		c.metrics.Hits.Inc(1)
-		c.metrics.ReadBytes.Inc(int64(e.Size()))
+		c.Metric.Hits.Inc(1)
+		c.Metric.ReadBytes.Inc(int64(e.Size()))
 	}
 	return e, ok
 }
@@ -237,7 +237,7 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 func (c *Cache) Scan(
 	ents []raftpb.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
-	c.metrics.Accesses.Inc(1)
+	c.Metric.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
 	c.mu.Unlock()
@@ -251,9 +251,9 @@ func (c *Cache) Scan(
 	// Track all bytes that are returned to caller, but only consider an access a
 	// "hit" if it returns all requested entries or stops short because of a
 	// maximum bytes limit.
-	c.metrics.ReadBytes.Inc(int64(bytes))
+	c.Metric.ReadBytes.Inc(int64(bytes))
 	if nextIdx == hi || exceededMaxBytes {
-		c.metrics.Hits.Inc(1)
+		c.Metric.Hits.Inc(1)
 	}
 	return ents, bytes, nextIdx, exceededMaxBytes
 }
@@ -332,8 +332,8 @@ func (c *Cache) addEntries(toAdd int32) int32 {
 }
 
 func (c *Cache) updateGauges(bytes, entries int32) {
-	c.metrics.Bytes.Update(int64(bytes))
-	c.metrics.Size.Update(int64(entries))
+	c.Metric.Bytes.Update(int64(bytes))
+	c.Metric.Size.Update(int64(entries))
 }
 
 var initialSize = newCacheSize(partitionSize, 0)
