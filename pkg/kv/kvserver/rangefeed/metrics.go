@@ -108,6 +108,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangefeedLifetimeNanos = metric.Metadata{
+		Name:        "kv.rangefeed.lifetime_nanos",
+		Help:        "Duration of Rangefeed between its registration and disconnection",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
@@ -124,6 +130,7 @@ type Metrics struct {
 	RangeFeedBufferedRegistrations              *metric.Gauge
 	RangeFeedUnbufferedRegistrations            *metric.Gauge
 	RangefeedOutputLoopNanosForUnbufferedReg    *metric.Counter
+	RangefeedLifetimeNanos                      *metric.Counter
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -157,6 +164,7 @@ func NewMetrics() *Metrics {
 		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
 		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
 		RangefeedOutputLoopNanosForUnbufferedReg:    metric.NewCounter(metaRangeFeedOutputLoopNanosUnbufferedRegistration),
+		RangefeedLifetimeNanos:                      metric.NewCounter(metaRangefeedLifetimeNanos),
 	}
 }
 
