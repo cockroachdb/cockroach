@@ -520,6 +520,7 @@ func (r *Replica) handleTruncatedStateResultRaftMuLocked(
 	r.mu.Lock()
 	r.shMu.raftTruncState = pt.RaftTruncatedState
 	r.handleRaftLogDeltaResultRaftMuLockedReplicaMuLocked(pt.logDeltaBytes, isDeltaTrusted)
+	r.mu.internalRaftGroup.Compact()
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up

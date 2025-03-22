@@ -276,6 +276,7 @@ func TestCompactionSideEffects(t *testing.T) {
 
 	offset := uint64(500)
 	require.NoError(t, storage.Compact(offset))
+	raftLog.compact()
 	require.Equal(t, unstable.lastEntryID(), raftLog.lastEntryID())
 
 	for j := offset; j <= raftLog.lastIndex(); j++ {
@@ -651,6 +652,7 @@ func TestCompaction(t *testing.T) {
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
 				err := storage.Compact(tt.compact[j])
+				raftLog.compact()
 				if err != nil {
 					require.False(t, tt.wallow)
 					continue
@@ -670,7 +672,7 @@ func TestLogRestore(t *testing.T) {
 	raftLog := newLog(storage, raftlogger.DiscardLogger)
 
 	require.Zero(t, len(raftLog.allEntries()))
-	require.Equal(t, index, raftLog.compacted())
+	require.Equal(t, index, raftLog.compacted)
 	require.Equal(t, index, raftLog.committed)
 	require.Equal(t, index, raftLog.unstable.prev.index)
 	require.Equal(t, term, mustTerm(raftLog.term(index)))
