@@ -40,6 +40,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
+        "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/stop",

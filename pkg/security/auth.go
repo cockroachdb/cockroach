@@ -353,11 +353,15 @@ func UserAuthCertHook(
 
 		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject) {
 			if certManager != nil {
-				certManager.MaybeUpsertClientExpiration(
+				err := certManager.MaybeUpsertClientExpiration(
 					ctx,
 					systemIdentity,
+					peerCert.SerialNumber.String(),
 					peerCert.NotAfter.Unix(),
 				)
+				if err != nil {
+					return err
+				}
 			}
 			return nil
 		}

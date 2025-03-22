@@ -170,7 +170,6 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/security",
         "//pkg/security/certnames",
-        "//pkg/security/clientcert",
         "//pkg/security/clientsecopts",
         "//pkg/security/username",
         "//pkg/server/apiconstants",
