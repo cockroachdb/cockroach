@@ -18257,6 +18257,7 @@ unreserved_keyword:
 | LOGICALLY
 | LOGIN
 | LOCALITY
+| LOGGED
 | LOOKUP
 | LOW
 | MATCH
