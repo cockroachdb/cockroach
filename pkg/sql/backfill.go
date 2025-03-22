@@ -2925,7 +2925,12 @@ func indexBackfillInTxn(
 
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.InitForLocalUse(
-		ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon,
+		ctx,
+		evalCtx,
+		semaCtx,
+		tableDesc,
+		indexBackfillerMon,
+		evalCtx.Planner.ExecutorConfig().(*ExecutorConfig).VecIndexManager,
 	); err != nil {
 		return err
 	}
