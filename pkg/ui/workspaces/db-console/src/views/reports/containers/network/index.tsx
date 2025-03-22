@@ -6,7 +6,7 @@
 import { util, Loading } from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { deviation as d3Deviation, mean as d3Mean } from "d3";
+import { deviation as d3Deviation, mean as d3Mean } from "d3-array";
 import capitalize from "lodash/capitalize";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";

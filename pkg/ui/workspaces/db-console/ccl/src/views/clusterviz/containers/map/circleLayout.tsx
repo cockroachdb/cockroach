@@ -52,7 +52,10 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
     return (
       <g transform={`translate(${viewportSize[0] / 2},${viewportSize[1] / 2})`}>
         {childLocalities.map((locality, i) => (
-          <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
+          <g
+            key={`locality-${i}`}
+            transform={`translate(${this.coordsFor(i, total, radius)})`}
+          >
             <LocalityView
               localityTree={locality}
               livenessStatuses={this.props.livenessStatuses}
@@ -62,6 +65,7 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
         {localityTree.nodes.map((node, i) => {
           return (
             <g
+              key={`node-${i}`}
               transform={`translate(${this.coordsFor(
                 i + childLocalities.length,
                 total,
