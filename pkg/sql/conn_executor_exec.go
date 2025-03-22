@@ -3344,6 +3344,14 @@ func (ex *connExecutor) makeExecPlan(
 	// Include gist in error reports.
 	ih := &planner.instrumentation
 	ctx = withPlanGist(ctx, ih.planGist.String())
+	if buildutil.CrdbTestBuild && ih.planGist.String() != "" {
+		// TODO: with non-nil catalog for some reason
+		// TestAllowRoleMembershipsToChangeDuringTransaction deadlocks.
+		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), nil /* catalog */)
+		if errors.IsAssertionFailure(err) {
+			return ctx, err
+		}
+	}
 
 	// Now that we have the plan gist, check whether we should get a bundle for
 	// it.
