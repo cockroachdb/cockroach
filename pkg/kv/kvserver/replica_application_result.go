@@ -358,7 +358,9 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 		// releasing it here.
 		quotaAlloc: origP.quotaAlloc,
 		ec:         origP.ec,
-		doneCh:     origP.doneCh,
+		// Move over createdAtTs since we want to include the time spent in re-proposals as well.
+		createdAtTs: origP.createdAtTs,
+		doneCh:      origP.doneCh,
 
 		applied: false,
 

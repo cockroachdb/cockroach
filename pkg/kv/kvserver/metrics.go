@@ -1542,6 +1542,41 @@ the actual replication latency, despite returning early to the client.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftProposalsLeaderAckLatency = metric.Metadata{
+		Name: "raft.proposal.leader.ack.latency",
+		Help: `The duration elapsed between a proposal being submitted to Raft 
+and its local Raft leader's acknowledgement on the success to the client. 
+Note that this may not include the time taken to apply the command to the 
+state machine for asynchronous consensus.
+
+Only successful write commands are measured. Measurements are not recorded for:
+- Failed proposals
+- Read-only commands
+- Read-write commands that don't result in actual writes
+`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRaftProposalsLeaderAppliedLatency = metric.Metadata{
+		Name: "raft.proposal.leader.applied.latency",
+		Help: `The duration elapsed between a proposal being submitted to Raft and 
+its local Raft leader application to the state machine.
+
+While similar to 'raft.replication.latency', this metric starts counting only 
+after the proposal is being submitted to Raft, excluding earlier processing 
+steps such as acquiring for proposal quota.
+
+Only successful write commands are measured. Measurements are not recorded for:
+- Failed proposals
+- Read-only commands
+- Read-write commands that don't result in actual writes
+
+Note that this metric only captures application on the proposing leader node 
+itself but not including the time taken for follower replicas to apply the 
+changes.`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRaftSchedulerLatency = metric.Metadata{
 		Name: "raft.scheduler.latency",
 		Help: `Queueing durations for ranges waiting to be processed by the Raft scheduler.
@@ -2834,27 +2869,29 @@ type StoreMetrics struct {
 	DelegateSnapshotInProgress *metric.Gauge
 
 	// Raft processing metrics.
-	RaftTicks                  *metric.Counter
-	RaftProposalsDropped       *metric.Counter
-	RaftProposalsDroppedLeader *metric.Counter
-	RaftQuotaPoolPercentUsed   metric.IHistogram
-	RaftLoadedEntriesBytes     *metric.Gauge
-	RaftWorkingDurationNanos   *metric.Counter
-	RaftTickingDurationNanos   *metric.Counter
-	RaftCommandsProposed       *metric.Counter
-	RaftCommandsReproposed     *metric.Counter
-	RaftCommandsReproposedLAI  *metric.Counter
-	RaftCommandsPending        *metric.Gauge
-	RaftCommandsApplied        *metric.Counter
-	RaftLogCommitLatency       metric.IHistogram
-	RaftCommandCommitLatency   metric.IHistogram
-	RaftHandleReadyLatency     metric.IHistogram
-	RaftApplyCommittedLatency  metric.IHistogram
-	RaftReplicationLatency     metric.IHistogram
-	RaftSchedulerLatency       metric.IHistogram
-	RaftTimeoutCampaign        *metric.Counter
-	RaftStorageReadBytes       *metric.Counter
-	RaftStorageError           *metric.Counter
+	RaftTicks                         *metric.Counter
+	RaftProposalsDropped              *metric.Counter
+	RaftProposalsDroppedLeader        *metric.Counter
+	RaftQuotaPoolPercentUsed          metric.IHistogram
+	RaftLoadedEntriesBytes            *metric.Gauge
+	RaftWorkingDurationNanos          *metric.Counter
+	RaftTickingDurationNanos          *metric.Counter
+	RaftCommandsProposed              *metric.Counter
+	RaftCommandsReproposed            *metric.Counter
+	RaftCommandsReproposedLAI         *metric.Counter
+	RaftCommandsPending               *metric.Gauge
+	RaftCommandsApplied               *metric.Counter
+	RaftLogCommitLatency              metric.IHistogram
+	RaftCommandCommitLatency          metric.IHistogram
+	RaftHandleReadyLatency            metric.IHistogram
+	RaftApplyCommittedLatency         metric.IHistogram
+	RaftReplicationLatency            metric.IHistogram
+	RaftProposalsLeaderAckLatency     metric.IHistogram
+	RaftProposalsLeaderAppliedLatency metric.IHistogram
+	RaftSchedulerLatency              metric.IHistogram
+	RaftTimeoutCampaign               *metric.Counter
+	RaftStorageReadBytes              *metric.Counter
+	RaftStorageError                  *metric.Counter
 
 	// Raft message metrics.
 	//
@@ -3598,6 +3635,18 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftReplicationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaRaftReplicationLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		RaftProposalsLeaderAckLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRaftProposalsLeaderAckLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		RaftProposalsLeaderAppliedLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaRaftProposalsLeaderAppliedLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),

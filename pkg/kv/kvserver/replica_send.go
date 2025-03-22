@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -77,7 +78,9 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	  Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
 //	                       │
 //
-// read-write ◄─────────────────────────┴────────────────────────► read-only
+// read-write
+// ◄─────────────────────────┴────────────────────────►
+// read-only
 //
 //	│                                                               │
 //	│                                                               │
@@ -1323,7 +1326,11 @@ func (ec *endCmds) poison() {
 // No-op if the receiver has been zeroed out by a call to move. Idempotent and
 // is safe to call more than once.
 func (ec *endCmds) done(
-	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, pErr *kvpb.Error,
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	pErr *kvpb.Error,
+	proposalCreatedAt crtime.Mono,
 ) {
 	if ec.repl == nil {
 		// The endCmds were cleared. This may no longer be necessary, see the comment on
@@ -1342,6 +1349,12 @@ func (ec *endCmds) done(
 
 	if ts := ec.replicatingSince; !ts.IsZero() {
 		ec.repl.store.metrics.RaftReplicationLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
+	}
+
+	// Read-only or read-write commands that did not lead to raft proposals have
+	// zero proposalCreatedAt.
+	if successfulWrites := proposalCreatedAt != 0 && pErr == nil; successfulWrites {
+		ec.repl.store.metrics.RaftProposalsLeaderAppliedLatency.RecordValue(proposalCreatedAt.Elapsed().Nanoseconds())
 	}
 
 	// Release the latches acquired by the request and exit lock wait-queues. Must
