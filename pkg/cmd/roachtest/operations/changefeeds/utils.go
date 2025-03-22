@@ -9,6 +9,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +41,8 @@ type jobDetails struct {
 	payload            *jobspb.ChangefeedDetails // required payload details for the job
 	highWaterTimestamp hlc.Timestamp             // high watermark timestamp
 }
+
+type configSetter func(key string, value int) error
 
 // getJobsUpdatedWithPayload fetches additional changefeed payload details for specific jobs from the database.
 // This returns a new slice of jobDetails with the updated payload details without mutating the one in input.
@@ -338,10 +343,92 @@ func createChangefeed(
 	return err
 }
 
+func parseConfigs(config string, cb configSetter) error {
+	if config == "" {
+		return fmt.Errorf("config string cannot be empty")
+	}
+
+	configsArr := strings.Split(config, ",")
+	totalCount := 0
+
+	for _, c := range configsArr {
+		parts := strings.Split(c, ":")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid config format: %s", c)
+		}
+
+		key := parts[0]
+		valueStr := parts[1]
+
+		value, err := strconv.Atoi(valueStr)
+		if err != nil {
+			return fmt.Errorf("invalid percentage value in config '%s'", c)
+		}
+
+		if value < 0 || value > 100 {
+			return fmt.Errorf("percentage value out of range in config '%s': must be between 0 and 100", c)
+		}
+
+		err = cb(key, value)
+		if err != nil {
+			return err
+		}
+
+		totalCount += value
+	}
+
+	if totalCount != 100 {
+		return fmt.Errorf("all sinks must sum to 100%%, but total is %d%%", totalCount)
+	}
+
+	return nil
+}
+
+func selectSink(sinks map[string]int) string {
+	choice := rand.Intn(100)
+	sum := 0
+	for sink, pct := range sinks {
+		sum += pct
+		if choice < sum {
+			return sink
+		}
+	}
+	return "null" // Default fallback if no valid selection
+}
+
 // getSinkConfigs returns the sink uri along with the options for creating the changefeed.
 // this will be extended later for more sinks
 func getSinkConfigs(_ context.Context, _ []*jobDetails) (string, []string, error) {
-	return "null://", make([]string, 0), nil
+	sinkConfigEnv := os.Getenv("SINK_CONFIG")
+	if sinkConfigEnv == "" {
+		return "null://", []string{}, nil // Default to null sink if env is not set
+	}
+
+	sinks := make(map[string]int)
+	uris := make(map[string]string)
+
+	err := parseConfigs(sinkConfigEnv, func(sink string, value int) error {
+		sinks[sink] = value
+		uriEnv := fmt.Sprintf("SINK_CONFIG_%s", strings.ToUpper(sink))
+		uri, exists := os.LookupEnv(uriEnv)
+		if !exists {
+			return fmt.Errorf("environment variable %s not found for sink %s", uriEnv, sink)
+		}
+		uris[sink] = uri
+		return nil
+	})
+	if err != nil {
+		// Default to null sink on parsing error
+		return "null://", []string{}, nil //nolint:returnerrcheck
+	}
+
+	selectedSink := selectSink(sinks)
+	selectedURI, exists := uris[selectedSink]
+	if !exists {
+		return "null://", []string{}, nil // Default to null sink if selection fails
+	}
+
+	return selectedURI, []string{}, nil
 }
 
 // calculateScanOption determines whether the new changefeed should have an initial scan based on existing jobs.
