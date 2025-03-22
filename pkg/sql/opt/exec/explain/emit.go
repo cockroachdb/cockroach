@@ -1120,7 +1120,14 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case callOp:
 		a := n.args.(*callArgs)
-		ob.Expr("procedure", a.Proc, nil /* columns */)
+		if a.Proc != nil {
+			// Unlike other expressions, we store Proc as *tree.RoutineExpr, so
+			// the nil value in Proc is different from the nil value that is
+			// checked in Expr:
+			//  (*tree.RoutineExpr)(nil)  vs (tree.TypedExpr)(nil)
+			// so we need an explicit nil check.
+			ob.Expr("procedure", a.Proc, nil /* columns */)
+		}
 
 	case simpleProjectOp,
 		serializingProjectOp,
