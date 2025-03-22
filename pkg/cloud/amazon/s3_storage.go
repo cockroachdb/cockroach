@@ -616,6 +616,8 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 			}
 		})
 
+		fmt.Printf("##### assume role provider\n%v\nopts\n%v\nobj\n%v\n^^^^^^\n", s.opts.assumeRoleProvider, s.opts, s)
+
 		creds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
 		// NOTE: It's critical to wrap all credentials in a CredentialCache to
 		// prevent DDoS'ing STS API endpoints:
