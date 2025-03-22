@@ -1,6 +1,6 @@
-# ----------
+# ----------------------------------------------------------------------
 # Basic merge cases.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=2 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 10)
@@ -141,9 +141,9 @@ format-tree
 │
 └───• vec2 (3, 10)
 
-# ----------
+# ----------------------------------------------------------------------
 # Test merge with dangling vectors.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=3 max-partition-size=6 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -256,9 +256,9 @@ format-tree
 │
 └───• vec3 (-2, 8)
 
-# ----------
+# ----------------------------------------------------------------------
 # Delete all vectors and expect tree to be merged back to empty root.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=2 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -378,9 +378,9 @@ format-tree
 ----
 • 1 (0, 0)
 
-# ----------
+# ----------------------------------------------------------------------
 # Merge of partition that's too large or not a child of the parent are no-ops.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=3 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -401,7 +401,7 @@ vec5: (1, 5)
     ├───• vec2 (3, 9)
     └───• vec5 (1, 5)
 
-force-split-or-merge partition-key=2 parent-partition-key=1
+force-merge partition-key=2 parent-partition-key=1
 ----
 • 1 (1.3333, 4.1667)
 │
@@ -416,7 +416,7 @@ force-split-or-merge partition-key=2 parent-partition-key=1
     ├───• vec2 (3, 9)
     └───• vec5 (1, 5)
 
-force-split-or-merge partition-key=3 parent-partition-key=2
+force-merge partition-key=3 parent-partition-key=2
 ----
 • 1 (1.3333, 4.1667)
 │

@@ -33,6 +33,10 @@ type PartitionToSearch struct {
 	// partition metadata is scanned, it is not known whether a root partition is
 	// a leaf partition.
 	ExcludeLeafVectors bool
+	// StateDetails returns the latest state information from the partition
+	// metadata. This is used by fixup workers to detect interference from other
+	// agents that are updating the partition.
+	StateDetails PartitionStateDetails
 	// Count is set to the number of vectors in the searched partition. This is
 	// an output value (i.e. it's set by SearchPartitions).
 	Count int
@@ -62,6 +66,10 @@ type Store interface {
 	// transaction. If the function returns an error, the transaction is aborted,
 	// else it is committed.
 	RunTransaction(ctx context.Context, fn func(txn Txn) error) error
+
+	// MakePartitionKey allocates a new partition key that is guaranteed to be
+	// globally unique.
+	MakePartitionKey() PartitionKey
 
 	// EstimatePartitionCount returns the approximate number of vectors in the
 	// given partition. The estimate can be based on a (bounded) stale copy of

@@ -1,6 +1,6 @@
-# ----------
+# ----------------------------------------------------------------------
 # Test simple partition splits.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 ----
 • 1 (0, 0)
@@ -114,9 +114,9 @@ vec10: 5 (centroid=0.75)
 vec12: 9 (centroid=0.75)
 8 leaf vectors, 16 vectors, 6 full vectors, 6 partitions
 
-# ----------
+# ----------------------------------------------------------------------
 # Test linking nearby vectors from other partitions.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (-2, -2)
 vec2: (0, 0)
@@ -167,9 +167,9 @@ vec9: (3, 4)
     ├───• vec5 (5, 5)
     └───• vec6 (6, 6)
 
-# ----------
+# ----------------------------------------------------------------------
 # Test moving vectors to other partitions during split.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (0, 0)
 vec2: (-1, 1)
@@ -218,9 +218,9 @@ vec8: (4, 4)
     ├───• vec3 (1, 1)
     └───• vec8 (4, 4)
 
-# ----------
+# ----------------------------------------------------------------------
 # Test splits in the presence of dangling vectors.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -304,9 +304,9 @@ vec9: (6, 1)
     │
     └───• vec8 (2, 2)
 
-# ----------
+# ----------------------------------------------------------------------
 # Test split of root partition with every vector dangling.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -349,9 +349,9 @@ vec5: (4, 3)
 ├───• vec4 (MISSING)
 └───• vec5 (4, 3)
 
-# ----------
+# ----------------------------------------------------------------------
 # Split of partition that's too small or not a child of the parent is a no-op.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (0, -1)
 vec2: (3, 9)
@@ -372,7 +372,7 @@ vec5: (2, 2)
     ├───• vec4 (4, 3)
     └───• vec5 (2, 2)
 
-force-split-or-merge partition-key=3
+force-split partition-key=3
 ----
 • 1 (1.25, 4.75)
 │
@@ -412,7 +412,7 @@ vec9: (1, 1)
     └───• vec9 (1, 1)
 
 # Even split partition is greater than max-partition-size.
-force-split-or-merge partition-key=3 parent-partition-key=2
+force-split partition-key=3 parent-partition-key=2
 ----
 • 1 (1.25, 4.75)
 │
@@ -433,3 +433,75 @@ force-split-or-merge partition-key=3 parent-partition-key=2
     ├───• vec6 (3, 2)
     ├───• vec5 (2, 2)
     └───• vec4 (4, 3)
+
+# ----------------------------------------------------------------------
+# Split partitions with less than 2 vectors.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=2 beam-size=2 new-fixups
+• 1 (2.4583, 4.6667)
+│
+└───• 2 (3.75, 6.9167)
+    │
+    ├───• 3 (5, 2)
+    │   │
+    │   └───• vec1 (5, 2)
+    │
+    └───• 4 (5, 6)
+        │
+        ├───• vec2 (3, 5)
+        ├───• vec3 (6, 8)
+        └───• vec4 (6, 5)
+----
+Loaded 4 vectors.
+
+# Delete vectors from primary index, but not from secondary index. Leave
+# partition #3 with zero vectors and partition #4 with one vector.
+delete not-found
+vec1
+vec2
+vec3
+----
+• 1 (2.4583, 4.6667)
+│
+└───• 2 (3.75, 6.9167)
+    │
+    ├───• 3 (5, 2)
+    │   │
+    │   └───• vec1 (MISSING)
+    │
+    └───• 4 (5, 6)
+        │
+        ├───• vec2 (MISSING)
+        ├───• vec3 (MISSING)
+        └───• vec4 (6, 5)
+
+# Split partition with 0 vectors.
+force-split partition-key=3 parent-partition-key=2
+----
+• 1 (2.4583, 4.6667)
+│
+└───• 2 (3.75, 6.9167)
+    │
+    ├───• 6 (5, 2)
+    ├───• 4 (5, 6)
+    │   │
+    │   ├───• vec2 (MISSING)
+    │   ├───• vec3 (MISSING)
+    │   └───• vec4 (6, 5)
+    │
+    └───• 5 (5, 2)
+
+# Split partition with 1 vector.
+force-split partition-key=4 parent-partition-key=2
+----
+• 1 (2.4583, 4.6667)
+│
+└───• 2 (3.75, 6.9167)
+    │
+    ├───• 6 (5, 2)
+    ├───• 8 (6, 5)
+    ├───• 5 (5, 2)
+    └───• 7 (6, 5)
+        │
+        └───• vec4 (6, 5)
