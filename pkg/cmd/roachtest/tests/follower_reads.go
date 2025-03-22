@@ -530,6 +530,17 @@ func initFollowerReadsDB(
 	if topology.multiRegion {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE mr_db.test SET LOCALITY %s`, topology.locality))
 		require.NoError(t, err)
+		// Create one more table that we split and scatter to ensure that the tenant
+		// RPC connections between nodes are warmed up and ready to serve follower
+		// reads. This is especially important for mixed-version multi-tenant tests
+		// that restart nodes multiple times; in contrast, in a single-tenant setup,
+		// the systems ranges help warm these connections up.
+		_, err = db.ExecContext(ctx, `CREATE TABLE mr_db.warmup ( k INT8, v INT8 )`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `ALTER TABLE mr_db.warmup SPLIT AT SELECT i FROM generate_series(0, 20) AS g(i)`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `ALTER TABLE mr_db.warmup SCATTER`)
+		require.NoError(t, err)
 	}
 
 	ensureUpreplicationAndPlacement(ctx, t, l, topology, db)
@@ -1051,6 +1062,10 @@ func runFollowerReadsMixedVersionTest(
 			if err := enableTenantMultiRegion(l, r, h); err != nil {
 				return err
 			}
+		}
+
+		if err := enableTenantSplitScatter(l, r, h); err != nil {
+			return err
 		}
 
 		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology)
