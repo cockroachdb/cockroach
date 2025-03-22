@@ -22,6 +22,7 @@ import (
 // store additional information from the original caller.
 type RemoteCommand struct {
 	Args     []string
+	GroupID  string // GroupID identifies commands that are part of the same logical group
 	Metadata interface{}
 }
 
@@ -64,6 +65,7 @@ func remoteWorker(
 	runOptions install.RunOptions,
 	workChan chan []RemoteCommand,
 	responseChan chan RemoteResponse,
+	cancelledGroups *sync.Map,
 ) {
 	for {
 		commands := <-workChan
@@ -71,6 +73,14 @@ func remoteWorker(
 			return
 		}
 		for index, command := range commands {
+			// Check if the command's group has been cancelled
+			if command.GroupID != "" {
+				if _, cancelled := cancelledGroups.Load(command.GroupID); cancelled {
+					responseChan <- RemoteResponse{RemoteCommand: command, commandStatus: Cancelled}
+					continue
+				}
+			}
+
 			if errors.Is(ctx.Err(), context.Canceled) {
 				for _, cancelCommand := range commands[index:] {
 					responseChan <- RemoteResponse{RemoteCommand: cancelCommand, commandStatus: Cancelled}
@@ -108,7 +118,8 @@ func remoteWorker(
 				stderr = runResult[0].Stderr
 				exitStatus = runResult[0].RemoteExitStatus
 			}
-			responseChan <- RemoteResponse{
+
+			response := RemoteResponse{
 				command,
 				stdout,
 				stderr,
@@ -117,6 +128,8 @@ func remoteWorker(
 				duration,
 				Completed,
 			}
+
+			responseChan <- response
 		}
 	}
 }
@@ -138,12 +151,13 @@ func ExecuteRemoteCommands(
 ) error {
 	workChannel := make(chan []RemoteCommand, numNodes)
 	responseChannel := make(chan RemoteResponse, numNodes)
+	cancelledGroups := &sync.Map{}
 
 	ctx, cancelCtx := context.WithCancelCause(context.Background())
 
 	for idx := 1; idx <= numNodes; idx++ {
 		go remoteWorker(ctx, log, execFunc, fmt.Sprintf("%s:%d", cluster, idx),
-			runOptions, workChannel, responseChannel)
+			runOptions, workChannel, responseChannel, cancelledGroups)
 	}
 
 	var wg sync.WaitGroup
@@ -159,8 +173,15 @@ func ExecuteRemoteCommands(
 			switch response.commandStatus {
 			case Completed:
 				callback(response)
-				if response.Err != nil && failFast {
-					cancelCtx(errors.Wrap(response.Err, "failed to execute command, cancelling execution"))
+				if response.Err != nil {
+					if failFast {
+						cancelCtx(errors.Wrap(response.Err, "failed to execute command, cancelling execution"))
+					}
+					// If the command has a GroupID and the error is not transient,
+					// mark all commands in this group as cancelled
+					if response.GroupID != "" && !rperrors.IsTransient(response.Err) {
+						cancelledGroups.Store(response.GroupID, true)
+					}
 				}
 				wg.Done()
 			case Cancelled:
