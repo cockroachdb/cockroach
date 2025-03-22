@@ -50,6 +50,10 @@ message Liveness {
   // the defining MembershipStatus to be on-the-wire compatible with the boolean
   // representation.
   MembershipStatus membership = 5;
+
+  // Membership status of each of the stores. For backwards compatibility, any
+  // store not listed is assumed to be ACTIVE.
+  map<int32, MembershipStatus> storeMembership = 6;
 }
 
 // MembershipStatus enumerates the possible membership states a node could in.
