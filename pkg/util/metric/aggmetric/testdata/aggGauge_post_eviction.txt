@@ -1,0 +1,13 @@
+echo
+----
+foo_gauge 60
+foo_gauge{tenant_id="1",gauge_label="5"} 1
+foo_gauge{tenant_id="1",gauge_label="6"} 1
+foo_gauge{tenant_id="1",gauge_label="7"} 1
+foo_gauge{tenant_id="1",gauge_label="8"} 1
+foo_gauge{tenant_id="1",gauge_label="9"} 1
+foo_gauge{tenant_id="2",gauge_label="10"} 10
+foo_gauge{tenant_id="2",gauge_label="11"} 10
+foo_gauge{tenant_id="2",gauge_label="12"} 10
+foo_gauge{tenant_id="2",gauge_label="13"} 10
+foo_gauge{tenant_id="2",gauge_label="14"} 10

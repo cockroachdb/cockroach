@@ -1,0 +1,13 @@
+echo
+----
+foo_counter 15
+foo_counter{tenant_id="1",counter_label="5"} 1
+foo_counter{tenant_id="1",counter_label="6"} 1
+foo_counter{tenant_id="1",counter_label="7"} 1
+foo_counter{tenant_id="1",counter_label="8"} 1
+foo_counter{tenant_id="1",counter_label="9"} 1
+foo_counter{tenant_id="2",counter_label="10"} 1
+foo_counter{tenant_id="2",counter_label="11"} 1
+foo_counter{tenant_id="2",counter_label="12"} 1
+foo_counter{tenant_id="2",counter_label="13"} 1
+foo_counter{tenant_id="2",counter_label="14"} 1
