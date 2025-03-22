@@ -459,9 +459,6 @@ func TestLWWConflictResolution(t *testing.T) {
 				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
 			})
 			t.Run("cross-cluster-local-delete", func(t *testing.T) {
-				if !useKVProc {
-					skip.IgnoreLint(t, "local delete ordering is not handled correctly by the SQL processor")
-				}
 				tableNameDst, rp, encoder := setup(t, useKVProc)
 
 				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
@@ -507,9 +504,6 @@ func TestLWWConflictResolution(t *testing.T) {
 				runner.CheckQueryResults(t, fmt.Sprintf("SELECT * from %s", tableNameDst), expectedRows)
 			})
 			t.Run("remote-delete-after-local-delete", func(t *testing.T) {
-				if !useKVProc {
-					skip.IgnoreLint(t, "local delete ordering is not handled correctly by the SQL processor")
-				}
 				tableNameDst, rp, encoder := setup(t, useKVProc)
 
 				runner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES ($1, $2)", tableNameDst), row1...)
