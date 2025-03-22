@@ -77,9 +77,8 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 //   - rawValueBuf must be a scratch byte array. This must be reinitialized
 //     to an empty slice on each call but can be preserved at its current
 //     capacity to avoid allocations. The function returns the slice.
-//   - kvOp indicates which KV write operation should be used.
-//   - oldKeysLocked, if true, indicates that the locks have already been
-//     acquired on the old keys (in the UPDATE case).
+//   - kvOp indicates which KV write operation should be used. If it is PutOp,
+//     it also indicates that the old keys have been locked.
 //   - traceKV is to be set to log the KV operations added to the batch.
 func prepareInsertOrUpdateBatch(
 	ctx context.Context,
@@ -96,7 +95,6 @@ func prepareInsertOrUpdateBatch(
 	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
-	oldKeysLocked bool,
 	traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -109,16 +107,19 @@ func prepareInsertOrUpdateBatch(
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
 	}
 	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
-	var overwrite bool
+	var oldKeysLocked, overwrite bool
 	switch kvOp {
 	case CPutOp:
 		putFn = insertCPutFn
+		oldKeysLocked = false
 		overwrite = false
 	case PutOp:
 		putFn = insertPutFn
+		oldKeysLocked = true
 		overwrite = true
 	case PutMustAcquireExclusiveLockOp:
 		putFn = insertPutMustAcquireExclusiveLockFn
+		oldKeysLocked = false
 		overwrite = true
 	}
 

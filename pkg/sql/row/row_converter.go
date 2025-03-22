@@ -61,7 +61,10 @@ func (i KVInserter) Del(key ...interface{}) {
 
 // DelMustAcquireExclusiveLock is not implemented.
 func (i KVInserter) DelMustAcquireExclusiveLock(key ...interface{}) {
-	// See comment within Del for why this is a no-op.
+	// Lock acquisition ask has no influence on the KVInserter - the KVInserter
+	// function simply accumulates KVs and doesn't care about the KV request
+	// details.
+	i.Del(key)
 }
 
 // Put method of the row.Putter interface.
@@ -72,27 +75,30 @@ func (i KVInserter) Put(key, value interface{}) {
 	})
 }
 
-func (c KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {
-	panic(errors.AssertionFailedf("unimplemented"))
+func (i KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {
+	// Lock acquisition ask has no influence on the KVInserter - the KVInserter
+	// function simply accumulates KVs and doesn't care about the KV request
+	// details.
+	i.Put(key, value)
 }
-func (c KVInserter) CPutWithOriginTimestamp(
+func (i KVInserter) CPutWithOriginTimestamp(
 	key, value interface{}, expValue []byte, ts hlc.Timestamp,
 ) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
+func (i KVInserter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
+func (i KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {
+func (i KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte) {
+func (i KVInserter) PutBytes(kys []roachpb.Key, values [][]byte) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
-func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte) {
+func (i KVInserter) PutTuples(kys []roachpb.Key, values [][]byte) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }
 
@@ -589,7 +595,10 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		pm,
 		vh,
 		nil, /* OriginTimestampCPutHelper */
-		PutOp,
+		// Lock acquisition ask doesn't matter for the DatumRowConverter, but
+		// we're being conservative and are choosing a "safer" option of asking
+		// for the lock.
+		PutMustAcquireExclusiveLockOp,
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrap(err, "insert row")

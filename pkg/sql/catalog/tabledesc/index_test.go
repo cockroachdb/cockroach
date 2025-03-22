@@ -400,7 +400,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve KV trace and check for redundant values.
-	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'CPut%/Table/%/2% ->%'`)
+	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE '%Put%/Table/%/2% ->%'`)
 	require.NoError(t, err)
 	defer rows.Close()
 	require.True(t, rows.Next())
@@ -411,7 +411,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	if srv.TenantController().StartedDefaultTestTenant() {
 		tenantPrefix = codec.TenantPrefix().String()
 	}
-	expected := fmt.Sprintf(`CPut %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())
+	expected := fmt.Sprintf(`Put %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())
 	require.Equal(t, expected, msg)
 
 	// Test that with the strict guarantees, this table descriptor would have been

@@ -198,11 +198,11 @@ func (ri *Inserter) InsertRow(
 		return err
 	}
 
-	// Add the new values.
+	// Add the new values to the primary index.
 	ri.valueBuf, err = prepareInsertOrUpdateBatch(
 		ctx, b, &ri.Helper, primaryIndexKey, ri.InsertCols, values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex, &ri.key, &ri.value, ri.valueBuf, oth, nil, /* oldValues */
-		kvOp, false /* oldKeysLocked */, traceKV,
+		kvOp, traceKV,
 	)
 	if err != nil {
 		return err
@@ -215,15 +215,29 @@ func (ri *Inserter) InsertRow(
 	// For determinism, add the entries for the secondary indexes in the same
 	// order as they appear in the helper.
 	for idx, index := range ri.Helper.Indexes {
-		entries, ok := secondaryIndexEntries[ri.Helper.Indexes[idx]]
+		entries, ok := secondaryIndexEntries[index]
 		if ok {
 			for i := range entries {
 				e := &entries[i]
-
-				if ri.Helper.Indexes[idx].ForcePut() {
-					// See the comment on (catalog.Index).ForcePut() for more details.
+				if index.ForcePut() || !index.IsUnique() {
+					// See the comment on (catalog.Index).ForcePut() for more
+					// details.
+					// TODO(#140695): re-evaluate the lock need when we enable
+					// buffered writes with DDLs.
+					//
+					// For non-unique indexes we don't care whether there exists
+					// an entry already, so we can just use the Put. (In fact,
+					// since we always include the PK columns into the
+					// non-unique secondary index key, the current key should
+					// never already exist (unless we have a duplicate PK which
+					// will be detected when inserting into the primary index).)
+					//
+					// We also don't need the lock.
 					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				} else {
+					// For unique indexes we need to ensure that the key doesn't
+					// exist already. This will also acquire the lock on the
+					// key.
 					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 				}
 			}
