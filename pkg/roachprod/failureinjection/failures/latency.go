@@ -80,6 +80,7 @@ func (f *NetworkLatency) Setup(ctx context.Context, l *logger.Logger, args Failu
 	if err != nil {
 		return err
 	}
+	l.Printf("Setting up root htb qdisc on interfaces: %s", interfaces)
 	cmd := failScriptEarlyCmd
 	for _, iface := range interfaces {
 		// Ignore the loopback interface since no CRDB traffic should go through it
@@ -89,7 +90,6 @@ func (f *NetworkLatency) Setup(ctx context.Context, l *logger.Logger, args Failu
 		}
 		cmd += fmt.Sprintf(setupQdiscsCmd, iface)
 	}
-	l.Printf("Setting up root htb qdisc with cmd: %s", cmd)
 	if err := f.Run(ctx, l, f.c.Nodes, cmd); err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 				}
 				cmd += fmt.Sprintf(addFilterCmd, iface, class, handle, latency.Delay, dest)
 			}
-			l.Printf("Adding artificial latency from nodes %d to node %d with cmd: %s", latency.Source, dest, cmd)
+			l.Printf("Adding artificial latency from nodes %d to node %d", latency.Source, dest)
 			if err := f.Run(ctx, l, latency.Source, cmd); err != nil {
 				return err
 			}
