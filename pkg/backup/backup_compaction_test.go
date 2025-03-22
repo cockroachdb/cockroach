@@ -285,17 +285,17 @@ crdb_internal.json_to_pb(
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		start := getTime(t)
 		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 7, start))
 		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 7))
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
 		end := getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
-		defer func() {
-			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
-		}()
 
 		jobID := startCompaction(7, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
@@ -339,6 +339,39 @@ crdb_internal.json_to_pb(
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/9'", start, end, opts,
 		)
+	})
+
+	t.Run("compaction of chain ending in a compacted backup", func(t *testing.T) {
+		// This test is to ensure that the second compaction job does not
+		// clobber the first compaction in the bucket. To do so, we take the
+		// following chain:
+		// F -> I1 -> I2 -> I3
+		// We compact I2 and I3 to get C1 and then compact I1 and C1 to get C2.
+		// Both C1 and C2 will have the same end time, but C2 should not clobber C1.
+		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
+		defer func() {
+			db.Exec(t, "DROP TABLE foo")
+		}()
+		start := getTime(t)
+		db.Exec(t, fmt.Sprintf(fullBackupAostCmd, 11, start))
+
+		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
+		mid := getTime(t)
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 11, mid))
+
+		db.Exec(t, "INSERT INTO foo VALUES (2, 2)")
+		db.Exec(t, fmt.Sprintf(incBackupCmd, 11))
+
+		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
+		end := getTime(t)
+		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 11, end))
+
+		c1JobID := startCompaction(11, mid, end)
+		waitForSuccessfulJob(t, tc, c1JobID)
+
+		c2JobID := startCompaction(11, start, end)
+		waitForSuccessfulJob(t, tc, c2JobID)
+		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/11'", start, end)
 	})
 	// TODO (kev-cao): Once range keys are supported by the compaction
 	// iterator, add tests for dropped tables/indexes.
