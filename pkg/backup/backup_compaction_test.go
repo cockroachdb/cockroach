@@ -12,9 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -420,6 +422,73 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
 	validateCompactedBackupForTables(t, db, []string{"foo"}, collectionURIs, start, end)
+}
+
+func TestScheduledBackupCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
+	schedules, err := th.createBackupSchedule(
+		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+	inc, err = jobs.ScheduledJobDB(th.internalDB()).
+		Load(context.Background(), th.env, inc.ScheduleID())
+	require.NoError(t, err)
+
+	th.env.SetTime(inc.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+
+	inc, err = jobs.ScheduledJobDB(th.internalDB()).
+		Load(context.Background(), th.env, inc.ScheduleID())
+	require.NoError(t, err)
+
+	th.env.SetTime(inc.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+
+	var jobID jobspb.JobID
+	th.sqlDB.QueryRow(
+		t,
+		`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+	).Scan(&jobID)
+	testutils.SucceedsSoon(t, func() error {
+		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var unused int64
+		return th.sqlDB.DB.QueryRowContext(
+			ctx,
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			jobID, jobs.StateSucceeded,
+		).Scan(&unused)
+	})
+
+	var numBackups int
+	th.sqlDB.QueryRow(
+		t,
+		"SELECT count(DISTINCT (start_time, end_time)) FROM "+
+			"[SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
+	).Scan(&numBackups)
+	require.Equal(t, 4, numBackups)
 }
 
 // Start and end are unix epoch in nanoseconds.

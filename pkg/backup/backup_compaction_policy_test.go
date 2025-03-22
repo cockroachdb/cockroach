@@ -66,10 +66,8 @@ func TestBackupCompactionHeuristic(t *testing.T) {
 		var windowSize int64 = 5
 		chain := make([]backuppb.BackupManifest, 5)
 		backupCompactionWindow.Override(ctx, &st.SV, windowSize)
-		execCtx := sql.FakeJobExecContext{
-			ExecutorConfig: &sql.ExecutorConfig{Settings: st},
-		}
-		_, _, err := minSizeDeltaHeuristic(ctx, &execCtx, chain)
+		execCfg := &sql.ExecutorConfig{Settings: st}
+		_, _, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
 		require.Error(t, err)
 	})
 }
