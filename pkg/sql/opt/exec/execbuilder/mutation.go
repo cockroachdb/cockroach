@@ -433,8 +433,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		upd.VectorIndexDelPartitionCols,
 	)
 
-	// TODO(yuzefovich): use lockedIndexes to optimize locking behavior.
-	input, _, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
+	input, lockedIndexes, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -465,6 +464,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		checkOrds,
 		passthroughCols,
 		upd.UniqueWithTombstoneIndexes,
+		lockedIndexes,
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil,
 	)
@@ -508,8 +508,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		ups.VectorIndexDelPartitionCols,
 	)
 
-	// TODO(yuzefovich): use lockedIndexes to optimize locking behavior.
-	input, _, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
+	input, lockedIndexes, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -545,6 +544,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		returnColOrds,
 		checkOrds,
 		ups.UniqueWithTombstoneIndexes,
+		lockedIndexes,
 		b.allowAutoCommit && len(ups.UniqueChecks) == 0 &&
 			len(ups.FKChecks) == 0 && len(ups.FKCascades) == 0 && ups.AfterTriggers == nil,
 	)

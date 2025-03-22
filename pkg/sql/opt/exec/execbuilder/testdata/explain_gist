@@ -212,3 +212,9 @@ query T
 SELECT crdb_internal.decode_external_plan_gist('Aifvzn5p':::STRING)
 ----
 • create view
+
+# Regression test for hitting an internal error on CALL expressions (#143211).
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('Aj0=':::STRING)
+----
+• call

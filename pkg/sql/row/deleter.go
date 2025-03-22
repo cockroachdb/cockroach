@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -112,7 +113,11 @@ func MakeDeleter(
 			secondaryLocked = index
 		}
 	}
-	if len(lockedIndexes) > 1 && !primaryLocked {
+	if buildutil.CrdbTestBuild && len(lockedIndexes) > 1 && !primaryLocked {
+		// We don't expect multiple secondary indexes to be locked, yet if that
+		// happens in prod, we'll just not use the already acquired locks on all
+		// but the last secondary index, which means a possible performance hit
+		// but no correctness issues.
 		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
 	}
 	rd := Deleter{
@@ -161,10 +166,10 @@ func (rd *Deleter) DeleteRow(
 		if err != nil {
 			return err
 		}
-		needsLock := index.IsUnique() && (rd.secondaryLocked == nil || rd.secondaryLocked.GetID() != index.GetID())
+		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
-				ctx, b, index, &e.Key, needsLock, traceKV, rd.Helper.secIndexValDirs[i],
+				ctx, b, index, &e.Key, alreadyLocked, traceKV, rd.Helper.secIndexValDirs[i],
 			); err != nil {
 				return err
 			}

@@ -1154,7 +1154,8 @@ CREATE TABLE t137352 (
   k INT PRIMARY KEY,
   a INT,
   b INT,
-  UNIQUE INDEX (a)
+  UNIQUE INDEX (a),
+  FAMILY (k, a, b)
 )
 
 statement ok
@@ -1208,8 +1209,27 @@ quality of service: regular
           actual row count: 1
           size: 3 columns, 1 row
 
+# Only need to update 'b' - no need to modify the secondary index.
+query T kvtrace
+EXECUTE p(1, 10, 101)
+----
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/10/1:3:Int/101
+
+# Updating both 'a' and 'b' - need to modify the secondary index.
+query T kvtrace
+EXECUTE p(1, 11, 102)
+----
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/102
+Del (locking) /Table/123/2/10/0
+CPut /Table/123/2/11/0 -> /BYTES/0x89
+
 statement ok
 DEALLOCATE p
+
+statement ok
+DELETE FROM t137352 WHERE true
 
 statement ok
 PREPARE p AS INSERT INTO t137352 VALUES ($1, $2, $3) ON CONFLICT (a) DO UPDATE SET b = $3
@@ -1222,7 +1242,6 @@ execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
-rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -1242,15 +1261,13 @@ quality of service: regular
     │
     └── • lookup join (left outer)
         │ sql nodes: <hidden>
-        │ kv nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 1
         │ KV time: 0µs
         │ KV contention time: 0µs
-        │ KV rows decoded: 1
-        │ KV pairs read: 2
-        │ KV bytes read: 8 B
-        │ KV gRPC calls: 1
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: (k) = (k)
@@ -1264,10 +1281,9 @@ quality of service: regular
             │ actual row count: 1
             │ KV time: 0µs
             │ KV contention time: 0µs
-            │ KV rows decoded: 1
-            │ KV pairs read: 2
-            │ KV bytes read: 8 B
-            │ KV gRPC calls: 1
+            │ KV rows decoded: 0
+            │ KV bytes read: 0 B
+            │ KV gRPC calls: 0
             │ estimated max memory allocated: 0 B
             │ table: t137352@t137352_a_key
             │ equality: (column2) = (a)
@@ -1280,11 +1296,143 @@ quality of service: regular
                   actual row count: 1
                   size: 3 columns, 1 row
 
+# Conflict on 'a', so we're only updating the value of 'b'.
+query T kvtrace
+EXECUTE p(2, 10, 101)
+----
+Scan /Table/123/2/10/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/123/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/123/1/1/0 -> /TUPLE/2:2:Int/10/1:3:Int/101
+
+# No conflict, so we're performing an INSERT.
+query T kvtrace
+EXECUTE p(3, 11, 101)
+----
+Scan /Table/123/2/11/0 lock Exclusive (Block, Unreplicated)
+CPut /Table/123/1/3/0 -> /TUPLE/2:2:Int/11/1:3:Int/101
+CPut /Table/123/2/11/0 -> /BYTES/0x8b
+
 # Regression test for #136458. The canary column ordinal should be correctly
-# selected when the canaray column is also a partial index DEL column.
+# selected when the canary column is also a partial index DEL column.
 
 statement ok
 CREATE TABLE t136458 (c BOOL PRIMARY KEY, INDEX (c) WHERE c)
 
 statement ok
 UPSERT INTO t136458 (c) VALUES (false)
+
+statement ok
+CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
+
+query T
+EXPLAIN UPSERT INTO t139105 VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t139105(k, v)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+# Upsert fast-path - we need locking Put.
+query T kvtrace
+UPSERT INTO t139105 VALUES (1, 1)
+----
+Put (locking) /Table/125/1/1/0 -> /TUPLE/2:2:Int/1
+
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  FAMILY (k, i, u, v)
+);
+
+# Effectively an INSERT.
+query T kvtrace
+UPSERT INTO t139160 VALUES (1, 1, 1, 1)
+----
+Scan /Table/20/1/12{6-7}
+Scan /Table/126/1/1/0 lock Exclusive (Block, Unreplicated)
+CPut /Table/126/1/1/0 -> /TUPLE/2:2:Int/1/1:3:Int/1/1:4:Int/1
+CPut /Table/126/2/1/1/0 -> /BYTES/0x3302
+CPut /Table/126/3/1/0 -> /BYTES/0x892302
+
+# The PK is scanned and locked.
+query T
+EXPLAIN UPSERT INTO t139160 VALUES (1, 2, 3, 4)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t139160(k, i, u, v)
+│ auto commit
+│ arbiter indexes: t139160_pkey
+│
+└── • cross join (left outer)
+    │
+    ├── • values
+    │     size: 4 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+query T kvtrace
+UPSERT INTO t139160 VALUES (1, 2, 3, 4)
+----
+Scan /Table/126/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/126/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/3/1:4:Int/4
+Del /Table/126/2/1/1/0
+CPut /Table/126/2/2/1/0 -> /BYTES/0x3306
+Del (locking) /Table/126/3/1/0
+CPut /Table/126/3/3/0 -> /BYTES/0x892304
+
+# Both primary and unique secondary indexes are scanned but are not locked. The
+# locking improvement is tracked by #143111.
+query T
+EXPLAIN INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: t139160(k, i, u, v)
+│ auto commit
+│ arbiter indexes: t139160_u_key
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 4 columns, 1 row
+        │
+        └── • index join
+            │ table: t139160@t139160_pkey
+            │
+            └── • scan
+                  missing stats
+                  table: t139160@t139160_u_key
+                  spans: [/3 - /3]
+
+query T kvtrace
+INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11, i = 12, v = 14;
+----
+Scan /Table/126/3/3/0
+Scan /Table/126/1/1/0
+Del /Table/126/2/2/1/0
+Del (locking) /Table/126/3/3/0
+Del (locking) /Table/126/1/1/0
+CPut /Table/126/1/11/0 -> /TUPLE/2:2:Int/12/1:3:Int/3/1:4:Int/14
+CPut /Table/126/2/12/11/0 -> /BYTES/0x3306
+CPut /Table/126/3/3/0 -> /BYTES/0x932318

@@ -176,8 +176,6 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 			// explicitly.
 			// - if buffered writes are disabled, then the KV layer will write
 			// an intent which acts as a lock.
-			// TODO(yuzefovich): add a tracing test to ensure that the lock is
-			// acquired here once the interceptor is updated.
 			b.DelMustAcquireExclusiveLock(span.Key)
 		} else {
 			if traceKV {

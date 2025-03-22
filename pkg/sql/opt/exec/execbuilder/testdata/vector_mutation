@@ -38,11 +38,11 @@ UPSERT INTO exec_test VALUES (2, 10, 'bar', '[6, 5, 4]'), (4, 20, 'qux', '[10, 1
 ----
 Scan /Table/106/1/2/0, /Table/106/1/4/0
 Put /Table/106/1/2/0 -> /TUPLE/2:2:Int/10/1:3:Bytes/bar/
-Del (locking) /Table/106/2/1/1/2/0
+Del /Table/106/2/1/1/2/0
 CPut /Table/106/2/1/1/2/0 -> /BYTES/:redacted:
-Del (locking) /Table/106/3/10/1/1/2/0
+Del /Table/106/3/10/1/1/2/0
 CPut /Table/106/3/10/1/1/2/0 -> /BYTES/:redacted:
-Del (locking) /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/1/2/0
+Del /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/1/2/0
 CPut /Table/106/4/"\x16\x05\x15\xef\x17\xbd\x00\x00\x00 \x00 \x00 "/1/1/2/0 -> /BYTES/:redacted:
 CPut /Table/106/1/4/0 -> /TUPLE/2:2:Int/20/1:3:Bytes/qux/
 CPut /Table/106/2/1/1/4/0 -> /BYTES/:redacted:
@@ -55,11 +55,11 @@ UPDATE exec_test SET encoding = '[3, 2, 1]' WHERE id = 1
 ----
 Scan /Table/106/1/1/0
 Put /Table/106/1/1/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo/
-Del (locking) /Table/106/2/1/1/1/0
+Del /Table/106/2/1/1/1/0
 CPut /Table/106/2/1/1/1/0 -> /BYTES/:redacted:
-Del (locking) /Table/106/3/1/1/1/1/0
+Del /Table/106/3/1/1/1/1/0
 CPut /Table/106/3/1/1/1/1/0 -> /BYTES/:redacted:
-Del (locking) /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/1/0
+Del /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/1/0
 CPut /Table/106/4/"\x16\x84\x17q\x17q\x00\x00\x00 \x00 \x00 "/1/1/1/0 -> /BYTES/:redacted:
 
 query T kvtrace(redactbytes)
@@ -68,7 +68,7 @@ UPDATE exec_test SET data = 'fooo' WHERE user_id = 15;
 Scan /Table/106/5/1{5-6}
 Scan /Table/106/1/3/0
 Put /Table/106/1/3/0 -> /TUPLE/2:2:Int/15/1:3:Bytes/fooo/
-Del (locking) /Table/106/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/1/3/0
+Del /Table/106/4/"\x16\x05\x15\xef\x18\x95\x00\x00\x00 \x00 \x00 "/1/1/3/0
 CPut /Table/106/4/"\x16\x84\x17q\x17q\x17q\x00\x00\x00 \x00 \x00 \x00 "/1/1/3/0 -> /BYTES/:redacted:
 
 query T kvtrace
