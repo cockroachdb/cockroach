@@ -62,7 +62,7 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
 	dst := b.getExistingElementState(e)
 	switch target {
-	case scpb.ToAbsent, scpb.ToPublic, scpb.Transient:
+	case scpb.ToAbsent, scpb.ToPublic, scpb.Transient, scpb.TransientPublic:
 		// Sanity check.
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
