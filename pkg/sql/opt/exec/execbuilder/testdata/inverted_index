@@ -90,7 +90,7 @@ UPDATE d SET b=NULL WHERE a=4
 ----
 Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Put /Table/106/1/4/0 -> /TUPLE/
-Del (locking) /Table/106/2/Arr/1/4/0
+Del /Table/106/2/Arr/1/4/0
 
 # Deleting a null shouldn't remove anything from the inv idx.
 query T kvtrace
@@ -226,7 +226,7 @@ UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
 Scan /Table/108/1/0/0 lock Exclusive (Block, Unreplicated)
 Put /Table/108/1/0/0 -> /TUPLE/2:2:Array/ARRAY[0,15,7,10]
-Del (locking) /Table/108/2/1/0/0
+Del /Table/108/2/1/0/0
 CPut /Table/108/2/15/0/0 -> /BYTES/
 
 statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint

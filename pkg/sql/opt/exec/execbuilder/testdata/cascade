@@ -172,7 +172,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%' OR message LIKE 'Scan%updated%'
 ----
 Scan /Table/112/1/"updated"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/112/1/"updated"/0
+Del /Table/112/1/"updated"/0
 CPut /Table/112/1/"latest"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Scan /Table/113/2/"updated"/0
@@ -384,7 +384,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%' OR message LIKE 'Scan%original%'
 ----
 Scan /Table/129/1/"original"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/129/1/"original"/0
+Del /Table/129/1/"original"/0
 CPut /Table/129/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_set_null_fkey
 executing cascade for constraint b2_update_set_null_fkey
@@ -466,7 +466,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%' OR message LIKE 'Scan%original%'
 ----
 Scan /Table/134/1/"original"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/134/1/"original"/0
+Del /Table/134/1/"original"/0
 CPut /Table/134/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Scan /Table/135/2/"original"/0
@@ -677,7 +677,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%' OR message LIKE 'Scan%original%'
 ----
 Scan /Table/151/1/"original"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/151/1/"original"/0
+Del /Table/151/1/"original"/0
 CPut /Table/151/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_set_null_fkey
 executing cascade for constraint b2_update_set_null_fkey
@@ -759,7 +759,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%' OR message LIKE 'Scan%original%'
 ----
 Scan /Table/156/1/"original"/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/156/1/"original"/0
+Del /Table/156/1/"original"/0
 CPut /Table/156/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
 Scan /Table/157/2/"original"/0

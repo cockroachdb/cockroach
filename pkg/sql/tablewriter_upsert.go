@@ -185,8 +185,6 @@ func (tu *tableUpserter) row(
 		// read, we need to tell the KV layer to acquire the lock explicitly.
 		// - if buffered writes are disabled, then the KV layer will write an
 		// intent which acts as a lock.
-		// TODO(yuzefovich): add a tracing test to ensure that the lock is
-		// acquired here once the interceptor is updated.
 		kvOp := row.PutMustAcquireExclusiveLockOp
 		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, kvOp, traceKV)
 	}

@@ -78,6 +78,8 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 //     to an empty slice on each call but can be preserved at its current
 //     capacity to avoid allocations. The function returns the slice.
 //   - kvOp indicates which KV write operation should be used.
+//   - oldKeysLocked, if true, indicates that the locks have already been
+//     acquired on the old keys (in the UPDATE case).
 //   - traceKV is to be set to log the KV operations added to the batch.
 func prepareInsertOrUpdateBatch(
 	ctx context.Context,
@@ -94,6 +96,7 @@ func prepareInsertOrUpdateBatch(
 	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
+	oldKeysLocked bool,
 	traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -200,8 +203,7 @@ func prepareInsertOrUpdateBatch(
 				} else if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
-					// TODO(yuzefovich): think about this.
-					const needsLock = true
+					needsLock := !oldKeysLocked
 					delFn(ctx, batch, kvKey, needsLock, traceKV, helper.primIndexValDirs)
 				}
 			} else {
@@ -263,8 +265,7 @@ func prepareInsertOrUpdateBatch(
 			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
-				// TODO(yuzefovich): think about this.
-				const needsLock = true
+				needsLock := !oldKeysLocked
 				delFn(ctx, batch, kvKey, needsLock, traceKV, helper.primIndexValDirs)
 			}
 		} else {

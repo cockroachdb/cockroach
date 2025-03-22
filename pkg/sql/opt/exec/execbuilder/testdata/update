@@ -901,8 +901,8 @@ Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
 fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
 fetched: /tu/tu_pkey/1/b:cf=1 -> 2
 fetched: /tu/tu_pkey/1/c/d:cf=2 -> /4/4
-Del (locking) /Table/115/1/1/1/1
-Del (locking) /Table/115/1/1/2/1
+Del /Table/115/1/1/1/1
+Del /Table/115/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -985,14 +985,15 @@ CREATE TABLE t137352 (
   a INT,
   b INT,
   INDEX (a),
-  INDEX (b)
+  INDEX (b),
+  FAMILY (k, a, b)
 )
 
 statement ok
 SET plan_cache_mode = force_generic_plan
 
 statement ok
-PREPARE p AS UPDATE t137352 SET b = $2 WHERE k = $1
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE k = $1
 
 query T
 EXPLAIN ANALYZE EXECUTE p(1, 10)
@@ -1014,7 +1015,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 0
 │ table: t137352
-│ set: b
+│ set: a, b
 │ auto commit
 │
 └── • render
@@ -1042,10 +1043,23 @@ quality of service: regular
               size: 1 column, 1 row
 
 statement ok
+INSERT INTO t137352 VALUES (1, 2, 3);
+
+query T kvtrace
+EXECUTE p(1, 10)
+----
+Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
+Del /Table/118/2/2/1/0
+CPut /Table/118/2/3/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+CPut /Table/118/3/10/1/0 -> /BYTES/
+
+statement ok
 DEALLOCATE p
 
 statement ok
-PREPARE p AS UPDATE t137352 SET b = $2 WHERE a = $1
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE a = $1
 
 query T
 EXPLAIN ANALYZE EXECUTE p(10, 100)
@@ -1067,7 +1081,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 0
 │ table: t137352
-│ set: b
+│ set: a, b
 │ auto commit
 │
 └── • render
@@ -1109,10 +1123,25 @@ quality of service: regular
                   size: 1 column, 1 row
 
 statement ok
+DELETE FROM t137352 WHERE true;
+INSERT INTO t137352 VALUES (1, 10, 3);
+
+query T kvtrace
+EXECUTE p(10, 100)
+----
+Scan /Table/118/2/1{0-1} lock Exclusive (Block, Unreplicated)
+Scan /Table/118/1/1/0 lock Exclusive (Block, Unreplicated)
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/11/1:3:Int/100
+Del /Table/118/2/10/1/0
+CPut /Table/118/2/11/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+CPut /Table/118/3/100/1/0 -> /BYTES/
+
+statement ok
 DEALLOCATE p
 
 statement ok
-PREPARE p AS UPDATE t137352 SET b = $2 WHERE k = $1 AND b > 0
+PREPARE p AS UPDATE t137352 SET a = a + 1, b = $2 WHERE k = $1 AND b > 0
 
 # Do not apply implicit FOR UPDATE locks if the lookup join has an ON condition.
 query T
@@ -1123,6 +1152,7 @@ execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -1133,9 +1163,9 @@ quality of service: regular
 • update
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 0
+│ actual row count: 1
 │ table: t137352
-│ set: b
+│ set: a, b
 │ auto commit
 │
 └── • render
@@ -1144,12 +1174,13 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ kv nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 0
+        │ actual row count: 1
         │ KV time: 0µs
         │ KV contention time: 0µs
-        │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
+        │ KV rows decoded: 1
+        │ KV pairs read: 2
+        │ KV bytes read: 8 B
+        │ KV gRPC calls: 1
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: ($1) = (k)
@@ -1163,10 +1194,24 @@ quality of service: regular
               size: 1 column, 1 row
 
 statement ok
+DELETE FROM t137352 WHERE true;
+INSERT INTO t137352 VALUES (1, 2, 3);
+
+query T kvtrace
+EXECUTE p(1, 10)
+----
+Scan /Table/118/1/1/0
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/10
+Del /Table/118/2/2/1/0
+CPut /Table/118/2/3/1/0 -> /BYTES/
+Del /Table/118/3/3/1/0
+CPut /Table/118/3/10/1/0 -> /BYTES/
+
+statement ok
 DEALLOCATE p
 
 statement ok
-PREPARE p AS UPDATE t137352 t1 SET b = t2.b + 1 FROM t137352 t2 WHERE t1.k = t2.a AND t1.k = $1
+PREPARE p AS UPDATE t137352 t1 SET a = t2.a + 1, b = t2.b + 1 FROM t137352 t2 WHERE t1.k = t2.a AND t1.k = $1
 
 statement ok
 ALTER TABLE t137352 INJECT STATISTICS '[
@@ -1189,6 +1234,7 @@ execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -1201,7 +1247,7 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 0
 │ table: t137352
-│ set: b
+│ set: a, b
 │ auto commit
 │
 └── • render
@@ -1226,6 +1272,7 @@ quality of service: regular
             │
             └── • lookup join
                 │ sql nodes: <hidden>
+                │ kv nodes: <hidden>
                 │ regions: <hidden>
                 │ actual row count: 0
                 │ KV time: 0µs
@@ -1243,12 +1290,13 @@ quality of service: regular
                     │ sql nodes: <hidden>
                     │ kv nodes: <hidden>
                     │ regions: <hidden>
-                    │ actual row count: 0
+                    │ actual row count: 1
                     │ KV time: 0µs
                     │ KV contention time: 0µs
-                    │ KV rows decoded: 0
-                    │ KV bytes read: 0 B
-                    │ KV gRPC calls: 0
+                    │ KV rows decoded: 1
+                    │ KV pairs read: 2
+                    │ KV bytes read: 8 B
+                    │ KV gRPC calls: 1
                     │ estimated max memory allocated: 0 B
                     │ estimated row count: 1
                     │ table: t137352@t137352_pkey
@@ -1260,3 +1308,329 @@ quality of service: regular
                           regions: <hidden>
                           actual row count: 1
                           size: 1 column, 1 row
+
+statement ok
+DELETE FROM t137352 WHERE true;
+INSERT INTO t137352 VALUES (1, 1, 1);
+
+query T kvtrace
+EXECUTE p(1)
+----
+Scan /Table/118/1/1/0
+Scan /Table/118/2/{1-2}
+Scan /Table/118/1/1/0
+Put /Table/118/1/1/0 -> /TUPLE/2:2:Int/2/1:3:Int/2
+Del /Table/118/2/1/1/0
+CPut /Table/118/2/2/1/0 -> /BYTES/
+Del /Table/118/3/1/1/0
+CPut /Table/118/3/2/1/0 -> /BYTES/
+
+statement ok
+CREATE TABLE t139160 (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT NOT NULL,
+  w INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  UNIQUE INDEX (v),
+  FAMILY (k, i, u, v),
+  FAMILY (w)
+);
+
+statement ok
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# The PK is scanned and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: t139160@t139160_pkey
+          spans: [/1 - /1]
+          locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE k = 1
+----
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and non-unique secondary indexes are scanned and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_i_idx
+              spans: [/2 - /2]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE i = 2
+----
+Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE i = 2
+----
+Scan /Table/119/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and unique secondary (on nullable column) indexes are scanned and
+# locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_u_key
+              spans: [/3 - /3]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE u = 3
+----
+Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE u = 3
+----
+Scan /Table/119/3/3/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Both primary and unique secondary (on non-nullable column) indexes are scanned
+# and locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: t139160@t139160_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_v_key
+              spans: [/4 - /4]
+              locking strength: for update
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE v = 4
+----
+Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE v = 4
+----
+Scan /Table/119/4/4/0 lock Exclusive (Block, Unreplicated)
+Scan /Table/119/1/{1-2} lock Exclusive (Block, Unreplicated)
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# The filter is not pushed down into the scan, so no index is locked.
+query T
+EXPLAIN UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: t139160
+│ set: i, u, v, w
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: w = 5
+        │
+        └── • scan
+              missing stats
+              table: t139160@t139160_pkey
+              spans: FULL SCAN
+
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE w = 5
+----
+Scan /Table/119/{1-2}
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Put /Table/119/1/1/1/1 -> /INT/6
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
+
+statement ok
+DELETE FROM t139160 WHERE true;
+INSERT INTO t139160 VALUES (1, 2, 3, 4, 5);
+
+# Same as above, but the second column family is set to NULL.
+query T kvtrace
+UPDATE t139160 SET i = i + 1, u = u + 1, v = v + 1, w = NULL WHERE w = 5
+----
+Scan /Table/119/{1-2}
+Put /Table/119/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/4/1:4:Int/5
+Del (locking) /Table/119/1/1/1/1
+Del /Table/119/2/2/1/0
+CPut /Table/119/2/3/1/0 -> /BYTES/0x3308
+Del (locking) /Table/119/3/3/0
+CPut /Table/119/3/4/0 -> /BYTES/0x892306
+Del (locking) /Table/119/4/4/0
+CPut /Table/119/4/5/0 -> /BYTES/0x89
