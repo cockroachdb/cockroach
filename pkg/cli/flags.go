@@ -509,12 +509,7 @@ func init() {
 
 		// More server flags.
 
-		if cmd != mtStartSQLCmd {
-			// TODO(knz): SQL-only servers should probably also support per-locality server
-			// addresses, for multi-region support.
-			// See: https://github.com/cockroachdb/cockroach/issues/90172
-			cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
-		}
+		cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 
 		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 		cliflagcfg.StringFlag(f, &localityFile, cliflags.LocalityFile)
