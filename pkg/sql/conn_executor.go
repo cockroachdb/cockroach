@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -526,6 +527,91 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return s
 }
 
+var AppNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.application_name_metrics.enabled",
+	"set to true to enable 'app' label in SQL metrics",
+	false, /* default */
+	settings.WithPublic)
+
+var DBNameLabelEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.db_name_metrics.enabled",
+	"set to true to enable 'db' label in SQL metrics",
+	false, /* default */
+	settings.WithPublic)
+
+type labelReinitializer interface {
+	ReinitializeLabels(*settings.Values)
+}
+
+// sqlMetrics carries a list of sql metrics that have the ReinitializeLabels
+// method. This is used to reinitialize all the metrics when the
+// AppNameLabelEnabled or DBNameLabelEnabled cluster settings change
+var sqlMetrics []labelReinitializer
+
+type SQLCounter struct {
+	syncutil.Mutex
+	*aggmetric.AggCounter
+	shouldIncludeAppName bool
+	shouldIncludeDBName  bool
+}
+
+func NewSQLCounter(md metric.Metadata, sv *settings.Values) *SQLCounter {
+	labelSet := []string{}
+	counter := &SQLCounter{Mutex: syncutil.Mutex{}}
+
+	counter.shouldIncludeDBName = DBNameLabelEnabled.Get(sv)
+	counter.shouldIncludeAppName = AppNameLabelEnabled.Get(sv)
+
+	if counter.shouldIncludeDBName {
+		labelSet = append(labelSet, "db_name")
+	}
+	if counter.shouldIncludeAppName {
+		labelSet = append(labelSet, "app_name")
+	}
+
+	counter.AggCounter = aggmetric.NewCounter(md, labelSet...)
+	sqlMetrics = append(sqlMetrics, counter)
+	return counter
+}
+
+func (sc *SQLCounter) Inc(dbName, appName string) {
+	sc.Lock()
+	defer sc.Unlock()
+
+	switch {
+	case sc.shouldIncludeDBName && sc.shouldIncludeAppName:
+		sc.AggCounter.Inc(1, dbName, appName)
+	case sc.shouldIncludeDBName:
+		sc.AggCounter.Inc(1, dbName)
+	case sc.shouldIncludeAppName:
+		sc.AggCounter.Inc(1, appName)
+	default:
+		sc.AggCounter.Inc(1)
+	}
+}
+
+func (sc *SQLCounter) ReinitializeLabels(sv *settings.Values) {
+	sc.Lock()
+	defer sc.Unlock()
+
+	sc.shouldIncludeDBName = DBNameLabelEnabled.Get(sv)
+	sc.shouldIncludeAppName = AppNameLabelEnabled.Get(sv)
+
+	md := sc.AggCounter.GetMetadata()
+	labelSet := []string{}
+
+	if sc.shouldIncludeDBName {
+		labelSet = append(labelSet, "db_name")
+	}
+	if sc.shouldIncludeAppName {
+		labelSet = append(labelSet, "app_name")
+	}
+
+	sc.AggCounter = aggmetric.NewCounter(md, labelSet...)
+}
+
 func makeMetrics(internal bool, sv *settings.Values) Metrics {
 	// For internal metrics, don't facet the latency metrics on the fingerprint
 	facetLabels := make([]string, 0, 1)
@@ -544,11 +630,11 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 		sqlExecLatencyDetail.Clear()
 	})
 
-	return Metrics{
+	metrics := Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:            metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			DistSQLSelectCount:            NewSQLCounter(getMetricMeta(MetaDistSQLSelect, internal), sv),
 			DistSQLSelectDistributedCount: metric.NewCounter(getMetricMeta(MetaDistSQLSelectDistributed, internal)),
-			SQLOptPlanCacheHits:           metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheHits:           NewSQLCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal), sv),
 			SQLOptPlanCacheMisses:         metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
 			StatementFingerprintCount:     metric.NewUniqueCounter(getMetricMeta(MetaUniqueStatementCount, internal)),
 			SQLExecLatencyDetail:          sqlExecLatencyDetail,
@@ -603,6 +689,20 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			TxnRowsReadErrCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadErr, internal)),
 		},
 	}
+
+	AppNameLabelEnabled.SetOnChange(sv, func(_ context.Context) {
+		for _, m := range sqlMetrics {
+			m.ReinitializeLabels(sv)
+		}
+	})
+
+	DBNameLabelEnabled.SetOnChange(sv, func(_ context.Context) {
+		for _, m := range sqlMetrics {
+			m.ReinitializeLabels(sv)
+		}
+	})
+
+	return metrics
 }
 
 func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {

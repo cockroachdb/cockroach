@@ -62,6 +62,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2409,4 +2410,74 @@ SELECT id
 `,
 	).Scan(&id)
 	return id
+}
+
+func TestSQLCounter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{Insecure: true}
+	srv, _, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	metrics := srv.SQLServer().(*sql.Server).Metrics.EngineMetrics
+
+	newConn := func(appName string) (*sqlutils.SQLRunner, func()) {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(username.RootUser),
+			Host:     s.AdvSQLAddr(),
+			RawQuery: fmt.Sprintf("sslmode=disable&application_name=%s", appName),
+		}
+		rawSQL, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return sqlutils.MakeSQLRunner(rawSQL), func() {
+			require.NoError(t, rawSQL.Close())
+		}
+	}
+
+	runTest := func(t *testing.T, appName string, appNameMetricsEnabled, dbNameMetricsEnabled bool) string {
+		conn, closeConn := newConn(appName)
+		defer closeConn()
+
+		var buf strings.Builder
+		conn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.application_name_metrics.enabled = %t",
+			appNameMetricsEnabled))
+		conn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.db_name_metrics.enabled = %t",
+			dbNameMetricsEnabled))
+
+		conn.Exec(t, "SELECT 1")
+		conn.Exec(t, "SELECT 1")
+		conn.Exec(t, "SELECT 1")
+		conn.Exec(t, "SELECT 1")
+
+		metrics.SQLOptPlanCacheHits.Each([]*prometheusgo.LabelPair{}, func(m *prometheusgo.Metric) {
+			for _, l := range m.GetLabel() {
+				buf.WriteString(fmt.Sprintf("%s=%s\n", l.GetName(), l.GetValue()))
+			}
+			buf.WriteString(fmt.Sprintf("value=%f\n", m.GetCounter().GetValue()))
+		})
+
+		return buf.String()
+	}
+
+	datadriven.RunTest(t, "testdata/sql_counter", func(t *testing.T, d *datadriven.TestData) string {
+		arg, ok := d.Arg("appName")
+		require.True(t, ok)
+		appName := arg.FirstVal(t)
+
+		arg, ok = d.Arg("appNameMetricsEnabled")
+		require.True(t, ok)
+		appNameMetricsEnabled := arg.FirstVal(t) == "true"
+
+		arg, ok = d.Arg("dbNameMetricsEnabled")
+		require.True(t, ok)
+		dbNameMetricsEnabled := arg.FirstVal(t) == "true"
+
+		return runTest(t, appName, appNameMetricsEnabled, dbNameMetricsEnabled)
+	})
 }

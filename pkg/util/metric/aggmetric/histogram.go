@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -78,7 +77,7 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 			// Atomically rotate the histogram window for the
 			// parent histogram, and all the child histograms.
 			a.h.Tick()
-			a.childSet.apply(func(childItem btree.Item) {
+			a.childSet.apply(func(childItem MetricItem) {
 				childHist, ok := childItem.(*Histogram)
 				if !ok {
 					panic(errors.AssertionFailedf(
