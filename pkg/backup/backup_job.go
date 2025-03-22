@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -332,7 +333,7 @@ func backup(
 			// Update the running aggregate of the component with the latest received
 			// aggregate.
 			resumer.mu.Lock()
-			resumer.mu.perNodeAggregatorStats[componentID] = agg.Events
+			resumer.mu.perNodeAggregatorStats[componentID] = *agg
 			resumer.mu.Unlock()
 		}
 		return nil
@@ -511,6 +512,7 @@ type backupResumer struct {
 		// driven AggregatorStats pushed backed to the resumer from all the
 		// processors running the backup.
 		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+		perSpanMetadata        map[string]tracingpb.OperationMetadata
 	}
 
 	testingKnobs struct {
