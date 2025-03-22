@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 type expBucket struct {
@@ -169,6 +170,24 @@ func TestEquiDepthHistogram(t *testing.T) {
 				{
 					// Bucket contains -9130100296576294525, -9042492057500701159.
 					upper: -9042492057500701159, numEq: 1000, numLess: 1000, distinctLess: 298,
+				},
+			},
+		},
+		{
+			samples: []int64{
+				9223372036854775807, 9223372036854775806,
+				-9223372036854775808, -9223372036854775807,
+				-1, 0, 1,
+			},
+			numRows:       7000,
+			distinctCount: 700,
+			maxBuckets:    2,
+			buckets: []expBucket{
+				{
+					upper: -9223372036854775808, numEq: 1000, numLess: 0, distinctLess: 0,
+				},
+				{
+					upper: 9223372036854775807, numEq: 1000, numLess: 5000, distinctLess: 698,
 				},
 			},
 		},
@@ -1108,7 +1127,9 @@ func TestGetMCVs(t *testing.T) {
 				samples[i] = tree.NewDInt(tree.DInt(tc.samples[i]))
 			}
 
-			mcvs, err := getMCVs(ctx, evalCtx, samples, tc.maxMCVs)
+			var os orderedSamples
+			os.Init(ctx, evalCtx, samples)
+			mcvs, err := getMCVs(os, tc.maxMCVs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1260,5 +1281,57 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 		} else if cmp != 0 {
 			t.Errorf("type %s: expected %s, decoded %s", typ.SQLString(), expected, decoded)
 		}
+	}
+}
+
+func TestOrderedSamples(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
+	rng, _ := randutil.NewTestRand()
+
+	for _, typ := range []*types.T{types.Int, types.String, types.Bytes, types.Float} {
+		t.Run(typ.SQLString(), func(t *testing.T) {
+			const numDatums = 100
+			samples := make(tree.Datums, numDatums)
+			for i := range samples {
+				samples[i] = randDatum(rng, typ)
+			}
+
+			var os orderedSamples
+			os.Init(ctx, evalCtx, samples)
+
+			for i := 1; i < len(samples); i++ {
+				if c, err := samples[i].Compare(ctx, evalCtx, samples[i-1]); err != nil {
+					t.Fatalf("comparison error: %s", err)
+				} else if c < 0 {
+					t.Errorf("samples not sorted: %s < %s", samples[i], samples[i-1])
+				}
+			}
+		})
+	}
+}
+
+// randDatum implements a subset of randgen.RandDatum. We don't use randgen here
+// to avoid an import cycle.
+func randDatum(rng *rand.Rand, typ *types.T) tree.Datum {
+	switch typ {
+	case types.Int:
+		// Use rng.Uint64() to produce negative numbers.
+		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
+	case types.Float:
+		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
+	case types.String:
+		l := rng.Intn(32)
+		b := make([]byte, l)
+		_, _ = rng.Read(b)
+		return tree.NewDString(string(b))
+	case types.Bytes:
+		l := rng.Intn(32)
+		b := make([]byte, l)
+		_, _ = rng.Read(b)
+		return tree.NewDBytes(tree.DBytes(b))
+	default:
+		panic(errors.AssertionFailedf("unsupported type %s", typ))
 	}
 }
