@@ -1,0 +1,2595 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label=/mnt/data1/postgres/src/test/regress/results/merge.out /mnt/data1/postgres/src/test/regress/expected/merge.out /mnt/data1/postgres/src/test/regress/results/merge.out
+--- /mnt/data1/postgres/src/test/regress/expected/merge.out
++++ /mnt/data1/postgres/src/test/regress/results/merge.out
+@@ -4,53 +4,47 @@
+ CREATE USER regress_merge_privs;
+ CREATE USER regress_merge_no_privs;
+ DROP TABLE IF EXISTS target;
+-NOTICE:  table "target" does not exist, skipping
+ DROP TABLE IF EXISTS source;
+-NOTICE:  table "source" does not exist, skipping
+ CREATE TABLE target (tid integer, balance integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE source (sid integer, delta integer) -- no index
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO target VALUES (1, 10);
+ INSERT INTO target VALUES (2, 20);
+ INSERT INTO target VALUES (3, 30);
+ SELECT t.ctid is not null as matched, t.*, s.* FROM source s FULL OUTER JOIN target t ON s.sid = t.tid ORDER BY t.tid, s.sid;
+- matched | tid | balance | sid | delta 
+----------+-----+---------+-----+-------
+- t       |   1 |      10 |     |      
+- t       |   2 |      20 |     |      
+- t       |   3 |      30 |     |      
+-(3 rows)
+-
++ERROR:  column "t.ctid" does not exist
+ ALTER TABLE target OWNER TO regress_merge_privs;
+ ALTER TABLE source OWNER TO regress_merge_privs;
+ CREATE TABLE target2 (tid integer, balance integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE source2 (sid integer, delta integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ ALTER TABLE target2 OWNER TO regress_merge_no_privs;
+ ALTER TABLE source2 OWNER TO regress_merge_no_privs;
+ GRANT INSERT ON target TO regress_merge_no_privs;
+ SET SESSION AUTHORIZATION regress_merge_privs;
++ERROR:  at or near "regress_merge_privs": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_merge_privs
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ EXPLAIN (COSTS OFF)
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
+-               QUERY PLAN               
+-----------------------------------------
+- Merge on target t
+-   ->  Merge Join
+-         Merge Cond: (t.tid = s.sid)
+-         ->  Sort
+-               Sort Key: t.tid
+-               ->  Seq Scan on target t
+-         ->  Sort
+-               Sort Key: s.sid
+-               ->  Seq Scan on source s
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ --
+ -- Errors
+ --
+@@ -59,84 +53,99 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
+-ERROR:  syntax error at or near "RANDOMWORD"
+-LINE 1: MERGE INTO target t RANDOMWORD
+-                            ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t RANDOMWORD
++^
+ -- MATCHED/INSERT error
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	INSERT DEFAULT VALUES;
+-ERROR:  syntax error at or near "INSERT"
+-LINE 5:  INSERT DEFAULT VALUES;
+-         ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- incorrectly specifying INTO target
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT INTO target DEFAULT VALUES;
+-ERROR:  syntax error at or near "INTO"
+-LINE 5:  INSERT INTO target DEFAULT VALUES;
+-                ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- Multiple VALUES clause
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (1,1), (2,2);
+-ERROR:  syntax error at or near ","
+-LINE 5:  INSERT VALUES (1,1), (2,2);
+-                            ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- SELECT query for INSERT
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT SELECT (1, 1);
+-ERROR:  syntax error at or near "SELECT"
+-LINE 5:  INSERT SELECT (1, 1);
+-                ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- NOT MATCHED/UPDATE
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	UPDATE SET balance = 0;
+-ERROR:  syntax error at or near "UPDATE"
+-LINE 5:  UPDATE SET balance = 0;
+-         ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- UPDATE tablename
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE target SET balance = 0;
+-ERROR:  syntax error at or near "target"
+-LINE 5:  UPDATE target SET balance = 0;
+-                ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- source and target names the same
+ MERGE INTO target
+ USING target
+ ON tid = tid
+ WHEN MATCHED THEN DO NOTHING;
+-ERROR:  name "target" specified more than once
+-DETAIL:  The name is used both as MERGE target table and data source.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target
++^
+ -- used in a CTE
+ WITH foo AS (
+   MERGE INTO target USING source ON (true)
+   WHEN MATCHED THEN DELETE
+ ) SELECT * FROM foo;
+-ERROR:  MERGE not supported in WITH query
+-LINE 1: WITH foo AS (
+-             ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++WITH foo AS (
++  MERGE INTO target USING source ON (true)
++  ^
+ -- used in COPY
+ COPY (
+   MERGE INTO target USING source ON (true)
+   WHEN MATCHED THEN DELETE
+ ) TO stdout;
+-ERROR:  MERGE not supported in COPY
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++COPY (
++  MERGE INTO target USING source ON (true)
++  ^
+ -- unsupported relation types
+ -- view
+ CREATE VIEW tv AS SELECT * FROM target;
+@@ -145,8 +154,10 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
+-ERROR:  cannot execute MERGE on relation "tv"
+-DETAIL:  This operation is not supported for views.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO tv t
++^
+ DROP VIEW tv;
+ -- materialized view
+ CREATE MATERIALIZED VIEW mv AS SELECT * FROM target;
+@@ -155,8 +166,10 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
+-ERROR:  cannot execute MERGE on relation "mv"
+-DETAIL:  This operation is not supported for materialized views.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO mv t
++^
+ DROP MATERIALIZED VIEW mv;
+ -- permissions
+ MERGE INTO target
+@@ -164,29 +177,53 @@
+ ON target.tid = source2.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
+-ERROR:  permission denied for table source2
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target
++^
+ GRANT INSERT ON target TO regress_merge_no_privs;
+ SET SESSION AUTHORIZATION regress_merge_no_privs;
++ERROR:  at or near "regress_merge_no_privs": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_merge_no_privs
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ MERGE INTO target
+ USING source2
+ ON target.tid = source2.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
+-ERROR:  permission denied for table target
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target
++^
+ GRANT UPDATE ON target2 TO regress_merge_privs;
+ SET SESSION AUTHORIZATION regress_merge_privs;
++ERROR:  at or near "regress_merge_privs": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_merge_privs
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ MERGE INTO target2
+ USING source
+ ON target2.tid = source.sid
+ WHEN MATCHED THEN
+ 	DELETE;
+-ERROR:  permission denied for table target2
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target2
++^
+ MERGE INTO target2
+ USING source
+ ON target2.tid = source.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
+-ERROR:  permission denied for table target2
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target2
++^
+ -- check if the target can be accessed from source relation subquery; we should
+ -- not be able to do so
+ MERGE INTO target t
+@@ -194,10 +231,10 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
+-ERROR:  invalid reference to FROM-clause entry for table "t"
+-LINE 2: USING (SELECT * FROM source WHERE t.tid > sid) s
+-                                          ^
+-DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ --
+ -- initial tests
+ --
+@@ -207,22 +244,38 @@
+ ON target.tid = source.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target
++^
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ BEGIN;
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ ROLLBACK;
+ -- insert some non-matching source rows to work from
+ INSERT INTO source VALUES (4, 40);
+@@ -245,35 +298,45 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	DO NOTHING;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ BEGIN;
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT DEFAULT VALUES;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-     |        
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- index plans
+ INSERT INTO target SELECT generate_series(1000,2500), 0;
+ ALTER TABLE target ADD PRIMARY KEY (tid);
++ERROR:  cannot use nullable column "tid" in primary key
+ ANALYZE target;
+ EXPLAIN (COSTS OFF)
+ MERGE INTO target t
+@@ -281,48 +344,33 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
+-               QUERY PLAN               
+-----------------------------------------
+- Merge on target t
+-   ->  Hash Join
+-         Hash Cond: (s.sid = t.tid)
+-         ->  Seq Scan on source s
+-         ->  Hash
+-               ->  Seq Scan on target t
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF)
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
+-               QUERY PLAN               
+-----------------------------------------
+- Merge on target t
+-   ->  Hash Join
+-         Hash Cond: (s.sid = t.tid)
+-         ->  Seq Scan on source s
+-         ->  Hash
+-               ->  Seq Scan on target t
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF)
+ MERGE INTO target t
+ USING source AS s
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (4, NULL);
+-               QUERY PLAN               
+-----------------------------------------
+- Merge on target t
+-   ->  Hash Left Join
+-         Hash Cond: (s.sid = t.tid)
+-         ->  Seq Scan on source s
+-         ->  Hash
+-               ->  Seq Scan on target t
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ DELETE FROM target WHERE tid > 100;
+ ANALYZE target;
+ -- insert some matching source rows to work from
+@@ -351,14 +399,12 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |       0
+-   3 |       0
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- equivalent of a DELETE join
+ BEGIN;
+@@ -367,12 +413,12 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -380,14 +426,12 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DO NOTHING;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -395,15 +439,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (4, NULL);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |        
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- duplicate source row causes multiple target row update ERROR
+ INSERT INTO source VALUES (2, 5);
+@@ -430,8 +471,10 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
+-ERROR:  MERGE command cannot affect row a second time
+-HINT:  Ensure that not more than one source row matches any one target row.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -439,8 +482,10 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	DELETE;
+-ERROR:  MERGE command cannot affect row a second time
+-HINT:  Ensure that not more than one source row matches any one target row.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ ROLLBACK;
+ -- remove duplicate MATCHED data from source data
+ DELETE FROM source WHERE sid = 2;
+@@ -469,8 +514,10 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+   INSERT VALUES (4, NULL);
+-ERROR:  duplicate key value violates unique constraint "target_pkey"
+-DETAIL:  Key (tid)=(4) already exists.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+ ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+@@ -495,6 +542,9 @@
+ 
+ -- remove constraints
+ alter table target drop CONSTRAINT target_pkey;
++ERROR:  relation "target" (1299): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ alter table target alter column tid drop not null;
+ -- multiple actions
+ BEGIN;
+@@ -505,15 +555,12 @@
+ 	INSERT VALUES (4, 4)
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = 0;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |       0
+-   3 |       0
+-   4 |       4
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- should be equivalent
+ BEGIN;
+@@ -524,15 +571,12 @@
+ 	UPDATE SET balance = 0
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (4, 4);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |       0
+-   3 |       0
+-   4 |       4
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- column references
+ -- do a simple equivalent of an UPDATE join
+@@ -542,14 +586,12 @@
+ ON t.tid = s.sid
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = t.balance + s.delta;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      25
+-   3 |      50
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- do a simple equivalent of an INSERT SELECT
+ BEGIN;
+@@ -558,15 +600,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (s.sid, s.delta);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- and again with duplicate source rows
+ INSERT INTO source VALUES (5, 50);
+@@ -578,17 +617,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+   INSERT VALUES (s.sid, s.delta);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-   5 |      50
+-   5 |      50
+-(6 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- removing duplicate source rows
+ DELETE FROM source WHERE sid = 5;
+@@ -599,15 +633,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.delta);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- and again with a subtle error: referring to non-existent target row for NOT MATCHED
+ MERGE INTO target t
+@@ -615,10 +646,10 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (t.tid, s.delta);
+-ERROR:  invalid reference to FROM-clause entry for table "t"
+-LINE 5:  INSERT (tid, balance) VALUES (t.tid, s.delta);
+-                                       ^
+-DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ -- and again with a constant ON clause
+ BEGIN;
+ MERGE INTO target t
+@@ -626,10 +657,10 @@
+ ON (SELECT true)
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (t.tid, s.delta);
+-ERROR:  invalid reference to FROM-clause entry for table "t"
+-LINE 5:  INSERT (tid, balance) VALUES (t.tid, s.delta);
+-                                       ^
+-DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+ ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+@@ -642,15 +673,12 @@
+ 	UPDATE SET balance = t.balance + s.delta
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (s.sid, s.delta);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      25
+-   3 |      50
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- unreachable WHEN clause should ERROR
+ BEGIN;
+@@ -661,13 +689,18 @@
+ 	DELETE
+ WHEN MATCHED THEN
+ 	UPDATE SET balance = t.balance - s.delta;
+-ERROR:  unreachable WHEN clause specified after unconditional WHEN clause
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ ROLLBACK;
+ -- conditional WHEN clause
+ CREATE TABLE wq_target (tid integer not null, balance integer DEFAULT -1)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE wq_source (balance integer, sid integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO wq_source (sid, balance) VALUES (1, 100);
+ BEGIN;
+ -- try a simple INSERT with default values first
+@@ -675,18 +708,22 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid) VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+- tid | balance 
+------+---------
+-   1 |      -1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- this time with a FALSE condition
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED AND FALSE THEN
+ 	INSERT (tid) VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+@@ -697,6 +734,10 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED AND s.balance <> 100 THEN
+ 	INSERT (tid) VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+@@ -708,12 +749,12 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED AND s.balance = 100 THEN
+ 	INSERT (tid) VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+- tid | balance 
+------+---------
+-   1 |      -1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- conditions in the NOT MATCHED clause can only refer to source columns
+ BEGIN;
+@@ -721,10 +762,10 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED AND t.balance = 100 THEN
+ 	INSERT (tid) VALUES (s.sid);
+-ERROR:  invalid reference to FROM-clause entry for table "t"
+-LINE 3: WHEN NOT MATCHED AND t.balance = 100 THEN
+-                             ^
+-DETAIL:  There is an entry for table "t", but it cannot be referenced from this part of the query.
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+ ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+@@ -732,11 +773,14 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN NOT MATCHED AND s.balance = 100 THEN
+ 	INSERT (tid) VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |      -1
+-(1 row)
++(0 rows)
+ 
+ -- conditions in MATCHED clause can refer to both source and target
+ SELECT * FROM wq_source;
+@@ -749,63 +793,81 @@
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND s.balance = 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |      99
+-(1 row)
++(0 rows)
+ 
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance = 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |      99
+-(1 row)
++(0 rows)
+ 
+ -- check if AND works
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance = 99 AND s.balance > 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |      99
+-(1 row)
++(0 rows)
+ 
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance = 99 AND s.balance = 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |     199
+-(1 row)
++(0 rows)
+ 
+ -- check if OR works
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance = 99 OR s.balance > 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |     199
+-(1 row)
++(0 rows)
+ 
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance = 199 OR s.balance > 100 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |     299
+-(1 row)
++(0 rows)
+ 
+ -- check source-side whole-row references
+ BEGIN;
+@@ -813,35 +875,43 @@
+ USING wq_source s ON (t.tid = s.sid)
+ WHEN matched and t = s or t.tid = s.sid THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+- tid | balance 
+------+---------
+-   1 |     399
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- check if subqueries work in the conditions?
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.balance > (SELECT max(balance) FROM target) THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ -- check if we can access system columns in the conditions
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.xmin = t.xmax THEN
+ 	UPDATE SET balance = t.balance + s.balance;
+-ERROR:  cannot use system column "xmin" in MERGE WHEN condition
+-LINE 3: WHEN MATCHED AND t.xmin = t.xmax THEN
+-                         ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ MERGE INTO wq_target t
+ USING wq_source s ON t.tid = s.sid
+ WHEN MATCHED AND t.tableoid >= 0 THEN
+ 	UPDATE SET balance = t.balance + s.balance;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO wq_target t
++^
+ SELECT * FROM wq_target;
+  tid | balance 
+ -----+---------
+-   1 |     499
+-(1 row)
++(0 rows)
+ 
+ DROP TABLE wq_target, wq_source;
+ -- test triggers
+@@ -874,11 +944,29 @@
+ END;
+ $$;
+ CREATE TRIGGER merge_bsi BEFORE INSERT ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_bsu BEFORE UPDATE ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_bsd BEFORE DELETE ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_asi AFTER INSERT ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_asu AFTER UPDATE ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_asd AFTER DELETE ON target FOR EACH STATEMENT EXECUTE PROCEDURE merge_trigfunc ();
++ERROR:  unimplemented: statement-level triggers are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/126362/_version_
+ CREATE TRIGGER merge_bri BEFORE INSERT ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
+ CREATE TRIGGER merge_bru BEFORE UPDATE ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
+ CREATE TRIGGER merge_brd BEFORE DELETE ON target FOR EACH ROW EXECUTE PROCEDURE merge_trigfunc ();
+@@ -888,10 +976,8 @@
+ -- now the classic UPSERT, with a DELETE
+ BEGIN;
+ UPDATE target SET balance = 0 WHERE tid = 3;
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (3,30) -> (3,0)
+-NOTICE:  AFTER UPDATE ROW trigger row: (3,30) -> (3,0)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
++NOTICE:  BEFORE UPDATE ROW trigger row: ((3, 30) AS tid, balance) -> ((3, 0) AS tid, balance)
++NOTICE:  AFTER UPDATE ROW trigger row: ((3, 30) AS tid, balance) -> ((3, 0) AS tid, balance)
+ --EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+ MERGE INTO target t
+ USING source AS s
+@@ -902,26 +988,12 @@
+ 	DELETE
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (s.sid, s.delta);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE DELETE STATEMENT trigger
+-NOTICE:  BEFORE DELETE ROW trigger row: (3,0)
+-NOTICE:  BEFORE UPDATE ROW trigger row: (2,20) -> (2,15)
+-NOTICE:  BEFORE INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER DELETE ROW trigger row: (3,0)
+-NOTICE:  AFTER UPDATE ROW trigger row: (2,20) -> (2,15)
+-NOTICE:  AFTER INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER DELETE STATEMENT trigger
+-NOTICE:  AFTER UPDATE STATEMENT trigger
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      15
+-   4 |      40
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- Test behavior of triggers that turn UPDATE/DELETE into no-ops
+ create or replace function skip_merge_op() returns trigger
+@@ -961,17 +1033,22 @@
+ RAISE NOTICE 'ROW_COUNT = %', result;
+ END;
+ $$;
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE DELETE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (3,30) -> (3,50)
+-NOTICE:  BEFORE DELETE ROW trigger row: (2,20)
+-NOTICE:  BEFORE INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER DELETE STATEMENT trigger
+-NOTICE:  AFTER UPDATE STATEMENT trigger
+-NOTICE:  AFTER INSERT STATEMENT trigger
+-NOTICE:  Not found
+-NOTICE:  ROW_COUNT = 0
++ERROR:  at or near ";": at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
++--
++source SQL:
++DECLARE
++  result integer;
++BEGIN
++MERGE INTO target t
++USING source AS s
++ON t.tid = s.sid
++WHEN MATCHED AND s.sid = 3 THEN UPDATE SET balance = t.balance + s.delta
++WHEN MATCHED THEN DELETE
++WHEN NOT MATCHED THEN INSERT VALUES (sid, delta);
++                                                ^
+ SELECT * FROM target FULL OUTER JOIN source ON (sid = tid);
+  tid | balance | sid | delta 
+ -----+---------+-----+-------
+@@ -995,12 +1072,19 @@
+ 	UPDATE SET balance = t.balance - s.delta;
+ END;
+ $$;
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (3,30) -> (3,10)
+-NOTICE:  BEFORE UPDATE ROW trigger row: (2,20) -> (2,15)
+-NOTICE:  AFTER UPDATE ROW trigger row: (3,30) -> (3,10)
+-NOTICE:  AFTER UPDATE ROW trigger row: (2,20) -> (2,15)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
++ERROR:  at or near ";": at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
++--
++source SQL:
++BEGIN
++MERGE INTO target t
++USING source AS s
++ON t.tid = s.sid
++WHEN MATCHED AND t.balance > s.delta THEN
++	UPDATE SET balance = t.balance - s.delta;
++                                         ^
+ ROLLBACK;
+ --source constants
+ BEGIN;
+@@ -1009,19 +1093,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.delta);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE INSERT ROW trigger row: (9,57)
+-NOTICE:  AFTER INSERT ROW trigger row: (9,57)
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   9 |      57
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ --source query
+ BEGIN;
+@@ -1030,19 +1107,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.delta);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -1050,19 +1120,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.newname);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ --self-merge
+ BEGIN;
+@@ -1073,24 +1136,12 @@
+ 	UPDATE SET balance = t1.balance + t2.balance
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (t2.tid, t2.balance);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (1,10) -> (1,20)
+-NOTICE:  BEFORE UPDATE ROW trigger row: (2,20) -> (2,40)
+-NOTICE:  BEFORE UPDATE ROW trigger row: (3,30) -> (3,60)
+-NOTICE:  AFTER UPDATE ROW trigger row: (1,10) -> (1,20)
+-NOTICE:  AFTER UPDATE ROW trigger row: (2,20) -> (2,40)
+-NOTICE:  AFTER UPDATE ROW trigger row: (3,30) -> (3,60)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t1
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      20
+-   2 |      40
+-   3 |      60
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -1098,16 +1149,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.delta);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO target t
+@@ -1120,19 +1167,12 @@
+ ON t.tid = s.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance) VALUES (s.sid, s.delta);
+-NOTICE:  BEFORE INSERT STATEMENT trigger
+-NOTICE:  BEFORE INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT ROW trigger row: (4,40)
+-NOTICE:  AFTER INSERT STATEMENT trigger
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |      10
+-   2 |      20
+-   3 |      30
+-   4 |      40
+-(4 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- plpgsql parameters and results
+ BEGIN;
+@@ -1154,41 +1194,46 @@
+ RETURN result;
+ END;
+ $$;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  at or near ";": at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO target t
++^
++--
++source SQL:
++DECLARE
++ result integer;
++BEGIN
++MERGE INTO target t
++USING (SELECT p_id AS sid) AS s
++ON t.tid = s.sid
++WHEN MATCHED THEN
++	UPDATE SET balance = t.balance - p_bal;
++                                       ^
+ SELECT merge_func(3, 4);
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (3,30) -> (3,26)
+-NOTICE:  AFTER UPDATE ROW trigger row: (3,30) -> (3,26)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
+- merge_func 
+-------------
+-          1
+-(1 row)
+-
++ERROR:  unknown function: merge_func()
+ SELECT * FROM target ORDER BY tid;
+  tid | balance 
+ -----+---------
+    1 |      10
+    2 |      20
+-   3 |      26
++   3 |      30
+ (3 rows)
+ 
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ -- PREPARE
+ BEGIN;
+ prepare foom as merge into target t using (select 1 as sid) s on (t.tid = s.sid) when matched then update set balance = 1;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++prepare foom as merge into target t using (select 1 as sid) s on (t.tid = s.sid) when matched then update set balance = 1
++                ^
++HINT:  try \h PREPARE
+ execute foom;
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (1,10) -> (1,1)
+-NOTICE:  AFTER UPDATE ROW trigger row: (1,10) -> (1,1)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |       1
+-   2 |      20
+-   3 |      30
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ PREPARE foom2 (integer, integer) AS
+@@ -1197,26 +1242,25 @@
+ ON t.tid = $1
+ WHEN MATCHED THEN
+ UPDATE SET balance = $2;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++PREPARE foom2 (integer, integer) AS
++MERGE INTO target t
++^
++HINT:  try \h PREPARE
+ --EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+ execute foom2 (1, 1);
+-NOTICE:  BEFORE UPDATE STATEMENT trigger
+-NOTICE:  BEFORE UPDATE ROW trigger row: (1,10) -> (1,1)
+-NOTICE:  AFTER UPDATE ROW trigger row: (1,10) -> (1,1)
+-NOTICE:  AFTER UPDATE STATEMENT trigger
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT * FROM target ORDER BY tid;
+- tid | balance 
+------+---------
+-   1 |       1
+-   2 |      20
+-   3 |      30
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- subqueries in source relation
+ CREATE TABLE sq_target (tid integer NOT NULL, balance integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE sq_source (delta integer, sid integer, balance integer DEFAULT 0)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO sq_target(tid, balance) VALUES (1,100), (2,200), (3,300);
+ INSERT INTO sq_source(sid, delta) VALUES (1,10), (2,20), (4,40);
+ BEGIN;
+@@ -1225,14 +1269,12 @@
+ ON tid = sid
+ WHEN MATCHED AND t.balance > delta THEN
+ 	UPDATE SET balance = t.balance + delta;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ SELECT * FROM sq_target;
+- tid | balance 
+------+---------
+-   3 |     300
+-   1 |     110
+-   2 |     220
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- try a view
+ CREATE VIEW v AS SELECT * FROM sq_source WHERE sid < 2;
+@@ -1242,14 +1284,12 @@
+ ON tid = sid
+ WHEN MATCHED THEN
+     UPDATE SET balance = v.balance + delta;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target
++^
+ SELECT * FROM sq_target;
+- tid | balance 
+------+---------
+-   2 |     200
+-   3 |     300
+-   1 |      10
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- ambiguous reference to a column
+ BEGIN;
+@@ -1262,9 +1302,10 @@
+ 	INSERT (balance, tid) VALUES (balance + delta, sid)
+ WHEN MATCHED AND tid < 2 THEN
+ 	DELETE;
+-ERROR:  column reference "balance" is ambiguous
+-LINE 5:     UPDATE SET balance = balance + delta
+-                                 ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target
++^
+ ROLLBACK;
+ BEGIN;
+ INSERT INTO sq_source (sid, balance, delta) VALUES (-1, -1, -10);
+@@ -1277,14 +1318,12 @@
+ 	INSERT (balance, tid) VALUES (balance + delta, sid)
+ WHEN MATCHED AND tid < 2 THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ SELECT * FROM sq_target;
+- tid | balance 
+------+---------
+-   2 |     200
+-   3 |     300
+-  -1 |     -11
+-(3 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- CTEs
+ BEGIN;
+@@ -1301,6 +1340,13 @@
+ 	INSERT (balance, tid) VALUES (balance + delta, sid)
+ WHEN MATCHED AND tid < 2 THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++WITH targq AS (
++	SELECT * FROM v
++)
++MERGE INTO sq_target t
++^
+ ROLLBACK;
+ -- RETURNING
+ BEGIN;
+@@ -1315,15 +1361,18 @@
+ WHEN MATCHED AND tid < 2 THEN
+ 	DELETE
+ RETURNING *;
+-ERROR:  syntax error at or near "RETURNING"
+-LINE 10: RETURNING *;
+-         ^
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ ROLLBACK;
+ -- EXPLAIN
+ CREATE TABLE ex_mtarget (a int, b int)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE ex_msource (a int, b int)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO ex_mtarget SELECT i, i*10 FROM generate_series(1,100,2) i;
+ INSERT INTO ex_msource SELECT i, i*10 FROM generate_series(1,100,1) i;
+ CREATE FUNCTION explain_merge(query text) RETURNS SETOF text
+@@ -1340,48 +1389,21 @@
+     END LOOP;
+ END;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ -- only updates
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
+ WHEN MATCHED THEN
+ 	UPDATE SET b = t.b + 1');
+-                            explain_merge                             
+-----------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   Tuples: updated=50
+-   ->  Merge Join (actual rows=50 loops=1)
+-         Merge Cond: (t.a = s.a)
+-         ->  Sort (actual rows=50 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=50 loops=1)
+-         ->  Sort (actual rows=100 loops=1)
+-               Sort Key: s.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_msource s (actual rows=100 loops=1)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ -- only updates to selected tuples
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
+ WHEN MATCHED AND t.a < 10 THEN
+ 	UPDATE SET b = t.b + 1');
+-                            explain_merge                             
+-----------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   Tuples: updated=5 skipped=45
+-   ->  Merge Join (actual rows=50 loops=1)
+-         Merge Cond: (t.a = s.a)
+-         ->  Sort (actual rows=50 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=50 loops=1)
+-         ->  Sort (actual rows=100 loops=1)
+-               Sort Key: s.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_msource s (actual rows=100 loops=1)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ -- updates + deletes
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
+@@ -1389,43 +1411,13 @@
+ 	UPDATE SET b = t.b + 1
+ WHEN MATCHED AND t.a >= 10 AND t.a <= 20 THEN
+ 	DELETE');
+-                            explain_merge                             
+-----------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   Tuples: updated=5 deleted=5 skipped=40
+-   ->  Merge Join (actual rows=50 loops=1)
+-         Merge Cond: (t.a = s.a)
+-         ->  Sort (actual rows=50 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=50 loops=1)
+-         ->  Sort (actual rows=100 loops=1)
+-               Sort Key: s.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_msource s (actual rows=100 loops=1)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ -- only inserts
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
+ WHEN NOT MATCHED AND s.a < 10 THEN
+ 	INSERT VALUES (a, b)');
+-                            explain_merge                             
+-----------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   Tuples: inserted=4 skipped=96
+-   ->  Merge Left Join (actual rows=100 loops=1)
+-         Merge Cond: (s.a = t.a)
+-         ->  Sort (actual rows=100 loops=1)
+-               Sort Key: s.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_msource s (actual rows=100 loops=1)
+-         ->  Sort (actual rows=45 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=45 loops=1)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ -- all three
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a
+@@ -1435,45 +1427,16 @@
+ 	DELETE
+ WHEN NOT MATCHED AND s.a < 20 THEN
+ 	INSERT VALUES (a, b)');
+-                            explain_merge                             
+-----------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   Tuples: inserted=10 updated=9 deleted=5 skipped=76
+-   ->  Merge Left Join (actual rows=100 loops=1)
+-         Merge Cond: (s.a = t.a)
+-         ->  Sort (actual rows=100 loops=1)
+-               Sort Key: s.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_msource s (actual rows=100 loops=1)
+-         ->  Sort (actual rows=49 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=49 loops=1)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ -- nothing
+ SELECT explain_merge('
+ MERGE INTO ex_mtarget t USING ex_msource s ON t.a = s.a AND t.a < -1000
+ WHEN MATCHED AND t.a < 10 THEN
+ 	DO NOTHING');
+-                           explain_merge                            
+---------------------------------------------------------------------
+- Merge on ex_mtarget t (actual rows=0 loops=1)
+-   ->  Merge Join (actual rows=0 loops=1)
+-         Merge Cond: (t.a = s.a)
+-         ->  Sort (actual rows=0 loops=1)
+-               Sort Key: t.a
+-               Sort Method: quicksort  Memory: xxx
+-               ->  Seq Scan on ex_mtarget t (actual rows=0 loops=1)
+-                     Filter: (a < '-1000'::integer)
+-                     Rows Removed by Filter: 54
+-         ->  Sort (never executed)
+-               Sort Key: s.a
+-               ->  Seq Scan on ex_msource s (never executed)
+-(12 rows)
+-
++ERROR:  unknown function: explain_merge()
+ DROP TABLE ex_msource, ex_mtarget;
+ DROP FUNCTION explain_merge(text);
++ERROR:  unknown function: explain_merge()
+ -- Subqueries
+ BEGIN;
+ MERGE INTO sq_target t
+@@ -1481,12 +1444,12 @@
+ ON tid = sid
+ WHEN MATCHED THEN
+     UPDATE SET balance = (SELECT count(*) FROM sq_target);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ SELECT * FROM sq_target WHERE tid = 1;
+- tid | balance 
+------+---------
+-   1 |       3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO sq_target t
+@@ -1494,12 +1457,12 @@
+ ON tid = sid
+ WHEN MATCHED AND (SELECT count(*) > 0 FROM sq_target) THEN
+     UPDATE SET balance = 42;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ SELECT * FROM sq_target WHERE tid = 1;
+- tid | balance 
+------+---------
+-   1 |      42
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ BEGIN;
+ MERGE INTO sq_target t
+@@ -1507,30 +1470,57 @@
+ ON tid = sid AND (SELECT count(*) > 0 FROM sq_target)
+ WHEN MATCHED THEN
+     UPDATE SET balance = 42;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO sq_target t
++^
+ SELECT * FROM sq_target WHERE tid = 1;
+- tid | balance 
+------+---------
+-   1 |      42
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ DROP TABLE sq_target, sq_source CASCADE;
+-NOTICE:  drop cascades to view v
+ CREATE TABLE pa_target (tid integer, balance float, val text)
+ 	PARTITION BY LIST (tid);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pa_target (tid integer, balance float, val text)
++	PARTITION BY LIST (tid)
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part1 PARTITION OF pa_target FOR VALUES IN (1,4)
+   WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part1 PARTITION OF pa_target FOR VALUES IN (1,4)
++                   ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part2 PARTITION OF pa_target FOR VALUES IN (2,5,6)
+   WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part2 PARTITION OF pa_target FOR VALUES IN (2,5,6)
++                   ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part3 PARTITION OF pa_target FOR VALUES IN (3,8,9)
+   WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part3 PARTITION OF pa_target FOR VALUES IN (3,8,9)
++                   ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part4 PARTITION OF pa_target DEFAULT
+   WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part4 PARTITION OF pa_target DEFAULT
++                   ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pa_source (sid integer, delta float);
+ -- insert many rows to the source table
+ INSERT INTO pa_source SELECT id, id * 10  FROM generate_series(1,14) AS id;
++ERROR:  unsupported binary operator: <int> * <int> (returning <float>)
+ -- insert a few rows in the target table (odd numbered tid)
+ INSERT INTO pa_target SELECT id, id * 100, 'initial' FROM generate_series(1,14,2) AS id;
++ERROR:  relation "pa_target" does not exist
+ -- try simple MERGE
+ BEGIN;
+ MERGE INTO pa_target t
+@@ -1540,25 +1530,12 @@
+     UPDATE SET balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   1 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   3 |     330 | initial updated by merge
+-   4 |      40 | inserted by merge
+-   5 |     550 | initial updated by merge
+-   6 |      60 | inserted by merge
+-   7 |     770 | initial updated by merge
+-   8 |      80 | inserted by merge
+-   9 |     990 | initial updated by merge
+-  10 |     100 | inserted by merge
+-  11 |    1210 | initial updated by merge
+-  12 |     120 | inserted by merge
+-  13 |    1430 | initial updated by merge
+-  14 |     140 | inserted by merge
+-(14 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- same with a constant qual
+ BEGIN;
+@@ -1569,31 +1546,12 @@
+     UPDATE SET balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   1 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   3 |      30 | inserted by merge
+-   3 |     300 | initial
+-   4 |      40 | inserted by merge
+-   5 |     500 | initial
+-   5 |      50 | inserted by merge
+-   6 |      60 | inserted by merge
+-   7 |     700 | initial
+-   7 |      70 | inserted by merge
+-   8 |      80 | inserted by merge
+-   9 |      90 | inserted by merge
+-   9 |     900 | initial
+-  10 |     100 | inserted by merge
+-  11 |    1100 | initial
+-  11 |     110 | inserted by merge
+-  12 |     120 | inserted by merge
+-  13 |    1300 | initial
+-  13 |     130 | inserted by merge
+-  14 |     140 | inserted by merge
+-(20 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- try updating the partition key column
+ BEGIN;
+@@ -1614,52 +1572,82 @@
+ RETURN result;
+ END;
+ $$;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  at or near ";": at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
++--
++source SQL:
++DECLARE
++  result integer;
++BEGIN
++MERGE INTO pa_target t
++  USING pa_source s
++  ON t.tid = s.sid
++  WHEN MATCHED THEN
++    UPDATE SET tid = tid + 1, balance = balance + delta, val = val || ' updated by merge'
++  WHEN NOT MATCHED THEN
++    INSERT VALUES (sid, delta, 'inserted by merge');
++                                                   ^
+ SELECT merge_func();
+- merge_func 
+-------------
+-         14
+-(1 row)
+-
++ERROR:  unknown function: merge_func()
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   2 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   4 |      40 | inserted by merge
+-   4 |     330 | initial updated by merge
+-   6 |     550 | initial updated by merge
+-   6 |      60 | inserted by merge
+-   8 |      80 | inserted by merge
+-   8 |     770 | initial updated by merge
+-  10 |     990 | initial updated by merge
+-  10 |     100 | inserted by merge
+-  12 |    1210 | initial updated by merge
+-  12 |     120 | inserted by merge
+-  14 |    1430 | initial updated by merge
+-  14 |     140 | inserted by merge
+-(14 rows)
+-
++ERROR:  relation "pa_target" does not exist
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ DROP TABLE pa_target CASCADE;
++ERROR:  relation "pa_target" does not exist
+ -- The target table is partitioned in the same way, but this time by attaching
+ -- partitions which have columns in different order, dropped columns etc.
+ CREATE TABLE pa_target (tid integer, balance float, val text)
+ 	PARTITION BY LIST (tid);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pa_target (tid integer, balance float, val text)
++	PARTITION BY LIST (tid)
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part1 (tid integer, balance float, val text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE part2 (balance float, tid integer, val text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE part3 (tid integer, balance float, val text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE part4 (extraid text, tid integer, balance float, val text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ ALTER TABLE part4 DROP COLUMN extraid;
+ ALTER TABLE pa_target ATTACH PARTITION part1 FOR VALUES IN (1,4);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pa_target ATTACH PARTITION part1 FOR VALUES IN (1,4)
++                      ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE pa_target ATTACH PARTITION part2 FOR VALUES IN (2,5,6);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pa_target ATTACH PARTITION part2 FOR VALUES IN (2,5,6)
++                      ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE pa_target ATTACH PARTITION part3 FOR VALUES IN (3,8,9);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pa_target ATTACH PARTITION part3 FOR VALUES IN (3,8,9)
++                      ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE pa_target ATTACH PARTITION part4 DEFAULT;
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE pa_target ATTACH PARTITION part4 DEFAULT
++                      ^
++HINT:  try \h ALTER TABLE
+ -- insert a few rows in the target table (odd numbered tid)
+ INSERT INTO pa_target SELECT id, id * 100, 'initial' FROM generate_series(1,14,2) AS id;
++ERROR:  relation "pa_target" does not exist
+ -- try simple MERGE
+ BEGIN;
+ MERGE INTO pa_target t
+@@ -1669,25 +1657,12 @@
+     UPDATE SET balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   1 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   3 |     330 | initial updated by merge
+-   4 |      40 | inserted by merge
+-   5 |     550 | initial updated by merge
+-   6 |      60 | inserted by merge
+-   7 |     770 | initial updated by merge
+-   8 |      80 | inserted by merge
+-   9 |     990 | initial updated by merge
+-  10 |     100 | inserted by merge
+-  11 |    1210 | initial updated by merge
+-  12 |     120 | inserted by merge
+-  13 |    1430 | initial updated by merge
+-  14 |     140 | inserted by merge
+-(14 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- same with a constant qual
+ BEGIN;
+@@ -1699,29 +1674,12 @@
+     UPDATE SET balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   1 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   3 |      30 | inserted by merge
+-   3 |     300 | initial
+-   4 |      40 | inserted by merge
+-   6 |      60 | inserted by merge
+-   7 |     700 | initial
+-   7 |      70 | inserted by merge
+-   8 |      80 | inserted by merge
+-   9 |     900 | initial
+-   9 |      90 | inserted by merge
+-  10 |     100 | inserted by merge
+-  11 |     110 | inserted by merge
+-  11 |    1100 | initial
+-  12 |     120 | inserted by merge
+-  13 |    1300 | initial
+-  13 |     130 | inserted by merge
+-  14 |     140 | inserted by merge
+-(18 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- try updating the partition key column
+ BEGIN;
+@@ -1732,64 +1690,102 @@
+     UPDATE SET tid = tid + 1, balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+- tid | balance |           val            
+------+---------+--------------------------
+-   2 |     110 | initial updated by merge
+-   2 |      20 | inserted by merge
+-   4 |      40 | inserted by merge
+-   4 |     330 | initial updated by merge
+-   6 |     550 | initial updated by merge
+-   6 |      60 | inserted by merge
+-   8 |      80 | inserted by merge
+-   8 |     770 | initial updated by merge
+-  10 |     990 | initial updated by merge
+-  10 |     100 | inserted by merge
+-  12 |    1210 | initial updated by merge
+-  12 |     120 | inserted by merge
+-  14 |    1430 | initial updated by merge
+-  14 |     140 | inserted by merge
+-(14 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- test RLS enforcement
+ BEGIN;
+ ALTER TABLE pa_target ENABLE ROW LEVEL SECURITY;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
++ERROR:  relation "pa_target" does not exist
+ ALTER TABLE pa_target FORCE ROW LEVEL SECURITY;
++ERROR:  relation "pa_target" does not exist
+ CREATE POLICY pa_target_pol ON pa_target USING (tid != 0);
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ MERGE INTO pa_target t
+   USING pa_source s
+   ON t.tid = s.sid AND t.tid IN (1,2,3,4)
+   WHEN MATCHED THEN
+     UPDATE SET tid = tid - 1;
+-ERROR:  new row violates row-level security policy for table "pa_target"
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ ROLLBACK;
++WARNING:  there is no transaction in progress
+ DROP TABLE pa_source;
+ DROP TABLE pa_target CASCADE;
++ERROR:  relation "pa_target" does not exist
+ -- Sub-partitioning
+ CREATE TABLE pa_target (logts timestamp, tid integer, balance float, val text)
+ 	PARTITION BY RANGE (logts);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pa_target (logts timestamp, tid integer, balance float, val text)
++	PARTITION BY RANGE (logts)
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m01 PARTITION OF pa_target
+ 	FOR VALUES FROM ('2017-01-01') TO ('2017-02-01')
+ 	PARTITION BY LIST (tid);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m01 PARTITION OF pa_target
++                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m01_odd PARTITION OF part_m01
+ 	FOR VALUES IN (1,3,5,7,9) WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m01_odd PARTITION OF part_m01
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m01_even PARTITION OF part_m01
+ 	FOR VALUES IN (2,4,6,8) WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m01_even PARTITION OF part_m01
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m02 PARTITION OF pa_target
+ 	FOR VALUES FROM ('2017-02-01') TO ('2017-03-01')
+ 	PARTITION BY LIST (tid);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m02 PARTITION OF pa_target
++                      ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m02_odd PARTITION OF part_m02
+ 	FOR VALUES IN (1,3,5,7,9) WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m02_odd PARTITION OF part_m02
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE part_m02_even PARTITION OF part_m02
+ 	FOR VALUES IN (2,4,6,8) WITH (autovacuum_enabled=off);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE part_m02_even PARTITION OF part_m02
++                           ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pa_source (sid integer, delta float)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ -- insert many rows to the source table
+ INSERT INTO pa_source SELECT id, id * 10  FROM generate_series(1,14) AS id;
++ERROR:  unsupported binary operator: <int> * <int> (returning <float>)
+ -- insert a few rows in the target table (odd numbered tid)
+ INSERT INTO pa_target SELECT '2017-01-31', id, id * 100, 'initial' FROM generate_series(1,9,3) AS id;
++ERROR:  relation "pa_target" does not exist
+ INSERT INTO pa_target SELECT '2017-02-28', id, id * 100, 'initial' FROM generate_series(2,9,3) AS id;
++ERROR:  relation "pa_target" does not exist
+ -- try simple MERGE
+ BEGIN;
+ MERGE INTO pa_target t
+@@ -1799,91 +1795,78 @@
+     UPDATE SET balance = balance + delta, val = val || ' updated by merge'
+   WHEN NOT MATCHED THEN
+     INSERT VALUES (slogts::timestamp, sid, delta, 'inserted by merge');
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t
++^
+ SELECT * FROM pa_target ORDER BY tid;
+-          logts           | tid | balance |           val            
+---------------------------+-----+---------+--------------------------
+- Tue Jan 31 00:00:00 2017 |   1 |     110 | initial updated by merge
+- Tue Feb 28 00:00:00 2017 |   2 |     220 | initial updated by merge
+- Sun Jan 15 00:00:00 2017 |   3 |      30 | inserted by merge
+- Tue Jan 31 00:00:00 2017 |   4 |     440 | initial updated by merge
+- Tue Feb 28 00:00:00 2017 |   5 |     550 | initial updated by merge
+- Sun Jan 15 00:00:00 2017 |   6 |      60 | inserted by merge
+- Tue Jan 31 00:00:00 2017 |   7 |     770 | initial updated by merge
+- Tue Feb 28 00:00:00 2017 |   8 |     880 | initial updated by merge
+- Sun Jan 15 00:00:00 2017 |   9 |      90 | inserted by merge
+-(9 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ DROP TABLE pa_source;
+ DROP TABLE pa_target CASCADE;
++ERROR:  relation "pa_target" does not exist
+ -- Partitioned table with primary key
+ CREATE TABLE pa_target (tid integer PRIMARY KEY) PARTITION BY LIST (tid);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pa_target (tid integer PRIMARY KEY) PARTITION BY LIST (tid)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pa_targetp PARTITION OF pa_target DEFAULT;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE pa_targetp PARTITION OF pa_target DEFAULT
++                        ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE pa_source (sid integer);
+ INSERT INTO pa_source VALUES (1), (2);
+ EXPLAIN (VERBOSE, COSTS OFF)
+ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
+   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Merge on public.pa_target t
+-   Merge on public.pa_targetp t_1
+-   ->  Hash Left Join
+-         Output: s.sid, t_1.tableoid, t_1.ctid
+-         Inner Unique: true
+-         Hash Cond: (s.sid = t_1.tid)
+-         ->  Seq Scan on public.pa_source s
+-               Output: s.sid
+-         ->  Hash
+-               Output: t_1.tid, t_1.tableoid, t_1.ctid
+-               ->  Seq Scan on public.pa_targetp t_1
+-                     Output: t_1.tid, t_1.tableoid, t_1.ctid
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
+   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
++^
+ TABLE pa_target;
+- tid 
+------
+-   1
+-   2
+-(2 rows)
+-
++ERROR:  relation "pa_target" does not exist
+ -- Partition-less partitioned table
+ -- (the bug we are checking for appeared only if table had partitions before)
+ DROP TABLE pa_targetp;
++ERROR:  relation "pa_targetp" does not exist
+ EXPLAIN (VERBOSE, COSTS OFF)
+ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
+   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
+-                 QUERY PLAN                 
+---------------------------------------------
+- Merge on public.pa_target t
+-   ->  Hash Left Join
+-         Output: s.sid, t.ctid
+-         Inner Unique: true
+-         Hash Cond: (s.sid = t.tid)
+-         ->  Seq Scan on public.pa_source s
+-               Output: s.sid
+-         ->  Hash
+-               Output: t.tid, t.ctid
+-               ->  Result
+-                     Output: t.tid, t.ctid
+-                     One-Time Filter: false
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (VERBOSE, COSTS OFF)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
+   WHEN NOT MATCHED THEN INSERT VALUES (s.sid);
+-ERROR:  no partition of relation "pa_target" found for row
+-DETAIL:  Partition key of the failing row contains (tid) = (1).
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO pa_target t USING pa_source s ON t.tid = s.sid
++^
+ DROP TABLE pa_source;
+ DROP TABLE pa_target CASCADE;
++ERROR:  relation "pa_target" does not exist
+ -- some complex joins on the source side
+ CREATE TABLE cj_target (tid integer, balance float, val text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE cj_source1 (sid1 integer, scat integer, delta integer)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE cj_source2 (sid2 integer, sval text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO cj_source1 VALUES (1, 10, 100);
+ INSERT INTO cj_source1 VALUES (1, 20, 200);
+ INSERT INTO cj_source1 VALUES (2, 20, 300);
+@@ -1898,6 +1881,10 @@
+ ON t.tid = sid1
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (sid1, delta, sval);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ -- try accessing columns from either side of the source join
+ MERGE INTO cj_target t
+ USING cj_source2 s2
+@@ -1907,6 +1894,10 @@
+ 	INSERT VALUES (sid2, delta, sval)
+ WHEN MATCHED THEN
+ 	DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ -- some simple expressions in INSERT targetlist
+ MERGE INTO cj_target t
+ USING cj_source2 s2
+@@ -1916,20 +1907,24 @@
+ 	INSERT VALUES (sid2, delta + scat, sval)
+ WHEN MATCHED THEN
+ 	UPDATE SET val = val || ' updated by merge';
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ MERGE INTO cj_target t
+ USING cj_source2 s2
+ 	INNER JOIN cj_source1 s1 ON sid1 = sid2 AND scat = 20
+ ON t.tid = sid1
+ WHEN MATCHED THEN
+ 	UPDATE SET val = val || ' ' || delta::text;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ SELECT * FROM cj_target;
+- tid | balance |               val                
+------+---------+----------------------------------
+-   3 |     400 | initial source2 updated by merge
+-   1 |     220 | initial source2 200
+-   1 |     110 | initial source2 200
+-   2 |     320 | initial source2 300
+-(4 rows)
++ tid | balance | val 
++-----+---------+-----
++(0 rows)
+ 
+ -- try it with an outer join and PlaceHolderVar
+ MERGE INTO cj_target t
+@@ -1938,19 +1933,14 @@
+ ON t.tid = fj.scat
+ WHEN NOT MATCHED THEN
+ 	INSERT (tid, balance, val) VALUES (fj.scat, fj.delta, fj.phv);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ SELECT * FROM cj_target;
+- tid | balance |               val                
+------+---------+----------------------------------
+-   3 |     400 | initial source2 updated by merge
+-   1 |     220 | initial source2 200
+-   1 |     110 | initial source2 200
+-   2 |     320 | initial source2 300
+-  10 |     100 | join input
+-  10 |     400 | join input
+-  20 |     200 | join input
+-  20 |     300 | join input
+-     |         | 
+-(9 rows)
++ tid | balance | val 
++-----+---------+-----
++(0 rows)
+ 
+ ALTER TABLE cj_source1 RENAME COLUMN sid1 TO sid;
+ ALTER TABLE cj_source2 RENAME COLUMN sid2 TO sid;
+@@ -1961,10 +1951,15 @@
+ ON t.tid = s1.sid
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (s2.sid, delta, sval);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO cj_target t
++^
+ DROP TABLE cj_source2, cj_source1, cj_target;
+ -- Function scans
+ CREATE TABLE fs_target (a int, b int, c text)
+   WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ MERGE INTO fs_target t
+ USING generate_series(1,100,1) AS id
+ ON t.a = id
+@@ -1972,6 +1967,10 @@
+ 	UPDATE SET b = b + id
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (id, -1);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO fs_target t
++^
+ MERGE INTO fs_target t
+ USING generate_series(1,100,2) AS id
+ ON t.a = id
+@@ -1979,10 +1978,14 @@
+ 	UPDATE SET b = b + id, c = 'updated '|| id.*::text
+ WHEN NOT MATCHED THEN
+ 	INSERT VALUES (id, -1, 'inserted ' || id.*::text);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO fs_target t
++^
+ SELECT count(*) FROM fs_target;
+  count 
+ -------
+-   100
++     0
+ (1 row)
+ 
+ DROP TABLE fs_target;
+@@ -1995,12 +1998,29 @@
+     peaktemp        int,
+     unitsales       int
+ ) WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE TABLE measurement_y2006m02 (
+     CHECK ( logdate >= DATE '2006-02-01' AND logdate < DATE '2006-03-01' )
+ ) INHERITS (measurement) WITH (autovacuum_enabled=off);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE measurement_y2006m02 (
++    CHECK ( logdate >= DATE '2006-02-01' AND logdate < DATE '2006-03-01' )
++) INHERITS (measurement) WITH (autovacuum_enabled=off)
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE measurement_y2006m03 (
+     CHECK ( logdate >= DATE '2006-03-01' AND logdate < DATE '2006-04-01' )
+ ) INHERITS (measurement) WITH (autovacuum_enabled=off);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE measurement_y2006m03 (
++    CHECK ( logdate >= DATE '2006-03-01' AND logdate < DATE '2006-04-01' )
++) INHERITS (measurement) WITH (autovacuum_enabled=off)
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE measurement_y2007m01 (
+     filler          text,
+     peaktemp        int,
+@@ -2009,8 +2029,14 @@
+     unitsales       int
+     CHECK ( logdate >= DATE '2007-01-01' AND logdate < DATE '2007-02-01')
+ ) WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ ALTER TABLE measurement_y2007m01 DROP COLUMN filler;
+ ALTER TABLE measurement_y2007m01 INHERIT measurement;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++ALTER TABLE measurement_y2007m01 INHERIT measurement
++                                 ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO measurement VALUES (0, '2005-07-21', 5, 15);
+ CREATE OR REPLACE FUNCTION measurement_insert_trigger()
+ RETURNS TRIGGER AS $$
+@@ -2034,6 +2060,7 @@
+ CREATE TRIGGER insert_measurement_trigger
+     BEFORE INSERT ON measurement
+     FOR EACH ROW EXECUTE PROCEDURE measurement_insert_trigger();
++ERROR:  relation "measurement_y2006m02" does not exist
+ INSERT INTO measurement VALUES (1, '2006-02-10', 35, 10);
+ INSERT INTO measurement VALUES (1, '2006-02-16', 45, 20);
+ INSERT INTO measurement VALUES (1, '2006-03-17', 25, 10);
+@@ -2041,18 +2068,19 @@
+ INSERT INTO measurement VALUES (1, '2007-01-15', 10, 10);
+ INSERT INTO measurement VALUES (1, '2007-01-17', 10, 10);
+ SELECT tableoid::regclass, * FROM measurement ORDER BY city_id, logdate;
+-       tableoid       | city_id |  logdate   | peaktemp | unitsales 
+-----------------------+---------+------------+----------+-----------
+- measurement          |       0 | 07-21-2005 |        5 |        15
+- measurement_y2006m02 |       1 | 02-10-2006 |       35 |        10
+- measurement_y2006m02 |       1 | 02-16-2006 |       45 |        20
+- measurement_y2006m03 |       1 | 03-17-2006 |       25 |        10
+- measurement_y2006m03 |       1 | 03-27-2006 |       15 |        40
+- measurement_y2007m01 |       1 | 01-15-2007 |       10 |        10
+- measurement_y2007m01 |       1 | 01-17-2007 |       10 |        10
++  tableoid   | city_id |  logdate   | peaktemp | unitsales 
++-------------+---------+------------+----------+-----------
++ measurement |       0 | 2005-07-21 |        5 |        15
++ measurement |       1 | 2006-02-10 |       35 |        10
++ measurement |       1 | 2006-02-16 |       45 |        20
++ measurement |       1 | 2006-03-17 |       25 |        10
++ measurement |       1 | 2006-03-27 |       15 |        40
++ measurement |       1 | 2007-01-15 |       10 |        10
++ measurement |       1 | 2007-01-17 |       10 |        10
+ (7 rows)
+ 
+ CREATE TABLE new_measurement (LIKE measurement) WITH (autovacuum_enabled=off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO new_measurement VALUES (0, '2005-07-21', 25, 20);
+ INSERT INTO new_measurement VALUES (1, '2006-03-01', 20, 10);
+ INSERT INTO new_measurement VALUES (1, '2006-02-16', 50, 10);
+@@ -2072,25 +2100,12 @@
+ WHEN NOT MATCHED THEN INSERT
+      (city_id, logdate, peaktemp, unitsales)
+    VALUES (city_id, logdate, peaktemp, unitsales);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO ONLY measurement m
++^
+ SELECT tableoid::regclass, * FROM measurement ORDER BY city_id, logdate, peaktemp;
+-       tableoid       | city_id |  logdate   | peaktemp | unitsales 
+-----------------------+---------+------------+----------+-----------
+- measurement          |       0 | 07-21-2005 |       25 |        35
+- measurement_y2006m02 |       1 | 02-10-2006 |       35 |        10
+- measurement_y2006m02 |       1 | 02-16-2006 |       45 |        20
+- measurement_y2006m02 |       1 | 02-16-2006 |       50 |        10
+- measurement_y2006m03 |       1 | 03-01-2006 |       20 |        10
+- measurement_y2006m03 |       1 | 03-17-2006 |       25 |        10
+- measurement_y2006m03 |       1 | 03-27-2006 |       15 |        40
+- measurement_y2006m03 |       1 | 03-27-2006 |          |          
+- measurement_y2007m01 |       1 | 01-15-2007 |        5 |          
+- measurement_y2007m01 |       1 | 01-15-2007 |       10 |        10
+- measurement_y2007m01 |       1 | 01-16-2007 |       10 |        10
+- measurement_y2007m01 |       1 | 01-17-2007 |       10 |        10
+- measurement_y2007m01 |       1 | 01-17-2007 |          |          
+- measurement_y2006m02 |       2 | 02-10-2006 |       20 |        20
+-(14 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ MERGE into measurement m
+  USING new_measurement nm ON
+@@ -2102,56 +2117,64 @@
+ WHEN NOT MATCHED THEN INSERT
+      (city_id, logdate, peaktemp, unitsales)
+    VALUES (city_id, logdate, peaktemp, unitsales);
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE into measurement m
++^
+ SELECT tableoid::regclass, * FROM measurement ORDER BY city_id, logdate;
+-       tableoid       | city_id |  logdate   | peaktemp | unitsales 
+-----------------------+---------+------------+----------+-----------
+- measurement          |       0 | 07-21-2005 |       25 |        35
+- measurement_y2006m02 |       1 | 02-10-2006 |       35 |        10
+- measurement_y2006m02 |       1 | 02-16-2006 |       50 |        30
+- measurement_y2006m03 |       1 | 03-01-2006 |       20 |        10
+- measurement_y2006m03 |       1 | 03-17-2006 |       25 |        10
+- measurement_y2007m01 |       1 | 01-15-2007 |       10 |        10
+- measurement_y2007m01 |       1 | 01-16-2007 |       10 |        10
+- measurement_y2006m02 |       2 | 02-10-2006 |       20 |        20
+-(8 rows)
++  tableoid   | city_id |  logdate   | peaktemp | unitsales 
++-------------+---------+------------+----------+-----------
++ measurement |       0 | 2005-07-21 |        5 |        15
++ measurement |       1 | 2006-02-10 |       35 |        10
++ measurement |       1 | 2006-02-16 |       45 |        20
++ measurement |       1 | 2006-03-17 |       25 |        10
++ measurement |       1 | 2006-03-27 |       15 |        40
++ measurement |       1 | 2007-01-15 |       10 |        10
++ measurement |       1 | 2007-01-17 |       10 |        10
++(7 rows)
+ 
+ BEGIN;
+ MERGE INTO new_measurement nm
+  USING ONLY measurement m ON
+       (nm.city_id = m.city_id and nm.logdate=m.logdate)
+ WHEN MATCHED THEN DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO new_measurement nm
++^
+ SELECT * FROM new_measurement ORDER BY city_id, logdate;
+- city_id |  logdate   | peaktemp | unitsales 
+----------+------------+----------+-----------
+-       1 | 02-16-2006 |       50 |        10
+-       1 | 03-01-2006 |       20 |        10
+-       1 | 03-27-2006 |          |          
+-       1 | 01-15-2007 |        5 |          
+-       1 | 01-16-2007 |       10 |        10
+-       1 | 01-17-2007 |          |          
+-       2 | 02-10-2006 |       20 |        20
+-(7 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ MERGE INTO new_measurement nm
+  USING measurement m ON
+       (nm.city_id = m.city_id and nm.logdate=m.logdate)
+ WHEN MATCHED THEN DELETE;
++ERROR:  at or near "merge": syntax error
++DETAIL:  source SQL:
++MERGE INTO new_measurement nm
++^
+ SELECT * FROM new_measurement ORDER BY city_id, logdate;
+  city_id |  logdate   | peaktemp | unitsales 
+ ---------+------------+----------+-----------
+-       1 | 03-27-2006 |          |          
+-       1 | 01-17-2007 |          |          
+-(2 rows)
++       0 | 2005-07-21 |       25 |        20
++       1 | 2006-02-16 |       50 |        10
++       1 | 2006-03-01 |       20 |        10
++       1 | 2006-03-27 |          |          
++       1 | 2007-01-15 |        5 |          
++       1 | 2007-01-16 |       10 |        10
++       1 | 2007-01-17 |          |          
++       2 | 2006-02-10 |       20 |        20
++(8 rows)
+ 
+ DROP TABLE measurement, new_measurement CASCADE;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table measurement_y2006m02
+-drop cascades to table measurement_y2006m03
+-drop cascades to table measurement_y2007m01
+ DROP FUNCTION measurement_insert_trigger();
+ -- prepare
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP TABLE target, target2;
+ DROP TABLE source, source2;
+ DROP FUNCTION merge_trigfunc();

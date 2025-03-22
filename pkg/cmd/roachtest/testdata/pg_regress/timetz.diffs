@@ -1,0 +1,256 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timetz.out --label=/mnt/data1/postgres/src/test/regress/results/timetz.out /mnt/data1/postgres/src/test/regress/expected/timetz.out /mnt/data1/postgres/src/test/regress/results/timetz.out
+--- /mnt/data1/postgres/src/test/regress/expected/timetz.out
++++ /mnt/data1/postgres/src/test/regress/results/timetz.out
+@@ -3,70 +3,55 @@
+ --
+ CREATE TABLE TIMETZ_TBL (f1 time(2) with time zone);
+ INSERT INTO TIMETZ_TBL VALUES ('00:01 PDT');
++ERROR:  could not parse "1970-01-01 00:01 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('01:00 PDT');
++ERROR:  could not parse "1970-01-01 01:00 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('02:03 PDT');
++ERROR:  could not parse "1970-01-01 02:03 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('07:07 PST');
++ERROR:  could not parse "1970-01-01 07:07 PST" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('08:08 EDT');
++ERROR:  could not parse "1970-01-01 08:08 EDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('11:59 PDT');
++ERROR:  could not parse "1970-01-01 11:59 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('12:00 PDT');
++ERROR:  could not parse "1970-01-01 12:00 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('12:01 PDT');
++ERROR:  could not parse "1970-01-01 12:01 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('23:59 PDT');
++ERROR:  could not parse "1970-01-01 23:59 PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('11:59:59.99 PM PDT');
++ERROR:  could not parse "1970-01-01 11:59:59.99 PM PDT" as TimeTZ
+ INSERT INTO TIMETZ_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+ INSERT INTO TIMETZ_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+ -- this should fail (the timezone offset is not known)
+ INSERT INTO TIMETZ_TBL VALUES ('15:36:39 America/New_York');
+-ERROR:  invalid input syntax for type time with time zone: "15:36:39 America/New_York"
+-LINE 1: INSERT INTO TIMETZ_TBL VALUES ('15:36:39 America/New_York');
+-                                       ^
+ -- this should fail (timezone not specified without a date)
+ INSERT INTO TIMETZ_TBL VALUES ('15:36:39 m2');
+-ERROR:  invalid input syntax for type time with time zone: "15:36:39 m2"
+-LINE 1: INSERT INTO TIMETZ_TBL VALUES ('15:36:39 m2');
+-                                       ^
++ERROR:  could not parse "1970-01-01 15:36:39 m2" as TimeTZ
+ -- this should fail (dynamic timezone abbreviation without a date)
+ INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
+-ERROR:  invalid input syntax for type time with time zone: "15:36:39 MSK m2"
+-LINE 1: INSERT INTO TIMETZ_TBL VALUES ('15:36:39 MSK m2');
+-                                       ^
++ERROR:  could not parse "1970-01-01 15:36:39 MSK m2" as TimeTZ
+ SELECT f1 AS "Time TZ" FROM TIMETZ_TBL;
+-    Time TZ     
+-----------------
+- 00:01:00-07
+- 01:00:00-07
+- 02:03:00-07
+- 07:07:00-08
+- 08:08:00-04
+- 11:59:00-07
+- 12:00:00-07
+- 12:01:00-07
+- 23:59:00-07
+- 23:59:59.99-07
++   Time TZ   
++-------------
+  15:36:39-05
+  15:36:39-04
+-(12 rows)
++ 15:36:39-05
++(3 rows)
+ 
+ SELECT f1 AS "Three" FROM TIMETZ_TBL WHERE f1 < '05:06:07-07';
+-    Three    
+--------------
+- 00:01:00-07
+- 01:00:00-07
+- 02:03:00-07
+-(3 rows)
++ Three 
++-------
++(0 rows)
+ 
+ SELECT f1 AS "Seven" FROM TIMETZ_TBL WHERE f1 > '05:06:07-07';
+-     Seven      
+-----------------
+- 07:07:00-08
+- 08:08:00-04
+- 11:59:00-07
+- 12:00:00-07
+- 12:01:00-07
+- 23:59:00-07
+- 23:59:59.99-07
++    Seven    
++-------------
+  15:36:39-05
+  15:36:39-04
+-(9 rows)
++ 15:36:39-05
++(3 rows)
+ 
+ SELECT f1 AS "None" FROM TIMETZ_TBL WHERE f1 < '00:00-07';
+  None 
+@@ -74,94 +59,41 @@
+ (0 rows)
+ 
+ SELECT f1 AS "Ten" FROM TIMETZ_TBL WHERE f1 >= '00:00-07';
+-      Ten       
+-----------------
+- 00:01:00-07
+- 01:00:00-07
+- 02:03:00-07
+- 07:07:00-08
+- 08:08:00-04
+- 11:59:00-07
+- 12:00:00-07
+- 12:01:00-07
+- 23:59:00-07
+- 23:59:59.99-07
++     Ten     
++-------------
+  15:36:39-05
+  15:36:39-04
+-(12 rows)
++ 15:36:39-05
++(3 rows)
+ 
+ -- Check edge cases
+ SELECT '23:59:59.999999 PDT'::timetz;
+-       timetz       
+---------------------
+- 23:59:59.999999-07
+-(1 row)
+-
++ERROR:  could not parse "1970-01-01 23:59:59.999999 PDT" as TimeTZ
+ SELECT '23:59:59.9999999 PDT'::timetz;  -- rounds up
+-   timetz    
+--------------
+- 24:00:00-07
+-(1 row)
+-
++ERROR:  could not parse "1970-01-01 23:59:59.9999999 PDT" as TimeTZ
+ SELECT '23:59:60 PDT'::timetz;  -- rounds up
+-   timetz    
+--------------
+- 24:00:00-07
+-(1 row)
+-
++ERROR:  could not parse "1970-01-01 23:59:60 PDT" as TimeTZ
+ SELECT '24:00:00 PDT'::timetz;  -- allowed
+-   timetz    
+--------------
+- 24:00:00-07
+-(1 row)
+-
++ERROR:  could not parse "1970-01-01 24:00:00 PDT" as TimeTZ
+ SELECT '24:00:00.01 PDT'::timetz;  -- not allowed
+-ERROR:  date/time field value out of range: "24:00:00.01 PDT"
+-LINE 1: SELECT '24:00:00.01 PDT'::timetz;
+-               ^
++ERROR:  could not parse "1970-01-01 24:00:00.01 PDT" as TimeTZ
+ SELECT '23:59:60.01 PDT'::timetz;  -- not allowed
+-ERROR:  date/time field value out of range: "23:59:60.01 PDT"
+-LINE 1: SELECT '23:59:60.01 PDT'::timetz;
+-               ^
++ERROR:  could not parse "1970-01-01 23:59:60.01 PDT" as TimeTZ
+ SELECT '24:01:00 PDT'::timetz;  -- not allowed
+-ERROR:  date/time field value out of range: "24:01:00 PDT"
+-LINE 1: SELECT '24:01:00 PDT'::timetz;
+-               ^
++ERROR:  could not parse "1970-01-01 24:01:00 PDT" as TimeTZ
+ SELECT '25:00:00 PDT'::timetz;  -- not allowed
+-ERROR:  date/time field value out of range: "25:00:00 PDT"
+-LINE 1: SELECT '25:00:00 PDT'::timetz;
+-               ^
++ERROR:  could not parse "1970-01-01 25:00:00 PDT" as TimeTZ
+ -- Test non-error-throwing API
+ SELECT pg_input_is_valid('12:00:00 PDT', 'timetz');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('25:00:00 PDT', 'timetz');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('15:36:39 America/New_York', 'timetz');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('25:00:00 PDT', 'timetz');
+-                      message                       | detail | hint | sql_error_code 
+-----------------------------------------------------+--------+------+----------------
+- date/time field value out of range: "25:00:00 PDT" |        |      | 22008
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('15:36:39 America/New_York', 'timetz');
+-                                    message                                     | detail | hint | sql_error_code 
+---------------------------------------------------------------------------------+--------+------+----------------
+- invalid input syntax for type time with time zone: "15:36:39 America/New_York" |        |      | 22007
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- TIME simple math
+ --
+@@ -171,17 +103,14 @@
+ -- and do the rest of the testing in horology.sql
+ -- where we do mixed-type arithmetic. - thomas 2000-12-02
+ SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TIMETZ_TBL;
+-ERROR:  operator does not exist: time with time zone + time with time zone
+-LINE 1: SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TI...
+-                  ^
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unsupported binary operator: <timetz(2)> + <timetz>
+ --
+ -- test EXTRACT
+ --
+ SELECT EXTRACT(MICROSECOND FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+- extract  
+-----------
+- 25575401
++    extract    
++---------------
++ 2.5575401e+07
+ (1 row)
+ 
+ SELECT EXTRACT(MILLISECOND FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+@@ -209,9 +138,9 @@
+ (1 row)
+ 
+ SELECT EXTRACT(DAY         FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+-ERROR:  unit "day" not supported for type time with time zone
++ERROR:  extract(): unsupported timespan: day
+ SELECT EXTRACT(FORTNIGHT   FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');  -- error
+-ERROR:  unit "fortnight" not recognized for type time with time zone
++ERROR:  extract(): unsupported timespan: fortnight
+ SELECT EXTRACT(TIMEZONE    FROM TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04:30');
+  extract 
+ ---------
+@@ -239,9 +168,9 @@
+ -- date_part implementation is mostly the same as extract, so only
+ -- test a few cases for additional coverage.
+ SELECT date_part('microsecond', TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');
+- date_part 
+------------
+-  25575401
++   date_part   
++---------------
++ 2.5575401e+07
+ (1 row)
+ 
+ SELECT date_part('millisecond', TIME WITH TIME ZONE '2020-05-26 13:30:25.575401-04');

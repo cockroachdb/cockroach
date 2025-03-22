@@ -1,0 +1,1680 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --label=/mnt/data1/postgres/src/test/regress/results/strings.out /mnt/data1/postgres/src/test/regress/expected/strings.out /mnt/data1/postgres/src/test/regress/results/strings.out
+--- /mnt/data1/postgres/src/test/regress/expected/strings.out
++++ /mnt/data1/postgres/src/test/regress/results/strings.out
+@@ -18,83 +18,62 @@
+ ' - next line' /* this comment is not allowed here */
+ ' - third line'
+ 	AS "Illegal comment within continuation";
+-ERROR:  syntax error at or near "' - third line'"
+-LINE 3: ' - third line'
+-        ^
++ERROR:  at or near " - third line": syntax error
++DETAIL:  source SQL:
++SELECT 'first line'
++' - next line' /* this comment is not allowed here */
++' - third line'
++^
+ -- Unicode escapes
+ SET standard_conforming_strings TO on;
+ SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+- data 
+-------
+- data
+-(1 row)
+-
++ERROR:  at or near "&": syntax error
++DETAIL:  source SQL:
++SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061"
++                               ^
+ SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+- dat\+000061 
+--------------
+- dat\+000061
+-(1 row)
+-
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*'
++                                   ^
+ SELECT U&'a\\b' AS "a\b";
+- a\b 
+------
+- a\b
+-(1 row)
+-
++ERROR:  column "u" does not exist
+ SELECT U&' \' UESCAPE '!' AS "tricky";
+- tricky 
+---------
+-  \
+-(1 row)
+-
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT U&' \' UESCAPE '!' AS "tricky"
++                      ^
+ SELECT 'tricky' AS U&"\" UESCAPE '!';
+-   \    
+---------
+- tricky
+-(1 row)
+-
++ERROR:  at or near "&": syntax error
++DETAIL:  source SQL:
++SELECT 'tricky' AS U&"\" UESCAPE '!'
++                    ^
+ SELECT U&'wrong: \061';
+-ERROR:  invalid Unicode escape
+-LINE 1: SELECT U&'wrong: \061';
+-                         ^
+-HINT:  Unicode escapes must be \XXXX or \+XXXXXX.
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \+0061';
+-ERROR:  invalid Unicode escape
+-LINE 1: SELECT U&'wrong: \+0061';
+-                         ^
+-HINT:  Unicode escapes must be \XXXX or \+XXXXXX.
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: +0061' UESCAPE +;
+-ERROR:  UESCAPE must be followed by a simple string literal at or near "+"
+-LINE 1: SELECT U&'wrong: +0061' UESCAPE +;
+-                                        ^
++ERROR:  at or near "+": syntax error
++DETAIL:  source SQL:
++SELECT U&'wrong: +0061' UESCAPE +
++                                ^
+ SELECT U&'wrong: +0061' UESCAPE '+';
+-ERROR:  invalid Unicode escape character at or near "'+'"
+-LINE 1: SELECT U&'wrong: +0061' UESCAPE '+';
+-                                        ^
++ERROR:  at or near "+": syntax error
++DETAIL:  source SQL:
++SELECT U&'wrong: +0061' UESCAPE '+'
++                                ^
+ SELECT U&'wrong: \db99';
+-ERROR:  invalid Unicode surrogate pair
+-LINE 1: SELECT U&'wrong: \db99';
+-                              ^
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \db99xy';
+-ERROR:  invalid Unicode surrogate pair
+-LINE 1: SELECT U&'wrong: \db99xy';
+-                              ^
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \db99\\';
+-ERROR:  invalid Unicode surrogate pair
+-LINE 1: SELECT U&'wrong: \db99\\';
+-                              ^
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \db99\0061';
+-ERROR:  invalid Unicode surrogate pair
+-LINE 1: SELECT U&'wrong: \db99\0061';
+-                              ^
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \+00db99\+000061';
+-ERROR:  invalid Unicode surrogate pair
+-LINE 1: SELECT U&'wrong: \+00db99\+000061';
+-                                 ^
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \+2FFFFF';
+-ERROR:  invalid Unicode escape value
+-LINE 1: SELECT U&'wrong: \+2FFFFF';
+-                         ^
++ERROR:  column "u" does not exist
+ -- while we're here, check the same cases in E-style literals
+ SELECT E'd\u0061t\U00000061' AS "data";
+  data 
+@@ -109,76 +88,78 @@
+ (1 row)
+ 
+ SELECT E'wrong: \u061';
+-ERROR:  invalid Unicode escape
+-LINE 1: SELECT E'wrong: \u061';
+-                        ^
+-HINT:  Unicode escapes must be \uXXXX or \UXXXXXXXX.
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \u061';
++       ^
+ SELECT E'wrong: \U0061';
+-ERROR:  invalid Unicode escape
+-LINE 1: SELECT E'wrong: \U0061';
+-                        ^
+-HINT:  Unicode escapes must be \uXXXX or \UXXXXXXXX.
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \U0061';
++       ^
+ SELECT E'wrong: \udb99';
+-ERROR:  invalid Unicode surrogate pair at or near "'"
+-LINE 1: SELECT E'wrong: \udb99';
+-                              ^
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \udb99';
++       ^
+ SELECT E'wrong: \udb99xy';
+-ERROR:  invalid Unicode surrogate pair at or near "x"
+-LINE 1: SELECT E'wrong: \udb99xy';
+-                              ^
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \udb99xy';
++       ^
+ SELECT E'wrong: \udb99\\';
+-ERROR:  invalid Unicode surrogate pair at or near "\"
+-LINE 1: SELECT E'wrong: \udb99\\';
+-                              ^
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \udb99\\';
++       ^
+ SELECT E'wrong: \udb99\u0061';
+-ERROR:  invalid Unicode surrogate pair at or near "\u0061"
+-LINE 1: SELECT E'wrong: \udb99\u0061';
+-                              ^
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \udb99\u0061';
++       ^
++SELECT E'wrong: \U0000db99\U00000061';
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
+ SELECT E'wrong: \U0000db99\U00000061';
+-ERROR:  invalid Unicode surrogate pair at or near "\U00000061"
+-LINE 1: SELECT E'wrong: \U0000db99\U00000061';
+-                                  ^
++       ^
+ SELECT E'wrong: \U002FFFFF';
+-ERROR:  invalid Unicode escape value at or near "\U002FFFFF"
+-LINE 1: SELECT E'wrong: \U002FFFFF';
+-                        ^
++ERROR:  lexical error: invalid syntax
++DETAIL:  source SQL:
++SELECT E'wrong: \U002FFFFF';
++       ^
+ SET standard_conforming_strings TO off;
++ERROR:  invalid value for parameter "standard_conforming_strings": "off"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: on
+ SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  at or near "&": syntax error
++DETAIL:  source SQL:
++SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061"
++                               ^
+ SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061...
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*'
++                                   ^
+ SELECT U&' \' UESCAPE '!' AS "tricky";
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&' \' UESCAPE '!' AS "tricky";
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  at or near "!": syntax error
++DETAIL:  source SQL:
++SELECT U&' \' UESCAPE '!' AS "tricky"
++                      ^
+ SELECT 'tricky' AS U&"\" UESCAPE '!';
+-   \    
+---------
+- tricky
+-(1 row)
+-
++ERROR:  at or near "&": syntax error
++DETAIL:  source SQL:
++SELECT 'tricky' AS U&"\" UESCAPE '!'
++                    ^
+ SELECT U&'wrong: \061';
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&'wrong: \061';
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: \+0061';
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&'wrong: \+0061';
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  column "u" does not exist
+ SELECT U&'wrong: +0061' UESCAPE '+';
+-ERROR:  unsafe use of string constant with Unicode escapes
+-LINE 1: SELECT U&'wrong: +0061' UESCAPE '+';
+-               ^
+-DETAIL:  String constants with Unicode escapes cannot be used when standard_conforming_strings is off.
++ERROR:  at or near "+": syntax error
++DETAIL:  source SQL:
++SELECT U&'wrong: +0061' UESCAPE '+'
++                                ^
+ RESET standard_conforming_strings;
+ -- bytea
+ SET bytea_output TO hex;
+@@ -189,19 +170,11 @@
+ (1 row)
+ 
+ SELECT E'\\x De Ad Be Ef '::bytea;
+-   bytea    
+-------------
+- \xdeadbeef
+-(1 row)
+-
++ERROR:  could not parse "\\x De Ad Be Ef " as type bytes: encoding/hex: invalid byte: U+0020 ' '
+ SELECT E'\\xDeAdBeE'::bytea;
+-ERROR:  invalid hexadecimal data: odd number of digits
+-LINE 1: SELECT E'\\xDeAdBeE'::bytea;
+-               ^
++ERROR:  could not parse "\\xDeAdBeE" as type bytes: encoding/hex: odd length hex string
+ SELECT E'\\xDeAdBeEx'::bytea;
+-ERROR:  invalid hexadecimal digit: "x"
+-LINE 1: SELECT E'\\xDeAdBeEx'::bytea;
+-               ^
++ERROR:  could not parse "\\xDeAdBeEx" as type bytes: encoding/hex: invalid byte: U+0078 'x'
+ SELECT E'\\xDe00BeEf'::bytea;
+    bytea    
+ ------------
+@@ -233,9 +206,7 @@
+ (1 row)
+ 
+ SELECT E'De\\678dBeEf'::bytea;
+-ERROR:  invalid input syntax for type bytea
+-LINE 1: SELECT E'De\\678dBeEf'::bytea;
+-               ^
++ERROR:  could not parse "De\\678dBeEf" as type bytes: invalid bytea escape sequence
+ SET bytea_output TO escape;
+ SELECT E'\\xDeAdBeEf'::bytea;
+       bytea       
+@@ -244,11 +215,7 @@
+ (1 row)
+ 
+ SELECT E'\\x De Ad Be Ef '::bytea;
+-      bytea       
+-------------------
+- \336\255\276\357
+-(1 row)
+-
++ERROR:  could not parse "\\x De Ad Be Ef " as type bytes: encoding/hex: invalid byte: U+0020 ' '
+ SELECT E'\\xDe00BeEf'::bytea;
+       bytea       
+ ------------------
+@@ -275,29 +242,13 @@
+ 
+ -- Test non-error-throwing API too
+ SELECT pg_input_is_valid(E'\\xDeAdBeE', 'bytea');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info(E'\\xDeAdBeE', 'bytea');
+-                    message                     | detail | hint | sql_error_code 
+-------------------------------------------------+--------+------+----------------
+- invalid hexadecimal data: odd number of digits |        |      | 22023
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info(E'\\xDeAdBeEx', 'bytea');
+-            message             | detail | hint | sql_error_code 
+---------------------------------+--------+------+----------------
+- invalid hexadecimal digit: "x" |        |      | 22023
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info(E'foo\\99bar', 'bytea');
+-               message               | detail | hint | sql_error_code 
+--------------------------------------+--------+------+----------------
+- invalid input syntax for type bytea |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- test conversions between various string types
+ -- E021-10 implicit casting among the character data types
+@@ -435,96 +386,99 @@
+ (1 row)
+ 
+ SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
+-ERROR:  negative substring length not allowed
++ERROR:  substring(): negative substring length -2147483646 not allowed
+ -- T581 regular expression substring (with SQL's bizarre regexp syntax)
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a#"(b_d)#"%' ESCAPE '#') AS "bcd";
+- bcd 
+------
+- bcd
+-(1 row)
+-
++ERROR:  at or near "a#"(b_d)#"%": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a#"(b_d)#"%' ESCAPE '#') AS "bcd"
++                                   ^
++HINT:  try \hf substring
+ -- obsolete SQL99 syntax
+ SELECT SUBSTRING('abcdefg' FROM 'a#"(b_d)#"%' FOR '#') AS "bcd";
+  bcd 
+ -----
+- bcd
++ 
+ (1 row)
+ 
+ -- No match should return NULL
+ SELECT SUBSTRING('abcdefg' SIMILAR '#"(b_d)#"%' ESCAPE '#') IS NULL AS "True";
+- True 
+-------
+- t
+-(1 row)
+-
++ERROR:  at or near "#"(b_d)#"%": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR '#"(b_d)#"%' ESCAPE '#') IS NULL AS "True"
++                                   ^
++HINT:  try \hf substring
+ -- Null inputs should return NULL
+ SELECT SUBSTRING('abcdefg' SIMILAR '%' ESCAPE NULL) IS NULL AS "True";
+- True 
+-------
+- t
+-(1 row)
+-
++ERROR:  at or near "%": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR '%' ESCAPE NULL) IS NULL AS "True"
++                                   ^
++HINT:  try \hf substring
+ SELECT SUBSTRING(NULL SIMILAR '%' ESCAPE '#') IS NULL AS "True";
+- True 
+-------
+- t
+-(1 row)
+-
++ERROR:  at or near "%": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING(NULL SIMILAR '%' ESCAPE '#') IS NULL AS "True"
++                              ^
++HINT:  try \hf substring
+ SELECT SUBSTRING('abcdefg' SIMILAR NULL ESCAPE '#') IS NULL AS "True";
+- True 
+-------
+- t
+-(1 row)
+-
++ERROR:  at or near "null": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR NULL ESCAPE '#') IS NULL AS "True"
++                                   ^
++HINT:  try \hf substring
+ -- The first and last parts should act non-greedy
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"g' ESCAPE '#') AS "bcdef";
+- bcdef 
+--------
+- bcdef
+-(1 row)
+-
++ERROR:  at or near "a#"%#"g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"g' ESCAPE '#') AS "bcdef"
++                                   ^
++HINT:  try \hf substring
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*' ESCAPE '#') AS "abcdefg";
+- abcdefg 
+----------
+- abcdefg
+-(1 row)
+-
++ERROR:  at or near "a*#"%#"g*": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*' ESCAPE '#') AS "abcdefg"
++                                   ^
++HINT:  try \hf substring
+ -- Vertical bar in any part affects only that part
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a|b#"%#"g' ESCAPE '#') AS "bcdef";
+- bcdef 
+--------
+- bcdef
+-(1 row)
+-
++ERROR:  at or near "a|b#"%#"g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a|b#"%#"g' ESCAPE '#') AS "bcdef"
++                                   ^
++HINT:  try \hf substring
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"x|g' ESCAPE '#') AS "bcdef";
+- bcdef 
+--------
+- bcdef
+-(1 row)
+-
++ERROR:  at or near "a#"%#"x|g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"x|g' ESCAPE '#') AS "bcdef"
++                                   ^
++HINT:  try \hf substring
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%|ab#"g' ESCAPE '#') AS "bcdef";
+- bcdef 
+--------
+- bcdef
+-(1 row)
+-
++ERROR:  at or near "a#"%|ab#"g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%|ab#"g' ESCAPE '#') AS "bcdef"
++                                   ^
++HINT:  try \hf substring
+ -- Can't have more than two part separators
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*#"x' ESCAPE '#') AS "error";
+-ERROR:  SQL regular expression may not contain more than two escape-double-quote separators
+-CONTEXT:  SQL function "substring" statement 1
++ERROR:  at or near "a*#"%#"g*#"x": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*#"x' ESCAPE '#') AS "error"
++                                   ^
++HINT:  try \hf substring
+ -- Postgres extension: with 0 or 1 separator, assume parts 1 and 3 are empty
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%g' ESCAPE '#') AS "bcdefg";
+- bcdefg 
+---------
+- bcdefg
+-(1 row)
+-
++ERROR:  at or near "a#"%g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%g' ESCAPE '#') AS "bcdefg"
++                                   ^
++HINT:  try \hf substring
+ SELECT SUBSTRING('abcdefg' SIMILAR 'a%g' ESCAPE '#') AS "abcdefg";
+- abcdefg 
+----------
+- abcdefg
+-(1 row)
+-
++ERROR:  at or near "a%g": syntax error
++DETAIL:  source SQL:
++SELECT SUBSTRING('abcdefg' SIMILAR 'a%g' ESCAPE '#') AS "abcdefg"
++                                   ^
++HINT:  try \hf substring
+ -- substring() with just two arguments is not allowed by SQL spec;
+ -- we accept it, but we interpret the pattern as a POSIX regexp not SQL
+ SELECT SUBSTRING('abcdefg' FROM 'c.e') AS "cde";
+@@ -544,7 +498,7 @@
+ SELECT SUBSTRING('foo' FROM 'foo(bar)?') IS NULL AS t;
+  t 
+ ---
+- t
++ f
+ (1 row)
+ 
+ -- Check behavior of SIMILAR TO, which uses largely the same regexp variant
+@@ -594,8 +548,7 @@
+ (1 row)
+ 
+ SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '##' AS error;
+-ERROR:  invalid escape string
+-HINT:  Escape string must be empty or one character.
++ERROR:  similar_to_escape(): invalid escape string
+ -- Test backslash escapes in regexp_replace's replacement string
+ SELECT regexp_replace('1112223333', E'(\\d{3})(\\d{3})(\\d{4})', E'(\\1) \\2-\\3');
+  regexp_replace 
+@@ -604,24 +557,12 @@
+ (1 row)
+ 
+ SELECT regexp_replace('foobarrbazz', E'(.)\\1', E'X\\&Y', 'g');
+-  regexp_replace   
+--------------------
+- fXooYbaXrrYbaXzzY
+-(1 row)
+-
++ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
+ SELECT regexp_replace('foobarrbazz', E'(.)\\1', E'X\\\\Y', 'g');
+- regexp_replace 
+-----------------
+- fX\YbaX\YbaX\Y
+-(1 row)
+-
++ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
+ -- not an error, though perhaps it should be:
+ SELECT regexp_replace('foobarrbazz', E'(.)\\1', E'X\\Y\\1Z\\');
+- regexp_replace  
+------------------
+- fX\YoZ\barrbazz
+-(1 row)
+-
++ERROR:  regexp_replace(): error parsing regexp: invalid escape sequence: `\1`
+ SELECT regexp_replace('AAA   BBB   CCC   ', E'\\s+', ' ', 'g');
+  regexp_replace 
+ ----------------
+@@ -642,487 +583,210 @@
+ 
+ -- invalid regexp option
+ SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'z');
+-ERROR:  invalid regular expression option: "z"
++ERROR:  regexp_replace(): invalid regexp flag: 'z'
+ -- extended regexp_replace tests
+ SELECT regexp_replace('A PostgreSQL function', 'A|e|i|o|u', 'X', 1);
+-    regexp_replace     
+------------------------
+- X PostgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'A|e|i|o|u', 'X', 1, 2);
+-    regexp_replace     
+------------------------
+- A PXstgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 0, 'i');
+-    regexp_replace     
+------------------------
+- X PXstgrXSQL fXnctXXn
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 1, 'i');
+-    regexp_replace     
+------------------------
+- X PostgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 2, 'i');
+-    regexp_replace     
+------------------------
+- A PXstgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 3, 'i');
+-    regexp_replace     
+------------------------
+- A PostgrXSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 9, 'i');
+-    regexp_replace     
+------------------------
+- A PostgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'A|e|i|o|u', 'X', 7, 0, 'i');
+-    regexp_replace     
+------------------------
+- A PostgrXSQL fXnctXXn
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- 'g' flag should be ignored when N is specified
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, 1, 'g');
+-    regexp_replace     
+------------------------
+- A PXstgreSQL function
+-(1 row)
+-
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- errors
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', -1, 0, 'i');
+-ERROR:  invalid value for parameter "start": -1
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', 1, -1, 'i');
+-ERROR:  invalid value for parameter "n": -1
++ERROR:  unknown signature: regexp_replace(string, string, string, int, int, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- erroneous invocation of non-extended form
+ SELECT regexp_replace('A PostgreSQL function', 'a|e|i|o|u', 'X', '1');
+-ERROR:  invalid regular expression option: "1"
+-HINT:  If you meant to use regexp_replace() with a start parameter, cast the fourth argument to integer explicitly.
++ERROR:  regexp_replace(): invalid regexp flag: '1'
+ --  regexp_count tests
+ SELECT regexp_count('123123123123123', '(12)3');
+- regexp_count 
+---------------
+-            5
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('123123123123', '123', 1);
+- regexp_count 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('123123123123', '123', 3);
+- regexp_count 
+---------------
+-            3
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('123123123123', '123', 33);
+- regexp_count 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('ABCABCABCABC', 'Abc', 1, '');
+- regexp_count 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('ABCABCABCABC', 'Abc', 1, 'i');
+- regexp_count 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_count()
+ -- errors
+ SELECT regexp_count('123123123123', '123', 0);
+-ERROR:  invalid value for parameter "start": 0
++ERROR:  unknown function: regexp_count()
+ SELECT regexp_count('123123123123', '123', -3);
+-ERROR:  invalid value for parameter "start": -3
++ERROR:  unknown function: regexp_count()
+ -- regexp_like tests
+ SELECT regexp_like('Steven', '^Ste(v|ph)en$');
+- regexp_like 
+--------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_like()
+ SELECT regexp_like('a'||CHR(10)||'d', 'a.d', 'n');
+- regexp_like 
+--------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: regexp_like()
+ SELECT regexp_like('a'||CHR(10)||'d', 'a.d', 's');
+- regexp_like 
+--------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_like()
+ SELECT regexp_like('abc', ' a . c ', 'x');
+- regexp_like 
+--------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_like()
+ SELECT regexp_like('abc', 'a.c', 'g');  -- error
+-ERROR:  regexp_like() does not support the "global" option
++ERROR:  unknown function: regexp_like()
+ -- regexp_instr tests
+ SELECT regexp_instr('abcdefghi', 'd.f');
+- regexp_instr 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcdefghi', 'd.q');
+- regexp_instr 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c');
+- regexp_instr 
+---------------
+-            1
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 2);
+- regexp_instr 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 3);
+- regexp_instr 
+---------------
+-            7
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 4);
+- regexp_instr 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'A.C', 1, 2, 0, 'i');
+- regexp_instr 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 0);
+- regexp_instr 
+---------------
+-            1
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 1);
+- regexp_instr 
+---------------
+-            1
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 2);
+- regexp_instr 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 3);
+- regexp_instr 
+---------------
+-            5
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 4);
+- regexp_instr 
+---------------
+-            7
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 0, 'i', 5);
+- regexp_instr 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 0);
+- regexp_instr 
+---------------
+-            9
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 1);
+- regexp_instr 
+---------------
+-            4
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 2);
+- regexp_instr 
+---------------
+-            9
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 3);
+- regexp_instr 
+---------------
+-            7
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 4);
+- regexp_instr 
+---------------
+-            9
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('1234567890', '(123)(4(56)(78))', 1, 1, 1, 'i', 5);
+- regexp_instr 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ -- Check case where we have a match, but not a subexpression match
+ SELECT regexp_instr('foo', 'foo(bar)?', 1, 1, 0, '', 1);
+- regexp_instr 
+---------------
+-            0
+-(1 row)
+-
++ERROR:  unknown function: regexp_instr()
+ -- errors
+ SELECT regexp_instr('abcabcabc', 'a.c', 0, 1);
+-ERROR:  invalid value for parameter "start": 0
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 0);
+-ERROR:  invalid value for parameter "n": 0
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 1, -1);
+-ERROR:  invalid value for parameter "endoption": -1
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 1, 2);
+-ERROR:  invalid value for parameter "endoption": 2
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 1, 0, 'g');
+-ERROR:  regexp_instr() does not support the "global" option
++ERROR:  unknown function: regexp_instr()
+ SELECT regexp_instr('abcabcabc', 'a.c', 1, 1, 0, '', -1);
+-ERROR:  invalid value for parameter "subexpr": -1
++ERROR:  unknown function: regexp_instr()
+ -- regexp_substr tests
+ SELECT regexp_substr('abcdefghi', 'd.f');
+- regexp_substr 
+----------------
+- def
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcdefghi', 'd.q') IS NULL AS t;
+- t 
+----
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c');
+- regexp_substr 
+----------------
+- abc
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 2);
+- regexp_substr 
+----------------
+- abc
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 1, 3);
+- regexp_substr 
+----------------
+- abc
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 1, 4) IS NULL AS t;
+- t 
+----
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'A.C', 1, 2, 'i');
+- regexp_substr 
+----------------
+- abc
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 0);
+- regexp_substr 
+----------------
+- 12345678
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 1);
+- regexp_substr 
+----------------
+- 123
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 2);
+- regexp_substr 
+----------------
+- 45678
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 3);
+- regexp_substr 
+----------------
+- 56
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 4);
+- regexp_substr 
+----------------
+- 78
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('1234567890', '(123)(4(56)(78))', 1, 1, 'i', 5) IS NULL AS t;
+- t 
+----
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ -- Check case where we have a match, but not a subexpression match
+ SELECT regexp_substr('foo', 'foo(bar)?', 1, 1, '', 1) IS NULL AS t;
+- t 
+----
+- t
+-(1 row)
+-
++ERROR:  unknown function: regexp_substr()
+ -- errors
+ SELECT regexp_substr('abcabcabc', 'a.c', 0, 1);
+-ERROR:  invalid value for parameter "start": 0
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 1, 0);
+-ERROR:  invalid value for parameter "n": 0
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 1, 1, 'g');
+-ERROR:  regexp_substr() does not support the "global" option
++ERROR:  unknown function: regexp_substr()
+ SELECT regexp_substr('abcabcabc', 'a.c', 1, 1, '', -1);
+-ERROR:  invalid value for parameter "subexpr": -1
++ERROR:  unknown function: regexp_substr()
+ -- set so we can tell NULL from empty string
+ \pset null '\\N'
+ -- return all matches from regexp
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$);
+- regexp_matches 
+-----------------
+- {bar,beque}
+-(1 row)
+-
++ERROR:  unknown function: regexp_matches()
+ -- test case insensitive
+ SELECT regexp_matches('foObARbEqUEbAz', $re$(bar)(beque)$re$, 'i');
+- regexp_matches 
+-----------------
+- {bAR,bEqUE}
+-(1 row)
+-
++ERROR:  unknown function: regexp_matches()
+ -- global option - more than one match
+ SELECT regexp_matches('foobarbequebazilbarfbonk', $re$(b[^b]+)(b[^b]+)$re$, 'g');
+- regexp_matches 
+-----------------
+- {bar,beque}
+- {bazil,barf}
+-(2 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ -- empty capture group (matched empty string)
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(.*)(beque)$re$);
+- regexp_matches 
+-----------------
+- {bar,"",beque}
+-(1 row)
+-
++ERROR:  unknown function: regexp_matches()
+ -- no match
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)(beque)$re$);
+- regexp_matches 
+-----------------
+-(0 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ -- optional capture group did not match, null entry in array
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)?(beque)$re$);
+-  regexp_matches  
+-------------------
+- {bar,NULL,beque}
+-(1 row)
+-
++ERROR:  unknown function: regexp_matches()
+ -- no capture groups
+ SELECT regexp_matches('foobarbequebaz', $re$barbeque$re$);
+- regexp_matches 
+-----------------
+- {barbeque}
+-(1 row)
+-
++ERROR:  unknown function: regexp_matches()
+ -- start/end-of-line matches are of zero length
+ SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '^', 'mg');
+- regexp_matches 
+-----------------
+- {""}
+- {""}
+- {""}
+- {""}
+-(4 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '$', 'mg');
+- regexp_matches 
+-----------------
+- {""}
+- {""}
+- {""}
+- {""}
+-(4 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches('1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '^.?', 'mg');
+- regexp_matches 
+-----------------
+- {1}
+- {2}
+- {3}
+- {4}
+- {""}
+-(5 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '.?$', 'mg');
+- regexp_matches 
+-----------------
+- {""}
+- {1}
+- {""}
+- {2}
+- {""}
+- {3}
+- {""}
+- {4}
+- {""}
+- {""}
+-(10 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4', '.?$', 'mg');
+- regexp_matches 
+-----------------
+- {""}
+- {1}
+- {""}
+- {2}
+- {""}
+- {3}
+- {""}
+- {4}
+- {""}
+-(9 rows)
+-
++ERROR:  unknown function: regexp_matches()
+ -- give me errors
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$, 'gz');
+-ERROR:  invalid regular expression option: "z"
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches('foobarbequebaz', $re$(barbeque$re$);
+-ERROR:  invalid regular expression: parentheses () not balanced
++ERROR:  unknown function: regexp_matches()
+ SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque){2,1}$re$);
+-ERROR:  invalid regular expression: invalid repetition count(s)
++ERROR:  unknown function: regexp_matches()
+ -- split string on regexp
+ SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s+$re$) AS foo;
+   foo  | length 
+@@ -1312,14 +976,23 @@
+ 
+ -- errors
+ SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'zippy') AS foo;
+-ERROR:  invalid regular expression option: "z"
++ERROR:  invalid regexp flag: 'z'
+ SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+-ERROR:  invalid regular expression option: "z"
++ERROR:  regexp_split_to_array(): invalid regexp flag: 'z'
+ -- global option meaningless for regexp_split
+ SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
+-ERROR:  regexp_split_to_table() does not support the "global" option
++                foo                | length 
++-----------------------------------+--------
++ thE QUick bROWn FOx jUMPs ovEr Th |     33
++  lazy dOG                         |      9
++(2 rows)
++
+ SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+-ERROR:  regexp_split_to_array() does not support the "global" option
++               regexp_split_to_array               
++---------------------------------------------------
++ {"thE QUick bROWn FOx jUMPs ovEr Th"," lazy dOG"}
++(1 row)
++
+ -- change NULL-display back
+ \pset null ''
+ -- E021-11 position expression
+@@ -1463,17 +1136,9 @@
+ (1 row)
+ 
+ SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <bytes> LIKE <bytes>
+ SELECT 'abc'::bytea NOT LIKE '_b_'::bytea AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <bytes> NOT LIKE <bytes>
+ -- unused escape character
+ SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
+  true 
+@@ -1598,17 +1263,11 @@
+ (1 row)
+ 
+ SELECT 'a_c'::bytea LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "true";
+- true 
+-------
+- t
+-(1 row)
+-
++ERROR:  unknown signature: like_escape(bytes, bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT 'a_c'::bytea NOT LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "false";
+- false 
+--------
+- f
+-(1 row)
+-
++ERROR:  unknown signature: not_like_escape(bytes, bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- escape character same as pattern character
+ SELECT 'maca' LIKE 'm%aca' ESCAPE '%' AS "true";
+  true 
+@@ -1778,10 +1437,7 @@
+ 
+ CREATE TABLE byteatest (a bytea PRIMARY KEY, b int);
+ SELECT * FROM byteatest WHERE a LIKE '%1%';
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  unsupported comparison operator: <bytes> LIKE <string>
+ DROP TABLE texttest, byteatest;
+ --
+ -- test implicit type conversion
+@@ -1828,6 +1484,11 @@
+ -- operation used in that case
+ --
+ alter table toasttest alter column f1 set storage external;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++alter table toasttest alter column f1 set storage external
++                                          ^
++HINT:  try \h ALTER TABLE
+ insert into toasttest values(repeat('1234567890',10000));
+ insert into toasttest values(repeat('1234567890',10000));
+ -- If the starting position is zero or less, then return from the start of the string
+@@ -1843,7 +1504,7 @@
+ 
+ -- If the length is less than zero, an ERROR is thrown.
+ SELECT substr(f1, 5, -1) from toasttest;
+-ERROR:  negative substring length not allowed
++ERROR:  negative substring length -1 not allowed
+ -- If no third argument (length) is provided, the length to the end of the
+ -- string is assumed.
+ SELECT substr(f1, 99995) from toasttest;
+@@ -1874,13 +1535,12 @@
+ -- expect >0 blocks
+ SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+   FROM pg_class where relname = 'toasttest';
+- is_empty 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_relation_size()
+ TRUNCATE TABLE toasttest;
+ ALTER TABLE toasttest set (toast_tuple_target = 4080);
++ERROR:  unimplemented: storage parameter "toast_tuple_target"
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/43299/_version_
+ INSERT INTO toasttest values (repeat('1234567890',300));
+ INSERT INTO toasttest values (repeat('1234567890',300));
+ INSERT INTO toasttest values (repeat('1234567890',300));
+@@ -1888,11 +1548,7 @@
+ -- expect 0 blocks
+ SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+   FROM pg_class where relname = 'toasttest';
+- is_empty 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_relation_size()
+ DROP TABLE toasttest;
+ --
+ -- test substr with toasted bytea values
+@@ -1905,6 +1561,11 @@
+ -- operation used in that case
+ --
+ alter table toasttest alter column f1 set storage external;
++ERROR:  at or near "storage": syntax error
++DETAIL:  source SQL:
++alter table toasttest alter column f1 set storage external
++                                          ^
++HINT:  try \h ALTER TABLE
+ insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+ insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+ -- If the starting position is zero or less, then return from the start of the string
+@@ -1920,7 +1581,7 @@
+ 
+ -- If the length is less than zero, an ERROR is thrown.
+ SELECT substr(f1, 5, -1) from toasttest;
+-ERROR:  negative substring length not allowed
++ERROR:  substr(): negative byte subarray length -1 not allowed
+ -- If no third argument (length) is provided, the length to the end of the
+ -- string is assumed.
+ SELECT substr(f1, 99995) from toasttest;
+@@ -2067,7 +1728,7 @@
+ (1 row)
+ 
+ select split_part('joeuser@mydatabase','@',0) AS "an error";
+-ERROR:  field position must not be zero
++ERROR:  split_part(): field position must not be zero
+ select split_part('joeuser@mydatabase','@@',1) AS "joeuser@mydatabase";
+  joeuser@mydatabase 
+ --------------------
+@@ -2148,51 +1809,51 @@
+ --
+ SET bytea_output TO hex;
+ SELECT sha224('');
+-                           sha224                           
+-------------------------------------------------------------
+- \xd14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f
++                          sha224                          
++----------------------------------------------------------
++ d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f
+ (1 row)
+ 
+ SELECT sha224('The quick brown fox jumps over the lazy dog.');
+-                           sha224                           
+-------------------------------------------------------------
+- \x619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c
++                          sha224                          
++----------------------------------------------------------
++ 619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c
+ (1 row)
+ 
+ SELECT sha256('');
+-                               sha256                               
+---------------------------------------------------------------------
+- \xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
++                              sha256                              
++------------------------------------------------------------------
++ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ (1 row)
+ 
+ SELECT sha256('The quick brown fox jumps over the lazy dog.');
+-                               sha256                               
+---------------------------------------------------------------------
+- \xef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c
++                              sha256                              
++------------------------------------------------------------------
++ ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c
+ (1 row)
+ 
+ SELECT sha384('');
+-                                               sha384                                               
+-----------------------------------------------------------------------------------------------------
+- \x38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b
++                                              sha384                                              
++--------------------------------------------------------------------------------------------------
++ 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b
+ (1 row)
+ 
+ SELECT sha384('The quick brown fox jumps over the lazy dog.');
+-                                               sha384                                               
+-----------------------------------------------------------------------------------------------------
+- \xed892481d8272ca6df370bf706e4d7bc1b5739fa2177aae6c50e946678718fc67a7af2819a021c2fc34e91bdb63409d7
++                                              sha384                                              
++--------------------------------------------------------------------------------------------------
++ ed892481d8272ca6df370bf706e4d7bc1b5739fa2177aae6c50e946678718fc67a7af2819a021c2fc34e91bdb63409d7
+ (1 row)
+ 
+ SELECT sha512('');
+-                                                               sha512                                                               
+-------------------------------------------------------------------------------------------------------------------------------------
+- \xcf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
++                                                              sha512                                                              
++----------------------------------------------------------------------------------------------------------------------------------
++ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+ (1 row)
+ 
+ SELECT sha512('The quick brown fox jumps over the lazy dog.');
+-                                                               sha512                                                               
+-------------------------------------------------------------------------------------------------------------------------------------
+- \x91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d12890cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed
++                                                              sha512                                                              
++----------------------------------------------------------------------------------------------------------------------------------
++ 91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d12890cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed
+ (1 row)
+ 
+ --
+@@ -2211,10 +1872,9 @@
+ (1 row)
+ 
+ SELECT encode(('\x' || repeat('1234567890abcdef0001', 7))::bytea, 'base64');
+-                                    encode                                    
+-------------------------------------------------------------------------------
+- EjRWeJCrze8AARI0VniQq83vAAESNFZ4kKvN7wABEjRWeJCrze8AARI0VniQq83vAAESNFZ4kKvN+
+- 7wABEjRWeJCrze8AAQ==
++                                              encode                                              
++--------------------------------------------------------------------------------------------------
++ EjRWeJCrze8AARI0VniQq83vAAESNFZ4kKvN7wABEjRWeJCrze8AARI0VniQq83vAAESNFZ4kKvN7wABEjRWeJCrze8AAQ==
+ (1 row)
+ 
+ SELECT decode(encode(('\x' || repeat('1234567890abcdef0001', 7))::bytea,
+@@ -2227,7 +1887,7 @@
+ SELECT encode('\x1234567890abcdef00', 'escape');
+            encode            
+ -----------------------------
+- \x124Vx\220\253\315\357\000
++ \0224Vx\220\253\315\357\000
+ (1 row)
+ 
+ SELECT decode(encode('\x1234567890abcdef00', 'escape'), 'escape');
+@@ -2246,7 +1906,7 @@
+ (1 row)
+ 
+ SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
+-ERROR:  index 99 out of valid range, 0..71
++ERROR:  get_bit(): bit index 99 out of valid range (0..71)
+ SELECT set_bit('\x1234567890abcdef00'::bytea, 43, 0);
+        set_bit        
+ ----------------------
+@@ -2254,7 +1914,7 @@
+ (1 row)
+ 
+ SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
+-ERROR:  index 99 out of valid range, 0..71
++ERROR:  set_bit(): bit index 99 out of valid range (0..71)
+ SELECT get_byte('\x1234567890abcdef00'::bytea, 3);
+  get_byte 
+ ----------
+@@ -2262,7 +1922,7 @@
+ (1 row)
+ 
+ SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
+-ERROR:  index 99 out of valid range, 0..8
++ERROR:  get_byte(): byte index 99 out of valid range (0..8)
+ SELECT set_byte('\x1234567890abcdef00'::bytea, 7, 11);
+        set_byte       
+ ----------------------
+@@ -2270,22 +1930,25 @@
+ (1 row)
+ 
+ SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
+-ERROR:  index 99 out of valid range, 0..8
++ERROR:  set_byte(): byte index 99 out of valid range (0..8)
+ --
+ -- test behavior of escape_string_warning and standard_conforming_strings options
+ --
+ set escape_string_warning = off;
+ set standard_conforming_strings = off;
++ERROR:  invalid value for parameter "standard_conforming_strings": "off"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: on
+ show escape_string_warning;
+  escape_string_warning 
+ -----------------------
+- off
++ on
+ (1 row)
+ 
+ show standard_conforming_strings;
+  standard_conforming_strings 
+ -----------------------------
+- off
++ on
+ (1 row)
+ 
+ set escape_string_warning = on;
+@@ -2309,37 +1972,16 @@
+ (1 row)
+ 
+ set standard_conforming_strings = off;
++ERROR:  invalid value for parameter "standard_conforming_strings": "off"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: on
+ select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3,...
+-               ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3,...
+-                               ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3,...
+-                                                 ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: ...bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'  ...
+-                                                             ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: ...'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd'...
+-                                                             ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-WARNING:  nonstandard use of \\ in a string literal
+-LINE 1: ...'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as ...
+-                                                             ^
+-HINT:  Use the escape string syntax for backslashes, e.g., E'\\'.
+-  f1   |   f2   |   f3    |  f4   |   f5   | f6 
+--------+--------+---------+-------+--------+----
+- a\bcd | a\b'cd | a\b''cd | abcd\ | ab\'cd | \\
+-(1 row)
+-
++invalid command \
+ set escape_string_warning = off;
++ERROR:  at or near " as f2, ": syntax error
++DETAIL:  source SQL:
++select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a
++                                ^
+ set standard_conforming_strings = on;
+ select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+   f1   |   f2   |   f3    |  f4   |   f5   | f6 
+@@ -2348,13 +1990,16 @@
+ (1 row)
+ 
+ set standard_conforming_strings = off;
++ERROR:  invalid value for parameter "standard_conforming_strings": "off"
++DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
++HINT:  Available values: on
+ select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+-  f1   |   f2   |   f3    |  f4   |   f5   | f6 
+--------+--------+---------+-------+--------+----
+- a\bcd | a\b'cd | a\b''cd | abcd\ | ab\'cd | \\
+-(1 row)
+-
++invalid command \
+ reset standard_conforming_strings;
++ERROR:  at or near " as f2, ": syntax error
++DETAIL:  source SQL:
++select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a
++                                ^
+ --
+ -- Additional string functions
+ --
+@@ -2456,11 +2101,7 @@
+ (1 row)
+ 
+ SELECT ascii('');
+- ascii 
+--------
+-     0
+-(1 row)
+-
++ERROR:  ascii(): the input string must not be empty
+ SELECT chr(65);
+  chr 
+ -----
+@@ -2468,7 +2109,11 @@
+ (1 row)
+ 
+ SELECT chr(0);
+-ERROR:  null character not permitted
++ chr 
++-----
++ 
++(1 row)
++
+ SELECT repeat('Pg', 4);
+   repeat  
+ ----------
+@@ -2506,61 +2151,34 @@
+ (1 row)
+ 
+ SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
+-ERROR:  negative substring length not allowed
++ERROR:  substring(): negative byte subarray length -2147483646 not allowed
+ SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+- btrim 
+--------
+- Tom
+-(1 row)
+-
++ERROR:  unknown signature: btrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT trim(leading E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+-  ltrim  
+----------
+- Tom\000
+-(1 row)
+-
++ERROR:  unknown signature: ltrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT trim(trailing E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+-  rtrim  
+----------
+- \000Tom
+-(1 row)
+-
++ERROR:  unknown signature: rtrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT btrim(E'\\000trim\\000'::bytea, E'\\000'::bytea);
+- btrim 
+--------
+- trim
+-(1 row)
+-
++ERROR:  unknown signature: btrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT btrim(''::bytea, E'\\000'::bytea);
+- btrim 
+--------
+- 
+-(1 row)
+-
++ERROR:  unknown signature: btrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT btrim(E'\\000trim\\000'::bytea, ''::bytea);
+-    btrim     
+---------------
+- \000trim\000
+-(1 row)
+-
++ERROR:  unknown signature: btrim(bytes, bytes)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT encode(overlay(E'Th\\000omas'::bytea placing E'Th\\001omas'::bytea from 2),'escape');
+-   encode    
+--------------
+- TTh\x01omas
+-(1 row)
+-
++ERROR:  encode(): unknown signature: overlay(bytes, bytes, int) (returning <bytes>)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 8),'escape');
+-       encode       
+---------------------
+- Th\000omas\x02\x03
+-(1 row)
+-
++ERROR:  encode(): unknown signature: overlay(bytes, bytes, int) (returning <bytes>)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 5 for 3),'escape');
+-     encode      
+------------------
+- Th\000o\x02\x03
+-(1 row)
+-
++ERROR:  encode(): unknown signature: overlay(bytes, bytes, int, int) (returning <bytes>)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT bit_count('\x1234567890'::bytea);
+  bit_count 
+ -----------
+@@ -2568,38 +2186,25 @@
+ (1 row)
+ 
+ SELECT unistr('\0064at\+0000610');
+- unistr 
+---------
+- data0
+-(1 row)
+-
++ERROR:  unknown function: unistr()
+ SELECT unistr('d\u0061t\U000000610');
+- unistr 
+---------
+- data0
+-(1 row)
+-
++ERROR:  unknown function: unistr()
+ SELECT unistr('a\\b');
+- unistr 
+---------
+- a\b
+-(1 row)
+-
++ERROR:  unknown function: unistr()
+ -- errors:
+ SELECT unistr('wrong: \db99');
+-ERROR:  invalid Unicode surrogate pair
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \db99\0061');
+-ERROR:  invalid Unicode surrogate pair
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \+00db99\+000061');
+-ERROR:  invalid Unicode surrogate pair
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \+2FFFFF');
+-ERROR:  invalid Unicode code point: 2FFFFF
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \udb99\u0061');
+-ERROR:  invalid Unicode surrogate pair
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \U0000db99\U00000061');
+-ERROR:  invalid Unicode surrogate pair
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \U002FFFFF');
+-ERROR:  invalid Unicode code point: 2FFFFF
++ERROR:  unknown function: unistr()
+ SELECT unistr('wrong: \xyz');
+-ERROR:  invalid Unicode escape
+-HINT:  Unicode escapes must be \XXXX, \+XXXXXX, \uXXXX, or \UXXXXXXXX.
++ERROR:  unknown function: unistr()

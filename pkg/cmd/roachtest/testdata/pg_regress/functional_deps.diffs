@@ -1,0 +1,176 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/functional_deps.out --label=/mnt/data1/postgres/src/test/regress/results/functional_deps.out /mnt/data1/postgres/src/test/regress/expected/functional_deps.out /mnt/data1/postgres/src/test/regress/results/functional_deps.out
+--- /mnt/data1/postgres/src/test/regress/expected/functional_deps.out
++++ /mnt/data1/postgres/src/test/regress/results/functional_deps.out
+@@ -26,23 +26,20 @@
+ SELECT id, keywords, title, body, created
+ FROM articles
+ GROUP BY title;
+-ERROR:  column "articles.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT id, keywords, title, body, created
+-               ^
++ id | keywords | title | body | created 
++----+----------+-------+------+---------
++(0 rows)
++
+ -- group by unique nullable (fail)
+ SELECT id, keywords, title, body, created
+ FROM articles
+ GROUP BY body;
+-ERROR:  column "articles.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT id, keywords, title, body, created
+-               ^
++ERROR:  column "id" must appear in the GROUP BY clause or be used in an aggregate function
+ -- group by something else (fail)
+ SELECT id, keywords, title, body, created
+ FROM articles
+ GROUP BY keywords;
+-ERROR:  column "articles.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT id, keywords, title, body, created
+-               ^
++ERROR:  column "id" must appear in the GROUP BY clause or be used in an aggregate function
+ -- multiple tables
+ -- group by primary key (OK)
+ SELECT a.id, a.keywords, a.title, a.body, a.created
+@@ -58,9 +55,7 @@
+ FROM articles AS a, articles_in_category AS aic
+ WHERE a.id = aic.article_id AND aic.category_id in (14,62,70,53,138)
+ GROUP BY aic.article_id, aic.category_id;
+-ERROR:  column "a.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT a.id, a.keywords, a.title, a.body, a.created
+-               ^
++ERROR:  column "id" must appear in the GROUP BY clause or be used in an aggregate function
+ -- JOIN syntax
+ -- group by left table's primary key (OK)
+ SELECT a.id, a.keywords, a.title, a.body, a.created
+@@ -76,9 +71,7 @@
+ FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+ WHERE aic.category_id in (14,62,70,53,138)
+ GROUP BY aic.article_id, aic.category_id;
+-ERROR:  column "a.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT a.id, a.keywords, a.title, a.body, a.created
+-               ^
++ERROR:  column "id" must appear in the GROUP BY clause or be used in an aggregate function
+ -- group by right table's (composite) primary key (OK)
+ SELECT aic.changed
+ FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+@@ -93,9 +86,7 @@
+ FROM articles AS a JOIN articles_in_category AS aic ON a.id = aic.article_id
+ WHERE aic.category_id in (14,62,70,53,138)
+ GROUP BY aic.article_id;
+-ERROR:  column "aic.changed" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT aic.changed
+-               ^
++ERROR:  column "changed" must appear in the GROUP BY clause or be used in an aggregate function
+ -- example from documentation
+ CREATE TEMP TABLE products (product_id int, name text, price numeric);
+ CREATE TEMP TABLE sales (product_id int, units int);
+@@ -111,18 +102,14 @@
+ SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+     FROM products p LEFT JOIN sales s USING (product_id)
+     GROUP BY product_id;
+-ERROR:  column "p.name" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 1: SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+-                           ^
++ERROR:  column "name" must appear in the GROUP BY clause or be used in an aggregate function
+ ALTER TABLE products ADD PRIMARY KEY (product_id);
++ERROR:  cannot use nullable column "product_id" in primary key
+ -- OK now
+ SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
+     FROM products p LEFT JOIN sales s USING (product_id)
+     GROUP BY product_id;
+- product_id | name | sales 
+-------------+------+-------
+-(0 rows)
+-
++ERROR:  column "name" must appear in the GROUP BY clause or be used in an aggregate function
+ -- Drupal example, http://drupal.org/node/555530
+ CREATE TEMP TABLE node (
+     nid SERIAL,
+@@ -135,6 +122,7 @@
+     -- snip
+     PRIMARY KEY (nid, vid)
+ );
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ CREATE TEMP TABLE users (
+     uid integer NOT NULL default '0',
+     name varchar(60) NOT NULL default '',
+@@ -167,9 +155,7 @@
+ SELECT id, keywords, title, body, created
+ FROM articles
+ GROUP BY body;
+-ERROR:  column "articles.id" must appear in the GROUP BY clause or be used in an aggregate function
+-LINE 2: SELECT id, keywords, title, body, created
+-               ^
++ERROR:  column "id" must appear in the GROUP BY clause or be used in an aggregate function
+ -- OK
+ CREATE TEMP VIEW fdv1 AS
+ SELECT id, keywords, title, body, created
+@@ -177,9 +163,9 @@
+ GROUP BY id;
+ -- fail
+ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
+-ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
+-DETAIL:  view fdv1 depends on constraint articles_pkey on table articles
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "articles" (1585): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ DROP VIEW fdv1;
+ -- multiple dependencies
+ CREATE TEMP VIEW fdv2 AS
+@@ -188,13 +174,13 @@
+ WHERE aic.category_id in (14,62,70,53,138)
+ GROUP BY a.id, aic.category_id, aic.article_id;
+ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+-ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
+-DETAIL:  view fdv2 depends on constraint articles_pkey on table articles
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "articles" (1585): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ ALTER TABLE articles_in_category DROP CONSTRAINT articles_in_category_pkey RESTRICT; --fail
+-ERROR:  cannot drop constraint articles_in_category_pkey on table articles_in_category because other objects depend on it
+-DETAIL:  view fdv2 depends on constraint articles_in_category_pkey on table articles_in_category
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "articles_in_category" (1586): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ DROP VIEW fdv2;
+ -- nested queries
+ CREATE TEMP VIEW fdv3 AS
+@@ -206,16 +192,16 @@
+ FROM articles
+ GROUP BY id;
+ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+-ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
+-DETAIL:  view fdv3 depends on constraint articles_pkey on table articles
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "articles" (1585): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ DROP VIEW fdv3;
+ CREATE TEMP VIEW fdv4 AS
+ SELECT * FROM articles WHERE title IN (SELECT title FROM articles GROUP BY id);
+ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT; -- fail
+-ERROR:  cannot drop constraint articles_pkey on table articles because other objects depend on it
+-DETAIL:  view fdv4 depends on constraint articles_pkey on table articles
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  relation "articles" (1585): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ DROP VIEW fdv4;
+ -- prepared query plans: this results in failure on reuse
+ PREPARE foo AS
+@@ -228,5 +214,11 @@
+ (0 rows)
+ 
+ ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
++ERROR:  relation "articles" (1585): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48026/_version_
+ EXECUTE foo;  -- fail
+-ERROR:  column "articles.keywords" must appear in the GROUP BY clause or be used in an aggregate function
++ id | keywords | title | body | created 
++----+----------+-------+------+---------
++(0 rows)
++
