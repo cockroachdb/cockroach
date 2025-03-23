@@ -52,10 +52,10 @@ func TestNodePropose(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.Advance(rd)
+			rn.AdvanceHack(rd)
 			break
 		}
-		rn.Advance(rd)
+		rn.AdvanceHack(rd)
 	}
 	require.NoError(t, rn.Propose([]byte("somedata")))
 
@@ -115,10 +115,10 @@ func TestNodeProposeConfig(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.Advance(rd)
+			rn.AdvanceHack(rd)
 			break
 		}
-		rn.Advance(rd)
+		rn.AdvanceHack(rd)
 	}
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
@@ -144,7 +144,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	ready := func() (appliedConfChange bool) {
 		rd := rn.Ready()
@@ -162,7 +162,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 				applied = true
 			}
 		}
-		rn.Advance(rd)
+		rn.AdvanceHack(rd)
 		return applied
 	}
 	waitAppliedConfChange := func() bool {
@@ -206,7 +206,7 @@ func TestBlockProposal(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	require.NoError(t, rn.Propose([]byte("somedata")))
 }
@@ -237,10 +237,10 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		// change the step function to dropStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = dropStep
-			rn.Advance(rd)
+			rn.AdvanceHack(rd)
 			break
 		}
-		rn.Advance(rd)
+		rn.AdvanceHack(rd)
 	}
 	assert.Equal(t, ErrProposalDropped, rn.Propose(droppingMsg))
 
@@ -297,6 +297,7 @@ func TestNodeStart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
+		AsyncStorageWrites: false, // TODO(pav-kv): make it true
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -363,6 +364,7 @@ func TestNodeRestart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
+		AsyncStorageWrites: false, // TODO(pav-kv): make it true
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -413,6 +415,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            s,
+		AsyncStorageWrites: false, // TODO(pav-kv): make it true
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -437,6 +440,7 @@ func TestNodeAdvance(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
+		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -450,16 +454,16 @@ func TestNodeAdvance(t *testing.T) {
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	require.True(t, rn.HasReady())
 }
@@ -500,7 +504,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	ready := func() (appliedConfChange bool) {
 		rd := rn.Ready()
@@ -521,7 +525,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 			t.Logf("apply raft conf %v changed to: %v", cc, state.String())
 			appliedConfChange = true
 		}
-		rn.Advance(rd)
+		rn.AdvanceHack(rd)
 		return appliedConfChange
 	}
 	waitAppliedConfChange := func() bool {
@@ -541,6 +545,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 func TestAppendPagination(t *testing.T) {
 	const maxSizePerMsg = 2048
 	n := newNetworkWithConfig(func(c *Config) {
+		c.AsyncStorageWrites = true
 		c.MaxSizePerMsg = maxSizePerMsg
 	}, nil, nil, nil)
 
@@ -593,17 +598,17 @@ func TestCommitPagination(t *testing.T) {
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 	// Apply empty entry.
 	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 1)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	blob := []byte(strings.Repeat("a", 1000))
 	for i := 0; i < 3; i++ {
@@ -614,25 +619,24 @@ func TestCommitPagination(t *testing.T) {
 	rd = rn.Ready()
 	require.Len(t, rd.Entries, 3)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	// The 3 proposals will commit in two batches.
 	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 2)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	rd = rn.Ready()
 	require.Len(t, rd.CommittedEntries, 1)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 }
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	cfg := newTestConfig(1, 10, 1, s)
 	cfg.MaxCommittedSizePerReady = 2048
-	cfg.AsyncStorageWrites = true
 
 	rn, err := NewRawNode(cfg)
 	require.NoError(t, err)
