@@ -53,6 +53,7 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 		ElectionJitterTick:        50,
 		HeartbeatTick:             1,
 		Storage:                   st,
+		AsyncStorageWrites:        true,
 		MaxSizePerMsg:             1024 * 1024,
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
@@ -121,19 +122,19 @@ func (n *node) start() {
 		// Simulate disk latency.
 		time.Sleep(time.Millisecond)
 		// Send messages, with a simulated latency.
-		for _, m := range rd.Messages {
-			m := m
+		send := func(m raftpb.Message) {
 			go func() {
 				time.Sleep(time.Duration(rand.Int63n(10)) * time.Millisecond)
 				n.iface.send(m)
 			}()
 		}
-		func() {
-			n.mu.Lock()
-			defer n.mu.Unlock()
-			n.mu.rn.Advance(rd)
-			maybeSignalLocked()
-		}()
+		toSend, _ := raft.SplitMessages(n.id, rd.Messages)
+		for _, m := range toSend {
+			send(m)
+		}
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		n.mu.rn.AdvanceHack(rd)
 	}
 
 	// An independently running Ready handling loop.
@@ -215,6 +216,7 @@ func (n *node) restart() {
 		ElectionJitterTick:        10,
 		HeartbeatTick:             1,
 		Storage:                   n.storage,
+		AsyncStorageWrites:        true,
 		MaxSizePerMsg:             1024 * 1024,
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
