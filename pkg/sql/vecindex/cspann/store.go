@@ -169,9 +169,8 @@ type Store interface {
 // Txn implementations are not thread-safe.
 type Txn interface {
 	// GetPartition returns the partition identified by the given key, or
-	// ErrPartitionNotFound if the key cannot be found. The returned partition
-	// can be modified by the caller in the scope of the transaction with a
-	// guarantee it won't be changed by other agents.
+	// ErrPartitionNotFound if the key cannot be found. The returned partition's
+	// memory is owned by the caller - it can be modified as needed.
 	GetPartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) (*Partition, error)
 
 	// SetRootPartition makes the given partition the root partition in the store.
@@ -246,6 +245,9 @@ type Txn interface {
 	// by the given child keys and stores them in "refs". If a vector has been
 	// deleted, then its corresponding reference will be set to nil. If a
 	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
+	//
+	// NOTE: The caller takes ownership of any vector memory returned in "refs".
+	// The Store implementation should not try to use it after returning it.
 	//
 	// TODO(andyk): what if the row exists but the vector column is NULL? Right
 	// now, this whole library expects vectors passed to it to be non-nil and have

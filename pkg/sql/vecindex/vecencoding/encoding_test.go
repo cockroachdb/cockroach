@@ -68,7 +68,11 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 						}
 						valueBytes[i] = randutil.RandBytes(rnd, 10)
 					}
-					metadata := cspann.PartitionMetadata{Level: level, Centroid: quantizedSet.GetCentroid()}
+					metadata := cspann.PartitionMetadata{
+						Level:        level,
+						Centroid:     quantizedSet.GetCentroid(),
+						StateDetails: cspann.MakeReadyDetails(),
+					}
 					originalPartition := cspann.NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 
 					// Encode the partition.
@@ -125,7 +129,11 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 						require.Equal(t, trailingData, testutils.NormalizeSlice(remainder))
 					}
 
-					metadata = cspann.PartitionMetadata{Level: decodedLevel, Centroid: decodedCentroid}
+					metadata = cspann.PartitionMetadata{
+						Level:        decodedLevel,
+						Centroid:     decodedCentroid,
+						StateDetails: cspann.MakeReadyDetails(),
+					}
 					decodedPartition := cspann.NewPartition(
 						metadata, quantizer, decodedSet, childKeys, valueBytes)
 					testingAssertPartitionsEqual(t, originalPartition, decodedPartition)

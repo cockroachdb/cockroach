@@ -918,6 +918,10 @@ type FormatOptions struct {
 	// PrimaryKeyStrings, if true, indicates that primary key bytes should be
 	// interpreted as strings. This is used for testing scenarios.
 	PrimaryKeyStrings bool
+	// RootPartitionKey is the key of the partition that is used as the root of
+	// the formatted output. If this is InvalidKey, then RootKey is used by
+	// default.
+	RootPartitionKey PartitionKey
 }
 
 // Format formats the vector index as a tree-formatted string similar to this,
@@ -933,7 +937,7 @@ type FormatOptions struct {
 // values are rounded to 4 decimal places. Centroids are printed next to
 // partition keys.
 func (vi *Index) Format(
-	ctx context.Context, idxCtx *Context, treeKey TreeKey, options FormatOptions,
+	ctx context.Context, treeKey TreeKey, options FormatOptions,
 ) (str string, err error) {
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
@@ -953,15 +957,24 @@ func (vi *Index) Format(
 
 	var helper func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error
 	helper = func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error {
-		partition, err := idxCtx.txn.GetPartition(ctx, treeKey, partitionKey)
+		partition, err := vi.store.TryGetPartition(ctx, treeKey, partitionKey)
 		if err != nil {
 			if errors.Is(err, ErrPartitionNotFound) {
-				// This should never happen, and indicates a bug in the vector index
-				// implementation. Fallback to showing MISSING.
+				// Something else might be modifying the tree as we're trying to
+				// print it. Fallback to showing MISSING.
 				buf.WriteString(parentPrefix)
 				buf.WriteString("• ")
 				buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
-				buf.WriteString(" (MISSING)\n")
+
+				// If this is the root partition, then show synthesized empty
+				// partition.
+				if partitionKey == RootKey {
+					centroid := make(vector.T, vi.quantizer.GetDims())
+					buf.WriteByte(' ')
+					utils.WriteVector(&buf, centroid, 4)
+				} else {
+					buf.WriteString(" (MISSING)\n")
+				}
 				return nil
 			}
 			return err
@@ -976,6 +989,12 @@ func (vi *Index) Format(
 		buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
 		buf.WriteByte(' ')
 		utils.WriteVector(&buf, original, 4)
+		details := partition.Metadata().StateDetails
+		if details.State != ReadyState {
+			buf.WriteString(" [")
+			buf.WriteString(details.String())
+			buf.WriteByte(']')
+		}
 		buf.WriteByte('\n')
 
 		if partition.Count() == 0 {
@@ -995,7 +1014,10 @@ func (vi *Index) Format(
 
 			if partition.Level() == LeafLevel {
 				refs := []VectorWithKey{{Key: childKey}}
-				if err = idxCtx.txn.GetFullVectors(ctx, treeKey, refs); err != nil {
+				err = vi.store.RunTransaction(ctx, func(tx Txn) error {
+					return tx.GetFullVectors(ctx, treeKey, refs)
+				})
+				if err != nil {
 					return err
 				}
 				buf.WriteString(parentPrefix)
@@ -1029,7 +1051,11 @@ func (vi *Index) Format(
 		return nil
 	}
 
-	if err = helper(RootKey, "", ""); err != nil {
+	rootKey := options.RootPartitionKey
+	if rootKey == InvalidKey {
+		rootKey = RootKey
+	}
+	if err = helper(rootKey, "", ""); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

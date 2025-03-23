@@ -216,7 +216,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	oldRoot, err := txn.GetPartition(ctx, treeKey, cspann.RootKey)
 	require.NoError(t, err)
 	metadata := cspann.PartitionMetadata{
-		Level: 3, Centroid: oldRoot.QuantizedSet().GetCentroid()}
+		Level:        3,
+		Centroid:     oldRoot.QuantizedSet().GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
 	newRoot := cspann.NewPartition(metadata, oldRoot.Quantizer(), oldRoot.QuantizedSet(),
 		oldRoot.ChildKeys(), oldRoot.ValueBytes())
 	require.NoError(t, txn.SetRootPartition(ctx, treeKey, newRoot))
@@ -229,7 +232,11 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
-	metadata = cspann.PartitionMetadata{Level: 2, Centroid: quantizedSet.GetCentroid()}
+	metadata = cspann.PartitionMetadata{
+		Level:        2,
+		Centroid:     quantizedSet.GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
 	partition := cspann.NewPartition(metadata, quantizer, quantizedSet,
 		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30})
 	partitionKey, err := txn.InsertPartition(ctx, treeKey, partition)
@@ -286,7 +293,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart := &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 1, Centroid: centroid},
+		cspann.PartitionMetadata{Level: 1, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,
@@ -304,7 +311,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	memPart = &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
-		cspann.PartitionMetadata{Level: 2, Centroid: centroid},
+		cspann.PartitionMetadata{Level: 2, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
 			Centroid:          centroid,

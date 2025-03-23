@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/suite"
@@ -229,7 +228,10 @@ func (suite *StoreTestSuite) TestNonRootPartition() {
 		childKeys := []cspann.ChildKey{partitionKey1, partitionKey2}
 		valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2}
 		metadata := cspann.PartitionMetadata{
-			Level: cspann.SecondLevel, Centroid: quantizedSet.GetCentroid()}
+			Level:        cspann.SecondLevel,
+			Centroid:     quantizedSet.GetCentroid(),
+			StateDetails: cspann.MakeReadyDetails(),
+		}
 		partition := cspann.NewPartition(
 			metadata, suite.quantizer, quantizedSet, childKeys, valueBytes)
 
@@ -400,18 +402,12 @@ func (suite *StoreTestSuite) TestTryCreateEmptyPartition() {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
 		partitionKey := cspann.PartitionKey(10)
 		centroid := vector.T{4, 3}
-		timestamp := timeutil.Now()
 
 		// Create empty partition.
 		metadata := cspann.PartitionMetadata{
-			Level:    cspann.SecondLevel,
-			Centroid: centroid,
-			StateDetails: cspann.PartitionStateDetails{
-				State:     cspann.SplittingState,
-				Target1:   20,
-				Target2:   30,
-				Timestamp: timestamp,
-			},
+			Level:        cspann.SecondLevel,
+			Centroid:     centroid,
+			StateDetails: cspann.MakeSplittingDetails(20, 30),
 		}
 		suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, partitionKey, metadata))
 
@@ -500,7 +496,6 @@ func (suite *StoreTestSuite) TestTryGetPartition() {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
 		partitionKey := cspann.PartitionKey(10)
 		centroid := vector.T{4, 3}
-		timestamp := timeutil.Now()
 
 		// Partition does not yet exist.
 		_, err := store.TryGetPartition(suite.ctx, treeKey, partitionKey)
@@ -508,13 +503,9 @@ func (suite *StoreTestSuite) TestTryGetPartition() {
 
 		// Create partition with some vectors in it.
 		metadata := cspann.PartitionMetadata{
-			Level:    cspann.LeafLevel,
-			Centroid: centroid,
-			StateDetails: cspann.PartitionStateDetails{
-				State:     cspann.UpdatingState,
-				Source:    20,
-				Timestamp: timestamp,
-			},
+			Level:        cspann.LeafLevel,
+			Centroid:     centroid,
+			StateDetails: cspann.MakeUpdatingDetails(20),
 		}
 		suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, partitionKey, metadata))
 		vectors := vector.MakeSet(2)
@@ -576,11 +567,7 @@ func (suite *StoreTestSuite) TestTryGetPartitionMetadata() {
 		// Update the metadata and verify we get the updated values.
 		expected := *partition.Metadata()
 		metadata := expected
-		metadata.StateDetails = cspann.PartitionStateDetails{
-			State:     cspann.UpdatingState,
-			Source:    30,
-			Timestamp: timeutil.Now(),
-		}
+		metadata.StateDetails = cspann.MakeUpdatingDetails(30)
 		suite.NoError(store.TryUpdatePartitionMetadata(
 			suite.ctx, treeKey, partitionKey, metadata, expected))
 
@@ -661,17 +648,12 @@ func (suite *StoreTestSuite) TestTryAddToPartition() {
 		treeKey := store.MakeTreeKey(suite.T(), treeID)
 		partitionKey := cspann.PartitionKey(10)
 		centroid := vector.T{4, 3}
-		timestamp := timeutil.Now()
 
 		// Partition does not yet exist.
 		metadata := cspann.PartitionMetadata{
-			Level:    cspann.LeafLevel,
-			Centroid: centroid,
-			StateDetails: cspann.PartitionStateDetails{
-				State:     cspann.UpdatingState,
-				Source:    20,
-				Timestamp: timestamp,
-			},
+			Level:        cspann.LeafLevel,
+			Centroid:     centroid,
+			StateDetails: cspann.MakeUpdatingDetails(20),
 		}
 		addVectors := vector.MakeSet(2)
 		addVectors.Add(vec1)
@@ -854,12 +836,9 @@ func (suite *StoreTestSuite) createTestPartition(
 ) (cspann.PartitionKey, *cspann.Partition) {
 	partitionKey := cspann.PartitionKey(10)
 	metadata := cspann.PartitionMetadata{
-		Level:    cspann.SecondLevel,
-		Centroid: vector.T{4, 3},
-		StateDetails: cspann.PartitionStateDetails{
-			State:     cspann.ReadyState,
-			Timestamp: timeutil.Now(),
-		},
+		Level:        cspann.SecondLevel,
+		Centroid:     vector.T{4, 3},
+		StateDetails: cspann.MakeReadyDetails(),
 	}
 	suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, partitionKey, metadata))
 	vectors := vector.MakeSet(2)
@@ -973,7 +952,10 @@ func (suite *StoreTestSuite) insertLeafPartition(store TestStore, treeID int) cs
 	childKeys := []cspann.ChildKey{primaryKey1, primaryKey2, primaryKey3}
 	valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2, valueBytes3}
 	metadata := cspann.PartitionMetadata{
-		Level: cspann.LeafLevel, Centroid: quantizedSet.GetCentroid()}
+		Level:        cspann.LeafLevel,
+		Centroid:     quantizedSet.GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
 	partition := cspann.NewPartition(
 		metadata, suite.quantizer, quantizedSet, childKeys, valueBytes)
 
@@ -1117,7 +1099,10 @@ func (suite *StoreTestSuite) setRootPartition(store TestStore, treeID int) {
 	childKeys := []cspann.ChildKey{partitionKey1, partitionKey2}
 	valueBytes := []cspann.ValueBytes{valueBytes1, valueBytes2}
 	metadata := cspann.PartitionMetadata{
-		Level: cspann.SecondLevel, Centroid: quantizedSet.GetCentroid()}
+		Level:        cspann.SecondLevel,
+		Centroid:     quantizedSet.GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
 	newRoot := cspann.NewPartition(
 		metadata, suite.rootQuantizer, quantizedSet, childKeys, valueBytes)
 
