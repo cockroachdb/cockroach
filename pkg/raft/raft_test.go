@@ -5403,7 +5403,6 @@ func SetRandomizedElectionTimeout(r *RawNode, v int64) {
 type testConfigModifiers struct {
 	testingStoreLiveness raftstoreliveness.StoreLiveness
 	testingLogger        raftlogger.Logger
-	todoAsyncWrites      bool
 }
 
 // testConfigModifierOpt is the type of an optional parameter to newTestConfig
@@ -5426,15 +5425,6 @@ func withStoreLiveness(storeLiveness raftstoreliveness.StoreLiveness) testConfig
 func withLogger(logger raftlogger.Logger) testConfigModifierOpt {
 	return func(modifier *testConfigModifiers) {
 		modifier.testingLogger = logger
-	}
-}
-
-// todoAsyncWrites configures a node with the legacy synchronous storage API
-// workflow.
-// TODO(pav-kv): remove this and the last tests that use this API.
-func todoAsyncWrites() testConfigModifierOpt {
-	return func(modifier *testConfigModifiers) {
-		modifier.todoAsyncWrites = true
 	}
 }
 
@@ -5465,7 +5455,7 @@ func newTestConfig(
 		ElectionJitterTick: election,
 		HeartbeatTick:      heartbeat,
 		Storage:            storage,
-		AsyncStorageWrites: !modifiers.todoAsyncWrites,
+		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      storeLiveness,

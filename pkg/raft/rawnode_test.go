@@ -594,29 +594,30 @@ func TestRawNodeStart(t *testing.T) {
 
 	require.NoError(t, bootstrap(storage, pb.ConfState{Voters: []pb.PeerID{1}}))
 
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage, todoAsyncWrites()))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
 	require.NoError(t, err)
 	require.False(t, rawNode.HasReady())
 
 	rawNode.Campaign()
 	rd := rawNode.Ready()
 	storage.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 	rawNode.Propose([]byte("foo"))
 	require.True(t, rawNode.HasReady())
 
 	rd = rawNode.Ready()
 	require.Equal(t, entries, rd.Entries)
 	storage.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	require.True(t, rawNode.HasReady())
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
 	require.True(t, rd.MustSync)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	rd.SoftState, want.SoftState = nil, nil
+	rd.Messages, _ = SplitMessages(1, rd.Messages)
 
 	require.Equal(t, want, rd)
 	assert.False(t, rawNode.HasReady())
@@ -639,13 +640,15 @@ func TestRawNodeRestart(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	storage.SetHardState(st)
 	storage.Append(entries)
-	rawNode1, err := NewRawNode(newTestConfig(1, 10, 1, storage, todoAsyncWrites()))
+	rawNode1, err := NewRawNode(newTestConfig(1, 10, 1, storage))
 	require.NoError(t, err)
-	rawNode2, err := NewRawNode(newTestConfig(2, 10, 1, storage, todoAsyncWrites()))
+	rawNode2, err := NewRawNode(newTestConfig(2, 10, 1, storage))
 	require.NoError(t, err)
 	rd := rawNode1.Ready()
+	var advance []pb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, want, rd)
-	rawNode1.Advance(rd)
+	rawNode1.advance(advance)
 	assert.False(t, rawNode1.HasReady())
 
 	// Ensure that the HardState was correctly loaded post rawNode1 restart.
@@ -701,11 +704,13 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	s.SetHardState(st)
 	s.ApplySnapshot(snap)
 	s.Append(entries)
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, todoAsyncWrites()))
+	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 	require.NoError(t, err)
 	rd := rawNode.Ready()
+	var advance []pb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
-		rawNode.Advance(rd)
+		rawNode.advance(advance)
 	}
 	assert.False(t, rawNode.HasReady())
 }
@@ -1085,7 +1090,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 					rn.Step(resp)
 				}
 			}
-			rn.Advance(rd)
+			rn.AdvanceHack(rd)
 		}
 		return applied
 	}

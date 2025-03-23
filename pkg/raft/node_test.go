@@ -297,12 +297,13 @@ func TestNodeStart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
-		AsyncStorageWrites: false, // TODO(pav-kv): make it true
+		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
 		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
 		Metrics:            NewMetrics(),
+		TestingKnobs:       &TestingKnobs{EnableApplyUnstableEntries: true},
 	}
 
 	rn, err := NewRawNode(c)
@@ -310,31 +311,35 @@ func TestNodeStart(t *testing.T) {
 	require.NoError(t, rn.Bootstrap([]Peer{{ID: 1}}))
 
 	rd := rn.Ready()
+	var advance []raftpb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	require.Equal(t, wants[0], rd)
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.advance(advance)
 
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, wants[1], rd)
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.advance(advance)
 
 	rd = rn.Ready()
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, wants[2], rd)
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.Advance(rd)
+	rn.advance(advance)
 
 	require.False(t, rn.HasReady())
 }
@@ -364,7 +369,7 @@ func TestNodeRestart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
-		AsyncStorageWrites: false, // TODO(pav-kv): make it true
+		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -375,8 +380,10 @@ func TestNodeRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	rd := rn.Ready()
+	var advance []raftpb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
-		rn.Advance(rd)
+		rn.advance(advance)
 	}
 	require.False(t, rn.HasReady())
 }
@@ -415,7 +422,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            s,
-		AsyncStorageWrites: false, // TODO(pav-kv): make it true
+		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -426,8 +433,10 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	rd := rn.Ready()
+	var advance []raftpb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
-		rn.Advance(rd)
+		rn.advance(advance)
 	}
 	require.False(t, rn.HasReady())
 }
