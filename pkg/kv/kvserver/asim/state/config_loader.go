@@ -309,6 +309,10 @@ type RangeInfo struct {
 	Leaseholder StoreID
 }
 
+func (ri RangeInfo) String() string {
+	return fmt.Sprintf("range %s, leaseholder %d, replicas %s", ri.Descriptor, ri.Leaseholder)
+}
+
 type RangesInfo []RangeInfo
 
 // LoadConfig loads a predefined configuration which contains cluster

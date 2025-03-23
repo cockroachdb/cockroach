@@ -3,6 +3,9 @@
 gen_cluster nodes=5
 ----
 
+gen_ranges ranges=1
+----
+
 set_locality node=1 locality=region=a
 ----
 
