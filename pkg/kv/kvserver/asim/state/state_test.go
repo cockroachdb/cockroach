@@ -309,7 +309,8 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
-			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Writes: 1, WriteSize: 1}})
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+				Key: key, Writes: 1, WriteSize: 1, RequestCPU: 1, RaftCPU: 1}})
 		}
 	}
 
@@ -327,7 +328,7 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
 	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
 	// Similarly, only the leaseholder should have request CPU recorded.
-	require.Equal(t, float64(qps)*requestCPUPerRequest,
+	require.Equal(t, float64(qps),
 		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RequestCPUNanosPerSecond)
 	require.Equal(t, float64(0),
 		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RequestCPUNanosPerSecond)
@@ -335,11 +336,11 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RequestCPUNanosPerSecond)
 	// All the replicas should have identical write bytes/s, which is equal to
 	// the QPS. The replicas should also have identical raft CPU usage.
-	require.Equal(t, float64(qps)*raftCPUPerWriteRequest,
+	require.Equal(t, float64(qps),
 		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RaftCPUNanosPerSecond)
-	require.Equal(t, float64(qps)*raftCPUPerWriteRequest,
+	require.Equal(t, float64(qps),
 		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RaftCPUNanosPerSecond)
-	require.Equal(t, float64(qps)*raftCPUPerWriteRequest,
+	require.Equal(t, float64(qps),
 		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RaftCPUNanosPerSecond)
 }
 
