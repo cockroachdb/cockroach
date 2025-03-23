@@ -84,15 +84,28 @@ type RaftState struct {
 	ByteSize  int64
 }
 
+// EntryStats contains stats about the appended log slice.
+type EntryStats struct {
+	RegularEntries    int
+	RegularBytes      int64
+	SideloadedEntries int
+	SideloadedBytes   int64
+}
+
+// Add increments the stats with the given delta.
+func (e *EntryStats) Add(delta EntryStats) {
+	e.RegularEntries += delta.RegularEntries
+	e.RegularBytes += delta.RegularBytes
+	e.SideloadedEntries += delta.SideloadedEntries
+	e.SideloadedBytes += delta.SideloadedBytes
+}
+
 // AppendStats describes a completed log storage append operation.
 type AppendStats struct {
 	Begin crtime.Mono
 	End   crtime.Mono
 
-	RegularEntries    int
-	RegularBytes      int64
-	SideloadedEntries int
-	SideloadedBytes   int64
+	EntryStats
 
 	PebbleBegin crtime.Mono
 	PebbleEnd   crtime.Mono
@@ -186,22 +199,19 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		stats.Begin = crtime.NowMono()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := MaybeSideloadEntries(ctx, m.Entries, s.Sideload)
+		thinEntries, entryStats, err := MaybeSideloadEntries(ctx, m.Entries, s.Sideload)
 		if err != nil {
 			const expl = "during sideloading"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		state.ByteSize += sideLoadedEntriesSize
+		stats.EntryStats.Add(entryStats) // TODO(pav-kv): just return the stats.
+		state.ByteSize += entryStats.SideloadedBytes
 		if state, err = logAppend(
 			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return RaftState{}, errors.Wrap(err, expl)
 		}
-		stats.RegularEntries += len(thinEntries) - numSideloaded
-		stats.RegularBytes += otherEntriesSize
-		stats.SideloadedEntries += numSideloaded
-		stats.SideloadedBytes += sideLoadedEntriesSize
 		stats.End = crtime.NowMono()
 	}
 
