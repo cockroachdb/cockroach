@@ -309,7 +309,10 @@ func (fw *fixupWorker) splitPartition(
 		}
 		valueBytes := make([]ValueBytes, 2)
 		rootMetadata := PartitionMetadata{
-			Level: partition.Level() + 1, Centroid: quantizedSet.GetCentroid()}
+			Level:        partition.Level() + 1,
+			Centroid:     quantizedSet.GetCentroid(),
+			StateDetails: MakeReadyDetails(),
+		}
 		rootPartition := NewPartition(
 			rootMetadata, fw.index.rootQuantizer, quantizedSet, childKeys, valueBytes)
 		if err = fw.txn.SetRootPartition(ctx, fw.treeKey, rootPartition); err != nil {
@@ -623,7 +626,11 @@ func (fw *fixupWorker) mergePartition(
 			return errors.AssertionFailedf("only root partition can have zero vectors")
 		}
 		quantizedSet := fw.index.rootQuantizer.Quantize(&fw.workspace, vectors)
-		metadata := PartitionMetadata{Level: partition.Level(), Centroid: quantizedSet.GetCentroid()}
+		metadata := PartitionMetadata{
+			Level:        partition.Level(),
+			Centroid:     quantizedSet.GetCentroid(),
+			StateDetails: MakeReadyDetails(),
+		}
 		rootPartition := NewPartition(
 			metadata, fw.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.ValueBytes())
 		if err = fw.txn.SetRootPartition(ctx, fw.treeKey, rootPartition); err != nil {
