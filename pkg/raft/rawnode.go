@@ -490,7 +490,7 @@ func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
 // they are known to be committed but before they have been written locally to
 // stable storage.
 func (rn *RawNode) applyUnstableEntries() bool {
-	return !rn.asyncStorageWrites
+	return !rn.asyncStorageWrites || rn.raft.testingKnobs.ApplyUnstableEntries()
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
