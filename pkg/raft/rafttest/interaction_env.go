@@ -41,7 +41,12 @@ type Node struct {
 	*raft.RawNode
 	Storage
 
-	Config     *raft.Config
+	Config *raft.Config
+	// syncWrites configures this node to sync storage writes on Ready handling.
+	// All datadriven tests now use the async storage API, but most were written
+	// with the sync storage API in mind. Once the legacy API is removed
+	syncWrites bool
+
 	AppendWork []pb.Message // []MsgStorageAppend
 	ApplyWork  []pb.Message // []MsgStorageApply
 	History    []pb.Snapshot
@@ -105,6 +110,9 @@ func raftConfigStub() raft.Config {
 		HeartbeatTick:      1,
 		MaxSizePerMsg:      math.MaxUint64,
 		MaxInflightMsgs:    math.MaxInt32,
+		TestingKnobs: &raft.TestingKnobs{
+			EnableApplyUnstableEntries: true,
+		},
 	}
 }
 

@@ -144,6 +144,11 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
 		}
 
+		// NB: the datadriven tests use the async storage API, but have an option to
+		// sync writes immediately in imitation of the previous synchronous API.
+		syncWrites := !cfg.AsyncStorageWrites
+		cfg.AsyncStorageWrites = true
+
 		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
 
 		cfg.Metrics = raft.NewMetrics()
@@ -170,9 +175,10 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			RawNode: rn,
 			// TODO(tbg): allow a more general Storage, as long as it also allows
 			// us to apply snapshots, append entries, and update the HardState.
-			Storage: s,
-			Config:  &cfg,
-			History: []pb.Snapshot{snap},
+			Storage:    s,
+			syncWrites: syncWrites,
+			Config:     &cfg,
+			History:    []pb.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
 	}
