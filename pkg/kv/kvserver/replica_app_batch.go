@@ -302,6 +302,13 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		res.LinkExternalSSTable = nil
 	}
 
+	if res.Excise != nil {
+		// All watching rangefeeds should error until we teach clients how to
+		// process excise commands.
+		b.r.disconnectRangefeedSpanWithErr(res.Excise.Span, kvpb.NewErrorf("Replica applied ExciseRequest"))
+		res.Excise = nil
+	}
+
 	if res.Split != nil {
 		// Splits require a new HardState to be written to the new RHS
 		// range (and this needs to be atomic with the main batch). This
@@ -688,6 +695,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	}
 
 	b.recordStatsOnCommit()
+
 	return nil
 }
 
