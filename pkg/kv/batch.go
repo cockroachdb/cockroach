@@ -301,6 +301,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
 			case *kvpb.LinkExternalSSTableRequest:
+			case *kvpb.ExciseRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -1074,6 +1075,28 @@ func (b *Batch) linkExternalSSTable(
 			EndKey: span.EndKey,
 		},
 		ExternalFile: externalFile,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) Excise(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+
+	req := &kvpb.ExciseRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

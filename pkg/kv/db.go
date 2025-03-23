@@ -504,6 +504,13 @@ func (db *DB) scan(
 	return r.Rows, err
 }
 
+func (db *DB) Excise(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.Excise(begin, end)
+	_, err := getOneResult(db.Run(ctx, b), b)
+	return err
+}
+
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
 // ascending order.
 //

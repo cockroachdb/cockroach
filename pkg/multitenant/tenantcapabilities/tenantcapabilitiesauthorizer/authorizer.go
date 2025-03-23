@@ -301,6 +301,7 @@ var reqMethodToCap = map[kvpb.Method]methodCapability{
 	kvpb.TruncateLog:                   onlySystemTenant,
 	kvpb.WriteBatch:                    onlySystemTenant,
 	kvpb.LinkExternalSSTable:           onlySystemTenant,
+	kvpb.Excise:                        onlySystemTenant,
 }
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
