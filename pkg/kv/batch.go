@@ -301,6 +301,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
 			case *kvpb.LinkExternalSSTableRequest:
+			case *kvpb.ExciseRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",

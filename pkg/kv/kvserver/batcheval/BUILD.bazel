@@ -11,6 +11,7 @@ go_library(
         "cmd_delete.go",
         "cmd_delete_range.go",
         "cmd_end_transaction.go",
+        "cmd_excise.go",
         "cmd_export.go",
         "cmd_gc.go",
         "cmd_get.go",
