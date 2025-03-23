@@ -237,6 +237,41 @@ func (etc *externalSSTTestCluster) writeIntents(
 	return pendingTxn1, pendingTxn2, nil
 }
 
+// checkConsistency verifies that the provided key span is consistent.
+func (etc *externalSSTTestCluster) checkConsistency(
+	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key,
+) error {
+	req := kvpb.CheckConsistencyRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+		Mode: kvpb.ChecksumMode_CHECK_FULL,
+	}
+
+	b := kv.Batch{}
+	b.AddRawRequest(&req)
+	err := etc.db.Run(ctx, &b)
+	if err != nil {
+		return err
+	}
+
+	if len(b.RawResponse().Responses) == 0 {
+		return errors.Errorf("received 0 responses")
+	}
+
+	constResp := b.RawResponse().Responses[0].GetInner().(*kvpb.CheckConsistencyResponse)
+	for i := range len(b.RawResponse().Responses) {
+		if constResp.Result[i].Status != kvpb.CheckConsistencyResponse_RANGE_CONSISTENT &&
+			constResp.Result[i].Status !=
+				kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED {
+			return errors.Errorf("expected range to be consistent, but found: %+v",
+				constResp.Result[i])
+		}
+	}
+	return nil
+}
+
 // putHelper is a helper function to put a key-value pair in the store.
 func (etc *externalSSTTestCluster) putHelper(ctx context.Context, key roachpb.Key) error {
 	b := kv.Batch{}
@@ -280,6 +315,20 @@ func (etc *externalSSTTestCluster) mergeHelper(ctx context.Context, key roachpb.
 	b := kv.Batch{}
 	b.AddRawRequest(adminMergeArgs(key))
 	return etc.db.Run(ctx, &b)
+}
+
+// exciseHelper excises the provided key range from the store.
+func (etc *externalSSTTestCluster) exciseHelper(
+	ctx context.Context, start roachpb.Key, end roachpb.Key,
+) error {
+	batch := &kv.Batch{}
+	batch.AddRawRequest(&kvpb.ExciseRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    start,
+			EndKey: end,
+		},
+	})
+	return etc.db.Run(ctx, batch)
 }
 
 // checkKeysPointToSameRangeDesc is a helper function to check if two or more
@@ -400,6 +449,25 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
 				require.NoError(t,
 					etc.deleteRangeHelper(ctx, roachpb.Key("g"), roachpb.Key("h")))
+
+				// If we excise the problematic key range, operations should
+				// work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("d"), roachpb.Key("g")))
+
+				// Since we excised, the scan over the excised span should
+				// return 0 rows, but the scan over the rest of the keys should
+				// return some rows.
+				rows, err = etc.scanHelper(ctx, roachpb.Key("d"), roachpb.Key("g"))
+				require.NoError(t, err)
+				require.Equal(t, rows, 0)
+				rows, err = etc.scanHelper(ctx, roachpb.Key("a"), roachpb.Key("z"))
+				require.NoError(t, err)
+				require.Greater(t, rows, 0)
+
+				require.NoError(t, etc.getHelper(ctx, roachpb.Key("d-15000")))
+				require.NoError(t, etc.putHelper(ctx, roachpb.Key("d-15000")))
+				require.NoError(t,
+					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("z")))
 			},
 		},
 		{
@@ -441,6 +509,24 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("e")))
 				require.NoError(t,
 					etc.deleteRangeHelper(ctx, roachpb.Key("f"), roachpb.Key("h")))
+
+				// If we excise the problematic key range, operations should work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("e"), roachpb.Key("f")))
+
+				// Since we excised, the scan over the excised span should
+				// return 0 rows, but the scan over the rest of the keys should
+				// return some rows.
+				rows, err = etc.scanHelper(ctx, roachpb.Key("e"), roachpb.Key("f"))
+				require.NoError(t, err)
+				require.Equal(t, rows, 0)
+				rows, err = etc.scanHelper(ctx, roachpb.Key("a"), roachpb.Key("z"))
+				require.NoError(t, err)
+				require.Greater(t, rows, 0)
+
+				require.NoError(t, etc.getHelper(ctx, roachpb.Key("e-15000")))
+				require.NoError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+				require.NoError(t,
+					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("z")))
 			},
 		},
 		{
@@ -482,6 +568,57 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("b")))
 				require.NoError(t,
 					etc.deleteRangeHelper(ctx, roachpb.Key("h"), roachpb.Key("i")))
+
+				// If we excise the problematic key range, operations should work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("c"), roachpb.Key("h")))
+
+				// Since we excised, the scan over the excised span should
+				// return 0 rows, but the scan over the rest of the keys should
+				// return some rows.
+				rows, err = etc.scanHelper(ctx, roachpb.Key("c"), roachpb.Key("h"))
+				require.NoError(t, err)
+				require.Equal(t, rows, 0)
+				rows, err = etc.scanHelper(ctx, roachpb.Key("a"), roachpb.Key("z"))
+				require.NoError(t, err)
+				require.Greater(t, rows, 0)
+
+				require.NoError(t, etc.getHelper(ctx, roachpb.Key("c-15000")))
+				require.NoError(t, etc.putHelper(ctx, roachpb.Key("c-15000")))
+				require.NoError(t,
+					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("z")))
+			},
+		},
+		{
+			name: "excise succeeds on larger than deleted span",
+			// Original ranges: [a,    d), [d,     g), [g,    z).
+			// The deleted span is:          [e, f).
+			deletedExternalSpanStart: roachpb.Key("e"),
+			deletedExternalSpanEnd:   roachpb.Key("f"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Excise more than the span with deleted SSTable.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("b"), roachpb.Key("y")))
+
+				// Operations should succeed.
+				// Since we excised, the scan over the excised span should
+				// return 0 rows, but the scan over the rest of the keys should
+				// return some rows.
+				rows, err := etc.scanHelper(ctx, roachpb.Key("b"), roachpb.Key("y"))
+				require.NoError(t, err)
+				require.Equal(t, rows, 0)
+				rows, err = etc.scanHelper(ctx, roachpb.Key("a"), roachpb.Key("z"))
+				require.NoError(t, err)
+				require.Greater(t, rows, 0)
+
+				require.NoError(t, etc.getHelper(ctx, roachpb.Key("d-15000")))
+				require.NoError(t, etc.getHelper(ctx, roachpb.Key("e-15000")))
+				require.NoError(t, etc.putHelper(ctx, roachpb.Key("d-15000")))
+				require.NoError(t, etc.putHelper(ctx, roachpb.Key("e-15000")))
+				require.NoError(t,
+					etc.deleteRangeHelper(ctx, roachpb.Key("a"), roachpb.Key("z")))
 			},
 		},
 		{
@@ -495,6 +632,31 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 				etc *externalSSTTestCluster,
 			) {
 				// Merges don't touch the deleted SSTable so they succeed.
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("d")))
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("a")))
+
+				// Make sure that the ranges have been merged correctly.
+				require.NoError(t, etc.checkKeysPointToSameRangeDesc(t, "a", "d", "g"))
+
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("d"), roachpb.Key("g")))
+			},
+		},
+		{
+			name: "merge with excised span at range boundaries",
+			// Original ranges: [a, d), [d, g), [g, z).
+			// The deleted span is:     [d, g).
+			deletedExternalSpanStart: roachpb.Key("d"),
+			deletedExternalSpanEnd:   roachpb.Key("g"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("d"), roachpb.Key("g")))
+
+				// Merges should succeed after excising.
 				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("d")))
 				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("a")))
 
@@ -519,6 +681,31 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 				// Make sure that the ranges have been merged correctly.
 				require.NoError(t, etc.checkKeysPointToSameRangeDesc(t, "a", "d", "g"))
+
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("c"), roachpb.Key("h")))
+			},
+		},
+		{
+			name: "merge with excised span at more than range boundaries",
+			// Original ranges: [a, d), [d, g), [g, z).
+			// The deleted span is [c,            h).
+			deletedExternalSpanStart: roachpb.Key("c"),
+			deletedExternalSpanEnd:   roachpb.Key("h"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("c"), roachpb.Key("h")))
+
+				// Merges should succeed after excising.
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("d")))
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("a")))
+
+				// Make sure that the ranges have been merged correctly.
+				require.NoError(t, etc.checkKeysPointToSameRangeDesc(t, "a", "d", "g"))
 			},
 		},
 		{
@@ -533,6 +720,31 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 				etc *externalSSTTestCluster,
 			) {
 				// Merges don't touch the deleted SSTable so they succeed.
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("d")))
+				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("a")))
+
+				// Make sure that the ranges have been merged correctly.
+				require.NoError(t, etc.checkKeysPointToSameRangeDesc(t, "a", "d", "g"))
+
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("e"), roachpb.Key("f")))
+			},
+		},
+		{
+			name: "merge with excised span at less than range boundaries",
+			// Original ranges: [a,   d), [d,     g), [g,   z).
+			// The deleted span is:         [e,f).
+			deletedExternalSpanStart: roachpb.Key("e"),
+			deletedExternalSpanEnd:   roachpb.Key("f"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Excise the problematic key range.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("e"), roachpb.Key("f")))
+
+				// Merges should succeed after excising.
 				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("d")))
 				require.NoError(t, etc.mergeHelper(ctx, roachpb.Key("a")))
 
@@ -570,13 +782,14 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 			require.NoError(t, externalStorage.Delete(ctx, "file1.sst"))
 
 			// We should be able to commit the transactions since they just have
-			// point writes and they wouldn't need the deleted file.
+			// point writes, and they wouldn't need the deleted file.
 			require.NoError(t, pendingTxn1.Commit(ctx))
 			require.NoError(t, pendingTxn2.Commit(ctx))
 
 			// Run the test function, and make sure that the store is consistent
 			// afterward.
 			testCase.testFunc(t, ctx, &etc)
+			require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 		})
 	}
 }

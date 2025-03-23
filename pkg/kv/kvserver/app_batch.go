@@ -198,5 +198,15 @@ func (b *appBatch) runPostAddTriggers(
 			cmd.Index(),
 			*res.LinkExternalSSTable)
 	}
+
+	if res.Excise != nil {
+		if err := env.eng.Excise(ctx, res.Excise.Span); err != nil {
+			return errors.Wrapf(err, "error while excising span: %v", res.Excise.Span)
+		}
+		if err := env.eng.Excise(ctx, res.Excise.LockTableSpan); err != nil {
+			return errors.Wrapf(err, "error while excising span: %v", res.Excise.LockTableSpan)
+		}
+	}
+
 	return nil
 }
