@@ -38,10 +38,14 @@ import (
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
+//     [add_to_existing=<bool>] [cpu_per_access=<int>] [raft_cpu_per_write=<int>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
-//     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
-//     max_block=1 min_key=1 max_key=10_000 access_skew=false.
+//     simulation. When add_to_existing is true, this workload doesn't replace
+//     any existing workload specified by the simulation, it instead adds it
+//     ontop. The default values are: rw_ratio=0 rate=0 min_block=1
+//     max_block=1 min_key=1 max_key=10_000 access_skew=false
+//     add_to_existing=false cpu_per_access=0 raft_cpu_per_write=0.
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
@@ -60,11 +64,13 @@ import (
 //     number of nodes per region.
 //
 //   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
-//     [keyspace=<int>] [range_bytes=<int>]
+//     [min_key=<int>] [max_key=<int>] [range_bytes=<int>] [add_to_existing<bool>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
-//     placement. The default values are ranges=1 repl_factor=3
-//     placement_skew=false keyspace=10000.
+//     placement. When add_to_existing is true, the range generator doesn't
+//     replace any existing range generators, it is instead added on-top. The
+//     The default values are ranges=1 repl_factor=3 placement_skew=false
+//     min_key=0 max_key=10000 add_to_existing=false.
 //
 //   - set_liveness node=<int> [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
@@ -163,15 +169,9 @@ func TestDataDriven(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		const defaultKeyspace = 10000
-		loadGen := gen.BasicLoad{}
+		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
-		var rangeGen gen.RangeGen = gen.BasicRanges{
-			BaseRanges: gen.BaseRanges{
-				Ranges:            1,
-				ReplicationFactor: 1,
-				KeySpace:          defaultKeyspace,
-			},
-		}
+		rangeGen := gen.MultiRanges{}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
@@ -182,7 +182,8 @@ func TestDataDriven(t *testing.T) {
 				var rwRatio, rate = 0.0, 0.0
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
-				var accessSkew bool
+				var accessSkew, addToExisting bool
+				var requestCPUPerAccess, raftCPUPerAccess int64
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -191,25 +192,39 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "max_block", &maxBlock)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
+				scanIfExists(t, d, "add_to_existing", &addToExisting)
+				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
+				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
-				loadGen.SkewedAccess = accessSkew
-				loadGen.MinKey = minKey
-				loadGen.MaxKey = maxKey
-				loadGen.RWRatio = rwRatio
-				loadGen.Rate = rate
-				loadGen.MaxBlockSize = maxBlock
-				loadGen.MinBlockSize = minBlock
+				nextLoadGen := gen.BasicLoad{}
+				nextLoadGen.SkewedAccess = accessSkew
+				nextLoadGen.MinKey = minKey
+				nextLoadGen.MaxKey = maxKey
+				nextLoadGen.RWRatio = rwRatio
+				nextLoadGen.Rate = rate
+				nextLoadGen.MaxBlockSize = maxBlock
+				nextLoadGen.MinBlockSize = minBlock
+				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
+				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
+				if addToExisting {
+					loadGen = append(loadGen, nextLoadGen)
+				} else {
+					loadGen = gen.MultiLoad{nextLoadGen}
+				}
 				return ""
 			case "gen_ranges":
-				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
+				var ranges, replFactor = 1, 3
+				var minKey, maxKey = int64(0), int64(defaultKeyspace)
 				var bytes int64 = 0
-				var placementSkew bool
+				var placementSkew, addToExisting bool
 
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
 				scanIfExists(t, d, "placement_skew", &placementSkew)
-				scanIfExists(t, d, "keyspace", &keyspace)
+				scanIfExists(t, d, "min_key", &minKey)
+				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "bytes", &bytes)
+				scanIfExists(t, d, "add_to_existing", &addToExisting)
 
 				var placementType gen.PlacementType
 				if placementSkew {
@@ -217,14 +232,20 @@ func TestDataDriven(t *testing.T) {
 				} else {
 					placementType = gen.Even
 				}
-				rangeGen = gen.BasicRanges{
+				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
 						Ranges:            ranges,
-						KeySpace:          keyspace,
+						MinKey:            minKey,
+						MaxKey:            maxKey,
 						ReplicationFactor: replFactor,
 						Bytes:             bytes,
 					},
 					PlacementType: placementType,
+				}
+				if addToExisting {
+					rangeGen = append(rangeGen, nextRangeGen)
+				} else {
+					rangeGen = gen.MultiRanges{nextRangeGen}
 				}
 				return ""
 			case "topology":

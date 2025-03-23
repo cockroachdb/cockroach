@@ -266,7 +266,7 @@ func makeStoreList(stores int) []StoreID {
 }
 
 func RangesInfoSkewedDistribution(
-	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
 ) RangesInfo {
 	distribution := skewedDistribution(stores, ranges)
 	storeList := makeStoreList(stores)
@@ -277,7 +277,7 @@ func RangesInfoSkewedDistribution(
 
 	return RangesInfoWithDistribution(
 		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		minKey, maxKey, rangeSize)
 }
 
 func RangesInfoWithReplicaCounts(
@@ -305,7 +305,7 @@ func RangesInfoWithReplicaCounts(
 }
 
 func RangesInfoEvenDistribution(
-	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
 ) RangesInfo {
 	distribution := evenDistribution(stores)
 	storeList := makeStoreList(stores)
@@ -316,7 +316,7 @@ func RangesInfoEvenDistribution(
 
 	return RangesInfoWithDistribution(
 		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		minKey, maxKey, rangeSize)
 }
 
 // RangesInfoWeightedRandDistribution returns a RangesInfo, where ranges are
@@ -325,7 +325,7 @@ func RangesInfoWeightedRandDistribution(
 	randSource *rand.Rand,
 	weightedStores []float64,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
 ) RangesInfo {
@@ -343,8 +343,8 @@ func RangesInfoWeightedRandDistribution(
 		distribution,
 		ranges,
 		spanConfig,
-		int64(MinKey),
-		int64(keyspace),
+		minKey,
+		maxKey,
 		rangeSize, /* rangeSize */
 	)
 }
@@ -355,7 +355,7 @@ func RangesInfoRandDistribution(
 	randSource *rand.Rand,
 	stores int,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
 ) RangesInfo {
@@ -371,7 +371,7 @@ func RangesInfoRandDistribution(
 
 	return RangesInfoWithDistribution(
 		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		minKey, maxKey, rangeSize)
 }
 
 // NewStateWithDistribution returns a State where the stores given are
@@ -431,7 +431,7 @@ func NewStateEvenDistribution(
 	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode*/)
-	rangesInfo := RangesInfoEvenDistribution(stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoEvenDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -441,7 +441,7 @@ func NewStateSkewedDistribution(
 	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
 ) State {
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoSkewedDistribution(stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoSkewedDistribution(stores, ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -457,7 +457,8 @@ func NewStateRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, int64(MinKey),
+		int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -473,6 +474,7 @@ func NewStateWeightedRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(len(weightedStores), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores,
+		ranges, int64(MinKey), int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }

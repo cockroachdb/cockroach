@@ -93,14 +93,38 @@ func (ss StaticSettings) Generate(seed int64) config.SimulationSettings {
 	return ret
 }
 
+type MultiLoad []BasicLoad
+
+// MultiLoad implements the LoadGen interface. It is a collection of
+// BasicLoad.
+var _ LoadGen = MultiLoad{}
+
+func (ml MultiLoad) String() string {
+	var str string
+	for _, load := range ml {
+		str += fmt.Sprintf("%s\n", load.String())
+	}
+	return str
+}
+
+func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []workload.Generator {
+	var generators []workload.Generator
+	for _, load := range ml {
+		generators = append(generators, load.Generate(seed, settings)...)
+	}
+	return generators
+}
+
 // BasicLoad implements the LoadGen interface.
 type BasicLoad struct {
-	RWRatio        float64
-	Rate           float64
-	SkewedAccess   bool
-	MinBlockSize   int
-	MaxBlockSize   int
-	MinKey, MaxKey int64
+	RWRatio             float64
+	Rate                float64
+	SkewedAccess        bool
+	MinBlockSize        int
+	MaxBlockSize        int
+	MinKey, MaxKey      int64
+	RequestCPUPerAccess int64
+	RaftCPUPerWrite     int64
 }
 
 func (bl BasicLoad) String() string {
@@ -137,6 +161,8 @@ func (bl BasicLoad) Generate(seed int64, settings *config.SimulationSettings) []
 			bl.RWRatio,
 			bl.MaxBlockSize,
 			bl.MinBlockSize,
+			bl.RequestCPUPerAccess,
+			bl.RaftCPUPerWrite,
 		),
 	}
 }
@@ -255,13 +281,13 @@ func GetRangePlacementType(s string) PlacementType {
 // WeightedRandomizedBasicRanges.
 type BaseRanges struct {
 	Ranges            int
-	KeySpace          int
+	MinKey, MaxKey    int64
 	ReplicationFactor int
 	Bytes             int64
 }
 
 func (b BaseRanges) String() string {
-	return fmt.Sprintf("ranges=%d, key_space=%d, replication_factor=%d, bytes=%d", b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	return fmt.Sprintf("ranges=%d, min_key=%d, max_key=%d, replication_factor=%d, bytes=%d", b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 }
 
 // GetRangesInfo generates and distributes ranges across stores based on
@@ -271,13 +297,13 @@ func (b BaseRanges) GetRangesInfo(
 ) state.RangesInfo {
 	switch pType {
 	case Even:
-		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case Skewed:
-		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case Random:
-		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case WeightedRandom:
-		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
@@ -313,5 +339,32 @@ func (br BasicRanges) Generate(
 	}
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
+	return s
+}
+
+// MultiRanges implements the RangeGen interface, supporting multiple
+// BasicRanges generation.
+type MultiRanges []BasicRanges
+
+func (mr MultiRanges) String() string {
+	var str string
+	for _, ranges := range mr {
+		str += fmt.Sprintf("%s\n", ranges.String())
+	}
+	return str
+}
+
+func (mr MultiRanges) Generate(
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
+	var rangeInfos []state.RangeInfo
+	for _, ranges := range mr {
+		nextInfos := ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
+		for _, rangeInfo := range nextInfos {
+			rangeInfo.Size = ranges.Bytes
+		}
+		rangeInfos = append(rangeInfos, nextInfos...)
+	}
+	state.LoadRangeInfo(s, rangeInfos...)
 	return s
 }
