@@ -358,6 +358,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.LinkExternalSSTable = nil
 
+	if p.Replicated.Excise == nil {
+		p.Replicated.Excise = q.Replicated.Excise
+	} else if q.Replicated.Excise != nil {
+		return errors.AssertionFailedf("conflicting Excise")
+	}
+	q.Replicated.Excise = nil
+
 	if p.Replicated.MVCCHistoryMutation == nil {
 		p.Replicated.MVCCHistoryMutation = q.Replicated.MVCCHistoryMutation
 	} else if q.Replicated.MVCCHistoryMutation != nil {

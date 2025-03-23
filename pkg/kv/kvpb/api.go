@@ -720,6 +720,19 @@ func (r *IsSpanEmptyResponse) combine(_ context.Context, c combinable, _ *BatchR
 
 var _ combinable = &IsSpanEmptyResponse{}
 
+// combine implements the combinable interface.
+func (r *ExciseResponse) combine(_ context.Context, c combinable, _ *BatchRequest) error {
+	otherDR := c.(*ExciseResponse)
+	if r != nil {
+		if err := r.ResponseHeader.combine(otherDR.Header()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ combinable = &ExciseResponse{}
+
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
 	return rh
@@ -969,6 +982,9 @@ func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
 // Method implements the Request interface.
 func (*LinkExternalSSTableRequest) Method() Method { return LinkExternalSSTable }
+
+// Method implements the Request interface.
+func (*ExciseRequest) Method() Method { return Excise }
 
 // Method implements the Request interface.
 func (*MigrateRequest) Method() Method { return Migrate }
@@ -1232,6 +1248,12 @@ func (r *AddSSTableRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *LinkExternalSSTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ExciseRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1524,6 +1546,12 @@ func (r *AddSSTableResponse) ShallowCopy() Response {
 
 // ShallowCopy implements the Response interface.
 func (r *LinkExternalSSTableResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *ExciseResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -2100,6 +2128,11 @@ func (r *LinkExternalSSTableRequest) flags() flag {
 	}
 	return flags
 }
+
+func (r *ExciseRequest) flags() flag {
+	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
+}
+
 func (*MigrateRequest) flags() flag { return isWrite | isRange | isAlone }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
