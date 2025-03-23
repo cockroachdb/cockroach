@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -288,7 +289,7 @@ func listRemoteBranches(pattern string) ([]string, error) {
 	if err != nil {
 		return []string{}, fmt.Errorf("git ls-remote: %w", err)
 	}
-	log.Printf("git ls-remote returned: %s", out)
+	log.Printf("git ls-remote for %s returned: %s", pattern, out)
 	var remoteBranches []string
 	// Example output:
 	// $ git ls-remote origin "refs/heads/release-23.1*"
@@ -307,19 +308,6 @@ func listRemoteBranches(pattern string) ([]string, error) {
 	return remoteBranches, nil
 }
 
-// fileExistsInGit checks if a file exists in a local repository, assuming the remote name is `origin`.
-func fileExistsInGit(branch string, f string) (bool, error) {
-	cmd := exec.Command("git", "ls-tree", remoteOrigin+"/"+branch, f)
-	out, err := cmd.Output()
-	if err != nil {
-		return false, fmt.Errorf("git ls-tree: %s %s %w, `%s`", branch, f, err, out)
-	}
-	if len(out) == 0 {
-		return false, nil
-	}
-	return true, nil
-}
-
 // fileContent uses `git cat-file -p ref:file` to get to the file contents without `git checkout`.
 func fileContent(ref string, f string) (string, error) {
 	cmd := exec.Command("git", "cat-file", "-p", ref+":"+f)
@@ -328,4 +316,94 @@ func fileContent(ref string, f string) (string, error) {
 		return "", fmt.Errorf("git cat-file %s:%s: %w, `%s`", ref, f, err, out)
 	}
 	return string(out), nil
+}
+
+// isAncestor checks if ref1 is an ancestor of ref2.
+// Returns true if ref1 is an ancestor of ref2, false if not, and error if the command fails.
+func isAncestor(ref1, ref2 string) (bool, error) {
+	cmd := exec.Command("git", "merge-base", "--is-ancestor", remoteOrigin+"/"+ref1, remoteOrigin+"/"+ref2)
+	err := cmd.Run()
+	if err != nil {
+		// Treat exit code 1 as false, as it means that ref1 is not an ancestor of ref2.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("checking ancestry relationship between %s and %s: %w", ref1, ref2, err)
+	}
+	return true, nil
+}
+
+// mergeCreatesContentChanges checks if a merge commit introduces changes to the branch.
+// Returns true if the merge commit introduces changes, false if not, and error if the command fails.
+func mergeCreatesContentChanges(branch, intoBranch string, ignoredPatterns []string) (bool, error) {
+	// Make sure the working directory is clean
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	if out, err := statusCmd.Output(); err != nil {
+		return false, fmt.Errorf("checking git status: %w", err)
+	} else if len(out) > 0 {
+		return false, fmt.Errorf("working directory is not clean")
+	}
+
+	// Get the current branch name before we start
+	currentBranchCmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranch, err := currentBranchCmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("getting current branch: %w", err)
+	}
+	originalBranch := strings.TrimSpace(string(currentBranch))
+
+	// Checkout the branch to merge into. Use a temporary branch to avoid
+	// conflicts with the current branch name.
+	tmpIntoBranch := intoBranch + "-tmp"
+	checkoutCmd := exec.Command("git", "checkout", "-b", tmpIntoBranch, remoteOrigin+"/"+intoBranch)
+	if err := checkoutCmd.Run(); err != nil {
+		return false, fmt.Errorf("running checkout: %w", err)
+	}
+
+	// Run the merge command without committing and without fast-forward. If
+	// fast-forward is allowed and the current branch can fast forward, there
+	// will be no merge commit, so the --no-commit option won't work.
+	// We need to use the ours strategy to avoid conflicts. In the next step we
+	// will checkout the ignored files from the current branch (like version.txt).
+	mergeCmd := exec.Command("git", "merge", "--no-commit", "--no-ff", "--strategy=recursive", "-X", "ours", remoteOrigin+"/"+branch)
+	if err := mergeCmd.Run(); err != nil {
+		return false, fmt.Errorf("running merge: %w", err)
+	}
+	if len(ignoredPatterns) > 0 {
+		coCmd := exec.Command("git", "checkout", tmpIntoBranch, "--")
+		coCmd.Args = append(coCmd.Args, ignoredPatterns...)
+
+		if err := coCmd.Run(); err != nil {
+			return false, fmt.Errorf("running checkout: %w", err)
+		}
+	}
+
+	// Check if there are any content changes. The exit code will be analyzed to
+	// determine if there are changes after we clean up the current repo.
+	diffCmd := exec.Command("git", "diff", "--staged", "--quiet")
+	diffErr := diffCmd.Run()
+
+	// Always abort the merge attempt to clean up
+	if err := exec.Command("git", "merge", "--abort").Run(); err != nil {
+		return false, fmt.Errorf("aborting merge: %w", err)
+	}
+	if err := exec.Command("git", "checkout", originalBranch).Run(); err != nil {
+		return false, fmt.Errorf("running original branch checkout: %w", err)
+	}
+	if err := exec.Command("git", "branch", "-D", tmpIntoBranch).Run(); err != nil {
+		return false, fmt.Errorf("deleting tmp branch: %w", err)
+	}
+
+	// If diff returns no error (exit code 0), there are no changes
+	// If diff returns error with exit code 1, there are changes
+	// Any other error is unexpected
+	if diffErr == nil {
+		return false, nil // No changes
+	}
+	var exitErr *exec.ExitError
+	if errors.As(diffErr, &exitErr) && exitErr.ExitCode() == 1 {
+		return true, nil // Has changes
+	}
+	return false, fmt.Errorf("checking diff: %w", diffErr)
 }
