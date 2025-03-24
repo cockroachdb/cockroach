@@ -35,7 +35,7 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 	// Flipping the includeAggregateMetrics flag should have no effect.
 	testutils.RunTrueAndFalse(t, "includeChildMetrics=false,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
 		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, false, includeAggregateMetrics)
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(false), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 		families, err := pe.Gather()
 		require.NoError(t, err)
 		require.Equal(t, 1, len(families))
@@ -46,7 +46,7 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "includeChildMetrics=true,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
 		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, true, includeAggregateMetrics)
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 		families, err := pe.Gather()
 		require.NoError(t, err)
 		require.Equal(t, 1, len(families))
@@ -355,7 +355,7 @@ func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
+			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string

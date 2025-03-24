@@ -346,15 +346,15 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	}
 	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
-	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics, includeAggregateMetrics)
-	pm.ScrapeRegistry(mr.mu.appRegistry, includeChildMetrics, includeAggregateMetrics)
-	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics, includeAggregateMetrics)
-	pm.ScrapeRegistry(mr.mu.sysRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+	pm.ScrapeRegistry(mr.mu.appRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+	pm.ScrapeRegistry(mr.mu.logRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+	pm.ScrapeRegistry(mr.mu.sysRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg, includeChildMetrics, includeAggregateMetrics)
+		pm.ScrapeRegistry(reg, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 	}
 	for _, tenantRegistry := range mr.mu.tenantRegistries {
-		pm.ScrapeRegistry(tenantRegistry, includeChildMetrics, includeAggregateMetrics)
+		pm.ScrapeRegistry(tenantRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
 	}
 }
 
@@ -808,7 +808,7 @@ func (rr registryRecorder) recordChild(
 			return
 		}
 		m := prom.ToPrometheusMetric()
-		m.Label = append(labels, prom.GetLabels()...)
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
 
 		processChildMetric := func(metric *prometheusgo.Metric) {
 			found := false
