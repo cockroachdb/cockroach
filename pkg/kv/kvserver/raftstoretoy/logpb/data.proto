@@ -1,0 +1,14 @@
+syntax = "proto3";
+package cockroach.kv.kvserver.raftstoretoy.logpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/logpb";
+
+import "gogoproto/gogo.proto";
+
+message FullLogID {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "roachpb.RangeID"];
+  optional int64 replica_id = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "roachpb.ReplicaID"];
+  optional int64 LogID = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "LogID"];
+}
