@@ -34,3 +34,25 @@ statement ok
 ALTER DATABASE db CONFIGURE ZONE USING constraints = '{+region=us-east-1: 1, +region=ca-central-1: 1}'
 
 subtest end
+
+subtest privileged_ranges
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_non_root_modify_default_range.enabled = false
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET ROLE admin
+
+statement error pgcode 42501 only root users are allowed to modify the default range
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_non_root_modify_default_range.enabled = true
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+subtest end
