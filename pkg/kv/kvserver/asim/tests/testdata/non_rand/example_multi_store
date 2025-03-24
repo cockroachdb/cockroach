@@ -5,7 +5,7 @@
 gen_cluster nodes=7 stores_per_node=2
 ----
 
-gen_ranges ranges=14 placement_skew=true
+gen_ranges ranges=14 placement_type=skewed
 ----
 
 gen_load rate=7000

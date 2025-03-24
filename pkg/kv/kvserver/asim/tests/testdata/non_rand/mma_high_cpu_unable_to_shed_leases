@@ -1,0 +1,117 @@
+# Want to test two cases:
+# (1) Where its impossible to shed leases from the CPU overloaded store, so we
+#     should initially observe a period of no rebalancing activity away from
+#     the store.
+# (2) Where its possible to shed leases from the CPU overloaded store, so we
+#     should observe a period of lease transfers before any replica based
+#     rebalancing away from the store occurs.
+gen_cluster nodes=5
+----
+
+# Disable everything but the mma store rebalancer.
+setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# Case (1) where s5 has no leases and is CPU overloaded due to raft CPU. It
+# won't be able to shed its own replicas because it is not the leaseholder for
+# any of the ranges.
+gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=weighted replica_weights=(0.3,0.175,0.175,0.175,0.175) lease_weights=(0,0.25,0.25,0.25,0.25)
+----
+
+gen_load rate=1000 rw_ratio=0 min_block=0 max_block=0 min_key=0 max_key=10000 raft_cpu_per_write=100
+----
+
+eval duration=30m samples=1 seed=42
+----
+OK
+
+plot stat=cpu show_last_value=true
+----
+----
+
+ 88063 ┤╭──────────────────────────────────────────────────────────────────────────────
+ 82192 ┤│
+ 76321 ┤│
+ 70450 ┤│
+ 64580 ┤│
+ 58709 ┤│╭─────────────────────────────────────────────────────────────────────────────
+ 52838 ┤╭╯─────────────────────────────────────────────────────────────────────────────
+ 46967 ┤│
+ 41096 ┤│
+ 35225 ┤│
+ 29354 ┤│
+ 23483 ┤│
+ 17613 ┤│
+ 11742 ┤│
+  5871 ┤│
+     0 ┼╯
+                                              cpu
+
+last store values: [s2=51962 s3=51962 s4=52074 s5=56037 s1=88063]
+----
+----
+
+plot stat=write_bytes_per_second show_last_value=true
+----
+----
+
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                    write_bytes_per_second
+
+last store values: [s1=0 s2=0 s3=0 s4=0 s5=0]
+----
+----
+
+plot stat=replicas show_last_value=true
+----
+----
+
+ 22.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 21.40 ┤
+ 20.80 ┤
+ 20.20 ┤
+ 19.60 ┤
+ 19.00 ┤
+ 18.40 ┤
+ 17.80 ┤
+ 17.20 ┤
+ 16.60 ┤
+ 16.00 ┤
+ 15.40 ┤
+ 14.80 ┤
+ 14.20 ┤
+ 13.60 ┼───────────────────────────────────────────────────────────────────────────────
+ 13.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+
+last store values: [s2=13 s3=13 s4=13 s5=14 s1=22]
+----
+----
+
+plot stat=leases show_last_value=true
+----
+----
+
+ 7.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 6.53 ┤
+ 6.07 ┼───────────────────────────────────────────────────────────────────────────────
+ 5.60 ┤
+ 5.13 ┤
+ 4.67 ┤
+ 4.20 ┤
+ 3.73 ┤
+ 3.27 ┤
+ 2.80 ┤
+ 2.33 ┤
+ 1.87 ┤
+ 1.40 ┤
+ 0.93 ┤
+ 0.47 ┤
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            leases
+
+last store values: [s1=0 s2=6 s3=6 s4=6 s5=7]
+----
+----
+
+# TODO(kvoli): Case (2)

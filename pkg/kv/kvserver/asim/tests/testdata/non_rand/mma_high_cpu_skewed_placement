@@ -3,7 +3,7 @@ gen_cluster nodes=7 node_cpu_rate_capacity=50000
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
 # replicas initially and n1/s1 will have every lease.
-gen_ranges ranges=21 placement_skew=true
+gen_ranges ranges=21 placement_type=skewed
 ----
 
 # Set the rebalance mode to use the mma store rebalancer and disable the lease
