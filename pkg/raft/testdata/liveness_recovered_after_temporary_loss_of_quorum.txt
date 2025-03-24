@@ -38,7 +38,7 @@ ok
 stabilize 1
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/12 EntryNormal "data1"
   Messages:
@@ -71,7 +71,7 @@ INFO 1 became follower at term 1
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateFollower
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -79,7 +79,7 @@ stabilize
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
 
 # Fix the network blip.
@@ -99,7 +99,7 @@ INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
 stabilize
 ----
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StatePreCandidate
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -110,7 +110,7 @@ stabilize
   2->1 MsgPreVote Term:2 Log:1/11
   INFO 1 [logterm: 1, index: 12, vote: 1] rejected MsgPreVote from 2 [logterm: 1, index: 11] at term 1
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->2 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
 > 2 receiving messages
@@ -119,7 +119,7 @@ stabilize
   INFO 2 has received 1 MsgPreVoteResp votes and 1 vote rejections
   INFO 2 became follower at term 1
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready:
   State:StateFollower
 
 # Note that both peers have successfully forgotten the leader for term 1.
@@ -137,7 +137,7 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
 > 2 receiving messages
@@ -157,7 +157,7 @@ INFO 1 [logterm: 1, index: 12] sent MsgPreVote request to 2 at term 1
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   State:StatePreCandidate
   Messages:
   1->2 MsgPreVote Term:2 Log:1/12
@@ -167,7 +167,7 @@ stabilize
   1->2 MsgPreVote Term:2 Log:1/12
   INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 1 [logterm: 1, index: 12] at term 1
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   2->1 MsgPreVoteResp Term:2 Log:0/0
 > 1 receiving messages
@@ -177,7 +177,7 @@ stabilize
   INFO 1 became candidate at term 2
   INFO 1 [logterm: 1, index: 12] sent MsgVote request to 2 at term 2
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -190,7 +190,7 @@ stabilize
   INFO 2 became follower at term 2
   INFO 2 [logterm: 1, index: 11, vote: 0] cast MsgVote for 1 [logterm: 1, index: 12] at term 2
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVoteResp Term:2 Log:0/0
@@ -200,7 +200,7 @@ stabilize
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 2
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateLeader
   HardState Term:2 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Entries:
@@ -212,7 +212,7 @@ stabilize
   1->2 MsgFortifyLeader Term:2 Log:0/0
   1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Messages:
   2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
@@ -221,7 +221,7 @@ stabilize
   2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[
     1/12 EntryNormal "data1"
@@ -233,7 +233,7 @@ stabilize
     2/13 EntryNormal ""
   ]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/12 EntryNormal "data1"
   2/13 EntryNormal ""
@@ -242,7 +242,7 @@ stabilize
 > 1 receiving messages
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/12 EntryNormal "data1"
@@ -252,7 +252,7 @@ stabilize
 > 2 receiving messages
   1->2 MsgApp Term:2 Log:2/13 Commit:13
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/12 EntryNormal "data1"

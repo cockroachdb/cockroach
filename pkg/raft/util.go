@@ -183,7 +183,7 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 		}
 	}
 	if buf.Len() > 0 {
-		return fmt.Sprintf("Ready MustSync=%t:\n%s", rd.MustSync, buf.String())
+		return fmt.Sprintf("Ready:\n%s", buf.String())
 	}
 	return "<empty Ready>"
 }

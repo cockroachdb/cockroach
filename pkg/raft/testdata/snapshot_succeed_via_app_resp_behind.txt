@@ -99,7 +99,7 @@ DEBUG 3 [logterm: 0, index: 10] rejected MsgApp [logterm: 1, index: 10] from 1
 # PendingSnapshot=lastIndex=12.
 process-ready 3
 ----
-Ready MustSync=true:
+Ready:
 HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:0
 Messages:
 3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
@@ -127,7 +127,7 @@ stabilize 1
   DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
   DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=13 sentCommit=12 matchCommit=5 paused pendingSnap=12]
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
@@ -143,7 +143,7 @@ dropped: 1->3 MsgSnap Term:1 Log:0/0
 stabilize 3
 ----
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
@@ -157,7 +157,7 @@ stabilize 1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=13 sentCommit=12 matchCommit=11 paused pendingSnap=12]
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgApp Term:1 Log:1/11 Commit:12 Entries:[1/12 EntryNormal "\"foo\""]
 
