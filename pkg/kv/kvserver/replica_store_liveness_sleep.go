@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // RaftStoreLivenessQuiescenceEnabled controls whether store liveness quiescence
@@ -18,9 +17,7 @@ var RaftStoreLivenessQuiescenceEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft.store_liveness.quiescence.enabled",
 	"controls whether store liveness quiescence is enabled",
-	metamorphic.ConstantWithTestChoice("kv.raft.store_liveness.quiescence.enabled",
-		false, /* defaultValue */
-		true /* otherValues */),
+	true,
 )
 
 // goToSleepAfterTicks is the number of Raft ticks after which a follower can
