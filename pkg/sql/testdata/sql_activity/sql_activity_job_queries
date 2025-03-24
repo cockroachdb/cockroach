@@ -1,0 +1,249 @@
+# This file verifies the query plans for the sql activity update job.
+
+# Generates the explain plans the sql_activity_update_job uses to update
+# transaction_activity and statement_activity tables
+
+run-sql
+set enable_zigzag_join = false
+----
+
+
+run-sql
+SELECT * FROM crdb_internal.transaction_activity
+----
+
+# Pretend we have max number of rows in the transaction activity table
+run-sql
+ALTER TABLE system.transaction_activity INJECT STATISTICS '[
+  {
+    "columns": ["aggregated_ts"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 72
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","app_name"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  }
+]'
+----
+
+# Pretend we have max number of rows in the transaction_statistics table
+run-sql
+ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
+  {
+    "columns": ["aggregated_ts"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 12
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","app_name","node_id","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","app_name","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 30000
+  }
+]'
+----
+
+# This command will run EXPLAIN on the query used to select and aggregate
+# all transactions from system.transaction_statistic in the supplied time
+# period.
+explain-sql-activity-select-all-transactions aggTs=(2023-04-10 16:00:00)
+----
+----
+distribution: local
+vectorized: true
+
+• render
+│ columns: (fingerprint_id, app_name, max_agg_interval, metadata, statistics, count, total_latency, avg_contention_time, avg_cpu_time, avg_service_latency)
+│ render count: ((statistics->'statistics')->>'cnt')::INT8
+│ render total_latency: ((statistics->'statistics')->>'cnt')::FLOAT8 * (((statistics->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render avg_contention_time: COALESCE((((statistics->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+│ render avg_cpu_time: COALESCE((((statistics->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+│ render avg_service_latency: (((statistics->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render app_name: app_name
+│ render fingerprint_id: fingerprint_id
+│ render max_agg_interval: max_agg_interval
+│ render metadata: metadata
+│ render statistics: statistics
+│
+└── • render
+    │ columns: (app_name, fingerprint_id, max_agg_interval, metadata, statistics)
+    │ render app_name: app_name
+    │ render fingerprint_id: fingerprint_id
+    │ render max_agg_interval: max
+    │ render metadata: max
+    │ render statistics: merge_transaction_stats
+    │
+    └── • group (hash)
+        │ columns: (fingerprint_id, app_name, max, max, merge_transaction_stats)
+        │ estimated row count: 27,778
+        │ aggregate 0: max(agg_interval)
+        │ aggregate 1: max(metadata)
+        │ aggregate 2: merge_transaction_stats(statistics)
+        │ group by: fingerprint_id, app_name
+        │
+        └── • project
+            │ columns: (fingerprint_id, app_name, agg_interval, metadata, statistics)
+            │
+            └── • filter
+                │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                │ estimated row count: 27,778
+                │ filter: app_name NOT LIKE '$ internal%'
+                │
+                └── • scan
+                      columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                      estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
+                      table: transaction_statistics@primary
+                      spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
+----
+----
+
+
+# This command will run EXPLAIN on the query used to select and aggregate
+# the top transactions from system.transaction_statistic in the supplied time
+# period.
+explain-sql-activity-select-top-transactions aggTs=(2023-04-10 16:00:00)
+----
+----
+distribution: local
+vectorized: true
+
+• render
+│ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, exec_lat_product, contention_time, cpu_time, svc_lat)
+│ render exec_lat_product: svc_lat * exec_count::FLOAT8
+│ render fingerprint_id: fingerprint_id
+│ render app_name: app_name
+│ render agg_interval: agg_interval
+│ render metadata: metadata
+│ render merge_stats: merge_stats
+│ render exec_count: exec_count
+│ render svc_lat: svc_lat
+│ render contention_time: contention_time
+│ render cpu_time: cpu_time
+│
+└── • render
+    │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time)
+    │ render fingerprint_id: fingerprint_id
+    │ render app_name: app_name
+    │ render agg_interval: agg_interval
+    │ render metadata: metadata
+    │ render merge_stats: merge_stats
+    │ render exec_count: exec_count
+    │ render svc_lat: svc_lat
+    │ render contention_time: contention_time
+    │ render cpu_time: cpu_time
+    │
+    └── • filter
+        │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number, row_number, row_number, row_number_3_orderby_1_1, row_number)
+        │ estimated row count: 21,275
+        │ filter: ((((row_number < 500) OR (row_number < 500)) OR (row_number < 500)) OR ((row_number < 500) AND (contention_time > 0.0))) OR ((row_number < 500) AND (cpu_time > 0.0))
+        │
+        └── • window
+            │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number, row_number, row_number, row_number_3_orderby_1_1, row_number)
+            │ estimated row count: 27,778
+            │ window 0: row_number() OVER (ORDER BY cpu_time DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+            │
+            └── • window
+                │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number, row_number, row_number, row_number_3_orderby_1_1)
+                │ estimated row count: 27,778
+                │ window 0: row_number() OVER (ORDER BY contention_time DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                │
+                └── • window
+                    │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number, row_number, row_number_3_orderby_1_1)
+                    │ estimated row count: 27,778
+                    │ window 0: row_number() OVER (ORDER BY row_number_3_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                    │
+                    └── • window
+                        │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number, row_number_3_orderby_1_1)
+                        │ estimated row count: 27,778
+                        │ window 0: row_number() OVER (ORDER BY svc_lat DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                        │
+                        └── • window
+                            │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number, row_number_3_orderby_1_1)
+                            │ estimated row count: 27,778
+                            │ window 0: row_number() OVER (ORDER BY exec_count DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                            │
+                            └── • render
+                                │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time, row_number_3_orderby_1_1)
+                                │ render row_number_3_orderby_1_1: svc_lat * exec_count::FLOAT8
+                                │ render fingerprint_id: fingerprint_id
+                                │ render app_name: app_name
+                                │ render agg_interval: agg_interval
+                                │ render metadata: metadata
+                                │ render merge_stats: merge_stats
+                                │ render exec_count: exec_count
+                                │ render svc_lat: svc_lat
+                                │ render contention_time: contention_time
+                                │ render cpu_time: cpu_time
+                                │
+                                └── • render
+                                    │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats, exec_count, svc_lat, contention_time, cpu_time)
+                                    │ render fingerprint_id: fingerprint_id
+                                    │ render app_name: app_name
+                                    │ render agg_interval: agg_interval
+                                    │ render metadata: metadata
+                                    │ render merge_stats: merge_stats
+                                    │ render exec_count: ((merge_stats->'statistics')->>'cnt')::INT8
+                                    │ render svc_lat: (((merge_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                                    │ render contention_time: COALESCE((((merge_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                                    │ render cpu_time: COALESCE((((merge_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+                                    │
+                                    └── • render
+                                        │ columns: (fingerprint_id, app_name, agg_interval, metadata, merge_stats)
+                                        │ render fingerprint_id: fingerprint_id
+                                        │ render app_name: app_name
+                                        │ render agg_interval: max
+                                        │ render metadata: max
+                                        │ render merge_stats: merge_transaction_stats
+                                        │
+                                        └── • group (hash)
+                                            │ columns: (fingerprint_id, app_name, max, max, merge_transaction_stats)
+                                            │ estimated row count: 27,778
+                                            │ aggregate 0: max(agg_interval)
+                                            │ aggregate 1: max(metadata)
+                                            │ aggregate 2: merge_transaction_stats(statistics)
+                                            │ group by: fingerprint_id, app_name
+                                            │
+                                            └── • project
+                                                │ columns: (fingerprint_id, app_name, agg_interval, metadata, statistics)
+                                                │
+                                                └── • filter
+                                                    │ columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                                                    │ estimated row count: 27,778
+                                                    │ filter: app_name NOT LIKE '$ internal%'
+                                                    │
+                                                    └── • scan
+                                                          columns: (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics)
+                                                          estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
+                                                          table: transaction_statistics@primary
+                                                          spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
+----
+----
