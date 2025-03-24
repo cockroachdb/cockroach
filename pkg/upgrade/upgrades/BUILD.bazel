@@ -62,6 +62,7 @@ go_library(
         "//pkg/upgrade/upgradebase",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/protoutil",
