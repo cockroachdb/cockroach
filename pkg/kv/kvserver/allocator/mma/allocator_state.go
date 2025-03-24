@@ -141,6 +141,12 @@ func (a *allocatorState) rebalanceStores(
 	// first shed load from the stores of n1, before we shed load from the store
 	// on n2.
 	slices.SortFunc(sheddingStores, func(a, b sheddingStore) int {
+		// Prefer to shed from the local store first.
+		if a.StoreID == localStoreID {
+			return -1
+		} else if b.StoreID == localStoreID {
+			return 1
+		}
 		// Use StoreID for tie-breaker for determinism.
 		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls),
 			cmp.Compare(a.StoreID, b.StoreID))
