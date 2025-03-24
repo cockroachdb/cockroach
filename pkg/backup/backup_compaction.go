@@ -8,6 +8,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -28,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -46,6 +51,96 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
+
+var (
+	backupCompactionThreshold = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"backup.compaction.threshold",
+		"the required backup chain length for compaction to be triggered (0 to disable compactions)",
+		0,
+		settings.WithVisibility(settings.Reserved),
+		settings.IntInRangeOrZeroDisable(3, math.MaxInt64),
+	)
+)
+
+// maybeStartCompactionJob will initiate a compaction job off of a triggering
+// incremental job if the backup chain length exceeds the threshold.
+// backupStmt should be the original backup statement that triggered the job.
+func maybeStartCompactionJob(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	triggerJob jobspb.BackupDetails,
+) (jobspb.JobID, error) {
+	threshold := backupCompactionThreshold.Get(&execCfg.Settings.SV)
+	if threshold == 0 || triggerJob.RevisionHistory ||
+		triggerJob.StartTime.IsEmpty() || triggerJob.ScheduleID == 0 {
+		return 0, nil
+	}
+	env := scheduledjobs.ProdJobSchedulerEnv
+	knobs := execCfg.JobsKnobs()
+	if knobs != nil && knobs.JobSchedulerEnv != nil {
+		env = knobs.JobSchedulerEnv
+	}
+	var backupStmt string
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, jobs.ScheduledJobTxn(txn), triggerJob.ScheduleID,
+		)
+		if err != nil {
+			return errors.Wrapf(
+				err, "failed to get scheduled backup execution args for schedule %d", triggerJob.ScheduleID,
+			)
+		}
+		backupStmt = args.BackupStatement
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	kmsEnv := backupencryption.MakeBackupKMSEnv(
+		execCfg.Settings,
+		&execCfg.ExternalIODirConfig,
+		execCfg.InternalDB,
+		user,
+	)
+	chain, _, _, _, err := getBackupChain(ctx, execCfg, user, triggerJob, &kmsEnv)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get backup chain")
+	}
+	if int64(len(chain)) < threshold {
+		return 0, nil
+	}
+	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+	if err != nil {
+		return 0, err
+	}
+	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
+	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+	var jobID jobspb.JobID
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context,
+		txn isql.Txn) error {
+		datums, err := txn.QueryRowEx(
+			ctx,
+			"start-compaction-job",
+			txn.KV(),
+			sessiondata.NoSessionDataOverride,
+			`SELECT crdb_internal.backup_compaction($1, $2::DECIMAL, $3::DECIMAL)`,
+			backupStmt,
+			startTS.AsOfSystemTime(),
+			endTS.AsOfSystemTime(),
+		)
+		if err != nil {
+			return err
+		}
+		idDatum, ok := tree.AsDInt(datums[0])
+		if !ok {
+			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
+		}
+		jobID = jobspb.JobID(idDatum)
+		return nil
+	})
+	return jobID, err
+}
 
 // StartCompactionJob kicks off an asynchronous job to compact the backups at
 // the collection URI within the start and end timestamps.
@@ -104,7 +199,9 @@ func (b *backupResumer) ResumeCompaction(
 	// We interleave the computation of the compaction chain between the destination
 	// resolution and writing of backup lock due to the need to verify that the
 	// compaction chain is a valid chain.
-	prevManifests, localityInfo, encryption, allIters, err := getBackupChain(ctx, execCtx, initialDetails, kmsEnv)
+	prevManifests, localityInfo, encryption, allIters, err := getBackupChain(
+		ctx, execCtx.ExecCfg(), execCtx.User(), initialDetails, kmsEnv,
+	)
 	if err != nil {
 		return err
 	}
@@ -285,9 +382,7 @@ func (b *backupResumer) ResumeCompaction(
 		return errors.Wrap(err, "exhausted retries")
 	}
 
-	return b.maybeNotifyScheduledJobCompletion(
-		ctx, jobs.StateSucceeded, execCtx.ExecCfg().JobsKnobs(), execCtx.ExecCfg().InternalDB,
-	)
+	return b.processScheduledBackupCompletion(ctx, jobs.StateSucceeded, execCtx, updatedDetails)
 }
 
 type compactionChain struct {
@@ -698,11 +793,15 @@ func compactIntroducedSpans(
 // specified sub-directory. subdir may be a specified path or the string
 // "LATEST" to resolve the latest subdirectory.
 func resolveBackupSubdir(
-	ctx context.Context, p sql.JobExecContext, mainFullBackupURI string, subdir string,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	mainFullBackupURI string,
+	subdir string,
 ) (string, error) {
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		latest, err := backupdest.ReadLatestFile(ctx, mainFullBackupURI,
-			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+			execCfg.DistSQLSrv.ExternalStorageFromURI, user)
 		if err != nil {
 			return "", err
 		}
@@ -717,12 +816,13 @@ func resolveBackupSubdir(
 // sub-directory or the string "LATEST" to resolve the latest sub-directory.
 func resolveBackupDirs(
 	ctx context.Context,
-	p sql.JobExecContext,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
 	collectionURIs []string,
 	incrementalURIs []string,
 	subdir string,
 ) ([]string, []string, string, error) {
-	resolvedSubdir, err := resolveBackupSubdir(ctx, p, collectionURIs[0], subdir)
+	resolvedSubdir, err := resolveBackupSubdir(ctx, execCfg, user, collectionURIs[0], subdir)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -731,7 +831,7 @@ func resolveBackupDirs(
 		return nil, nil, "", err
 	}
 	resolvedIncDirs, err := backupdest.ResolveIncrementalsBackupLocation(
-		ctx, p.User(), p.ExecCfg(), incrementalURIs, collectionURIs, resolvedSubdir,
+		ctx, user, execCfg, incrementalURIs, collectionURIs, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, "", err
@@ -784,7 +884,8 @@ func createCompactionManifest(
 // associated info) required to restore the to the end time specified in the details.
 func getBackupChain(
 	ctx context.Context,
-	execCtx sql.JobExecContext,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
 	details jobspb.BackupDetails,
 	kmsEnv cloud.KMSEnv,
 ) (
@@ -796,14 +897,14 @@ func getBackupChain(
 ) {
 	dest := details.Destination
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCtx, dest.To, dest.IncrementalStorage, dest.Subdir,
+		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	mkStore := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
 	baseStores, baseCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, execCtx.User(), mkStore, resolvedBaseDirs,
+		ctx, user, mkStore, resolvedBaseDirs,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -814,7 +915,7 @@ func getBackupChain(
 		}
 	}()
 	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, execCtx.User(), mkStore, resolvedIncDirs,
+		ctx, user, mkStore, resolvedIncDirs,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -830,13 +931,13 @@ func getBackupChain(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	mem := execCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
 		resolvedIncDirs, details.EndTime, encryption, kmsEnv,
-		execCtx.User(), false,
+		user, false,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -845,7 +946,7 @@ func getBackupChain(
 		mem.Shrink(ctx, memReserved)
 	}()
 	allIters, err := backupinfo.GetBackupManifestIterFactories(
-		ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, manifests, encryption, kmsEnv,
+		ctx, execCfg.DistSQLSrv.ExternalStorage, manifests, encryption, kmsEnv,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
