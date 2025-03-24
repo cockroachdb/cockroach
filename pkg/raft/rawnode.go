@@ -52,9 +52,6 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	rn := &RawNode{
 		raft: r,
 	}
-	if !config.AsyncStorageWrites {
-		panic("synchronous storage writes are no longer supported")
-	}
 	ss := r.softState()
 	rn.prevSoftSt = &ss
 	rn.prevHardSt = r.hardState()
@@ -267,7 +264,9 @@ func (rn *RawNode) Ready() Ready {
 
 // MustSync returns true if the hard state and count of Raft entries indicate
 // that a synchronous write to persistent storage is required.
-// NOTE: MustSync isn't used under AsyncStorageWrites mode.
+//
+// TODO(pav-kv): MustSync isn't used, because all writes are asynchronous.
+// Remove this, or repurpose it to fit the asynchronous writes API.
 func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// Persistent state on all servers:
 	// (Updated on stable storage before responding to RPCs)
@@ -299,8 +298,7 @@ func needStorageAppendRespMsg(rd Ready) bool {
 // newStorageAppendMsg creates the message that should be sent to the local
 // append thread to instruct it to append log entries, write an updated hard
 // state, and apply a snapshot. The message also carries a set of responses
-// that should be delivered after the rest of the message is processed. Used
-// with AsyncStorageWrites.
+// that should be delivered after the rest of the message is processed.
 func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 	m := pb.Message{
 		Type:    pb.MsgStorageAppend,
@@ -429,7 +427,7 @@ func needStorageApplyMsg(rd Ready) bool { return len(rd.CommittedEntries) > 0 }
 // newStorageApplyMsg creates the message that should be sent to the local
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
-// message is processed. Used with AsyncStorageWrites.
+// message is processed.
 func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
 	ents := rd.CommittedEntries
 	return pb.Message{

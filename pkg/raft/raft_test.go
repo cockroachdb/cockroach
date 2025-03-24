@@ -5455,7 +5455,6 @@ func newTestConfig(
 		ElectionJitterTick: election,
 		HeartbeatTick:      heartbeat,
 		Storage:            storage,
-		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      storeLiveness,

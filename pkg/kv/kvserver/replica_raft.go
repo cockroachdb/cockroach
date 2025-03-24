@@ -1079,9 +1079,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	//
 	// Note that the Entries slice in the MsgStorageApply cannot refer to entries
 	// that are also in the Entries slice in the MsgStorageAppend. Raft will not
-	// allow unstable entries to be applied when AsyncStorageWrites is enabled.
+	// allow unstable entries to be applied.
+	// TODO(pav-kv): Reconsider if this can be relaxed.
 	//
-	// If we disable AsyncStorageWrites in the future, this property will no
+	// If we disable async storage writes in the future, this property will no
 	// longer be true, and the two slices could overlap. For example, this can
 	// happen when a follower is being caught up on committed commands. We could
 	// acknowledge these commands early even though they aren't durably in the

@@ -71,9 +71,6 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		return nil
 	}
 
-	if !n.Config.AsyncStorageWrites {
-		panic("expected AsyncStorageWrites")
-	}
 	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
 	for _, m := range rd.Messages {

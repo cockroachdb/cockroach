@@ -46,11 +46,11 @@ const (
 	None pb.PeerID = 0
 	// LocalAppendThread is a reference to a local thread that saves unstable
 	// log entries and snapshots to stable storage. The identifier is used as a
-	// target for MsgStorageAppend messages when AsyncStorageWrites is enabled.
+	// target for MsgStorageAppend messages.
 	LocalAppendThread pb.PeerID = math.MaxUint64
 	// LocalApplyThread is a reference to a local thread that applies committed
 	// log entries to the local state machine. The identifier is used as a
-	// target for MsgStorageApply messages when AsyncStorageWrites is enabled.
+	// target for MsgStorageApply messages.
 	LocalApplyThread pb.PeerID = math.MaxUint64 - 1
 )
 
@@ -159,9 +159,9 @@ type Config struct {
 	// threads are not responsible for understanding the response messages, only
 	// for delivering them to the correct target after performing the storage
 	// write.
-	// TODO(#129411): deprecate !AsyncStorageWrites mode as it's not used in
-	// CRDB.
-	AsyncStorageWrites bool
+	// TODO(pav-kv): this comment is a remnant of the AsyncStorageWrites option,
+	// which is now implicitly always true. Move the comment to a better place.
+
 	// LazyReplication instructs raft to hold off constructing MsgApp messages
 	// eagerly in reaction to Step() calls.
 	//
@@ -185,7 +185,8 @@ type Config struct {
 	//
 	// Despite its name (preserved for compatibility), this quota applies across
 	// Ready structs to encompass all outstanding entries in unacknowledged
-	// MsgStorageApply messages when AsyncStorageWrites is enabled.
+	// MsgStorageApply messages.
+	// TODO(pav-kv): make the name better.
 	MaxCommittedSizePerReady uint64
 	// MaxUncommittedEntriesSize limits the aggregate byte size of the
 	// uncommitted entries that may be appended to a leader's log. Once this
@@ -558,13 +559,11 @@ func (r *raft) hardState() pb.HardState {
 // next Ready handling cycle, except in one condition below.
 //
 // Certain message types are scheduled for being sent *after* the unstable state
-// is durably persisted in storage. If AsyncStorageWrites config flag is true,
-// the responsibility of upholding this condition is on the application, so the
-// message will be handed over via the next Ready as usually; if false, the
-// message will skip one Ready handling cycle, and will be sent after the
-// application has persisted the state.
-//
-// TODO(pav-kv): remove this special case after !AsyncStorageWrites is removed.
+// is durably persisted in storage. These messages are nevertheless included in
+// Ready.Messages, and the responsibility of upholding this condition is on the
+// application.
+// TODO(pav-kv): make this requirement explicit in the API, instead of mixing
+// the two kinds of messages together.
 func (r *raft) send(m pb.Message) {
 	if m.From == None {
 		m.From = r.id
