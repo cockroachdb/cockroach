@@ -213,11 +213,12 @@ func (s *Storage) isAlive(
 		if !s.mu.started {
 			return false, false, singleflight.Future{}, sqlliveness.NotStartedError
 		}
-		if _, ok := s.mu.deadSessions.Get(sid); ok {
+		sidKey := any(sid)
+		if _, ok := s.mu.deadSessions.Get(sidKey); ok {
 			s.metrics.IsAliveCacheHits.Inc(1)
 			return false, false, singleflight.Future{}, nil
 		}
-		if expiration, ok := s.mu.liveSessions.Get(sid); ok {
+		if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
 			expiration := expiration.(hlc.Timestamp)
 			// The record exists and is valid.
 			if s.clock.Now().Less(expiration) {
