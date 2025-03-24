@@ -107,6 +107,42 @@ func getTableDesc(
 	return desc, nil
 }
 
+func getDBDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, dbID descpb.ID,
+) (catalog.DatabaseDescriptor, error) {
+	var desc catalog.DatabaseDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
+		if err != nil {
+			return err
+		}
+		desc = dbDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+func getSchemaDesc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, schemaID descpb.ID,
+) (catalog.SchemaDescriptor, error) {
+	var desc catalog.SchemaDescriptor
+	f := func(ctx context.Context, txn descs.Txn) error {
+		schemaDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, schemaID)
+		if err != nil {
+			return err
+		}
+		desc = schemaDesc
+		return nil
+	}
+	if err := execCfg.InternalDB.DescsTxn(ctx, f, isql.WithPriority(admissionpb.LowPri)); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
 func detailsFromPayload(payload jobspb.Payload) (*jobspb.ChangefeedDetails, error) {
 	details := payload.GetDetails()
 	if details == nil {

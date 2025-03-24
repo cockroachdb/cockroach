@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -30,7 +32,12 @@ type enrichedSourceProviderOpts struct {
 type enrichedSourceData struct {
 	jobID, sink,
 	dbVersion, clusterName, sourceNodeLocality, nodeName, nodeID, clusterID string
-	// TODO(#139692): Add schema info support.
+	tableSchemaInfo map[descpb.ID]struct {
+		tableName   string
+		dbName      string
+		schemaName  string
+		primaryKeys []string
+	}
 	// TODO(#139691): Add job info support.
 	// TODO(#139690): Add node/cluster info support.
 }
@@ -47,7 +54,44 @@ func newEnrichedSourceData(
 	cfg *execinfra.ServerConfig,
 	spec execinfrapb.ChangeAggregatorSpec,
 	sink sinkType,
+	targets changefeedbase.Targets,
 ) (enrichedSourceData, error) {
+	tableSchemaInfo := make(map[descpb.ID]struct {
+		tableName   string
+		dbName      string
+		schemaName  string
+		primaryKeys []string
+	})
+	err := targets.EachTarget(func(target changefeedbase.Target) error {
+		id := target.TableID
+		td, err := getTableDesc(ctx, cfg.ExecutorConfig.(*sql.ExecutorConfig), id)
+		if err != nil {
+			return err
+		}
+		dbd, err := getDBDesc(ctx, cfg.ExecutorConfig.(*sql.ExecutorConfig), td.GetParentID())
+		if err != nil {
+			return err
+		}
+		sd, err := getSchemaDesc(ctx, cfg.ExecutorConfig.(*sql.ExecutorConfig), td.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+		tableSchemaInfo[id] = struct {
+			tableName   string
+			dbName      string
+			schemaName  string
+			primaryKeys []string
+		}{
+			tableName:   td.GetName(),
+			dbName:      dbd.GetName(),
+			schemaName:  sd.GetName(),
+			primaryKeys: td.GetPrimaryIndex().IndexDesc().KeyColumnNames,
+		}
+		return nil
+	})
+	if err != nil {
+		return enrichedSourceData{}, err
+	}
 	var sourceNodeLocality, nodeName, nodeID string
 	tiers := cfg.Locality.Tiers
 
@@ -85,6 +129,7 @@ func newEnrichedSourceData(
 		sourceNodeLocality: sourceNodeLocality,
 		nodeName:           nodeName,
 		nodeID:             nodeID,
+		tableSchemaInfo:    tableSchemaInfo,
 	}, nil
 }
 
@@ -104,6 +149,16 @@ func newEnrichedSourceProvider(
 
 	var nonFixedJSONFields []string
 	nonFixedDataIdx := map[string]int{}
+
+	nonFixedJSONFields = append(nonFixedJSONFields, fieldNameDatabaseName)
+	nonFixedDataIdx[fieldNameDatabaseName] = len(nonFixedJSONFields) - 1
+	nonFixedJSONFields = append(nonFixedJSONFields, fieldNameSchemaName)
+	nonFixedDataIdx[fieldNameSchemaName] = len(nonFixedJSONFields) - 1
+	nonFixedJSONFields = append(nonFixedJSONFields, fieldNameTableName)
+	nonFixedDataIdx[fieldNameTableName] = len(nonFixedJSONFields) - 1
+	nonFixedJSONFields = append(nonFixedJSONFields, fieldNamePrimaryKeys)
+	nonFixedDataIdx[fieldNamePrimaryKeys] = len(nonFixedJSONFields) - 1
+
 	if opts.MVCCTimestamps {
 		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameMVCCTimestamp)
 		nonFixedDataIdx[fieldNameMVCCTimestamp] = len(nonFixedJSONFields) - 1
@@ -134,6 +189,24 @@ func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error) {
 	// TODO(#139661): Add other non fixed fields.
 	clear(p.jsonNonFixedData)
+
+	metadata := updated.Metadata
+	tableID := metadata.TableID
+	tableInfo, ok := p.sourceData.tableSchemaInfo[tableID]
+	if !ok {
+		return nil, fmt.Errorf("table %d not found in tableSchemaInfo", tableID)
+	}
+
+	p.jsonNonFixedData[fieldNameDatabaseName] = json.FromString(tableInfo.dbName)
+	p.jsonNonFixedData[fieldNameSchemaName] = json.FromString(tableInfo.schemaName)
+	p.jsonNonFixedData[fieldNameTableName] = json.FromString(tableInfo.tableName)
+
+	primaryKeysBuilder := json.NewArrayBuilder(len(tableInfo.primaryKeys))
+	for _, key := range tableInfo.primaryKeys {
+		primaryKeysBuilder.Add(json.FromString(key))
+	}
+	p.jsonNonFixedData[fieldNamePrimaryKeys] = primaryKeysBuilder.Build()
+
 	if p.opts.mvccTimestamp {
 		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(updated.MvccTimestamp.AsOfSystemTime())
 	}
@@ -144,6 +217,12 @@ func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error
 func (p *enrichedSourceProvider) GetAvro(
 	row cdcevent.Row, schemaPrefix string,
 ) (*avro.FunctionalRecord, error) {
+	tableID := row.EventDescriptor.TableDescriptor().GetID()
+	tableInfo, ok := p.sourceData.tableSchemaInfo[tableID]
+	if !ok {
+		return nil, fmt.Errorf("table %d not found in tableSchemaInfo", tableID)
+	}
+
 	fromRow := func(row cdcevent.Row, dest map[string]any) {
 		// If this is the first use of the avro record (ie the first row the encoder processed), set the fixed fields.
 		if len(dest) == 0 {
@@ -156,6 +235,14 @@ func (p *enrichedSourceProvider) GetAvro(
 			dest[fieldNameNodeName] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName)
 			dest[fieldNameNodeID] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID)
 		}
+
+		dest[fieldNameDatabaseName] = goavro.Union(avro.SchemaTypeString, tableInfo.dbName)
+		dest[fieldNameSchemaName] = goavro.Union(avro.SchemaTypeString, tableInfo.schemaName)
+		dest[fieldNameTableName] = goavro.Union(avro.SchemaTypeString, tableInfo.tableName)
+		// TODO:(aerin) I'd like this to be an array and not a string, byt this causes an error on
+		// the call to newFunctionalRecord saying it's missing Items. I think I'm not using the schema
+		// correctly. Trying to figure out the right way to specify this.
+		dest[fieldNamePrimaryKeys] = goavro.Union(avro.SchemaTypeString, fmt.Sprintf(`[ "%s" ]`, strings.Join(tableInfo.primaryKeys, `", "`)))
 
 		if p.opts.mvccTimestamp {
 			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, row.MvccTimestamp.AsOfSystemTime())
@@ -179,6 +266,10 @@ const (
 	fieldNameNodeName           = "node_name"
 	fieldNameNodeID             = "node_id"
 	fieldNameMVCCTimestamp      = "mvcc_timestamp"
+	fieldNameDatabaseName       = "database_name"
+	fieldNameSchemaName         = "schema_name"
+	fieldNameTableName          = "table_name"
+	fieldNamePrimaryKeys        = "primary_keys"
 )
 
 type fieldInfo struct {
@@ -288,6 +379,52 @@ var allFieldInfo = map[string]fieldInfo{
 			Field:    fieldNameMVCCTimestamp,
 			TypeName: kcjsonschema.SchemaTypeString,
 			Optional: true,
+		},
+	},
+	fieldNameDatabaseName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameDatabaseName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameDatabaseName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNameSchemaName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameSchemaName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameSchemaName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNameTableName: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameTableName,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameTableName,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
+	fieldNamePrimaryKeys: {
+		avroSchemaField: avro.SchemaField{
+			// TODO:(aerin) how do I use this right?
+			Name:       fieldNamePrimaryKeys,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNamePrimaryKeys,
+			TypeName: kcjsonschema.SchemaTypeArray,
+			Optional: false,
+			Items:    &kcjsonschema.Schema{TypeName: kcjsonschema.SchemaTypeString},
 		},
 	},
 }

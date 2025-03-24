@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -1577,6 +1578,21 @@ func getTestingEnrichedSourceData() enrichedSourceData {
 		sourceNodeLocality: "test_source_node_locality",
 		nodeName:           "test_node_name",
 		nodeID:             "test_node_id",
+		tableSchemaInfo: map[descpb.ID]struct {
+			tableName   string
+			dbName      string
+			schemaName  string
+			primaryKeys []string
+		}{
+			// We use 42 here since that is compatible with the tableID in
+			// cdcevent.TestingMakeEventRowFromEncDatums
+			42: {
+				tableName:   "test_table_name",
+				dbName:      "test_db_name",
+				schemaName:  "test_schema_name",
+				primaryKeys: []string{"test_primary_key"},
+			},
+		},
 	}
 }
 
