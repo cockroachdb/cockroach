@@ -142,7 +142,7 @@ func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return a.h.ToPrometheusMetric()
 }
 
-// AddChild adds a Counter to this AggCounter. This method panics if a Counter
+// AddChild adds a Counter to this AggHistogram. This method panics if a Counter
 // already exists for this set of labelVals.
 func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	child := &Histogram{
@@ -152,6 +152,13 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	}
 	a.add(child)
 	return child
+}
+
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggHistogram) RemoveChild(labelVals ...string) {
+	key := &Histogram{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
 }
 
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the
