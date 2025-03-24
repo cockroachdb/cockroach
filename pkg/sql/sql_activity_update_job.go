@@ -281,41 +281,17 @@ func (u *sqlActivityUpdater) transferAllStats(
 	totalEstimatedStmtClusterExecSeconds float64,
 	totalEstimatedTxnClusterExecSeconds float64,
 ) error {
-	aost := u.testingKnobs.GetAOSTClause()
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"sql-activity-select-all-transactions",
 		nil, // txn
-		sessiondata.NodeUserWithBulkLowPriSessionDataOverride, fmt.Sprintf(
-			`
-SELECT fingerprint_id,
-       app_name,
-       max_agg_interval,
-       metadata,
-       statistics,
-       (statistics->'statistics'->>'cnt')::int,
-       ((statistics->'statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float),
-       COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float,0),
-       COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float,0),
-       (statistics->'statistics'->'svcLat'->>'mean')::float
-     FROM (
-       SELECT max(aggregated_ts) AS max_aggregated_ts,
-              app_name,
-              fingerprint_id,
-              max(agg_interval) as max_agg_interval,
-              max(metadata) as metadata,
-              merge_transaction_stats(statistics) AS statistics
-       FROM system.public.transaction_statistics %[1]s
-       WHERE aggregated_ts = $1 AND
-             app_name not like '$ internal%%'
-       GROUP BY app_name, fingerprint_id
-     ) %[1]s
-`, aost), aggTs)
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+		u.buildSelectAllTransactionsQuery(), aggTs)
 
 	if err != nil {
 		return err
 	}
 
-	if err := u.upsertTopTransactions(ctx, "activity-flush-txn-upsert-all", u.db.Executor(),
+	if err := u.upsertTopTransactions(ctx, "activity-flush-txn-eelect-all", u.db.Executor(),
 		nil /* txn */, it, aggTs, totalEstimatedTxnClusterExecSeconds); err != nil {
 		return err
 	}
@@ -399,6 +375,7 @@ func (u *sqlActivityUpdater) transferTopStats(
 	// Note that it's important we use follower reads here to avoid causing
 	// contention // since the rest of the cluster is still writing to the statistics
 	// tables during the execution of this job.
+	//
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"sql-activity-select-top-transactions",
 		nil, // txn
@@ -725,6 +702,44 @@ func (u *sqlActivityUpdater) getTableRowCount(
 	return int64(tree.MustBeDInt(datums[0])), nil
 }
 
+// buildSelectAllTransactionsQuery is used to build the query to select and
+// aggregate all transactions for the provided aggregated timestamp to upsert
+// into the system.transaction_activity table.
+// The constructd query will expect 1 argument:
+// arg1: the aggregated timestamp to select the transactions.
+func (u *sqlActivityUpdater) buildSelectAllTransactionsQuery() string {
+	aost := u.testingKnobs.GetAOSTClause()
+	return fmt.Sprintf(`
+WITH aggregate_transaction_statistics AS (
+  SELECT 
+    app_name,
+    fingerprint_id,
+    max(aggregated_ts) AS max_aggregated_ts,
+    max(agg_interval) AS max_agg_interval,
+    max(metadata) AS metadata,
+    merge_transaction_stats(statistics) AS statistics
+  FROM system.public.transaction_statistics %[1]s
+  WHERE 
+    aggregated_ts = $1 AND
+    app_name NOT LIKE '$ internal%%'
+  GROUP BY app_name, fingerprint_id
+)
+SELECT 
+  fingerprint_id,
+  app_name,
+  max_agg_interval,
+  metadata,
+  statistics,
+  (statistics->'statistics'->>'cnt')::int AS count,
+  ((statistics->'statistics'->>'cnt')::float) * 
+    ((statistics->'statistics'->'svcLat'->>'mean')::float) AS total_latency,
+  COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float, 0) AS avg_contention_time,
+  COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float, 0) AS avg_cpu_time,
+  (statistics->'statistics'->'svcLat'->>'mean')::float AS avg_service_latency
+FROM aggregate_transaction_statistics %[1]s
+`, aost)
+}
+
 // buildSelectTopTransactionsQuery is used to build the query to select the top
 // transactions for the provided aggregated timestamp by
 // - execution count
@@ -750,8 +765,8 @@ WITH transaction_aggregates AS (
     SELECT 
         fingerprint_id,
         app_name,
-        MAX(agg_interval) AS agg_interval,
-        MAX(metadata) AS metadata,
+        max(agg_interval) AS agg_interval,
+        max(metadata) AS metadata,
         merge_transaction_stats(statistics) AS merge_stats
     FROM system.public.transaction_statistics %[1]s
     WHERE aggregated_ts = $1 AND app_name NOT LIKE '$ internal%%'
@@ -885,7 +900,7 @@ UPSERT INTO system.public.transaction_activity (
 			}
 		}
 
-		_, err := executor.ExecEx(ctx, redact.RedactableString(opName),
+		_, err := executor.ExecEx(ctx, redact.Sprint(opName),
 			txn,
 			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
 			queryStr.String(), qArgs...)
