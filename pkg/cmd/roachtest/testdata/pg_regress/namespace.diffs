@@ -1,0 +1,140 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/namespace.out --label=/mnt/data1/postgres/src/test/regress/results/namespace.out /mnt/data1/postgres/src/test/regress/expected/namespace.out /mnt/data1/postgres/src/test/regress/results/namespace.out
+--- /mnt/data1/postgres/src/test/regress/expected/namespace.out
++++ /mnt/data1/postgres/src/test/regress/results/namespace.out
+@@ -4,11 +4,7 @@
+ -- set the whitespace-only search_path to test that the
+ -- GUC list syntax is preserved during a schema creation
+ SELECT pg_catalog.set_config('search_path', ' ', false);
+- set_config 
+-------------
+-  
+-(1 row)
+-
++ERROR:  set_config(): invalid value for parameter "search_path": " "
+ CREATE SCHEMA test_ns_schema_1
+        CREATE UNIQUE INDEX abc_a_idx ON abc (a)
+        CREATE VIEW abc_view AS
+@@ -17,20 +13,27 @@
+               a serial,
+               b int UNIQUE
+        );
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA test_ns_schema_1
++       CREATE UNIQUE INDEX abc_a_idx ON abc (a)
++       ^
+ -- verify that the correct search_path restored on abort
+ SET search_path to public;
+ BEGIN;
+ SET search_path to public, test_ns_schema_1;
+ CREATE SCHEMA test_ns_schema_2
+        CREATE VIEW abc_view AS SELECT c FROM abc;
+-ERROR:  column "c" does not exist
+-LINE 2:        CREATE VIEW abc_view AS SELECT c FROM abc;
+-                                              ^
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA test_ns_schema_2
++       CREATE VIEW abc_view AS SELECT c FROM abc
++       ^
+ COMMIT;
+ SHOW search_path;
+- search_path 
+--------------
+- public
++       search_path        
++--------------------------
++ public, test_ns_schema_1
+ (1 row)
+ 
+ -- verify that the correct search_path preserved
+@@ -39,12 +42,13 @@
+ SET search_path to public, test_ns_schema_1;
+ CREATE SCHEMA test_ns_schema_2
+        CREATE VIEW abc_view AS SELECT a FROM abc;
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA test_ns_schema_2
++       CREATE VIEW abc_view AS SELECT a FROM abc
++       ^
+ SHOW search_path;
+-       search_path        
+---------------------------
+- public, test_ns_schema_1
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ COMMIT;
+ SHOW search_path;
+        search_path        
+@@ -53,35 +57,27 @@
+ (1 row)
+ 
+ DROP SCHEMA test_ns_schema_2 CASCADE;
+-NOTICE:  drop cascades to view test_ns_schema_2.abc_view
++ERROR:  unknown schema "test_ns_schema_2"
+ -- verify that the objects were created
+ SELECT COUNT(*) FROM pg_class WHERE relnamespace =
+     (SELECT oid FROM pg_namespace WHERE nspname = 'test_ns_schema_1');
+  count 
+ -------
+-     5
++     0
+ (1 row)
+ 
+ INSERT INTO test_ns_schema_1.abc DEFAULT VALUES;
++ERROR:  relation "test_ns_schema_1.abc" does not exist
+ INSERT INTO test_ns_schema_1.abc DEFAULT VALUES;
++ERROR:  relation "test_ns_schema_1.abc" does not exist
+ INSERT INTO test_ns_schema_1.abc DEFAULT VALUES;
++ERROR:  relation "test_ns_schema_1.abc" does not exist
+ SELECT * FROM test_ns_schema_1.abc;
+- a | b 
+----+---
+- 1 |  
+- 2 |  
+- 3 |  
+-(3 rows)
+-
++ERROR:  relation "test_ns_schema_1.abc" does not exist
+ SELECT * FROM test_ns_schema_1.abc_view;
+- a | b 
+----+---
+- 2 |  
+- 3 |  
+- 4 |  
+-(3 rows)
+-
++ERROR:  relation "test_ns_schema_1.abc_view" does not exist
+ ALTER SCHEMA test_ns_schema_1 RENAME TO test_ns_schema_renamed;
++ERROR:  unknown schema "test_ns_schema_1"
+ SELECT COUNT(*) FROM pg_class WHERE relnamespace =
+     (SELECT oid FROM pg_namespace WHERE nspname = 'test_ns_schema_1');
+  count 
+@@ -91,21 +87,18 @@
+ 
+ -- test IF NOT EXISTS cases
+ CREATE SCHEMA test_ns_schema_renamed; -- fail, already exists
+-ERROR:  schema "test_ns_schema_renamed" already exists
+ CREATE SCHEMA IF NOT EXISTS test_ns_schema_renamed; -- ok with notice
+-NOTICE:  schema "test_ns_schema_renamed" already exists, skipping
+ CREATE SCHEMA IF NOT EXISTS test_ns_schema_renamed -- fail, disallowed
+        CREATE TABLE abc (
+               a serial,
+               b int UNIQUE
+        );
+-ERROR:  CREATE SCHEMA IF NOT EXISTS cannot include schema elements
+-LINE 2:        CREATE TABLE abc (
+-               ^
++ERROR:  at or near "create": syntax error
++DETAIL:  source SQL:
++CREATE SCHEMA IF NOT EXISTS test_ns_schema_renamed 
++       CREATE TABLE abc (
++       ^
+ DROP SCHEMA test_ns_schema_renamed CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to table test_ns_schema_renamed.abc
+-drop cascades to view test_ns_schema_renamed.abc_view
+ -- verify that the objects were dropped
+ SELECT COUNT(*) FROM pg_class WHERE relnamespace =
+     (SELECT oid FROM pg_namespace WHERE nspname = 'test_ns_schema_renamed');

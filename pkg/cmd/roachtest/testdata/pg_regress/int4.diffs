@@ -1,0 +1,439 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int4.out --label=/mnt/data1/postgres/src/test/regress/results/int4.out /mnt/data1/postgres/src/test/regress/expected/int4.out /mnt/data1/postgres/src/test/regress/results/int4.out
+--- /mnt/data1/postgres/src/test/regress/expected/int4.out
++++ /mnt/data1/postgres/src/test/regress/results/int4.out
+@@ -4,37 +4,21 @@
+ -- int4_tbl was already created and filled in test_setup.sql.
+ -- Here we just try to insert bad values.
+ INSERT INTO INT4_TBL(f1) VALUES ('34.5');
+-ERROR:  invalid input syntax for type integer: "34.5"
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('34.5');
+-                                         ^
++ERROR:  could not parse "34.5" as type int: strconv.ParseInt: parsing "34.5": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('1000000000000');
+-ERROR:  value "1000000000000" is out of range for type integer
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('1000000000000');
+-                                         ^
++ERROR:  integer out of range for type int4
+ INSERT INTO INT4_TBL(f1) VALUES ('asdf');
+-ERROR:  invalid input syntax for type integer: "asdf"
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('asdf');
+-                                         ^
++ERROR:  could not parse "asdf" as type int: strconv.ParseInt: parsing "asdf": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('     ');
+-ERROR:  invalid input syntax for type integer: "     "
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('     ');
+-                                         ^
++ERROR:  could not parse "" as type int: strconv.ParseInt: parsing "": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('   asdf   ');
+-ERROR:  invalid input syntax for type integer: "   asdf   "
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('   asdf   ');
+-                                         ^
++ERROR:  could not parse "asdf" as type int: strconv.ParseInt: parsing "asdf": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('- 1234');
+-ERROR:  invalid input syntax for type integer: "- 1234"
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('- 1234');
+-                                         ^
++ERROR:  could not parse "- 1234" as type int: strconv.ParseInt: parsing "- 1234": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('123       5');
+-ERROR:  invalid input syntax for type integer: "123       5"
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('123       5');
+-                                         ^
++ERROR:  could not parse "123       5" as type int: strconv.ParseInt: parsing "123       5": invalid syntax
+ INSERT INTO INT4_TBL(f1) VALUES ('');
+-ERROR:  invalid input syntax for type integer: ""
+-LINE 1: INSERT INTO INT4_TBL(f1) VALUES ('');
+-                                         ^
++ERROR:  could not parse "" as type int: strconv.ParseInt: parsing "": invalid syntax
+ SELECT * FROM INT4_TBL;
+      f1      
+ -------------
+@@ -47,29 +31,13 @@
+ 
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('34', 'int4');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('asdf', 'int4');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('1000000000000', 'int4');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1000000000000', 'int4');
+-                        message                         | detail | hint | sql_error_code 
+---------------------------------------------------------+--------+------+----------------
+- value "1000000000000" is out of range for type integer |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT i.* FROM INT4_TBL i WHERE i.f1 <> int2 '0';
+      f1      
+ -------------
+@@ -177,7 +145,15 @@
+ (3 rows)
+ 
+ SELECT i.f1, i.f1 * int2 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |           0
++      123456 |      246912
++     -123456 |     -246912
++  2147483647 |  4294967294
++ -2147483647 | -4294967294
++(5 rows)
++
+ SELECT i.f1, i.f1 * int2 '2' AS x FROM INT4_TBL i
+ WHERE abs(f1) < 1073741824;
+    f1    |    x    
+@@ -188,7 +164,15 @@
+ (3 rows)
+ 
+ SELECT i.f1, i.f1 * int4 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |           0
++      123456 |      246912
++     -123456 |     -246912
++  2147483647 |  4294967294
++ -2147483647 | -4294967294
++(5 rows)
++
+ SELECT i.f1, i.f1 * int4 '2' AS x FROM INT4_TBL i
+ WHERE abs(f1) < 1073741824;
+    f1    |    x    
+@@ -199,7 +183,15 @@
+ (3 rows)
+ 
+ SELECT i.f1, i.f1 + int2 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |           2
++      123456 |      123458
++     -123456 |     -123454
++  2147483647 |  2147483649
++ -2147483647 | -2147483645
++(5 rows)
++
+ SELECT i.f1, i.f1 + int2 '2' AS x FROM INT4_TBL i
+ WHERE f1 < 2147483646;
+      f1      |      x      
+@@ -211,7 +203,15 @@
+ (4 rows)
+ 
+ SELECT i.f1, i.f1 + int4 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |           2
++      123456 |      123458
++     -123456 |     -123454
++  2147483647 |  2147483649
++ -2147483647 | -2147483645
++(5 rows)
++
+ SELECT i.f1, i.f1 + int4 '2' AS x FROM INT4_TBL i
+ WHERE f1 < 2147483646;
+      f1      |      x      
+@@ -223,7 +223,15 @@
+ (4 rows)
+ 
+ SELECT i.f1, i.f1 - int2 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |          -2
++      123456 |      123454
++     -123456 |     -123458
++  2147483647 |  2147483645
++ -2147483647 | -2147483649
++(5 rows)
++
+ SELECT i.f1, i.f1 - int2 '2' AS x FROM INT4_TBL i
+ WHERE f1 > -2147483647;
+      f1     |     x      
+@@ -235,7 +243,15 @@
+ (4 rows)
+ 
+ SELECT i.f1, i.f1 - int4 '2' AS x FROM INT4_TBL i;
+-ERROR:  integer out of range
++     f1      |      x      
++-------------+-------------
++           0 |          -2
++      123456 |      123454
++     -123456 |     -123458
++  2147483647 |  2147483645
++ -2147483647 | -2147483649
++(5 rows)
++
+ SELECT i.f1, i.f1 - int4 '2' AS x FROM INT4_TBL i
+ WHERE f1 > -2147483647;
+      f1     |     x      
+@@ -247,23 +263,23 @@
+ (4 rows)
+ 
+ SELECT i.f1, i.f1 / int2 '2' AS x FROM INT4_TBL i;
+-     f1      |      x      
+--------------+-------------
+-           0 |           0
+-      123456 |       61728
+-     -123456 |      -61728
+-  2147483647 |  1073741823
+- -2147483647 | -1073741823
++     f1      |           x            
++-------------+------------------------
++           0 |                      0
++      123456 |  61728.000000000000000
++     -123456 | -61728.000000000000000
++  2147483647 |  1073741823.5000000000
++ -2147483647 | -1073741823.5000000000
+ (5 rows)
+ 
+ SELECT i.f1, i.f1 / int4 '2' AS x FROM INT4_TBL i;
+-     f1      |      x      
+--------------+-------------
+-           0 |           0
+-      123456 |       61728
+-     -123456 |      -61728
+-  2147483647 |  1073741823
+- -2147483647 | -1073741823
++     f1      |           x            
++-------------+------------------------
++           0 |                      0
++      123456 |  61728.000000000000000
++     -123456 | -61728.000000000000000
++  2147483647 |  1073741823.5000000000
++ -2147483647 | -1073741823.5000000000
+ (5 rows)
+ 
+ --
+@@ -325,15 +341,15 @@
+ (1 row)
+ 
+ SELECT 2 + 2 / 2 AS three;
+- three 
+--------
+-     3
++         three         
++-----------------------
++ 3.0000000000000000000
+ (1 row)
+ 
+ SELECT (2 + 2) / 2 AS two;
+- two 
+------
+-   2
++          two          
++-----------------------
++ 2.0000000000000000000
+ (1 row)
+ 
+ -- corner case
+@@ -351,9 +367,17 @@
+ 
+ -- check sane handling of INT_MIN overflow cases
+ SELECT (-2147483648)::int4 * (-1)::int4;
+-ERROR:  integer out of range
++  ?column?  
++------------
++ 2147483648
++(1 row)
++
+ SELECT (-2147483648)::int4 / (-1)::int4;
+-ERROR:  integer out of range
++       ?column?        
++-----------------------
++ 2147483648.0000000000
++(1 row)
++
+ SELECT (-2147483648)::int4 % (-1)::int4;
+  ?column? 
+ ----------
+@@ -361,9 +385,17 @@
+ (1 row)
+ 
+ SELECT (-2147483648)::int4 * (-1)::int2;
+-ERROR:  integer out of range
++  ?column?  
++------------
++ 2147483648
++(1 row)
++
+ SELECT (-2147483648)::int4 / (-1)::int2;
+-ERROR:  integer out of range
++       ?column?        
++-----------------------
++ 2147483648.0000000000
++(1 row)
++
+ SELECT (-2147483648)::int4 % (-1)::int2;
+  ?column? 
+ ----------
+@@ -419,21 +451,11 @@
+              ((-2147483648)::int4, 1::int4),
+              ((-2147483648)::int4, 2147483647::int4),
+              ((-2147483648)::int4, 1073741824::int4)) AS v(a, b);
+-      a      |     b      |    gcd     |    gcd     |    gcd     |    gcd     
+--------------+------------+------------+------------+------------+------------
+-           0 |          0 |          0 |          0 |          0 |          0
+-           0 |    6410818 |    6410818 |    6410818 |    6410818 |    6410818
+-    61866666 |    6410818 |       1466 |       1466 |       1466 |       1466
+-   -61866666 |    6410818 |       1466 |       1466 |       1466 |       1466
+- -2147483648 |          1 |          1 |          1 |          1 |          1
+- -2147483648 | 2147483647 |          1 |          1 |          1 |          1
+- -2147483648 | 1073741824 | 1073741824 | 1073741824 | 1073741824 | 1073741824
+-(7 rows)
+-
++ERROR:  unknown function: gcd()
+ SELECT gcd((-2147483648)::int4, 0::int4); -- overflow
+-ERROR:  integer out of range
++ERROR:  unknown function: gcd()
+ SELECT gcd((-2147483648)::int4, (-2147483648)::int4); -- overflow
+-ERROR:  integer out of range
++ERROR:  unknown function: gcd()
+ -- test lcm()
+ SELECT a, b, lcm(a, b), lcm(a, -b), lcm(b, a), lcm(-b, a)
+ FROM (VALUES (0::int4, 0::int4),
+@@ -442,20 +464,11 @@
+              (330::int4, 462::int4),
+              (-330::int4, 462::int4),
+              ((-2147483648)::int4, 0::int4)) AS v(a, b);
+-      a      |  b  | lcm  | lcm  | lcm  | lcm  
+--------------+-----+------+------+------+------
+-           0 |   0 |    0 |    0 |    0 |    0
+-           0 |  42 |    0 |    0 |    0 |    0
+-          42 |  42 |   42 |   42 |   42 |   42
+-         330 | 462 | 2310 | 2310 | 2310 | 2310
+-        -330 | 462 | 2310 | 2310 | 2310 | 2310
+- -2147483648 |   0 |    0 |    0 |    0 |    0
+-(6 rows)
+-
++ERROR:  unknown function: lcm()
+ SELECT lcm((-2147483648)::int4, 1::int4); -- overflow
+-ERROR:  integer out of range
++ERROR:  unknown function: lcm()
+ SELECT lcm(2147483647::int4, 2147483646::int4); -- overflow
+-ERROR:  integer out of range
++ERROR:  unknown function: lcm()
+ -- non-decimal literals
+ SELECT int4 '0b100101';
+  int4 
+@@ -476,17 +489,11 @@
+ (1 row)
+ 
+ SELECT int4 '0b';
+-ERROR:  invalid input syntax for type integer: "0b"
+-LINE 1: SELECT int4 '0b';
+-                    ^
++ERROR:  could not parse "0b" as type int: strconv.ParseInt: parsing "0b": invalid syntax
+ SELECT int4 '0o';
+-ERROR:  invalid input syntax for type integer: "0o"
+-LINE 1: SELECT int4 '0o';
+-                    ^
++ERROR:  could not parse "0o" as type int: strconv.ParseInt: parsing "0o": invalid syntax
+ SELECT int4 '0x';
+-ERROR:  invalid input syntax for type integer: "0x"
+-LINE 1: SELECT int4 '0x';
+-                    ^
++ERROR:  could not parse "0x" as type int: strconv.ParseInt: parsing "0x": invalid syntax
+ -- cases near overflow
+ SELECT int4 '0b1111111111111111111111111111111';
+     int4    
+@@ -495,9 +502,7 @@
+ (1 row)
+ 
+ SELECT int4 '0b10000000000000000000000000000000';
+-ERROR:  value "0b10000000000000000000000000000000" is out of range for type integer
+-LINE 1: SELECT int4 '0b10000000000000000000000000000000';
+-                    ^
++ERROR:  integer out of range for type int4
+ SELECT int4 '0o17777777777';
+     int4    
+ ------------
+@@ -505,9 +510,7 @@
+ (1 row)
+ 
+ SELECT int4 '0o20000000000';
+-ERROR:  value "0o20000000000" is out of range for type integer
+-LINE 1: SELECT int4 '0o20000000000';
+-                    ^
++ERROR:  integer out of range for type int4
+ SELECT int4 '0x7FFFFFFF';
+     int4    
+ ------------
+@@ -515,9 +518,7 @@
+ (1 row)
+ 
+ SELECT int4 '0x80000000';
+-ERROR:  value "0x80000000" is out of range for type integer
+-LINE 1: SELECT int4 '0x80000000';
+-                    ^
++ERROR:  integer out of range for type int4
+ SELECT int4 '-0b10000000000000000000000000000000';
+     int4     
+ -------------
+@@ -525,9 +526,7 @@
+ (1 row)
+ 
+ SELECT int4 '-0b10000000000000000000000000000001';
+-ERROR:  value "-0b10000000000000000000000000000001" is out of range for type integer
+-LINE 1: SELECT int4 '-0b10000000000000000000000000000001';
+-                    ^
++ERROR:  integer out of range for type int4
+ SELECT int4 '-0o20000000000';
+     int4     
+ -------------
+@@ -535,9 +534,7 @@
+ (1 row)
+ 
+ SELECT int4 '-0o20000000001';
+-ERROR:  value "-0o20000000001" is out of range for type integer
+-LINE 1: SELECT int4 '-0o20000000001';
+-                    ^
++ERROR:  integer out of range for type int4
+ SELECT int4 '-0x80000000';
+     int4     
+ -------------
+@@ -545,9 +542,7 @@
+ (1 row)
+ 
+ SELECT int4 '-0x80000001';
+-ERROR:  value "-0x80000001" is out of range for type integer
+-LINE 1: SELECT int4 '-0x80000001';
+-                    ^
++ERROR:  integer out of range for type int4
+ -- underscores
+ SELECT int4 '1_000_000';
+   int4   
+@@ -581,14 +576,8 @@
+ 
+ -- error cases
+ SELECT int4 '_100';
+-ERROR:  invalid input syntax for type integer: "_100"
+-LINE 1: SELECT int4 '_100';
+-                    ^
++ERROR:  could not parse "_100" as type int: strconv.ParseInt: parsing "_100": invalid syntax
+ SELECT int4 '100_';
+-ERROR:  invalid input syntax for type integer: "100_"
+-LINE 1: SELECT int4 '100_';
+-                    ^
++ERROR:  could not parse "100_" as type int: strconv.ParseInt: parsing "100_": invalid syntax
+ SELECT int4 '100__000';
+-ERROR:  invalid input syntax for type integer: "100__000"
+-LINE 1: SELECT int4 '100__000';
+-                    ^
++ERROR:  could not parse "100__000" as type int: strconv.ParseInt: parsing "100__000": invalid syntax

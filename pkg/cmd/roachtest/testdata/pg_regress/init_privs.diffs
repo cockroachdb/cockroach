@@ -1,0 +1,25 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/init_privs.out --label=/mnt/data1/postgres/src/test/regress/results/init_privs.out /mnt/data1/postgres/src/test/regress/expected/init_privs.out /mnt/data1/postgres/src/test/regress/results/init_privs.out
+--- /mnt/data1/postgres/src/test/regress/expected/init_privs.out
++++ /mnt/data1/postgres/src/test/regress/results/init_privs.out
+@@ -3,10 +3,20 @@
+ SELECT count(*) > 0 FROM pg_init_privs;
+  ?column? 
+ ----------
+- t
++ f
+ (1 row)
+ 
+ -- Intentionally include some non-initial privs for pg_dump to dump out
+ GRANT SELECT ON pg_proc TO CURRENT_USER;
+ GRANT SELECT (prosrc) ON pg_proc TO CURRENT_USER;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (prosrc) ON pg_proc TO CURRENT_USER
++             ^
++HINT:  try \h GRANT
+ GRANT SELECT (rolname, rolsuper) ON pg_authid TO CURRENT_USER;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++GRANT SELECT (rolname, rolsuper) ON pg_authid TO CURRENT_USER
++             ^
++HINT:  try \h GRANT

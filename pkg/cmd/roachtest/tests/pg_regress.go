@@ -27,7 +27,7 @@ var postgresReleaseTagRegex = regexp.MustCompile(`^REL_(?P<major>\d+)_(?P<minor>
 var postgresSupportedTag = "REL_16_0"
 var postgresDir = "/mnt/data1/postgres"
 var pgregressDir = postgresDir + "/src/test/regress"
-var testdata = "./pkg/cmd/roachtest/testdata/regression.diffs"
+var testdataPrefix = "./pkg/cmd/roachtest/testdata/pg_regress/"
 
 func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	node := c.Node(1)
@@ -163,299 +163,324 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// when all tests are run with default settings (groups are run in
 	// parallel when run against postgres).
 	// The following tests have been removed instead of commented out,
-	// because there are no plans to support the features under test: vacuum,
-	// txid, guc.
-	tests := "varchar " +
-		"char " +
-		"int2 " +
-		"text " +
-		"boolean " +
-		"name " +
-		"int4 " +
-		"oid " +
-		"int8 " +
-		"bit " +
-		"uuid " +
-		"float4 " +
-		"pg_lsn " +
-		"regproc " +
+	// because there are no plans to support the features under test:
+	// - vacuum,
+	// - txid,
+	// - guc.
+	tests := []string{
+		"varchar",
+		"char",
+		"int2",
+		"text",
+		"boolean",
+		"name",
+		"int4",
+		"oid",
+		"int8",
+		"bit",
+		"uuid",
+		"float4",
+		"pg_lsn",
+		"regproc",
 		// TODO(#41578): Reenable when money types are supported.
-		// "money " +
-		"enum " +
-		"float8 " +
-		"numeric " +
-		"rangetypes " +
-		"md5 " +
-		"numerology " +
-		"timetz " +
+		// "money",
+		"enum",
+		"float8",
+		"numeric",
+		"rangetypes",
+		"md5",
+		"numerology",
+		"timetz",
 		// TODO(#45813): Reenable when macaddr is supported.
-		// "macaddr " +
-		// "macaddr8 " +
-		"strings " +
-		"time " +
-		"date " +
-		"inet " +
-		"interval " +
-		"multirangetypes " +
-		"timestamp " +
-		"timestamptz " +
+		// "macaddr",
+		// "macaddr8",
+		"strings",
+		"time",
+		"date",
+		"inet",
+		"interval",
+		"multirangetypes",
+		"timestamp",
+		"timestamptz",
 		// TODO(#21286): Reenable when more geometric types are supported.
-		// "point " +
-		// "circle " +
-		// "line " +
-		// "lseg " +
-		// "path " +
-		// "box " +
-		// "polygon " +
-		"unicode " +
-		"misc_sanity " +
-		"tstypes " +
-		"comments " +
-		"geometry " +
-		"xid " +
-		"horology " +
-		"type_sanity " +
-		"expressions " +
-		"mvcc " +
-		"regex " +
+		// "point",
+		// "circle",
+		// "line",
+		// "lseg",
+		// "path",
+		// "box",
+		// "polygon",
+		"unicode",
+		"misc_sanity",
+		"tstypes",
+		"comments",
+		"geometry",
+		"xid",
+		"horology",
+		"type_sanity",
+		"expressions",
+		"mvcc",
+		"regex",
 		// TODO(#123651): re-enable when pg_catalog.pg_proc is fixed up.
-		// "opr_sanity " +
-		"copyselect " +
-		"copydml " +
-		"copy " +
-		"insert_conflict " +
-		"insert " +
-		"create_function_c " +
-		"create_operator " +
-		"create_type " +
-		"create_procedure " +
-		"create_schema " +
-		"create_misc " +
-		"create_table " +
-		"index_including " +
-		"index_including_gist " +
-		"create_view " +
-		"create_index_spgist " +
-		"create_index " +
-		"create_cast " +
-		"create_aggregate " +
-		"hash_func " +
-		"select " +
-		"roleattributes " +
-		"drop_if_exists " +
-		"typed_table " +
-		"errors " +
-		"create_function_sql " +
-		"create_am " +
-		"infinite_recurse " +
-		"constraints " +
-		"updatable_views " +
-		"triggers " +
-		"random " +
-		"delete " +
-		"inherit " +
-		"select_distinct_on " +
-		"select_having " +
-		"select_implicit " +
-		"namespace " +
-		"case " +
-		"select_into " +
-		"prepared_xacts " +
-		"select_distinct " +
+		// "opr_sanity",
+		"copyselect",
+		"copydml",
+		"copy",
+		"insert_conflict",
+		"insert",
+		"create_function_c",
+		"create_operator",
+		"create_type",
+		"create_procedure",
+		"create_schema",
+		"create_misc",
+		"create_table",
+		"index_including",
+		"index_including_gist",
+		"create_view",
+		"create_index_spgist",
+		"create_index",
+		"create_cast",
+		"create_aggregate",
+		"hash_func",
+		"select",
+		"roleattributes",
+		"drop_if_exists",
+		"typed_table",
+		"errors",
+		"create_function_sql",
+		"create_am",
+		"infinite_recurse",
+		"constraints",
+		"updatable_views",
+		"triggers",
+		"random",
+		"delete",
+		"inherit",
+		"select_distinct_on",
+		"select_having",
+		"select_implicit",
+		"namespace",
+		"case",
+		"select_into",
+		// TODO(#137549): prepared transactions cause hanging.
+		//"prepared_xacts",
+		"select_distinct",
 		// TODO(#117689): Transactions test causes server crash.
-		// "transactions " +
-		"portals " +
-		"union " +
-		"subselect " +
-		"arrays " +
-		"hash_index " +
-		"update " +
-		"aggregates " +
-		"join " +
-		"btree_index " +
-		"init_privs " +
-		"security_label " +
-		"drop_operator " +
-		"tablesample " +
-		"lock " +
-		"collate " +
-		"replica_identity " +
-		"object_address " +
-		"password " +
-		"identity " +
-		"groupingsets " +
-		"matview " +
-		"generated " +
-		"spgist " +
-		"rowsecurity " +
-		"gin " +
-		"gist " +
-		"brin " +
-		"join_hash " +
-		"privileges " +
-		"brin_bloom " +
-		"brin_multi " +
-		"async " +
-		"dbsize " +
-		"alter_operator " +
-		"tidrangescan " +
-		"collate.icu.utf8 " +
-		"tsrf " +
-		"alter_generic " +
-		"tidscan " +
-		"tid " +
-		"create_role " +
-		"misc " +
-		"sysviews " +
-		"misc_functions " +
-		"incremental_sort " +
-		"merge " +
-		"create_table_like " +
-		"collate.linux.utf8 " +
-		"collate.windows.win1252 " +
-		"amutils " +
-		"psql_crosstab " +
-		"rules " +
+		// "transactions",
+		"portals",
+		"union",
+		"subselect",
+		"arrays",
+		"hash_index",
+		"update",
+		"aggregates",
+		"join",
+		"btree_index",
+		"init_privs",
+		"security_label",
+		"drop_operator",
+		"tablesample",
+		"lock",
+		"collate",
+		"replica_identity",
+		"object_address",
+		"password",
+		"identity",
+		"groupingsets",
+		"matview",
+		"generated",
+		"spgist",
+		"rowsecurity",
+		"gin",
+		"gist",
+		"brin",
+		"join_hash",
+		"privileges",
+		"brin_bloom",
+		"brin_multi",
+		"async",
+		"dbsize",
+		"alter_operator",
+		"tidrangescan",
+		"collate.icu.utf8",
+		"tsrf",
+		"alter_generic",
+		"tidscan",
+		"tid",
+		"create_role",
+		"misc",
+		"sysviews",
+		"misc_functions",
+		"incremental_sort",
+		"merge",
+		"create_table_like",
+		"collate.linux.utf8",
+		"collate.windows.win1252",
+		"amutils",
+		"psql_crosstab",
+		"rules",
 		// TODO(#117689): Psql test causes server crash.
-		// "psql " +
-		"stats_ext " +
-		"subscription " +
-		"publication " +
-		"portals_p2 " +
-		"dependency " +
-		"xmlmap " +
-		"advisory_lock " +
-		"select_views " +
-		"combocid " +
-		"tsdicts " +
-		"functional_deps " +
-		"equivclass " +
-		"bitmapops " +
-		"window " +
-		"indirect_toast " +
-		"tsearch " +
-		"cluster " +
-		"foreign_data " +
-		"foreign_key " +
-		"json_encoding " +
-		"jsonpath_encoding " +
-		"jsonpath " +
-		"sqljson " +
-		"json " +
-		"jsonb_jsonpath " +
-		"jsonb " +
-		"prepare " +
-		"limit " +
-		"returning " +
-		"plancache " +
-		"conversion " +
-		"xml " +
-		"temp " +
+		// "psql",
+		"stats_ext",
+		"subscription",
+		"publication",
+		"portals_p2",
+		"dependency",
+		"xmlmap",
+		"advisory_lock",
+		"select_views",
+		"combocid",
+		"tsdicts",
+		"functional_deps",
+		"equivclass",
+		"bitmapops",
+		"window",
+		"indirect_toast",
+		"tsearch",
+		"cluster",
+		"foreign_data",
+		"foreign_key",
+		"json_encoding",
+		"jsonpath_encoding",
+		"jsonpath",
+		"sqljson",
+		"json",
+		"jsonb_jsonpath",
+		"jsonb",
+		"prepare",
+		"limit",
+		"returning",
+		"plancache",
+		"conversion",
+		"xml",
+		"temp",
 		// TODO(#28296): Reenable copy2 when triggers and COPY [view] FROM are supported.
-		// "copy2 " +
-		"rangefuncs " +
-		"sequence " +
-		"truncate " +
-		"alter_table " +
-		"polymorphism " +
-		"rowtypes " +
-		"domain " +
-		"largeobject " +
+		// "copy2",
+		"rangefuncs",
+		"sequence",
+		"truncate",
+		"alter_table",
+		"polymorphism",
+		"rowtypes",
+		"domain",
+		"largeobject",
 		// TODO(#113625): Reenable with when aggregation bug is fixed.
-		// "with " +
-		"plpgsql " +
-		"hash_part " +
-		"partition_info " +
-		"reloptions " +
-		"explain " +
-		"memoize " +
-		"compression " +
-		"partition_aggregate " +
-		"indexing " +
-		"partition_join " +
-		"partition_prune " +
-		"tuplesort " +
-		"stats " +
-		// TODO(#107345): Reenable oidjoins when DO statements are supported.
-		// "oidjoins " +
-		"event_trigger "
+		// "with",
+		"plpgsql",
+		"hash_part",
+		"partition_info",
+		"reloptions",
+		"explain",
+		"memoize",
+		"compression",
+		"partition_aggregate",
+		"indexing",
+		"partition_join",
+		"partition_prune",
+		"tuplesort",
+		"stats",
+		"oidjoins",
+		"event_trigger",
+	}
 
-	// psql was installed in /usr/bin/psql, so use the prefix for bindir.
+	// Perform the setup only once.
 	cmd := fmt.Sprintf("cd %s && "+
 		"./configure --without-icu --without-readline --without-zlib && "+
 		"cd %s && "+
-		"make && "+
-		"./pg_regress --bindir=/usr/bin --host=%s --port=%s --user=test_admin "+
-		"--dbname=root --use-existing %s",
-		postgresDir, pgregressDir, u.Hostname(), u.Port(), tests)
-	result, err := c.RunWithDetailsSingleNode(
-		ctx, t.L(), option.WithNodes(node),
-		cmd,
-	)
-
-	rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
-	t.L().Printf("Test results for pg_regress: %s", rawResults)
-
-	// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
-	// Proceed for any other (command) errors
+		"make ",
+		postgresDir, pgregressDir)
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), cmd)
+	// Fatal for a roachprod or transient error. A roachprod error is when
+	// result.Err==nil. Proceed for any other (command) errors
 	if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
 		t.Fatal(err)
 	}
 
 	outputDir := t.ArtifactsDir()
+	var expected, actual []string
 
-	t.Status("collecting the test results")
-	t.L().Printf("If the test failure is expected, consider updating the testdata with regression.diffs in artifacts")
-
-	// Copy the test result files.
-	collectFiles := []string{
-		"regression.out", "regression.diffs",
-	}
-	for _, file := range collectFiles {
-		if err := c.Get(
-			ctx, t.L(),
-			filepath.Join(pgregressDir, file),
-			filepath.Join(outputDir, file),
-			node,
-		); err != nil {
-			t.L().Printf("failed to retrieve %s: %s", file, err)
+	// We'll run each test file separately to make reviewing the diff easier.
+	for testIdx, testFile := range tests {
+		// psql was installed in /usr/bin/psql, so use the prefix for bindir.
+		cmd = fmt.Sprintf("cd %s && "+
+			"./pg_regress --bindir=/usr/bin --host=%s --port=%s --user=test_admin "+
+			"--dbname=root --use-existing %s",
+			pgregressDir, u.Hostname(), u.Port(), testFile)
+		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), cmd)
+		// Fatal for a roachprod or transient error. A roachprod error is when
+		// result.Err==nil. Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
+			t.Fatal(err)
 		}
+
+		t.Status("collecting the test results for test '", testFile, "' (", testIdx, "/", len(tests), ")")
+		diffFile := testFile + ".diffs"
+		diffFilePath := filepath.Join(outputDir, diffFile)
+		tmpFile := diffFile + ".tmp"
+		tmpFilePath := filepath.Join(outputDir, tmpFile)
+
+		// Copy the test result files.
+		for _, file := range []struct {
+			src, dest string
+		}{
+			{src: "regression.out", dest: testFile + ".out"},
+			{src: "regression.diffs", dest: tmpFile},
+		} {
+			if err := c.Get(
+				ctx, t.L(),
+				filepath.Join(pgregressDir, file.src),
+				filepath.Join(outputDir, file.dest),
+				node,
+			); err != nil {
+				t.L().Printf("failed to retrieve %s: %s", file.src, err)
+			}
+		}
+
+		// Replace specific versions in URIs with a generic "_version_".
+		actualB, err := os.ReadFile(tmpFilePath)
+		if err != nil {
+			t.L().Printf("Failed to read %s: %s", tmpFilePath, err)
+		}
+		issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+		actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
+		docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+		actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
+		err = os.WriteFile(diffFilePath, actualB, 0644)
+		if err != nil {
+			t.L().Printf("Failed to write %s: %s", diffFilePath, err)
+		}
+		actual = append(actual, string(actualB))
+		if err = os.Remove(tmpFilePath); err != nil {
+			t.L().Printf("Failed to remove %s: %s", tmpFilePath, err)
+		}
+
+		expectedB, err := os.ReadFile(testdataPrefix + diffFile)
+		if err != nil {
+			t.L().Printf("Failed to read %s: %s", testdataPrefix+diffFile, err)
+		}
+		expected = append(expected, string(expectedB))
 	}
 
 	// Compare the regression diffs.
-	expectedB, err := os.ReadFile(testdata)
-	if err != nil {
-		t.L().Printf("Failed to read %s: %s", testdata, err)
-	}
-	expected := string(expectedB)
-	actualB, err := os.ReadFile(filepath.Join(outputDir, "regression.diffs"))
-	if err != nil {
-		t.L().Printf("Failed to read %s: %s", testdata, err)
-	}
-
-	// Replace specific versions in URIs with a generic "_version_".
-	issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
-	actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
-	docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
-	actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
-	actual := string(actualB)
-
-	if expected != actual {
-		diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-			A:        difflib.SplitLines(expected),
-			B:        difflib.SplitLines(actual),
-			FromFile: "testdata/regression.diffs",
-			ToFile:   "regression.diffs",
-			Context:  3,
-		})
-		if diffErr != nil {
-			t.Fatalf("failed to produce diff: %s", diffErr)
+	for i := range expected {
+		exp, act := expected[i], actual[i]
+		if exp != act {
+			testFile := tests[i] + ".diffs"
+			diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+				A:        difflib.SplitLines(exp),
+				B:        difflib.SplitLines(act),
+				FromFile: "testdata/" + testFile,
+				ToFile:   testFile,
+				Context:  3,
+			})
+			if diffErr != nil {
+				t.Fatalf("failed to produce diff: %s", diffErr)
+			}
+			t.Errorf("Regression diffs do not match expected output for %[1]s.\n%[2]s\n"+
+				"If the diff is expected, copy %[1]s.diffs from the test artifacts to pkg/cmd/roachtest/testdata/%[1]s.diffs",
+				tests[i], diff)
 		}
-		t.Fatalf("Regression diffs do not match expected output:\n%s\n"+
-			"If the diff is expected, copy regression.diffs from the test artifacts to pkg/cmd/roachtest/testdata/regression.diffs",
-			diff)
-	} else {
-		t.L().Printf("Regression diffs passed")
 	}
 }
 

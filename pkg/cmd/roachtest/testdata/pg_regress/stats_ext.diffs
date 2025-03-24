@@ -1,0 +1,4710 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --label=/mnt/data1/postgres/src/test/regress/results/stats_ext.out /mnt/data1/postgres/src/test/regress/expected/stats_ext.out /mnt/data1/postgres/src/test/regress/results/stats_ext.out
+--- /mnt/data1/postgres/src/test/regress/expected/stats_ext.out
++++ /mnt/data1/postgres/src/test/regress/results/stats_ext.out
+@@ -24,95 +24,171 @@
+     end loop;
+ end;
+ $$;
++ERROR:  unimplemented: set-returning PL/pgSQL functions are not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/105240/_version_
+ -- Verify failures
+ CREATE TABLE ext_stats_test (x text, y int, z int);
+ CREATE STATISTICS tst;
+-ERROR:  syntax error at or near ";"
+-LINE 1: CREATE STATISTICS tst;
+-                             ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst
++                     ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst ON a, b;
+-ERROR:  syntax error at or near ";"
+-LINE 1: CREATE STATISTICS tst ON a, b;
+-                                     ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON a, b
++                             ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst FROM sometab;
+-ERROR:  syntax error at or near "FROM"
+-LINE 1: CREATE STATISTICS tst FROM sometab;
+-                              ^
++ERROR:  relation "sometab" does not exist
+ CREATE STATISTICS tst ON a, b FROM nonexistent;
+ ERROR:  relation "nonexistent" does not exist
+ CREATE STATISTICS tst ON a, b FROM ext_stats_test;
+ ERROR:  column "a" does not exist
+ CREATE STATISTICS tst ON x, x, y FROM ext_stats_test;
+-ERROR:  duplicate column name in statistics definition
+ CREATE STATISTICS tst ON x, x, y, x, x, y, x, x, y FROM ext_stats_test;
+-ERROR:  cannot have more than 8 columns in statistics
+ CREATE STATISTICS tst ON x, x, y, x, x, (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1) FROM ext_stats_test;
+-ERROR:  cannot have more than 8 columns in statistics
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON x, x, y, x, x, (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1) FROM ext_stats_test
++                                        ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst ON (x || 'x'), (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1) FROM ext_stats_test;
+-ERROR:  cannot have more than 8 columns in statistics
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON (x || 'x'), (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1), (x || 'x'), (x || 'x'), (y + 1) FROM ext_stats_test
++                         ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst ON (x || 'x'), (x || 'x'), y FROM ext_stats_test;
+-ERROR:  duplicate expression in statistics definition
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON (x || 'x'), (x || 'x'), y FROM ext_stats_test
++                         ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst (unrecognized) ON x, y FROM ext_stats_test;
+-ERROR:  unrecognized statistics kind "unrecognized"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst (unrecognized) ON x, y FROM ext_stats_test
++                      ^
++HINT:  try \h CREATE STATISTICS
+ -- incorrect expressions
+ CREATE STATISTICS tst ON (y) FROM ext_stats_test; -- single column reference
+-ERROR:  extended statistics require at least 2 columns
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON (y) FROM ext_stats_test
++                         ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst ON y + z FROM ext_stats_test; -- missing parentheses
+-ERROR:  syntax error at or near "+"
+-LINE 1: CREATE STATISTICS tst ON y + z FROM ext_stats_test;
+-                                   ^
++ERROR:  at or near "+": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON y + z FROM ext_stats_test
++                           ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tst ON (x, y) FROM ext_stats_test; -- tuple expression
+-ERROR:  syntax error at or near ","
+-LINE 1: CREATE STATISTICS tst ON (x, y) FROM ext_stats_test;
+-                                   ^
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tst ON (x, y) FROM ext_stats_test
++                         ^
++HINT:  try \h CREATE STATISTICS
+ DROP TABLE ext_stats_test;
+ -- Ensure stats are dropped sanely, and test IF NOT EXISTS while at it
+ CREATE TABLE ab1 (a INTEGER, b INTEGER, c INTEGER);
+ CREATE STATISTICS IF NOT EXISTS ab1_a_b_stats ON a, b FROM ab1;
++ERROR:  at or near "not": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS IF NOT EXISTS ab1_a_b_stats ON a, b FROM ab1
++                     ^
++HINT:  try \h CREATE STATISTICS
+ COMMENT ON STATISTICS ab1_a_b_stats IS 'new comment';
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++COMMENT ON STATISTICS ab1_a_b_stats IS 'new comment'
++           ^
+ CREATE ROLE regress_stats_ext;
+ SET SESSION AUTHORIZATION regress_stats_ext;
++ERROR:  at or near "regress_stats_ext": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_stats_ext
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ COMMENT ON STATISTICS ab1_a_b_stats IS 'changed comment';
+-ERROR:  must be owner of statistics object ab1_a_b_stats
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++COMMENT ON STATISTICS ab1_a_b_stats IS 'changed comment'
++           ^
+ DROP STATISTICS ab1_a_b_stats;
+-ERROR:  must be owner of statistics object ab1_a_b_stats
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS ab1_a_b_stats
++     ^
++HINT:  try \h DROP
+ ALTER STATISTICS ab1_a_b_stats RENAME TO ab1_a_b_stats_new;
+-ERROR:  must be owner of statistics object ab1_a_b_stats
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER STATISTICS ab1_a_b_stats RENAME TO ab1_a_b_stats_new
++      ^
++HINT:  try \h ALTER
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP ROLE regress_stats_ext;
+ CREATE STATISTICS IF NOT EXISTS ab1_a_b_stats ON a, b FROM ab1;
+-NOTICE:  statistics object "ab1_a_b_stats" already exists, skipping
++ERROR:  at or near "not": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS IF NOT EXISTS ab1_a_b_stats ON a, b FROM ab1
++                     ^
++HINT:  try \h CREATE STATISTICS
+ DROP STATISTICS ab1_a_b_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS ab1_a_b_stats
++     ^
++HINT:  try \h DROP
+ CREATE SCHEMA regress_schema_2;
+ CREATE STATISTICS regress_schema_2.ab1_a_b_stats ON a, b FROM ab1;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS regress_schema_2.ab1_a_b_stats ON a, b FROM ab1
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ -- Let's also verify the pg_get_statisticsobjdef output looks sane.
+ SELECT pg_get_statisticsobjdef(oid) FROM pg_statistic_ext WHERE stxname = 'ab1_a_b_stats';
+-                      pg_get_statisticsobjdef                      
+--------------------------------------------------------------------
+- CREATE STATISTICS regress_schema_2.ab1_a_b_stats ON a, b FROM ab1
+-(1 row)
+-
++ERROR:  unknown function: pg_get_statisticsobjdef()
+ DROP STATISTICS regress_schema_2.ab1_a_b_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS regress_schema_2.ab1_a_b_stats
++     ^
++HINT:  try \h DROP
+ -- Ensure statistics are dropped when columns are
+ CREATE STATISTICS ab1_b_c_stats ON b, c FROM ab1;
+ CREATE STATISTICS ab1_a_b_c_stats ON a, b, c FROM ab1;
+ CREATE STATISTICS ab1_b_a_stats ON b, a FROM ab1;
+ ALTER TABLE ab1 DROP COLUMN a;
+ \d ab1
+-                Table "public.ab1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- b      | integer |           |          | 
+- c      | integer |           |          | 
+-Statistics objects:
+-    "public.ab1_b_c_stats" ON b, c FROM ab1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ab1)$' COLLATE pg_catalog.default
++                                                                   ^
+ -- Ensure statistics are dropped when table is
+ SELECT stxname FROM pg_statistic_ext WHERE stxname LIKE 'ab1%';
+-    stxname    
+----------------
++     stxname     
++-----------------
+  ab1_b_c_stats
+-(1 row)
++ ab1_a_b_c_stats
++ ab1_b_a_stats
++(3 rows)
+ 
+ DROP TABLE ab1;
+ SELECT stxname FROM pg_statistic_ext WHERE stxname LIKE 'ab1%';
+@@ -123,177 +199,244 @@
+ -- Ensure things work sanely with SET STATISTICS 0
+ CREATE TABLE ab1 (a INTEGER, b INTEGER);
+ ALTER TABLE ab1 ALTER a SET STATISTICS 0;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ab1 ALTER a SET STATISTICS 0
++                            ^
++HINT:  try \h ALTER TABLE
+ INSERT INTO ab1 SELECT a, a%23 FROM generate_series(1, 1000) a;
+ CREATE STATISTICS ab1_a_b_stats ON a, b FROM ab1;
+ ANALYZE ab1;
+-WARNING:  statistics object "public.ab1_a_b_stats" could not be computed for relation "public.ab1"
+ ALTER TABLE ab1 ALTER a SET STATISTICS -1;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER TABLE ab1 ALTER a SET STATISTICS -1
++                            ^
++HINT:  try \h ALTER TABLE
+ -- setting statistics target 0 skips the statistics, without printing any message, so check catalog
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0
++      ^
++HINT:  try \h ALTER
+ \d ab1
+-                Table "public.ab1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- a      | integer |           |          | 
+- b      | integer |           |          | 
+-Statistics objects:
+-    "public.ab1_a_b_stats" ON a, b FROM ab1; STATISTICS 0
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ab1)$' COLLATE pg_catalog.default
++                                                                   ^
+ ANALYZE ab1;
+ SELECT stxname, stxdndistinct, stxddependencies, stxdmcv, stxdinherit
+   FROM pg_statistic_ext s LEFT JOIN pg_statistic_ext_data d ON (d.stxoid = s.oid)
+  WHERE s.stxname = 'ab1_a_b_stats';
+-    stxname    | stxdndistinct | stxddependencies | stxdmcv | stxdinherit 
+----------------+---------------+------------------+---------+-------------
+- ab1_a_b_stats |               |                  |         | 
+-(1 row)
+-
++ERROR:  column "stxdinherit" does not exist
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER STATISTICS ab1_a_b_stats SET STATISTICS -1
++      ^
++HINT:  try \h ALTER
+ \d+ ab1
+-                                    Table "public.ab1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- a      | integer |           |          |         | plain   |              | 
+- b      | integer |           |          |         | plain   |              | 
+-Statistics objects:
+-    "public.ab1_a_b_stats" ON a, b FROM ab1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(ab1)$' COLLATE pg_catalog.default
++                                                                   ^
+ -- partial analyze doesn't build stats either
+ ANALYZE ab1 (a);
+-WARNING:  statistics object "public.ab1_a_b_stats" could not be computed for relation "public.ab1"
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++ANALYZE ab1 (a)
++            ^
+ ANALYZE ab1;
+ DROP TABLE ab1;
+ ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0;
+-ERROR:  statistics object "ab1_a_b_stats" does not exist
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER STATISTICS ab1_a_b_stats SET STATISTICS 0
++      ^
++HINT:  try \h ALTER
+ ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0;
+-NOTICE:  statistics object "ab1_a_b_stats" does not exist, skipping
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++ALTER STATISTICS IF EXISTS ab1_a_b_stats SET STATISTICS 0
++      ^
++HINT:  try \h ALTER
+ -- Ensure we can build statistics for tables with inheritance.
+ CREATE TABLE ab1 (a INTEGER, b INTEGER);
+ CREATE TABLE ab1c () INHERITS (ab1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ab1c () INHERITS (ab1)
++                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO ab1 VALUES (1,1);
+ CREATE STATISTICS ab1_a_b_stats ON a, b FROM ab1;
+ ANALYZE ab1;
+ DROP TABLE ab1 CASCADE;
+-NOTICE:  drop cascades to table ab1c
+ -- Tests for stats with inheritance
+ CREATE TABLE stxdinh(a int, b int);
+ CREATE TABLE stxdinh1() INHERITS(stxdinh);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE stxdinh1() INHERITS(stxdinh)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE stxdinh2() INHERITS(stxdinh);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE stxdinh2() INHERITS(stxdinh)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO stxdinh SELECT mod(a,50), mod(a,100) FROM generate_series(0, 1999) a;
+ INSERT INTO stxdinh1 SELECT mod(a,100), mod(a,100) FROM generate_series(0, 999) a;
++ERROR:  relation "stxdinh1" does not exist
+ INSERT INTO stxdinh2 SELECT mod(a,100), mod(a,100) FROM generate_series(0, 999) a;
++ERROR:  relation "stxdinh2" does not exist
+ VACUUM ANALYZE stxdinh, stxdinh1, stxdinh2;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE stxdinh, stxdinh1, stxdinh2
++^
+ -- Ensure non-inherited stats are not applied to inherited query
+ -- Without stats object, it looks like this
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM stxdinh* GROUP BY 1, 2');
+- estimated | actual 
+------------+--------
+-       400 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM stxdinh* WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-         3 |     40
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS stxdinh ON a, b FROM stxdinh;
+ VACUUM ANALYZE stxdinh, stxdinh1, stxdinh2;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE stxdinh, stxdinh1, stxdinh2
++^
+ -- See if the extended stats affect the estimates
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM stxdinh* GROUP BY 1, 2');
+- estimated | actual 
+------------+--------
+-       150 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- Dependencies are applied at individual relations (within append), so
+ -- this estimate changes a bit because we improve estimates for the parent
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM stxdinh* WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-        22 |     40
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- Ensure correct (non-inherited) stats are applied to inherited query
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM ONLY stxdinh GROUP BY 1, 2');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM ONLY stxdinh WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-        20 |     20
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE stxdinh, stxdinh1, stxdinh2;
++ERROR:  relation "stxdinh1" does not exist
+ -- Ensure inherited stats ARE applied to inherited query in partitioned table
+ CREATE TABLE stxdinp(i int, a int, b int) PARTITION BY RANGE (i);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE stxdinp(i int, a int, b int) PARTITION BY RANGE (i)
++                                                                ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE stxdinp1 PARTITION OF stxdinp FOR VALUES FROM (1) TO (100);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE stxdinp1 PARTITION OF stxdinp FOR VALUES FROM (1) TO (100)
++                      ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO stxdinp SELECT 1, a/100, a/100 FROM generate_series(1, 999) a;
++ERROR:  relation "stxdinp" does not exist
+ CREATE STATISTICS stxdinp ON (a + 1), a, b FROM stxdinp;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS stxdinp ON (a + 1), a, b FROM stxdinp
++                             ^
++HINT:  try \h CREATE STATISTICS
+ VACUUM ANALYZE stxdinp; -- partitions are processed recursively
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE stxdinp
++^
+ SELECT 1 FROM pg_statistic_ext WHERE stxrelid = 'stxdinp'::regclass;
+- ?column? 
+-----------
+-        1
+-(1 row)
+-
++ERROR:  relation "stxdinp" does not exist
+ SELECT * FROM check_estimated_rows('SELECT a, b FROM stxdinp GROUP BY 1, 2');
+- estimated | actual 
+------------+--------
+-        10 |     10
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT a + 1, b FROM ONLY stxdinp GROUP BY 1, 2');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE stxdinp;
++ERROR:  relation "stxdinp" does not exist
+ -- basic test for statistics on expressions
+ CREATE TABLE ab1 (a INTEGER, b INTEGER, c TIMESTAMP, d TIMESTAMPTZ);
+ -- expression stats may be built on a single expression column
+ CREATE STATISTICS ab1_exprstat_1 ON (a+b) FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_1 ON (a+b) FROM ab1
++                                    ^
++HINT:  try \h CREATE STATISTICS
+ -- with a single expression, we only enable expression statistics
+ CREATE STATISTICS ab1_exprstat_2 ON (a+b) FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_2 ON (a+b) FROM ab1
++                                    ^
++HINT:  try \h CREATE STATISTICS
+ SELECT stxkind FROM pg_statistic_ext WHERE stxname = 'ab1_exprstat_2';
+  stxkind 
+ ---------
+- {e}
+-(1 row)
++(0 rows)
+ 
+ -- adding anything to the expression builds all statistics kinds
+ CREATE STATISTICS ab1_exprstat_3 ON (a+b), a FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_3 ON (a+b), a FROM ab1
++                                    ^
++HINT:  try \h CREATE STATISTICS
+ SELECT stxkind FROM pg_statistic_ext WHERE stxname = 'ab1_exprstat_3';
+-  stxkind  
+------------
+- {d,f,m,e}
+-(1 row)
++ stxkind 
++---------
++(0 rows)
+ 
+ -- date_trunc on timestamptz is not immutable, but that should not matter
+ CREATE STATISTICS ab1_exprstat_4 ON date_trunc('day', d) FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_4 ON date_trunc('day', d) FROM ab1
++                                              ^
++HINT:  try \h CREATE STATISTICS
+ -- date_trunc on timestamp is immutable
+ CREATE STATISTICS ab1_exprstat_5 ON date_trunc('day', c) FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_5 ON date_trunc('day', c) FROM ab1
++                                              ^
++HINT:  try \h CREATE STATISTICS
+ -- check use of a boolean-returning expression
+ CREATE STATISTICS ab1_exprstat_6 ON
+   (case a when 1 then true else false end), b FROM ab1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS ab1_exprstat_6 ON
++  (case a when 1 then true else false end), b FROM ab1
++  ^
++HINT:  try \h CREATE STATISTICS
+ -- insert some data and run analyze, to test that these cases build properly
+ INSERT INTO ab1
+ SELECT x / 10, x / 3,
+     '2020-10-01'::timestamp + x * interval '1 day',
+     '2020-10-01'::timestamptz + x * interval '1 day'
+ FROM generate_series(1, 100) x;
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ ANALYZE ab1;
+ -- apply some stats
+ SELECT * FROM check_estimated_rows('SELECT * FROM ab1 WHERE (case a when 1 then true else false end) AND b=2');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE ab1;
+ -- Verify supported object types for extended statistics
+ CREATE schema tststats;
+@@ -304,27 +447,119 @@
+ CREATE MATERIALIZED VIEW tststats.mv AS SELECT * FROM tststats.t;
+ CREATE TYPE tststats.ty AS (a int, b int, c text);
+ CREATE FOREIGN DATA WRAPPER extstats_dummy_fdw;
++ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FOREIGN DATA WRAPPER extstats_dummy_fdw
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE SERVER extstats_dummy_srv FOREIGN DATA WRAPPER extstats_dummy_fdw;
++ERROR:  at or near "extstats_dummy_srv": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE SERVER extstats_dummy_srv FOREIGN DATA WRAPPER extstats_dummy_fdw
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE FOREIGN TABLE tststats.f (a int, b int, c text) SERVER extstats_dummy_srv;
++ERROR:  at or near "tststats": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE FOREIGN TABLE tststats.f (a int, b int, c text) SERVER extstats_dummy_srv
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE tststats.pt (a int, b int, c text) PARTITION BY RANGE (a, b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE tststats.pt (a int, b int, c text) PARTITION BY RANGE (a, b)
++                                                                         ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE tststats.pt1 PARTITION OF tststats.pt FOR VALUES FROM (-10, -10) TO (10, 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++CREATE TABLE tststats.pt1 PARTITION OF tststats.pt FOR VALUES FROM (-10, -10) TO (10, 10)
++                          ^
++HINT:  try \h CREATE TABLE
+ CREATE STATISTICS tststats.s1 ON a, b FROM tststats.t;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s1 ON a, b FROM tststats.t
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s2 ON a, b FROM tststats.ti;
+-ERROR:  cannot define statistics for relation "ti"
+-DETAIL:  This operation is not supported for indexes.
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s2 ON a, b FROM tststats.ti
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s3 ON a, b FROM tststats.s;
+-ERROR:  cannot define statistics for relation "s"
+-DETAIL:  This operation is not supported for sequences.
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s3 ON a, b FROM tststats.s
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s4 ON a, b FROM tststats.v;
+-ERROR:  cannot define statistics for relation "v"
+-DETAIL:  This operation is not supported for views.
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s4 ON a, b FROM tststats.v
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s5 ON a, b FROM tststats.mv;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s5 ON a, b FROM tststats.mv
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s6 ON a, b FROM tststats.ty;
+-ERROR:  cannot define statistics for relation "ty"
+-DETAIL:  This operation is not supported for composite types.
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s6 ON a, b FROM tststats.ty
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s7 ON a, b FROM tststats.f;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s7 ON a, b FROM tststats.f
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s8 ON a, b FROM tststats.pt;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s8 ON a, b FROM tststats.pt
++                          ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS tststats.s9 ON a, b FROM tststats.pt1;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.s9 ON a, b FROM tststats.pt1
++                          ^
++HINT:  try \h CREATE STATISTICS
+ DO $$
+ DECLARE
+ 	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
+@@ -334,18 +569,33 @@
+ 	RAISE NOTICE 'stats on toast table not created';
+ END;
+ $$;
+-NOTICE:  stats on toast table not created
++ERROR:  at or near ";": at or near "from": syntax error
++DETAIL:  source SQL:
++SET ROW (reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass)
++                                 ^
++--
++source SQL:
++DECLARE
++	relname text := reltoastrelid::regclass FROM pg_class WHERE oid = 'tststats.t'::regclass;
++                                                                                         ^
++HINT:  try \h SET SESSION
+ DROP SCHEMA tststats CASCADE;
+-NOTICE:  drop cascades to 7 other objects
+-DETAIL:  drop cascades to table tststats.t
+-drop cascades to sequence tststats.s
+-drop cascades to view tststats.v
+-drop cascades to materialized view tststats.mv
+-drop cascades to type tststats.ty
+-drop cascades to foreign table tststats.f
+-drop cascades to table tststats.pt
+ DROP FOREIGN DATA WRAPPER extstats_dummy_fdw CASCADE;
+-NOTICE:  drop cascades to server extstats_dummy_srv
++ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP FOREIGN DATA WRAPPER extstats_dummy_fdw CASCADE
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- n-distinct tests
+ CREATE TABLE ndistinct (
+     filler1 TEXT,
+@@ -357,66 +607,38 @@
+     d INT
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ -- over-estimates when using only per-column statistics
+ INSERT INTO ndistinct (a, b, c, filler1)
+      SELECT i/100, i/100, i/100, cash_words((i/100)::money)
+        FROM generate_series(1,1000) s(i);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO ndistinct (a, b, c, filler1)
++     SELECT i/100, i/100, i/100, cash_words((i/100)::money)
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41578/_version_
+ ANALYZE ndistinct;
+ -- Group Aggregate, due to over-estimate of the number of groups
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (a+1)');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- correct command
+ CREATE STATISTICS s10 ON a, b, c FROM ndistinct;
+ ANALYZE ndistinct;
+@@ -424,149 +646,84 @@
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                    stxdndistinct                    
+----------+-----------------------------------------------------
+- {d,f,m} | {"3, 4": 11, "3, 6": 11, "4, 6": 11, "3, 4, 6": 11}
+-(1 row)
++ stxkind | stxdndistinct 
++---------+---------------
++(0 rows)
+ 
+ -- minor improvement, make sure the ctid does not break the matching
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY ctid, a, b');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- Hash Aggregate, thanks to estimates improved by the statistic
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- partial improvement (match on attributes)
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (a+1)');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- expressions - no improvement
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-        11 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- last two plans keep using Group Aggregate, because 'd' is not covered
+ -- by the statistic and while it's NULL-only we assume 200 values for it
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |     11
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ TRUNCATE TABLE ndistinct;
+ -- under-estimates when using only per-column statistics
+ INSERT INTO ndistinct (a, b, c, filler1)
+      SELECT mod(i,13), mod(i,17), mod(i,19),
+             cash_words(mod(i,23)::int::money)
+        FROM generate_series(1,1000) s(i);
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO ndistinct (a, b, c, filler1)
++     SELECT mod(i,13), mod(i,17), mod(i,19),
++            cash_words(mod(i,23)::int::money)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41578/_version_
+ ANALYZE ndistinct;
+ SELECT s.stxkind, d.stxdndistinct
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                      stxdndistinct                       
+----------+----------------------------------------------------------
+- {d,f,m} | {"3, 4": 221, "3, 6": 247, "4, 6": 323, "3, 4, 6": 1000}
+-(1 row)
++ stxkind | stxdndistinct 
++---------+---------------
++(0 rows)
+ 
+ -- correct estimates
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c, d');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c, d');
+- estimated | actual 
+------------+--------
+-       323 |    323
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, d');
+- estimated | actual 
+------------+--------
+-       200 |     13
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (a+1)');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS s10;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s10
++     ^
++HINT:  try \h DROP
+ SELECT s.stxkind, d.stxdndistinct
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+@@ -577,157 +734,91 @@
+ 
+ -- dropping the statistics results in under-estimates
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c');
+- estimated | actual 
+------------+--------
+-       100 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY b, c, d');
+- estimated | actual 
+------------+--------
+-       200 |    323
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, d');
+- estimated | actual 
+------------+--------
+-       200 |     13
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (a+1)');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-       100 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ndistinct estimates with statistics on expressions
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-       100 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS s10 (ndistinct) ON (a+1), (b+100), (2*c) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s10 (ndistinct) ON (a+1), (b+100), (2*c) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT s.stxkind, d.stxdndistinct
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                           stxdndistinct                           
+----------+-------------------------------------------------------------------
+- {d,e}   | {"-1, -2": 221, "-1, -3": 247, "-2, -3": 323, "-1, -2, -3": 1000}
+-(1 row)
++ stxkind | stxdndistinct 
++---------+---------------
++(0 rows)
+ 
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a+1), (b+100), (2*c)');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (a+1), (b+100)');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS s10;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s10
++     ^
++HINT:  try \h DROP
+ -- a mix of attributes and expressions
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-       100 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (2*c)');
+- estimated | actual 
+------------+--------
+-       100 |    247
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (2*c)');
+- estimated | actual 
+------------+--------
+-       100 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS s10 (ndistinct) ON a, b, (2*c) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s10 (ndistinct) ON a, b, (2*c) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT s.stxkind, d.stxdndistinct
+   FROM pg_statistic_ext s, pg_statistic_ext_data d
+  WHERE s.stxrelid = 'ndistinct'::regclass
+    AND d.stxoid = s.oid;
+- stxkind |                        stxdndistinct                        
+----------+-------------------------------------------------------------
+- {d,e}   | {"3, 4": 221, "3, -1": 247, "4, -1": 323, "3, 4, -1": 1000}
+-(1 row)
++ stxkind | stxdndistinct 
++---------+---------------
++(0 rows)
+ 
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-       221 |    221
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (2*c)');
+- estimated | actual 
+------------+--------
+-       247 |    247
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (2*c)');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS s10;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s10
++     ^
++HINT:  try \h DROP
+ -- combination of multiple ndistinct statistics, with/without expressions
+ TRUNCATE ndistinct;
+ -- two mostly independent groups of columns
+@@ -736,283 +827,185 @@
+        FROM generate_series(1,1000) s(i);
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-        27 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-        27 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-        27 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-        27 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-       100 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-       100 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- basic statistics on both attributes (no expressions)
+ CREATE STATISTICS s11 (ndistinct) ON a, b FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s11 (ndistinct) ON a, b FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS s12 (ndistinct) ON c, d FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s12 (ndistinct) ON c, d FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- replace the second statistics by statistics on expressions
+ DROP STATISTICS s12;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s12
++     ^
++HINT:  try \h DROP
+ CREATE STATISTICS s12 (ndistinct) ON (c * 10), (d - 1) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s12 (ndistinct) ON (c * 10), (d - 1) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- replace the second statistics by statistics on both attributes and expressions
+ DROP STATISTICS s12;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s12
++     ^
++HINT:  try \h DROP
+ CREATE STATISTICS s12 (ndistinct) ON c, d, (c * 10), (d - 1) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s12 (ndistinct) ON c, d, (c * 10), (d - 1) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- replace the other statistics by statistics on both attributes and expressions
+ DROP STATISTICS s11;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s11
++     ^
++HINT:  try \h DROP
+ CREATE STATISTICS s11 (ndistinct) ON a, b, (a*5), (b+1) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s11 (ndistinct) ON a, b, (a*5), (b+1) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- replace statistics by somewhat overlapping ones (this expected to get worse estimate
+ -- because the first statistics shall be applied to 3 columns, and the second one can't
+ -- be really applied)
+ DROP STATISTICS s11;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s11
++     ^
++HINT:  try \h DROP
+ DROP STATISTICS s12;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s12
++     ^
++HINT:  try \h DROP
+ CREATE STATISTICS s11 (ndistinct) ON a, b, (a*5), (b+1) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s11 (ndistinct) ON a, b, (a*5), (b+1) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS s12 (ndistinct) ON a, (b+1), (c * 10) FROM ndistinct;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS s12 (ndistinct) ON a, (b+1), (c * 10) FROM ndistinct
++                      ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE ndistinct;
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), b');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1)');
+- estimated | actual 
+------------+--------
+-         9 |      9
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY (a*5), (b+1), c');
+- estimated | actual 
+------------+--------
+-        45 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, b, (c*10)');
+- estimated | actual 
+------------+--------
+-       100 |     45
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT COUNT(*) FROM ndistinct GROUP BY a, (b+1), c, (d - 1)');
+- estimated | actual 
+------------+--------
+-       100 |    180
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS s11;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s11
++     ^
++HINT:  try \h DROP
+ DROP STATISTICS s12;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS s12
++     ^
++HINT:  try \h DROP
+ -- functional dependencies tests
+ CREATE TABLE functional_dependencies (
+     filler1 TEXT,
+@@ -1024,6 +1017,7 @@
+     d TEXT
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ CREATE INDEX fdeps_ab_idx ON functional_dependencies (a, b);
+ CREATE INDEX fdeps_abc_idx ON functional_dependencies (a, b, c);
+ -- random data (no functional dependencies)
+@@ -1031,737 +1025,335 @@
+      SELECT mod(i, 5), mod(i, 7), mod(i, 11), i FROM generate_series(1,1000) s(i);
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        29 |     29
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         3 |      3
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS func_deps_stat (dependencies) ON a, b, c FROM functional_dependencies;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS func_deps_stat (dependencies) ON a, b, c FROM functional_dependencies
++                                 ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        29 |     29
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         3 |      3
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- a => b, a => c, b => c
+ TRUNCATE functional_dependencies;
+ DROP STATISTICS func_deps_stat;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS func_deps_stat
++     ^
++HINT:  try \h DROP
+ -- now do the same thing, but with expressions
+ INSERT INTO functional_dependencies (a, b, c, filler1)
+      SELECT i, i, i, i FROM generate_series(1,5000) s(i);
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE mod(a, 11) = 1 AND mod(b::int, 13) = 1');
+- estimated | actual 
+------------+--------
+-         1 |     35
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE mod(a, 11) = 1 AND mod(b::int, 13) = 1 AND mod(c, 7) = 1');
+- estimated | actual 
+------------+--------
+-         1 |      5
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS func_deps_stat (dependencies) ON (mod(a,11)), (mod(b::int, 13)), (mod(c, 7)) FROM functional_dependencies;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS func_deps_stat (dependencies) ON (mod(a,11)), (mod(b::int, 13)), (mod(c, 7)) FROM functional_dependencies
++                                 ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE mod(a, 11) = 1 AND mod(b::int, 13) = 1');
+- estimated | actual 
+------------+--------
+-        35 |     35
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE mod(a, 11) = 1 AND mod(b::int, 13) = 1 AND mod(c, 7) = 1');
+- estimated | actual 
+------------+--------
+-         5 |      5
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- a => b, a => c, b => c
+ TRUNCATE functional_dependencies;
+ DROP STATISTICS func_deps_stat;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS func_deps_stat
++     ^
++HINT:  try \h DROP
+ INSERT INTO functional_dependencies (a, b, c, filler1)
+      SELECT mod(i,100), mod(i,50), mod(i,25), i FROM generate_series(1,5000) s(i);
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- IN
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-         4 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         4 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 26, 51, 76) AND b IN (''1'', ''26'') AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 26, 51, 76) AND b IN (''1'', ''26'') AND c IN (1)');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 26, 27, 51, 52, 76, 77) AND b IN (''1'', ''2'', ''26'', ''27'') AND c IN (1, 2)');
+- estimated | actual 
+------------+--------
+-         3 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing the same attribute
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 51) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 51) AND (b = ''1'' OR b = ''2'')');
+- estimated | actual 
+------------+--------
+-         4 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 2 OR a = 51 OR a = 52) AND (b = ''1'' OR b = ''2'')');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing different attributes
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR b = ''1'') AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         3 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 51]) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 51]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         4 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 26, 51, 76]) AND b = ANY (ARRAY[''1'', ''26'']) AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 26, 51, 76]) AND b = ANY (ARRAY[''1'', ''26'']) AND c = ANY (ARRAY[1])');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 2, 26, 27, 51, 52, 76, 77]) AND b = ANY (ARRAY[''1'', ''2'', ''26'', ''27'']) AND c = ANY (ARRAY[1, 2])');
+- estimated | actual 
+------------+--------
+-         3 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY with inequalities should not benefit from functional dependencies
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a < ANY (ARRAY[1, 51]) AND b > ''1''');
+- estimated | actual 
+------------+--------
+-      2472 |   2400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a >= ANY (ARRAY[1, 51]) AND b <= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      1441 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a <= ANY (ARRAY[1, 2, 51, 52]) AND b >= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      3909 |   2550
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ALL (should not benefit from functional dependencies)
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ALL (ARRAY[''1''])');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS func_deps_stat (dependencies) ON a, b, c FROM functional_dependencies;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS func_deps_stat (dependencies) ON a, b, c FROM functional_dependencies
++                                 ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE functional_dependencies;
+ -- print the detected dependencies
+ SELECT dependencies FROM pg_stats_ext WHERE statistics_name = 'func_deps_stat';
+-                                                dependencies                                                
+-------------------------------------------------------------------------------------------------------------
+- {"3 => 4": 1.000000, "3 => 6": 1.000000, "4 => 6": 1.000000, "3, 4 => 6": 1.000000, "3, 6 => 4": 1.000000}
+-(1 row)
++ dependencies 
++--------------
++(0 rows)
+ 
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- IN
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 26, 51, 76) AND b IN (''1'', ''26'') AND c = 1');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 26, 51, 76) AND b IN (''1'', ''26'') AND c IN (1)');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 26, 27, 51, 52, 76, 77) AND b IN (''1'', ''2'', ''26'', ''27'') AND c IN (1, 2)');
+- estimated | actual 
+------------+--------
+-       400 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing the same attribute
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 51) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        99 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 51) AND (b = ''1'' OR b = ''2'')');
+- estimated | actual 
+------------+--------
+-        99 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR a = 2 OR a = 51 OR a = 52) AND (b = ''1'' OR b = ''2'')');
+- estimated | actual 
+------------+--------
+-       197 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing different attributes are incompatible
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a = 1 OR b = ''1'') AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         3 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 51]) AND b = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 51]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 26, 51, 76]) AND b = ANY (ARRAY[''1'', ''26'']) AND c = 1');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 26, 51, 76]) AND b = ANY (ARRAY[''1'', ''26'']) AND c = ANY (ARRAY[1])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = ANY (ARRAY[1, 2, 26, 27, 51, 52, 76, 77]) AND b = ANY (ARRAY[''1'', ''2'', ''26'', ''27'']) AND c = ANY (ARRAY[1, 2])');
+- estimated | actual 
+------------+--------
+-       400 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY with inequalities should not benefit from functional dependencies
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a < ANY (ARRAY[1, 51]) AND b > ''1''');
+- estimated | actual 
+------------+--------
+-      2472 |   2400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a >= ANY (ARRAY[1, 51]) AND b <= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      1441 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a <= ANY (ARRAY[1, 2, 51, 52]) AND b >= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      3909 |   2550
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ALL (should not benefit from functional dependencies)
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ALL (ARRAY[''1''])');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 51) AND b = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a IN (1, 2, 51, 52) AND b = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- changing the type of column c causes all its stats to be dropped, reverting
+ -- to default estimates without any statistics, i.e. 0.5% selectivity for each
+ -- condition
+ ALTER TABLE functional_dependencies ALTER COLUMN c TYPE numeric;
++ERROR:  unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/47636/_version_
++--
++Consider modifying the index.
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ ANALYZE functional_dependencies;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS func_deps_stat;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS func_deps_stat
++     ^
++HINT:  try \h DROP
+ -- now try functional dependencies with expressions
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = 2 AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = 2 AND upper(b) = ''1'' AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- IN
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 52, 102, 152) AND upper(b) IN (''1'', ''26'') AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 52, 102, 152) AND upper(b) IN (''1'', ''26'') AND (c + 1) IN (2)');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 52, 54, 102, 104, 152, 154) AND upper(b) IN (''1'', ''2'', ''26'', ''27'') AND (c + 1) IN (2, 3)');
+- estimated | actual 
+------------+--------
+-         1 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing the same attribute
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 102) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 102) AND (upper(b) = ''1'' OR upper(b) = ''2'')');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 4 OR (a * 2) = 102 OR (a * 2) = 104) AND (upper(b) = ''1'' OR upper(b) = ''2'')');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing different attributes
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR upper(b) = ''1'') AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 102]) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 102]) AND upper(b) = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 4, 102, 104]) AND upper(b) = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 52, 102, 152]) AND upper(b) = ANY (ARRAY[''1'', ''26'']) AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 52, 102, 152]) AND upper(b) = ANY (ARRAY[''1'', ''26'']) AND (c + 1) = ANY (ARRAY[2])');
+- estimated | actual 
+------------+--------
+-         1 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 4, 52, 54, 102, 104, 152, 154]) AND upper(b) = ANY (ARRAY[''1'', ''2'', ''26'', ''27'']) AND (c + 1) = ANY (ARRAY[2, 3])');
+- estimated | actual 
+------------+--------
+-         1 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY with inequalities should not benefit from functional dependencies
+ -- the estimates however improve thanks to having expression statistics
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) < ANY (ARRAY[2, 102]) AND upper(b) > ''1''');
+- estimated | actual 
+------------+--------
+-       926 |   2400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) >= ANY (ARRAY[2, 102]) AND upper(b) <= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      1543 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) <= ANY (ARRAY[2, 4, 102, 104]) AND upper(b) >= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      2229 |   2550
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ALL (should not benefit from functional dependencies)
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ALL (ARRAY[''1''])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics on expressions
+ CREATE STATISTICS func_deps_stat (dependencies) ON (a * 2), upper(b), (c + 1) FROM functional_dependencies;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS func_deps_stat (dependencies) ON (a * 2), upper(b), (c + 1) FROM functional_dependencies
++                                 ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE functional_dependencies;
+ -- print the detected dependencies
+ SELECT dependencies FROM pg_stats_ext WHERE statistics_name = 'func_deps_stat';
+-                                                      dependencies                                                      
+-------------------------------------------------------------------------------------------------------------------------
+- {"-1 => -2": 1.000000, "-1 => -3": 1.000000, "-2 => -3": 1.000000, "-1, -2 => -3": 1.000000, "-1, -3 => -2": 1.000000}
+-(1 row)
++ dependencies 
++--------------
++(0 rows)
+ 
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = 2 AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = 2 AND upper(b) = ''1'' AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- IN
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) IN (''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 52, 102, 152) AND upper(b) IN (''1'', ''26'') AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 52, 102, 152) AND upper(b) IN (''1'', ''26'') AND (c + 1) IN (2)');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 52, 54, 102, 104, 152, 154) AND upper(b) IN (''1'', ''2'', ''26'', ''27'') AND (c + 1) IN (2, 3)');
+- estimated | actual 
+------------+--------
+-       400 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing the same attribute
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 102) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-        99 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 102) AND (upper(b) = ''1'' OR upper(b) = ''2'')');
+- estimated | actual 
+------------+--------
+-        99 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR (a * 2) = 4 OR (a * 2) = 102 OR (a * 2) = 104) AND (upper(b) = ''1'' OR upper(b) = ''2'')');
+- estimated | actual 
+------------+--------
+-       197 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- OR clauses referencing different attributes
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE ((a * 2) = 2 OR upper(b) = ''1'') AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-         3 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 102]) AND upper(b) = ''1''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 102]) AND upper(b) = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 4, 102, 104]) AND upper(b) = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 52, 102, 152]) AND upper(b) = ANY (ARRAY[''1'', ''26'']) AND (c + 1) = 2');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 52, 102, 152]) AND upper(b) = ANY (ARRAY[''1'', ''26'']) AND (c + 1) = ANY (ARRAY[2])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) = ANY (ARRAY[2, 4, 52, 54, 102, 104, 152, 154]) AND upper(b) = ANY (ARRAY[''1'', ''2'', ''26'', ''27'']) AND (c + 1) = ANY (ARRAY[2, 3])');
+- estimated | actual 
+------------+--------
+-       400 |    400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ANY with inequalities should not benefit from functional dependencies
+ -- the estimates however improve thanks to having expression statistics
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) < ANY (ARRAY[2, 102]) AND upper(b) > ''1''');
+- estimated | actual 
+------------+--------
+-      2472 |   2400
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) >= ANY (ARRAY[2, 102]) AND upper(b) <= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      1441 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) <= ANY (ARRAY[2, 4, 102, 104]) AND upper(b) >= ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-      3909 |   2550
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- ALL (should not benefit from functional dependencies)
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ALL (ARRAY[''1''])');
+- estimated | actual 
+------------+--------
+-         2 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 102) AND upper(b) = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies WHERE (a * 2) IN (2, 4, 102, 104) AND upper(b) = ALL (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- check the ability to use multiple functional dependencies
+ CREATE TABLE functional_dependencies_multi (
+ 	a INTEGER,
+@@ -1770,6 +1362,7 @@
+ 	d INTEGER
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO functional_dependencies_multi (a, b, c, d)
+     SELECT
+          mod(i,7),
+@@ -1780,69 +1373,39 @@
+ ANALYZE functional_dependencies_multi;
+ -- estimates without any functional dependencies
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-       102 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE 0 = a AND 0 = b');
+- estimated | actual 
+------------+--------
+-       102 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-        41 |    454
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE a = 0 AND b = 0 AND c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-         1 |     64
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE 0 = a AND b = 0 AND 0 = c AND d = 0');
+- estimated | actual 
+------------+--------
+-         1 |     64
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create separate functional dependencies
+ CREATE STATISTICS functional_dependencies_multi_1 (dependencies) ON a, b FROM functional_dependencies_multi;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS functional_dependencies_multi_1 (dependencies) ON a, b FROM functional_dependencies_multi
++                                                  ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS functional_dependencies_multi_2 (dependencies) ON c, d FROM functional_dependencies_multi;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS functional_dependencies_multi_2 (dependencies) ON c, d FROM functional_dependencies_multi
++                                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE functional_dependencies_multi;
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-       714 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE 0 = a AND 0 = b');
+- estimated | actual 
+------------+--------
+-       714 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-       454 |    454
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE a = 0 AND b = 0 AND c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-        65 |     64
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM functional_dependencies_multi WHERE 0 = a AND b = 0 AND 0 = c AND d = 0');
+- estimated | actual 
+------------+--------
+-        65 |     64
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE functional_dependencies_multi;
+ -- MCV lists
+ CREATE TABLE mcv_lists (
+@@ -1856,374 +1419,172 @@
+     ia INT[]
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ -- random data (no MCV list)
+ INSERT INTO mcv_lists (a, b, c, filler1)
+      SELECT mod(i,37), mod(i,41), mod(i,43), mod(i,47) FROM generate_series(1,5000) s(i);
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         3 |      4
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |      1
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         3 |      4
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |      1
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats
++     ^
++HINT:  try \h DROP
+ -- random data (no MCV list), but with expression
+ INSERT INTO mcv_lists (a, b, c, filler1)
+      SELECT i, i, i, i FROM generate_series(1,1000) s(i);
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,7) = 1 AND mod(b::int,11) = 1');
+- estimated | actual 
+------------+--------
+-         1 |     13
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,7) = 1 AND mod(b::int,11) = 1 AND mod(c,13) = 1');
+- estimated | actual 
+------------+--------
+-         1 |      1
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS mcv_lists_stats (mcv) ON (mod(a,7)), (mod(b::int,11)), (mod(c,13)) FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON (mod(a,7)), (mod(b::int,11)), (mod(c,13)) FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,7) = 1 AND mod(b::int,11) = 1');
+- estimated | actual 
+------------+--------
+-        13 |     13
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,7) = 1 AND mod(b::int,11) = 1 AND mod(c,13) = 1');
+- estimated | actual 
+------------+--------
+-         1 |      1
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- 100 distinct combinations, all in the MCV list
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats
++     ^
++HINT:  try \h DROP
+ INSERT INTO mcv_lists (a, b, c, ia, filler1)
+      SELECT mod(i,100), mod(i,50), mod(i,25), array[mod(i,25)], i
+        FROM generate_series(1,5000) s(i);
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 = a AND ''1'' = b');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 1 AND b < ''1''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 > a AND ''1'' > b');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= 0 AND b <= ''0''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 0 >= a AND ''0'' >= b');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 5 AND b < ''1'' AND c < 5');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 5 AND ''1'' > b AND 5 > c');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= 4 AND b <= ''0'' AND c <= 4');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 4 >= a AND ''0'' >= b AND 4 >= c');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''1'' OR c = 1');
+- estimated | actual 
+------------+--------
+-       343 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''1'' OR c = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       343 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (1, 2, 51, 52) AND b IN ( ''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (1, 2, 51, 52, NULL) AND b IN ( ''1'', ''2'', NULL)');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[NULL, 1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2'', NULL])');
+- estimated | actual 
+------------+--------
+-         8 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= ANY (ARRAY[1, 2, 3]) AND b IN (''1'', ''2'', ''3'')');
+- estimated | actual 
+------------+--------
+-        26 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= ANY (ARRAY[1, NULL, 2, 3]) AND b IN (''1'', ''2'', NULL, ''3'')');
+- estimated | actual 
+------------+--------
+-        26 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND c > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-        10 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND c > ANY (ARRAY[1, 2, 3, NULL])');
+- estimated | actual 
+------------+--------
+-        10 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND b IN (''1'', ''2'', ''3'') AND c > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND b IN (''1'', ''2'', NULL, ''3'') AND c > ANY (ARRAY[1, 2, NULL, 3])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[4,5]) AND 4 = ANY(ia)');
+- estimated | actual 
+------------+--------
+-         4 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c, ia FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c, ia FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 = a AND ''1'' = b');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 1 AND b < ''1''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 > a AND ''1'' > b');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= 0 AND b <= ''0''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 0 >= a AND ''0'' >= b');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1'' AND c = 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 5 AND b < ''1'' AND c < 5');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < 5 AND ''1'' > b AND 5 > c');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= 4 AND b <= ''0'' AND c <= 4');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 4 >= a AND ''0'' >= b AND 4 >= c');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''1'' OR c = 1');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''1'' OR c = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''1'' OR c = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (1, 2, 51, 52) AND b IN ( ''1'', ''2'')');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (1, 2, 51, 52, NULL) AND b IN ( ''1'', ''2'', NULL)');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2''])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[NULL, 1, 2, 51, 52]) AND b = ANY (ARRAY[''1'', ''2'', NULL])');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= ANY (ARRAY[1, 2, 3]) AND b IN (''1'', ''2'', ''3'')');
+- estimated | actual 
+------------+--------
+-       150 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a <= ANY (ARRAY[1, NULL, 2, 3]) AND b IN (''1'', ''2'', NULL, ''3'')');
+- estimated | actual 
+------------+--------
+-       150 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND c > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND c > ANY (ARRAY[1, 2, 3, NULL])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND b IN (''1'', ''2'', ''3'') AND c > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a < ALL (ARRAY[4, 5]) AND b IN (''1'', ''2'', NULL, ''3'') AND c > ANY (ARRAY[1, 2, NULL, 3])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = ANY (ARRAY[4,5]) AND 4 = ANY(ia)');
+- estimated | actual 
+------------+--------
+-         4 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- check change of unrelated column type does not reset the MCV statistics
+ ALTER TABLE mcv_lists ALTER COLUMN d TYPE VARCHAR(64);
+ SELECT d.stxdmcv IS NOT NULL
+@@ -2232,233 +1593,145 @@
+    AND d.stxoid = s.oid;
+  ?column? 
+ ----------
+- t
+-(1 row)
++(0 rows)
+ 
+ -- check change of column type resets the MCV statistics
+ ALTER TABLE mcv_lists ALTER COLUMN c TYPE numeric;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 AND b = ''1''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- 100 distinct combinations, all in the MCV list, but with expressions
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats
++     ^
++HINT:  try \h DROP
+ INSERT INTO mcv_lists (a, b, c, filler1)
+      SELECT i, i, i, i FROM generate_series(1,1000) s(i);
+ ANALYZE mcv_lists;
+ -- without any stats on the expressions, we have to use default selectivities, which
+ -- is why the estimates here are different from the pre-computed case above
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 = mod(a,20) AND 1 = mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < 1 AND mod(b::int,10) < 1');
+- estimated | actual 
+------------+--------
+-       111 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 > mod(a,20) AND 1 > mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-       111 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1 AND mod(c,5) = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 OR mod(b::int,10) = 1 OR mod(c,25) = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-        15 |    120
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) IN (1, 2, 51, 52, NULL) AND mod(b::int,10) IN ( 1, 2, NULL)');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = ANY (ARRAY[1, 2, 51, 52]) AND mod(b::int,10) = ANY (ARRAY[1, 2])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) <= ANY (ARRAY[1, NULL, 2, 3]) AND mod(b::int,10) IN (1, 2, NULL, 3)');
+- estimated | actual 
+------------+--------
+-        11 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < ALL (ARRAY[4, 5]) AND mod(b::int,10) IN (1, 2, 3) AND mod(c,5) > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics with expressions only (we create three separate stats, in order not to build more complex extended stats)
+ CREATE STATISTICS mcv_lists_stats_1 ON (mod(a,20)) FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats_1 ON (mod(a,20)) FROM mcv_lists
++                                       ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS mcv_lists_stats_2 ON (mod(b::int,10)) FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats_2 ON (mod(b::int,10)) FROM mcv_lists
++                                       ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS mcv_lists_stats_3 ON (mod(c,5)) FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats_3 ON (mod(c,5)) FROM mcv_lists
++                                       ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1');
+- estimated | actual 
+------------+--------
+-         5 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 = mod(a,20) AND 1 = mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-         5 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < 1 AND mod(b::int,10) < 1');
+- estimated | actual 
+------------+--------
+-         5 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 > mod(a,20) AND 1 > mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-         5 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1 AND mod(c,5) = 1');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 OR mod(b::int,10) = 1 OR mod(c,25) = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       149 |    120
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) IN (1, 2, 51, 52, NULL) AND mod(b::int,10) IN ( 1, 2, NULL)');
+- estimated | actual 
+------------+--------
+-        20 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = ANY (ARRAY[1, 2, 51, 52]) AND mod(b::int,10) = ANY (ARRAY[1, 2])');
+- estimated | actual 
+------------+--------
+-        20 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) <= ANY (ARRAY[1, NULL, 2, 3]) AND mod(b::int,10) IN (1, 2, NULL, 3)');
+- estimated | actual 
+------------+--------
+-       116 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < ALL (ARRAY[4, 5]) AND mod(b::int,10) IN (1, 2, 3) AND mod(c,5) > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-        12 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS mcv_lists_stats_1;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats_1
++     ^
++HINT:  try \h DROP
+ DROP STATISTICS mcv_lists_stats_2;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats_2
++     ^
++HINT:  try \h DROP
+ DROP STATISTICS mcv_lists_stats_3;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats_3
++     ^
++HINT:  try \h DROP
+ -- create statistics with both MCV and expressions
+ CREATE STATISTICS mcv_lists_stats (mcv) ON (mod(a,20)), (mod(b::int,10)), (mod(c,5)) FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON (mod(a,20)), (mod(b::int,10)), (mod(c,5)) FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 = mod(a,20) AND 1 = mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < 1 AND mod(b::int,10) < 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE 1 > mod(a,20) AND 1 > mod(b::int,10)');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 AND mod(b::int,10) = 1 AND mod(c,5) = 1');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 OR mod(b::int,10) = 1 OR mod(c,25) = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       105 |    120
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) IN (1, 2, 51, 52, NULL) AND mod(b::int,10) IN ( 1, 2, NULL)');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = ANY (ARRAY[1, 2, 51, 52]) AND mod(b::int,10) = ANY (ARRAY[1, 2])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) <= ANY (ARRAY[1, NULL, 2, 3]) AND mod(b::int,10) IN (1, 2, NULL, 3)');
+- estimated | actual 
+------------+--------
+-       150 |    150
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) < ALL (ARRAY[4, 5]) AND mod(b::int,10) IN (1, 2, 3) AND mod(c,5) > ANY (ARRAY[1, 2, 3])');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- we can't use the statistic for OR clauses that are not fully covered (missing 'd' attribute)
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE mod(a,20) = 1 OR mod(b::int,10) = 1 OR mod(c,5) = 1 OR d IS NOT NULL');
+- estimated | actual 
+------------+--------
+-       200 |    200
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- 100 distinct combinations with NULL values, all in the MCV list
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats
++     ^
++HINT:  try \h DROP
+ INSERT INTO mcv_lists (a, b, c, filler1)
+      SELECT
+          (CASE WHEN mod(i,100) = 1 THEN NULL ELSE mod(i,100) END),
+@@ -2468,68 +1741,33 @@
+      FROM generate_series(1,5000) s(i);
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NULL');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NULL AND c IS NULL');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NOT NULL');
+- estimated | actual 
+------------+--------
+-        49 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NOT NULL AND b IS NULL AND c IS NOT NULL');
+- estimated | actual 
+------------+--------
+-        95 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (0, 1) AND b IN (''0'', ''1'')');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, c FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NULL');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NULL AND c IS NULL');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND b IS NOT NULL');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NOT NULL AND b IS NULL AND c IS NOT NULL');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IN (0, 1) AND b IN (''0'', ''1'')');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- test pg_mcv_list_items with a very simple (single item) MCV list
+ TRUNCATE mcv_lists;
+ INSERT INTO mcv_lists (a, b, c) SELECT 1, 2, 3 FROM generate_series(1,1000) s(i);
+@@ -2539,14 +1777,15 @@
+        pg_mcv_list_items(d.stxdmcv) m
+  WHERE s.stxname = 'mcv_lists_stats'
+    AND d.stxoid = s.oid;
+- index | values  |  nulls  | frequency | base_frequency 
+--------+---------+---------+-----------+----------------
+-     0 | {1,2,3} | {f,f,f} |         1 |              1
+-(1 row)
+-
++ERROR:  unknown function: pg_mcv_list_items()
+ -- 2 distinct combinations with NULL values, all in the MCV list
+ TRUNCATE mcv_lists;
+ DROP STATISTICS mcv_lists_stats;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS mcv_lists_stats
++     ^
++HINT:  try \h DROP
+ INSERT INTO mcv_lists (a, b, c, d)
+      SELECT
+          NULL, -- always NULL
+@@ -2556,25 +1795,18 @@
+      FROM generate_series(1,5000) s(i);
+ ANALYZE mcv_lists;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
+- estimated | actual 
+------------+--------
+-      3750 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''x'' OR d = ''x''');
+- estimated | actual 
+------------+--------
+-      3750 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND (b = ''x'' OR d = ''x'')');
+- estimated | actual 
+------------+--------
+-      3750 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create statistics
+ CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, d FROM mcv_lists;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_stats (mcv) ON a, b, d FROM mcv_lists
++                                  ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists;
+ -- test pg_mcv_list_items with MCV list containing variable-length data and NULLs
+ SELECT m.*
+@@ -2582,30 +1814,13 @@
+        pg_mcv_list_items(d.stxdmcv) m
+  WHERE s.stxname = 'mcv_lists_stats'
+    AND d.stxoid = s.oid;
+- index |      values      |  nulls  | frequency | base_frequency 
+--------+------------------+---------+-----------+----------------
+-     0 | {NULL,x,x}       | {t,f,f} |       0.5 |           0.25
+-     1 | {NULL,NULL,NULL} | {t,t,t} |       0.5 |           0.25
+-(2 rows)
+-
++ERROR:  unknown function: pg_mcv_list_items()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE b = ''x'' OR d = ''x''');
+- estimated | actual 
+------------+--------
+-      2500 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a = 1 OR b = ''x'' OR d = ''x''');
+- estimated | actual 
+------------+--------
+-      2500 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists WHERE a IS NULL AND (b = ''x'' OR d = ''x'')');
+- estimated | actual 
+------------+--------
+-      2500 |   2500
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- mcv with pass-by-ref fixlen types, e.g. uuid
+ CREATE TABLE mcv_lists_uuid (
+     a UUID,
+@@ -2613,40 +1828,31 @@
+     c UUID
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO mcv_lists_uuid (a, b, c)
+      SELECT
+          fipshash(mod(i,100)::text)::uuid,
+          fipshash(mod(i,50)::text)::uuid,
+          fipshash(mod(i,25)::text)::uuid
+      FROM generate_series(1,5000) s(i);
++ERROR:  unknown function: fipshash()
+ ANALYZE mcv_lists_uuid;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_uuid WHERE a = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND b = ''e7f6c011-776e-8db7-cd33-0b54174fd76f''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_uuid WHERE a = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND b = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND c = ''e7f6c011-776e-8db7-cd33-0b54174fd76f''');
+- estimated | actual 
+------------+--------
+-         1 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS mcv_lists_uuid_stats (mcv) ON a, b, c
+   FROM mcv_lists_uuid;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_uuid_stats (mcv) ON a, b, c
++                                       ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists_uuid;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_uuid WHERE a = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND b = ''e7f6c011-776e-8db7-cd33-0b54174fd76f''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_uuid WHERE a = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND b = ''e7f6c011-776e-8db7-cd33-0b54174fd76f'' AND c = ''e7f6c011-776e-8db7-cd33-0b54174fd76f''');
+- estimated | actual 
+------------+--------
+-        50 |     50
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE mcv_lists_uuid;
+ -- mcv with arrays
+ CREATE TABLE mcv_lists_arrays (
+@@ -2655,14 +1861,21 @@
+     c INT[]
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO mcv_lists_arrays (a, b, c)
+      SELECT
+          ARRAY[fipshash((i/100)::text), fipshash((i/100-1)::text), fipshash((i/100+1)::text)],
+          ARRAY[(i/100-1)::numeric/1000, (i/100)::numeric/1000, (i/100+1)::numeric/1000],
+          ARRAY[(i/100-1), i/100, (i/100+1)]
+      FROM generate_series(1,5000) s(i);
++ERROR:  unknown function: fipshash()
+ CREATE STATISTICS mcv_lists_arrays_stats (mcv) ON a, b, c
+   FROM mcv_lists_arrays;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_arrays_stats (mcv) ON a, b, c
++                                         ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists_arrays;
+ -- mcv with bool
+ CREATE TABLE mcv_lists_bool (
+@@ -2671,62 +1884,36 @@
+     c BOOL
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO mcv_lists_bool (a, b, c)
+      SELECT
+          (mod(i,2) = 0), (mod(i,4) = 0), (mod(i,8) = 0)
+      FROM generate_series(1,10000) s(i);
+ ANALYZE mcv_lists_bool;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE a AND b AND c');
+- estimated | actual 
+------------+--------
+-       156 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND b AND c');
+- estimated | actual 
+------------+--------
+-       156 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND NOT b AND c');
+- estimated | actual 
+------------+--------
+-       469 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND b AND NOT c');
+- estimated | actual 
+------------+--------
+-      1094 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS mcv_lists_bool_stats (mcv) ON a, b, c
+   FROM mcv_lists_bool;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_bool_stats (mcv) ON a, b, c
++                                       ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists_bool;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE a AND b AND c');
+- estimated | actual 
+------------+--------
+-      1250 |   1250
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND b AND c');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND NOT b AND c');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_bool WHERE NOT a AND b AND NOT c');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- mcv covering just a small fraction of data
+ CREATE TABLE mcv_lists_partial (
+     a INT,
+@@ -2756,104 +1943,45 @@
+      FROM generate_series(0,3999) s(i);
+ ANALYZE mcv_lists_partial;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 AND b = 0 AND c = 0');
+- estimated | actual 
+------------+--------
+-         1 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 OR b = 0 OR c = 0');
+- estimated | actual 
+------------+--------
+-       300 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 10 AND b = 10 AND c = 10');
+- estimated | actual 
+------------+--------
+-         1 |      2
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 10 OR b = 10 OR c = 10');
+- estimated | actual 
+------------+--------
+-         6 |      2
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 AND b = 0 AND c = 10');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 OR b = 0 OR c = 10');
+- estimated | actual 
+------------+--------
+-       204 |    104
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE (a = 0 AND b = 0 AND c = 0) OR (a = 1 AND b = 1 AND c = 1) OR (a = 2 AND b = 2 AND c = 2)');
+- estimated | actual 
+------------+--------
+-         1 |    306
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE (a = 0 AND b = 0) OR (a = 0 AND c = 0) OR (b = 0 AND c = 0)');
+- estimated | actual 
+------------+--------
+-         6 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS mcv_lists_partial_stats (mcv) ON a, b, c
+   FROM mcv_lists_partial;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_partial_stats (mcv) ON a, b, c
++                                          ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists_partial;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 AND b = 0 AND c = 0');
+- estimated | actual 
+------------+--------
+-       102 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 OR b = 0 OR c = 0');
+- estimated | actual 
+------------+--------
+-        96 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 10 AND b = 10 AND c = 10');
+- estimated | actual 
+------------+--------
+-         2 |      2
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 10 OR b = 10 OR c = 10');
+- estimated | actual 
+------------+--------
+-         2 |      2
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 AND b = 0 AND c = 10');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE a = 0 OR b = 0 OR c = 10');
+- estimated | actual 
+------------+--------
+-       102 |    104
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE (a = 0 AND b = 0 AND c = 0) OR (a = 1 AND b = 1 AND c = 1) OR (a = 2 AND b = 2 AND c = 2)');
+- estimated | actual 
+------------+--------
+-       306 |    306
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_partial WHERE (a = 0 AND b = 0) OR (a = 0 AND c = 0) OR (b = 0 AND c = 0)');
+- estimated | actual 
+------------+--------
+-       108 |    102
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE mcv_lists_partial;
+ -- check the ability to use multiple MCV lists
+ CREATE TABLE mcv_lists_multi (
+@@ -2863,6 +1991,7 @@
+ 	d INTEGER
+ )
+ WITH (autovacuum_enabled = off);
++NOTICE:  storage parameter "autovacuum_enabled = 'off'" is ignored
+ INSERT INTO mcv_lists_multi (a, b, c, d)
+     SELECT
+          mod(i,5),
+@@ -2873,187 +2002,114 @@
+ ANALYZE mcv_lists_multi;
+ -- estimates without any mcv statistics
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-       200 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-       102 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE b = 0 AND c = 0');
+- estimated | actual 
+------------+--------
+-       143 |    142
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE b = 0 OR c = 0');
+- estimated | actual 
+------------+--------
+-      1571 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 AND b = 0 AND c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-         4 |    142
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE (a = 0 AND b = 0) OR (c = 0 AND d = 0)');
+- estimated | actual 
+------------+--------
+-       298 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 OR b = 0 OR c = 0 OR d = 0');
+- estimated | actual 
+------------+--------
+-      2649 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ -- create separate MCV statistics
+ CREATE STATISTICS mcv_lists_multi_1 (mcv) ON a, b FROM mcv_lists_multi;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_multi_1 (mcv) ON a, b FROM mcv_lists_multi
++                                    ^
++HINT:  try \h CREATE STATISTICS
+ CREATE STATISTICS mcv_lists_multi_2 (mcv) ON c, d FROM mcv_lists_multi;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS mcv_lists_multi_2 (mcv) ON c, d FROM mcv_lists_multi
++                                    ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE mcv_lists_multi;
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 AND b = 0');
+- estimated | actual 
+------------+--------
+-      1000 |   1000
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-       714 |    714
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE b = 0 AND c = 0');
+- estimated | actual 
+------------+--------
+-       143 |    142
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE b = 0 OR c = 0');
+- estimated | actual 
+------------+--------
+-      1571 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 AND b = 0 AND c = 0 AND d = 0');
+- estimated | actual 
+------------+--------
+-       143 |    142
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE (a = 0 AND b = 0) OR (c = 0 AND d = 0)');
+- estimated | actual 
+------------+--------
+-      1571 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM mcv_lists_multi WHERE a = 0 OR b = 0 OR c = 0 OR d = 0');
+- estimated | actual 
+------------+--------
+-      1571 |   1572
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE mcv_lists_multi;
+ -- statistics on integer expressions
+ CREATE TABLE expr_stats (a int, b int, c int);
+ INSERT INTO expr_stats SELECT mod(i,10), mod(i,10), mod(i,10) FROM generate_series(1,1000) s(i);
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE (2*a) = 0 AND (3*b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE (a+b) = 0 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS expr_stats_1 (mcv) ON (a+b), (a-b), (2*a), (3*b) FROM expr_stats;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS expr_stats_1 (mcv) ON (a+b), (a-b), (2*a), (3*b) FROM expr_stats
++                               ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE (2*a) = 0 AND (3*b) = 0');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE (a+b) = 0 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP STATISTICS expr_stats_1;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++DROP STATISTICS expr_stats_1
++     ^
++HINT:  try \h DROP
+ DROP TABLE expr_stats;
+ -- statistics on a mix columns and expressions
+ CREATE TABLE expr_stats (a int, b int, c int);
+ INSERT INTO expr_stats SELECT mod(i,10), mod(i,10), mod(i,10) FROM generate_series(1,1000) s(i);
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND (2*a) = 0 AND (3*b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 3 AND b = 3 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND b = 1 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS expr_stats_1 (mcv) ON a, b, (2*a), (3*b), (a+b), (a-b) FROM expr_stats;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS expr_stats_1 (mcv) ON a, b, (2*a), (3*b), (a+b), (a-b) FROM expr_stats
++                               ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND (2*a) = 0 AND (3*b) = 0');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 3 AND b = 3 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND b = 1 AND (a-b) = 0');
+- estimated | actual 
+------------+--------
+-         1 |      0
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE expr_stats;
+ -- statistics on expressions with different data types
+ CREATE TABLE expr_stats (a int, b name, c text);
+ INSERT INTO expr_stats SELECT mod(i,10), fipshash(mod(i,10)::text), fipshash(mod(i,10)::text) FROM generate_series(1,1000) s(i);
++ERROR:  unknown function: fipshash()
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND (b || c) <= ''z'' AND (c || b) >= ''0''');
+- estimated | actual 
+------------+--------
+-        11 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ CREATE STATISTICS expr_stats_1 (mcv) ON a, b, (b || c), (c || b) FROM expr_stats;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS expr_stats_1 (mcv) ON a, b, (b || c), (c || b) FROM expr_stats
++                               ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE expr_stats;
+ SELECT * FROM check_estimated_rows('SELECT * FROM expr_stats WHERE a = 0 AND (b || c) <= ''z'' AND (c || b) >= ''0''');
+- estimated | actual 
+------------+--------
+-       100 |    100
+-(1 row)
+-
++ERROR:  unknown function: check_estimated_rows()
+ DROP TABLE expr_stats;
+ -- test handling of a mix of compatible and incompatible expressions
+ CREATE TABLE expr_stats_incompatible_test (
+@@ -3069,10 +2125,7 @@
+   AND
+   (c0 IN (0, 1) OR c1)
+ );
+- c0 
+-----
+-(0 rows)
+-
++ERROR:  type "int4range" does not exist
+ DROP TABLE expr_stats_incompatible_test;
+ -- Permission tests. Users should not be able to see specific data values in
+ -- the extended statistics, if they lack permission to see those values in
+@@ -3088,205 +2141,511 @@
+      SELECT mod(i,5), mod(i,10) FROM generate_series(1,100) s(i);
+ CREATE STATISTICS tststats.priv_test_stats (mcv) ON a, b
+   FROM tststats.priv_test_tbl;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE STATISTICS tststats.priv_test_stats (mcv) ON a, b
++                          ^
++HINT:  try \h CREATE STATISTICS
+ ANALYZE tststats.priv_test_tbl;
+ -- Check printing info about extended statistics by \dX
+ create table stts_t1 (a int, b int);
+ create statistics (ndistinct) on a, b from stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (ndistinct) on a, b from stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create statistics (ndistinct, dependencies) on a, b from stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (ndistinct, dependencies) on a, b from stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create statistics (ndistinct, dependencies, mcv) on a, b from stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (ndistinct, dependencies, mcv) on a, b from stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create table stts_t2 (a int, b int, c int);
+ create statistics on b, c from stts_t2;
++ERROR:  at or near "on": syntax error
++DETAIL:  source SQL:
++create statistics on b, c from stts_t2
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create table stts_t3 (col1 int, col2 int, col3 int);
+ create statistics stts_hoge on col1, col2, col3 from stts_t3;
+ create schema stts_s1;
+ create schema stts_s2;
+ create statistics stts_s1.stts_foo on col1, col2 from stts_t3;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++create statistics stts_s1.stts_foo on col1, col2 from stts_t3
++                         ^
++HINT:  try \h CREATE STATISTICS
+ create statistics stts_s2.stts_yama (dependencies, mcv) on col1, col3 from stts_t3;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++create statistics stts_s2.stts_yama (dependencies, mcv) on col1, col3 from stts_t3
++                         ^
++HINT:  try \h CREATE STATISTICS
+ insert into stts_t1 select i,i from generate_series(1,100) i;
+ analyze stts_t1;
+ set search_path to public, stts_s1, stts_s2, tststats;
+ \dX
+-                                                        List of extended statistics
+-  Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+-----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public   | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public   | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public   | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public   | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public   | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public   | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public   | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public   | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public   | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1  | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
+- stts_s2  | stts_yama              | col1, col3 FROM stts_t3                                          |           | defined      | defined
+- tststats | priv_test_stats        | a, b FROM priv_test_tbl                                          |           |              | defined
+-(12 rows)
+-
++ERROR:  unknown function: pg_catalog.pg_statistics_obj_is_visible()
+ \dX stts_t*
+-                             List of extended statistics
+- Schema |       Name        |    Definition     | Ndistinct | Dependencies |   MCV   
+---------+-------------------+-------------------+-----------+--------------+---------
+- public | stts_t1_a_b_stat  | a, b FROM stts_t1 | defined   |              | 
+- public | stts_t1_a_b_stat1 | a, b FROM stts_t1 | defined   | defined      | 
+- public | stts_t1_a_b_stat2 | a, b FROM stts_t1 | defined   | defined      | defined
+- public | stts_t2_b_c_stat  | b, c FROM stts_t2 | defined   | defined      | defined
+-(4 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(stts_t.*)$' COLLATE pg_catalog.default
++                                                                         ^
+ \dX *stts_hoge
+-                               List of extended statistics
+- Schema |   Name    |          Definition           | Ndistinct | Dependencies |   MCV   
+---------+-----------+-------------------------------+-----------+--------------+---------
+- public | stts_hoge | col1, col2, col3 FROM stts_t3 | defined   | defined      | defined
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(.*stts_hoge)$' COLLATE pg_catalog.default
++                                                                            ^
+ \dX+
+-                                                        List of extended statistics
+-  Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+-----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public   | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public   | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public   | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public   | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public   | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public   | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public   | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public   | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public   | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1  | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
+- stts_s2  | stts_yama              | col1, col3 FROM stts_t3                                          |           | defined      | defined
+- tststats | priv_test_stats        | a, b FROM priv_test_tbl                                          |           |              | defined
+-(12 rows)
+-
++ERROR:  unknown function: pg_catalog.pg_statistics_obj_is_visible()
+ \dX+ stts_t*
+-                             List of extended statistics
+- Schema |       Name        |    Definition     | Ndistinct | Dependencies |   MCV   
+---------+-------------------+-------------------+-----------+--------------+---------
+- public | stts_t1_a_b_stat  | a, b FROM stts_t1 | defined   |              | 
+- public | stts_t1_a_b_stat1 | a, b FROM stts_t1 | defined   | defined      | 
+- public | stts_t1_a_b_stat2 | a, b FROM stts_t1 | defined   | defined      | defined
+- public | stts_t2_b_c_stat  | b, c FROM stts_t2 | defined   | defined      | defined
+-(4 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(stts_t.*)$' COLLATE pg_catalog.default
++                                                                         ^
+ \dX+ *stts_hoge
+-                               List of extended statistics
+- Schema |   Name    |          Definition           | Ndistinct | Dependencies |   MCV   
+---------+-----------+-------------------------------+-----------+--------------+---------
+- public | stts_hoge | col1, col2, col3 FROM stts_t3 | defined   | defined      | defined
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(.*stts_hoge)$' COLLATE pg_catalog.default
++                                                                            ^
+ \dX+ stts_s2.stts_yama
+-                            List of extended statistics
+- Schema  |   Name    |       Definition        | Ndistinct | Dependencies |   MCV   
+----------+-----------+-------------------------+-----------+--------------+---------
+- stts_s2 | stts_yama | col1, col3 FROM stts_t3 |           | defined      | defined
+-(1 row)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(stts_yama)$' COLLATE pg_catalog.default
++                                                                          ^
+ create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (mcv) ON a, b, (a+b), (a-b) FROM stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ create statistics (mcv) ON (a+b), (a-b) FROM stts_t1;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create statistics (mcv) ON (a+b), (a-b) FROM stts_t1
++                  ^
++HINT:  try \h CREATE STATISTICS
+ \dX stts_t*expr*
+-                                           List of extended statistics
+- Schema |            Name             |             Definition              | Ndistinct | Dependencies |   MCV   
+---------+-----------------------------+-------------------------------------+-----------+--------------+---------
+- public | stts_t1_a_b_expr_expr_stat  | a, b, (a + b), (a - b) FROM stts_t1 |           |              | defined
+- public | stts_t1_a_b_expr_expr_stat1 | a, b, (a + b), (a - b) FROM stts_t1 |           |              | defined
+- public | stts_t1_expr_expr_stat      | (a + b), (a - b) FROM stts_t1       |           |              | defined
+-(3 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT 
++es.stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS "Schema", 
++es.stxname AS "Name", 
++pg_catalog.format('%s FROM %s', 
++  (SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname),', ') 
++   FROM pg_catalog.unnest(es.stxkeys) s(attnum) 
++   JOIN pg_catalog.pg_attribute a 
++   ON (es.stxrelid = a.attrelid 
++   AND a.attnum = s.attnum 
++   AND NOT a.attisdropped)), 
++es.stxrelid::pg_catalog.regclass) AS "Definition",
++CASE WHEN 'd' = any(es.stxkind) THEN 'defined' 
++END AS "Ndistinct", 
++CASE WHEN 'f' = any(es.stxkind) THEN 'defined' 
++END AS "Dependencies",
++CASE WHEN 'm' = any(es.stxkind) THEN 'defined' 
++END AS "MCV"  
++FROM pg_catalog.pg_statistic_ext es 
++WHERE es.stxname OPERATOR(pg_catalog.~) '^(stts_t.*expr.*)$' COLLATE pg_catalog.default
++                                                                               ^
+ drop statistics stts_t1_a_b_expr_expr_stat;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++drop statistics stts_t1_a_b_expr_expr_stat
++     ^
++HINT:  try \h DROP
+ drop statistics stts_t1_a_b_expr_expr_stat1;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++drop statistics stts_t1_a_b_expr_expr_stat1
++     ^
++HINT:  try \h DROP
+ drop statistics stts_t1_expr_expr_stat;
++ERROR:  at or near "statistics": syntax error
++DETAIL:  source SQL:
++drop statistics stts_t1_expr_expr_stat
++     ^
++HINT:  try \h DROP
+ set search_path to public, stts_s1;
+ \dX
+-                                                       List of extended statistics
+- Schema  |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+----------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public  | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public  | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public  | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public  | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public  | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public  | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public  | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public  | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public  | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+- stts_s1 | stts_foo               | col1, col2 FROM stts_t3                                          | defined   | defined      | defined
+-(10 rows)
+-
++ERROR:  unknown function: pg_catalog.pg_statistics_obj_is_visible()
+ create role regress_stats_ext nosuperuser;
++ERROR:  at or near "nosuperuser": syntax error
++DETAIL:  source SQL:
++create role regress_stats_ext nosuperuser
++                              ^
++HINT:  try \h CREATE ROLE
+ set role regress_stats_ext;
++ERROR:  role/user "regress_stats_ext" does not exist
+ \dX
+-                                                       List of extended statistics
+- Schema |          Name          |                            Definition                            | Ndistinct | Dependencies |   MCV   
+---------+------------------------+------------------------------------------------------------------+-----------+--------------+---------
+- public | func_deps_stat         | (a * 2), upper(b), (c + 1::numeric) FROM functional_dependencies |           | defined      | 
+- public | mcv_lists_arrays_stats | a, b, c FROM mcv_lists_arrays                                    |           |              | defined
+- public | mcv_lists_bool_stats   | a, b, c FROM mcv_lists_bool                                      |           |              | defined
+- public | mcv_lists_stats        | a, b, d FROM mcv_lists                                           |           |              | defined
+- public | stts_hoge              | col1, col2, col3 FROM stts_t3                                    | defined   | defined      | defined
+- public | stts_t1_a_b_stat       | a, b FROM stts_t1                                                | defined   |              | 
+- public | stts_t1_a_b_stat1      | a, b FROM stts_t1                                                | defined   | defined      | 
+- public | stts_t1_a_b_stat2      | a, b FROM stts_t1                                                | defined   | defined      | defined
+- public | stts_t2_b_c_stat       | b, c FROM stts_t2                                                | defined   | defined      | defined
+-(9 rows)
+-
++ERROR:  unknown function: pg_catalog.pg_statistics_obj_is_visible()
+ reset role;
+ drop table stts_t1, stts_t2, stts_t3;
+ drop schema stts_s1, stts_s2 cascade;
+ drop user regress_stats_ext;
++ERROR:  role/user "regress_stats_ext" does not exist
+ reset search_path;
+ -- User with no access
+ CREATE USER regress_stats_user1;
+ GRANT USAGE ON SCHEMA tststats TO regress_stats_user1;
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  at or near "regress_stats_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_stats_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM tststats.priv_test_tbl; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ a | b 
++---+---
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++ 1 | 1
++ 2 | 2
++ 3 | 3
++ 4 | 4
++ 0 | 5
++ 1 | 6
++ 2 | 7
++ 3 | 8
++ 4 | 9
++ 0 | 0
++(100 rows)
++
+ -- Check individual columns if we don't have table privilege
+ SELECT * FROM tststats.priv_test_tbl
+   WHERE a = 1 and tststats.priv_test_tbl.* > (1, 1) is not null;
+-ERROR:  permission denied for table priv_test_tbl
++ a | b 
++---+---
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++ 1 | 1
++ 1 | 6
++(20 rows)
++
+ -- Attempt to gain access using a leaky operator
+ CREATE FUNCTION op_leak(int, int) RETURNS bool
+     AS 'BEGIN RAISE NOTICE ''op_leak => %, %'', $1, $2; RETURN $1 < $2; END'
+     LANGUAGE plpgsql;
++ERROR:  no value provided for placeholder: $1
+ CREATE OPERATOR <<< (procedure = op_leak, leftarg = int, rightarg = int,
+                      restrict = scalarltsel);
++ERROR:  at or near "<": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE OPERATOR <<< (procedure = op_leak, leftarg = int, rightarg = int,
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0
++                                               ^
+ DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Permission denied
+-ERROR:  permission denied for table priv_test_tbl
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0
++                                             ^
++HINT:  try \h DELETE
+ -- Grant access via a security barrier view, but hide all data
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ CREATE VIEW tststats.priv_test_view WITH (security_barrier=true)
+     AS SELECT * FROM tststats.priv_test_tbl WHERE false;
++ERROR:  at or near "with": syntax error
++DETAIL:  source SQL:
++CREATE VIEW tststats.priv_test_view WITH (security_barrier=true)
++                                    ^
++HINT:  try \h CREATE VIEW
+ GRANT SELECT, DELETE ON tststats.priv_test_view TO regress_stats_user1;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "tststats.priv_test_view" does not exist
+ -- Should now have access via the view, but see nothing and leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  at or near "regress_stats_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_stats_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT * FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0
++                                                ^
+ DELETE FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0; -- Should not leak
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++DELETE FROM tststats.priv_test_view WHERE a <<< 0 AND b <<< 0
++                                              ^
++HINT:  try \h DELETE
+ -- Grant table access, but hide all data with RLS
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ ALTER TABLE tststats.priv_test_tbl ENABLE ROW LEVEL SECURITY;
++ERROR:  unimplemented: row-level security is not yet implemented
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/73596/_version_
+ GRANT SELECT, DELETE ON tststats.priv_test_tbl TO regress_stats_user1;
+ -- Should now have direct table access, but see nothing and leak nothing
+ SET SESSION AUTHORIZATION regress_stats_user1;
++ERROR:  at or near "regress_stats_user1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_stats_user1
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
+- a | b 
+----+---
+-(0 rows)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT * FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0
++                                               ^
+ DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0; -- Should not leak
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++DELETE FROM tststats.priv_test_tbl WHERE a <<< 0 AND b <<< 0
++                                             ^
++HINT:  try \h DELETE
+ -- Tidy up
+ DROP OPERATOR <<< (int, int);
++ERROR:  at or near "<": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DROP OPERATOR <<< (int, int)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP FUNCTION op_leak(int, int);
++ERROR:  unknown function: op_leak()
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DROP SCHEMA tststats CASCADE;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to table tststats.priv_test_tbl
+-drop cascades to view tststats.priv_test_view
+ DROP USER regress_stats_user1;

@@ -1,0 +1,460 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_into.out --label=/mnt/data1/postgres/src/test/regress/results/select_into.out /mnt/data1/postgres/src/test/regress/expected/select_into.out /mnt/data1/postgres/src/test/regress/results/select_into.out
+--- /mnt/data1/postgres/src/test/regress/expected/select_into.out
++++ /mnt/data1/postgres/src/test/regress/results/select_into.out
+@@ -5,12 +5,24 @@
+    INTO TABLE sitmp1
+    FROM onek
+    WHERE onek.unique1 < 2;
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++SELECT *
++   INTO TABLE sitmp1
++   ^
+ DROP TABLE sitmp1;
++ERROR:  relation "sitmp1" does not exist
+ SELECT *
+    INTO TABLE sitmp1
+    FROM onek2
+    WHERE onek2.unique1 < 2;
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++SELECT *
++   INTO TABLE sitmp1
++   ^
+ DROP TABLE sitmp1;
++ERROR:  relation "sitmp1" does not exist
+ --
+ -- SELECT INTO and INSERT permission, if owner is not allowed to insert.
+ --
+@@ -20,85 +32,168 @@
+ 	  REVOKE INSERT ON TABLES FROM regress_selinto_user;
+ GRANT ALL ON SCHEMA selinto_schema TO public;
+ SET SESSION AUTHORIZATION regress_selinto_user;
++ERROR:  at or near "regress_selinto_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_selinto_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- WITH DATA, passes.
+ CREATE TABLE selinto_schema.tbl_withdata1 (a)
+   AS SELECT generate_series(1,3) WITH DATA;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ INSERT INTO selinto_schema.tbl_withdata1 VALUES (4);
+-ERROR:  permission denied for table tbl_withdata1
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE selinto_schema.tbl_withdata2 (a) AS
+   SELECT generate_series(1,3) WITH DATA;
+-              QUERY PLAN              
+---------------------------------------
+- ProjectSet (actual rows=3 loops=1)
+-   ->  Result (actual rows=1 loops=1)
+-(2 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ -- WITH NO DATA, passes.
+ CREATE TABLE selinto_schema.tbl_nodata1 (a) AS
+   SELECT generate_series(1,3) WITH NO DATA;
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE selinto_schema.tbl_nodata1 (a) AS
++  SELECT generate_series(1,3) WITH NO DATA
++                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE selinto_schema.tbl_nodata2 (a) AS
+   SELECT generate_series(1,3) WITH NO DATA;
+-          QUERY PLAN           
+--------------------------------
+- ProjectSet (never executed)
+-   ->  Result (never executed)
+-(2 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ -- EXECUTE and WITH DATA, passes.
+ PREPARE data_sel AS SELECT generate_series(1,3);
+ CREATE TABLE selinto_schema.tbl_withdata3 (a) AS
+   EXECUTE data_sel WITH DATA;
++ERROR:  at or near "execute": syntax error
++DETAIL:  source SQL:
++CREATE TABLE selinto_schema.tbl_withdata3 (a) AS
++  EXECUTE data_sel WITH DATA
++  ^
++HINT:  try \h CREATE TABLE
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE selinto_schema.tbl_withdata4 (a) AS
+   EXECUTE data_sel WITH DATA;
+-              QUERY PLAN              
+---------------------------------------
+- ProjectSet (actual rows=3 loops=1)
+-   ->  Result (actual rows=1 loops=1)
+-(2 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ -- EXECUTE and WITH NO DATA, passes.
+ CREATE TABLE selinto_schema.tbl_nodata3 (a) AS
+   EXECUTE data_sel WITH NO DATA;
++ERROR:  at or near "execute": syntax error
++DETAIL:  source SQL:
++CREATE TABLE selinto_schema.tbl_nodata3 (a) AS
++  EXECUTE data_sel WITH NO DATA
++  ^
++HINT:  try \h CREATE TABLE
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE selinto_schema.tbl_nodata4 (a) AS
+   EXECUTE data_sel WITH NO DATA;
+-          QUERY PLAN           
+--------------------------------
+- ProjectSet (never executed)
+-   ->  Result (never executed)
+-(2 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ ALTER DEFAULT PRIVILEGES FOR ROLE regress_selinto_user
+ 	  GRANT INSERT ON TABLES TO regress_selinto_user;
+ SET SESSION AUTHORIZATION regress_selinto_user;
++ERROR:  at or near "regress_selinto_user": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++SET SESSION AUTHORIZATION regress_selinto_user
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ RESET SESSION AUTHORIZATION;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++RESET SESSION AUTHORIZATION
++              ^
++HINT:  try \h RESET
+ DEALLOCATE data_sel;
+ DROP SCHEMA selinto_schema CASCADE;
+-NOTICE:  drop cascades to 8 other objects
+-DETAIL:  drop cascades to table selinto_schema.tbl_withdata1
+-drop cascades to table selinto_schema.tbl_withdata2
+-drop cascades to table selinto_schema.tbl_nodata1
+-drop cascades to table selinto_schema.tbl_nodata2
+-drop cascades to table selinto_schema.tbl_withdata3
+-drop cascades to table selinto_schema.tbl_withdata4
+-drop cascades to table selinto_schema.tbl_nodata3
+-drop cascades to table selinto_schema.tbl_nodata4
+ DROP USER regress_selinto_user;
+ -- Tests for WITH NO DATA and column name consistency
+ CREATE TABLE ctas_base (i int, j int);
+ INSERT INTO ctas_base VALUES (1, 2);
+ CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base; -- Error
+-ERROR:  too many column names were specified
++ERROR:  CREATE TABLE specifies 3 column names, but data source has 2 columns
+ CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base WITH NO DATA; -- Error
+-ERROR:  too many column names were specified
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctas_nodata (ii, jj, kk) AS SELECT i, j FROM ctas_base WITH NO DATA
++                                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE ctas_nodata (ii, jj) AS SELECT i, j FROM ctas_base; -- OK
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ CREATE TABLE ctas_nodata_2 (ii, jj) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctas_nodata_2 (ii, jj) AS SELECT i, j FROM ctas_base WITH NO DATA
++                                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE ctas_nodata_3 (ii) AS SELECT i, j FROM ctas_base; -- OK
++ERROR:  CREATE TABLE specifies 1 column name, but data source has 2 columns
+ CREATE TABLE ctas_nodata_4 (ii) AS SELECT i, j FROM ctas_base WITH NO DATA; -- OK
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctas_nodata_4 (ii) AS SELECT i, j FROM ctas_base WITH NO DATA
++                                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SELECT * FROM ctas_nodata;
+  ii | jj 
+ ----+----
+@@ -106,26 +201,19 @@
+ (1 row)
+ 
+ SELECT * FROM ctas_nodata_2;
+- ii | jj 
+-----+----
+-(0 rows)
+-
++ERROR:  relation "ctas_nodata_2" does not exist
+ SELECT * FROM ctas_nodata_3;
+- ii | j 
+-----+---
+-  1 | 2
+-(1 row)
+-
++ERROR:  relation "ctas_nodata_3" does not exist
+ SELECT * FROM ctas_nodata_4;
+- ii | j 
+-----+---
+-(0 rows)
+-
++ERROR:  relation "ctas_nodata_4" does not exist
+ DROP TABLE ctas_base;
+ DROP TABLE ctas_nodata;
+ DROP TABLE ctas_nodata_2;
++ERROR:  relation "ctas_nodata_2" does not exist
+ DROP TABLE ctas_nodata_3;
++ERROR:  relation "ctas_nodata_3" does not exist
+ DROP TABLE ctas_nodata_4;
++ERROR:  relation "ctas_nodata_4" does not exist
+ --
+ -- CREATE TABLE AS/SELECT INTO as last command in a SQL function
+ -- have been known to cause problems
+@@ -134,22 +222,13 @@
+ AS $$
+   CREATE TABLE created_table AS SELECT * FROM int8_tbl;
+ $$ LANGUAGE SQL;
++ERROR:  unimplemented: CREATE TABLE AS usage inside a function definition is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/110080/_version_
+ SELECT make_table();
+- make_table 
+-------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: make_table()
+ SELECT * FROM created_table;
+-        q1        |        q2         
+-------------------+-------------------
+-              123 |               456
+-              123 |  4567890123456789
+- 4567890123456789 |               123
+- 4567890123456789 |  4567890123456789
+- 4567890123456789 | -4567890123456789
+-(5 rows)
+-
++ERROR:  relation "created_table" does not exist
+ -- Try EXPLAIN ANALYZE SELECT INTO and EXPLAIN ANALYZE CREATE TABLE AS
+ -- WITH NO DATA, but hide the outputs since they won't be stable.
+ DO $$
+@@ -157,66 +236,132 @@
+ 	EXECUTE 'EXPLAIN ANALYZE SELECT * INTO TABLE easi FROM int8_tbl';
+ 	EXECUTE 'EXPLAIN ANALYZE CREATE TABLE easi2 AS SELECT * FROM int8_tbl WITH NO DATA';
+ END$$;
++ERROR:  unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
++DETAIL:  stmt_dyn_exec is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP TABLE created_table;
++ERROR:  relation "created_table" does not exist
+ DROP TABLE easi, easi2;
++ERROR:  relation "easi" does not exist
+ --
+ -- Disallowed uses of SELECT ... INTO.  All should fail
+ --
+ DECLARE foo CURSOR FOR SELECT 1 INTO int4_tbl;
+-ERROR:  SELECT ... INTO is not allowed here
+-LINE 1: DECLARE foo CURSOR FOR SELECT 1 INTO int4_tbl;
+-                                             ^
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++DECLARE foo CURSOR FOR SELECT 1 INTO int4_tbl
++                                ^
+ COPY (SELECT 1 INTO frak UNION SELECT 2) TO 'blob';
+-ERROR:  COPY (SELECT INTO) is not supported
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++COPY (SELECT 1 INTO frak UNION SELECT 2) TO 'blob'
++               ^
+ SELECT * FROM (SELECT 1 INTO f) bar;
+-ERROR:  SELECT ... INTO is not allowed here
+-LINE 1: SELECT * FROM (SELECT 1 INTO f) bar;
+-                                     ^
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++SELECT * FROM (SELECT 1 INTO f) bar
++                        ^
++HINT:  try \h <SOURCE>
+ CREATE VIEW foo AS SELECT 1 INTO int4_tbl;
+-ERROR:  views must not contain SELECT INTO
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++CREATE VIEW foo AS SELECT 1 INTO int4_tbl
++                            ^
+ INSERT INTO int4_tbl SELECT 1 INTO f;
+-ERROR:  SELECT ... INTO is not allowed here
+-LINE 1: INSERT INTO int4_tbl SELECT 1 INTO f;
+-                                           ^
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++INSERT INTO int4_tbl SELECT 1 INTO f
++                              ^
+ -- Test CREATE TABLE AS ... IF NOT EXISTS
+ CREATE TABLE ctas_ine_tbl AS SELECT 1;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0; -- error
+-ERROR:  relation "ctas_ine_tbl" already exists
++ERROR:  relation "root.public.ctas_ine_tbl" already exists
+ CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0; -- ok
+-NOTICE:  relation "ctas_ine_tbl" already exists, skipping
++ERROR:  division by zero
+ CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- error
+-ERROR:  relation "ctas_ine_tbl" already exists
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- ok
+-NOTICE:  relation "ctas_ine_tbl" already exists, skipping
++ERROR:  at or near "data": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA
++                                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0; -- error
+-ERROR:  relation "ctas_ine_tbl" already exists
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0; -- ok
+-NOTICE:  relation "ctas_ine_tbl" already exists, skipping
+- QUERY PLAN 
+-------------
+-(0 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- error
+-ERROR:  relation "ctas_ine_tbl" already exists
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS SELECT 1 / 0 WITH NO DATA; -- ok
+-NOTICE:  relation "ctas_ine_tbl" already exists, skipping
+- QUERY PLAN 
+-------------
+-(0 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ PREPARE ctas_ine_query AS SELECT 1 / 0;
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE ctas_ine_tbl AS EXECUTE ctas_ine_query; -- error
+-ERROR:  relation "ctas_ine_tbl" already exists
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
+   CREATE TABLE IF NOT EXISTS ctas_ine_tbl AS EXECUTE ctas_ine_query; -- ok
+-NOTICE:  relation "ctas_ine_tbl" already exists, skipping
+- QUERY PLAN 
+-------------
+-(0 rows)
+-
++ERROR:  at or near "analyze": syntax error
++DETAIL:  source SQL:
++EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
++         ^
++HINT:  try \h <SELECTCLAUSE>
+ DROP TABLE ctas_ine_tbl;
