@@ -3963,7 +3963,7 @@ CREATE TABLE crdb_internal.create_statements (
   create_statement              STRING NOT NULL,
   state                         STRING NOT NULL,
   create_nofks                  STRING NOT NULL,
-  policy_statements             STRING[] NOT NULL,
+  rls_statements             STRING[] NOT NULL,
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   create_redactable             STRING NOT NULL,
@@ -3988,7 +3988,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var descType tree.Datum
 		var stmt, createNofk, createRedactable string
 		alterStmts := tree.NewDArray(types.String)
-		policyStmts := tree.NewDArray(types.String)
+		rlsStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
 		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
 		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
@@ -4023,12 +4023,12 @@ CREATE TABLE crdb_internal.create_statements (
 				return err
 			}
 
-			if err = showPolicyStatements(ctx, &name, table, p.EvalContext(), &p.semaCtx, p.SessionData(), policyStmts); err != nil {
+			if err = showRowLevelSecurityStatements(ctx, &name, table, p.EvalContext(), &p.semaCtx, p.SessionData(), rlsStmts); err != nil {
 				return err
 			}
 
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
-			displayOptions.IgnoreRLSStatements = false
+
 			stmt, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
 			if err != nil {
 				return err
@@ -4060,7 +4060,7 @@ CREATE TABLE crdb_internal.create_statements (
 			tree.NewDString(stmt),
 			tree.NewDString(table.GetState().String()),
 			tree.NewDString(createNofk),
-			policyStmts,
+			rlsStmts,
 			alterStmts,
 			validateStmts,
 			tree.NewDString(createRedactable),
@@ -4072,21 +4072,31 @@ CREATE TABLE crdb_internal.create_statements (
 	},
 	nil)
 
-// showPolicyStatements adds the RLS policy statements to the policy_statements column.
-func showPolicyStatements(
+// showRowLevelSecurityStatements adds the RLS policy statements to the rls_statements column.
+func showRowLevelSecurityStatements(
 	ctx context.Context,
 	tn *tree.TableName,
 	table catalog.TableDescriptor,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
-	policyStmts *tree.DArray,
+	rlsStmts *tree.DArray,
 ) error {
+	// Add the row level security ALTER statements to the rls_statements column.
+	if alterRLSStatements, err := showRLSAlterStatement(tn, table, false); err != nil {
+		return err
+	} else if len(alterRLSStatements) != 0 {
+		if err = rlsStmts.Append(tree.NewDString(alterRLSStatements)); err != nil {
+			return err
+		}
+	}
+
+	// Add the row level security policy statements to the rls_statements column.
 	for _, policy := range table.GetPolicies() {
 		if policyStatement, err := showPolicyStatement(ctx, tn, table, evalCtx, semaCtx, sessionData, policy, false); err != nil {
 			return err
 		} else if len(policyStatement) != 0 {
-			if err := policyStmts.Append(tree.NewDString(policyStatement)); err != nil {
+			if err := rlsStmts.Append(tree.NewDString(policyStatement)); err != nil {
 				return err
 			}
 		}
@@ -4135,15 +4145,6 @@ func showAlterStatement(
 		f.FormatName(fk.GetName())
 
 		if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
-			return err
-		}
-	}
-
-	// Add the row level security ALTER statements to the alter_statements column.
-	if alterRLSStatements, err := showRLSAlterStatement(tn, table, false); err != nil {
-		return err
-	} else if len(alterRLSStatements) != 0 {
-		if err = alterStmts.Append(tree.NewDString(alterRLSStatements)); err != nil {
 			return err
 		}
 	}

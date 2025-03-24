@@ -92,6 +92,11 @@ SELECT
           THEN NULL
 				ELSE
 					e'\n-- Warning: Partitioned table with no zone configurations.\n'
+        END,
+        CASE
+            WHEN array_length(rls_statements, 1) > 0 THEN
+                concat(e';\n', array_to_string(rls_statements, e';\n'))
+            ELSE NULL
         END
     ) AS create_statement
 FROM
@@ -253,7 +258,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 	obj_description(c.oid) AS comment`
 	}
 	getConstraintsQuery += `
-FROM
+	FROM
        %[4]s.pg_catalog.pg_class t,
        %[4]s.pg_catalog.pg_namespace n,
        %[4]s.pg_catalog.pg_constraint c
