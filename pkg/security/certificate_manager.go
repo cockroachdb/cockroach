@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -197,22 +199,27 @@ func (cm *CertificateManager) RegisterSignalHandler(
 
 // RegisterExpirationCache registers a cache for client certificate expiration.
 // It is called during server startup.
-func (cm *CertificateManager) RegisterExpirationCache(cache *clientcert.ClientCertExpirationCache) {
-	cm.clientCertExpirationCache = cache
+func (cm *CertificateManager) RegisterExpirationCache(
+	ctx context.Context,
+	st *cluster.Settings,
+	stopper *stop.Stopper,
+	timeSrc timeutil.TimeSource,
+	parentMon *mon.BytesMonitor,
+) {
+	cm.clientCertExpirationCache = clientcert.NewClientCertExpirationCache(ctx, st, stopper, timeSrc, parentMon, cm.certMetrics.ClientExpiration, cm.certMetrics.ClientTTL)
 }
 
 // MaybeUpsertClientExpiration updates or inserts the expiration time for the
 // given client certificate. An update is contingent on whether the old
 // expiration is after the new expiration.
 func (cm *CertificateManager) MaybeUpsertClientExpiration(
-	ctx context.Context, identity string, expiration int64,
+	ctx context.Context, identity string, serial string, expiration int64,
 ) {
 	if cache := cm.clientCertExpirationCache; cache != nil {
 		cache.MaybeUpsert(ctx,
 			identity,
+			serial,
 			expiration,
-			cm.certMetrics.ClientExpiration,
-			cm.certMetrics.ClientTTL,
 		)
 	}
 }
