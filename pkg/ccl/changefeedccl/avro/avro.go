@@ -76,7 +76,7 @@ type logicalType struct {
 	Scale       *int       `json:"scale,omitempty"`
 }
 
-type arrayType struct {
+type ArrayType struct {
 	SchemaType SchemaType `json:"type"`
 	Items      SchemaType `json:"items"`
 }
@@ -87,7 +87,7 @@ func unionKey(t SchemaType) string {
 		return s
 	case logicalType:
 		return unionKey(s.SchemaType) + `.` + s.LogicalType
-	case arrayType:
+	case ArrayType:
 		return unionKey(s.SchemaType)
 	case *Record:
 		if s.Namespace == "" {
@@ -339,7 +339,7 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		)
 	case types.BitFamily:
 		setNullable(
-			arrayType{
+			ArrayType{
 				SchemaType: SchemaTypeArray,
 				Items:      SchemaTypeLong,
 			},
@@ -710,7 +710,7 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 		itemUnionKey := unionKey(itemSchema.SchemaType.([]SchemaType)[1])
 
 		setNullable(
-			arrayType{
+			ArrayType{
 				SchemaType: SchemaTypeArray,
 				Items:      itemSchema.SchemaType,
 			},
