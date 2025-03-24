@@ -63,13 +63,14 @@ import (
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
 //     number of nodes per region.
 //
-//   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
-//     [min_key=<int>] [max_key=<int>] [range_bytes=<int>] [add_to_existing<bool>]
+//   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
+//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [range_bytes=<int>]
+//     [add_to_existing<bool>] [lease_weights=<float>] [replica_weights=<float>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
 //     placement. When add_to_existing is true, the range generator doesn't
 //     replace any existing range generators, it is instead added on-top. The
-//     The default values are ranges=1 repl_factor=3 placement_skew=false
+//     The default values are ranges=1 repl_factor=3 placement_type=even
 //     min_key=0 max_key=10000 add_to_existing=false.
 //
 //   - set_liveness node=<int> [delay=<duration>]
@@ -216,21 +217,24 @@ func TestDataDriven(t *testing.T) {
 				var ranges, replFactor = 1, 3
 				var minKey, maxKey = int64(0), int64(defaultKeyspace)
 				var bytes int64 = 0
-				var placementSkew, addToExisting bool
+				var addToExisting bool
+				var placementTypeStr string = "even"
+				var leaseWeights, replicaWeights []float64
 
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
-				scanIfExists(t, d, "placement_skew", &placementSkew)
+				scanIfExists(t, d, "placement_type", &placementTypeStr)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "bytes", &bytes)
 				scanIfExists(t, d, "add_to_existing", &addToExisting)
 
-				var placementType gen.PlacementType
-				if placementSkew {
-					placementType = gen.Skewed
-				} else {
-					placementType = gen.Even
+				placementType := gen.GetRangePlacementType(placementTypeStr)
+				if placementType == gen.Weighted {
+					// lease_weights and replica_weights are required for weighted
+					// placement.
+					scanArg(t, d, "lease_weights", &leaseWeights)
+					scanArg(t, d, "replica_weights", &replicaWeights)
 				}
 				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
@@ -240,7 +244,9 @@ func TestDataDriven(t *testing.T) {
 						ReplicationFactor: replFactor,
 						Bytes:             bytes,
 					},
-					PlacementType: placementType,
+					PlacementType:  placementType,
+					LeaseWeights:   leaseWeights,
+					ReplicaWeights: replicaWeights,
 				}
 				if addToExisting {
 					rangeGen = append(rangeGen, nextRangeGen)

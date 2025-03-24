@@ -242,6 +242,7 @@ const (
 	Skewed
 	Random
 	WeightedRandom
+	Weighted
 )
 
 func (p PlacementType) String() string {
@@ -254,6 +255,8 @@ func (p PlacementType) String() string {
 		return "random"
 	case WeightedRandom:
 		return "weighted_rand"
+	case Weighted:
+		return "weighted"
 	default:
 		panic("unknown placement type")
 	}
@@ -269,6 +272,8 @@ func GetRangePlacementType(s string) PlacementType {
 		return Random
 	case "weighted_rand":
 		return WeightedRandom
+	case "weighted":
+		return Weighted
 	default:
 		panic(fmt.Sprintf("unknown placement type %s", s))
 	}
@@ -311,9 +316,6 @@ func (b BaseRanges) GetRangesInfo(
 
 // LoadRangeInfo loads the given state with the specified rangesInfo.
 func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = b.Bytes
-	}
 	state.LoadRangeInfo(s, rangesInfo...)
 }
 
@@ -322,6 +324,9 @@ func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 type BasicRanges struct {
 	BaseRanges
 	PlacementType PlacementType
+	// ReplicaWeights and LeaseWeights are only non-nil when the placement type
+	// is Weighted.
+	ReplicaWeights, LeaseWeights []float64
 }
 
 func (br BasicRanges) String() string {
@@ -335,7 +340,7 @@ func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
 	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
-		panic("BasicRanges generate only uniform or skewed distributions")
+		panic("BasicRanges generate only uniform, skewed or weighted distributions")
 	}
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
@@ -359,9 +364,24 @@ func (mr MultiRanges) Generate(
 ) state.State {
 	var rangeInfos []state.RangeInfo
 	for _, ranges := range mr {
-		nextInfos := ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
-		for _, rangeInfo := range nextInfos {
-			rangeInfo.Size = ranges.Bytes
+		var nextInfos state.RangesInfo
+		if ranges.PlacementType == Weighted {
+			// HACK / TODO(kvoli): Want to support specifying the lease/replica weights
+			// directly, this accomplishes that, however its hacky to put this here
+			// instead of refactoring GetRangesInfo to be more general.
+			var storeIDs []state.StoreID
+			for _, store := range s.Stores() {
+				storeIDs = append(storeIDs, store.StoreID())
+			}
+			nextInfos = state.RangesInfoWithDistribution(storeIDs,
+				ranges.ReplicaWeights, ranges.LeaseWeights,
+				ranges.Ranges, state.DefaultSpanConfigWithRF(ranges.ReplicationFactor),
+				ranges.MinKey, ranges.MaxKey, ranges.Bytes)
+		} else {
+			if ranges.LeaseWeights != nil || ranges.ReplicaWeights != nil {
+				panic("leaseWeights and replicaWeights should be nil for non-weighted placement types")
+			}
+			nextInfos = ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
 		}
 		rangeInfos = append(rangeInfos, nextInfos...)
 	}

@@ -5,7 +5,7 @@
 gen_cluster nodes=7
 ----
 
-gen_ranges ranges=7 placement_skew=true
+gen_ranges ranges=7 placement_type=skewed
 ----
 
 # Create a load generator, where there are 7k ops/s and the access follows a
