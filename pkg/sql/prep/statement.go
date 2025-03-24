@@ -45,7 +45,8 @@ type Statement struct {
 
 	// GenericMemo, if present, is a fully-optimized memo that can be executed
 	// as-is.
-	GenericMemo *memo.Memo
+	GenericMemo  *memo.Memo
+	CompiledPlan any
 
 	// IdealGenericPlan is true if GenericMemo is guaranteed to be optimal
 	// across all executions of the prepared statement. Ideal generic plans are
