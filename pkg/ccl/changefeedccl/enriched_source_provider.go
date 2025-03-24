@@ -100,6 +100,7 @@ func newEnrichedSourceProvider(
 		fieldNameSourceNodeLocality: json.FromString(sourceData.sourceNodeLocality),
 		fieldNameNodeName:           json.FromString(sourceData.nodeName),
 		fieldNameNodeID:             json.FromString(sourceData.nodeID),
+		fieldNameOrigin:             json.FromString(originCockroachDB),
 	}
 
 	var nonFixedJSONFields []string
@@ -155,6 +156,7 @@ func (p *enrichedSourceProvider) GetAvro(
 			dest[fieldNameSourceNodeLocality] = goavro.Union(avro.SchemaTypeString, p.sourceData.sourceNodeLocality)
 			dest[fieldNameNodeName] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeName)
 			dest[fieldNameNodeID] = goavro.Union(avro.SchemaTypeString, p.sourceData.nodeID)
+			dest[fieldNameOrigin] = goavro.Union(avro.SchemaTypeString, originCockroachDB)
 		}
 
 		if p.opts.mvccTimestamp {
@@ -179,6 +181,7 @@ const (
 	fieldNameNodeName           = "node_name"
 	fieldNameNodeID             = "node_id"
 	fieldNameMVCCTimestamp      = "mvcc_timestamp"
+	fieldNameOrigin             = "origin"
 )
 
 type fieldInfo struct {
@@ -191,6 +194,17 @@ type fieldInfo struct {
 // everything is nullable in avro for better backwards compatibility, whereas we
 // use the optional flag in kafka connect more meaningfully.
 var allFieldInfo = map[string]fieldInfo{
+	fieldNameOrigin: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameOrigin,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameOrigin,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: false,
+		},
+	},
 	fieldNameChangefeedSink: {
 		avroSchemaField: avro.SchemaField{
 			Name:       fieldNameChangefeedSink,
@@ -316,3 +330,5 @@ func init() {
 		Optional: true,
 	}
 }
+
+const originCockroachDB = "cockroachdb"
