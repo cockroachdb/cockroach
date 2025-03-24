@@ -3866,6 +3866,22 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: key columns in primary index cannot become nullable before the primary index becomes write only
+  from: index-Node
+  kind: Precedence
+  to: column-not-null-Node
+  query:
+    - $index[Type] = '*scpb.PrimaryIndex'
+    - $column-not-null[Type] = '*scpb.ColumnNotNull'
+    - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column-not-null, $table-id, $column-id)
+    - toAbsent($index-Target, $column-not-null-Target)
+    - $index-Node[CurrentStatus] = WRITE_ONLY
+    - $column-not-null-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-25.2($index-column)
+    - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($column-not-null, $column-not-null-Target, $column-not-null-Node)
 - name: namespace exist before schema parent
   from: dependent-Node
   kind: Precedence
@@ -8537,6 +8553,22 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: key columns in primary index cannot become nullable before the primary index becomes write only
+  from: index-Node
+  kind: Precedence
+  to: column-not-null-Node
+  query:
+    - $index[Type] = '*scpb.PrimaryIndex'
+    - $column-not-null[Type] = '*scpb.ColumnNotNull'
+    - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column-not-null, $table-id, $column-id)
+    - toAbsent($index-Target, $column-not-null-Target)
+    - $index-Node[CurrentStatus] = WRITE_ONLY
+    - $column-not-null-Node[CurrentStatus] = VALIDATED
+    - descriptorIsNotBeingDropped-25.2($index-column)
+    - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($column-not-null, $column-not-null-Target, $column-not-null-Node)
 - name: namespace exist before schema parent
   from: dependent-Node
   kind: Precedence

@@ -56,6 +56,30 @@ func init() {
 			}
 		})
 
+	// This rule ensures that updates / upserts will still function while
+	// cleaning up a nullable column from a primary index. This happens for
+	// example when a rowid column is replaced with a primary key.
+	registerDepRule("key columns in primary index cannot become nullable before the primary index becomes write only",
+		scgraph.Precedence,
+		"index", "column-not-null",
+		func(from, to NodeVars) rel.Clauses {
+			ic := MkNodeVars("index-column")
+			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.ColumnNotNull)(nil)),
+				ColumnInIndex(ic, from, relationID, columnID, "index-id"),
+				JoinOnColumnID(ic, to, relationID, columnID),
+				StatusesToAbsent(from, scpb.Status_WRITE_ONLY, to, scpb.Status_VALIDATED),
+				descriptorIsNotBeingDropped(ic.El),
+				rel.Filter("isIndexKeyColumnKey", ic.El)(
+					func(ic *scpb.IndexColumn) bool {
+						return ic.Kind == scpb.IndexColumn_KEY || ic.Kind == scpb.IndexColumn_KEY_SUFFIX
+					},
+				),
+			}
+		})
+
 	// This rule ensures if we are dropping a column, we only transition to non-public after
 	// all adding indexes are present in the table descriptor (i.e. all adding indexes reached
 	// BACKFILL_ONLY).
