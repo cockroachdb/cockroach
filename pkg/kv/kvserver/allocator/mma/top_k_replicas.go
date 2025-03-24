@@ -7,8 +7,9 @@ import (
 )
 
 type topKReplicas struct {
-	k   int
-	dim LoadDimension
+	k         int
+	dim       LoadDimension
+	threshold LoadValue
 	// Decreasing load.
 	replicas    []replicaLoad
 	replicaHeap replicaHeap
@@ -25,6 +26,9 @@ func (t *topKReplicas) startInit() {
 }
 
 func (t *topKReplicas) addReplica(rangeID roachpb.RangeID, loadValue LoadValue) {
+	if loadValue < t.threshold {
+		return
+	}
 	rl := replicaLoad{
 		RangeID: rangeID,
 		load:    loadValue,
