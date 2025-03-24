@@ -95,6 +95,13 @@ func (cs *childSet) Each(
 	})
 }
 
+func (cs *childSet) Has(lvs ...string) bool {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	key := labelValuesSlice(lvs)
+	return cs.mu.tree.Has(&key)
+}
+
 // apply applies the given applyFn to every item in the childSet
 func (cs *childSet) apply(applyFn func(item btree.Item)) {
 	cs.mu.Lock()
