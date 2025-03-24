@@ -1148,6 +1148,31 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// sls.
 			topk.dim = WriteBandwidth
 		}
+		// TODO: setting a threshold such that only ranges > some threshold of the
+		// store's load in the top-k dimension are included in the top-k. We
+		// should actually be using the min of this threshold and the n-th ranked
+		// load (across all ranges) per dimension reported by the store in
+		// StoreDescriptor, where say n is 50 (since it is possible that the store
+		// has a massive range that consumes 50% of the load, and another 100
+		// ranges that consume 0.5% each, and the only way to restore health is to
+		// shed those 100 ranges).
+		const (
+			// minLeaseLoadFraction is the minimum fraction of the local store's load a
+			// lease must contribute, in order to consider it worthwhile rebalancing when
+			// overfull.
+			minLeaseLoadFraction = 0.005
+			// minReplicaLoadFraction is the minimum fraction of the local store's load a
+			// replica (lease included) must contribute, in order to consider it
+			// worthwhile rebalancing when overfull.
+			minReplicaLoadFraction = 0.02
+		)
+		fraction := minReplicaLoadFraction
+		if ss.StoreID == msg.StoreID && topk.dim == CPURate {
+			// We are assuming we will be able to shed leases, but if we can't we
+			// will start shedding replicas, so this is just a heuristic.
+			fraction = minLeaseLoadFraction
+		}
+		topk.threshold = LoadValue(float64(ss.adjusted.load[topk.dim]) * fraction)
 	}
 	// TODO: replica is already adjusted for some ongoing changes, which may be
 	// undone. So if s10 is a replica for range r1 whose leaseholder is the
