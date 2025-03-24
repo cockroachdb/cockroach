@@ -99,7 +99,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		})
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */, true)
+			ex.ScrapeRegistry(store.Registry(), metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		var in bytes.Buffer
 		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {

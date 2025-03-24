@@ -31,7 +31,7 @@ func TestAggHistogram(t *testing.T) {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
+			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string
