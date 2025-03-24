@@ -417,6 +417,30 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			schemaChange: "DROP INDEX idx",
 		},
 		{
+			desc: "alter policy name",
+			setup: []string{
+				"SET enable_row_level_security=on",
+				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
+				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
+				"CREATE USER foo",
+				"ALTER TABLE tbl OWNER TO foo",
+				"SET ROLE foo",
+			},
+			schemaChange: "ALTER POLICY p ON tbl RENAME TO policy_1",
+		},
+		{
+			desc: "alter policy using expression",
+			setup: []string{
+				"SET enable_row_level_security=on",
+				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
+				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
+				"CREATE USER foo",
+				"ALTER TABLE tbl OWNER TO foo",
+				"SET ROLE foo",
+			},
+			schemaChange: "ALTER POLICY p ON tbl USING (val > -10)",
+		},
+		{
 			desc: "drop column with index using hash cascade",
 			setup: []string{
 				"ALTER TABLE tbl ADD COLUMN i INT NOT NULL DEFAULT 1",
