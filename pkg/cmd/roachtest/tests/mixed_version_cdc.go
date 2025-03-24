@@ -446,9 +446,6 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t, t.L(), c, tester.crdbNodes,
 		// Multi-tenant deployments are currently unsupported. See #127378.
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
-		// We limit the number of upgrades to be performed in the test run because
-		// the test takes a significant amount of time to complete.
-		mixedversion.MaxUpgrades(3),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
