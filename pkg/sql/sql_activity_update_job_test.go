@@ -416,13 +416,13 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// the necessary information.
 		var stmtIDs [2]string
 		rows := db.Query(t, `SELECT json_array_elements_text(metadata->'stmtFingerprintIDs') FROM system.public.transaction_activity where app_name = 'topTransaction' AND json_array_length(metadata->'stmtFingerprintIDs') = 2`)
-		defer rows.Close()
 		stmtIdCnt := 0
 		for rows.Next() {
 			require.Less(t, stmtIdCnt, 2)
 			require.NoError(t, rows.Scan(&stmtIDs[stmtIdCnt]))
 			stmtIdCnt++
 		}
+		require.NoError(t, rows.Close())
 
 		require.Equal(t, 2, stmtIdCnt, "transaction_activity should have 2 stmts ids: actual:%d", stmtIdCnt)
 		// Don't check if the statements are on statements_activity
