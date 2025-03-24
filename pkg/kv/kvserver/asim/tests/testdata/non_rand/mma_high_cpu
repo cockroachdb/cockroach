@@ -16,7 +16,7 @@ gen_load rate=5000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_acc
 
 # Another workload is added over the second half of the keyspace, which is initially
 # only on s1-s3.
-gen_ranges ranges=50 min_key=10001 max_key=20000 placement_skew=true add_to_existing=true
+gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed add_to_existing=true
 ----
 
 gen_load rate=5000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=10001 max_key=20000 add_to_existing=true

@@ -1,7 +1,7 @@
 gen_cluster nodes=5
 ----
 
-gen_ranges ranges=500 placement_skew=true
+gen_ranges ranges=500 placement_type=skewed
 ----
 
 set_capacity store=5 io_threshold=1

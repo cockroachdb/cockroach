@@ -61,6 +61,13 @@ func exactDistribution(counts []int) []float64 {
 	return distribution
 }
 
+func DefaultSpanConfigWithRF(rf int) roachpb.SpanConfig {
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(rf)
+	spanConfig.NumVoters = int32(rf)
+	return spanConfig
+}
+
 // weighted struct handles weighted random index selection from an input array,
 // weightedStores.
 //
@@ -271,13 +278,9 @@ func RangesInfoSkewedDistribution(
 	distribution := skewedDistribution(stores, ranges)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		minKey, maxKey, rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
 }
 
 func RangesInfoWithReplicaCounts(
@@ -295,13 +298,9 @@ func RangesInfoWithReplicaCounts(
 	distribution := exactDistribution(counts)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), int64(MinKey), int64(keyspace), rangeSize)
 }
 
 func RangesInfoEvenDistribution(
@@ -310,13 +309,9 @@ func RangesInfoEvenDistribution(
 	distribution := evenDistribution(stores)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		minKey, maxKey, rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
 }
 
 // RangesInfoWeightedRandDistribution returns a RangesInfo, where ranges are
@@ -334,15 +329,13 @@ func RangesInfoWeightedRandDistribution(
 	}
 	distribution := weightedRandDistribution(randSource, weightedStores)
 	storeList := makeStoreList(len(weightedStores))
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
+
 	return RangesInfoWithDistribution(
 		storeList,
 		distribution,
 		distribution,
 		ranges,
-		spanConfig,
+		DefaultSpanConfigWithRF(replicationFactor),
 		minKey,
 		maxKey,
 		rangeSize, /* rangeSize */
@@ -365,13 +358,9 @@ func RangesInfoRandDistribution(
 	distribution := randDistribution(randSource, stores)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		minKey, maxKey, rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
 }
 
 // NewStateWithDistribution returns a State where the stores given are
@@ -396,16 +385,13 @@ func NewStateWithDistribution(
 	for i, store := range s.Stores() {
 		stores[i] = store.StoreID()
 	}
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
 
 	rangesInfo := RangesInfoWithDistribution(
 		stores,
 		percentOfReplicas,
 		percentOfReplicas,
 		ranges,
-		spanConfig,
+		DefaultSpanConfigWithRF(replicationFactor),
 		int64(MinKey),
 		int64(keyspace),
 		0, /* rangeSize */
