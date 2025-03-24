@@ -8,8 +8,6 @@ EXPLAIN (DDL) rollback at post-commit stage 1 of 15;
 Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a);
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED     → PUBLIC ColumnNotNull:{DescID: 104 (t), ColumnID: 2 (rowid+), IndexID: 0}
            ├── 10 elements transitioning toward ABSENT
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (rowid+), IndexID: 2 (t_pkey-)}
@@ -21,8 +19,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2 (t_pkey-)}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 4 (t_pkey-)}
            │    └── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
-           └── 13 Mutation operations
-                ├── MakeValidatedColumnNotNullPublic {"ColumnID":2,"TableID":104}
+           └── 12 Mutation operations
                 ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
                 ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
                 ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
