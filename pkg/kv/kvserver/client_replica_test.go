@@ -5809,6 +5809,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	txn2StartedOnce := sync.OnceFunc(func() { close(txn2Started) })
 	txn2Done := make(chan struct{})
 	txn1HasLock := make(chan struct{})
+	txn1HasLockOnce := sync.OnceFunc(func() { close(txn1HasLock) })
 
 	g := ctxgroup.WithContext(ctx)
 	g.Go(func() error {
@@ -5817,7 +5818,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			close(txn1HasLock)
+			txn1HasLockOnce()
 			t.Log("txn1: lock acquired, waiting for txn2 cancellation")
 			<-txn2Done
 			t.Log("txn1: done")
