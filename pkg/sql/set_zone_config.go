@@ -173,6 +173,18 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	// an admin. Otherwise we require CREATE privileges on the database or table
 	// in question.
 	if zs.NamedZone != "" {
+		// Only block privileges for non-root users if this is the default range
+		// for a secondary tenant with sql.zone.allow_modify_ranges set to
+		// false.
+		if zonepb.NamedZone(zs.NamedZone.String()) == zonepb.DefaultZoneName && !p.execCfg.Codec.ForSystemTenant() &&
+			!zonepb.AllowModifyDefaultRange.Get(&p.execCfg.Settings.SV) {
+			if !p.EvalContext().SessionData().User().IsRootUser() {
+				return pgerror.New(
+					pgcode.InsufficientPrivilege,
+					"only root users are allowed to modify the default range",
+				)
+			}
+		}
 		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 	}
 	if zs.Database != "" {
