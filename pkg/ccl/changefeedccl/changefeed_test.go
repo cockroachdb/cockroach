@@ -2354,8 +2354,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
-// Test checkpointing when the highwater does not move due to some issues with
-// specific spans lagging behind
+// TestChangefeedLaggingSpanCheckpointing tests checkpointing when the highwater
+// does not advance due to specific spans lagging behind.
 func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2369,7 +2369,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		DistSQL.(*execinfra.TestingKnobs).
 		Changefeed.(*TestingKnobs)
 
-	// Initialize table with multiple ranges.
+	// Initialize table with 20 ranges.
 	sqlDB.Exec(t, `
   CREATE TABLE foo (key INT PRIMARY KEY);
   INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
@@ -2381,28 +2381,39 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	changefeedbase.SpanCheckpointInterval.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 	changefeedbase.SpanCheckpointMaxBytes.Override(
-		context.Background(), &s.ClusterSettings().SV, 100<<20)
+		context.Background(), &s.ClusterSettings().SV, 100<<20 /* 100 MiB */)
 	changefeedbase.SpanCheckpointLagThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 
-	// We'll start changefeed with the cursor.
+	// We'll start the changefeed with the cursor set to the current time (not insert time).
+	// NB: The changefeed created in this test doesn't actually send any message events.
 	var tsStr string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() from foo`).Scan(&tsStr)
 	cursor := parseTimeToHLC(t, tsStr)
+	t.Logf("cursor: %v", cursor)
 
 	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
 	var laggingSpans roachpb.SpanGroup
-	numLagging := 0
+	nonLaggingSpans := make(map[string]int)
+	var numLagging, numNonLagging int
 	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) bool {
-		// Skip spans that were skipped before; otherwise skip some spans.
-		seenBefore := laggingSpans.Encloses(checkpoint.Span)
-		if seenBefore || (numLagging < 5 && rnd.Int()%3 == 0) {
-			if !seenBefore {
-				laggingSpans.Add(checkpoint.Span)
-				numLagging++
-			}
+		// Skip spans that we already picked to be lagging.
+		if laggingSpans.Encloses(checkpoint.Span) {
 			return true /* skip */
 		}
+		// Skip additional updates for some non-lagging spans so that we can
+		// have more than one timestamp in the checkpoint.
+		if i, ok := nonLaggingSpans[checkpoint.Span.String()]; ok {
+			return i%3 == 0
+		}
+		// Ensure we have a few spans that are lagging at the cursor.
+		if numLagging == 0 || (numLagging < 5 && rnd.Int()%3 == 0) {
+			laggingSpans.Add(checkpoint.Span)
+			numLagging++
+			return true /* skip */
+		}
+		nonLaggingSpans[checkpoint.Span.String()] = numNonLagging
+		numNonLagging++
 		return false
 	}
 
@@ -2419,49 +2430,65 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		return job.Progress()
 	}
 
-	// Should eventually checkpoint all spans around the lagging span
+	// We should eventually checkpoint some spans that are ahead of the highwater.
+	// We'll wait until we have two unique timestamps.
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if loadCheckpoint(t, progress) != nil {
+		cp := maps.Collect(loadCheckpoint(t, progress).All())
+		if len(cp) >= 2 {
 			return nil
 		}
-		return errors.New("waiting for checkpoint")
+		return errors.New("waiting for checkpoint with two different timestamps")
 	})
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
 
 	// We expect highwater to be 0 (because we skipped some spans) or exactly cursor
-	// (this is mostly due to racy updates sent from aggregators to the frontier.
+	// (this is mostly due to racy updates sent from aggregators to the frontier).
 	// However, the checkpoint timestamp should be at least at the cursor.
 	progress := loadProgress()
-	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
-		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
+	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().Equal(cursor),
+		"expected empty highwater or %s, found %s", cursor, progress.GetHighWater())
 	spanLevelCheckpoint := loadCheckpoint(t, progress)
 	require.NotNil(t, spanLevelCheckpoint)
-	minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
-	require.True(t, cursor.LessEq(minCheckpointTS))
+	require.True(t, cursor.LessEq(spanLevelCheckpoint.MinTimestamp()))
 
+	// Construct a reverse index from spans to timestamps.
+	spanTimestamps := make(map[string]hlc.Timestamp)
+	for ts, spans := range spanLevelCheckpoint.All() {
+		for _, s := range spans {
+			spanTimestamps[s.String()] = ts
+		}
+	}
+
+	var rangefeedStarted bool
 	var incorrectCheckpointErr error
 	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
+		rangefeedStarted = true
+
 		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
 			incorrectCheckpointErr = errors.Newf(
 				"rangefeed for span %s expected to start @%s, started @%s instead",
 				stp.Span, expectedTS, stp.StartAfter)
 		}
 
+		// Verify that the start time for each span is correct.
 		for _, sp := range spans {
-			if laggingSpans.Encloses(sp.Span) {
-				if !sp.StartAfter.Equal(cursor) {
-					setErr(sp, cursor)
+			if checkpointTS := spanTimestamps[sp.Span.String()]; checkpointTS.IsSet() {
+				// Any span in the checkpoint should be resumed at its checkpoint timestamp.
+				if !sp.StartAfter.Equal(checkpointTS) {
+					setErr(sp, checkpointTS)
 				}
 			} else {
-				if !sp.StartAfter.Equal(minCheckpointTS) {
-					setErr(sp, minCheckpointTS)
+				// Any spans not in the checkpoint should be at the cursor.
+				if !sp.StartAfter.Equal(cursor) {
+					setErr(sp, cursor)
 				}
 			}
 		}
 	}
+	knobs.FeedKnobs.ShouldSkipCheckpoint = nil
 
 	sqlDB.Exec(t, "RESUME JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StateRunning)
@@ -2469,7 +2496,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Wait until highwater advances past cursor.
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if hw := progress.GetHighWater(); hw != nil && cursor.LessEq(*hw) {
+		if hw := progress.GetHighWater(); hw != nil && cursor.Less(*hw) {
 			return nil
 		}
 		return errors.New("waiting for checkpoint advance")
@@ -2477,6 +2504,9 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
+	// Verify the rangefeed started. This guards against the testing knob
+	// not being called, which was happening in earlier versions of the code.
+	require.True(t, rangefeedStarted)
 	// Verify we didn't see incorrect timestamps when resuming.
 	require.NoError(t, incorrectCheckpointErr)
 }
