@@ -396,6 +396,15 @@ func (twb *txnWriteBuffer) applyTransformations(
 			twb.addToBuffer(t.Key, t.Value, t.Sequence)
 
 		case *kvpb.DeleteRequest:
+			// To correctly populate FoundKey in the response, we need to look in our
+			// write buffer to see if there is a tombstone.
+			var foundKey bool
+			val, served := twb.maybeServeRead(t.Key, t.Sequence)
+			if served {
+				log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", t.Method(), t.Key)
+				foundKey = val.IsPresent()
+			}
+
 			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
 			// need to add a locking Get to the BatchRequest, including if the key
 			// doesn't exist.
@@ -414,10 +423,20 @@ func (twb *txnWriteBuffer) applyTransformations(
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
 
+			// If we found a key in our write buffer we use that
+			// result regardless of what the GetResponse that we
+			// might have sent says.
+			//
+			// NOTE(ssd): We are assuming that callers who care
+			// about an accurate value of FoundKey also set
+			// MustAcquireExclusiveLock.
 			var ru kvpb.ResponseUnion
-			ru.MustSetInner(&kvpb.DeleteResponse{
-				FoundKey: false,
-			})
+			if served || !t.MustAcquireExclusiveLock {
+				ru.MustSetInner(&kvpb.DeleteResponse{
+					FoundKey: foundKey,
+				})
+			}
+
 			ts = append(ts, transformation{
 				stripped:    !t.MustAcquireExclusiveLock,
 				index:       i,
@@ -813,13 +832,19 @@ func (t transformation) toResp(
 		ru = t.resp
 
 	case *kvpb.DeleteRequest:
-		getResp := br.GetInner().(*kvpb.GetResponse)
 		ru = t.resp
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
+		// If the deletion response is already set, it means we served response from
+		// the write buffer. We can still be here because we happened to need to
+		// send a GetRequest solely for the locking behaviour.
+		if ru.GetDelete() == nil {
+			getResp := br.GetInner().(*kvpb.GetResponse)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
+			}
+			ru.MustSetInner(&kvpb.DeleteResponse{
+				FoundKey: getResp.Value.IsPresent(),
+			})
 		}
-		ru.GetDelete().FoundKey = getResp.Value.IsPresent()
-
 	case *kvpb.GetRequest:
 		// Get requests must be served from the local buffer if a transaction
 		// performed a previous write to the key being read. However, Get requests
