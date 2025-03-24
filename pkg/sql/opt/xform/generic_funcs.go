@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // GenericRulesEnabled returns true if rules for optimizing generic query plans
@@ -24,6 +25,7 @@ func (c *CustomFuncs) GenericRulesEnabled() bool {
 
 // HasPlaceholdersOrStableExprs returns true if the given relational expression's subtree has
 // at least one placeholder.
+// TODO: Move this.
 func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
 }
@@ -123,4 +125,86 @@ func (c *CustomFuncs) ParameterizedJoinPrivate() *memo.JoinPrivate {
 		Flags:            memo.DisallowMergeJoin,
 		SkipReorderJoins: true,
 	}
+}
+
+func (c *CustomFuncs) PlaceholderScanSpanAndPrivate(
+	join *memo.LookupJoinExpr, values *memo.ValuesExpr, row memo.ScalarListExpr,
+) (span memo.ScalarListExpr, private *memo.ScanPrivate, ok bool) {
+	// TODO: Check for other things we want to prevent.
+
+	// The lookup join must only have key columns.
+	if join.LookupExpr != nil {
+		return nil, nil, false
+	}
+	if join.RemoteLookupExpr != nil {
+		return nil, nil, false
+	}
+
+	// The lookup join must not have any post-lookup filters.
+	if join.On != nil {
+		return nil, nil, false
+	}
+
+	private = &memo.ScanPrivate{
+		Table: join.Table,
+		Index: join.Index,
+		Cols:  join.Relational().OutputCols,
+		// Constraint:               nil,
+		// InvertedConstraint:       nil,
+		// HardLimit:                0,
+		// Distribution:             physical.Distribution{},
+		// Flags:                    memo.ScanFlags{},
+		// Locking:                  opt.Locking{},
+		// LocalityOptimized:        false,
+		// PartitionConstrainedScan: false,
+		// ExactPrefix:              0,
+	}
+
+	span = make(memo.ScalarListExpr, len(join.KeyCols))
+	for i, keyCol := range join.KeyCols {
+		// TODO: Assertion that we found all the columns?
+		for j, valCol := range values.Cols {
+			if keyCol == valCol {
+				span[i] = row[j]
+				// TODO: Do I need a type check lke veryifType?
+				break
+			}
+		}
+		if span[i] == nil {
+			panic(errors.AssertionFailedf("no value for span[%d]", i))
+		}
+	}
+
+	return span, private, true
+
+	// for i := range span {
+	// 	col := tabMeta.MetaID.ColumnID(foundIndex.Column(i).Ordinal())
+	// 	for j := range sel.Filters {
+	// 		eq := sel.Filters[j].Condition.(*memo.EqExpr)
+	// 		if v := eq.Left.(*memo.VariableExpr); v.Col == col {
+	// 			if !verifyType(o.mem.Metadata(), col, eq.Right.DataType()) {
+	// 				return false, nil
+	// 			}
+	// 			span[i] = eq.Right
+	// 			break
+	// 		}
+	// 	}
+	// 	if span[i] == nil {
+	// 		// We checked above that the constrained columns match the index prefix.
+	// 		return false, errors.AssertionFailedf("no span value")
+	// 	}
+	// }
+	// placeholderScan := &memo.PlaceholderScanExpr{
+	// 	Span:        span,
+	// 	ScanPrivate: newPrivate,
+	// }
+	// placeholderScan = o.mem.AddPlaceholderScanToGroup(placeholderScan, root)
+	// o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, memo.Cost{C: 1.0})
+	// o.mem.SetRoot(placeholderScan, rootPhysicalProps)
+	//
+	// if buildutil.CrdbTestBuild && !o.mem.IsOptimized() {
+	// 	return false, errors.AssertionFailedf("IsOptimized() should be true")
+	// }
+	//
+	// return true, nil
 }

@@ -80,6 +80,22 @@ func newDistSQLSpecExecFactory(
 	return e
 }
 
+// Ctx implements the Factory interface.
+func (e *distSQLSpecExecFactory) Ctx() context.Context {
+	return e.ctx
+}
+
+// EnableCompilation implements the Factory interface.
+func (e *distSQLSpecExecFactory) EnableCompilation() {}
+
+// DisableCompilation implements the Factory interface.
+func (e *distSQLSpecExecFactory) DisableCompilation() {}
+
+// Compiled implements the Factory interface.
+func (e *distSQLSpecExecFactory) Compiled() exec.CompiledPlan {
+	return nil
+}
+
 func (e *distSQLSpecExecFactory) getPlanCtx(recommendation distRecommendation) *PlanningCtx {
 	distribute := false
 	if e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning {
@@ -355,9 +371,107 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
-// Ctx implements the Factory interface.
-func (e *distSQLSpecExecFactory) Ctx() context.Context {
-	return e.ctx
+// ConstructPlaceholderScan implements exec.Factory interface by combining the
+// logic that performs scanNode creation of execFactory.ConstructScan and
+// physical planning of table readers of DistSQLPlanner.createTableReaders.
+func (e *distSQLSpecExecFactory) ConstructPlaceholderScan(
+	table cat.Table, index cat.Index, params exec.PlaceholderScanParams,
+) (exec.Node, error) {
+	if table.IsVirtualTable() {
+		// TODO: Assertion failure.
+	}
+
+	// Although we don't yet recommend distributing plans where soft limits
+	// propagate to scan nodes because we don't have infrastructure to only
+	// plan for a few ranges at a time, the propagation of the soft limits
+	// to scan nodes has been added in 20.1 release, so to keep the
+	// previous behavior we continue to ignore the soft limits for now.
+	// TODO(yuzefovich): pay attention to the soft limits.
+	recommendation := canDistribute
+	planCtx := e.getPlanCtx(recommendation)
+	p := planCtx.NewPhysicalPlan()
+
+	// Phase 1: set up all necessary infrastructure for table reader planning
+	// below. This phase is equivalent to what execFactory.ConstructScan does.
+	tabDesc := table.(*optTable).desc
+	idx := index.(*optIndex).idx
+	// colCfg := makeScanColumnsConfig(table, params.NeededCols)
+
+	var sb span.Builder
+	sb.InitAllowingExternalRowData(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
+
+	cols := make([]catalog.Column, 0, params.NeededCols.Len())
+	allCols := tabDesc.AllColumns()
+	for ord, ok := params.NeededCols.Next(0); ok; ord, ok = params.NeededCols.Next(ord + 1) {
+		cols = append(cols, allCols[ord])
+	}
+	columnIDs := make([]descpb.ColumnID, len(cols))
+	for i := range cols {
+		columnIDs[i] = cols[i].GetID()
+	}
+
+	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
+
+	var c constraint.Constraint
+	params.InitConstraint(e.ctx, e.planner.EvalContext(), &c)
+
+	var spans roachpb.Spans
+	var err error
+	splitter := span.MakeSplitter(tabDesc, idx, params.NeededCols)
+	spans, err = sb.SpansFromConstraint(&c, splitter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 2: perform the table reader planning. This phase is equivalent to
+	// what DistSQLPlanner.createTableReaders does.
+	trSpec := physicalplan.NewTableReaderSpec()
+	*trSpec = execinfrapb.TableReaderSpec{
+		Reverse:                         false,
+		TableDescriptorModificationTime: tabDesc.GetModificationTime(),
+	}
+	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
+		return nil, err
+	}
+	// trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
+	// trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	// trSpec.LockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
+	// if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+	// 	// Scans that are performing row-level locking cannot currently be
+	// 	// distributed because their locks would not be propagated back to
+	// 	// the root transaction coordinator.
+	// 	// TODO(nvanbenschoten): lift this restriction.
+	// 	recommendation = cannotDistribute
+	// }
+
+	// Note that we don't do anything about the possible filter here since we
+	// don't know yet whether we will have it. ConstructFilter is responsible
+	// for pushing the filter down into the post-processing stage of this scan.
+	post := execinfrapb.PostProcessSpec{}
+	// if params.HardLimit != 0 {
+	// 	post.Limit = uint64(params.HardLimit)
+	// } else if params.SoftLimit != 0 {
+	// 	trSpec.LimitHint = params.SoftLimit
+	// }
+
+	err = e.dsp.planTableReaders(
+		e.ctx,
+		e.getPlanCtx(recommendation),
+		p,
+		&tableReaderPlanningInfo{
+			spec:        trSpec,
+			post:        post,
+			desc:        tabDesc,
+			spans:       spans,
+			reverse:     false,
+			parallelize: false,
+			// TODO: Need estimated row count.
+			// estimatedRowCount: params.EstimatedRowCount,
+			reqOrdering: nil,
+		},
+	)
+
+	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
 // checkExprsAndMaybeMergeLastStage is a helper method that returns a
@@ -1291,7 +1405,7 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	} else {
 		p.physPlan.onClose = e.planCtx.getCleanupFunc()
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(

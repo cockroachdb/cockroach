@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/errors"
 )
 
 // Node represents a node in the execution tree
@@ -107,6 +109,27 @@ func (pf *PlanFlags) Unset(flags PlanFlags) {
 	*pf &^= flags
 }
 
+type Factory interface {
+	factory
+
+	EnableCompilation()
+	DisableCompilation()
+
+	Compiled() CompiledPlan
+}
+
+type CompiledPlan func(
+	context.Context,
+	*eval.Context,
+	*idxusage.LocalIndexUsageStats,
+) (Plan, error)
+
+var FailedCompiledPlan CompiledPlan = func(
+	context.Context, *eval.Context, *idxusage.LocalIndexUsageStats,
+) (Plan, error) {
+	return nil, nil
+}
+
 // ScanParams contains all the parameters for a table scan.
 type ScanParams struct {
 	// Only columns in this set are scanned and produced.
@@ -144,6 +167,67 @@ type ScanParams struct {
 	// to work correctly, the execution engine must create a local DistSQL plan
 	// for the main query (subqueries and postqueries need not be local).
 	LocalityOptimized bool
+}
+
+// PlaceholderScanParams contains all the parameters for a placeholder scan.
+type PlaceholderScanParams struct {
+	// Only columns in this set are scanned and produced.
+	NeededCols TableColumnOrdinalSet
+
+	// SpanValues TODO
+	SpanValues []tree.TypedExpr
+	// SpanColumns TODO
+	SpanColumns constraint.Columns
+
+	// If non-zero, the scan returns this many rows.
+	// HardLimit int64
+
+	// If non-zero, the scan may still be required to return up to all its rows
+	// (or up to the HardLimit if it is set, but can be optimized under the
+	// assumption that only SoftLimit rows will be needed.
+	// SoftLimit int64
+
+	// Row-level locking properties.
+	// TODO: Might need this...
+	// Locking opt.Locking
+
+	// EstimatedRowCount, if set, is the estimated number of rows that will be
+	// scanned, rounded up.
+	// TODO: Might need this.
+	// EstimatedRowCount uint64
+}
+
+// InitConstraint initializes a constraint based on the placeholder parameters.
+// Any placeholders in the Span are evaluated into datums.
+func (params *PlaceholderScanParams) InitConstraint(
+	ctx context.Context, evalCtx *eval.Context, c *constraint.Constraint,
+) error {
+	keyCtx := constraint.MakeKeyContext(ctx, &params.SpanColumns, evalCtx)
+
+	values := make([]tree.Datum, len(params.SpanValues))
+	for i, expr := range params.SpanValues {
+		// The expression is either a placeholder or a constant.
+		switch e := expr.(type) {
+		case *tree.Placeholder:
+			val, err := eval.Expr(ctx, evalCtx, e)
+			if err != nil {
+				return err
+			}
+			values[i] = val
+		case tree.Datum:
+			values[i] = e
+		default:
+			return errors.AssertionFailedf("invalid span value type: %T", e)
+		}
+	}
+
+	key := constraint.MakeCompositeKey(values...)
+	var sp constraint.Span
+	sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+	var spans constraint.Spans
+	spans.InitSingleSpan(&sp)
+	c.Init(&keyCtx, &spans)
+	return nil
 }
 
 // OutputOrdering indicates the required output ordering on a Node that is being
@@ -604,3 +688,14 @@ const (
 	// NumScanCountTypes is the total number of types of counts of scans.
 	NumScanCountTypes
 )
+
+// EnableCompilation implements the Factory interface.
+func (f StubFactory) EnableCompilation() {}
+
+// DisableCompilation implements the Factory interface.
+func (f StubFactory) DisableCompilation() {}
+
+// Compiled implements the Factory interface.
+func (f StubFactory) Compiled() CompiledPlan {
+	return nil
+}

@@ -121,7 +121,8 @@ func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrder
 	return nil
 }
 
-func (p *planner) Scan() *scanNode {
+// NewScanNode returns an empty scanNode.
+func NewScanNode() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
 	return n
 }

@@ -34,7 +34,8 @@ import (
 )
 
 func init() {
-	if numOperators != 65 {
+	// TODO
+	if numOperators != 66 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -105,6 +106,21 @@ var _ exec.Factory = &PlanGistFactory{}
 // Ctx implements the Factory interface.
 func (f *PlanGistFactory) Ctx() context.Context {
 	return f.wrappedFactory.Ctx()
+}
+
+// EnableCompilation implements the Factory interface.
+func (f *PlanGistFactory) EnableCompilation() {
+	f.wrappedFactory.EnableCompilation()
+}
+
+// DisableCompilation implements the Factory interface.
+func (f *PlanGistFactory) DisableCompilation() {
+	f.wrappedFactory.DisableCompilation()
+}
+
+// Compiled implements the Factory interface.
+func (f *PlanGistFactory) Compiled() exec.CompiledPlan {
+	return f.wrappedFactory.Compiled()
 }
 
 // writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
