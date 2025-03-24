@@ -1408,6 +1408,20 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
 }
 
+func (e *distSQLSpecExecFactory) ConstructUpdateFastPath(
+	rows [][]tree.TypedExpr,
+	table cat.Table,
+	fetchCols exec.TableColumnOrdinalSet,
+	updateCols exec.TableColumnOrdinalSet,
+	returnCols exec.TableColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update fast path")
+}
+
 func (e *distSQLSpecExecFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,

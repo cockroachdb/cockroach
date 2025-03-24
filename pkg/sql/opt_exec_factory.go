@@ -1672,6 +1672,102 @@ func (ef *execFactory) ConstructUpdate(
 	return &rowCountNode{source: upd}, nil
 }
 
+func (ef *execFactory) ConstructUpdateFastPath(
+	rows [][]tree.TypedExpr,
+	table cat.Table,
+	fetchColOrdSet exec.TableColumnOrdinalSet,
+	updateColOrdSet exec.TableColumnOrdinalSet,
+	returnColOrdSet exec.TableColumnOrdinalSet,
+	checks exec.CheckOrdinalSet,
+	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
+	autoCommit bool,
+) (exec.Node, error) {
+	// TODO(radu): the execution code has an annoying limitation that the fetch
+	// columns must be a superset of the update columns, even when the "old" value
+	// of a column is not necessary. The optimizer code for pruning columns is
+	// aware of this limitation.
+	if !updateColOrdSet.SubsetOf(fetchColOrdSet) {
+		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
+	}
+
+	// Derive table and column descriptors.
+	rowsNeeded := !returnColOrdSet.Empty()
+	tabDesc := table.(*optTable).desc
+	fetchCols := makeColList(table, fetchColOrdSet)
+	updateCols := makeColList(table, updateColOrdSet)
+
+	// Create the table updater, which does the bulk of the work.
+	internal := ef.planner.SessionData().Internal
+	ru, err := row.MakeUpdater(
+		ef.ctx,
+		ef.planner.txn,
+		ef.planner.ExecCfg().Codec,
+		tabDesc,
+		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
+		updateCols,
+		fetchCols,
+		row.UpdaterDefault,
+		ef.getDatumAlloc(),
+		&ef.planner.ExecCfg().Settings.SV,
+		internal,
+		ef.planner.ExecCfg().GetRowMetrics(internal),
+	)
+	if err != nil {
+		return nil, err
+	}
+	upd := updateFastPathNodePool.Get().(*updateFastPathNode)
+	*upd = updateFastPathNode{
+		input: rows,
+		run: updateFastPathRun{
+			updateRun: updateRun{
+				tu:             tableUpdater{ru: ru},
+				checkOrds:      checks,
+				numPassthrough: len(passthrough),
+			},
+		},
+	}
+
+	upd.run.regionLocalInfo.setupEnforceHomeRegion(ef.planner, table, ru.UpdateCols,
+		upd.run.tu.ru.UpdateColIDtoRowIndex)
+
+	// If rows are not needed, no columns are returned.
+	if rowsNeeded {
+		returnCols := makeColList(table, returnColOrdSet)
+
+		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		// Add the passthrough columns to the returning columns.
+		upd.columns = append(upd.columns, passthrough...)
+
+		// Set the rowIdxToRetIdx for the mutation. Update returns the non-mutation
+		// columns specified, in the same order they are defined in the table.
+		//
+		// The Updater derives/stores the fetch columns of the mutation and
+		// since the return columns are always a subset of the fetch columns,
+		// we can use use the fetch columns to generate the mapping for the
+		// returned rows.
+		upd.run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnCols)
+		upd.run.rowsNeeded = true
+	}
+
+	if autoCommit {
+		upd.enableAutoCommit()
+	}
+
+	// Serialize the data-modifying plan to ensure that no data is observed that
+	// hasn't been validated first. See the comments on BatchedNext() in
+	// plan_batch.go.
+	if rowsNeeded {
+		return &spoolNode{
+			singleInputPlanNode: singleInputPlanNode{&serializeNode{source: upd}},
+		}, nil
+	}
+
+	// We could use serializeNode here, but using rowCountNode is an
+	// optimization that saves on calls to Next() by the caller.
+	return &rowCountNode{source: upd}, nil
+}
+
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,

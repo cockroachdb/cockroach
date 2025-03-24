@@ -148,3 +148,11 @@ func (u *updateFastPathNode) Close(ctx context.Context) {
 	*u = updateFastPathNode{}
 	updateFastPathNodePool.Put(u)
 }
+
+func (u *updateFastPathNode) rowsWritten() int64 {
+	return u.run.tu.rowsWritten
+}
+
+func (u *updateFastPathNode) enableAutoCommit() {
+	u.run.tu.enableAutoCommit()
+}
