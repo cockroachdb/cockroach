@@ -760,6 +760,7 @@ var nonBareLabelKeywords = map[string]struct{}{
 	"INTERSECT": {},
 	"INTO":      {},
 	"LIMIT":     {},
+	"LOGGED":    {},
 	"MINUTE":    {},
 	"MONTH":     {},
 	"OFFSET":    {},
