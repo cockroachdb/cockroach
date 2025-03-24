@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -940,9 +941,13 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		// Pass the DefaultMaxNetworkRTT regardless of leadTargetAutoTune because we
+		// don't have a good way to estimate the network RTT here. We choose to be
+		// more conservative as this is just for an optimization if the deadline is
+		// far in the future. Missing the optimization is not a big deal.
 		return closedts.TargetForPolicy(now, maxClockOffset,
 			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
-			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+			ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO).Add(int64(time.Second), 0)
 	}
 
 	return !txn.mu.deadline.IsEmpty() &&
