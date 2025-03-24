@@ -48,12 +48,7 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 		}
 	})
 
-	// Depending on the command for the policy, some expressions are blocked.
-	if n.Cmd == tree.PolicyCommandInsert && n.Exprs.Using != nil {
-		panic(pgerror.Newf(pgcode.Syntax, "only WITH CHECK expression allowed for INSERT"))
-	} else if (n.Cmd == tree.PolicyCommandDelete || n.Cmd == tree.PolicyCommandSelect) && n.Exprs.WithCheck != nil {
-		panic(pgerror.Newf(pgcode.Syntax, "WITH CHECK cannot be applied to SELECT or DELETE"))
-	}
+	validateExprsForCmd(convertPolicyCommand(n.Cmd), &n.Exprs)
 
 	policyID := b.NextTablePolicyID(tbl.TableID)
 	policy := &scpb.Policy{
@@ -68,8 +63,8 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 		PolicyID: policyID,
 		Name:     string(n.PolicyName),
 	})
-	addRoleElements(b, n, tbl.TableID, policyID)
-	addPolicyExpressions(b, n, tbl.TableID, policyID)
+	upsertRoleElements(b, n.Roles, tbl.TableID, policyID, nil)
+	upsertPolicyExpressions(b, n.TableName.ToTableName(), n.Exprs, tbl.TableID, policyID, nil)
 	b.LogEventForExistingTarget(policy)
 }
 
@@ -103,17 +98,48 @@ func convertPolicyCommand(in tree.PolicyCommand) catpb.PolicyCommand {
 	}
 }
 
-// addRoleElements will add an element for each role defined in the policy.
-func addRoleElements(
-	b BuildCtx, n *tree.CreatePolicy, tableID descpb.ID, policyID descpb.PolicyID,
+// validateExprsForCmd will vet the expressions for the given command. A panic
+// is thrown if the expressions are invalid.
+func validateExprsForCmd(cmd catpb.PolicyCommand, exprs *tree.PolicyExpressions) {
+	// Depending on the command for the policy, some expressions are blocked.
+	switch cmd {
+	case catpb.PolicyCommand_INSERT:
+		if exprs.Using != nil {
+			panic(pgerror.Newf(pgcode.Syntax, "only WITH CHECK expression allowed for INSERT"))
+		}
+	case catpb.PolicyCommand_DELETE, catpb.PolicyCommand_SELECT:
+		if exprs.WithCheck != nil {
+			panic(pgerror.Newf(pgcode.Syntax, "WITH CHECK cannot be applied to SELECT or DELETE"))
+		}
+	}
+}
+
+// upsertRoleElements will add or update an element for each role defined in the policy.
+// If no roles are provided, then the public role is added by default. If policyElems is
+// nil or empty, then the roles are added as new elements. If policyElems is not nil, then
+// the roles are added as new elements and the existing roles are dropped.
+func upsertRoleElements(
+	b BuildCtx,
+	roles tree.RoleSpecList,
+	tableID descpb.ID,
+	policyID descpb.PolicyID,
+	policyElems *scpb.ElementCollection[scpb.Element],
 ) {
+	// In case we are replacing the roles, we need to drop the existing roles.
+	policyElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.PolicyRole:
+			b.Drop(e)
+		}
+	})
+
 	// If there were no roles provided, then we will default to adding the public
 	// role so that it applies to everyone.
-	if len(n.Roles) == 0 {
+	if len(roles) == 0 {
 		addRoleElement(b, tableID, policyID, username.PublicRoleName())
 		return
 	}
-	for _, role := range n.Roles {
+	for _, role := range roles {
 		authRole, err := decodeusername.FromRoleSpec(b.SessionData(), username.PurposeValidation, role)
 		if err != nil {
 			panic(err)
@@ -137,20 +163,40 @@ func addRoleElement(
 	})
 }
 
-// addPolicyExpressions will add elements for the WITH CHECK and USING expressions.
-func addPolicyExpressions(
-	b BuildCtx, n *tree.CreatePolicy, tableID descpb.ID, policyID descpb.PolicyID,
+// upsertPolicyExpressions adds or updates elements for the WITH CHECK and
+// USING expressions. If policyElems is nil or empty, the expressions are
+// added as new elements. If policyElems is not nil, the old expressions
+// may be dropped and the new ones added.
+func upsertPolicyExpressions(
+	b BuildCtx,
+	tn tree.TableName,
+	newExprs tree.PolicyExpressions,
+	tableID descpb.ID,
+	policyID descpb.PolicyID,
+	policyElems *scpb.ElementCollection[scpb.Element],
 ) {
-	tn := n.TableName.ToTableName()
-
 	// We maintain the forward references for both expressions in a single
 	// PolicyDeps elements. These vars are used to manage that.
 	var usesTypeIDs catalog.DescriptorIDSet
 	var usesRelationIDs catalog.DescriptorIDSet
 	var usesFunctionIDs catalog.DescriptorIDSet
 
-	if n.Exprs.Using != nil {
-		expr := validateAndResolveTypesInExpr(b, &tn, tableID, n.Exprs.Using, tree.PolicyUsingExpr)
+	policyElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch expr := e.(type) {
+		case *scpb.PolicyUsingExpr:
+			if newExprs.Using != nil {
+				b.Drop(e)
+			} else {
+				// If we aren't dropping the old expression, we need to keep track of
+				// the dependencies in case we replace PolicyDeps.
+				usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
+				usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
+				usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
+			}
+		}
+	})
+	if newExprs.Using != nil {
+		expr := validateAndResolveTypesInExpr(b, &tn, tableID, newExprs.Using, tree.PolicyUsingExpr)
 		b.Add(&scpb.PolicyUsingExpr{
 			TableID:    tableID,
 			PolicyID:   policyID,
@@ -160,8 +206,23 @@ func addPolicyExpressions(
 		usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
 		usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
 	}
-	if n.Exprs.WithCheck != nil {
-		expr := validateAndResolveTypesInExpr(b, &tn, tableID, n.Exprs.WithCheck, tree.PolicyWithCheckExpr)
+
+	policyElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch expr := e.(type) {
+		case *scpb.PolicyWithCheckExpr:
+			if newExprs.WithCheck != nil {
+				b.Drop(e)
+			} else {
+				// If we aren't dropping the old expression, we need to keep track of
+				// the dependencies in case we replace PolicyDeps.
+				usesTypeIDs = catalog.MakeDescriptorIDSet(expr.UsesTypeIDs...)
+				usesRelationIDs = catalog.MakeDescriptorIDSet(expr.UsesSequenceIDs...)
+				usesFunctionIDs = catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...)
+			}
+		}
+	})
+	if newExprs.WithCheck != nil {
+		expr := validateAndResolveTypesInExpr(b, &tn, tableID, newExprs.WithCheck, tree.PolicyWithCheckExpr)
 		b.Add(&scpb.PolicyWithCheckExpr{
 			TableID:    tableID,
 			PolicyID:   policyID,
@@ -172,7 +233,13 @@ func addPolicyExpressions(
 		usesFunctionIDs = usesFunctionIDs.Union(catalog.MakeDescriptorIDSet(expr.UsesFunctionIDs...))
 	}
 	// If we had at least one expression then we need to add the policy deps.
-	if n.Exprs.Using != nil || n.Exprs.WithCheck != nil {
+	if newExprs.Using != nil || newExprs.WithCheck != nil {
+		policyElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+			switch e.(type) {
+			case *scpb.PolicyDeps:
+				b.Drop(e)
+			}
+		})
 		b.Add(&scpb.PolicyDeps{
 			TableID:         tableID,
 			PolicyID:        policyID,

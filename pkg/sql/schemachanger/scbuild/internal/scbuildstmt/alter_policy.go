@@ -6,14 +6,42 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 // AlterPolicy implements ALTER POLICY.
 func AlterPolicy(b BuildCtx, n *tree.AlterPolicy) {
+	failIfRLSIsNotEnabled(b)
+	b.IncrementSchemaChangeAlterCounter("policy")
+
+	tableElems := b.ResolveTable(n.TableName, ResolveParams{
+		RequireOwnership: true,
+	})
+	panicIfSchemaChangeIsDisallowed(tableElems, n)
+	tbl := tableElems.FilterTable().MustGetOneElement()
+
+	// Alter of a policy implies that it must exist.
+	policyElems := b.ResolvePolicy(tbl.TableID, n.PolicyName, ResolveParams{})
+	policy := policyElems.FilterPolicy().MustGetOneElement()
+
+	validateExprsForCmd(policy.Command, &n.Exprs)
+
 	if n.NewPolicyName != "" {
-		panic(unimplemented.NewWithIssue(136996, "ALTER POLICY is not yet implemented"))
+		oldPolicyName := policyElems.FilterPolicyName().MustGetOneElement()
+		b.Drop(oldPolicyName)
+		b.Add(&scpb.PolicyName{
+			TableID:  tbl.TableID,
+			PolicyID: policy.PolicyID,
+			Name:     string(n.NewPolicyName),
+		})
 	}
-	panic(unimplemented.NewWithIssue(136997, "ALTER POLICY is not yet implemented"))
+	if len(n.Roles) > 0 {
+		upsertRoleElements(b, n.Roles, tbl.TableID, policy.PolicyID, policyElems)
+	}
+	if n.Exprs.Using != nil || n.Exprs.WithCheck != nil {
+		upsertPolicyExpressions(b, n.TableName.ToTableName(), n.Exprs, tbl.TableID,
+			policy.PolicyID, policyElems)
+	}
+	b.LogEventForExistingTarget(policy)
 }
