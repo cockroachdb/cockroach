@@ -107,6 +107,13 @@ func (g *AggGauge) AddChild(labelVals ...string) *Gauge {
 	return child
 }
 
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggGauge) RemoveChild(labelVals ...string) {
+	key := &Gauge{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
+}
+
 // AddFunctionalChild adds a Gauge to this AggGauge where the value is
 // determined when asked for. This method panics if a Gauge already exists for
 // this set of labelVals.
