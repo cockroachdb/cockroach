@@ -1,0 +1,153 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/copyselect.out --label=/mnt/data1/postgres/src/test/regress/results/copyselect.out /mnt/data1/postgres/src/test/regress/expected/copyselect.out /mnt/data1/postgres/src/test/regress/results/copyselect.out
+--- /mnt/data1/postgres/src/test/regress/expected/copyselect.out
++++ /mnt/data1/postgres/src/test/regress/results/copyselect.out
+@@ -1,7 +1,8 @@
+ --
+ -- Test cases for COPY (select) TO
+ --
+-create table test1 (id serial, t text);
++create sequence id_seq;
++create table test1 (id int default nextval('id_seq'), t text);
+ insert into test1 (t) values ('a');
+ insert into test1 (t) values ('b');
+ insert into test1 (t) values ('c');
+@@ -28,8 +29,11 @@
+ -- This should fail
+ --
+ copy v_test1 to stdout;
+-ERROR:  cannot copy from view "v_test1"
+-HINT:  Try the COPY (SELECT ...) TO variant.
++v_a
++v_b
++v_c
++v_d
++v_e
+ --
+ -- Test COPY (select) TO
+ --
+@@ -44,30 +48,30 @@
+ -- This should fail
+ --
+ copy (select t into temp test3 from test1 where id=3) to stdout;
+-ERROR:  COPY (SELECT INTO) is not supported
++ERROR:  at or near "into": syntax error
++DETAIL:  source SQL:
++copy (select t into temp test3 from test1 where id=3) to stdout
++               ^
+ --
+ -- This should fail
+ --
+ copy (select * from test1) from stdin;
+-ERROR:  syntax error at or near "from"
+-LINE 1: copy (select * from test1) from stdin;
+-                                   ^
++ERROR:  at or near "from": syntax error
++DETAIL:  source SQL:
++copy (select * from test1) from stdin
++                           ^
+ --
+ -- This should fail
+ --
+ copy (select * from test1) (t,id) to stdout;
+-ERROR:  syntax error at or near "("
+-LINE 1: copy (select * from test1) (t,id) to stdout;
+-                                   ^
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++copy (select * from test1) (t,id) to stdout
++                           ^
+ --
+ -- Test JOIN
+ --
+ copy (select * from test1 join test2 using (id)) to stdout;
+-1	a	A
+-2	b	B
+-3	c	C
+-4	d	D
+-5	e	E
+ --
+ -- Test UNION SELECT
+ --
+@@ -92,8 +96,12 @@
+ -- Test headers, CSV and quotes
+ --
+ copy (select t from test1 where id = 1) to stdout csv header force quote t;
+-t
+-"a"
++ERROR:  at or near "t": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++copy (select t from test1 where id = 1) to stdout csv header force quote t
++                                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/41608/_version_
+ --
+ -- Test psql builtins, plain table
+ --
+@@ -107,8 +115,11 @@
+ -- This should fail
+ --
+ \copy v_test1 to stdout
+-ERROR:  cannot copy from view "v_test1"
+-HINT:  Try the COPY (SELECT ...) TO variant.
++v_a
++v_b
++v_c
++v_d
++v_e
+ --
+ -- Test \copy (select ...)
+ --
+@@ -122,40 +133,23 @@
+ drop table test1;
+ -- psql handling of COPY in multi-command strings
+ copy (select 1) to stdout\; select 1/0;	-- row, then error
+-1
+-ERROR:  division by zero
++ERROR:  COPY together with other statements in a query string is not supported
+ select 1/0\; copy (select 1) to stdout; -- error only
+ ERROR:  division by zero
+ copy (select 1) to stdout\; copy (select 2) to stdout\; select 3\; select 4; -- 1 2 3 4
+-1
+-2
+- ?column? 
+-----------
+-        3
+-(1 row)
+-
+- ?column? 
+-----------
+-        4
+-(1 row)
+-
++ERROR:  COPY together with other statements in a query string is not supported
+ create table test3 (c int);
+ select 0\; copy test3 from stdin\; copy test3 from stdin\; select 1; -- 0 1
+- ?column? 
+-----------
+-        0
+-(1 row)
+-
+- ?column? 
+-----------
+-        1
+-(1 row)
+-
++ERROR:  COPY together with other statements in a query string is not supported
++1
++\.
++invalid command \.
++2
++\.
++invalid command \.
+ select * from test3;
+- c 
+----
+- 1
+- 2
+-(2 rows)
+-
++ERROR:  at or near "1": syntax error
++DETAIL:  source SQL:
++1
++^
+ drop table test3;

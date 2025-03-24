@@ -1,0 +1,1805 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath.out --label=/mnt/data1/postgres/src/test/regress/results/jsonpath.out /mnt/data1/postgres/src/test/regress/expected/jsonpath.out /mnt/data1/postgres/src/test/regress/results/jsonpath.out
+--- /mnt/data1/postgres/src/test/regress/expected/jsonpath.out
++++ /mnt/data1/postgres/src/test/regress/results/jsonpath.out
+@@ -1,8 +1,9 @@
+ --jsonpath io
+ select ''::jsonpath;
+-ERROR:  invalid input syntax for type jsonpath: ""
+-LINE 1: select ''::jsonpath;
+-               ^
++ERROR:  could not parse "" as type jsonpath: at or near "EOF": syntax error
++DETAIL:  source SQL:
++
++^
+ select '$'::jsonpath;
+  jsonpath 
+ ----------
+@@ -34,17 +35,15 @@
+ (1 row)
+ 
+ select '$.a.*'::jsonpath;
+- jsonpath 
+-----------
+- $."a".*
+-(1 row)
+-
++ERROR:  could not parse "$.a.*" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.*
++    ^
+ select '$.*[*]'::jsonpath;
+- jsonpath 
+-----------
+- $.*[*]
+-(1 row)
+-
++ERROR:  could not parse "$.*[*]" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.*[*]
++  ^
+ select '$.a[*]'::jsonpath;
+  jsonpath 
+ ----------
+@@ -88,191 +87,171 @@
+ (1 row)
+ 
+ select '$.a.**.b'::jsonpath;
+-   jsonpath   
+---------------
+- $."a".**."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**.b
++    ^
+ select '$.a.**{2}.b'::jsonpath;
+-    jsonpath     
+------------------
+- $."a".**{2}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{2}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{2}.b
++    ^
+ select '$.a.**{2 to 2}.b'::jsonpath;
+-    jsonpath     
+------------------
+- $."a".**{2}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{2 to 2}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{2 to 2}.b
++    ^
+ select '$.a.**{2 to 5}.b'::jsonpath;
+-       jsonpath       
+-----------------------
+- $."a".**{2 to 5}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{2 to 5}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{2 to 5}.b
++    ^
+ select '$.a.**{0 to 5}.b'::jsonpath;
+-       jsonpath       
+-----------------------
+- $."a".**{0 to 5}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{0 to 5}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{0 to 5}.b
++    ^
+ select '$.a.**{5 to last}.b'::jsonpath;
+-        jsonpath         
+--------------------------
+- $."a".**{5 to last}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{5 to last}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{5 to last}.b
++    ^
+ select '$.a.**{last}.b'::jsonpath;
+-      jsonpath      
+---------------------
+- $."a".**{last}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{last}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{last}.b
++    ^
+ select '$.a.**{last to 5}.b'::jsonpath;
+-        jsonpath         
+--------------------------
+- $."a".**{last to 5}."b"
+-(1 row)
+-
++ERROR:  could not parse "$.a.**{last to 5}.b" as type jsonpath: at or near "*": syntax error
++DETAIL:  source SQL:
++$.a.**{last to 5}.b
++    ^
+ select '$+1'::jsonpath;
+- jsonpath 
+-----------
+- ($ + 1)
++ jsonpath  
++-----------
++ ($"" + 1)
+ (1 row)
+ 
+ select '$-1'::jsonpath;
+- jsonpath 
+-----------
+- ($ - 1)
++ jsonpath  
++-----------
++ ($"" - 1)
+ (1 row)
+ 
+ select '$--+1'::jsonpath;
+  jsonpath 
+ ----------
+- ($ - -1)
++ $""
+ (1 row)
+ 
+ select '$.a/+-1'::jsonpath;
+-   jsonpath   
+---------------
+- ($."a" / -1)
+-(1 row)
+-
++ERROR:  could not parse "$.a/+-1" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$.a/+-1
++    ^
+ select '1 * 2 + 4 % -3 != false'::jsonpath;
+-         jsonpath          
+----------------------------
+- (1 * 2 + 4 % -3 != false)
+-(1 row)
+-
++ERROR:  could not parse "1 * 2 + 4 % -3 != false" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++1 * 2 + 4 % -3 != false
++            ^
+ select '"\b\f\r\n\t\v\"\''\\"'::jsonpath;
+-        jsonpath         
+--------------------------
+- "\b\f\r\n\t\u000b\"'\\"
+-(1 row)
+-
++ERROR:  could not parse "\"\\b\\f\\r\\n\\t\\v\\\"\\'\\\\\"" as type jsonpath: at or near "\b\f\r\n\t\v\": syntax error
++DETAIL:  source SQL:
++"\b\f\r\n\t\v\"\'\\"
++^
+ select '"\x50\u0067\u{53}\u{051}\u{00004C}"'::jsonpath;
+- jsonpath 
+-----------
+- "PgSQL"
+-(1 row)
+-
++ERROR:  could not parse "\"\\x50\\u0067\\u{53}\\u{051}\\u{00004C}\"" as type jsonpath: at or near "\x50\u0067\u{53}\u{051}\u{00004C}": syntax error
++DETAIL:  source SQL:
++"\x50\u0067\u{53}\u{051}\u{00004C}"
++^
+ select '$.foo\x50\u0067\u{53}\u{051}\u{00004C}\t\"bar'::jsonpath;
+-      jsonpath       
+----------------------
+- $."fooPgSQL\t\"bar"
+-(1 row)
+-
++ERROR:  could not parse "$.foo\\x50\\u0067\\u{53}\\u{051}\\u{00004C}\\t\\\"bar" as type jsonpath: at or near "\": syntax error
++DETAIL:  source SQL:
++$.foo\x50\u0067\u{53}\u{051}\u{00004C}\t\"bar
++     ^
+ select '"\z"'::jsonpath;  -- unrecognized escape is just the literal char
+- jsonpath 
+-----------
+- "z"
+-(1 row)
+-
++ERROR:  could not parse "\"\\z\"" as type jsonpath: at or near "\z": syntax error
++DETAIL:  source SQL:
++"\z"
++^
+ select '$.g ? ($.a == 1)'::jsonpath;
+-      jsonpath      
+---------------------
+- $."g"?($."a" == 1)
++       jsonpath       
++----------------------
++ $."g"?(($."a" == 1))
+ (1 row)
+ 
+ select '$.g ? (@ == 1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $."g"?(@ == 1)
++     jsonpath     
++------------------
++ $."g"?((@ == 1))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1)'::jsonpath;
+-      jsonpath      
+---------------------
+- $."g"?(@."a" == 1)
++       jsonpath       
++----------------------
++ $."g"?((@."a" == 1))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1 || @.a == 4)'::jsonpath;
+-             jsonpath             
+-----------------------------------
+- $."g"?(@."a" == 1 || @."a" == 4)
++                jsonpath                
++----------------------------------------
++ $."g"?(((@."a" == 1) || (@."a" == 4)))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1 && @.a == 4)'::jsonpath;
+-             jsonpath             
+-----------------------------------
+- $."g"?(@."a" == 1 && @."a" == 4)
++                jsonpath                
++----------------------------------------
++ $."g"?(((@."a" == 1) && (@."a" == 4)))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1 || @.a == 4 && @.b == 7)'::jsonpath;
+-                    jsonpath                    
+-------------------------------------------------
+- $."g"?(@."a" == 1 || @."a" == 4 && @."b" == 7)
++                         jsonpath                         
++----------------------------------------------------------
++ $."g"?(((@."a" == 1) || ((@."a" == 4) && (@."b" == 7))))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1 || !(@.a == 4) && @.b == 7)'::jsonpath;
+-                     jsonpath                      
+----------------------------------------------------
+- $."g"?(@."a" == 1 || !(@."a" == 4) && @."b" == 7)
++                          jsonpath                           
++-------------------------------------------------------------
++ $."g"?(((@."a" == 1) || (!((@."a" == 4)) && (@."b" == 7))))
+ (1 row)
+ 
+ select '$.g ? (@.a == 1 || !(@.x >= 123 || @.a == 4) && @.b == 7)'::jsonpath;
+-                             jsonpath                              
+--------------------------------------------------------------------
+- $."g"?(@."a" == 1 || !(@."x" >= 123 || @."a" == 4) && @."b" == 7)
++                                    jsonpath                                     
++---------------------------------------------------------------------------------
++ $."g"?(((@."a" == 1) || (!(((@."x" >= 123) || (@."a" == 4))) && (@."b" == 7))))
+ (1 row)
+ 
+ select '$.g ? (@.x >= @[*]?(@.a > "abc"))'::jsonpath;
+-               jsonpath                
+----------------------------------------
+- $."g"?(@."x" >= @[*]?(@."a" > "abc"))
+-(1 row)
+-
++ERROR:  could not parse "$.g ? (@.x >= @[*]?(@.a > \"abc\"))" as type jsonpath: at or near "abc": syntax error
++DETAIL:  source SQL:
++$.g ? (@.x >= @[*]?(@.a > "abc"))
++                          ^
+ select '$.g ? ((@.x >= 123 || @.a == 4) is unknown)'::jsonpath;
+-                    jsonpath                     
+--------------------------------------------------
+- $."g"?((@."x" >= 123 || @."a" == 4) is unknown)
+-(1 row)
+-
++ERROR:  could not parse "$.g ? ((@.x >= 123 || @.a == 4) is unknown)" as type jsonpath: at or near "is": syntax error
++DETAIL:  source SQL:
++$.g ? ((@.x >= 123 || @.a == 4) is unknown)
++                                ^
+ select '$.g ? (exists (@.x))'::jsonpath;
+-        jsonpath        
+-------------------------
+- $."g"?(exists (@."x"))
+-(1 row)
+-
++ERROR:  could not parse "$.g ? (exists (@.x))" as type jsonpath: at or near "exists": syntax error
++DETAIL:  source SQL:
++$.g ? (exists (@.x))
++       ^
+ select '$.g ? (exists (@.x ? (@ == 14)))'::jsonpath;
+-             jsonpath             
+-----------------------------------
+- $."g"?(exists (@."x"?(@ == 14)))
+-(1 row)
+-
++ERROR:  could not parse "$.g ? (exists (@.x ? (@ == 14)))" as type jsonpath: at or near "exists": syntax error
++DETAIL:  source SQL:
++$.g ? (exists (@.x ? (@ == 14)))
++       ^
+ select '$.g ? ((@.x >= 123 || @.a == 4) && exists (@.x ? (@ == 14)))'::jsonpath;
+-                             jsonpath                             
+-------------------------------------------------------------------
+- $."g"?((@."x" >= 123 || @."a" == 4) && exists (@."x"?(@ == 14)))
+-(1 row)
+-
++ERROR:  could not parse "$.g ? ((@.x >= 123 || @.a == 4) && exists (@.x ? (@ == 14)))" as type jsonpath: at or near "exists": syntax error
++DETAIL:  source SQL:
++$.g ? ((@.x >= 123 || @.a == 4) && exists (@.x ? (@ == 14)))
++                                   ^
+ select '$.g ? (+@.x >= +-(+@.a + 2))'::jsonpath;
+-              jsonpath              
+-------------------------------------
+- $."g"?(+@."x" >= +(-(+@."a" + 2)))
+-(1 row)
+-
++ERROR:  could not parse "$.g ? (+@.x >= +-(+@.a + 2))" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$.g ? (+@.x >= +-(+@.a + 2))
++       ^
+ select '$a'::jsonpath;
+  jsonpath 
+ ----------
+@@ -292,9 +271,9 @@
+ (1 row)
+ 
+ select '$.g ? (@.zip == $zip)'::jsonpath;
+-         jsonpath          
+----------------------------
+- $."g"?(@."zip" == $"zip")
++          jsonpath           
++-----------------------------
++ $."g"?((@."zip" == $"zip"))
+ (1 row)
+ 
+ select '$.a[1,2, 3 to 16]'::jsonpath;
+@@ -304,27 +283,25 @@
+ (1 row)
+ 
+ select '$.a[$a + 1, ($b[*]) to -($[0] * 2)]'::jsonpath;
+-                jsonpath                
+-----------------------------------------
+- $."a"[$"a" + 1,$"b"[*] to -($[0] * 2)]
+-(1 row)
+-
++ERROR:  could not parse "$.a[$a + 1, ($b[*]) to -($[0] * 2)]" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$.a[$a + 1, ($b[*]) to -($[0] * 2)]
++                       ^
+ select '$.a[$.a.size() - 3]'::jsonpath;
+-        jsonpath         
+--------------------------
+- $."a"[$."a".size() - 3]
+-(1 row)
+-
++ERROR:  could not parse "$.a[$.a.size() - 3]" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.a[$.a.size() - 3]
++            ^
+ select 'last'::jsonpath;
+-ERROR:  LAST is allowed only in array subscripts
+-LINE 1: select 'last'::jsonpath;
+-               ^
++ERROR:  could not parse "last" as type jsonpath: at or near "last": syntax error
++DETAIL:  source SQL:
++last
++^
+ select '"last"'::jsonpath;
+- jsonpath 
+-----------
+- "last"
+-(1 row)
+-
++ERROR:  could not parse "\"last\"" as type jsonpath: at or near "last": syntax error
++DETAIL:  source SQL:
++"last"
++^
+ select '$.last'::jsonpath;
+  jsonpath 
+ ----------
+@@ -332,152 +309,135 @@
+ (1 row)
+ 
+ select '$ ? (last > 0)'::jsonpath;
+-ERROR:  LAST is allowed only in array subscripts
+-LINE 1: select '$ ? (last > 0)'::jsonpath;
+-               ^
++ERROR:  could not parse "$ ? (last > 0)" as type jsonpath: at or near "last": syntax error
++DETAIL:  source SQL:
++$ ? (last > 0)
++     ^
+ select '$[last]'::jsonpath;
+- jsonpath 
+-----------
+- $[last]
+-(1 row)
+-
++ERROR:  could not parse "$[last]" as type jsonpath: at or near "last": syntax error
++DETAIL:  source SQL:
++$[last]
++  ^
+ select '$[$[0] ? (last > 0)]'::jsonpath;
+-      jsonpath      
+---------------------
+- $[$[0]?(last > 0)]
+-(1 row)
+-
++ERROR:  could not parse "$[$[0] ? (last > 0)]" as type jsonpath: at or near "last": syntax error
++DETAIL:  source SQL:
++$[$[0] ? (last > 0)]
++          ^
+ select 'null.type()'::jsonpath;
+-  jsonpath   
+--------------
+- null.type()
+-(1 row)
+-
++ERROR:  could not parse "null.type()" as type jsonpath: at or near "null": syntax error
++DETAIL:  source SQL:
++null.type()
++^
+ select '1.type()'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1.t" of jsonpath input
+-LINE 1: select '1.type()'::jsonpath;
+-               ^
++ERROR:  could not parse "1.type()" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.t"": syntax error
++DETAIL:  source SQL:
++1.type()
++^
+ select '(1).type()'::jsonpath;
+-  jsonpath  
+-------------
+- (1).type()
+-(1 row)
+-
++ERROR:  could not parse "(1).type()" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++(1).type()
++   ^
+ select '1.2.type()'::jsonpath;
+-   jsonpath   
+---------------
+- (1.2).type()
+-(1 row)
+-
++ERROR:  could not parse "1.2.type()" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++1.2.type()
++        ^
+ select '"aaa".type()'::jsonpath;
+-   jsonpath   
+---------------
+- "aaa".type()
+-(1 row)
+-
++ERROR:  could not parse "\"aaa\".type()" as type jsonpath: at or near "aaa": syntax error
++DETAIL:  source SQL:
++"aaa".type()
++^
+ select 'true.type()'::jsonpath;
+-  jsonpath   
+--------------
+- true.type()
+-(1 row)
+-
++ERROR:  could not parse "true.type()" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++true.type()
++         ^
+ select '$.double().floor().ceiling().abs()'::jsonpath;
+-              jsonpath              
+-------------------------------------
+- $.double().floor().ceiling().abs()
+-(1 row)
+-
++ERROR:  could not parse "$.double().floor().ceiling().abs()" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.double().floor().ceiling().abs()
++        ^
+ select '$.keyvalue().key'::jsonpath;
+-      jsonpath      
+---------------------
+- $.keyvalue()."key"
+-(1 row)
+-
++ERROR:  could not parse "$.keyvalue().key" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.keyvalue().key
++          ^
+ select '$.datetime()'::jsonpath;
+-   jsonpath   
+---------------
+- $.datetime()
+-(1 row)
+-
++ERROR:  could not parse "$.datetime()" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.datetime()
++          ^
+ select '$.datetime("datetime template")'::jsonpath;
+-            jsonpath             
+----------------------------------
+- $.datetime("datetime template")
+-(1 row)
+-
++ERROR:  could not parse "$.datetime(\"datetime template\")" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.datetime("datetime template")
++          ^
+ select '$ ? (@ starts with "abc")'::jsonpath;
+-        jsonpath         
+--------------------------
+- $?(@ starts with "abc")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ starts with \"abc\")" as type jsonpath: at or near "starts": syntax error
++DETAIL:  source SQL:
++$ ? (@ starts with "abc")
++       ^
+ select '$ ? (@ starts with $var)'::jsonpath;
+-         jsonpath         
+---------------------------
+- $?(@ starts with $"var")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ starts with $var)" as type jsonpath: at or near "starts": syntax error
++DETAIL:  source SQL:
++$ ? (@ starts with $var)
++       ^
+ select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
+-ERROR:  invalid regular expression: parentheses () not balanced
+-LINE 1: select '$ ? (@ like_regex "(invalid pattern")'::jsonpath;
+-               ^
++ERROR:  could not parse "$ ? (@ like_regex \"(invalid pattern\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "(invalid pattern")
++       ^
+ select '$ ? (@ like_regex "pattern")'::jsonpath;
+-          jsonpath          
+-----------------------------
+- $?(@ like_regex "pattern")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "")'::jsonpath;
+-          jsonpath          
+-----------------------------
+- $?(@ like_regex "pattern")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "i")'::jsonpath;
+-              jsonpath               
+--------------------------------------
+- $?(@ like_regex "pattern" flag "i")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"i\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "i")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "is")'::jsonpath;
+-               jsonpath               
+---------------------------------------
+- $?(@ like_regex "pattern" flag "is")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"is\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "is")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "isim")'::jsonpath;
+-               jsonpath                
+----------------------------------------
+- $?(@ like_regex "pattern" flag "ism")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"isim\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "isim")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
+-ERROR:  XQuery "x" flag (expanded regular expressions) is not implemented
+-LINE 1: select '$ ? (@ like_regex "pattern" flag "xsms")'::jsonpath;
+-               ^
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"xsms\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "xsms")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "q")'::jsonpath;
+-              jsonpath               
+--------------------------------------
+- $?(@ like_regex "pattern" flag "q")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"q\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "q")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "iq")'::jsonpath;
+-               jsonpath               
+---------------------------------------
+- $?(@ like_regex "pattern" flag "iq")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"iq\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "iq")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "smixq")'::jsonpath;
+-                jsonpath                 
+------------------------------------------
+- $?(@ like_regex "pattern" flag "ismxq")
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"smixq\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "smixq")
++       ^
+ select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
+-ERROR:  invalid input syntax for type jsonpath
+-LINE 1: select '$ ? (@ like_regex "pattern" flag "a")'::jsonpath;
+-               ^
+-DETAIL:  Unrecognized flag character "a" in LIKE_REGEX predicate.
++ERROR:  could not parse "$ ? (@ like_regex \"pattern\" flag \"a\")" as type jsonpath: at or near "like_regex": syntax error
++DETAIL:  source SQL:
++$ ? (@ like_regex "pattern" flag "a")
++       ^
+ select '$ < 1'::jsonpath;
+  jsonpath 
+ ----------
+@@ -485,51 +445,47 @@
+ (1 row)
+ 
+ select '($ < 1) || $.a.b <= $x'::jsonpath;
+-           jsonpath           
+-------------------------------
+- ($ < 1 || $."a"."b" <= $"x")
++             jsonpath             
++----------------------------------
++ (($ < 1) || ($."a"."b" <= $"x"))
+ (1 row)
+ 
+ select '@ + 1'::jsonpath;
+-ERROR:  @ is not allowed in root expressions
+-LINE 1: select '@ + 1'::jsonpath;
+-               ^
+-select '($).a.b'::jsonpath;
+- jsonpath  
+------------
+- $."a"."b"
++ jsonpath 
++----------
++ (@ + 1)
+ (1 row)
+ 
++select '($).a.b'::jsonpath;
++ERROR:  could not parse "($).a.b" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++($).a.b
++   ^
+ select '($.a.b).c.d'::jsonpath;
+-     jsonpath      
+--------------------
+- $."a"."b"."c"."d"
+-(1 row)
+-
++ERROR:  could not parse "($.a.b).c.d" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++($.a.b).c.d
++       ^
+ select '($.a.b + -$.x.y).c.d'::jsonpath;
+-             jsonpath             
+-----------------------------------
+- ($."a"."b" + -$."x"."y")."c"."d"
+-(1 row)
+-
++ERROR:  could not parse "($.a.b + -$.x.y).c.d" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++($.a.b + -$.x.y).c.d
++         ^
+ select '(-+$.a.b).c.d'::jsonpath;
+-        jsonpath         
+--------------------------
+- (-(+$."a"."b"))."c"."d"
+-(1 row)
+-
++ERROR:  could not parse "(-+$.a.b).c.d" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++(-+$.a.b).c.d
++ ^
+ select '1 + ($.a.b + 2).c.d'::jsonpath;
+-           jsonpath            
+--------------------------------
+- (1 + ($."a"."b" + 2)."c"."d")
+-(1 row)
+-
++ERROR:  could not parse "1 + ($.a.b + 2).c.d" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++1 + ($.a.b + 2).c.d
++               ^
+ select '1 + ($.a.b > 2).c.d'::jsonpath;
+-           jsonpath            
+--------------------------------
+- (1 + ($."a"."b" > 2)."c"."d")
+-(1 row)
+-
++ERROR:  could not parse "1 + ($.a.b > 2).c.d" as type jsonpath: at or near ">": syntax error
++DETAIL:  source SQL:
++1 + ($.a.b > 2).c.d
++           ^
+ select '($)'::jsonpath;
+  jsonpath 
+ ----------
+@@ -543,299 +499,262 @@
+ (1 row)
+ 
+ select '((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))'::jsonpath;
+-                     jsonpath                      
+----------------------------------------------------
+- (($ + 1)."a" + (2)."b"?(@ > 1 || exists (@."c")))
+-(1 row)
+-
++ERROR:  could not parse "((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++((($ + 1)).a + ((2)).b ? ((((@ > 1)) || (exists(@.c)))))
++          ^
+ select '$ ? (@.a < 1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
++    jsonpath     
++-----------------
++ $?((@."a" < 1))
+ (1 row)
+ 
+ select '$ ? (@.a < -1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < -1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -1)
++           ^
+ select '$ ? (@.a < +1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +1)
++           ^
+ select '$ ? (@.a < .1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < .1)" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < .1)
++           ^
+ select '$ ? (@.a < -.1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < -0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -.1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -.1)
++           ^
+ select '$ ? (@.a < +.1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +.1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +.1)
++           ^
+ select '$ ? (@.a < 0.1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
++     jsonpath      
++-------------------
++ $?((@."a" < 0.1))
+ (1 row)
+ 
+ select '$ ? (@.a < -0.1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < -0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -0.1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -0.1)
++           ^
+ select '$ ? (@.a < +0.1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +0.1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +0.1)
++           ^
+ select '$ ? (@.a < 10.1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 10.1)
++      jsonpath      
++--------------------
++ $?((@."a" < 10.1))
+ (1 row)
+ 
+ select '$ ? (@.a < -10.1)'::jsonpath;
+-     jsonpath      
+--------------------
+- $?(@."a" < -10.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -10.1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -10.1)
++           ^
+ select '$ ? (@.a < +10.1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 10.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +10.1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +10.1)
++           ^
+ select '$ ? (@.a < 1e1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < 10)
++      jsonpath      
++--------------------
++ $?((@."a" < 1E+1))
+ (1 row)
+ 
+ select '$ ? (@.a < -1e1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < -10)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -1e1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -1e1)
++           ^
+ select '$ ? (@.a < +1e1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < 10)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +1e1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +1e1)
++           ^
+ select '$ ? (@.a < .1e1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < .1e1)" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < .1e1)
++           ^
+ select '$ ? (@.a < -.1e1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < -1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -.1e1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -.1e1)
++           ^
+ select '$ ? (@.a < +.1e1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +.1e1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +.1e1)
++           ^
+ select '$ ? (@.a < 0.1e1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
++    jsonpath     
++-----------------
++ $?((@."a" < 1))
+ (1 row)
+ 
+ select '$ ? (@.a < -0.1e1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < -1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -0.1e1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -0.1e1)
++           ^
+ select '$ ? (@.a < +0.1e1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +0.1e1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +0.1e1)
++           ^
+ select '$ ? (@.a < 10.1e1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 101)
++     jsonpath      
++-------------------
++ $?((@."a" < 101))
+ (1 row)
+ 
+ select '$ ? (@.a < -10.1e1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < -101)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -10.1e1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -10.1e1)
++           ^
+ select '$ ? (@.a < +10.1e1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 101)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +10.1e1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +10.1e1)
++           ^
+ select '$ ? (@.a < 1e-1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
++     jsonpath      
++-------------------
++ $?((@."a" < 0.1))
+ (1 row)
+ 
+ select '$ ? (@.a < -1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < -0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -1e-1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -1e-1)
++           ^
+ select '$ ? (@.a < +1e-1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 0.1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +1e-1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +1e-1)
++           ^
+ select '$ ? (@.a < .1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 0.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < .1e-1)" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < .1e-1)
++           ^
+ select '$ ? (@.a < -.1e-1)'::jsonpath;
+-     jsonpath      
+--------------------
+- $?(@."a" < -0.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -.1e-1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -.1e-1)
++           ^
+ select '$ ? (@.a < +.1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 0.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +.1e-1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +.1e-1)
++           ^
+ select '$ ? (@.a < 0.1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 0.01)
++      jsonpath      
++--------------------
++ $?((@."a" < 0.01))
+ (1 row)
+ 
+ select '$ ? (@.a < -0.1e-1)'::jsonpath;
+-     jsonpath      
+--------------------
+- $?(@."a" < -0.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -0.1e-1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -0.1e-1)
++           ^
+ select '$ ? (@.a < +0.1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 0.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +0.1e-1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +0.1e-1)
++           ^
+ select '$ ? (@.a < 10.1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 1.01)
++      jsonpath      
++--------------------
++ $?((@."a" < 1.01))
+ (1 row)
+ 
+ select '$ ? (@.a < -10.1e-1)'::jsonpath;
+-     jsonpath      
+--------------------
+- $?(@."a" < -1.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -10.1e-1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -10.1e-1)
++           ^
+ select '$ ? (@.a < +10.1e-1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < 1.01)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +10.1e-1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +10.1e-1)
++           ^
+ select '$ ? (@.a < 1e+1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < 10)
++      jsonpath      
++--------------------
++ $?((@."a" < 1E+1))
+ (1 row)
+ 
+ select '$ ? (@.a < -1e+1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < -10)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -1e+1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -1e+1)
++           ^
+ select '$ ? (@.a < +1e+1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < 10)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +1e+1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +1e+1)
++           ^
+ select '$ ? (@.a < .1e+1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < .1e+1)" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < .1e+1)
++           ^
+ select '$ ? (@.a < -.1e+1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < -1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -.1e+1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -.1e+1)
++           ^
+ select '$ ? (@.a < +.1e+1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +.1e+1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +.1e+1)
++           ^
+ select '$ ? (@.a < 0.1e+1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
++    jsonpath     
++-----------------
++ $?((@."a" < 1))
+ (1 row)
+ 
+ select '$ ? (@.a < -0.1e+1)'::jsonpath;
+-    jsonpath    
+-----------------
+- $?(@."a" < -1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -0.1e+1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -0.1e+1)
++           ^
+ select '$ ? (@.a < +0.1e+1)'::jsonpath;
+-   jsonpath    
+----------------
+- $?(@."a" < 1)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +0.1e+1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +0.1e+1)
++           ^
+ select '$ ? (@.a < 10.1e+1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 101)
++     jsonpath      
++-------------------
++ $?((@."a" < 101))
+ (1 row)
+ 
+ select '$ ? (@.a < -10.1e+1)'::jsonpath;
+-     jsonpath     
+-------------------
+- $?(@."a" < -101)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < -10.1e+1)" as type jsonpath: at or near "-": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < -10.1e+1)
++           ^
+ select '$ ? (@.a < +10.1e+1)'::jsonpath;
+-    jsonpath     
+------------------
+- $?(@."a" < 101)
+-(1 row)
+-
++ERROR:  could not parse "$ ? (@.a < +10.1e+1)" as type jsonpath: at or near "+": syntax error
++DETAIL:  source SQL:
++$ ? (@.a < +10.1e+1)
++           ^
+ -- numeric literals
+ select '0'::jsonpath;
+  jsonpath 
+@@ -844,35 +763,39 @@
+ (1 row)
+ 
+ select '00'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "00" of jsonpath input
+-LINE 1: select '00'::jsonpath;
+-               ^
++ jsonpath 
++----------
++ 0
++(1 row)
++
+ select '0755'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0755'::jsonpath;
+-               ^
++ jsonpath 
++----------
++ 755
++(1 row)
++
+ select '0.0'::jsonpath;
+  jsonpath 
+ ----------
+- 0.0
++ 0
+ (1 row)
+ 
+ select '0.000'::jsonpath;
+  jsonpath 
+ ----------
+- 0.000
++ 0
+ (1 row)
+ 
+ select '0.000e1'::jsonpath;
+  jsonpath 
+ ----------
+- 0.00
++ 0
+ (1 row)
+ 
+ select '0.000e2'::jsonpath;
+  jsonpath 
+ ----------
+- 0.0
++ 0
+ (1 row)
+ 
+ select '0.000e3'::jsonpath;
+@@ -884,39 +807,37 @@
+ select '0.0010'::jsonpath;
+  jsonpath 
+ ----------
+- 0.0010
++ 0.001
+ (1 row)
+ 
+ select '0.0010e-1'::jsonpath;
+  jsonpath 
+ ----------
+- 0.00010
++ 0.0001
+ (1 row)
+ 
+ select '0.0010e+1'::jsonpath;
+  jsonpath 
+ ----------
+- 0.010
++ 0.01
+ (1 row)
+ 
+ select '0.0010e+2'::jsonpath;
+  jsonpath 
+ ----------
+- 0.10
++ 0.1
+ (1 row)
+ 
+ select '.001'::jsonpath;
+- jsonpath 
+-----------
+- 0.001
+-(1 row)
+-
++ERROR:  could not parse ".001" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++.001
++^
+ select '.001e1'::jsonpath;
+- jsonpath 
+-----------
+- 0.01
+-(1 row)
+-
++ERROR:  could not parse ".001e1" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++.001e1
++^
+ select '1.'::jsonpath;
+  jsonpath 
+ ----------
+@@ -926,130 +847,128 @@
+ select '1.e1'::jsonpath;
+  jsonpath 
+ ----------
+- 10
++ 1E+1
+ (1 row)
+ 
+ select '1a'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1a" of jsonpath input
+-LINE 1: select '1a'::jsonpath;
+-               ^
++ERROR:  could not parse "1a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1a"": syntax error
++DETAIL:  source SQL:
++1a
++^
+ select '1e'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1e" of jsonpath input
+-LINE 1: select '1e'::jsonpath;
+-               ^
++ERROR:  could not parse "1e" as type jsonpath: at or near "invalid floating point literal": syntax error
++DETAIL:  source SQL:
++1e
++^
+ select '1.e'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1.e" of jsonpath input
+-LINE 1: select '1.e'::jsonpath;
+-               ^
++ERROR:  could not parse "1.e" as type jsonpath: at or near "invalid floating point literal": syntax error
++DETAIL:  source SQL:
++1.e
++^
+ select '1.2a'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1.2a" of jsonpath input
+-LINE 1: select '1.2a'::jsonpath;
+-               ^
++ERROR:  could not parse "1.2a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.2a"": syntax error
++DETAIL:  source SQL:
++1.2a
++^
+ select '1.2e'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1.2e" of jsonpath input
+-LINE 1: select '1.2e'::jsonpath;
+-               ^
++ERROR:  could not parse "1.2e" as type jsonpath: at or near "invalid floating point literal": syntax error
++DETAIL:  source SQL:
++1.2e
++^
+ select '1.2.e'::jsonpath;
+- jsonpath  
+------------
+- (1.2)."e"
++ jsonpath 
++----------
++ 1.2."e"
+ (1 row)
+ 
+ select '(1.2).e'::jsonpath;
+- jsonpath  
+------------
+- (1.2)."e"
+-(1 row)
+-
++ERROR:  could not parse "(1.2).e" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++(1.2).e
++     ^
+ select '1e3'::jsonpath;
+  jsonpath 
+ ----------
+- 1000
++ 1E+3
+ (1 row)
+ 
+ select '1.e3'::jsonpath;
+  jsonpath 
+ ----------
+- 1000
++ 1E+3
+ (1 row)
+ 
+ select '1.e3.e'::jsonpath;
+-  jsonpath  
+-------------
+- (1000)."e"
++ jsonpath 
++----------
++ 1E+3."e"
+ (1 row)
+ 
+ select '1.e3.e4'::jsonpath;
+-  jsonpath   
+--------------
+- (1000)."e4"
++ jsonpath  
++-----------
++ 1E+3."e4"
+ (1 row)
+ 
+ select '1.2e3'::jsonpath;
+  jsonpath 
+ ----------
+- 1200
++ 1.2E+3
+ (1 row)
+ 
+ select '1.2e3a'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1.2e3a" of jsonpath input
+-LINE 1: select '1.2e3a'::jsonpath;
+-               ^
++ERROR:  could not parse "1.2e3a" as type jsonpath: at or near "trailing junk after numeric literal at or near "1.2e3a"": syntax error
++DETAIL:  source SQL:
++1.2e3a
++^
+ select '1.2.e3'::jsonpath;
+-  jsonpath  
+-------------
+- (1.2)."e3"
+-(1 row)
+-
+-select '(1.2).e3'::jsonpath;
+-  jsonpath  
+-------------
+- (1.2)."e3"
+-(1 row)
+-
+-select '1..e'::jsonpath;
+  jsonpath 
+ ----------
+- (1)."e"
++ 1.2."e3"
+ (1 row)
+ 
++select '(1.2).e3'::jsonpath;
++ERROR:  could not parse "(1.2).e3" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++(1.2).e3
++     ^
++select '1..e'::jsonpath;
++ERROR:  could not parse "1..e" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++1..e
++  ^
+ select '1..e3'::jsonpath;
+- jsonpath 
+-----------
+- (1)."e3"
+-(1 row)
+-
++ERROR:  could not parse "1..e3" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++1..e3
++  ^
+ select '(1.).e'::jsonpath;
+- jsonpath 
+-----------
+- (1)."e"
+-(1 row)
+-
++ERROR:  could not parse "(1.).e" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++(1.).e
++    ^
+ select '(1.).e3'::jsonpath;
+- jsonpath 
+-----------
+- (1)."e3"
+-(1 row)
+-
++ERROR:  could not parse "(1.).e3" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++(1.).e3
++    ^
+ select '1?(2>3)'::jsonpath;
+   jsonpath   
+ -------------
+- (1)?(2 > 3)
++ 1?((2 > 3))
+ (1 row)
+ 
+ -- nondecimal
+ select '0b100101'::jsonpath;
+- jsonpath 
+-----------
+- 37
+-(1 row)
+-
++ERROR:  could not parse "0b100101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++DETAIL:  source SQL:
++0b100101
++^
+ select '0o273'::jsonpath;
+- jsonpath 
+-----------
+- 187
+-(1 row)
+-
++ERROR:  could not parse "0o273" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++DETAIL:  source SQL:
++0o273
++^
+ select '0x42F'::jsonpath;
+  jsonpath 
+ ----------
+@@ -1058,142 +977,153 @@
+ 
+ -- error cases
+ select '0b'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "0b" of jsonpath input
+-LINE 1: select '0b'::jsonpath;
+-               ^
++ERROR:  could not parse "0b" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++DETAIL:  source SQL:
++0b
++^
+ select '1b'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1b" of jsonpath input
+-LINE 1: select '1b'::jsonpath;
+-               ^
++ERROR:  could not parse "1b" as type jsonpath: at or near "trailing junk after numeric literal at or near "1b"": syntax error
++DETAIL:  source SQL:
++1b
++^
+ select '0b0x'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0b0x'::jsonpath;
+-               ^
++ERROR:  could not parse "0b0x" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++DETAIL:  source SQL:
++0b0x
++^
+ select '0o'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "0o" of jsonpath input
+-LINE 1: select '0o'::jsonpath;
+-               ^
++ERROR:  could not parse "0o" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++DETAIL:  source SQL:
++0o
++^
+ select '1o'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1o" of jsonpath input
+-LINE 1: select '1o'::jsonpath;
+-               ^
++ERROR:  could not parse "1o" as type jsonpath: at or near "trailing junk after numeric literal at or near "1o"": syntax error
++DETAIL:  source SQL:
++1o
++^
+ select '0o0x'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0o0x'::jsonpath;
+-               ^
++ERROR:  could not parse "0o0x" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++DETAIL:  source SQL:
++0o0x
++^
+ select '0x'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "0x" of jsonpath input
+-LINE 1: select '0x'::jsonpath;
+-               ^
++ERROR:  could not parse "0x" as type jsonpath: lexical error: invalid hexadecimal numeric literal
++DETAIL:  source SQL:
++0x
++^
+ select '1x'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1x" of jsonpath input
+-LINE 1: select '1x'::jsonpath;
+-               ^
++ERROR:  could not parse "1x" as type jsonpath: at or near "invalid hexadecimal numeric literal": syntax error
++DETAIL:  source SQL:
++1x
++^
+ select '0x0y'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0x0y'::jsonpath;
+-               ^
++ERROR:  could not parse "0x0y" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x0y"": syntax error
++DETAIL:  source SQL:
++0x0y
++^
+ -- underscores
+ select '1_000_000'::jsonpath;
+- jsonpath 
+-----------
+- 1000000
+-(1 row)
+-
++ERROR:  could not parse "1_000_000" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000_000
++^
+ select '1_2_3'::jsonpath;
+- jsonpath 
+-----------
+- 123
+-(1 row)
+-
++ERROR:  could not parse "1_2_3" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_2_3
++^
+ select '0x1EEE_FFFF'::jsonpath;
+- jsonpath  
+------------
+- 518979583
+-(1 row)
+-
++ERROR:  could not parse "0x1EEE_FFFF" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x1EEE_"": syntax error
++DETAIL:  source SQL:
++0x1EEE_FFFF
++^
+ select '0o2_73'::jsonpath;
+- jsonpath 
+-----------
+- 187
+-(1 row)
+-
++ERROR:  could not parse "0o2_73" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++DETAIL:  source SQL:
++0o2_73
++^
+ select '0b10_0101'::jsonpath;
+- jsonpath 
+-----------
+- 37
+-(1 row)
+-
++ERROR:  could not parse "0b10_0101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++DETAIL:  source SQL:
++0b10_0101
++^
+ select '1_000.000_005'::jsonpath;
+-  jsonpath   
+--------------
+- 1000.000005
+-(1 row)
+-
++ERROR:  could not parse "1_000.000_005" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000.000_005
++^
+ select '1_000.'::jsonpath;
+- jsonpath 
+-----------
+- 1000
+-(1 row)
+-
++ERROR:  could not parse "1_000." as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000.
++^
+ select '.000_005'::jsonpath;
+- jsonpath 
+-----------
+- 0.000005
+-(1 row)
+-
++ERROR:  could not parse ".000_005" as type jsonpath: at or near ".": syntax error
++DETAIL:  source SQL:
++.000_005
++^
+ select '1_000.5e0_1'::jsonpath;
+- jsonpath 
+-----------
+- 10005
+-(1 row)
+-
++ERROR:  could not parse "1_000.5e0_1" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000.5e0_1
++^
+ -- error cases
+ select '_100'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '_100'::jsonpath;
+-               ^
++ERROR:  could not parse "_100" as type jsonpath: at or near "_100": syntax error
++DETAIL:  source SQL:
++_100
++^
+ select '100_'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "100_" of jsonpath input
+-LINE 1: select '100_'::jsonpath;
+-               ^
++ERROR:  could not parse "100_" as type jsonpath: at or near "trailing junk after numeric literal at or near "100_"": syntax error
++DETAIL:  source SQL:
++100_
++^
+ select '100__000'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '100__000'::jsonpath;
+-               ^
++ERROR:  could not parse "100__000" as type jsonpath: at or near "trailing junk after numeric literal at or near "100_"": syntax error
++DETAIL:  source SQL:
++100__000
++^
+ select '_1_000.5'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '_1_000.5'::jsonpath;
+-               ^
++ERROR:  could not parse "_1_000.5" as type jsonpath: at or near "_1_000": syntax error
++DETAIL:  source SQL:
++_1_000.5
++^
+ select '1_000_.5'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1_000_" of jsonpath input
+-LINE 1: select '1_000_.5'::jsonpath;
+-               ^
++ERROR:  could not parse "1_000_.5" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000_.5
++^
+ select '1_000._5'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1_000._" of jsonpath input
+-LINE 1: select '1_000._5'::jsonpath;
+-               ^
++ERROR:  could not parse "1_000._5" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000._5
++^
+ select '1_000.5_'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1_000.5_" of jsonpath input
+-LINE 1: select '1_000.5_'::jsonpath;
+-               ^
++ERROR:  could not parse "1_000.5_" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000.5_
++^
+ select '1_000.5e_1'::jsonpath;
+-ERROR:  trailing junk after numeric literal at or near "1_000.5e" of jsonpath input
+-LINE 1: select '1_000.5e_1'::jsonpath;
+-               ^
++ERROR:  could not parse "1_000.5e_1" as type jsonpath: at or near "trailing junk after numeric literal at or near "1_"": syntax error
++DETAIL:  source SQL:
++1_000.5e_1
++^
+ -- underscore after prefix not allowed in JavaScript (but allowed in SQL)
+ select '0b_10_0101'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0b_10_0101'::jsonpath;
+-               ^
++ERROR:  could not parse "0b_10_0101" as type jsonpath: at or near "trailing junk after numeric literal at or near "0b"": syntax error
++DETAIL:  source SQL:
++0b_10_0101
++^
+ select '0o_273'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0o_273'::jsonpath;
+-               ^
++ERROR:  could not parse "0o_273" as type jsonpath: at or near "trailing junk after numeric literal at or near "0o"": syntax error
++DETAIL:  source SQL:
++0o_273
++^
+ select '0x_42F'::jsonpath;
+-ERROR:  syntax error at end of jsonpath input
+-LINE 1: select '0x_42F'::jsonpath;
+-               ^
++ERROR:  could not parse "0x_42F" as type jsonpath: at or near "trailing junk after numeric literal at or near "0x_"": syntax error
++DETAIL:  source SQL:
++0x_42F
++^
+ -- test non-error-throwing API
+ SELECT str as jsonpath,
+        pg_input_is_valid(str,'jsonpath') as ok,
+@@ -1207,12 +1137,4 @@
+                   '00',
+                   '1a']) str,
+      LATERAL pg_input_error_info(str, 'jsonpath') as errinfo;
+-                 jsonpath                  | ok | sql_error_code |                                message                                |                          detail                          | hint 
+--------------------------------------------+----+----------------+-----------------------------------------------------------------------+----------------------------------------------------------+------
+- $ ? (@ like_regex "pattern" flag "smixq") | t  |                |                                                                       |                                                          | 
+- $ ? (@ like_regex "pattern" flag "a")     | f  | 42601          | invalid input syntax for type jsonpath                                | Unrecognized flag character "a" in LIKE_REGEX predicate. | 
+- @ + 1                                     | f  | 42601          | @ is not allowed in root expressions                                  |                                                          | 
+- 00                                        | f  | 42601          | trailing junk after numeric literal at or near "00" of jsonpath input |                                                          | 
+- 1a                                        | f  | 42601          | trailing junk after numeric literal at or near "1a" of jsonpath input |                                                          | 
+-(5 rows)
+-
++ERROR:  unknown function: pg_input_error_info()

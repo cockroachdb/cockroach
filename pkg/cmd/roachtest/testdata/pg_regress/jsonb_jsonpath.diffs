@@ -1,0 +1,3577 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out --label=/mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out /mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out /mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out
+--- /mnt/data1/postgres/src/test/regress/expected/jsonb_jsonpath.out
++++ /mnt/data1/postgres/src/test/regress/results/jsonb_jsonpath.out
+@@ -1,250 +1,222 @@
+ select jsonb '{"a": 12}' @? '$';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '$'
++                         ^
+ select jsonb '{"a": 12}' @? '1';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '1'
++                         ^
+ select jsonb '{"a": 12}' @? '$.a.b';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '$.a.b'
++                         ^
+ select jsonb '{"a": 12}' @? '$.b';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '$.b'
++                         ^
+ select jsonb '{"a": 12}' @? '$.a + 2';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '$.a + 2'
++                         ^
+ select jsonb '{"a": 12}' @? '$.b + 2';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 12}' @? '$.b + 2'
++                         ^
+ select jsonb '{"a": {"a": 12}}' @? '$.a.a';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"a": 12}}' @? '$.a.a'
++                                ^
+ select jsonb '{"a": {"a": 12}}' @? '$.*.a';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"a": 12}}' @? '$.*.a'
++                                ^
+ select jsonb '{"b": {"a": 12}}' @? '$.*.a';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"b": {"a": 12}}' @? '$.*.a'
++                                ^
+ select jsonb '{"b": {"a": 12}}' @? '$.*.b';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"b": {"a": 12}}' @? '$.*.b'
++                                ^
+ select jsonb '{"b": {"a": 12}}' @? 'strict $.*.b';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"b": {"a": 12}}' @? 'strict $.*.b'
++                                ^
+ select jsonb '{}' @? '$.*';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{}' @? '$.*'
++                  ^
+ select jsonb '{"a": 1}' @? '$.*';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 1}' @? '$.*'
++                        ^
+ select jsonb '{"a": {"b": 1}}' @? 'lax $.**{1}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? 'lax $.**{1}'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? 'lax $.**{2}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? 'lax $.**{2}'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? 'lax $.**{3}';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? 'lax $.**{3}'
++                               ^
+ select jsonb '[]' @? '$[*]';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[]' @? '$[*]'
++                  ^
+ select jsonb '[1]' @? '$[*]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[*]'
++                   ^
+ select jsonb '[1]' @? '$[1]';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[1]'
++                   ^
+ select jsonb '[1]' @? 'strict $[1]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? 'strict $[1]'
++                   ^
+ select jsonb_path_query('[1]', 'strict $[1]');
+ ERROR:  jsonpath array subscript is out of bounds
+ select jsonb_path_query('[1]', 'strict $[1]', silent => true);
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1]', 'strict $[1]', silent => true)
++                                                      ^
++HINT:  try \hf jsonb_path_query
++select jsonb '[1]' @? 'lax $[10000000000000000]';
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? 'lax $[10000000000000000]'
++                   ^
++select jsonb '[1]' @? 'strict $[10000000000000000]';
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? 'strict $[10000000000000000]'
++                   ^
++select jsonb_path_query('[1]', 'lax $[10000000000000000]');
+  jsonb_path_query 
+ ------------------
+ (0 rows)
+ 
+-select jsonb '[1]' @? 'lax $[10000000000000000]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
+-select jsonb '[1]' @? 'strict $[10000000000000000]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
+-select jsonb_path_query('[1]', 'lax $[10000000000000000]');
+-ERROR:  jsonpath array subscript is out of integer range
+ select jsonb_path_query('[1]', 'strict $[10000000000000000]');
+-ERROR:  jsonpath array subscript is out of integer range
++ERROR:  jsonpath array subscript is out of bounds
+ select jsonb '[1]' @? '$[0]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[0]'
++                   ^
+ select jsonb '[1]' @? '$[0.3]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[0.3]'
++                   ^
+ select jsonb '[1]' @? '$[0.5]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[0.5]'
++                   ^
+ select jsonb '[1]' @? '$[0.9]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[0.9]'
++                   ^
+ select jsonb '[1]' @? '$[1.2]';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? '$[1.2]'
++                   ^
+ select jsonb '[1]' @? 'strict $[1.2]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1]' @? 'strict $[1.2]'
++                   ^
+ select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >  @.b[*])';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >  @.b[*])'
++                                            ^
+ select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >= @.b[*])';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >= @.b[*])'
++                                            ^
+ select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? '$ ? (@.a[*] >= @.b[*])';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? '$ ? (@.a[*] >= @.b[*])'
++                                              ^
+ select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? 'strict $ ? (@.a[*] >= @.b[*])';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? 'strict $ ? (@.a[*] >= @.b[*])'
++                                              ^
+ select jsonb '{"a": [1,2,3], "b": [3,4,null]}' @? '$ ? (@.a[*] >= @.b[*])';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": [1,2,3], "b": [3,4,null]}' @? '$ ? (@.a[*] >= @.b[*])'
++                                               ^
+ select jsonb '1' @? '$ ? ((@ == "1") is unknown)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '1' @? '$ ? ((@ == "1") is unknown)'
++                 ^
+ select jsonb '1' @? '$ ? ((@ == 1) is unknown)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '1' @? '$ ? ((@ == 1) is unknown)'
++                 ^
+ select jsonb '[{"a": 1}, {"a": 2}]' @? '$[0 to 1] ? (@.a > 1)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[{"a": 1}, {"a": 2}]' @? '$[0 to 1] ? (@.a > 1)'
++                                    ^
+ select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => false);
+- jsonb_path_exists 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => false)
++                                                                          ^
++HINT:  try \hf jsonb_path_exists
+ select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => true);
+- jsonb_path_exists 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => true)
++                                                                          ^
++HINT:  try \hf jsonb_path_exists
+ select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => false);
+-ERROR:  jsonpath member accessor can only be applied to an object
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => false)
++                                                                             ^
++HINT:  try \hf jsonb_path_exists
+ select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => true);
+- jsonb_path_exists 
+--------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => true)
++                                                                             ^
++HINT:  try \hf jsonb_path_exists
+ select jsonb_path_query('1', 'lax $.a');
+  jsonb_path_query 
+ ------------------
+@@ -253,29 +225,75 @@
+ select jsonb_path_query('1', 'strict $.a');
+ ERROR:  jsonpath member accessor can only be applied to an object
+ select jsonb_path_query('1', 'strict $.*');
+-ERROR:  jsonpath wildcard member accessor can only be applied to an object
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', 'strict $.a', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('1', 'strict $.a', silent => true)
++                                                   ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('1', 'strict $.*', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('1', 'strict $.*', silent => true)
++                                                   ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[]', 'lax $.a');
+- jsonb_path_query 
+-------------------
+-(0 rows)
++ERROR:  internal error: unexpected path length
++DETAIL:  stack trace:
++pkg/util/jsonpath/eval/eval.go:147: executeAnyItem()
++pkg/util/jsonpath/eval/eval.go:134: unwrapCurrentTargetAndEval()
++pkg/util/jsonpath/eval/key.go:30: evalKey()
++pkg/util/jsonpath/eval/eval.go:87: eval()
++pkg/util/jsonpath/eval/eval.go:116: evalArray()
++pkg/util/jsonpath/eval/eval.go:76: eval()
++pkg/util/jsonpath/eval/eval.go:47: JsonpathQuery()
++pkg/sql/sem/builtins/generator_builtins.go:1667: Start()
++pkg/sql/rowexec/project_set.go:207: nextInputRow()
++pkg/sql/rowexec/project_set.go:301: Next()
++pkg/sql/colflow/flow_coordinator.go:119: next()
++pkg/sql/colflow/flow_coordinator.go:136: nextAdapter()
++pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
++pkg/sql/colflow/flow_coordinator.go:141: Next()
++pkg/sql/execinfra/base.go:193: Run()
++pkg/sql/execinfra/processorsbase.go:743: Run()
++pkg/sql/flowinfra/flow.go:574: Run()
++pkg/sql/colflow/vectorized_flow.go:301: Run()
++pkg/sql/distsql_running.go:985: Run()
++pkg/sql/distsql_running.go:2088: PlanAndRun()
++pkg/sql/distsql_running.go:1792: func3()
++pkg/sql/distsql_running.go:1795: PlanAndRunAll()
++pkg/sql/conn_executor_exec.go:3448: execWithDistSQLEngine()
++pkg/sql/conn_executor_exec.go:2980: dispatchToExecutionEngine()
++pkg/sql/conn_executor_exec.go:1077: execStmtInOpenState()
++pkg/sql/conn_executor_exec.go:170: func2()
++pkg/sql/conn_executor_exec.go:4456: execWithProfiling()
++pkg/sql/conn_executor_exec.go:169: execStmt()
++pkg/sql/conn_executor.go:2425: func1()
++pkg/sql/conn_executor.go:2430: execCmd()
++pkg/sql/conn_executor.go:2347: run()
++pkg/sql/conn_executor.go:1018: ServeConn()
++
++HINT:  You have encountered an unexpected error.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
+ select jsonb_path_query('[]', 'strict $.a');
+ ERROR:  jsonpath member accessor can only be applied to an object
+ select jsonb_path_query('[]', 'strict $.a', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[]', 'strict $.a', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('{}', 'lax $.a');
+  jsonb_path_query 
+ ------------------
+@@ -284,10 +302,11 @@
+ select jsonb_path_query('{}', 'strict $.a');
+ ERROR:  JSON object does not contain key "a"
+ select jsonb_path_query('{}', 'strict $.a', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('{}', 'strict $.a', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('1', 'strict $[1]');
+ ERROR:  jsonpath array accessor can only be applied to an array
+ select jsonb_path_query('1', 'strict $[*]');
+@@ -295,27 +314,32 @@
+ select jsonb_path_query('[]', 'strict $[1]');
+ ERROR:  jsonpath array subscript is out of bounds
+ select jsonb_path_query('[]', 'strict $["a"]');
+-ERROR:  jsonpath array subscript is not a single numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', 'strict $[1]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('1', 'strict $[1]', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('1', 'strict $[*]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('1', 'strict $[*]', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[]', 'strict $[1]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[]', 'strict $[1]', silent => true)
++                                                     ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[]', 'strict $["a"]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[]', 'strict $["a"]', silent => true)
++                                                       ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.a');
+  jsonb_path_query 
+ ------------------
+@@ -329,18 +353,11 @@
+ (1 row)
+ 
+ select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.*');
+- jsonb_path_query 
+-------------------
+- 12
+- {"a": 13}
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": 12, "b": {"a": 13}}', 'lax $.*.a');
+- jsonb_path_query 
+-------------------
+- 13
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].a');
+  jsonb_path_query 
+ ------------------
+@@ -348,12 +365,8 @@
+ (1 row)
+ 
+ select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].*');
+- jsonb_path_query 
+-------------------
+- 13
+- 14
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0].a');
+  jsonb_path_query 
+ ------------------
+@@ -385,13 +398,8 @@
+ select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10 / 0].a');
+ ERROR:  division by zero
+ select jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2.5 - 1 to $.size() - 2]');
+- jsonb_path_query 
+-------------------
+- {"a": 13}
+- {"b": 14}
+- "ccc"
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', 'lax $[0]');
+  jsonb_path_query 
+ ------------------
+@@ -427,58 +435,47 @@
+ select jsonb_path_query('[1,2,3]', 'strict $[*].a');
+ ERROR:  jsonpath member accessor can only be applied to an object
+ select jsonb_path_query('[1,2,3]', 'strict $[*].a', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1,2,3]', 'strict $[*].a', silent => true)
++                                                            ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[]', '$[last]');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', '$[last ? (exists(last))]');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', 'strict $[last]');
+-ERROR:  jsonpath array subscript is out of bounds
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', 'strict $[last]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[]', 'strict $[last]', silent => true)
++                                                        ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[1]', '$[last]');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,2,3]', '$[last]');
+- jsonb_path_query 
+-------------------
+- 3
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,2,3]', '$[last - 1]');
+- jsonb_path_query 
+-------------------
+- 2
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+- jsonb_path_query 
+-------------------
+- 3
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+-ERROR:  jsonpath array subscript is not a single numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]', silent => true)
++                                                                               ^
++HINT:  try \hf jsonb_path_query
+ select * from jsonb_path_query('{"a": 10}', '$');
+  jsonb_path_query 
+ ------------------
+@@ -486,24 +483,15 @@
+ (1 row)
+ 
+ select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+-ERROR:  could not find jsonpath variable "value"
++ERROR:  could not find jsonpath variable ""
+ select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
+ ERROR:  "vars" argument is not an object
+-DETAIL:  Jsonpath parameters should be encoded as key-value pairs of "vars" object.
+ select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '[{"value" : 13}]');
+ ERROR:  "vars" argument is not an object
+-DETAIL:  Jsonpath parameters should be encoded as key-value pairs of "vars" object.
+ select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
+- jsonb_path_query 
+-------------------
+- {"a": 10}
+-(1 row)
+-
++ERROR:  could not find jsonpath variable ""
+ select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 8}');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  could not find jsonpath variable ""
+ select * from jsonb_path_query('{"a": 10}', '$.a ? (@ < $value)', '{"value" : 13}');
+  jsonb_path_query 
+ ------------------
+@@ -534,11 +522,8 @@
+ (3 rows)
+ 
+ select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == "1")');
+- jsonb_path_query 
+-------------------
+- "1"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : "1"}');
+  jsonb_path_query 
+ ------------------
+@@ -552,297 +537,176 @@
+ (1 row)
+ 
+ select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ != null)');
+- jsonb_path_query 
+-------------------
+- 1
+- "2"
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ == null)');
+- jsonb_path_query 
+-------------------
+- null
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select * from jsonb_path_query('{}', '$ ? (@ == @)');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  could not find jsonpath variable ""
+ select * from jsonb_path_query('[]', 'strict $ ? (@ == @)');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  could not find jsonpath variable ""
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**');
+- jsonb_path_query 
+-------------------
+- {"a": {"b": 1}}
+- {"b": 1}
+- 1
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}');
+- jsonb_path_query 
+-------------------
+- {"a": {"b": 1}}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}');
+- jsonb_path_query 
+-------------------
+- {"a": {"b": 1}}
+- {"b": 1}
+- 1
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}');
+- jsonb_path_query 
+-------------------
+- {"b": 1}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}');
+- jsonb_path_query 
+-------------------
+- {"b": 1}
+- 1
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2}');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2 to last}');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{3 to last}');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{last}');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{2 to 3}.b ? (@ > 0)');
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb '{"a": {"b": 1}}' @? '$.**.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? '$.**{0}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**{0}.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? '$.**{1}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**{1}.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**{0 to last}.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**{1 to last}.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"b": 1}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"b": 1}}' @? '$.**{1 to 2}.b ? ( @ > 0)'
++                               ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0}.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1}.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0 to last}.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to last}.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to 2}.b ? ( @ > 0)'
++                                      ^
+ select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{2 to 3}.b ? ( @ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{2 to 3}.b ? ( @ > 0)'
++                                      ^
+ select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x))');
+- jsonb_path_query 
+-------------------
+- {"x": 2}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.y))');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x ? (@ >= 2) ))');
+- jsonb_path_query 
+-------------------
+- {"x": 2}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x))');
+- jsonb_path_query 
+-------------------
+- {"x": 2}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x + "3"))');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+- jsonb_path_query 
+-------------------
+- {"x": 2}
+- {"y": 3}
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? (exists (@.x))');
+- jsonb_path_query 
+-------------------
+- {"x": 2}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+- jsonb_path_query 
+-------------------
+- {"y": 3}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? (exists (@[*].x))');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+-   jsonb_path_query   
+-----------------------
+- [{"x": 2}, {"y": 3}]
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --test ternary logic
+ select
+ 	x, y,
+@@ -856,19 +720,7 @@
+ from
+ 	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
+ 	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
+-   x    |   y    | x && y 
+---------+--------+--------
+- true   | true   | true
+- true   | false  | false
+- true   | "null" | null
+- false  | true   | false
+- false  | false  | false
+- false  | "null" | false
+- "null" | true   | null
+- "null" | false  | false
+- "null" | "null" | null
+-(9 rows)
+-
++ERROR:  VALUES types string and jsonb cannot be matched
+ select
+ 	x, y,
+ 	jsonb_path_query(
+@@ -881,157 +733,114 @@
+ from
+ 	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
+ 	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
+-   x    |   y    | x || y 
+---------+--------+--------
+- true   | true   | true
+- true   | false  | true
+- true   | "null" | true
+- false  | true   | true
+- false  | false  | false
+- false  | "null" | null
+- "null" | true   | true
+- "null" | false  | null
+- "null" | "null" | null
+-(9 rows)
+-
++ERROR:  VALUES types string and jsonb cannot be matched
+ select jsonb '{"a": 1, "b":1}' @? '$ ? (@.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 1, "b":1}' @? '$ ? (@.a == @.b)'
++                               ^
+ select jsonb '{"c": {"a": 1, "b":1}}' @? '$ ? (@.a == @.b)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 1, "b":1}}' @? '$ ? (@.a == @.b)'
++                                      ^
+ select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? (@.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? (@.a == @.b)'
++                                      ^
+ select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? ($.c.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? ($.c.a == @.b)'
++                                      ^
+ select jsonb '{"c": {"a": 1, "b":1}}' @? '$.* ? (@.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 1, "b":1}}' @? '$.* ? (@.a == @.b)'
++                                      ^
+ select jsonb '{"a": 1, "b":1}' @? '$.** ? (@.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 1, "b":1}' @? '$.** ? (@.a == @.b)'
++                               ^
+ select jsonb '{"c": {"a": 1, "b":1}}' @? '$.** ? (@.a == @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 1, "b":1}}' @? '$.** ? (@.a == @.b)'
++                                      ^
+ select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == 1 + 1)');
+- jsonb_path_query 
+-------------------
+- {"a": 2, "b": 1}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (1 + 1))');
+- jsonb_path_query 
+-------------------
+- {"a": 2, "b": 1}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == @.b + 1)');
+- jsonb_path_query 
+-------------------
+- {"a": 2, "b": 1}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (@.b + 1))');
+- jsonb_path_query 
+-------------------
+- {"a": 2, "b": 1}
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - 1)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - 1)'
++                                       ^
+ select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -1)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -1)'
++                                       ^
+ select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -@.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -@.b)'
++                                       ^
+ select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - @.b)'
++                                       ^
+ select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - @.b)'
++                                      ^
+ select jsonb '{"c": {"a": 2, "b":1}}' @? '$.** ? (@.a == 1 - - @.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 2, "b":1}}' @? '$.** ? (@.a == 1 - - @.b)'
++                                      ^
+ select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - +@.b)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - +@.b)'
++                                      ^
+ select jsonb '[1,2,3]' @? '$ ? (+@[*] > +2)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,2,3]' @? '$ ? (+@[*] > +2)'
++                       ^
+ select jsonb '[1,2,3]' @? '$ ? (+@[*] > +3)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,2,3]' @? '$ ? (+@[*] > +3)'
++                       ^
+ select jsonb '[1,2,3]' @? '$ ? (-@[*] < -2)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,2,3]' @? '$ ? (-@[*] < -2)'
++                       ^
+ select jsonb '[1,2,3]' @? '$ ? (-@[*] < -3)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,2,3]' @? '$ ? (-@[*] < -3)'
++                       ^
+ select jsonb '1' @? '$ ? ($ > 0)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '1' @? '$ ? ($ > 0)'
++                 ^
+ -- arithmetic errors
+ select jsonb_path_query('[1,2,0,3]', '$[*] ? (2 / @ > 0)');
+  jsonb_path_query 
+@@ -1042,70 +851,70 @@
+ (3 rows)
+ 
+ select jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+- jsonb_path_query 
+-------------------
+- 0
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('0', '1 / $');
+ ERROR:  division by zero
+ select jsonb_path_query('0', '1 / $ + 2');
+ ERROR:  division by zero
+ select jsonb_path_query('0', '-(3 + 1 % $)');
+-ERROR:  division by zero
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', '$ + "2"');
+-ERROR:  right operand of jsonpath operator + is not a single numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1, 2]', '3 * $');
+ ERROR:  right operand of jsonpath operator * is not a single numeric value
+ select jsonb_path_query('"a"', '-$');
+-ERROR:  operand of unary jsonpath operator - is not a numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,"2",3]', '+$');
+-ERROR:  operand of unary jsonpath operator + is not a numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', '$ + "2"', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('1', '$ + "2"', silent => true)
++                                                ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[1, 2]', '3 * $', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1, 2]', '3 * $', silent => true)
++                                                   ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('"a"', '-$', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('"a"', '-$', silent => true)
++                                             ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[1,"2",3]', '+$', silent => true);
+- jsonb_path_query 
+-------------------
+- 1
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1,"2",3]', '+$', silent => true)
++                                                   ^
++HINT:  try \hf jsonb_path_query
+ select jsonb '["1",2,0,3]' @? '-$[*]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '["1",2,0,3]' @? '-$[*]'
++                           ^
+ select jsonb '[1,"2",0,3]' @? '-$[*]';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,"2",0,3]' @? '-$[*]'
++                           ^
+ select jsonb '["1",2,0,3]' @? 'strict -$[*]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '["1",2,0,3]' @? 'strict -$[*]'
++                           ^
+ select jsonb '[1,"2",0,3]' @? 'strict -$[*]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '[1,"2",0,3]' @? 'strict -$[*]'
++                           ^
+ -- unwrapping of operator arguments in lax mode
+ select jsonb_path_query('{"a": [2]}', 'lax $.a * 3');
+  jsonb_path_query 
+@@ -1120,21 +929,17 @@
+ (1 row)
+ 
+ select jsonb_path_query('{"a": [2, 3, 4]}', 'lax -$.a');
+- jsonb_path_query 
+-------------------
+- -2
+- -3
+- -4
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ -- should fail
+ select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3');
+ ERROR:  left operand of jsonpath operator * is not a single numeric value
+ select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3', silent => true)
++                                                                ^
++HINT:  try \hf jsonb_path_query
+ -- extension: boolean expressions
+ select jsonb_path_query('2', '$ > 1');
+  jsonb_path_query 
+@@ -1149,1070 +954,664 @@
+ (1 row)
+ 
+ select jsonb_path_query('2', '$ == "2"');
+- jsonb_path_query 
+-------------------
+- null
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb '2' @? '$ == "2"';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '2' @? '$ == "2"'
++                 ^
+ select jsonb '2' @@ '$ > 1';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '2' @@ '$ <= 1';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '2' @@ '$ == "2"';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '2' @@ '1';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '{}' @@ '$';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '[]' @@ '$';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '[1,2,3]' @@ '$[*]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb '[]' @@ '$[*]';
+- ?column? 
+-----------
+- 
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
+- jsonb_path_match 
+-------------------
+- f
+-(1 row)
+-
++ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
+- jsonb_path_match 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => false);
+- jsonb_path_match 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => false)
++                                                                                 ^
++HINT:  try \hf jsonb_path_match
+ select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => true);
+- jsonb_path_match 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => true)
++                                                                                 ^
++HINT:  try \hf jsonb_path_match
+ select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => false);
+- jsonb_path_match 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => false)
++                                                                                    ^
++HINT:  try \hf jsonb_path_match
+ select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => true);
+- jsonb_path_match 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => true)
++                                                                                    ^
++HINT:  try \hf jsonb_path_match
+ select jsonb_path_query('[null,1,true,"a",[],{}]', '$.type()');
+- jsonb_path_query 
+-------------------
+- "array"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+- jsonb_path_query 
+-------------------
+- "array"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+- jsonb_path_query 
+-------------------
+- "null"
+- "number"
+- "boolean"
+- "string"
+- "array"
+- "object"
+-(6 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', 'null.type()');
+- jsonb_path_query 
+-------------------
+- "null"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', 'true.type()');
+- jsonb_path_query 
+-------------------
+- "boolean"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', '(123).type()');
+- jsonb_path_query 
+-------------------
+- "number"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', '"123".type()');
+- jsonb_path_query 
+-------------------
+- "string"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": 2}', '($.a - 5).abs() + 10');
+- jsonb_path_query 
+-------------------
+- 13
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": 2.5}', '-($.a * $.a).floor() % 4.3');
+- jsonb_path_query 
+-------------------
+- -1.7
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
+- jsonb_path_query 
+-------------------
+- true
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1, 2, 3]', '($[*] > 3).type()');
+- jsonb_path_query 
+-------------------
+- "boolean"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1, 2, 3]', '($[*].a > 3).type()');
+- jsonb_path_query 
+-------------------
+- "boolean"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1, 2, 3]', 'strict ($[*].a > 3).type()');
+- jsonb_path_query 
+-------------------
+- "null"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+-ERROR:  jsonpath item method .size() can only be applied to an array
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()', silent => true)
++                                                                                                            ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+- jsonb_path_query 
+-------------------
+- 1
+- 1
+- 1
+- 1
+- 0
+- 1
+- 3
+- 1
+- 1
+-(9 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].abs()');
+- jsonb_path_query 
+-------------------
+- 0
+- 1
+- 2
+- 3.4
+- 5.6
+-(5 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].floor()');
+- jsonb_path_query 
+-------------------
+- 0
+- 1
+- -2
+- -4
+- 5
+-(5 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling()');
+- jsonb_path_query 
+-------------------
+- 0
+- 1
+- -2
+- -3
+- 6
+-(5 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs()');
+- jsonb_path_query 
+-------------------
+- 0
+- 1
+- 2
+- 3
+- 6
+-(5 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs().type()');
+- jsonb_path_query 
+-------------------
+- "number"
+- "number"
+- "number"
+- "number"
+- "number"
+-(5 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{},1]', '$[*].keyvalue()');
+-ERROR:  jsonpath item method .keyvalue() can only be applied to an object
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{},1]', '$[*].keyvalue()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[{},1]', '$[*].keyvalue()', silent => true)
++                                                             ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('{}', '$.keyvalue()');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{"a": 1, "b": [1, 2], "c": {"a": "bbb"}}', '$.keyvalue()');
+-               jsonb_path_query               
+-----------------------------------------------
+- {"id": 0, "key": "a", "value": 1}
+- {"id": 0, "key": "b", "value": [1, 2]}
+- {"id": 0, "key": "c", "value": {"a": "bbb"}}
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', '$[*].keyvalue()');
+-               jsonb_path_query                
+------------------------------------------------
+- {"id": 12, "key": "a", "value": 1}
+- {"id": 12, "key": "b", "value": [1, 2]}
+- {"id": 72, "key": "c", "value": {"a": "bbb"}}
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue()');
+-ERROR:  jsonpath item method .keyvalue() can only be applied to an object
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'lax $.keyvalue()');
+-               jsonb_path_query                
+------------------------------------------------
+- {"id": 12, "key": "a", "value": 1}
+- {"id": 12, "key": "b", "value": [1, 2]}
+- {"id": 72, "key": "c", "value": {"a": "bbb"}}
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue().a');
+-ERROR:  jsonpath item method .keyvalue() can only be applied to an object
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue()';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue()'
++                                     ^
+ select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue().key';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue().key'
++                                     ^
+ select jsonb_path_query('null', '$.double()');
+-ERROR:  jsonpath item method .double() can only be applied to a string or numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('true', '$.double()');
+-ERROR:  jsonpath item method .double() can only be applied to a string or numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', '$.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('null', '$.double()', silent => true)
++                                                      ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('true', '$.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('true', '$.double()', silent => true)
++                                                      ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('[]', '$.double()');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', 'strict $.double()');
+-ERROR:  jsonpath item method .double() can only be applied to a string or numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{}', '$.double()');
+-ERROR:  jsonpath item method .double() can only be applied to a string or numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', 'strict $.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('[]', 'strict $.double()', silent => true)
++                                                           ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('{}', '$.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('{}', '$.double()', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('1.23', '$.double()');
+- jsonb_path_query 
+-------------------
+- 1.23
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"1.23"', '$.double()');
+- jsonb_path_query 
+-------------------
+- 1.23
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"1.23aaa"', '$.double()');
+-ERROR:  string argument of jsonpath item method .double() is not a valid representation of a double precision number
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1e1000', '$.double()');
+-ERROR:  numeric argument of jsonpath item method .double() is out of range for type double precision
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"nan"', '$.double()');
+-ERROR:  string argument of jsonpath item method .double() is not a valid representation of a double precision number
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"NaN"', '$.double()');
+-ERROR:  string argument of jsonpath item method .double() is not a valid representation of a double precision number
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"inf"', '$.double()');
+-ERROR:  string argument of jsonpath item method .double() is not a valid representation of a double precision number
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"-inf"', '$.double()');
+-ERROR:  string argument of jsonpath item method .double() is not a valid representation of a double precision number
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"inf"', '$.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('"inf"', '$.double()', silent => true)
++                                                       ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('"-inf"', '$.double()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('"-inf"', '$.double()', silent => true)
++                                                        ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('{}', '$.abs()');
+-ERROR:  jsonpath item method .abs() can only be applied to a numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('true', '$.floor()');
+-ERROR:  jsonpath item method .floor() can only be applied to a numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"1.2"', '$.ceiling()');
+-ERROR:  jsonpath item method .ceiling() can only be applied to a numeric value
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{}', '$.abs()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('{}', '$.abs()', silent => true)
++                                                 ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('true', '$.floor()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('true', '$.floor()', silent => true)
++                                                     ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('"1.2"', '$.ceiling()', silent => true);
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select jsonb_path_query('"1.2"', '$.ceiling()', silent => true)
++                                                        ^
++HINT:  try \hf jsonb_path_query
+ select jsonb_path_query('["", "a", "abc", "abcabc"]', '$[*] ? (@ starts with "abc")');
+- jsonb_path_query 
+-------------------
+- "abc"
+- "abcabc"
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('["", "a", "abc", "abcabc"]', 'strict $ ? (@[*] starts with "abc")');
+-      jsonb_path_query      
+-----------------------------
+- ["", "a", "abc", "abcabc"]
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('["", "a", "abd", "abdabc"]', 'strict $ ? (@[*] starts with "abc")');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? (@[*] starts with "abc")');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? ((@[*] starts with "abc") is unknown)');
+-      jsonb_path_query      
+-----------------------------
+- ["abc", "abcabc", null, 1]
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[[null, 1, "abc", "abcabc"]]', 'lax $ ? (@[*] starts with "abc")');
+-      jsonb_path_query      
+-----------------------------
+- [null, 1, "abc", "abcabc"]
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[[null, 1, "abd", "abdabc"]]', 'lax $ ? ((@[*] starts with "abc") is unknown)');
+-      jsonb_path_query      
+-----------------------------
+- [null, 1, "abd", "abdabc"]
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "abd", "abdabc"]', 'lax $[*] ? ((@ starts with "abc") is unknown)');
+- jsonb_path_query 
+-------------------
+- null
+- 1
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c")');
+- jsonb_path_query 
+-------------------
+- "abc"
+- "abdacb"
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "i")');
+- jsonb_path_query 
+-------------------
+- "abc"
+- "aBdC"
+- "abdacb"
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "m")');
+- jsonb_path_query 
+-------------------
+- "abc"
+- "abdacb"
+- "adc\nabc"
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "s")');
+- jsonb_path_query 
+-------------------
+- "abc"
+- "abdacb"
+- "ab\nadc"
+-(3 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "q")');
+- jsonb_path_query 
+-------------------
+- "a\\b"
+- "^a\\b$"
+-(2 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "")');
+- jsonb_path_query 
+-------------------
+- "a\b"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "q")');
+- jsonb_path_query 
+-------------------
+- "^a\\b$"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "q")');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "iq")');
+- jsonb_path_query 
+-------------------
+- "^a\\b$"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "")');
+- jsonb_path_query 
+-------------------
+- "a\b"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('null', '$.datetime()');
+-ERROR:  jsonpath item method .datetime() can only be applied to a string
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('true', '$.datetime()');
+-ERROR:  jsonpath item method .datetime() can only be applied to a string
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('1', '$.datetime()');
+-ERROR:  jsonpath item method .datetime() can only be applied to a string
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', '$.datetime()');
+- jsonb_path_query 
+-------------------
+-(0 rows)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('[]', 'strict $.datetime()');
+-ERROR:  jsonpath item method .datetime() can only be applied to a string
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('{}', '$.datetime()');
+-ERROR:  jsonpath item method .datetime() can only be applied to a string
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"bogus"', '$.datetime()');
+-ERROR:  datetime format is not recognized: "bogus"
+-HINT:  Use a datetime template argument to specify the input data format.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34"', '$.datetime("aaa")');
+-ERROR:  invalid datetime format separator: "a"
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"aaaa"', '$.datetime("HH24")');
+-ERROR:  invalid value "aa" for "HH24"
+-DETAIL:  Value must be an integer.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb '"10-03-2017"' @? '$.datetime("dd-mm-yyyy")';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++select jsonb '"10-03-2017"' @? '$.datetime("dd-mm-yyyy")'
++                            ^
+ select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy")');
+- jsonb_path_query 
+-------------------
+- "2017-03-10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy").type()');
+- jsonb_path_query 
+-------------------
+- "date"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy")');
+-ERROR:  trailing characters remain in input string after datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy").type()');
+-ERROR:  trailing characters remain in input string after datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34"', '       $.datetime("dd-mm-yyyy HH24:MI").type()');
+-       jsonb_path_query        
+--------------------------------
+- "timestamp without time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM").type()');
+-      jsonb_path_query      
+-----------------------------
+- "timestamp with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56"', '$.datetime("HH24:MI:SS").type()');
+-     jsonb_path_query     
+---------------------------
+- "time without time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56 +05:20"', '$.datetime("HH24:MI:SS TZH:TZM").type()');
+-   jsonb_path_query    
+------------------------
+- "time with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017T12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+-   jsonb_path_query    
+------------------------
+- "2017-03-10T12:34:56"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017t12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+-ERROR:  unmatched format character "T"
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+-ERROR:  unmatched format character "T"
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ set time zone '+00';
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+-   jsonb_path_query    
+------------------------
+- "2017-03-10T12:34:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-ERROR:  input string is too short for datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00+05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00-05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00+05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00-05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+- jsonb_path_query 
+-------------------
+- "12:34:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+-ERROR:  input string is too short for datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+- jsonb_path_query 
+-------------------
+- "12:34:00+05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+- jsonb_path_query 
+-------------------
+- "12:34:00-05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+- jsonb_path_query 
+-------------------
+- "12:34:00+05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+- jsonb_path_query 
+-------------------
+- "12:34:00-05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ set time zone '+10';
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+-   jsonb_path_query    
+------------------------
+- "2017-03-10T12:34:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-ERROR:  input string is too short for datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00+05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00-05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00+05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:00-05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+- jsonb_path_query 
+-------------------
+- "12:34:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+-ERROR:  input string is too short for datetime format
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+- jsonb_path_query 
+-------------------
+- "12:34:00+05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+- jsonb_path_query 
+-------------------
+- "12:34:00-05:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+- jsonb_path_query 
+-------------------
+- "12:34:00+05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+- jsonb_path_query 
+-------------------
+- "12:34:00-05:20"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ set time zone default;
+ select jsonb_path_query('"2017-03-10"', '$.datetime().type()');
+- jsonb_path_query 
+-------------------
+- "date"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10"', '$.datetime()');
+- jsonb_path_query 
+-------------------
+- "2017-03-10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime().type()');
+-       jsonb_path_query        
+--------------------------------
+- "timestamp without time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime()');
+-   jsonb_path_query    
+------------------------
+- "2017-03-10T12:34:56"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime().type()');
+-      jsonb_path_query      
+-----------------------------
+- "timestamp with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime()');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:56+03:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime().type()');
+-      jsonb_path_query      
+-----------------------------
+- "timestamp with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime()');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:56+03:10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10T12:34:56+3:10"', '$.datetime()');
+-      jsonb_path_query       
+------------------------------
+- "2017-03-10T12:34:56+03:10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10t12:34:56+3:10"', '$.datetime()');
+-ERROR:  datetime format is not recognized: "2017-03-10t12:34:56+3:10"
+-HINT:  Use a datetime template argument to specify the input data format.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10 12:34:56.789+3:10"', '$.datetime()');
+-        jsonb_path_query         
+----------------------------------
+- "2017-03-10T12:34:56.789+03:10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10T12:34:56.789+3:10"', '$.datetime()');
+-        jsonb_path_query         
+----------------------------------
+- "2017-03-10T12:34:56.789+03:10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"2017-03-10t12:34:56.789+3:10"', '$.datetime()');
+-ERROR:  datetime format is not recognized: "2017-03-10t12:34:56.789+3:10"
+-HINT:  Use a datetime template argument to specify the input data format.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56"', '$.datetime().type()');
+-     jsonb_path_query     
+---------------------------
+- "time without time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56"', '$.datetime()');
+- jsonb_path_query 
+-------------------
+- "12:34:56"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56+3"', '$.datetime().type()');
+-   jsonb_path_query    
+------------------------
+- "time with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56+3"', '$.datetime()');
+- jsonb_path_query 
+-------------------
+- "12:34:56+03:00"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56+3:10"', '$.datetime().type()');
+-   jsonb_path_query    
+------------------------
+- "time with time zone"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query('"12:34:56+3:10"', '$.datetime()');
+- jsonb_path_query 
+-------------------
+- "12:34:56+03:10"
+-(1 row)
+-
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ set time zone '+00';
+ -- date comparison
+ select jsonb_path_query(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017".datetime("dd.mm.yyyy"))');
+-ERROR:  cannot convert value from date to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017".datetime("dd.mm.yyyy"))');
+-ERROR:  cannot convert value from date to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ <  "10.03.2017".datetime("dd.mm.yyyy"))');
+-ERROR:  cannot convert value from date to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query_tz(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017".datetime("dd.mm.yyyy"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10"
+- "2017-03-10T00:00:00"
+- "2017-03-10T03:00:00+03:00"
+-(3 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017".datetime("dd.mm.yyyy"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10"
+- "2017-03-11"
+- "2017-03-10T00:00:00"
+- "2017-03-10T12:34:56"
+- "2017-03-10T03:00:00+03:00"
+-(5 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+ 	'$[*].datetime() ? (@ <  "10.03.2017".datetime("dd.mm.yyyy"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-09"
+- "2017-03-10T01:02:03+04:00"
+-(2 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ -- time comparison
+ select jsonb_path_query(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ == "12:35".datetime("HH24:MI"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ >= "12:35".datetime("HH24:MI"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ <  "12:35".datetime("HH24:MI"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query_tz(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ == "12:35".datetime("HH24:MI"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:35:00"
+- "12:35:00+00:00"
+-(2 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ >= "12:35".datetime("HH24:MI"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:35:00"
+- "12:36:00"
+- "12:35:00+00:00"
+-(3 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+ 	'$[*].datetime() ? (@ <  "12:35".datetime("HH24:MI"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:34:00"
+- "12:35:00+01:00"
+- "13:35:00+01:00"
+-(3 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ -- timetz comparison
+ select jsonb_path_query(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ == "12:35 +1".datetime("HH24:MI TZH"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ >= "12:35 +1".datetime("HH24:MI TZH"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ <  "12:35 +1".datetime("HH24:MI TZH"))');
+-ERROR:  cannot convert value from time to timetz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query_tz(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ == "12:35 +1".datetime("HH24:MI TZH"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:35:00+01:00"
+-(1 row)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ >= "12:35 +1".datetime("HH24:MI TZH"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:35:00+01:00"
+- "12:36:00+01:00"
+- "12:35:00-02:00"
+- "11:35:00"
+- "12:35:00"
+-(5 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+ 	'$[*].datetime() ? (@ <  "12:35 +1".datetime("HH24:MI TZH"))');
+- jsonb_path_query_tz 
+----------------------
+- "12:34:00+01:00"
+- "12:35:00+02:00"
+- "10:35:00"
+-(3 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ -- timestamp comparison
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ < "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:35:00"
+- "2017-03-10T13:35:00+01:00"
+-(2 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:35:00"
+- "2017-03-10T12:36:00"
+- "2017-03-10T13:35:00+01:00"
+- "2017-03-10T12:35:00-01:00"
+- "2017-03-11"
+-(5 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ < "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:34:00"
+- "2017-03-10T12:35:00+01:00"
+- "2017-03-10"
+-(3 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ -- timestamptz comparison
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ < "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-ERROR:  cannot convert value from timestamp to timestamptz without time zone usage
+-HINT:  Use *_tz() function for time zone support.
++ERROR:  unknown signature: jsonb_path_query(string, string)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ == "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:35:00+01:00"
+- "2017-03-10T11:35:00"
+-(2 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ >= "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:35:00+01:00"
+- "2017-03-10T12:36:00+01:00"
+- "2017-03-10T12:35:00-02:00"
+- "2017-03-10T11:35:00"
+- "2017-03-10T12:35:00"
+- "2017-03-11"
+-(6 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ select jsonb_path_query_tz(
+ 	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+ 	'$[*].datetime() ? (@ < "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+-     jsonb_path_query_tz     
+------------------------------
+- "2017-03-10T12:34:00+01:00"
+- "2017-03-10T12:35:00+02:00"
+- "2017-03-10T10:35:00"
+- "2017-03-10"
+-(4 rows)
+-
++ERROR:  unknown function: jsonb_path_query_tz()
+ -- overflow during comparison
+ select jsonb_path_query('"1000000-01-01"', '$.datetime() > "2020-01-01 12:00:00".datetime()'::jsonpath);
+- jsonb_path_query 
+-------------------
+- true
+-(1 row)
+-
++ERROR:  jsonb_path_query(): could not parse "$.datetime() > \"2020-01-01 12:00:00\".datetime()" as type jsonpath: at or near "(": syntax error
++DETAIL:  source SQL:
++$.datetime() > "2020-01-01 12:00:00".datetime()
++          ^
+ set time zone default;
+ -- jsonpath operators
+ SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');
+@@ -2236,95 +1635,85 @@
+ (1 row)
+ 
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+-ERROR:  JSON object does not contain key "a"
++ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
+- jsonb_path_query_array 
+-------------------------
+- [1, 2]
+-(1 row)
+-
++ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+- jsonb_path_query_array 
+-------------------------
+- [1]
+-(1 row)
+-
++ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+- jsonb_path_query_array 
+-------------------------
+- []
+-(1 row)
+-
++ERROR:  jsonb_path_query_array(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+- jsonb_path_query_array 
+-------------------------
+- [2, 3]
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}')
++                                                                                                                   ^
++HINT:  try \hf jsonb_path_query_array
+ SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+- jsonb_path_query_array 
+-------------------------
+- []
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}')
++                                                                                                                   ^
++HINT:  try \hf jsonb_path_query_array
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+-ERROR:  JSON object does not contain key "a"
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true);
+- jsonb_path_query_first 
+-------------------------
+- 1
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true)
++                                                                                   ^
++HINT:  try \hf jsonb_path_query_first
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
+- jsonb_path_query_first 
+-------------------------
+- 1
+-(1 row)
+-
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+- jsonb_path_query_first 
+-------------------------
+- 1
+-(1 row)
+-
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+- jsonb_path_query_first 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+- jsonb_path_query_first 
+-------------------------
+- 2
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}')
++                                                                                                                   ^
++HINT:  try \hf jsonb_path_query_first
+ SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+- jsonb_path_query_first 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}')
++                                                                                                                   ^
++HINT:  try \hf jsonb_path_query_first
+ SELECT jsonb_path_query_first('[{"a": 1}]', '$undefined_var');
+-ERROR:  could not find jsonpath variable "undefined_var"
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_query_first('[{"a": 1}]', 'false');
+- jsonb_path_query_first 
+-------------------------
+- false
+-(1 row)
+-
++ERROR:  jsonb_path_query_first(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)'
++                                    ^
+ SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*] ? (@.a > 2)';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "@": syntax error
++DETAIL:  source SQL:
++SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*] ? (@.a > 2)'
++                                    ^
+ SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
+  jsonb_path_exists 
+ -------------------
+@@ -2332,19 +1721,19 @@
+ (1 row)
+ 
+ SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
+- jsonb_path_exists 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}')
++                                                                                                                ^
++HINT:  try \hf jsonb_path_exists
+ SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 3, "max": 4}');
+- jsonb_path_exists 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 3, "max": 4}')
++                                                                                                                ^
++HINT:  try \hf jsonb_path_exists
+ SELECT jsonb_path_exists('[{"a": 1}]', '$undefined_var');
+-ERROR:  could not find jsonpath variable "undefined_var"
++ERROR:  jsonb_path_exists(): could not find jsonpath variable "undefined_var"
+ SELECT jsonb_path_exists('[{"a": 1}]', 'false');
+  jsonb_path_exists 
+ -------------------
+@@ -2352,75 +1741,93 @@
+ (1 row)
+ 
+ SELECT jsonb_path_match('true', '$', silent => false);
+- jsonb_path_match 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('true', '$', silent => false)
++                                             ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('false', '$', silent => false);
+- jsonb_path_match 
+-------------------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('false', '$', silent => false)
++                                              ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('null', '$', silent => false);
+- jsonb_path_match 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('null', '$', silent => false)
++                                             ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('1', '$', silent => true);
+- jsonb_path_match 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('1', '$', silent => true)
++                                          ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('1', '$', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('1', '$', silent => false)
++                                          ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('"a"', '$', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('"a"', '$', silent => false)
++                                            ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('{}', '$', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('{}', '$', silent => false)
++                                           ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('[true]', '$', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('[true]', '$', silent => false)
++                                               ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('{}', 'lax $.a', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('{}', 'lax $.a', silent => false)
++                                                 ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('{}', 'strict $.a', silent => false);
+-ERROR:  JSON object does not contain key "a"
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('{}', 'strict $.a', silent => false)
++                                                    ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('{}', 'strict $.a', silent => true);
+- jsonb_path_match 
+-------------------
+- 
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('{}', 'strict $.a', silent => true)
++                                                    ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb_path_match('[true, true]', '$[*]', silent => false);
+-ERROR:  single boolean result is expected
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT jsonb_path_match('[true, true]', '$[*]', silent => false)
++                                                        ^
++HINT:  try \hf jsonb_path_match
+ SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 1';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 2';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unsupported comparison operator: <jsonb> @@ <string>
+ SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
+- jsonb_path_match 
+-------------------
+- t
+-(1 row)
+-
++ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_match('[{"a": 1}]', '$undefined_var');
+-ERROR:  could not find jsonpath variable "undefined_var"
++ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ SELECT jsonb_path_match('[{"a": 1}]', 'false');
+- jsonb_path_match 
+-------------------
+- f
+-(1 row)
+-
++ERROR:  jsonb_path_match(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22513/_version_
+ -- test string comparison (Unicode codepoint collation)
+ WITH str(j, num) AS
+ (
+@@ -2436,151 +1843,15 @@
+ 	jsonb_path_query_first(s1.j, '$.s > $s', vars => s2.j) gt
+ FROM str s1, str s2
+ ORDER BY s1.num, s2.num;
+-       j       |       j       |  lt   |  le   |  eq   |  ge   |  gt   
+----------------+---------------+-------+-------+-------+-------+-------
+- {"s": ""}     | {"s": ""}     | false | true  | true  | true  | false
+- {"s": ""}     | {"s": "a"}    | true  | true  | false | false | false
+- {"s": ""}     | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": ""}     | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": ""}     | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": ""}     | {"s": "b"}    | true  | true  | false | false | false
+- {"s": ""}     | {"s": "A"}    | true  | true  | false | false | false
+- {"s": ""}     | {"s": "AB"}   | true  | true  | false | false | false
+- {"s": ""}     | {"s": "ABC"}  | true  | true  | false | false | false
+- {"s": ""}     | {"s": "ABc"}  | true  | true  | false | false | false
+- {"s": ""}     | {"s": "ABcD"} | true  | true  | false | false | false
+- {"s": ""}     | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "a"}    | {"s": ""}     | false | false | false | true  | true
+- {"s": "a"}    | {"s": "a"}    | false | true  | true  | true  | false
+- {"s": "a"}    | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "a"}    | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "a"}    | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "a"}    | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "a"}    | {"s": "A"}    | false | false | false | true  | true
+- {"s": "a"}    | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "a"}    | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "a"}    | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "a"}    | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "a"}    | {"s": "B"}    | false | false | false | true  | true
+- {"s": "ab"}   | {"s": ""}     | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "a"}    | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "ab"}   | false | true  | true  | true  | false
+- {"s": "ab"}   | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "ab"}   | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "ab"}   | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "ab"}   | {"s": "A"}    | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "ab"}   | {"s": "B"}    | false | false | false | true  | true
+- {"s": "abc"}  | {"s": ""}     | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "a"}    | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "ab"}   | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "abc"}  | false | true  | true  | true  | false
+- {"s": "abc"}  | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "abc"}  | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "abc"}  | {"s": "A"}    | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "abc"}  | {"s": "B"}    | false | false | false | true  | true
+- {"s": "abcd"} | {"s": ""}     | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "a"}    | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "ab"}   | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "abc"}  | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "abcd"} | false | true  | true  | true  | false
+- {"s": "abcd"} | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "abcd"} | {"s": "A"}    | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "abcd"} | {"s": "B"}    | false | false | false | true  | true
+- {"s": "b"}    | {"s": ""}     | false | false | false | true  | true
+- {"s": "b"}    | {"s": "a"}    | false | false | false | true  | true
+- {"s": "b"}    | {"s": "ab"}   | false | false | false | true  | true
+- {"s": "b"}    | {"s": "abc"}  | false | false | false | true  | true
+- {"s": "b"}    | {"s": "abcd"} | false | false | false | true  | true
+- {"s": "b"}    | {"s": "b"}    | false | true  | true  | true  | false
+- {"s": "b"}    | {"s": "A"}    | false | false | false | true  | true
+- {"s": "b"}    | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "b"}    | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "b"}    | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "b"}    | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "b"}    | {"s": "B"}    | false | false | false | true  | true
+- {"s": "A"}    | {"s": ""}     | false | false | false | true  | true
+- {"s": "A"}    | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "A"}    | false | true  | true  | true  | false
+- {"s": "A"}    | {"s": "AB"}   | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "ABC"}  | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "ABc"}  | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "ABcD"} | true  | true  | false | false | false
+- {"s": "A"}    | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": ""}     | false | false | false | true  | true
+- {"s": "AB"}   | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "A"}    | false | false | false | true  | true
+- {"s": "AB"}   | {"s": "AB"}   | false | true  | true  | true  | false
+- {"s": "AB"}   | {"s": "ABC"}  | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "ABc"}  | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "ABcD"} | true  | true  | false | false | false
+- {"s": "AB"}   | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": ""}     | false | false | false | true  | true
+- {"s": "ABC"}  | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "A"}    | false | false | false | true  | true
+- {"s": "ABC"}  | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "ABC"}  | {"s": "ABC"}  | false | true  | true  | true  | false
+- {"s": "ABC"}  | {"s": "ABc"}  | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "ABcD"} | true  | true  | false | false | false
+- {"s": "ABC"}  | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": ""}     | false | false | false | true  | true
+- {"s": "ABc"}  | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "A"}    | false | false | false | true  | true
+- {"s": "ABc"}  | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "ABc"}  | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "ABc"}  | {"s": "ABc"}  | false | true  | true  | true  | false
+- {"s": "ABc"}  | {"s": "ABcD"} | true  | true  | false | false | false
+- {"s": "ABc"}  | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": ""}     | false | false | false | true  | true
+- {"s": "ABcD"} | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "ABcD"} | {"s": "A"}    | false | false | false | true  | true
+- {"s": "ABcD"} | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "ABcD"} | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "ABcD"} | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "ABcD"} | {"s": "ABcD"} | false | true  | true  | true  | false
+- {"s": "ABcD"} | {"s": "B"}    | true  | true  | false | false | false
+- {"s": "B"}    | {"s": ""}     | false | false | false | true  | true
+- {"s": "B"}    | {"s": "a"}    | true  | true  | false | false | false
+- {"s": "B"}    | {"s": "ab"}   | true  | true  | false | false | false
+- {"s": "B"}    | {"s": "abc"}  | true  | true  | false | false | false
+- {"s": "B"}    | {"s": "abcd"} | true  | true  | false | false | false
+- {"s": "B"}    | {"s": "b"}    | true  | true  | false | false | false
+- {"s": "B"}    | {"s": "A"}    | false | false | false | true  | true
+- {"s": "B"}    | {"s": "AB"}   | false | false | false | true  | true
+- {"s": "B"}    | {"s": "ABC"}  | false | false | false | true  | true
+- {"s": "B"}    | {"s": "ABc"}  | false | false | false | true  | true
+- {"s": "B"}    | {"s": "ABcD"} | false | false | false | true  | true
+- {"s": "B"}    | {"s": "B"}    | false | true  | true  | true  | false
+-(144 rows)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++WITH str(j, num) AS
++(
++	SELECT jsonb_build_object('s', s), num
++	FROM unnest('{"", "a", "ab", "abc", "abcd", "b", "A", "AB", "ABC", "ABc", "ABcD", "B"}'::text[]) WITH ORDINALITY AS a(s, num)
++)
++SELECT
++	s1.j, s2.j,
++	jsonb_path_query_first(s1.j, '$.s < $s', vars => s2.j) lt,
++                                                ^
++HINT:  try \hf jsonb_path_query_first

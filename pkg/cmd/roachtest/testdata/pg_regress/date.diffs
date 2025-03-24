@@ -1,0 +1,1015 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/date.out --label=/mnt/data1/postgres/src/test/regress/results/date.out /mnt/data1/postgres/src/test/regress/expected/date.out /mnt/data1/postgres/src/test/regress/results/date.out
+--- /mnt/data1/postgres/src/test/regress/expected/date.out
++++ /mnt/data1/postgres/src/test/regress/results/date.out
+@@ -10,9 +10,10 @@
+ INSERT INTO DATE_TBL VALUES ('1996-03-02');
+ INSERT INTO DATE_TBL VALUES ('1997-02-28');
+ INSERT INTO DATE_TBL VALUES ('1997-02-29');
+-ERROR:  date/time field value out of range: "1997-02-29"
+-LINE 1: INSERT INTO DATE_TBL VALUES ('1997-02-29');
+-                                     ^
++ERROR:  parsing as type date: field day value 29 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
++HINT:  Perhaps you need a different "datestyle" setting.
+ INSERT INTO DATE_TBL VALUES ('1997-03-01');
+ INSERT INTO DATE_TBL VALUES ('1997-03-02');
+ INSERT INTO DATE_TBL VALUES ('2000-04-01');
+@@ -25,46 +26,46 @@
+ SELECT f1 FROM DATE_TBL;
+       f1       
+ ---------------
+- 04-09-1957
+- 06-13-1957
+- 02-28-1996
+- 02-29-1996
+- 03-01-1996
+- 03-02-1996
+- 02-28-1997
+- 03-01-1997
+- 03-02-1997
+- 04-01-2000
+- 04-02-2000
+- 04-03-2000
+- 04-08-2038
+- 04-09-2039
+- 04-10-2040
+- 04-10-2040 BC
++ 1957-04-09
++ 1957-06-13
++ 1996-02-28
++ 1996-02-29
++ 1996-03-01
++ 1996-03-02
++ 1997-02-28
++ 1997-03-01
++ 1997-03-02
++ 2000-04-01
++ 2000-04-02
++ 2000-04-03
++ 2038-04-08
++ 2039-04-09
++ 2040-04-10
++ 2040-04-10 BC
+ (16 rows)
+ 
+ SELECT f1 FROM DATE_TBL WHERE f1 < '2000-01-01';
+       f1       
+ ---------------
+- 04-09-1957
+- 06-13-1957
+- 02-28-1996
+- 02-29-1996
+- 03-01-1996
+- 03-02-1996
+- 02-28-1997
+- 03-01-1997
+- 03-02-1997
+- 04-10-2040 BC
++ 1957-04-09
++ 1957-06-13
++ 1996-02-28
++ 1996-02-29
++ 1996-03-01
++ 1996-03-02
++ 1997-02-28
++ 1997-03-01
++ 1997-03-02
++ 2040-04-10 BC
+ (10 rows)
+ 
+ SELECT f1 FROM DATE_TBL
+   WHERE f1 BETWEEN '2000-01-01' AND '2001-01-01';
+      f1     
+ ------------
+- 04-01-2000
+- 04-02-2000
+- 04-03-2000
++ 2000-04-01
++ 2000-04-02
++ 2000-04-03
+ (3 rows)
+ 
+ --
+@@ -91,19 +92,19 @@
+ (1 row)
+ 
+ SELECT date '1/8/1999';
+-ERROR:  date/time field value out of range: "1/8/1999"
+-LINE 1: SELECT date '1/8/1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1/18/1999';
+-ERROR:  date/time field value out of range: "1/18/1999"
+-LINE 1: SELECT date '1/18/1999';
+-                    ^
++ERROR:  parsing as type date: field month value 18 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '18/1/1999';
+-ERROR:  date/time field value out of range: "18/1/1999"
+-LINE 1: SELECT date '18/1/1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01/02/03';
+     date    
+@@ -136,10 +137,9 @@
+ (1 row)
+ 
+ SELECT date 'January 8, 99 BC';
+-ERROR:  date/time field value out of range: "January 8, 99 BC"
+-LINE 1: SELECT date 'January 8, 99 BC';
+-                    ^
+-HINT:  Perhaps you need a different "datestyle" setting.
++ERROR:  parsing as type date: unexpected separator ',' for field Day
++DETAIL:  Wanted: [ Day Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Era ]
+ SELECT date '99-Jan-08';
+     date    
+ ------------
+@@ -153,9 +153,9 @@
+ (1 row)
+ 
+ SELECT date '08-Jan-99';
+-ERROR:  date/time field value out of range: "08-Jan-99"
+-LINE 1: SELECT date '08-Jan-99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '08-Jan-1999';
+     date    
+@@ -164,9 +164,9 @@
+ (1 row)
+ 
+ SELECT date 'Jan-08-99';
+-ERROR:  date/time field value out of range: "Jan-08-99"
+-LINE 1: SELECT date 'Jan-08-99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date 'Jan-08-1999';
+     date    
+@@ -175,13 +175,9 @@
+ (1 row)
+ 
+ SELECT date '99-08-Jan';
+-ERROR:  invalid input syntax for type date: "99-08-Jan"
+-LINE 1: SELECT date '99-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999-08-Jan';
+-ERROR:  invalid input syntax for type date: "1999-08-Jan"
+-LINE 1: SELECT date '1999-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99 Jan 08';
+     date    
+ ------------
+@@ -195,9 +191,9 @@
+ (1 row)
+ 
+ SELECT date '08 Jan 99';
+-ERROR:  date/time field value out of range: "08 Jan 99"
+-LINE 1: SELECT date '08 Jan 99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '08 Jan 1999';
+     date    
+@@ -206,9 +202,9 @@
+ (1 row)
+ 
+ SELECT date 'Jan 08 99';
+-ERROR:  date/time field value out of range: "Jan 08 99"
+-LINE 1: SELECT date 'Jan 08 99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date 'Jan 08 1999';
+     date    
+@@ -217,17 +213,9 @@
+ (1 row)
+ 
+ SELECT date '99 08 Jan';
+-    date    
+-------------
+- 1999-01-08
+-(1 row)
+-
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999 08 Jan';
+-    date    
+-------------
+- 1999-01-08
+-(1 row)
+-
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99-01-08';
+     date    
+ ------------
+@@ -241,24 +229,24 @@
+ (1 row)
+ 
+ SELECT date '08-01-99';
+-ERROR:  date/time field value out of range: "08-01-99"
+-LINE 1: SELECT date '08-01-99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '08-01-1999';
+-ERROR:  date/time field value out of range: "08-01-1999"
+-LINE 1: SELECT date '08-01-1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01-08-99';
+-ERROR:  date/time field value out of range: "01-08-99"
+-LINE 1: SELECT date '01-08-99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01-08-1999';
+-ERROR:  date/time field value out of range: "01-08-1999"
+-LINE 1: SELECT date '01-08-1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '99-08-01';
+     date    
+@@ -285,24 +273,24 @@
+ (1 row)
+ 
+ SELECT date '08 01 99';
+-ERROR:  date/time field value out of range: "08 01 99"
+-LINE 1: SELECT date '08 01 99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '08 01 1999';
+-ERROR:  date/time field value out of range: "08 01 1999"
+-LINE 1: SELECT date '08 01 1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01 08 99';
+-ERROR:  date/time field value out of range: "01 08 99"
+-LINE 1: SELECT date '01 08 99';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01 08 1999';
+-ERROR:  date/time field value out of range: "01 08 1999"
+-LINE 1: SELECT date '01 08 1999';
+-                    ^
++ERROR:  parsing as type date: field day value 1999 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '99 08 01';
+     date    
+@@ -342,9 +330,9 @@
+ (1 row)
+ 
+ SELECT date '1/18/1999';
+-ERROR:  date/time field value out of range: "1/18/1999"
+-LINE 1: SELECT date '1/18/1999';
+-                    ^
++ERROR:  parsing as type date: field month value 18 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '18/1/1999';
+     date    
+@@ -389,9 +377,9 @@
+ (1 row)
+ 
+ SELECT date '99-Jan-08';
+-ERROR:  date/time field value out of range: "99-Jan-08"
+-LINE 1: SELECT date '99-Jan-08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-Jan-08';
+     date    
+@@ -424,17 +412,13 @@
+ (1 row)
+ 
+ SELECT date '99-08-Jan';
+-ERROR:  invalid input syntax for type date: "99-08-Jan"
+-LINE 1: SELECT date '99-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999-08-Jan';
+-ERROR:  invalid input syntax for type date: "1999-08-Jan"
+-LINE 1: SELECT date '1999-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99 Jan 08';
+-ERROR:  date/time field value out of range: "99 Jan 08"
+-LINE 1: SELECT date '99 Jan 08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 Jan 08';
+     date    
+@@ -467,19 +451,13 @@
+ (1 row)
+ 
+ SELECT date '99 08 Jan';
+-ERROR:  invalid input syntax for type date: "99 08 Jan"
+-LINE 1: SELECT date '99 08 Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999 08 Jan';
+-    date    
+-------------
+- 1999-01-08
+-(1 row)
+-
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99-01-08';
+-ERROR:  date/time field value out of range: "99-01-08"
+-LINE 1: SELECT date '99-01-08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-01-08';
+     date    
+@@ -512,9 +490,9 @@
+ (1 row)
+ 
+ SELECT date '99-08-01';
+-ERROR:  date/time field value out of range: "99-08-01"
+-LINE 1: SELECT date '99-08-01';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-08-01';
+     date    
+@@ -523,9 +501,9 @@
+ (1 row)
+ 
+ SELECT date '99 01 08';
+-ERROR:  date/time field value out of range: "99 01 08"
+-LINE 1: SELECT date '99 01 08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 01 08';
+     date    
+@@ -558,9 +536,9 @@
+ (1 row)
+ 
+ SELECT date '99 08 01';
+-ERROR:  date/time field value out of range: "99 08 01"
+-LINE 1: SELECT date '99 08 01';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 08 01';
+     date    
+@@ -600,9 +578,9 @@
+ (1 row)
+ 
+ SELECT date '18/1/1999';
+-ERROR:  date/time field value out of range: "18/1/1999"
+-LINE 1: SELECT date '18/1/1999';
+-                    ^
++ERROR:  parsing as type date: field month value 18 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '01/02/03';
+     date    
+@@ -641,9 +619,9 @@
+ (1 row)
+ 
+ SELECT date '99-Jan-08';
+-ERROR:  date/time field value out of range: "99-Jan-08"
+-LINE 1: SELECT date '99-Jan-08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-Jan-08';
+     date    
+@@ -676,17 +654,14 @@
+ (1 row)
+ 
+ SELECT date '99-08-Jan';
+-ERROR:  invalid input syntax for type date: "99-08-Jan"
+-LINE 1: SELECT date '99-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999-08-Jan';
+-ERROR:  invalid input syntax for type date: "1999-08-Jan"
+-LINE 1: SELECT date '1999-08-Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99 Jan 08';
+-ERROR:  invalid input syntax for type date: "99 Jan 08"
+-LINE 1: SELECT date '99 Jan 08';
+-                    ^
++ERROR:  parsing as type date: field day value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
++HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 Jan 08';
+     date    
+ ------------
+@@ -718,19 +693,13 @@
+ (1 row)
+ 
+ SELECT date '99 08 Jan';
+-ERROR:  invalid input syntax for type date: "99 08 Jan"
+-LINE 1: SELECT date '99 08 Jan';
+-                    ^
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '1999 08 Jan';
+-    date    
+-------------
+- 1999-01-08
+-(1 row)
+-
++ERROR:  parsing as type date: no such thing as a YDM or DYM format
+ SELECT date '99-01-08';
+-ERROR:  date/time field value out of range: "99-01-08"
+-LINE 1: SELECT date '99-01-08';
+-                    ^
++ERROR:  parsing as type date: field month value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-01-08';
+     date    
+@@ -763,9 +732,9 @@
+ (1 row)
+ 
+ SELECT date '99-08-01';
+-ERROR:  date/time field value out of range: "99-08-01"
+-LINE 1: SELECT date '99-08-01';
+-                    ^
++ERROR:  parsing as type date: field month value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999-08-01';
+     date    
+@@ -774,9 +743,9 @@
+ (1 row)
+ 
+ SELECT date '99 01 08';
+-ERROR:  date/time field value out of range: "99 01 08"
+-LINE 1: SELECT date '99 01 08';
+-                    ^
++ERROR:  parsing as type date: field month value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 01 08';
+     date    
+@@ -809,9 +778,9 @@
+ (1 row)
+ 
+ SELECT date '99 08 01';
+-ERROR:  date/time field value out of range: "99 08 01"
+-LINE 1: SELECT date '99 08 01';
+-                    ^
++ERROR:  parsing as type date: field month value 99 is out of range
++DETAIL:  Wanted: [ Era Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]
++Already found in input: [ Year Month Day ]
+ HINT:  Perhaps you need a different "datestyle" setting.
+ SELECT date '1999 08 01';
+     date    
+@@ -827,9 +796,7 @@
+ (1 row)
+ 
+ SELECT date '4714-11-23 BC';  -- out of range
+-ERROR:  date out of range: "4714-11-23 BC"
+-LINE 1: SELECT date '4714-11-23 BC';
+-                    ^
++ERROR:  date is out of range
+ SELECT date '5874897-12-31';
+      date      
+ ---------------
+@@ -837,40 +804,18 @@
+ (1 row)
+ 
+ SELECT date '5874898-01-01';  -- out of range
+-ERROR:  date out of range: "5874898-01-01"
+-LINE 1: SELECT date '5874898-01-01';
+-                    ^
++ERROR:  date is out of range
+ -- Test non-error-throwing API
+ SELECT pg_input_is_valid('now', 'date');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('garbage', 'date');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('6874898-01-01', 'date');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('garbage', 'date');
+-                    message                    | detail | hint | sql_error_code 
+------------------------------------------------+--------+------+----------------
+- invalid input syntax for type date: "garbage" |        |      | 22007
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ SELECT * FROM pg_input_error_info('6874898-01-01', 'date');
+-              message               | detail | hint | sql_error_code 
+-------------------------------------+--------+------+----------------
+- date out of range: "6874898-01-01" |        |      | 22008
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ RESET datestyle;
+ --
+ -- Simple math
+@@ -973,24 +918,24 @@
+     date_part('julian', f1) AS julian,
+     date_part('epoch', f1) AS epoch
+     FROM date_tbl;
+-     date      | year  | month | day | quarter | decade | century | millennium | isoyear | week | dow | isodow | doy | julian  |     epoch     
+----------------+-------+-------+-----+---------+--------+---------+------------+---------+------+-----+--------+-----+---------+---------------
+- 04-09-1957    |  1957 |     4 |   9 |       2 |    195 |      20 |          2 |    1957 |   15 |   2 |      2 |  99 | 2435938 |    -401760000
+- 06-13-1957    |  1957 |     6 |  13 |       2 |    195 |      20 |          2 |    1957 |   24 |   4 |      4 | 164 | 2436003 |    -396144000
+- 02-28-1996    |  1996 |     2 |  28 |       1 |    199 |      20 |          2 |    1996 |    9 |   3 |      3 |  59 | 2450142 |     825465600
+- 02-29-1996    |  1996 |     2 |  29 |       1 |    199 |      20 |          2 |    1996 |    9 |   4 |      4 |  60 | 2450143 |     825552000
+- 03-01-1996    |  1996 |     3 |   1 |       1 |    199 |      20 |          2 |    1996 |    9 |   5 |      5 |  61 | 2450144 |     825638400
+- 03-02-1996    |  1996 |     3 |   2 |       1 |    199 |      20 |          2 |    1996 |    9 |   6 |      6 |  62 | 2450145 |     825724800
+- 02-28-1997    |  1997 |     2 |  28 |       1 |    199 |      20 |          2 |    1997 |    9 |   5 |      5 |  59 | 2450508 |     857088000
+- 03-01-1997    |  1997 |     3 |   1 |       1 |    199 |      20 |          2 |    1997 |    9 |   6 |      6 |  60 | 2450509 |     857174400
+- 03-02-1997    |  1997 |     3 |   2 |       1 |    199 |      20 |          2 |    1997 |    9 |   0 |      7 |  61 | 2450510 |     857260800
+- 04-01-2000    |  2000 |     4 |   1 |       2 |    200 |      20 |          2 |    2000 |   13 |   6 |      6 |  92 | 2451636 |     954547200
+- 04-02-2000    |  2000 |     4 |   2 |       2 |    200 |      20 |          2 |    2000 |   13 |   0 |      7 |  93 | 2451637 |     954633600
+- 04-03-2000    |  2000 |     4 |   3 |       2 |    200 |      20 |          2 |    2000 |   14 |   1 |      1 |  94 | 2451638 |     954720000
+- 04-08-2038    |  2038 |     4 |   8 |       2 |    203 |      21 |          3 |    2038 |   14 |   4 |      4 |  98 | 2465522 |    2154297600
+- 04-09-2039    |  2039 |     4 |   9 |       2 |    203 |      21 |          3 |    2039 |   14 |   6 |      6 |  99 | 2465888 |    2185920000
+- 04-10-2040    |  2040 |     4 |  10 |       2 |    204 |      21 |          3 |    2040 |   15 |   2 |      2 | 101 | 2466255 |    2217628800
+- 04-10-2040 BC | -2040 |     4 |  10 |       2 |   -204 |     -21 |         -3 |   -2040 |   15 |   1 |      1 | 100 |  976430 | -126503251200
++     date      | year  | month | day | quarter | decade | century | millennium | isoyear | week | dow | isodow | doy |    julian    |         epoch          
++---------------+-------+-------+-----+---------+--------+---------+------------+---------+------+-----+--------+-----+--------------+------------------------
++ 1957-04-09    |  1957 |     4 |   9 |       2 |    195 |      20 |          2 |    1957 |   15 |   2 |      2 |  99 | 2.435938e+06 |            -4.0176e+08
++ 1957-06-13    |  1957 |     6 |  13 |       2 |    195 |      20 |          2 |    1957 |   24 |   4 |      4 | 164 | 2.436003e+06 |           -3.96144e+08
++ 1996-02-28    |  1996 |     2 |  28 |       1 |    199 |      20 |          2 |    1996 |    9 |   3 |      3 |  59 | 2.450142e+06 |           8.254656e+08
++ 1996-02-29    |  1996 |     2 |  29 |       1 |    199 |      20 |          2 |    1996 |    9 |   4 |      4 |  60 | 2.450143e+06 |            8.25552e+08
++ 1996-03-01    |  1996 |     3 |   1 |       1 |    199 |      20 |          2 |    1996 |    9 |   5 |      5 |  61 | 2.450144e+06 |           8.256384e+08
++ 1996-03-02    |  1996 |     3 |   2 |       1 |    199 |      20 |          2 |    1996 |    9 |   6 |      6 |  62 | 2.450145e+06 |           8.257248e+08
++ 1997-02-28    |  1997 |     2 |  28 |       1 |    199 |      20 |          2 |    1997 |    9 |   5 |      5 |  59 | 2.450508e+06 |            8.57088e+08
++ 1997-03-01    |  1997 |     3 |   1 |       1 |    199 |      20 |          2 |    1997 |    9 |   6 |      6 |  60 | 2.450509e+06 |           8.571744e+08
++ 1997-03-02    |  1997 |     3 |   2 |       1 |    199 |      20 |          2 |    1997 |    9 |   0 |      7 |  61 |  2.45051e+06 |           8.572608e+08
++ 2000-04-01    |  2000 |     4 |   1 |       2 |    200 |      20 |          2 |    2000 |   13 |   6 |      6 |  92 | 2.451636e+06 |           9.545472e+08
++ 2000-04-02    |  2000 |     4 |   2 |       2 |    200 |      20 |          2 |    2000 |   13 |   0 |      7 |  93 | 2.451637e+06 |           9.546336e+08
++ 2000-04-03    |  2000 |     4 |   3 |       2 |    200 |      20 |          2 |    2000 |   14 |   1 |      1 |  94 | 2.451638e+06 |             9.5472e+08
++ 2038-04-08    |  2038 |     4 |   8 |       2 |    203 |      21 |          3 |    2038 |   14 |   4 |      4 |  98 | 2.465522e+06 |          2.1542976e+09
++ 2039-04-09    |  2039 |     4 |   9 |       2 |    203 |      21 |          3 |    2039 |   14 |   6 |      6 |  99 | 2.465888e+06 |            2.18592e+09
++ 2040-04-10    |  2040 |     4 |  10 |       2 |    204 |      21 |          3 |    2040 |   15 |   2 |      2 | 101 | 2.466255e+06 |          2.2176288e+09
++ 2040-04-10 BC | -2039 |     4 |  10 |       2 |   -204 |     -21 |         -3 |   -2039 |   15 |   1 |      1 | 100 |       976430 | 2.6239573159668612e+09
+ (16 rows)
+ 
+ --
+@@ -1160,15 +1105,35 @@
+ -- all possible fields
+ --
+ SELECT EXTRACT(MICROSECONDS  FROM DATE '2020-08-11');
+-ERROR:  unit "microseconds" not supported for type date
++ extract 
++---------
++       0
++(1 row)
++
+ SELECT EXTRACT(MILLISECONDS  FROM DATE '2020-08-11');
+-ERROR:  unit "milliseconds" not supported for type date
++ extract 
++---------
++       0
++(1 row)
++
+ SELECT EXTRACT(SECOND        FROM DATE '2020-08-11');
+-ERROR:  unit "second" not supported for type date
++ extract 
++---------
++       0
++(1 row)
++
+ SELECT EXTRACT(MINUTE        FROM DATE '2020-08-11');
+-ERROR:  unit "minute" not supported for type date
++ extract 
++---------
++       0
++(1 row)
++
+ SELECT EXTRACT(HOUR          FROM DATE '2020-08-11');
+-ERROR:  unit "hour" not supported for type date
++ extract 
++---------
++       0
++(1 row)
++
+ SELECT EXTRACT(DAY           FROM DATE '2020-08-11');
+  extract 
+ ---------
+@@ -1190,7 +1155,7 @@
+ SELECT EXTRACT(YEAR          FROM DATE '2020-08-11 BC');
+  extract 
+ ---------
+-   -2020
++   -2019
+ (1 row)
+ 
+ SELECT EXTRACT(DECADE        FROM DATE '2020-08-11');
+@@ -1220,7 +1185,7 @@
+ SELECT EXTRACT(ISOYEAR       FROM DATE '2020-08-11 BC');
+  extract 
+ ---------
+-   -2020
++   -2019
+ (1 row)
+ 
+ SELECT EXTRACT(QUARTER       FROM DATE '2020-08-11');
+@@ -1266,84 +1231,84 @@
+ (1 row)
+ 
+ SELECT EXTRACT(TIMEZONE      FROM DATE '2020-08-11');
+-ERROR:  unit "timezone" not supported for type date
++ERROR:  extract(): unsupported timespan: timezone
+ SELECT EXTRACT(TIMEZONE_M    FROM DATE '2020-08-11');
+-ERROR:  unit "timezone_m" not supported for type date
++ERROR:  extract(): unsupported timespan: timezone_m
+ SELECT EXTRACT(TIMEZONE_H    FROM DATE '2020-08-11');
+-ERROR:  unit "timezone_h" not supported for type date
++ERROR:  extract(): unsupported timespan: timezone_h
+ SELECT EXTRACT(EPOCH         FROM DATE '2020-08-11');
+-  extract   
+-------------
+- 1597104000
++   extract    
++--------------
++ 1.597104e+09
+ (1 row)
+ 
+ SELECT EXTRACT(JULIAN        FROM DATE '2020-08-11');
+- extract 
+----------
+- 2459073
++   extract    
++--------------
++ 2.459073e+06
+ (1 row)
+ 
+ --
+ -- test trunc function!
+ --
+ SELECT DATE_TRUNC('MILLENNIUM', TIMESTAMP '1970-03-20 04:30:00.00000'); -- 1001
+-        date_trunc        
+---------------------------
+- Thu Jan 01 00:00:00 1001
++     date_trunc      
++---------------------
++ 1001-01-01 00:00:00
+ (1 row)
+ 
+ SELECT DATE_TRUNC('MILLENNIUM', DATE '1970-03-20'); -- 1001-01-01
+-          date_trunc          
+-------------------------------
+- Thu Jan 01 00:00:00 1001 PST
++       date_trunc       
++------------------------
++ 1001-01-01 00:00:00-08
+ (1 row)
+ 
+ SELECT DATE_TRUNC('CENTURY', TIMESTAMP '1970-03-20 04:30:00.00000'); -- 1901
+-        date_trunc        
+---------------------------
+- Tue Jan 01 00:00:00 1901
++     date_trunc      
++---------------------
++ 1901-01-01 00:00:00
+ (1 row)
+ 
+ SELECT DATE_TRUNC('CENTURY', DATE '1970-03-20'); -- 1901
+-          date_trunc          
+-------------------------------
+- Tue Jan 01 00:00:00 1901 PST
++       date_trunc       
++------------------------
++ 1901-01-01 00:00:00-08
+ (1 row)
+ 
+ SELECT DATE_TRUNC('CENTURY', DATE '2004-08-10'); -- 2001-01-01
+-          date_trunc          
+-------------------------------
+- Mon Jan 01 00:00:00 2001 PST
++       date_trunc       
++------------------------
++ 2001-01-01 00:00:00-08
+ (1 row)
+ 
+ SELECT DATE_TRUNC('CENTURY', DATE '0002-02-04'); -- 0001-01-01
+-          date_trunc          
+-------------------------------
+- Mon Jan 01 00:00:00 0001 PST
++       date_trunc       
++------------------------
++ 0001-01-01 00:00:00-08
+ (1 row)
+ 
+ SELECT DATE_TRUNC('CENTURY', DATE '0055-08-10 BC'); -- 0100-01-01 BC
+-           date_trunc            
+----------------------------------
+- Tue Jan 01 00:00:00 0100 PST BC
++        date_trunc         
++---------------------------
++ 0100-01-01 00:00:00-08 BC
+ (1 row)
+ 
+ SELECT DATE_TRUNC('DECADE', DATE '1993-12-25'); -- 1990-01-01
+-          date_trunc          
+-------------------------------
+- Mon Jan 01 00:00:00 1990 PST
++       date_trunc       
++------------------------
++ 1990-01-01 00:00:00-08
+ (1 row)
+ 
+ SELECT DATE_TRUNC('DECADE', DATE '0004-12-25'); -- 0001-01-01 BC
+-           date_trunc            
+----------------------------------
+- Sat Jan 01 00:00:00 0001 PST BC
++        date_trunc         
++---------------------------
++ 0001-01-01 00:00:00-08 BC
+ (1 row)
+ 
+ SELECT DATE_TRUNC('DECADE', DATE '0002-12-31 BC'); -- 0011-01-01 BC
+-           date_trunc            
+----------------------------------
+- Mon Jan 01 00:00:00 0011 PST BC
++        date_trunc         
++---------------------------
++ 0011-01-01 00:00:00-08 BC
+ (1 row)
+ 
+ --
+@@ -1368,11 +1333,7 @@
+ (1 row)
+ 
+ select isfinite('infinity'::date), isfinite('-infinity'::date), isfinite('today'::date);
+- isfinite | isfinite | isfinite 
+-----------+----------+----------
+- f        | f        | t
+-(1 row)
+-
++ERROR:  unknown function: isfinite()
+ select 'infinity'::date = '+infinity'::date as t;
+  t 
+ ---
+@@ -1383,152 +1344,88 @@
+ -- oscillating fields from non-finite date:
+ --
+ SELECT EXTRACT(DAY FROM DATE 'infinity');      -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(DAY FROM DATE '-infinity');     -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): -infinity out of range for timestamp
+ -- all supported fields
+ SELECT EXTRACT(DAY           FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(MONTH         FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(QUARTER       FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(WEEK          FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(DOW           FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(ISODOW        FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(DOY           FROM DATE 'infinity');    -- NULL
+- extract 
+----------
+-        
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ --
+ -- monotonic fields from non-finite date:
+ --
+ SELECT EXTRACT(EPOCH FROM DATE 'infinity');         --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(EPOCH FROM DATE '-infinity');        -- -Infinity
+-  extract  
+------------
+- -Infinity
+-(1 row)
+-
++ERROR:  extract(): -infinity out of range for timestamp
+ -- all supported fields
+ SELECT EXTRACT(YEAR       FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(DECADE     FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(CENTURY    FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(MILLENNIUM FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(JULIAN     FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(ISOYEAR    FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ SELECT EXTRACT(EPOCH      FROM DATE 'infinity');    --  Infinity
+- extract  
+-----------
+- Infinity
+-(1 row)
+-
++ERROR:  extract(): infinity out of range for timestamp
+ --
+ -- wrong fields from non-finite date:
+ --
+ SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- error
+-ERROR:  unit "microsec" not recognized for type date
++ERROR:  extract(): infinity out of range for timestamp
+ -- test constructors
+ select make_date(2013, 7, 15);
+  make_date  
+ ------------
+- 07-15-2013
++ 2013-07-15
+ (1 row)
+ 
+ select make_date(-44, 3, 15);
+    make_date   
+ ---------------
+- 03-15-0044 BC
++ 0045-03-15 BC
+ (1 row)
+ 
+ select make_time(8, 20, 0.0);
+- make_time 
+------------
+- 08:20:00
+-(1 row)
+-
++ERROR:  unknown function: make_time()
+ -- should fail
+ select make_date(0, 7, 15);
+-ERROR:  date field value out of range: 0-07-15
++ERROR:  make_date(): year value of 0 is not valid
+ select make_date(2013, 2, 30);
+-ERROR:  date field value out of range: 2013-02-30
++ make_date  
++------------
++ 2013-03-02
++(1 row)
++
+ select make_date(2013, 13, 1);
+-ERROR:  date field value out of range: 2013-13-01
++ make_date  
++------------
++ 2014-01-01
++(1 row)
++
+ select make_date(2013, 11, -1);
+-ERROR:  date field value out of range: 2013-11--1
++ make_date  
++------------
++ 2013-10-30
++(1 row)
++
+ select make_time(10, 55, 100.1);
+-ERROR:  time field value out of range: 10:55:100.1
++ERROR:  unknown function: make_time()
+ select make_time(24, 0, 2.1);
+-ERROR:  time field value out of range: 24:00:2.1
++ERROR:  unknown function: make_time()

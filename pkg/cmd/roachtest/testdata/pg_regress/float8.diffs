@@ -1,0 +1,866 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --label=/mnt/data1/postgres/src/test/regress/results/float8.out /mnt/data1/postgres/src/test/regress/expected/float8.out /mnt/data1/postgres/src/test/regress/results/float8.out
+--- /mnt/data1/postgres/src/test/regress/expected/float8.out
++++ /mnt/data1/postgres/src/test/regress/results/float8.out
+@@ -13,86 +13,50 @@
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('1.2345678901234e-200');
+ -- test for underflow and overflow handling
+ SELECT '10e400'::float8;
+-ERROR:  "10e400" is out of range for type double precision
+-LINE 1: SELECT '10e400'::float8;
+-               ^
++ERROR:  could not parse "10e400" as type float: strconv.ParseFloat: parsing "10e400": value out of range
+ SELECT '-10e400'::float8;
+-ERROR:  "-10e400" is out of range for type double precision
+-LINE 1: SELECT '-10e400'::float8;
+-               ^
++ERROR:  could not parse "-10e400" as type float: strconv.ParseFloat: parsing "-10e400": value out of range
+ SELECT '10e-400'::float8;
+-ERROR:  "10e-400" is out of range for type double precision
+-LINE 1: SELECT '10e-400'::float8;
+-               ^
++ float8 
++--------
++      0
++(1 row)
++
+ SELECT '-10e-400'::float8;
+-ERROR:  "-10e-400" is out of range for type double precision
+-LINE 1: SELECT '-10e-400'::float8;
+-               ^
+--- test smallest normalized input
+-SELECT float8send('2.2250738585072014E-308'::float8);
+-     float8send     
+---------------------
+- \x0010000000000000
++ float8 
++--------
++     -0
+ (1 row)
+ 
++-- test smallest normalized input
++SELECT float8send('2.2250738585072014E-308'::float8);
++ERROR:  float8send(): unimplemented
+ -- bad input
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('');
+-ERROR:  invalid input syntax for type double precision: ""
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('');
+-                                           ^
++ERROR:  could not parse "" as type float: strconv.ParseFloat: parsing "": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('     ');
+-ERROR:  invalid input syntax for type double precision: "     "
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('     ');
+-                                           ^
++ERROR:  could not parse "" as type float: strconv.ParseFloat: parsing "": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('xyz');
+-ERROR:  invalid input syntax for type double precision: "xyz"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('xyz');
+-                                           ^
++ERROR:  could not parse "xyz" as type float: strconv.ParseFloat: parsing "xyz": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('5.0.0');
+-ERROR:  invalid input syntax for type double precision: "5.0.0"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('5.0.0');
+-                                           ^
++ERROR:  could not parse "5.0.0" as type float: strconv.ParseFloat: parsing "5.0.0": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('5 . 0');
+-ERROR:  invalid input syntax for type double precision: "5 . 0"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('5 . 0');
+-                                           ^
++ERROR:  could not parse "5 . 0" as type float: strconv.ParseFloat: parsing "5 . 0": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('5.   0');
+-ERROR:  invalid input syntax for type double precision: "5.   0"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('5.   0');
+-                                           ^
++ERROR:  could not parse "5.   0" as type float: strconv.ParseFloat: parsing "5.   0": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('    - 3');
+-ERROR:  invalid input syntax for type double precision: "    - 3"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('    - 3');
+-                                           ^
++ERROR:  could not parse "- 3" as type float: strconv.ParseFloat: parsing "- 3": invalid syntax
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
+-ERROR:  invalid input syntax for type double precision: "123           5"
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
+-                                           ^
++ERROR:  could not parse "123           5" as type float: strconv.ParseFloat: parsing "123           5": invalid syntax
+ -- Also try it with non-error-throwing API
+ SELECT pg_input_is_valid('34.5', 'float8');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('xyz', 'float8');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT pg_input_is_valid('1e4000', 'float8');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ SELECT * FROM pg_input_error_info('1e4000', 'float8');
+-                      message                       | detail | hint | sql_error_code 
+-----------------------------------------------------+--------+------+----------------
+- "1e4000" is out of range for type double precision |        |      | 22003
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- special inputs
+ SELECT 'NaN'::float8;
+  float8 
+@@ -126,17 +90,11 @@
+ 
+ -- bad special inputs
+ SELECT 'N A N'::float8;
+-ERROR:  invalid input syntax for type double precision: "N A N"
+-LINE 1: SELECT 'N A N'::float8;
+-               ^
++ERROR:  could not parse "N A N" as type float: strconv.ParseFloat: parsing "N A N": invalid syntax
+ SELECT 'NaN x'::float8;
+-ERROR:  invalid input syntax for type double precision: "NaN x"
+-LINE 1: SELECT 'NaN x'::float8;
+-               ^
++ERROR:  could not parse "NaN x" as type float: strconv.ParseFloat: parsing "NaN x": invalid syntax
+ SELECT ' INFINITY    x'::float8;
+-ERROR:  invalid input syntax for type double precision: " INFINITY    x"
+-LINE 1: SELECT ' INFINITY    x'::float8;
+-               ^
++ERROR:  could not parse "INFINITY    x" as type float: strconv.ParseFloat: parsing "INFINITY    x": invalid syntax
+ SELECT 'Infinity'::float8 + 100.0;
+  ?column? 
+ ----------
+@@ -274,23 +232,18 @@
+ 
+ SELECT f.f1 ^ '2.0' AS square_f1
+    FROM FLOAT8_TBL f where f.f1 = '1004.3';
+-     square_f1      
+---------------------
+- 1008618.4899999999
++       square_f1        
++------------------------
++ 1.0086184899999999e+06
+ (1 row)
+ 
+ -- absolute value
+ SELECT f.f1, @f.f1 AS abs_f1
+    FROM FLOAT8_TBL f;
+-          f1          |        abs_f1        
+-----------------------+----------------------
+-                    0 |                    0
+-               1004.3 |               1004.3
+-               -34.84 |                34.84
+- 1.2345678901234e+200 | 1.2345678901234e+200
+- 1.2345678901234e-200 | 1.2345678901234e-200
+-(5 rows)
+-
++ERROR:  at or near "f": syntax error
++DETAIL:  source SQL:
++SELECT f.f1, @f.f1 AS abs_f1
++              ^
+ -- truncate
+ SELECT f.f1, trunc(f.f1) AS trunc_f1
+    FROM FLOAT8_TBL f;
+@@ -445,7 +398,11 @@
+ (1 row)
+ 
+ SELECT power(float8 '0', float8 '-inf');
+-ERROR:  zero raised to a negative power is undefined
++  power   
++----------
++ Infinity
++(1 row)
++
+ SELECT power(float8 '1', float8 'inf');
+  power 
+ -------
+@@ -569,7 +526,11 @@
+ (1 row)
+ 
+ SELECT power(float8 '-inf', float8 '3.5');
+-ERROR:  a negative number raised to a non-integer power yields a complex result
++  power   
++----------
++ Infinity
++(1 row)
++
+ SELECT power(float8 '-inf', float8 'inf');
+   power   
+ ----------
+@@ -631,29 +592,60 @@
+    SET f1 = FLOAT8_TBL.f1 * '-1'
+    WHERE FLOAT8_TBL.f1 > '0.0';
+ SELECT f.f1 * '1e200' from FLOAT8_TBL f;
+-ERROR:  value out of range: overflow
++     ?column?     
++------------------
++                0
++     -1.0043e+203
++      -3.484e+201
++        -Infinity
++ -1.2345678901234
++(5 rows)
++
+ SELECT f.f1 ^ '1e200' from FLOAT8_TBL f;
+-ERROR:  value out of range: overflow
+-SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
+  ?column? 
+ ----------
+-        2
+-(1 row)
++        0
++ Infinity
++ Infinity
++ Infinity
++        0
++(5 rows)
+ 
++SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
++ERROR:  integer out of range
+ SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 = '0.0' ;
+-ERROR:  cannot take logarithm of zero
++    ln     
++-----------
++ -Infinity
++(1 row)
++
+ SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 < '0.0' ;
+-ERROR:  cannot take logarithm of a negative number
++ ln  
++-----
++ NaN
++ NaN
++ NaN
++ NaN
++(4 rows)
++
+ SELECT exp(f.f1) from FLOAT8_TBL f;
+-ERROR:  value out of range: underflow
++         exp          
++----------------------
++                    1
++                    0
++ 7.39912306090513e-16
++                    0
++                    1
++(5 rows)
++
+ SELECT f.f1 / '0.0' from FLOAT8_TBL f;
+ ERROR:  division by zero
+ SELECT * FROM FLOAT8_TBL;
+           f1           
+ -----------------------
+                      0
+-                -34.84
+                -1004.3
++                -34.84
+  -1.2345678901234e+200
+  -1.2345678901234e-200
+ (5 rows)
+@@ -773,7 +765,11 @@
+ -- acosh(Inf) should be Inf, but some mingw versions produce NaN, so skip test
+ -- SELECT acosh(float8 'infinity');
+ SELECT acosh(float8 '-infinity');
+-ERROR:  input is out of range
++ acosh 
++-------
++   NaN
++(1 row)
++
+ SELECT acosh(float8 'nan');
+  acosh 
+ -------
+@@ -781,9 +777,17 @@
+ (1 row)
+ 
+ SELECT atanh(float8 'infinity');
+-ERROR:  input is out of range
++ atanh 
++-------
++   NaN
++(1 row)
++
+ SELECT atanh(float8 '-infinity');
+-ERROR:  input is out of range
++ atanh 
++-------
++   NaN
++(1 row)
++
+ SELECT atanh(float8 'nan');
+  atanh 
+ -------
+@@ -803,50 +807,15 @@
+       (1.2e-17), (2.3e-13), (1.2e-9),
+       (0.45), (1.1), (2.1), (3.4), (6), (28),
+       (float8 'infinity'), (float8 'nan')) AS t(x);
+-     x     |         erf          |        erfc         
+------------+----------------------+---------------------
+- -Infinity |                   -1 |                   2
+-       -28 |                   -1 |                   2
+-        -6 |                   -1 |                   2
+-      -3.4 |    -0.99999847800664 |     1.9999984780066
+-      -2.1 |    -0.99702053334367 |     1.9970205333437
+-      -1.1 |    -0.88020506957408 |     1.8802050695741
+-     -0.45 |    -0.47548171978692 |     1.4754817197869
+-  -1.2e-09 | -1.3540550005146e-09 |     1.0000000013541
+-  -2.3e-13 | -2.5952720843197e-13 |     1.0000000000003
+-  -1.2e-17 | -1.3540550005146e-17 |                   1
+-         0 |                    0 |                   1
+-   1.2e-17 |  1.3540550005146e-17 |                   1
+-   2.3e-13 |  2.5952720843197e-13 |    0.99999999999974
+-   1.2e-09 |  1.3540550005146e-09 |    0.99999999864595
+-      0.45 |     0.47548171978692 |    0.52451828021308
+-       1.1 |     0.88020506957408 |    0.11979493042592
+-       2.1 |     0.99702053334367 |   0.002979466656333
+-       3.4 |     0.99999847800664 | 1.5219933628623e-06
+-         6 |                    1 | 2.1519736712499e-17
+-        28 |                    1 |                   0
+-  Infinity |                    1 |                   0
+-       NaN |                  NaN |                 NaN
+-(22 rows)
+-
++ERROR:  VALUES types int and float cannot be matched
+ RESET extra_float_digits;
+ -- test for over- and underflow
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('10e400');
+-ERROR:  "10e400" is out of range for type double precision
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('10e400');
+-                                           ^
++ERROR:  could not parse "10e400" as type float: strconv.ParseFloat: parsing "10e400": value out of range
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('-10e400');
+-ERROR:  "-10e400" is out of range for type double precision
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('-10e400');
+-                                           ^
++ERROR:  could not parse "-10e400" as type float: strconv.ParseFloat: parsing "-10e400": value out of range
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('10e-400');
+-ERROR:  "10e-400" is out of range for type double precision
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('10e-400');
+-                                           ^
+ INSERT INTO FLOAT8_TBL(f1) VALUES ('-10e-400');
+-ERROR:  "-10e-400" is out of range for type double precision
+-LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('-10e-400');
+-                                           ^
+ DROP TABLE FLOAT8_TBL;
+ -- Check the float8 values exported for use by other tests
+ SELECT * FROM FLOAT8_TBL;
+@@ -867,7 +836,7 @@
+ (1 row)
+ 
+ SELECT '32767.6'::float8::int2;
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT '-32768.4'::float8::int2;
+   int2  
+ --------
+@@ -875,7 +844,7 @@
+ (1 row)
+ 
+ SELECT '-32768.6'::float8::int2;
+-ERROR:  smallint out of range
++ERROR:  integer out of range for type int2
+ SELECT '2147483647.4'::float8::int4;
+     int4    
+ ------------
+@@ -883,7 +852,7 @@
+ (1 row)
+ 
+ SELECT '2147483647.6'::float8::int4;
+-ERROR:  integer out of range
++ERROR:  integer out of range for type int4
+ SELECT '-2147483648.4'::float8::int4;
+     int4     
+ -------------
+@@ -891,7 +860,7 @@
+ (1 row)
+ 
+ SELECT '-2147483648.6'::float8::int4;
+-ERROR:  integer out of range
++ERROR:  integer out of range for type int4
+ SELECT '9223372036854773760'::float8::int8;
+         int8         
+ ---------------------
+@@ -899,52 +868,26 @@
+ (1 row)
+ 
+ SELECT '9223372036854775807'::float8::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ SELECT '-9223372036854775808.5'::float8::int8;
+-         int8         
+-----------------------
+- -9223372036854775808
+-(1 row)
+-
++ERROR:  integer out of range
+ SELECT '-9223372036854780000'::float8::int8;
+-ERROR:  bigint out of range
++ERROR:  integer out of range
+ -- test exact cases for trigonometric functions in degrees
+ SELECT x,
+        sind(x),
+        sind(x) IN (-1,-0.5,0,0.5,1) AS sind_exact
+ FROM (VALUES (0), (30), (90), (150), (180),
+       (210), (270), (330), (360)) AS t(x);
+-  x  | sind | sind_exact 
+------+------+------------
+-   0 |    0 | t
+-  30 |  0.5 | t
+-  90 |    1 | t
+- 150 |  0.5 | t
+- 180 |    0 | t
+- 210 | -0.5 | t
+- 270 |   -1 | t
+- 330 | -0.5 | t
+- 360 |    0 | t
+-(9 rows)
+-
++ERROR:  unknown signature: sind(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT x,
+        cosd(x),
+        cosd(x) IN (-1,-0.5,0,0.5,1) AS cosd_exact
+ FROM (VALUES (0), (60), (90), (120), (180),
+       (240), (270), (300), (360)) AS t(x);
+-  x  | cosd | cosd_exact 
+------+------+------------
+-   0 |    1 | t
+-  60 |  0.5 | t
+-  90 |    0 | t
+- 120 | -0.5 | t
+- 180 |   -1 | t
+- 240 | -0.5 | t
+- 270 |    0 | t
+- 300 |  0.5 | t
+- 360 |    1 | t
+-(9 rows)
+-
++ERROR:  unknown signature: cosd(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT x,
+        tand(x),
+        tand(x) IN ('-Infinity'::float8,-1,0,
+@@ -954,79 +897,117 @@
+                    1,'Infinity'::float8) AS cotd_exact
+ FROM (VALUES (0), (45), (90), (135), (180),
+       (225), (270), (315), (360)) AS t(x);
+-  x  |   tand    | tand_exact |   cotd    | cotd_exact 
+------+-----------+------------+-----------+------------
+-   0 |         0 | t          |  Infinity | t
+-  45 |         1 | t          |         1 | t
+-  90 |  Infinity | t          |         0 | t
+- 135 |        -1 | t          |        -1 | t
+- 180 |         0 | t          | -Infinity | t
+- 225 |         1 | t          |         1 | t
+- 270 | -Infinity | t          |         0 | t
+- 315 |        -1 | t          |        -1 | t
+- 360 |         0 | t          |  Infinity | t
+-(9 rows)
+-
++ERROR:  unknown signature: tand(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ SELECT x,
+        asind(x),
+        asind(x) IN (-90,-30,0,30,90) AS asind_exact,
+        acosd(x),
+        acosd(x) IN (0,60,90,120,180) AS acosd_exact
+ FROM (VALUES (-1), (-0.5), (0), (0.5), (1)) AS t(x);
+-  x   | asind | asind_exact | acosd | acosd_exact 
+-------+-------+-------------+-------+-------------
+-   -1 |   -90 | t           |   180 | t
+- -0.5 |   -30 | t           |   120 | t
+-    0 |     0 | t           |    90 | t
+-  0.5 |    30 | t           |    60 | t
+-    1 |    90 | t           |     0 | t
+-(5 rows)
+-
++ERROR:  VALUES types decimal and int cannot be matched
+ SELECT x,
+        atand(x),
+        atand(x) IN (-90,-45,0,45,90) AS atand_exact
+ FROM (VALUES ('-Infinity'::float8), (-1), (0), (1),
+       ('Infinity'::float8)) AS t(x);
+-     x     | atand | atand_exact 
+------------+-------+-------------
+- -Infinity |   -90 | t
+-        -1 |   -45 | t
+-         0 |     0 | t
+-         1 |    45 | t
+-  Infinity |    90 | t
+-(5 rows)
+-
++ERROR:  VALUES types int and float cannot be matched
+ SELECT x, y,
+        atan2d(y, x),
+        atan2d(y, x) IN (-90,0,90,180) AS atan2d_exact
+ FROM (SELECT 10*cosd(a), 10*sind(a)
+       FROM generate_series(0, 360, 90) AS t(a)) AS t(x,y);
+-  x  |  y  | atan2d | atan2d_exact 
+------+-----+--------+--------------
+-  10 |   0 |      0 | t
+-   0 |  10 |     90 | t
+- -10 |   0 |    180 | t
+-   0 | -10 |    -90 | t
+-  10 |   0 |      0 | t
+-(5 rows)
+-
++ERROR:  unknown signature: cosd(int)
++HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ --
+ -- test output (and round-trip safety) of various values.
+ -- To ensure we're testing what we think we're testing, start with
+ -- float values specified by bit patterns (as a useful side effect,
+ -- this means we'll fail on non-IEEE platforms).
+ create type xfloat8;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type xfloat8
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create function xfloat8in(cstring) returns xfloat8 immutable strict
+   language internal as 'int8in';
+-NOTICE:  return type xfloat8 is only a shell
++ERROR:  language "internal" does not exist
+ create function xfloat8out(xfloat8) returns cstring immutable strict
+   language internal as 'int8out';
+-NOTICE:  argument type xfloat8 is only a shell
++ERROR:  language "internal" does not exist
+ create type xfloat8 (input = xfloat8in, output = xfloat8out, like = float8);
++ERROR:  at or near "input": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type xfloat8 (input = xfloat8in, output = xfloat8out, like = float8)
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create cast (xfloat8 as float8) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (xfloat8 as float8) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (float8 as xfloat8) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (float8 as xfloat8) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (xfloat8 as bigint) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (xfloat8 as bigint) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (bigint as xfloat8) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (bigint as xfloat8) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- float8: seeeeeee eeeeeeee eeeeeeee mmmmmmmm mmmmmmmm(x4)
+ -- we don't care to assume the platform's strtod() handles subnormals
+ -- correctly; those are "use at your own risk". However we do test
+@@ -1051,28 +1032,7 @@
+   from (select bits::bigint::xfloat8::float8 as flt
+           from testdata
+ 	offset 0) s;
+-       ibits        |           flt           
+---------------------+-------------------------
+- \x0000000000000001 |                  5e-324
+- \x0000000000000002 |                  1e-323
+- \x0000000000000003 |                1.5e-323
+- \x0000000000001000 |             2.0237e-320
+- \x0000000100000000 |        2.121995791e-314
+- \x0000010000000000 |      5.43230922487e-312
+- \x0000010100000000 |      5.45352918278e-312
+- \x0000400000000000 |    3.4766779039175e-310
+- \x0000400100000000 |    3.4768901034966e-310
+- \x0000800000000000 |     6.953355807835e-310
+- \x0000800000000001 |   6.95335580783505e-310
+- \x00000000000f4240 |           4.940656e-318
+- \x00000000016e3600 |         1.18575755e-316
+- \x0000008cdcdea440 |     2.989102097996e-312
+- \x000ffffffffffff0 | 2.2250738585071935e-308
+- \x000ffffffffffff1 |  2.225073858507194e-308
+- \x000ffffffffffffe | 2.2250738585072004e-308
+- \x000fffffffffffff |  2.225073858507201e-308
+-(18 rows)
+-
++ERROR:  type "xfloat8" does not exist
+ -- round-trip tests
+ with testdata(bits) as (values
+   (x'0000000000000000'),
+@@ -1220,225 +1180,9 @@
+   from (select bits::bigint::xfloat8::float8 as flt
+           from testdata
+ 	offset 0) s;
+-       ibits        |           flt           |          r_flt          |       obits        | correct 
+---------------------+-------------------------+-------------------------+--------------------+---------
+- \x0000000000000000 |                       0 |                       0 | \x0000000000000000 | t
+- \x0010000000000000 | 2.2250738585072014e-308 | 2.2250738585072014e-308 | \x0010000000000000 | t
+- \x0010000000000001 |  2.225073858507202e-308 |  2.225073858507202e-308 | \x0010000000000001 | t
+- \x0010000000000002 | 2.2250738585072024e-308 | 2.2250738585072024e-308 | \x0010000000000002 | t
+- \x0018000000000000 |  3.337610787760802e-308 |  3.337610787760802e-308 | \x0018000000000000 | t
+- \x3ddb7cdfd9d7bdba |   9.999999999999999e-11 |   9.999999999999999e-11 | \x3ddb7cdfd9d7bdba | t
+- \x3ddb7cdfd9d7bdbb |                   1e-10 |                   1e-10 | \x3ddb7cdfd9d7bdbb | t
+- \x3ddb7cdfd9d7bdbc |  1.0000000000000002e-10 |  1.0000000000000002e-10 | \x3ddb7cdfd9d7bdbc | t
+- \x3e112e0be826d694 |   9.999999999999999e-10 |   9.999999999999999e-10 | \x3e112e0be826d694 | t
+- \x3e112e0be826d695 |                   1e-09 |                   1e-09 | \x3e112e0be826d695 | t
+- \x3e112e0be826d696 |  1.0000000000000003e-09 |  1.0000000000000003e-09 | \x3e112e0be826d696 | t
+- \x3e45798ee2308c39 |   9.999999999999999e-09 |   9.999999999999999e-09 | \x3e45798ee2308c39 | t
+- \x3e45798ee2308c3a |                   1e-08 |                   1e-08 | \x3e45798ee2308c3a | t
+- \x3e45798ee2308c3b |  1.0000000000000002e-08 |  1.0000000000000002e-08 | \x3e45798ee2308c3b | t
+- \x3e7ad7f29abcaf47 |   9.999999999999998e-08 |   9.999999999999998e-08 | \x3e7ad7f29abcaf47 | t
+- \x3e7ad7f29abcaf48 |                   1e-07 |                   1e-07 | \x3e7ad7f29abcaf48 | t
+- \x3e7ad7f29abcaf49 |  1.0000000000000001e-07 |  1.0000000000000001e-07 | \x3e7ad7f29abcaf49 | t
+- \x3eb0c6f7a0b5ed8c |   9.999999999999997e-07 |   9.999999999999997e-07 | \x3eb0c6f7a0b5ed8c | t
+- \x3eb0c6f7a0b5ed8d |                   1e-06 |                   1e-06 | \x3eb0c6f7a0b5ed8d | t
+- \x3eb0c6f7a0b5ed8e |  1.0000000000000002e-06 |  1.0000000000000002e-06 | \x3eb0c6f7a0b5ed8e | t
+- \x3ee4f8b588e368ef |   9.999999999999997e-06 |   9.999999999999997e-06 | \x3ee4f8b588e368ef | t
+- \x3ee4f8b588e368f0 |   9.999999999999999e-06 |   9.999999999999999e-06 | \x3ee4f8b588e368f0 | t
+- \x3ee4f8b588e368f1 |                   1e-05 |                   1e-05 | \x3ee4f8b588e368f1 | t
+- \x3f1a36e2eb1c432c |   9.999999999999999e-05 |   9.999999999999999e-05 | \x3f1a36e2eb1c432c | t
+- \x3f1a36e2eb1c432d |                  0.0001 |                  0.0001 | \x3f1a36e2eb1c432d | t
+- \x3f1a36e2eb1c432e |  0.00010000000000000002 |  0.00010000000000000002 | \x3f1a36e2eb1c432e | t
+- \x3f50624dd2f1a9fb |   0.0009999999999999998 |   0.0009999999999999998 | \x3f50624dd2f1a9fb | t
+- \x3f50624dd2f1a9fc |                   0.001 |                   0.001 | \x3f50624dd2f1a9fc | t
+- \x3f50624dd2f1a9fd |   0.0010000000000000002 |   0.0010000000000000002 | \x3f50624dd2f1a9fd | t
+- \x3f847ae147ae147a |    0.009999999999999998 |    0.009999999999999998 | \x3f847ae147ae147a | t
+- \x3f847ae147ae147b |                    0.01 |                    0.01 | \x3f847ae147ae147b | t
+- \x3f847ae147ae147c |    0.010000000000000002 |    0.010000000000000002 | \x3f847ae147ae147c | t
+- \x3fb9999999999999 |     0.09999999999999999 |     0.09999999999999999 | \x3fb9999999999999 | t
+- \x3fb999999999999a |                     0.1 |                     0.1 | \x3fb999999999999a | t
+- \x3fb999999999999b |     0.10000000000000002 |     0.10000000000000002 | \x3fb999999999999b | t
+- \x3feffffffffffff0 |      0.9999999999999982 |      0.9999999999999982 | \x3feffffffffffff0 | t
+- \x3feffffffffffff1 |      0.9999999999999983 |      0.9999999999999983 | \x3feffffffffffff1 | t
+- \x3feffffffffffff2 |      0.9999999999999984 |      0.9999999999999984 | \x3feffffffffffff2 | t
+- \x3feffffffffffff3 |      0.9999999999999986 |      0.9999999999999986 | \x3feffffffffffff3 | t
+- \x3feffffffffffff4 |      0.9999999999999987 |      0.9999999999999987 | \x3feffffffffffff4 | t
+- \x3feffffffffffff5 |      0.9999999999999988 |      0.9999999999999988 | \x3feffffffffffff5 | t
+- \x3feffffffffffff6 |      0.9999999999999989 |      0.9999999999999989 | \x3feffffffffffff6 | t
+- \x3feffffffffffff7 |       0.999999999999999 |       0.999999999999999 | \x3feffffffffffff7 | t
+- \x3feffffffffffff8 |      0.9999999999999991 |      0.9999999999999991 | \x3feffffffffffff8 | t
+- \x3feffffffffffff9 |      0.9999999999999992 |      0.9999999999999992 | \x3feffffffffffff9 | t
+- \x3feffffffffffffa |      0.9999999999999993 |      0.9999999999999993 | \x3feffffffffffffa | t
+- \x3feffffffffffffb |      0.9999999999999994 |      0.9999999999999994 | \x3feffffffffffffb | t
+- \x3feffffffffffffc |      0.9999999999999996 |      0.9999999999999996 | \x3feffffffffffffc | t
+- \x3feffffffffffffd |      0.9999999999999997 |      0.9999999999999997 | \x3feffffffffffffd | t
+- \x3feffffffffffffe |      0.9999999999999998 |      0.9999999999999998 | \x3feffffffffffffe | t
+- \x3fefffffffffffff |      0.9999999999999999 |      0.9999999999999999 | \x3fefffffffffffff | t
+- \x3ff0000000000000 |                       1 |                       1 | \x3ff0000000000000 | t
+- \x3ff0000000000001 |      1.0000000000000002 |      1.0000000000000002 | \x3ff0000000000001 | t
+- \x3ff0000000000002 |      1.0000000000000004 |      1.0000000000000004 | \x3ff0000000000002 | t
+- \x3ff0000000000003 |      1.0000000000000007 |      1.0000000000000007 | \x3ff0000000000003 | t
+- \x3ff0000000000004 |      1.0000000000000009 |      1.0000000000000009 | \x3ff0000000000004 | t
+- \x3ff0000000000005 |       1.000000000000001 |       1.000000000000001 | \x3ff0000000000005 | t
+- \x3ff0000000000006 |      1.0000000000000013 |      1.0000000000000013 | \x3ff0000000000006 | t
+- \x3ff0000000000007 |      1.0000000000000016 |      1.0000000000000016 | \x3ff0000000000007 | t
+- \x3ff0000000000008 |      1.0000000000000018 |      1.0000000000000018 | \x3ff0000000000008 | t
+- \x3ff0000000000009 |       1.000000000000002 |       1.000000000000002 | \x3ff0000000000009 | t
+- \x3ff921fb54442d18 |      1.5707963267948966 |      1.5707963267948966 | \x3ff921fb54442d18 | t
+- \x4005bf0a8b14576a |      2.7182818284590455 |      2.7182818284590455 | \x4005bf0a8b14576a | t
+- \x400921fb54442d18 |       3.141592653589793 |       3.141592653589793 | \x400921fb54442d18 | t
+- \x4023ffffffffffff |       9.999999999999998 |       9.999999999999998 | \x4023ffffffffffff | t
+- \x4024000000000000 |                      10 |                      10 | \x4024000000000000 | t
+- \x4024000000000001 |      10.000000000000002 |      10.000000000000002 | \x4024000000000001 | t
+- \x4058ffffffffffff |       99.99999999999999 |       99.99999999999999 | \x4058ffffffffffff | t
+- \x4059000000000000 |                     100 |                     100 | \x4059000000000000 | t
+- \x4059000000000001 |      100.00000000000001 |      100.00000000000001 | \x4059000000000001 | t
+- \x408f3fffffffffff |       999.9999999999999 |       999.9999999999999 | \x408f3fffffffffff | t
+- \x408f400000000000 |                    1000 |                    1000 | \x408f400000000000 | t
+- \x408f400000000001 |      1000.0000000000001 |      1000.0000000000001 | \x408f400000000001 | t
+- \x40c387ffffffffff |       9999.999999999998 |       9999.999999999998 | \x40c387ffffffffff | t
+- \x40c3880000000000 |                   10000 |                   10000 | \x40c3880000000000 | t
+- \x40c3880000000001 |      10000.000000000002 |      10000.000000000002 | \x40c3880000000001 | t
+- \x40f869ffffffffff |       99999.99999999999 |       99999.99999999999 | \x40f869ffffffffff | t
+- \x40f86a0000000000 |                  100000 |                  100000 | \x40f86a0000000000 | t
+- \x40f86a0000000001 |      100000.00000000001 |      100000.00000000001 | \x40f86a0000000001 | t
+- \x412e847fffffffff |       999999.9999999999 |       999999.9999999999 | \x412e847fffffffff | t
+- \x412e848000000000 |                 1000000 |                 1000000 | \x412e848000000000 | t
+- \x412e848000000001 |      1000000.0000000001 |      1000000.0000000001 | \x412e848000000001 | t
+- \x416312cfffffffff |       9999999.999999998 |       9999999.999999998 | \x416312cfffffffff | t
+- \x416312d000000000 |                10000000 |                10000000 | \x416312d000000000 | t
+- \x416312d000000001 |      10000000.000000002 |      10000000.000000002 | \x416312d000000001 | t
+- \x4197d783ffffffff |       99999999.99999999 |       99999999.99999999 | \x4197d783ffffffff | t
+- \x4197d78400000000 |               100000000 |               100000000 | \x4197d78400000000 | t
+- \x4197d78400000001 |      100000000.00000001 |      100000000.00000001 | \x4197d78400000001 | t
+- \x41cdcd64ffffffff |       999999999.9999999 |       999999999.9999999 | \x41cdcd64ffffffff | t
+- \x41cdcd6500000000 |              1000000000 |              1000000000 | \x41cdcd6500000000 | t
+- \x41cdcd6500000001 |      1000000000.0000001 |      1000000000.0000001 | \x41cdcd6500000001 | t
+- \x4202a05f1fffffff |       9999999999.999998 |       9999999999.999998 | \x4202a05f1fffffff | t
+- \x4202a05f20000000 |             10000000000 |             10000000000 | \x4202a05f20000000 | t
+- \x4202a05f20000001 |      10000000000.000002 |      10000000000.000002 | \x4202a05f20000001 | t
+- \x42374876e7ffffff |       99999999999.99998 |       99999999999.99998 | \x42374876e7ffffff | t
+- \x42374876e8000000 |            100000000000 |            100000000000 | \x42374876e8000000 | t
+- \x42374876e8000001 |      100000000000.00002 |      100000000000.00002 | \x42374876e8000001 | t
+- \x426d1a94a1ffffff |       999999999999.9999 |       999999999999.9999 | \x426d1a94a1ffffff | t
+- \x426d1a94a2000000 |           1000000000000 |           1000000000000 | \x426d1a94a2000000 | t
+- \x426d1a94a2000001 |      1000000000000.0001 |      1000000000000.0001 | \x426d1a94a2000001 | t
+- \x42a2309ce53fffff |       9999999999999.998 |       9999999999999.998 | \x42a2309ce53fffff | t
+- \x42a2309ce5400000 |          10000000000000 |          10000000000000 | \x42a2309ce5400000 | t
+- \x42a2309ce5400001 |      10000000000000.002 |      10000000000000.002 | \x42a2309ce5400001 | t
+- \x42d6bcc41e8fffff |       99999999999999.98 |       99999999999999.98 | \x42d6bcc41e8fffff | t
+- \x42d6bcc41e900000 |         100000000000000 |         100000000000000 | \x42d6bcc41e900000 | t
+- \x42d6bcc41e900001 |      100000000000000.02 |      100000000000000.02 | \x42d6bcc41e900001 | t
+- \x430c6bf52633ffff |       999999999999999.9 |       999999999999999.9 | \x430c6bf52633ffff | t
+- \x430c6bf526340000 |                   1e+15 |                   1e+15 | \x430c6bf526340000 | t
+- \x430c6bf526340001 |  1.0000000000000001e+15 |  1.0000000000000001e+15 | \x430c6bf526340001 | t
+- \x4341c37937e07fff |   9.999999999999998e+15 |   9.999999999999998e+15 | \x4341c37937e07fff | t
+- \x4341c37937e08000 |                   1e+16 |                   1e+16 | \x4341c37937e08000 | t
+- \x4341c37937e08001 |  1.0000000000000002e+16 |  1.0000000000000002e+16 | \x4341c37937e08001 | t
+- \x4376345785d89fff |   9.999999999999998e+16 |   9.999999999999998e+16 | \x4376345785d89fff | t
+- \x4376345785d8a000 |                   1e+17 |                   1e+17 | \x4376345785d8a000 | t
+- \x4376345785d8a001 |  1.0000000000000002e+17 |  1.0000000000000002e+17 | \x4376345785d8a001 | t
+- \x43abc16d674ec7ff |   9.999999999999999e+17 |   9.999999999999999e+17 | \x43abc16d674ec7ff | t
+- \x43abc16d674ec800 |                   1e+18 |                   1e+18 | \x43abc16d674ec800 | t
+- \x43abc16d674ec801 |  1.0000000000000001e+18 |  1.0000000000000001e+18 | \x43abc16d674ec801 | t
+- \x43e158e460913cff |   9.999999999999998e+18 |   9.999999999999998e+18 | \x43e158e460913cff | t
+- \x43e158e460913d00 |                   1e+19 |                   1e+19 | \x43e158e460913d00 | t
+- \x43e158e460913d01 |  1.0000000000000002e+19 |  1.0000000000000002e+19 | \x43e158e460913d01 | t
+- \x4415af1d78b58c3f |   9.999999999999998e+19 |   9.999999999999998e+19 | \x4415af1d78b58c3f | t
+- \x4415af1d78b58c40 |                   1e+20 |                   1e+20 | \x4415af1d78b58c40 | t
+- \x4415af1d78b58c41 |  1.0000000000000002e+20 |  1.0000000000000002e+20 | \x4415af1d78b58c41 | t
+- \x444b1ae4d6e2ef4f |   9.999999999999999e+20 |   9.999999999999999e+20 | \x444b1ae4d6e2ef4f | t
+- \x444b1ae4d6e2ef50 |                   1e+21 |                   1e+21 | \x444b1ae4d6e2ef50 | t
+- \x444b1ae4d6e2ef51 |  1.0000000000000001e+21 |  1.0000000000000001e+21 | \x444b1ae4d6e2ef51 | t
+- \x4480f0cf064dd591 |   9.999999999999998e+21 |   9.999999999999998e+21 | \x4480f0cf064dd591 | t
+- \x4480f0cf064dd592 |                   1e+22 |                   1e+22 | \x4480f0cf064dd592 | t
+- \x4480f0cf064dd593 |  1.0000000000000002e+22 |  1.0000000000000002e+22 | \x4480f0cf064dd593 | t
+- \x44b52d02c7e14af5 |   9.999999999999997e+22 |   9.999999999999997e+22 | \x44b52d02c7e14af5 | t
+- \x44b52d02c7e14af6 |   9.999999999999999e+22 |   9.999999999999999e+22 | \x44b52d02c7e14af6 | t
+- \x44b52d02c7e14af7 |  1.0000000000000001e+23 |  1.0000000000000001e+23 | \x44b52d02c7e14af7 | t
+- \x44ea784379d99db3 |   9.999999999999998e+23 |   9.999999999999998e+23 | \x44ea784379d99db3 | t
+- \x44ea784379d99db4 |                   1e+24 |                   1e+24 | \x44ea784379d99db4 | t
+- \x44ea784379d99db5 |  1.0000000000000001e+24 |  1.0000000000000001e+24 | \x44ea784379d99db5 | t
+- \x45208b2a2c280290 |   9.999999999999999e+24 |   9.999999999999999e+24 | \x45208b2a2c280290 | t
+- \x45208b2a2c280291 |                   1e+25 |                   1e+25 | \x45208b2a2c280291 | t
+- \x45208b2a2c280292 |  1.0000000000000003e+25 |  1.0000000000000003e+25 | \x45208b2a2c280292 | t
+- \x7feffffffffffffe | 1.7976931348623155e+308 | 1.7976931348623155e+308 | \x7feffffffffffffe | t
+- \x7fefffffffffffff | 1.7976931348623157e+308 | 1.7976931348623157e+308 | \x7fefffffffffffff | t
+- \x4350000000000002 |  1.8014398509481992e+16 |  1.8014398509481992e+16 | \x4350000000000002 | t
+- \x4350000000002e06 |  1.8014398509529112e+16 |  1.8014398509529112e+16 | \x4350000000002e06 | t
+- \x4352000000000003 |  2.0266198323167244e+16 |  2.0266198323167244e+16 | \x4352000000000003 | t
+- \x4352000000000004 |  2.0266198323167248e+16 |  2.0266198323167248e+16 | \x4352000000000004 | t
+- \x4358000000000003 |  2.7021597764222988e+16 |  2.7021597764222988e+16 | \x4358000000000003 | t
+- \x4358000000000004 |  2.7021597764222992e+16 |  2.7021597764222992e+16 | \x4358000000000004 | t
+- \x435f000000000020 |  3.4902897112121472e+16 |  3.4902897112121472e+16 | \x435f000000000020 | t
+- \xc350000000000002 | -1.8014398509481992e+16 | -1.8014398509481992e+16 | \xc350000000000002 | t
+- \xc350000000002e06 | -1.8014398509529112e+16 | -1.8014398509529112e+16 | \xc350000000002e06 | t
+- \xc352000000000003 | -2.0266198323167244e+16 | -2.0266198323167244e+16 | \xc352000000000003 | t
+- \xc352000000000004 | -2.0266198323167248e+16 | -2.0266198323167248e+16 | \xc352000000000004 | t
+- \xc358000000000003 | -2.7021597764222988e+16 | -2.7021597764222988e+16 | \xc358000000000003 | t
+- \xc358000000000004 | -2.7021597764222992e+16 | -2.7021597764222992e+16 | \xc358000000000004 | t
+- \xc35f000000000020 | -3.4902897112121472e+16 | -3.4902897112121472e+16 | \xc35f000000000020 | t
+- \x42dc12218377de66 |       123456789012345.6 |       123456789012345.6 | \x42dc12218377de66 | t
+- \x42a674e79c5fe51f |       12345678901234.56 |       12345678901234.56 | \x42a674e79c5fe51f | t
+- \x4271f71fb04cb74c |       1234567890123.456 |       1234567890123.456 | \x4271f71fb04cb74c | t
+- \x423cbe991a145879 |       123456789012.3456 |       123456789012.3456 | \x423cbe991a145879 | t
+- \x4206fee0e1a9e061 |       12345678901.23456 |       12345678901.23456 | \x4206fee0e1a9e061 | t
+- \x41d26580b487e6b4 |       1234567890.123456 |       1234567890.123456 | \x41d26580b487e6b4 | t
+- \x419d6f34540ca453 |       123456789.0123456 |       123456789.0123456 | \x419d6f34540ca453 | t
+- \x41678c29dcd6e9dc |       12345678.90123456 |       12345678.90123456 | \x41678c29dcd6e9dc | t
+- \x4132d687e3df217d |       1234567.890123456 |       1234567.890123456 | \x4132d687e3df217d | t
+- \x40fe240c9fcb68c8 |       123456.7890123456 |       123456.7890123456 | \x40fe240c9fcb68c8 | t
+- \x40c81cd6e63c53d3 |       12345.67890123456 |       12345.67890123456 | \x40c81cd6e63c53d3 | t
+- \x40934a4584fd0fdc |       1234.567890123456 |       1234.567890123456 | \x40934a4584fd0fdc | t
+- \x405edd3c07fb4c93 |       123.4567890123456 |       123.4567890123456 | \x405edd3c07fb4c93 | t
+- \x4028b0fcd32f7076 |       12.34567890123456 |       12.34567890123456 | \x4028b0fcd32f7076 | t
+- \x3ff3c0ca428c59f8 |       1.234567890123456 |       1.234567890123456 | \x3ff3c0ca428c59f8 | t
+- \x3e60000000000000 |  2.9802322387695312e-08 |  2.9802322387695312e-08 | \x3e60000000000000 | t
+- \xc352bd2668e077c4 | -2.1098088986959632e+16 | -2.1098088986959632e+16 | \xc352bd2668e077c4 | t
+- \x434018601510c000 |     9.0608011534336e+15 |     9.0608011534336e+15 | \x434018601510c000 | t
+- \x43d055dc36f24000 |   4.708356024711512e+18 |   4.708356024711512e+18 | \x43d055dc36f24000 | t
+- \x43e052961c6f8000 |   9.409340012568248e+18 |   9.409340012568248e+18 | \x43e052961c6f8000 | t
+- \x3ff3c0ca2a5b1d5d |               1.2345678 |               1.2345678 | \x3ff3c0ca2a5b1d5d | t
+- \x4830f0cf064dd592 |   5.764607523034235e+39 |   5.764607523034235e+39 | \x4830f0cf064dd592 | t
+- \x4840f0cf064dd592 |   1.152921504606847e+40 |   1.152921504606847e+40 | \x4840f0cf064dd592 | t
+- \x4850f0cf064dd592 |   2.305843009213694e+40 |   2.305843009213694e+40 | \x4850f0cf064dd592 | t
+- \x3ff3333333333333 |                     1.2 |                     1.2 | \x3ff3333333333333 | t
+- \x3ff3ae147ae147ae |                    1.23 |                    1.23 | \x3ff3ae147ae147ae | t
+- \x3ff3be76c8b43958 |                   1.234 |                   1.234 | \x3ff3be76c8b43958 | t
+- \x3ff3c083126e978d |                  1.2345 |                  1.2345 | \x3ff3c083126e978d | t
+- \x3ff3c0c1fc8f3238 |                 1.23456 |                 1.23456 | \x3ff3c0c1fc8f3238 | t
+- \x3ff3c0c9539b8887 |                1.234567 |                1.234567 | \x3ff3c0c9539b8887 | t
+- \x3ff3c0ca2a5b1d5d |               1.2345678 |               1.2345678 | \x3ff3c0ca2a5b1d5d | t
+- \x3ff3c0ca4283de1b |              1.23456789 |              1.23456789 | \x3ff3c0ca4283de1b | t
+- \x3ff3c0ca43db770a |             1.234567895 |             1.234567895 | \x3ff3c0ca43db770a | t
+- \x3ff3c0ca428abd53 |            1.2345678901 |            1.2345678901 | \x3ff3c0ca428abd53 | t
+- \x3ff3c0ca428c1d2b |           1.23456789012 |           1.23456789012 | \x3ff3c0ca428c1d2b | t
+- \x3ff3c0ca428c51f2 |          1.234567890123 |          1.234567890123 | \x3ff3c0ca428c51f2 | t
+- \x3ff3c0ca428c58fc |         1.2345678901234 |         1.2345678901234 | \x3ff3c0ca428c58fc | t
+- \x3ff3c0ca428c59dd |        1.23456789012345 |        1.23456789012345 | \x3ff3c0ca428c59dd | t
+- \x3ff3c0ca428c59f8 |       1.234567890123456 |       1.234567890123456 | \x3ff3c0ca428c59f8 | t
+- \x3ff3c0ca428c59fb |      1.2345678901234567 |      1.2345678901234567 | \x3ff3c0ca428c59fb | t
+- \x40112e0be8047a7d |             4.294967294 |             4.294967294 | \x40112e0be8047a7d | t
+- \x40112e0be815a889 |             4.294967295 |             4.294967295 | \x40112e0be815a889 | t
+- \x40112e0be826d695 |             4.294967296 |             4.294967296 | \x40112e0be826d695 | t
+- \x40112e0be83804a1 |             4.294967297 |             4.294967297 | \x40112e0be83804a1 | t
+- \x40112e0be84932ad |             4.294967298 |             4.294967298 | \x40112e0be84932ad | t
+- \x0040000000000000 | 1.7800590868057611e-307 | 1.7800590868057611e-307 | \x0040000000000000 | t
+- \x007fffffffffffff | 2.8480945388892175e-306 | 2.8480945388892175e-306 | \x007fffffffffffff | t
+- \x0290000000000000 |  2.446494580089078e-296 |  2.446494580089078e-296 | \x0290000000000000 | t
+- \x029fffffffffffff | 4.8929891601781557e-296 | 4.8929891601781557e-296 | \x029fffffffffffff | t
+- \x4350000000000000 |  1.8014398509481984e+16 |  1.8014398509481984e+16 | \x4350000000000000 | t
+- \x435fffffffffffff |  3.6028797018963964e+16 |  3.6028797018963964e+16 | \x435fffffffffffff | t
+- \x1330000000000000 |  2.900835519859558e-216 |  2.900835519859558e-216 | \x1330000000000000 | t
+- \x133fffffffffffff |  5.801671039719115e-216 |  5.801671039719115e-216 | \x133fffffffffffff | t
+- \x3a6fa7161a4d6e0c |   3.196104012172126e-27 |   3.196104012172126e-27 | \x3a6fa7161a4d6e0c | t
+-(209 rows)
+-
++ERROR:  type "xfloat8" does not exist
+ -- clean up, lest opr_sanity complain
+ drop type xfloat8 cascade;
+-NOTICE:  drop cascades to 6 other objects
+-DETAIL:  drop cascades to function xfloat8in(cstring)
+-drop cascades to function xfloat8out(xfloat8)
+-drop cascades to cast from xfloat8 to double precision
+-drop cascades to cast from double precision to xfloat8
+-drop cascades to cast from xfloat8 to bigint
+-drop cascades to cast from bigint to xfloat8
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_

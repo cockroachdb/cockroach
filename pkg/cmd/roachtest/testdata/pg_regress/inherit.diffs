@@ -1,0 +1,4392 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --label=/mnt/data1/postgres/src/test/regress/results/inherit.out /mnt/data1/postgres/src/test/regress/expected/inherit.out /mnt/data1/postgres/src/test/regress/results/inherit.out
+--- /mnt/data1/postgres/src/test/regress/expected/inherit.out
++++ /mnt/data1/postgres/src/test/regress/results/inherit.out
+@@ -3,10 +3,26 @@
+ --
+ CREATE TABLE a (aa TEXT);
+ CREATE TABLE b (bb TEXT) INHERITS (a);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE b (bb TEXT) INHERITS (a)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE c (cc TEXT) INHERITS (a);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE c (cc TEXT) INHERITS (a)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE d (dd TEXT) INHERITS (b,c,a);
+-NOTICE:  merging multiple inherited definitions of column "aa"
+-NOTICE:  merging multiple inherited definitions of column "aa"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE d (dd TEXT) INHERITS (b,c,a)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO a(aa) VALUES('aaa');
+ INSERT INTO a(aa) VALUES('aaaa');
+ INSERT INTO a(aa) VALUES('aaaaa');
+@@ -14,23 +30,41 @@
+ INSERT INTO a(aa) VALUES('aaaaaaa');
+ INSERT INTO a(aa) VALUES('aaaaaaaa');
+ INSERT INTO b(aa) VALUES('bbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO b(aa) VALUES('bbbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO b(aa) VALUES('bbbbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO b(aa) VALUES('bbbbbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO b(aa) VALUES('bbbbbbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO b(aa) VALUES('bbbbbbbb');
++ERROR:  relation "b" does not exist
+ INSERT INTO c(aa) VALUES('ccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO c(aa) VALUES('cccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO c(aa) VALUES('ccccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO c(aa) VALUES('cccccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO c(aa) VALUES('ccccccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO c(aa) VALUES('cccccccc');
++ERROR:  relation "c" does not exist
+ INSERT INTO d(aa) VALUES('ddd');
++ERROR:  relation "d" does not exist
+ INSERT INTO d(aa) VALUES('dddd');
++ERROR:  relation "d" does not exist
+ INSERT INTO d(aa) VALUES('ddddd');
++ERROR:  relation "d" does not exist
+ INSERT INTO d(aa) VALUES('dddddd');
++ERROR:  relation "d" does not exist
+ INSERT INTO d(aa) VALUES('ddddddd');
++ERROR:  relation "d" does not exist
+ INSERT INTO d(aa) VALUES('dddddddd');
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM a, pg_class where a.tableoid = pg_class.oid;
+  relname |    aa    
+ ---------+----------
+@@ -40,71 +74,14 @@
+  a       | aaaaaa
+  a       | aaaaaaa
+  a       | aaaaaaaa
+- b       | bbb
+- b       | bbbb
+- b       | bbbbb
+- b       | bbbbbb
+- b       | bbbbbbb
+- b       | bbbbbbbb
+- c       | ccc
+- c       | cccc
+- c       | ccccc
+- c       | cccccc
+- c       | ccccccc
+- c       | cccccccc
+- d       | ddd
+- d       | dddd
+- d       | ddddd
+- d       | dddddd
+- d       | ddddddd
+- d       | dddddddd
+-(24 rows)
++(6 rows)
+ 
+ SELECT relname, b.* FROM b, pg_class where b.tableoid = pg_class.oid;
+- relname |    aa    | bb 
+----------+----------+----
+- b       | bbb      | 
+- b       | bbbb     | 
+- b       | bbbbb    | 
+- b       | bbbbbb   | 
+- b       | bbbbbbb  | 
+- b       | bbbbbbbb | 
+- d       | ddd      | 
+- d       | dddd     | 
+- d       | ddddd    | 
+- d       | dddddd   | 
+- d       | ddddddd  | 
+- d       | dddddddd | 
+-(12 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+- d       | ddd      | 
+- d       | dddd     | 
+- d       | ddddd    | 
+- d       | dddddd   | 
+- d       | ddddddd  | 
+- d       | dddddddd | 
+-(12 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM d, pg_class where d.tableoid = pg_class.oid;
+- relname |    aa    | bb | cc | dd 
+----------+----------+----+----+----
+- d       | ddd      |    |    | 
+- d       | dddd     |    |    | 
+- d       | ddddd    |    |    | 
+- d       | dddddd   |    |    | 
+- d       | ddddddd  |    |    | 
+- d       | dddddddd |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM ONLY a, pg_class where a.tableoid = pg_class.oid;
+  relname |    aa    
+ ---------+----------
+@@ -117,282 +94,91 @@
+ (6 rows)
+ 
+ SELECT relname, b.* FROM ONLY b, pg_class where b.tableoid = pg_class.oid;
+- relname |    aa    | bb 
+----------+----------+----
+- b       | bbb      | 
+- b       | bbbb     | 
+- b       | bbbbb    | 
+- b       | bbbbbb   | 
+- b       | bbbbbbb  | 
+- b       | bbbbbbbb | 
+-(6 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM ONLY c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+-(6 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM ONLY d, pg_class where d.tableoid = pg_class.oid;
+- relname |    aa    | bb | cc | dd 
+----------+----------+----+----+----
+- d       | ddd      |    |    | 
+- d       | dddd     |    |    | 
+- d       | ddddd    |    |    | 
+- d       | dddddd   |    |    | 
+- d       | ddddddd  |    |    | 
+- d       | dddddddd |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ UPDATE a SET aa='zzzz' WHERE aa='aaaa';
+ UPDATE ONLY a SET aa='zzzzz' WHERE aa='aaaaa';
+ UPDATE b SET aa='zzz' WHERE aa='aaa';
++ERROR:  relation "b" does not exist
+ UPDATE ONLY b SET aa='zzz' WHERE aa='aaa';
++ERROR:  relation "b" does not exist
+ UPDATE a SET aa='zzzzzz' WHERE aa LIKE 'aaa%';
+ SELECT relname, a.* FROM a, pg_class where a.tableoid = pg_class.oid;
+- relname |    aa    
+----------+----------
++ relname |   aa   
++---------+--------
++ a       | zzzzzz
+  a       | zzzz
+  a       | zzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+- a       | zzzzzz
+- b       | bbb
+- b       | bbbb
+- b       | bbbbb
+- b       | bbbbbb
+- b       | bbbbbbb
+- b       | bbbbbbbb
+- c       | ccc
+- c       | cccc
+- c       | ccccc
+- c       | cccccc
+- c       | ccccccc
+- c       | cccccccc
+- d       | ddd
+- d       | dddd
+- d       | ddddd
+- d       | dddddd
+- d       | ddddddd
+- d       | dddddddd
+-(24 rows)
++(6 rows)
+ 
+ SELECT relname, b.* FROM b, pg_class where b.tableoid = pg_class.oid;
+- relname |    aa    | bb 
+----------+----------+----
+- b       | bbb      | 
+- b       | bbbb     | 
+- b       | bbbbb    | 
+- b       | bbbbbb   | 
+- b       | bbbbbbb  | 
+- b       | bbbbbbbb | 
+- d       | ddd      | 
+- d       | dddd     | 
+- d       | ddddd    | 
+- d       | dddddd   | 
+- d       | ddddddd  | 
+- d       | dddddddd | 
+-(12 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+- d       | ddd      | 
+- d       | dddd     | 
+- d       | ddddd    | 
+- d       | dddddd   | 
+- d       | ddddddd  | 
+- d       | dddddddd | 
+-(12 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM d, pg_class where d.tableoid = pg_class.oid;
+- relname |    aa    | bb | cc | dd 
+----------+----------+----+----+----
+- d       | ddd      |    |    | 
+- d       | dddd     |    |    | 
+- d       | ddddd    |    |    | 
+- d       | dddddd   |    |    | 
+- d       | ddddddd  |    |    | 
+- d       | dddddddd |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM ONLY a, pg_class where a.tableoid = pg_class.oid;
+  relname |   aa   
+ ---------+--------
++ a       | zzzzzz
+  a       | zzzz
+  a       | zzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+- a       | zzzzzz
+ (6 rows)
+ 
+ SELECT relname, b.* FROM ONLY b, pg_class where b.tableoid = pg_class.oid;
+- relname |    aa    | bb 
+----------+----------+----
+- b       | bbb      | 
+- b       | bbbb     | 
+- b       | bbbbb    | 
+- b       | bbbbbb   | 
+- b       | bbbbbbb  | 
+- b       | bbbbbbbb | 
+-(6 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM ONLY c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+-(6 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM ONLY d, pg_class where d.tableoid = pg_class.oid;
+- relname |    aa    | bb | cc | dd 
+----------+----------+----+----+----
+- d       | ddd      |    |    | 
+- d       | dddd     |    |    | 
+- d       | ddddd    |    |    | 
+- d       | dddddd   |    |    | 
+- d       | ddddddd  |    |    | 
+- d       | dddddddd |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ UPDATE b SET aa='new';
++ERROR:  relation "b" does not exist
+ SELECT relname, a.* FROM a, pg_class where a.tableoid = pg_class.oid;
+- relname |    aa    
+----------+----------
++ relname |   aa   
++---------+--------
++ a       | zzzzzz
+  a       | zzzz
+  a       | zzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+- a       | zzzzzz
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- c       | ccc
+- c       | cccc
+- c       | ccccc
+- c       | cccccc
+- c       | ccccccc
+- c       | cccccccc
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+-(24 rows)
++(6 rows)
+ 
+ SELECT relname, b.* FROM b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa  | bb 
+----------+-----+----
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+-(12 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+- d       | new      | 
+- d       | new      | 
+- d       | new      | 
+- d       | new      | 
+- d       | new      | 
+- d       | new      | 
+-(12 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa  | bb | cc | dd 
+----------+-----+----+----+----
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM ONLY a, pg_class where a.tableoid = pg_class.oid;
+  relname |   aa   
+ ---------+--------
++ a       | zzzzzz
+  a       | zzzz
+  a       | zzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+  a       | zzzzzz
+- a       | zzzzzz
+ (6 rows)
+ 
+ SELECT relname, b.* FROM ONLY b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa  | bb 
+----------+-----+----
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+-(6 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM ONLY c, pg_class where c.tableoid = pg_class.oid;
+- relname |    aa    | cc 
+----------+----------+----
+- c       | ccc      | 
+- c       | cccc     | 
+- c       | ccccc    | 
+- c       | cccccc   | 
+- c       | ccccccc  | 
+- c       | cccccccc | 
+-(6 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM ONLY d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa  | bb | cc | dd 
+----------+-----+----+----+----
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ UPDATE a SET aa='new';
+ DELETE FROM ONLY c WHERE aa='new';
++ERROR:  relation "c" does not exist
+ SELECT relname, a.* FROM a, pg_class where a.tableoid = pg_class.oid;
+  relname | aa  
+ ---------+-----
+@@ -402,59 +188,14 @@
+  a       | new
+  a       | new
+  a       | new
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- b       | new
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+- d       | new
+-(18 rows)
++(6 rows)
+ 
+ SELECT relname, b.* FROM b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa  | bb 
+----------+-----+----
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+-(12 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM c, pg_class where c.tableoid = pg_class.oid;
+- relname | aa  | cc 
+----------+-----+----
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+- d       | new | 
+-(6 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa  | bb | cc | dd 
+----------+-----+----+----+----
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM ONLY a, pg_class where a.tableoid = pg_class.oid;
+  relname | aa  
+ ---------+-----
+@@ -467,32 +208,11 @@
+ (6 rows)
+ 
+ SELECT relname, b.* FROM ONLY b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa  | bb 
+----------+-----+----
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+- b       | new | 
+-(6 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM ONLY c, pg_class where c.tableoid = pg_class.oid;
+- relname | aa | cc 
+----------+----+----
+-(0 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM ONLY d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa  | bb | cc | dd 
+----------+-----+----+----+----
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+- d       | new |    |    | 
+-(6 rows)
+-
++ERROR:  relation "d" does not exist
+ DELETE FROM a;
+ SELECT relname, a.* FROM a, pg_class where a.tableoid = pg_class.oid;
+  relname | aa 
+@@ -500,71 +220,58 @@
+ (0 rows)
+ 
+ SELECT relname, b.* FROM b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa | bb 
+----------+----+----
+-(0 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM c, pg_class where c.tableoid = pg_class.oid;
+- relname | aa | cc 
+----------+----+----
+-(0 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa | bb | cc | dd 
+----------+----+----+----+----
+-(0 rows)
+-
++ERROR:  relation "d" does not exist
+ SELECT relname, a.* FROM ONLY a, pg_class where a.tableoid = pg_class.oid;
+  relname | aa 
+ ---------+----
+ (0 rows)
+ 
+ SELECT relname, b.* FROM ONLY b, pg_class where b.tableoid = pg_class.oid;
+- relname | aa | bb 
+----------+----+----
+-(0 rows)
+-
++ERROR:  relation "b" does not exist
+ SELECT relname, c.* FROM ONLY c, pg_class where c.tableoid = pg_class.oid;
+- relname | aa | cc 
+----------+----+----
+-(0 rows)
+-
++ERROR:  relation "c" does not exist
+ SELECT relname, d.* FROM ONLY d, pg_class where d.tableoid = pg_class.oid;
+- relname | aa | bb | cc | dd 
+----------+----+----+----+----
+-(0 rows)
+-
++ERROR:  relation "d" does not exist
+ -- Confirm PRIMARY KEY adds NOT NULL constraint to child table
+ CREATE TEMP TABLE z (b TEXT, PRIMARY KEY(aa, b)) inherits (a);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEMP TABLE z (b TEXT, PRIMARY KEY(aa, b)) inherits (a)
++                                                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ INSERT INTO z VALUES (NULL, 'text'); -- should fail
+-ERROR:  null value in column "aa" of relation "z" violates not-null constraint
+-DETAIL:  Failing row contains (null, text).
++ERROR:  relation "z" does not exist
+ -- Check inherited UPDATE with all children excluded
+ create table some_tab (a int, b int);
+ create table some_tab_child () inherits (some_tab);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table some_tab_child () inherits (some_tab)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into some_tab_child values(1,2);
++ERROR:  relation "some_tab_child" does not exist
+ explain (verbose, costs off)
+ update some_tab set a = a + 1 where false;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Update on public.some_tab
+-   ->  Result
+-         Output: (some_tab.a + 1), NULL::oid, NULL::tid
+-         One-Time Filter: false
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ update some_tab set a = a + 1 where false;
+ explain (verbose, costs off)
+ update some_tab set a = a + 1 where false returning b, a;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Update on public.some_tab
+-   Output: some_tab.b, some_tab.a
+-   ->  Result
+-         Output: (some_tab.a + 1), NULL::oid, NULL::tid
+-         One-Time Filter: false
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ update some_tab set a = a + 1 where false returning b, a;
+  b | a 
+ ---+---
+@@ -573,41 +280,53 @@
+ table some_tab;
+  a | b 
+ ---+---
+- 1 | 2
+-(1 row)
++(0 rows)
+ 
+ drop table some_tab cascade;
+-NOTICE:  drop cascades to table some_tab_child
+ -- Check UPDATE with inherited target and an inherited source table
+ create temp table foo(f1 int, f2 int);
+ create temp table foo2(f3 int) inherits (foo);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table foo2(f3 int) inherits (foo)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create temp table bar(f1 int, f2 int);
+ create temp table bar2(f3 int) inherits (bar);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table bar2(f3 int) inherits (bar)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into foo values(1,1);
+ insert into foo values(3,3);
+ insert into foo2 values(2,2,2);
++ERROR:  relation "foo2" does not exist
+ insert into foo2 values(3,3,3);
++ERROR:  relation "foo2" does not exist
+ insert into bar values(1,1);
+ insert into bar values(2,2);
+ insert into bar values(3,3);
+ insert into bar values(4,4);
+ insert into bar2 values(1,1,1);
++ERROR:  relation "bar2" does not exist
+ insert into bar2 values(2,2,2);
++ERROR:  relation "bar2" does not exist
+ insert into bar2 values(3,3,3);
++ERROR:  relation "bar2" does not exist
+ insert into bar2 values(4,4,4);
++ERROR:  relation "bar2" does not exist
+ update bar set f2 = f2 + 100 where f1 in (select f1 from foo);
+ select tableoid::regclass::text as relname, bar.* from bar order by 1,2;
+  relname | f1 | f2  
+ ---------+----+-----
+  bar     |  1 | 101
+- bar     |  2 | 102
++ bar     |  2 |   2
+  bar     |  3 | 103
+  bar     |  4 |   4
+- bar2    |  1 | 101
+- bar2    |  2 | 102
+- bar2    |  3 | 103
+- bar2    |  4 |   4
+-(8 rows)
++(4 rows)
+ 
+ -- Check UPDATE with inherited target and an appendrel subquery
+ update bar set f2 = f2 + 100
+@@ -618,485 +337,616 @@
+  relname | f1 | f2  
+ ---------+----+-----
+  bar     |  1 | 201
+- bar     |  2 | 202
++ bar     |  2 |   2
+  bar     |  3 | 203
+  bar     |  4 | 104
+- bar2    |  1 | 201
+- bar2    |  2 | 202
+- bar2    |  3 | 203
+- bar2    |  4 | 104
+-(8 rows)
++(4 rows)
+ 
+ -- Check UPDATE with *partitioned* inherited target and an appendrel subquery
+ create table some_tab (a int);
+ insert into some_tab values (0);
+ create table some_tab_child () inherits (some_tab);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table some_tab_child () inherits (some_tab)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into some_tab_child values (1);
++ERROR:  relation "some_tab_child" does not exist
+ create table parted_tab (a int, b char) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_tab (a int, b char) partition by list (a)
++                                                             ^
++HINT:  try \h CREATE TABLE
+ create table parted_tab_part1 partition of parted_tab for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_tab_part1 partition of parted_tab for values in (1)
++                              ^
++HINT:  try \h CREATE TABLE
+ create table parted_tab_part2 partition of parted_tab for values in (2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_tab_part2 partition of parted_tab for values in (2)
++                              ^
++HINT:  try \h CREATE TABLE
+ create table parted_tab_part3 partition of parted_tab for values in (3);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_tab_part3 partition of parted_tab for values in (3)
++                              ^
++HINT:  try \h CREATE TABLE
+ insert into parted_tab values (1, 'a'), (2, 'a'), (3, 'a');
++ERROR:  relation "parted_tab" does not exist
+ update parted_tab set b = 'b'
+ from
+   (select a from some_tab union all select a+1 from some_tab) ss (a)
+ where parted_tab.a = ss.a;
++ERROR:  relation "parted_tab" does not exist
+ select tableoid::regclass::text as relname, parted_tab.* from parted_tab order by 1,2;
+-     relname      | a | b 
+-------------------+---+---
+- parted_tab_part1 | 1 | b
+- parted_tab_part2 | 2 | b
+- parted_tab_part3 | 3 | a
+-(3 rows)
+-
++ERROR:  relation "parted_tab" does not exist
+ truncate parted_tab;
++ERROR:  relation "parted_tab" does not exist
+ insert into parted_tab values (1, 'a'), (2, 'a'), (3, 'a');
++ERROR:  relation "parted_tab" does not exist
+ update parted_tab set b = 'b'
+ from
+   (select 0 from parted_tab union all select 1 from parted_tab) ss (a)
+ where parted_tab.a = ss.a;
++ERROR:  relation "parted_tab" does not exist
+ select tableoid::regclass::text as relname, parted_tab.* from parted_tab order by 1,2;
+-     relname      | a | b 
+-------------------+---+---
+- parted_tab_part1 | 1 | b
+- parted_tab_part2 | 2 | a
+- parted_tab_part3 | 3 | a
+-(3 rows)
+-
++ERROR:  relation "parted_tab" does not exist
+ -- modifies partition key, but no rows will actually be updated
+ explain update parted_tab set a = 2 where false;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Update on parted_tab  (cost=0.00..0.00 rows=0 width=0)
+-   ->  Result  (cost=0.00..0.00 rows=0 width=10)
+-         One-Time Filter: false
+-(3 rows)
+-
++ERROR:  relation "parted_tab" does not exist
+ drop table parted_tab;
++ERROR:  relation "parted_tab" does not exist
+ -- Check UPDATE with multi-level partitioned inherited target
+ create table mlparted_tab (a int, b char, c text) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab (a int, b char, c text) partition by list (a)
++                                                                       ^
++HINT:  try \h CREATE TABLE
+ create table mlparted_tab_part1 partition of mlparted_tab for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab_part1 partition of mlparted_tab for values in (1)
++                                ^
++HINT:  try \h CREATE TABLE
+ create table mlparted_tab_part2 partition of mlparted_tab for values in (2) partition by list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab_part2 partition of mlparted_tab for values in (2) partition by list (b)
++                                ^
++HINT:  try \h CREATE TABLE
+ create table mlparted_tab_part3 partition of mlparted_tab for values in (3);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab_part3 partition of mlparted_tab for values in (3)
++                                ^
++HINT:  try \h CREATE TABLE
+ create table mlparted_tab_part2a partition of mlparted_tab_part2 for values in ('a');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab_part2a partition of mlparted_tab_part2 for values in ('a')
++                                 ^
++HINT:  try \h CREATE TABLE
+ create table mlparted_tab_part2b partition of mlparted_tab_part2 for values in ('b');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mlparted_tab_part2b partition of mlparted_tab_part2 for values in ('b')
++                                 ^
++HINT:  try \h CREATE TABLE
+ insert into mlparted_tab values (1, 'a'), (2, 'a'), (2, 'b'), (3, 'a');
++ERROR:  relation "mlparted_tab" does not exist
+ update mlparted_tab mlp set c = 'xxx'
+ from
+   (select a from some_tab union all select a+1 from some_tab) ss (a)
+ where (mlp.a = ss.a and mlp.b = 'b') or mlp.a = 3;
++ERROR:  relation "mlparted_tab" does not exist
+ select tableoid::regclass::text as relname, mlparted_tab.* from mlparted_tab order by 1,2;
+-       relname       | a | b |  c  
+----------------------+---+---+-----
+- mlparted_tab_part1  | 1 | a | 
+- mlparted_tab_part2a | 2 | a | 
+- mlparted_tab_part2b | 2 | b | xxx
+- mlparted_tab_part3  | 3 | a | xxx
+-(4 rows)
+-
++ERROR:  relation "mlparted_tab" does not exist
+ drop table mlparted_tab;
++ERROR:  relation "mlparted_tab" does not exist
+ drop table some_tab cascade;
+-NOTICE:  drop cascades to table some_tab_child
+ /* Test multiple inheritance of column defaults */
+ CREATE TABLE firstparent (tomorrow date default now()::date + 1);
+ CREATE TABLE secondparent (tomorrow date default  now() :: date  +  1);
+ CREATE TABLE jointchild () INHERITS (firstparent, secondparent);  -- ok
+-NOTICE:  merging multiple inherited definitions of column "tomorrow"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE jointchild () INHERITS (firstparent, secondparent)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE thirdparent (tomorrow date default now()::date - 1);
+ CREATE TABLE otherchild () INHERITS (firstparent, thirdparent);  -- not ok
+-NOTICE:  merging multiple inherited definitions of column "tomorrow"
+-ERROR:  column "tomorrow" inherits conflicting default values
+-HINT:  To resolve the conflict, specify a default explicitly.
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE otherchild () INHERITS (firstparent, thirdparent)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE otherchild (tomorrow date default now())
+   INHERITS (firstparent, thirdparent);  -- ok, child resolves ambiguous default
+-NOTICE:  merging multiple inherited definitions of column "tomorrow"
+-NOTICE:  merging column "tomorrow" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE otherchild (tomorrow date default now())
++  INHERITS (firstparent, thirdparent)
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ DROP TABLE firstparent, secondparent, jointchild, thirdparent, otherchild;
++ERROR:  relation "jointchild" does not exist
+ -- Test changing the type of inherited columns
+ insert into d values('test','one','two','three');
++ERROR:  relation "d" does not exist
+ alter table a alter column aa type integer using bit_length(aa);
+ select * from d;
+- aa | bb  | cc  |  dd   
+-----+-----+-----+-------
+- 32 | one | two | three
+-(1 row)
+-
++ERROR:  relation "d" does not exist
+ -- The above verified that we can change the type of a multiply-inherited
+ -- column; but we should reject that if any definition was inherited from
+ -- an unrelated parent.
+ create temp table parent1(f1 int, f2 int);
+ create temp table parent2(f1 int, f3 bigint);
+ create temp table childtab(f4 int) inherits(parent1, parent2);
+-NOTICE:  merging multiple inherited definitions of column "f1"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table childtab(f4 int) inherits(parent1, parent2)
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ alter table parent1 alter column f1 type bigint;  -- fail, conflict w/parent2
+-ERROR:  cannot alter inherited column "f1" of relation "childtab"
+ alter table parent1 alter column f2 type bigint;  -- ok
+ -- Test non-inheritable parent constraints
+ create table p1(ff1 int);
+ alter table p1 add constraint p1chk check (ff1 > 0) no inherit;
++ERROR:  at or near "no": syntax error
++DETAIL:  source SQL:
++alter table p1 add constraint p1chk check (ff1 > 0) no inherit
++                                                    ^
+ alter table p1 add constraint p2chk check (ff1 > 10);
+ -- connoinherit should be true for NO INHERIT constraint
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pgc.connoinherit from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname = 'p1' order by 1,2;
+  relname | conname | contype | conislocal | coninhcount | connoinherit 
+ ---------+---------+---------+------------+-------------+--------------
+- p1      | p1chk   | c       | t          |           0 | t
+- p1      | p2chk   | c       | t          |           0 | f
++ p1      | p1_pkey | p       | t          |           0 | t
++ p1      | p2chk   | c       | t          |           0 | t
+ (2 rows)
+ 
+ -- Test that child does not inherit NO INHERIT constraints
+ create table c1 () inherits (p1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table c1 () inherits (p1)
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d p1
+-                 Table "public.p1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- ff1    | integer |           |          | 
+-Check constraints:
+-    "p1chk" CHECK (ff1 > 0) NO INHERIT
+-    "p2chk" CHECK (ff1 > 10)
+-Number of child tables: 1 (Use \d+ to list them.)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(p1)$' COLLATE pg_catalog.default
++                                                                  ^
+ \d c1
+-                 Table "public.c1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- ff1    | integer |           |          | 
+-Check constraints:
+-    "p2chk" CHECK (ff1 > 10)
+-Inherits: p1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(c1)$' COLLATE pg_catalog.default
++                                                                  ^
+ -- Test that child does not override inheritable constraints of the parent
+ create table c2 (constraint p2chk check (ff1 > 10) no inherit) inherits (p1);	--fails
+-ERROR:  constraint "p2chk" conflicts with inherited constraint on relation "c2"
++ERROR:  at or near "no": syntax error
++DETAIL:  source SQL:
++create table c2 (constraint p2chk check (ff1 > 10) no inherit) inherits (p1)
++                                                   ^
++HINT:  try \h CREATE TABLE
+ drop table p1 cascade;
+-NOTICE:  drop cascades to table c1
+ -- Tests for casting between the rowtypes of parent and child
+ -- tables. See the pgsql-hackers thread beginning Dec. 4/04
+ create table base (i integer);
+ create table derived () inherits (base);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table derived () inherits (base)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table more_derived (like derived, b int) inherits (derived);
+-NOTICE:  merging column "i" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table more_derived (like derived, b int) inherits (derived)
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into derived (i) values (0);
++ERROR:  relation "derived" does not exist
+ select derived::base from derived;
+- derived 
+----------
+- (0)
+-(1 row)
+-
++ERROR:  relation "derived" does not exist
+ select NULL::derived::base;
+- base 
+-------
+- 
+-(1 row)
+-
++ERROR:  type "derived" does not exist
+ -- remove redundant conversions.
+ explain (verbose on, costs off) select row(i, b)::more_derived::derived::base from more_derived;
+-                QUERY PLAN                 
+--------------------------------------------
+- Seq Scan on public.more_derived
+-   Output: (ROW(i, b)::more_derived)::base
+-(2 rows)
+-
++ERROR:  at or near "on": syntax error
++DETAIL:  source SQL:
++explain (verbose on, costs off) select row(i, b)::more_derived::derived::base from more_derived
++                 ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose on, costs off) select (1, 2)::more_derived::derived::base;
+-      QUERY PLAN       
+------------------------
+- Result
+-   Output: '(1)'::base
+-(2 rows)
+-
++ERROR:  at or near "on": syntax error
++DETAIL:  source SQL:
++explain (verbose on, costs off) select (1, 2)::more_derived::derived::base
++                 ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table more_derived;
++ERROR:  relation "more_derived" does not exist
+ drop table derived;
++ERROR:  relation "derived" does not exist
+ drop table base;
+ create table p1(ff1 int);
+ create table p2(f1 text);
+ create function p2text(p2) returns text as 'select $1.f1' language sql;
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++select $1.f1
++         ^
+ create table c1(f3 int) inherits(p1,p2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table c1(f3 int) inherits(p1,p2)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into c1 values(123456789, 'hi', 42);
++ERROR:  relation "c1" does not exist
+ select p2text(c1.*) from c1;
+- p2text 
+---------
+- hi
+-(1 row)
+-
++ERROR:  relation "c1" does not exist
+ drop function p2text(p2);
++ERROR:  unknown function: p2text()
+ drop table c1;
++ERROR:  relation "c1" does not exist
+ drop table p2;
+ drop table p1;
+ CREATE TABLE ac (aa TEXT);
+ alter table ac add constraint ac_check check (aa is not null);
+ CREATE TABLE bc (bb TEXT) INHERITS (ac);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE bc (bb TEXT) INHERITS (ac)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+  relname | conname  | contype | conislocal | coninhcount |      consrc      
+ ---------+----------+---------+------------+-------------+------------------
+  ac      | ac_check | c       | t          |           0 | (aa IS NOT NULL)
+- bc      | ac_check | c       | f          |           1 | (aa IS NOT NULL)
++ ac      | ac_pkey  | p       | t          |           0 | 
+ (2 rows)
+ 
+ insert into ac (aa) values (NULL);
+-ERROR:  new row for relation "ac" violates check constraint "ac_check"
+-DETAIL:  Failing row contains (null).
++ERROR:  failed to satisfy CHECK constraint (aa IS NOT NULL)
+ insert into bc (aa) values (NULL);
+-ERROR:  new row for relation "bc" violates check constraint "ac_check"
+-DETAIL:  Failing row contains (null, null).
++ERROR:  relation "bc" does not exist
+ alter table bc drop constraint ac_check;  -- fail, disallowed
+-ERROR:  cannot drop inherited constraint "ac_check" of relation "bc"
++ERROR:  relation "bc" does not exist
+ alter table ac drop constraint ac_check;
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+  relname | conname | contype | conislocal | coninhcount | consrc 
+ ---------+---------+---------+------------+-------------+--------
+-(0 rows)
++ ac      | ac_pkey | p       | t          |           0 | 
++(1 row)
+ 
+ -- try the unnamed-constraint case
+ alter table ac add check (aa is not null);
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+- relname |   conname   | contype | conislocal | coninhcount |      consrc      
+----------+-------------+---------+------------+-------------+------------------
+- ac      | ac_aa_check | c       | t          |           0 | (aa IS NOT NULL)
+- bc      | ac_aa_check | c       | f          |           1 | (aa IS NOT NULL)
++ relname | conname  | contype | conislocal | coninhcount |      consrc      
++---------+----------+---------+------------+-------------+------------------
++ ac      | ac_pkey  | p       | t          |           0 | 
++ ac      | check_aa | c       | t          |           0 | (aa IS NOT NULL)
+ (2 rows)
+ 
+ insert into ac (aa) values (NULL);
+-ERROR:  new row for relation "ac" violates check constraint "ac_aa_check"
+-DETAIL:  Failing row contains (null).
++ERROR:  failed to satisfy CHECK constraint (aa IS NOT NULL)
+ insert into bc (aa) values (NULL);
+-ERROR:  new row for relation "bc" violates check constraint "ac_aa_check"
+-DETAIL:  Failing row contains (null, null).
++ERROR:  relation "bc" does not exist
+ alter table bc drop constraint ac_aa_check;  -- fail, disallowed
+-ERROR:  cannot drop inherited constraint "ac_aa_check" of relation "bc"
++ERROR:  relation "bc" does not exist
+ alter table ac drop constraint ac_aa_check;
++ERROR:  constraint "ac_aa_check" of relation "ac" does not exist
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+- relname | conname | contype | conislocal | coninhcount | consrc 
+----------+---------+---------+------------+-------------+--------
+-(0 rows)
++ relname | conname  | contype | conislocal | coninhcount |      consrc      
++---------+----------+---------+------------+-------------+------------------
++ ac      | ac_pkey  | p       | t          |           0 | 
++ ac      | check_aa | c       | t          |           0 | (aa IS NOT NULL)
++(2 rows)
+ 
+ alter table ac add constraint ac_check check (aa is not null);
+ alter table bc no inherit ac;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++alter table bc no inherit ac
++                  ^
++HINT:  try \h ALTER TABLE
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+  relname | conname  | contype | conislocal | coninhcount |      consrc      
+ ---------+----------+---------+------------+-------------+------------------
+  ac      | ac_check | c       | t          |           0 | (aa IS NOT NULL)
+- bc      | ac_check | c       | t          |           0 | (aa IS NOT NULL)
+-(2 rows)
++ ac      | ac_pkey  | p       | t          |           0 | 
++ ac      | check_aa | c       | t          |           0 | (aa IS NOT NULL)
++(3 rows)
+ 
+ alter table bc drop constraint ac_check;
++ERROR:  relation "bc" does not exist
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+  relname | conname  | contype | conislocal | coninhcount |      consrc      
+ ---------+----------+---------+------------+-------------+------------------
+  ac      | ac_check | c       | t          |           0 | (aa IS NOT NULL)
+-(1 row)
++ ac      | ac_pkey  | p       | t          |           0 | 
++ ac      | check_aa | c       | t          |           0 | (aa IS NOT NULL)
++(3 rows)
+ 
+ alter table ac drop constraint ac_check;
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+- relname | conname | contype | conislocal | coninhcount | consrc 
+----------+---------+---------+------------+-------------+--------
+-(0 rows)
++ relname | conname  | contype | conislocal | coninhcount |      consrc      
++---------+----------+---------+------------+-------------+------------------
++ ac      | ac_pkey  | p       | t          |           0 | 
++ ac      | check_aa | c       | t          |           0 | (aa IS NOT NULL)
++(2 rows)
+ 
+ drop table bc;
++ERROR:  relation "bc" does not exist
+ drop table ac;
+ create table ac (a int constraint check_a check (a <> 0));
+ create table bc (a int constraint check_a check (a <> 0), b int constraint check_b check (b <> 0)) inherits (ac);
+-NOTICE:  merging column "a" with inherited definition
+-NOTICE:  merging constraint "check_a" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table bc (a int constraint check_a check (a <> 0), b int constraint check_b check (b <> 0)) inherits (ac)
++                                                                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc') order by 1,2;
+  relname | conname | contype | conislocal | coninhcount |  consrc  
+ ---------+---------+---------+------------+-------------+----------
+- ac      | check_a | c       | t          |           0 | (a <> 0)
+- bc      | check_a | c       | t          |           1 | (a <> 0)
+- bc      | check_b | c       | t          |           0 | (b <> 0)
+-(3 rows)
++ ac      | ac_pkey | p       | t          |           0 | 
++ ac      | check_a | c       | t          |           0 | (a != 0)
++(2 rows)
+ 
+ drop table bc;
++ERROR:  relation "bc" does not exist
+ drop table ac;
+ create table ac (a int constraint check_a check (a <> 0));
+ create table bc (b int constraint check_b check (b <> 0));
+ create table cc (c int constraint check_c check (c <> 0)) inherits (ac, bc);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table cc (c int constraint check_c check (c <> 0)) inherits (ac, bc)
++                                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc', 'cc') order by 1,2;
+  relname | conname | contype | conislocal | coninhcount |  consrc  
+ ---------+---------+---------+------------+-------------+----------
+- ac      | check_a | c       | t          |           0 | (a <> 0)
+- bc      | check_b | c       | t          |           0 | (b <> 0)
+- cc      | check_a | c       | f          |           1 | (a <> 0)
+- cc      | check_b | c       | f          |           1 | (b <> 0)
+- cc      | check_c | c       | t          |           0 | (c <> 0)
+-(5 rows)
++ ac      | ac_pkey | p       | t          |           0 | 
++ ac      | check_a | c       | t          |           0 | (a != 0)
++ bc      | bc_pkey | p       | t          |           0 | 
++ bc      | check_b | c       | t          |           0 | (b != 0)
++(4 rows)
+ 
+ alter table cc no inherit bc;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++alter table cc no inherit bc
++                  ^
++HINT:  try \h ALTER TABLE
+ select pc.relname, pgc.conname, pgc.contype, pgc.conislocal, pgc.coninhcount, pg_get_expr(pgc.conbin, pc.oid) as consrc from pg_class as pc inner join pg_constraint as pgc on (pgc.conrelid = pc.oid) where pc.relname in ('ac', 'bc', 'cc') order by 1,2;
+  relname | conname | contype | conislocal | coninhcount |  consrc  
+ ---------+---------+---------+------------+-------------+----------
+- ac      | check_a | c       | t          |           0 | (a <> 0)
+- bc      | check_b | c       | t          |           0 | (b <> 0)
+- cc      | check_a | c       | f          |           1 | (a <> 0)
+- cc      | check_b | c       | t          |           0 | (b <> 0)
+- cc      | check_c | c       | t          |           0 | (c <> 0)
+-(5 rows)
++ ac      | ac_pkey | p       | t          |           0 | 
++ ac      | check_a | c       | t          |           0 | (a != 0)
++ bc      | bc_pkey | p       | t          |           0 | 
++ bc      | check_b | c       | t          |           0 | (b != 0)
++(4 rows)
+ 
+ drop table cc;
++ERROR:  relation "cc" does not exist
+ drop table bc;
+ drop table ac;
+ create table p1(f1 int);
+ create table p2(f2 int);
+ create table c1(f3 int) inherits(p1,p2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table c1(f3 int) inherits(p1,p2)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into c1 values(1,-1,2);
++ERROR:  relation "c1" does not exist
+ alter table p2 add constraint cc check (f2>0);  -- fail
+-ERROR:  check constraint "cc" of relation "c1" is violated by some row
+ alter table p2 add check (f2>0);  -- check it without a name, too
+-ERROR:  check constraint "p2_f2_check" of relation "c1" is violated by some row
+ delete from c1;
++ERROR:  relation "c1" does not exist
+ insert into c1 values(1,1,2);
++ERROR:  relation "c1" does not exist
+ alter table p2 add check (f2>0);
+ insert into c1 values(1,-1,2);  -- fail
+-ERROR:  new row for relation "c1" violates check constraint "p2_f2_check"
+-DETAIL:  Failing row contains (1, -1, 2).
++ERROR:  relation "c1" does not exist
+ create table c2(f3 int) inherits(p1,p2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table c2(f3 int) inherits(p1,p2)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d c2
+-                 Table "public.c2"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- f1     | integer |           |          | 
+- f2     | integer |           |          | 
+- f3     | integer |           |          | 
+-Check constraints:
+-    "p2_f2_check" CHECK (f2 > 0)
+-Inherits: p1,
+-          p2
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(c2)$' COLLATE pg_catalog.default
++                                                                  ^
+ create table c3 (f4 int) inherits(c1,c2);
+-NOTICE:  merging multiple inherited definitions of column "f1"
+-NOTICE:  merging multiple inherited definitions of column "f2"
+-NOTICE:  merging multiple inherited definitions of column "f3"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table c3 (f4 int) inherits(c1,c2)
++                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d c3
+-                 Table "public.c3"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- f1     | integer |           |          | 
+- f2     | integer |           |          | 
+- f3     | integer |           |          | 
+- f4     | integer |           |          | 
+-Check constraints:
+-    "p2_f2_check" CHECK (f2 > 0)
+-Inherits: c1,
+-          c2
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(c3)$' COLLATE pg_catalog.default
++                                                                  ^
+ drop table p1 cascade;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table c1
+-drop cascades to table c2
+-drop cascades to table c3
+ drop table p2 cascade;
+ create table pp1 (f1 int);
+ create table cc1 (f2 text, f3 int) inherits (pp1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table cc1 (f2 text, f3 int) inherits (pp1)
++                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ alter table pp1 add column a1 int check (a1 > 0);
+ \d cc1
+-                Table "public.cc1"
+- Column |  Type   | Collation | Nullable | Default 
+---------+---------+-----------+----------+---------
+- f1     | integer |           |          | 
+- f2     | text    |           |          | 
+- f3     | integer |           |          | 
+- a1     | integer |           |          | 
+-Check constraints:
+-    "pp1_a1_check" CHECK (a1 > 0)
+-Inherits: pp1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cc1)$' COLLATE pg_catalog.default
++                                                                   ^
+ create table cc2(f4 float) inherits(pp1,cc1);
+-NOTICE:  merging multiple inherited definitions of column "f1"
+-NOTICE:  merging multiple inherited definitions of column "a1"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table cc2(f4 float) inherits(pp1,cc1)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d cc2
+-                     Table "public.cc2"
+- Column |       Type       | Collation | Nullable | Default 
+---------+------------------+-----------+----------+---------
+- f1     | integer          |           |          | 
+- a1     | integer          |           |          | 
+- f2     | text             |           |          | 
+- f3     | integer          |           |          | 
+- f4     | double precision |           |          | 
+-Check constraints:
+-    "pp1_a1_check" CHECK (a1 > 0)
+-Inherits: pp1,
+-          cc1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cc2)$' COLLATE pg_catalog.default
++                                                                   ^
+ alter table pp1 add column a2 int check (a2 > 0);
+-NOTICE:  merging definition of column "a2" for child "cc2"
+-NOTICE:  merging constraint "pp1_a2_check" with inherited definition
+ \d cc2
+-                     Table "public.cc2"
+- Column |       Type       | Collation | Nullable | Default 
+---------+------------------+-----------+----------+---------
+- f1     | integer          |           |          | 
+- a1     | integer          |           |          | 
+- f2     | text             |           |          | 
+- f3     | integer          |           |          | 
+- f4     | double precision |           |          | 
+- a2     | integer          |           |          | 
+-Check constraints:
+-    "pp1_a1_check" CHECK (a1 > 0)
+-    "pp1_a2_check" CHECK (a2 > 0)
+-Inherits: pp1,
+-          cc1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(cc2)$' COLLATE pg_catalog.default
++                                                                   ^
+ drop table pp1 cascade;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to table cc1
+-drop cascades to table cc2
+ -- Test for renaming in simple multiple inheritance
+ CREATE TABLE inht1 (a int, b int);
+ CREATE TABLE inhs1 (b int, c int);
+ CREATE TABLE inhts (d int) INHERITS (inht1, inhs1);
+-NOTICE:  merging multiple inherited definitions of column "b"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inhts (d int) INHERITS (inht1, inhs1)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ ALTER TABLE inht1 RENAME a TO aa;
+ ALTER TABLE inht1 RENAME b TO bb;                -- to be failed
+-ERROR:  cannot rename inherited column "b"
+ ALTER TABLE inhts RENAME aa TO aaa;      -- to be failed
+-ERROR:  cannot rename inherited column "aa"
++ERROR:  relation "inhts" does not exist
+ ALTER TABLE inhts RENAME d TO dd;
++ERROR:  relation "inhts" does not exist
+ \d+ inhts
+-                                   Table "public.inhts"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- aa     | integer |           |          |         | plain   |              | 
+- b      | integer |           |          |         | plain   |              | 
+- c      | integer |           |          |         | plain   |              | 
+- dd     | integer |           |          |         | plain   |              | 
+-Inherits: inht1,
+-          inhs1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(inhts)$' COLLATE pg_catalog.default
++                                                                     ^
+ DROP TABLE inhts;
++ERROR:  relation "inhts" does not exist
+ -- Test for renaming in diamond inheritance
+ CREATE TABLE inht2 (x int) INHERITS (inht1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inht2 (x int) INHERITS (inht1)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE inht3 (y int) INHERITS (inht1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inht3 (y int) INHERITS (inht1)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ CREATE TABLE inht4 (z int) INHERITS (inht2, inht3);
+-NOTICE:  merging multiple inherited definitions of column "aa"
+-NOTICE:  merging multiple inherited definitions of column "b"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inht4 (z int) INHERITS (inht2, inht3)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ ALTER TABLE inht1 RENAME aa TO aaa;
+ \d+ inht4
+-                                   Table "public.inht4"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- aaa    | integer |           |          |         | plain   |              | 
+- b      | integer |           |          |         | plain   |              | 
+- x      | integer |           |          |         | plain   |              | 
+- y      | integer |           |          |         | plain   |              | 
+- z      | integer |           |          |         | plain   |              | 
+-Inherits: inht2,
+-          inht3
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(inht4)$' COLLATE pg_catalog.default
++                                                                     ^
+ CREATE TABLE inhts (d int) INHERITS (inht2, inhs1);
+-NOTICE:  merging multiple inherited definitions of column "b"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE inhts (d int) INHERITS (inht2, inhs1)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ ALTER TABLE inht1 RENAME aaa TO aaaa;
+ ALTER TABLE inht1 RENAME b TO bb;                -- to be failed
+-ERROR:  cannot rename inherited column "b"
++ERROR:  column "b" does not exist
+ \d+ inhts
+-                                   Table "public.inhts"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- aaaa   | integer |           |          |         | plain   |              | 
+- b      | integer |           |          |         | plain   |              | 
+- x      | integer |           |          |         | plain   |              | 
+- c      | integer |           |          |         | plain   |              | 
+- d      | integer |           |          |         | plain   |              | 
+-Inherits: inht2,
+-          inhs1
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(inhts)$' COLLATE pg_catalog.default
++                                                                     ^
+ WITH RECURSIVE r AS (
+   SELECT 'inht1'::regclass AS inhrelid
+ UNION ALL
+@@ -1109,131 +959,162 @@
+   ORDER BY a.attrelid::regclass::name, a.attnum;
+  attrelid | attname | attinhcount | expected 
+ ----------+---------+-------------+----------
+- inht2    | aaaa    |           1 |        1
+- inht2    | b       |           1 |        1
+- inht3    | aaaa    |           1 |        1
+- inht3    | b       |           1 |        1
+- inht4    | aaaa    |           2 |        2
+- inht4    | b       |           2 |        2
+- inht4    | x       |           1 |        2
+- inht4    | y       |           1 |        2
+- inhts    | aaaa    |           1 |        1
+- inhts    | b       |           2 |        1
+- inhts    | x       |           1 |        1
+- inhts    | c       |           1 |        1
+-(12 rows)
++(0 rows)
+ 
+ DROP TABLE inht1, inhs1 CASCADE;
+-NOTICE:  drop cascades to 4 other objects
+-DETAIL:  drop cascades to table inht2
+-drop cascades to table inhts
+-drop cascades to table inht3
+-drop cascades to table inht4
+ -- Test non-inheritable indices [UNIQUE, EXCLUDE] constraints
+ CREATE TABLE test_constraints (id int, val1 varchar, val2 int, UNIQUE(val1, val2));
+ CREATE TABLE test_constraints_inh () INHERITS (test_constraints);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_constraints_inh () INHERITS (test_constraints)
++                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d+ test_constraints
+-                                   Table "public.test_constraints"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+--------------+-------------
+- id     | integer           |           |          |         | plain    |              | 
+- val1   | character varying |           |          |         | extended |              | 
+- val2   | integer           |           |          |         | plain    |              | 
+-Indexes:
+-    "test_constraints_val1_val2_key" UNIQUE CONSTRAINT, btree (val1, val2)
+-Child tables: test_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_constraints)$' COLLATE pg_catalog.default
++                                                                                ^
+ ALTER TABLE ONLY test_constraints DROP CONSTRAINT test_constraints_val1_val2_key;
++ERROR:  unimplemented: cannot drop UNIQUE constraint "test_constraints_val1_val2_key" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/42840/_version_
+ \d+ test_constraints
+-                                   Table "public.test_constraints"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+--------------+-------------
+- id     | integer           |           |          |         | plain    |              | 
+- val1   | character varying |           |          |         | extended |              | 
+- val2   | integer           |           |          |         | plain    |              | 
+-Child tables: test_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_constraints)$' COLLATE pg_catalog.default
++                                                                                ^
+ \d+ test_constraints_inh
+-                                 Table "public.test_constraints_inh"
+- Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-------------------+-----------+----------+---------+----------+--------------+-------------
+- id     | integer           |           |          |         | plain    |              | 
+- val1   | character varying |           |          |         | extended |              | 
+- val2   | integer           |           |          |         | plain    |              | 
+-Inherits: test_constraints
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_constraints_inh)$' COLLATE pg_catalog.default
++                                                                                    ^
+ DROP TABLE test_constraints_inh;
++ERROR:  relation "test_constraints_inh" does not exist
+ DROP TABLE test_constraints;
+ CREATE TABLE test_ex_constraints (
+     c circle,
+     EXCLUDE USING gist (c WITH &&)
+ );
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_ex_constraints (
++    c circle,
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ CREATE TABLE test_ex_constraints_inh () INHERITS (test_ex_constraints);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_ex_constraints_inh () INHERITS (test_ex_constraints)
++                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d+ test_ex_constraints
+-                           Table "public.test_ex_constraints"
+- Column |  Type  | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+--------+-----------+----------+---------+---------+--------------+-------------
+- c      | circle |           |          |         | plain   |              | 
+-Indexes:
+-    "test_ex_constraints_c_excl" EXCLUDE USING gist (c WITH &&)
+-Child tables: test_ex_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_ex_constraints)$' COLLATE pg_catalog.default
++                                                                                   ^
+ ALTER TABLE test_ex_constraints DROP CONSTRAINT test_ex_constraints_c_excl;
++ERROR:  relation "test_ex_constraints" does not exist
+ \d+ test_ex_constraints
+-                           Table "public.test_ex_constraints"
+- Column |  Type  | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+--------+-----------+----------+---------+---------+--------------+-------------
+- c      | circle |           |          |         | plain   |              | 
+-Child tables: test_ex_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_ex_constraints)$' COLLATE pg_catalog.default
++                                                                                   ^
+ \d+ test_ex_constraints_inh
+-                         Table "public.test_ex_constraints_inh"
+- Column |  Type  | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+--------+-----------+----------+---------+---------+--------------+-------------
+- c      | circle |           |          |         | plain   |              | 
+-Inherits: test_ex_constraints
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_ex_constraints_inh)$' COLLATE pg_catalog.default
++                                                                                       ^
+ DROP TABLE test_ex_constraints_inh;
++ERROR:  relation "test_ex_constraints_inh" does not exist
+ DROP TABLE test_ex_constraints;
++ERROR:  relation "test_ex_constraints" does not exist
+ -- Test non-inheritable foreign key constraints
+ CREATE TABLE test_primary_constraints(id int PRIMARY KEY);
+ CREATE TABLE test_foreign_constraints(id1 int REFERENCES test_primary_constraints(id));
+ CREATE TABLE test_foreign_constraints_inh () INHERITS (test_foreign_constraints);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE test_foreign_constraints_inh () INHERITS (test_foreign_constraints)
++                                                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ \d+ test_primary_constraints
+-                         Table "public.test_primary_constraints"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- id     | integer |           | not null |         | plain   |              | 
+-Indexes:
+-    "test_primary_constraints_pkey" PRIMARY KEY, btree (id)
+-Referenced by:
+-    TABLE "test_foreign_constraints" CONSTRAINT "test_foreign_constraints_id1_fkey" FOREIGN KEY (id1) REFERENCES test_primary_constraints(id)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_primary_constraints)$' COLLATE pg_catalog.default
++                                                                                        ^
+ \d+ test_foreign_constraints
+-                         Table "public.test_foreign_constraints"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- id1    | integer |           |          |         | plain   |              | 
+-Foreign-key constraints:
+-    "test_foreign_constraints_id1_fkey" FOREIGN KEY (id1) REFERENCES test_primary_constraints(id)
+-Child tables: test_foreign_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_foreign_constraints)$' COLLATE pg_catalog.default
++                                                                                        ^
+ ALTER TABLE test_foreign_constraints DROP CONSTRAINT test_foreign_constraints_id1_fkey;
+ \d+ test_foreign_constraints
+-                         Table "public.test_foreign_constraints"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- id1    | integer |           |          |         | plain   |              | 
+-Child tables: test_foreign_constraints_inh
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_foreign_constraints)$' COLLATE pg_catalog.default
++                                                                                        ^
+ \d+ test_foreign_constraints_inh
+-                       Table "public.test_foreign_constraints_inh"
+- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
+---------+---------+-----------+----------+---------+---------+--------------+-------------
+- id1    | integer |           |          |         | plain   |              | 
+-Inherits: test_foreign_constraints
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_foreign_constraints_inh)$' COLLATE pg_catalog.default
++                                                                                            ^
+ DROP TABLE test_foreign_constraints_inh;
++ERROR:  relation "test_foreign_constraints_inh" does not exist
+ DROP TABLE test_foreign_constraints;
+ DROP TABLE test_primary_constraints;
+ -- Test foreign key behavior
+@@ -1242,7 +1123,14 @@
+ create table inh_fk_2 (x int primary key, y int references inh_fk_1 on delete cascade);
+ insert into inh_fk_2 values (11, 1), (22, 2), (33, 3);
+ create table inh_fk_2_child () inherits (inh_fk_2);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table inh_fk_2_child () inherits (inh_fk_2)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into inh_fk_2_child values (111, 1), (222, 2);
++ERROR:  relation "inh_fk_2_child" does not exist
+ delete from inh_fk_1 where a = 1;
+ select * from inh_fk_1 order by 1;
+  a 
+@@ -1252,24 +1140,29 @@
+ (2 rows)
+ 
+ select * from inh_fk_2 order by 1, 2;
+-  x  | y 
+------+---
+-  22 | 2
+-  33 | 3
+- 111 | 1
+- 222 | 2
+-(4 rows)
++ x  | y 
++----+---
++ 22 | 2
++ 33 | 3
++(2 rows)
+ 
+ drop table inh_fk_1, inh_fk_2, inh_fk_2_child;
++ERROR:  relation "inh_fk_2_child" does not exist
+ -- Test that parent and child CHECK constraints can be created in either order
+ create table p1(f1 int);
+ create table p1_c1() inherits(p1);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table p1_c1() inherits(p1)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ alter table p1 add constraint inh_check_constraint1 check (f1 > 0);
+ alter table p1_c1 add constraint inh_check_constraint1 check (f1 > 0);
+-NOTICE:  merging constraint "inh_check_constraint1" with inherited definition
++ERROR:  relation "p1_c1" does not exist
+ alter table p1_c1 add constraint inh_check_constraint2 check (f1 < 10);
++ERROR:  relation "p1_c1" does not exist
+ alter table p1 add constraint inh_check_constraint2 check (f1 < 10);
+-NOTICE:  merging constraint "inh_check_constraint2" with inherited definition
+ select conrelid::regclass::text as relname, conname, conislocal, coninhcount
+ from pg_constraint where conname like 'inh\_check\_constraint%'
+ order by 1, 2;
+@@ -1277,38 +1170,41 @@
+ ---------+-----------------------+------------+-------------
+  p1      | inh_check_constraint1 | t          |           0
+  p1      | inh_check_constraint2 | t          |           0
+- p1_c1   | inh_check_constraint1 | t          |           1
+- p1_c1   | inh_check_constraint2 | t          |           1
+-(4 rows)
++(2 rows)
+ 
+ drop table p1 cascade;
+-NOTICE:  drop cascades to table p1_c1
+ -- Test that a valid child can have not-valid parent, but not vice versa
+ create table invalid_check_con(f1 int);
+ create table invalid_check_con_child() inherits(invalid_check_con);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table invalid_check_con_child() inherits(invalid_check_con)
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ alter table invalid_check_con_child add constraint inh_check_constraint check(f1 > 0) not valid;
++ERROR:  relation "invalid_check_con_child" does not exist
+ alter table invalid_check_con add constraint inh_check_constraint check(f1 > 0); -- fail
+-ERROR:  constraint "inh_check_constraint" conflicts with NOT VALID constraint on relation "invalid_check_con_child"
+ alter table invalid_check_con_child drop constraint inh_check_constraint;
++ERROR:  relation "invalid_check_con_child" does not exist
+ insert into invalid_check_con values(0);
++ERROR:  failed to satisfy CHECK constraint (f1 > 0:::INT8)
+ alter table invalid_check_con_child add constraint inh_check_constraint check(f1 > 0);
++ERROR:  relation "invalid_check_con_child" does not exist
+ alter table invalid_check_con add constraint inh_check_constraint check(f1 > 0) not valid;
+-NOTICE:  merging constraint "inh_check_constraint" with inherited definition
++ERROR:  duplicate constraint name: "inh_check_constraint"
+ insert into invalid_check_con values(0); -- fail
+-ERROR:  new row for relation "invalid_check_con" violates check constraint "inh_check_constraint"
+-DETAIL:  Failing row contains (0).
++ERROR:  failed to satisfy CHECK constraint (f1 > 0:::INT8)
+ insert into invalid_check_con_child values(0); -- fail
+-ERROR:  new row for relation "invalid_check_con_child" violates check constraint "inh_check_constraint"
+-DETAIL:  Failing row contains (0).
++ERROR:  relation "invalid_check_con_child" does not exist
+ select conrelid::regclass::text as relname, conname,
+        convalidated, conislocal, coninhcount, connoinherit
+ from pg_constraint where conname like 'inh\_check\_constraint%'
+ order by 1, 2;
+-         relname         |       conname        | convalidated | conislocal | coninhcount | connoinherit 
+--------------------------+----------------------+--------------+------------+-------------+--------------
+- invalid_check_con       | inh_check_constraint | f            | t          |           0 | f
+- invalid_check_con_child | inh_check_constraint | t            | t          |           1 | f
+-(2 rows)
++      relname      |       conname        | convalidated | conislocal | coninhcount | connoinherit 
++-------------------+----------------------+--------------+------------+-------------+--------------
++ invalid_check_con | inh_check_constraint | t            | t          |           0 | t
++(1 row)
+ 
+ -- We don't drop the invalid_check_con* tables, to test dump/reload with
+ --
+@@ -1316,342 +1212,325 @@
+ --
+ create temp table patest0 (id, x) as
+   select x, x from generate_series(0,1000) x;
++NOTICE:  CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+ create temp table patest1() inherits (patest0);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table patest1() inherits (patest0)
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into patest1
+   select x, x from generate_series(0,1000) x;
++ERROR:  relation "patest1" does not exist
+ create temp table patest2() inherits (patest0);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table patest2() inherits (patest0)
++                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into patest2
+   select x, x from generate_series(0,1000) x;
++ERROR:  relation "patest2" does not exist
+ create index patest0i on patest0(id);
+ create index patest1i on patest1(id);
++ERROR:  relation "patest1" does not exist
+ create index patest2i on patest2(id);
++ERROR:  relation "patest2" does not exist
+ analyze patest0;
+ analyze patest1;
++ERROR:  relation "patest1" does not exist
+ analyze patest2;
++ERROR:  relation "patest2" does not exist
+ explain (costs off)
+ select * from patest0 join (select f1 from int4_tbl limit 1) ss on id = f1;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Nested Loop
+-   ->  Limit
+-         ->  Seq Scan on int4_tbl
+-   ->  Append
+-         ->  Index Scan using patest0i on patest0 patest0_1
+-               Index Cond: (id = int4_tbl.f1)
+-         ->  Index Scan using patest1i on patest1 patest0_2
+-               Index Cond: (id = int4_tbl.f1)
+-         ->  Index Scan using patest2i on patest2 patest0_3
+-               Index Cond: (id = int4_tbl.f1)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from patest0 join (select f1 from int4_tbl limit 1) ss on id = f1;
+  id | x | f1 
+ ----+---+----
+   0 | 0 |  0
+-  0 | 0 |  0
+-  0 | 0 |  0
+-(3 rows)
++(1 row)
+ 
+ drop index patest2i;
++ERROR:  index "patest2i" does not exist
+ explain (costs off)
+ select * from patest0 join (select f1 from int4_tbl limit 1) ss on id = f1;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Nested Loop
+-   ->  Limit
+-         ->  Seq Scan on int4_tbl
+-   ->  Append
+-         ->  Index Scan using patest0i on patest0 patest0_1
+-               Index Cond: (id = int4_tbl.f1)
+-         ->  Index Scan using patest1i on patest1 patest0_2
+-               Index Cond: (id = int4_tbl.f1)
+-         ->  Seq Scan on patest2 patest0_3
+-               Filter: (int4_tbl.f1 = id)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from patest0 join (select f1 from int4_tbl limit 1) ss on id = f1;
+  id | x | f1 
+ ----+---+----
+   0 | 0 |  0
+-  0 | 0 |  0
+-  0 | 0 |  0
+-(3 rows)
++(1 row)
+ 
+ drop table patest0 cascade;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to table patest1
+-drop cascades to table patest2
+ --
+ -- Test merge-append plans for inheritance trees
+ --
+ create table matest0 (id serial primary key, name text);
++NOTICE:  using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/_version_/serial.html
+ create table matest1 (id integer primary key) inherits (matest0);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table matest1 (id integer primary key) inherits (matest0)
++                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table matest2 (id integer primary key) inherits (matest0);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table matest2 (id integer primary key) inherits (matest0)
++                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table matest3 (id integer primary key) inherits (matest0);
+-NOTICE:  merging column "id" with inherited definition
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table matest3 (id integer primary key) inherits (matest0)
++                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create index matest0i on matest0 ((1-id));
+ create index matest1i on matest1 ((1-id));
++ERROR:  relation "matest1" does not exist
+ -- create index matest2i on matest2 ((1-id));  -- intentionally missing
+ create index matest3i on matest3 ((1-id));
++ERROR:  relation "matest3" does not exist
+ insert into matest1 (name) values ('Test 1');
++ERROR:  relation "matest1" does not exist
+ insert into matest1 (name) values ('Test 2');
++ERROR:  relation "matest1" does not exist
+ insert into matest2 (name) values ('Test 3');
++ERROR:  relation "matest2" does not exist
+ insert into matest2 (name) values ('Test 4');
++ERROR:  relation "matest2" does not exist
+ insert into matest3 (name) values ('Test 5');
++ERROR:  relation "matest3" does not exist
+ insert into matest3 (name) values ('Test 6');
++ERROR:  relation "matest3" does not exist
+ set enable_indexscan = off;  -- force use of seqscan/sort, so no merge
+-explain (verbose, costs off) select * from matest0 order by 1-id;
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Sort
+-   Output: matest0.id, matest0.name, ((1 - matest0.id))
+-   Sort Key: ((1 - matest0.id))
+-   ->  Result
+-         Output: matest0.id, matest0.name, (1 - matest0.id)
+-         ->  Append
+-               ->  Seq Scan on public.matest0 matest0_1
+-                     Output: matest0_1.id, matest0_1.name
+-               ->  Seq Scan on public.matest1 matest0_2
+-                     Output: matest0_2.id, matest0_2.name
+-               ->  Seq Scan on public.matest2 matest0_3
+-                     Output: matest0_3.id, matest0_3.name
+-               ->  Seq Scan on public.matest3 matest0_4
+-                     Output: matest0_4.id, matest0_4.name
+-(14 rows)
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++explain (verbose, costs off) select * from matest0 order by 1-id;
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from matest0 order by 1-id
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from matest0 order by 1-id;
+- id |  name  
+-----+--------
+-  6 | Test 6
+-  5 | Test 5
+-  4 | Test 4
+-  3 | Test 3
+-  2 | Test 2
+-  1 | Test 1
+-(6 rows)
++ id | name 
++----+------
++(0 rows)
+ 
+ explain (verbose, costs off) select min(1-id) from matest0;
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Aggregate
+-   Output: min((1 - matest0.id))
+-   ->  Append
+-         ->  Seq Scan on public.matest0 matest0_1
+-               Output: matest0_1.id
+-         ->  Seq Scan on public.matest1 matest0_2
+-               Output: matest0_2.id
+-         ->  Seq Scan on public.matest2 matest0_3
+-               Output: matest0_3.id
+-         ->  Seq Scan on public.matest3 matest0_4
+-               Output: matest0_4.id
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select min(1-id) from matest0
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(1-id) from matest0;
+  min 
+ -----
+-  -5
++    
+ (1 row)
+ 
+ reset enable_indexscan;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_seqscan = off;  -- plan with fewest seqscans should be merge
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_parallel_append = off; -- Don't let parallel-append interfere
++ERROR:  unrecognized configuration parameter "enable_parallel_append"
+ explain (verbose, costs off) select * from matest0 order by 1-id;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: ((1 - matest0.id))
+-   ->  Index Scan using matest0i on public.matest0 matest0_1
+-         Output: matest0_1.id, matest0_1.name, (1 - matest0_1.id)
+-   ->  Index Scan using matest1i on public.matest1 matest0_2
+-         Output: matest0_2.id, matest0_2.name, (1 - matest0_2.id)
+-   ->  Sort
+-         Output: matest0_3.id, matest0_3.name, ((1 - matest0_3.id))
+-         Sort Key: ((1 - matest0_3.id))
+-         ->  Seq Scan on public.matest2 matest0_3
+-               Output: matest0_3.id, matest0_3.name, (1 - matest0_3.id)
+-   ->  Index Scan using matest3i on public.matest3 matest0_4
+-         Output: matest0_4.id, matest0_4.name, (1 - matest0_4.id)
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from matest0 order by 1-id
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from matest0 order by 1-id;
+- id |  name  
+-----+--------
+-  6 | Test 6
+-  5 | Test 5
+-  4 | Test 4
+-  3 | Test 3
+-  2 | Test 2
+-  1 | Test 1
+-(6 rows)
++ id | name 
++----+------
++(0 rows)
+ 
+ explain (verbose, costs off) select min(1-id) from matest0;
+-                                   QUERY PLAN                                    
+----------------------------------------------------------------------------------
+- Result
+-   Output: $0
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           Output: ((1 - matest0.id))
+-           ->  Result
+-                 Output: ((1 - matest0.id))
+-                 ->  Merge Append
+-                       Sort Key: ((1 - matest0.id))
+-                       ->  Index Scan using matest0i on public.matest0 matest0_1
+-                             Output: matest0_1.id, (1 - matest0_1.id)
+-                             Index Cond: ((1 - matest0_1.id) IS NOT NULL)
+-                       ->  Index Scan using matest1i on public.matest1 matest0_2
+-                             Output: matest0_2.id, (1 - matest0_2.id)
+-                             Index Cond: ((1 - matest0_2.id) IS NOT NULL)
+-                       ->  Sort
+-                             Output: matest0_3.id, ((1 - matest0_3.id))
+-                             Sort Key: ((1 - matest0_3.id))
+-                             ->  Bitmap Heap Scan on public.matest2 matest0_3
+-                                   Output: matest0_3.id, (1 - matest0_3.id)
+-                                   Filter: ((1 - matest0_3.id) IS NOT NULL)
+-                                   ->  Bitmap Index Scan on matest2_pkey
+-                       ->  Index Scan using matest3i on public.matest3 matest0_4
+-                             Output: matest0_4.id, (1 - matest0_4.id)
+-                             Index Cond: ((1 - matest0_4.id) IS NOT NULL)
+-(25 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select min(1-id) from matest0
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(1-id) from matest0;
+  min 
+ -----
+-  -5
++    
+ (1 row)
+ 
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_parallel_append;
++ERROR:  unrecognized configuration parameter "enable_parallel_append"
+ drop table matest0 cascade;
+-NOTICE:  drop cascades to 3 other objects
+-DETAIL:  drop cascades to table matest1
+-drop cascades to table matest2
+-drop cascades to table matest3
+ --
+ -- Check that use of an index with an extraneous column doesn't produce
+ -- a plan with extraneous sorting
+ --
+ create table matest0 (a int, b int, c int, d int);
+ create table matest1 () inherits(matest0);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table matest1 () inherits(matest0)
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create index matest0i on matest0 (b, c);
+ create index matest1i on matest1 (b, c);
++ERROR:  relation "matest1" does not exist
+ set enable_nestloop = off;  -- we want a plan with two MergeAppends
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ explain (costs off)
+ select t1.* from matest0 t1, matest0 t2
+ where t1.b = t2.b and t2.c = t2.d
+ order by t1.b limit 10;
+-                            QUERY PLAN                             
+--------------------------------------------------------------------
+- Limit
+-   ->  Merge Join
+-         Merge Cond: (t1.b = t2.b)
+-         ->  Merge Append
+-               Sort Key: t1.b
+-               ->  Index Scan using matest0i on matest0 t1_1
+-               ->  Index Scan using matest1i on matest1 t1_2
+-         ->  Materialize
+-               ->  Merge Append
+-                     Sort Key: t2.b
+-                     ->  Index Scan using matest0i on matest0 t2_1
+-                           Filter: (c = d)
+-                     ->  Index Scan using matest1i on matest1 t2_2
+-                           Filter: (c = d)
+-(14 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset enable_nestloop;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table matest0 cascade;
+-NOTICE:  drop cascades to table matest1
+ --
+ -- Test merge-append for UNION ALL append relations
+ --
+ set enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ set enable_indexscan = on;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_bitmapscan = off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Check handling of duplicated, constant, or volatile targetlist items
+ explain (costs off)
+ SELECT thousand, tenthous FROM tenk1
+ UNION ALL
+ SELECT thousand, thousand FROM tenk1
+ ORDER BY thousand, tenthous;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: tenk1.thousand, tenk1.tenthous
+-   ->  Index Only Scan using tenk1_thous_tenthous on tenk1
+-   ->  Sort
+-         Sort Key: tenk1_1.thousand, tenk1_1.thousand
+-         ->  Index Only Scan using tenk1_thous_tenthous on tenk1 tenk1_1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ SELECT thousand, tenthous, thousand+tenthous AS x FROM tenk1
+ UNION ALL
+ SELECT 42, 42, hundred FROM tenk1
+ ORDER BY thousand, tenthous;
+-                            QUERY PLAN                            
+-------------------------------------------------------------------
+- Merge Append
+-   Sort Key: tenk1.thousand, tenk1.tenthous
+-   ->  Index Only Scan using tenk1_thous_tenthous on tenk1
+-   ->  Sort
+-         Sort Key: 42, 42
+-         ->  Index Only Scan using tenk1_hundred on tenk1 tenk1_1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ SELECT thousand, tenthous FROM tenk1
+ UNION ALL
+ SELECT thousand, random()::integer FROM tenk1
+ ORDER BY thousand, tenthous;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: tenk1.thousand, tenk1.tenthous
+-   ->  Index Only Scan using tenk1_thous_tenthous on tenk1
+-   ->  Sort
+-         Sort Key: tenk1_1.thousand, ((random())::integer)
+-         ->  Index Only Scan using tenk1_thous_tenthous on tenk1 tenk1_1
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Check min/max aggregate optimization
+ explain (costs off)
+ SELECT min(x) FROM
+   (SELECT unique1 AS x FROM tenk1 a
+    UNION ALL
+    SELECT unique2 AS x FROM tenk1 b) s;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: a.unique1
+-                 ->  Index Only Scan using tenk1_unique1 on tenk1 a
+-                       Index Cond: (unique1 IS NOT NULL)
+-                 ->  Index Only Scan using tenk1_unique2 on tenk1 b
+-                       Index Cond: (unique2 IS NOT NULL)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+ SELECT min(y) FROM
+   (SELECT unique1 AS x, unique1 AS y FROM tenk1 a
+    UNION ALL
+    SELECT unique2 AS x, unique2 AS y FROM tenk1 b) s;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: a.unique1
+-                 ->  Index Only Scan using tenk1_unique1 on tenk1 a
+-                       Index Cond: (unique1 IS NOT NULL)
+-                 ->  Index Only Scan using tenk1_unique2 on tenk1 b
+-                       Index Cond: (unique2 IS NOT NULL)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- XXX planner doesn't recognize that index on unique2 is sufficiently sorted
+ explain (costs off)
+ SELECT x, y FROM
+@@ -1659,16 +1538,11 @@
+    UNION ALL
+    SELECT unique2 AS x, unique2 AS y FROM tenk1 b) s
+ ORDER BY x, y;
+-                         QUERY PLAN                          
+--------------------------------------------------------------
+- Merge Append
+-   Sort Key: a.thousand, a.tenthous
+-   ->  Index Only Scan using tenk1_thous_tenthous on tenk1 a
+-   ->  Sort
+-         Sort Key: b.unique2, b.unique2
+-         ->  Index Only Scan using tenk1_unique2 on tenk1 b
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- exercise rescan code path via a repeatedly-evaluated subquery
+ explain (costs off)
+ SELECT
+@@ -1679,21 +1553,11 @@
+     ) f(i)
+     ORDER BY f.i LIMIT 10)
+ FROM generate_series(1, 3) g(i);
+-                           QUERY PLAN                           
+-----------------------------------------------------------------
+- Function Scan on generate_series g
+-   SubPlan 1
+-     ->  Limit
+-           ->  Merge Append
+-                 Sort Key: ((d.d + g.i))
+-                 ->  Sort
+-                       Sort Key: ((d.d + g.i))
+-                       ->  Function Scan on generate_series d
+-                 ->  Sort
+-                       Sort Key: ((d_1.d + g.i))
+-                       ->  Function Scan on generate_series d_1
+-(11 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT
+     ARRAY(SELECT f.i FROM (
+         (SELECT d + g.i FROM generate_series(4, 30, 3) d ORDER BY 1)
+@@ -1710,173 +1574,183 @@
+ (3 rows)
+ 
+ reset enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ reset enable_indexscan;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- Check handling of MULTIEXPR SubPlans in inherited updates
+ --
+ create table inhpar(f1 int, f2 name);
+ create table inhcld(f2 name, f1 int);
+ alter table inhcld inherit inhpar;
++ERROR:  at or near "inherit": syntax error
++DETAIL:  source SQL:
++alter table inhcld inherit inhpar
++                   ^
++HINT:  try \h ALTER TABLE
+ insert into inhpar select x, x::text from generate_series(1,5) x;
+ insert into inhcld select x::text, x from generate_series(6,10) x;
+ explain (verbose, costs off)
+ update inhpar i set (f1, f2) = (select i.f1, i.f2 || '-' from int4_tbl limit 1);
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Update on public.inhpar i
+-   Update on public.inhpar i_1
+-   Update on public.inhcld i_2
+-   ->  Result
+-         Output: $2, $3, (SubPlan 1 (returns $2,$3)), i.tableoid, i.ctid
+-         ->  Append
+-               ->  Seq Scan on public.inhpar i_1
+-                     Output: i_1.f1, i_1.f2, i_1.tableoid, i_1.ctid
+-               ->  Seq Scan on public.inhcld i_2
+-                     Output: i_2.f1, i_2.f2, i_2.tableoid, i_2.ctid
+-         SubPlan 1 (returns $2,$3)
+-           ->  Limit
+-                 Output: (i.f1), (((i.f2)::text || '-'::text))
+-                 ->  Seq Scan on public.int4_tbl
+-                       Output: i.f1, ((i.f2)::text || '-'::text)
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ update inhpar i set (f1, f2) = (select i.f1, i.f2 || '-' from int4_tbl limit 1);
+ select * from inhpar;
+- f1 | f2  
+-----+-----
++ f1 | f2 
++----+----
+   1 | 1-
+   2 | 2-
+   3 | 3-
+   4 | 4-
+   5 | 5-
+-  6 | 6-
+-  7 | 7-
+-  8 | 8-
+-  9 | 9-
+- 10 | 10-
+-(10 rows)
++(5 rows)
+ 
+ drop table inhpar cascade;
+-NOTICE:  drop cascades to table inhcld
+ --
+ -- And the same for partitioned cases
+ --
+ create table inhpar(f1 int primary key, f2 name) partition by range (f1);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table inhpar(f1 int primary key, f2 name) partition by range (f1)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ create table inhcld1(f2 name, f1 int primary key);
+ create table inhcld2(f1 int primary key, f2 name);
+ alter table inhpar attach partition inhcld1 for values from (1) to (5);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table inhpar attach partition inhcld1 for values from (1) to (5)
++                   ^
++HINT:  try \h ALTER TABLE
+ alter table inhpar attach partition inhcld2 for values from (5) to (100);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table inhpar attach partition inhcld2 for values from (5) to (100)
++                   ^
++HINT:  try \h ALTER TABLE
+ insert into inhpar select x, x::text from generate_series(1,10) x;
++ERROR:  relation "inhpar" does not exist
+ explain (verbose, costs off)
+ update inhpar i set (f1, f2) = (select i.f1, i.f2 || '-' from int4_tbl limit 1);
+-                                    QUERY PLAN                                     
+------------------------------------------------------------------------------------
+- Update on public.inhpar i
+-   Update on public.inhcld1 i_1
+-   Update on public.inhcld2 i_2
+-   ->  Append
+-         ->  Seq Scan on public.inhcld1 i_1
+-               Output: $2, $3, (SubPlan 1 (returns $2,$3)), i_1.tableoid, i_1.ctid
+-               SubPlan 1 (returns $2,$3)
+-                 ->  Limit
+-                       Output: (i_1.f1), (((i_1.f2)::text || '-'::text))
+-                       ->  Seq Scan on public.int4_tbl
+-                             Output: i_1.f1, ((i_1.f2)::text || '-'::text)
+-         ->  Seq Scan on public.inhcld2 i_2
+-               Output: $2, $3, (SubPlan 1 (returns $2,$3)), i_2.tableoid, i_2.ctid
+-(13 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ update inhpar i set (f1, f2) = (select i.f1, i.f2 || '-' from int4_tbl limit 1);
++ERROR:  relation "inhpar" does not exist
+ select * from inhpar;
+- f1 | f2  
+-----+-----
+-  1 | 1-
+-  2 | 2-
+-  3 | 3-
+-  4 | 4-
+-  5 | 5-
+-  6 | 6-
+-  7 | 7-
+-  8 | 8-
+-  9 | 9-
+- 10 | 10-
+-(10 rows)
+-
++ERROR:  relation "inhpar" does not exist
+ -- Also check ON CONFLICT
+ insert into inhpar as i values (3), (7) on conflict (f1)
+   do update set (f1, f2) = (select i.f1, i.f2 || '+');
++ERROR:  relation "inhpar" does not exist
+ select * from inhpar order by f1;  -- tuple order might be unstable here
+- f1 | f2  
+-----+-----
+-  1 | 1-
+-  2 | 2-
+-  3 | 3-+
+-  4 | 4-
+-  5 | 5-
+-  6 | 6-
+-  7 | 7-+
+-  8 | 8-
+-  9 | 9-
+- 10 | 10-
+-(10 rows)
+-
++ERROR:  relation "inhpar" does not exist
+ drop table inhpar cascade;
++ERROR:  relation "inhpar" does not exist
+ --
+ -- Check handling of a constant-null CHECK constraint
+ --
+ create table cnullparent (f1 int);
+ create table cnullchild (check (f1 = 1 or f1 = null)) inherits(cnullparent);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table cnullchild (check (f1 = 1 or f1 = null)) inherits(cnullparent)
++                                                              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into cnullchild values(1);
++ERROR:  relation "cnullchild" does not exist
+ insert into cnullchild values(2);
++ERROR:  relation "cnullchild" does not exist
+ insert into cnullchild values(null);
++ERROR:  relation "cnullchild" does not exist
+ select * from cnullparent;
+  f1 
+ ----
+-  1
+-  2
+-   
+-(3 rows)
++(0 rows)
+ 
+ select * from cnullparent where f1 = 2;
+  f1 
+ ----
+-  2
+-(1 row)
++(0 rows)
+ 
+ drop table cnullparent cascade;
+-NOTICE:  drop cascades to table cnullchild
+ --
+ -- Check use of temporary tables with inheritance trees
+ --
+ create table inh_perm_parent (a1 int);
+ create temp table inh_temp_parent (a1 int);
+ create temp table inh_temp_child () inherits (inh_perm_parent); -- ok
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table inh_temp_child () inherits (inh_perm_parent)
++                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create table inh_perm_child () inherits (inh_temp_parent); -- error
+-ERROR:  cannot inherit from temporary relation "inh_temp_parent"
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create table inh_perm_child () inherits (inh_temp_parent)
++                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ create temp table inh_temp_child_2 () inherits (inh_temp_parent); -- ok
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create temp table inh_temp_child_2 () inherits (inh_temp_parent)
++                                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/22456/_version_
+ insert into inh_perm_parent values (1);
+ insert into inh_temp_parent values (2);
+ insert into inh_temp_child values (3);
++ERROR:  relation "inh_temp_child" does not exist
+ insert into inh_temp_child_2 values (4);
++ERROR:  relation "inh_temp_child_2" does not exist
+ select tableoid::regclass, a1 from inh_perm_parent;
+     tableoid     | a1 
+ -----------------+----
+  inh_perm_parent |  1
+- inh_temp_child  |  3
+-(2 rows)
++(1 row)
+ 
+ select tableoid::regclass, a1 from inh_temp_parent;
+-     tableoid     | a1 
+-------------------+----
+- inh_temp_parent  |  2
+- inh_temp_child_2 |  4
+-(2 rows)
++    tableoid     | a1 
++-----------------+----
++ inh_temp_parent |  2
++(1 row)
+ 
+ drop table inh_perm_parent cascade;
+-NOTICE:  drop cascades to table inh_temp_child
+ drop table inh_temp_parent cascade;
+-NOTICE:  drop cascades to table inh_temp_child_2
+ --
+ -- Check that constraint exclusion works correctly with partitions using
+ -- implicit constraints generated from the partition bound information.
+@@ -1884,747 +1758,864 @@
+ create table list_parted (
+ 	a	varchar
+ ) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table list_parted (
++	a	varchar
++) partition by list (a)
++                       ^
++HINT:  try \h CREATE TABLE
+ create table part_ab_cd partition of list_parted for values in ('ab', 'cd');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_ab_cd partition of list_parted for values in ('ab', 'cd')
++                        ^
++HINT:  try \h CREATE TABLE
+ create table part_ef_gh partition of list_parted for values in ('ef', 'gh');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_ef_gh partition of list_parted for values in ('ef', 'gh')
++                        ^
++HINT:  try \h CREATE TABLE
+ create table part_null_xy partition of list_parted for values in (null, 'xy');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_null_xy partition of list_parted for values in (null, 'xy')
++                          ^
++HINT:  try \h CREATE TABLE
+ explain (costs off) select * from list_parted;
+-                  QUERY PLAN                  
+-----------------------------------------------
+- Append
+-   ->  Seq Scan on part_ab_cd list_parted_1
+-   ->  Seq Scan on part_ef_gh list_parted_2
+-   ->  Seq Scan on part_null_xy list_parted_3
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from list_parted where a is null;
+-              QUERY PLAN              
+---------------------------------------
+- Seq Scan on part_null_xy list_parted
+-   Filter: (a IS NULL)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted where a is null
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from list_parted where a is not null;
+-                  QUERY PLAN                  
+-----------------------------------------------
+- Append
+-   ->  Seq Scan on part_ab_cd list_parted_1
+-         Filter: (a IS NOT NULL)
+-   ->  Seq Scan on part_ef_gh list_parted_2
+-         Filter: (a IS NOT NULL)
+-   ->  Seq Scan on part_null_xy list_parted_3
+-         Filter: (a IS NOT NULL)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted where a is not null
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from list_parted where a in ('ab', 'cd', 'ef');
+-                        QUERY PLAN                        
+-----------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_ab_cd list_parted_1
+-         Filter: ((a)::text = ANY ('{ab,cd,ef}'::text[]))
+-   ->  Seq Scan on part_ef_gh list_parted_2
+-         Filter: ((a)::text = ANY ('{ab,cd,ef}'::text[]))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted where a in ('ab', 'cd', 'ef')
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from list_parted where a = 'ab' or a in (null, 'cd');
+-                                   QUERY PLAN                                    
+----------------------------------------------------------------------------------
+- Seq Scan on part_ab_cd list_parted
+-   Filter: (((a)::text = 'ab'::text) OR ((a)::text = ANY ('{NULL,cd}'::text[])))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted where a = 'ab' or a in (null, 'cd')
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from list_parted where a = 'ab';
+-             QUERY PLAN             
+-------------------------------------
+- Seq Scan on part_ab_cd list_parted
+-   Filter: ((a)::text = 'ab'::text)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from list_parted where a = 'ab'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ create table range_list_parted (
+ 	a	int,
+ 	b	char(2)
+ ) partition by range (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table range_list_parted (
++	a	int,
++	b	char(2)
++) partition by range (a)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table part_1_10 partition of range_list_parted for values from (1) to (10) partition by list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_1_10 partition of range_list_parted for values from (1) to (10) partition by list (b)
++                       ^
++HINT:  try \h CREATE TABLE
+ create table part_1_10_ab partition of part_1_10 for values in ('ab');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_1_10_ab partition of part_1_10 for values in ('ab')
++                          ^
++HINT:  try \h CREATE TABLE
+ create table part_1_10_cd partition of part_1_10 for values in ('cd');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_1_10_cd partition of part_1_10 for values in ('cd')
++                          ^
++HINT:  try \h CREATE TABLE
+ create table part_10_20 partition of range_list_parted for values from (10) to (20) partition by list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_10_20 partition of range_list_parted for values from (10) to (20) partition by list (b)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table part_10_20_ab partition of part_10_20 for values in ('ab');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_10_20_ab partition of part_10_20 for values in ('ab')
++                           ^
++HINT:  try \h CREATE TABLE
+ create table part_10_20_cd partition of part_10_20 for values in ('cd');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_10_20_cd partition of part_10_20 for values in ('cd')
++                           ^
++HINT:  try \h CREATE TABLE
+ create table part_21_30 partition of range_list_parted for values from (21) to (30) partition by list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_21_30 partition of range_list_parted for values from (21) to (30) partition by list (b)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table part_21_30_ab partition of part_21_30 for values in ('ab');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_21_30_ab partition of part_21_30 for values in ('ab')
++                           ^
++HINT:  try \h CREATE TABLE
+ create table part_21_30_cd partition of part_21_30 for values in ('cd');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_21_30_cd partition of part_21_30 for values in ('cd')
++                           ^
++HINT:  try \h CREATE TABLE
+ create table part_40_inf partition of range_list_parted for values from (40) to (maxvalue) partition by list (b);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_40_inf partition of range_list_parted for values from (40) to (maxvalue) partition by list (b)
++                         ^
++HINT:  try \h CREATE TABLE
+ create table part_40_inf_ab partition of part_40_inf for values in ('ab');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_40_inf_ab partition of part_40_inf for values in ('ab')
++                            ^
++HINT:  try \h CREATE TABLE
+ create table part_40_inf_cd partition of part_40_inf for values in ('cd');
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_40_inf_cd partition of part_40_inf for values in ('cd')
++                            ^
++HINT:  try \h CREATE TABLE
+ create table part_40_inf_null partition of part_40_inf for values in (null);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table part_40_inf_null partition of part_40_inf for values in (null)
++                              ^
++HINT:  try \h CREATE TABLE
+ explain (costs off) select * from range_list_parted;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_1_10_ab range_list_parted_1
+-   ->  Seq Scan on part_1_10_cd range_list_parted_2
+-   ->  Seq Scan on part_10_20_ab range_list_parted_3
+-   ->  Seq Scan on part_10_20_cd range_list_parted_4
+-   ->  Seq Scan on part_21_30_ab range_list_parted_5
+-   ->  Seq Scan on part_21_30_cd range_list_parted_6
+-   ->  Seq Scan on part_40_inf_ab range_list_parted_7
+-   ->  Seq Scan on part_40_inf_cd range_list_parted_8
+-   ->  Seq Scan on part_40_inf_null range_list_parted_9
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_list_parted where a = 5;
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Append
+-   ->  Seq Scan on part_1_10_ab range_list_parted_1
+-         Filter: (a = 5)
+-   ->  Seq Scan on part_1_10_cd range_list_parted_2
+-         Filter: (a = 5)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where a = 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_list_parted where b = 'ab';
+-                      QUERY PLAN                      
+-------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_1_10_ab range_list_parted_1
+-         Filter: (b = 'ab'::bpchar)
+-   ->  Seq Scan on part_10_20_ab range_list_parted_2
+-         Filter: (b = 'ab'::bpchar)
+-   ->  Seq Scan on part_21_30_ab range_list_parted_3
+-         Filter: (b = 'ab'::bpchar)
+-   ->  Seq Scan on part_40_inf_ab range_list_parted_4
+-         Filter: (b = 'ab'::bpchar)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where b = 'ab'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_list_parted where a between 3 and 23 and b in ('ab');
+-                           QUERY PLAN                            
+------------------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_1_10_ab range_list_parted_1
+-         Filter: ((a >= 3) AND (a <= 23) AND (b = 'ab'::bpchar))
+-   ->  Seq Scan on part_10_20_ab range_list_parted_2
+-         Filter: ((a >= 3) AND (a <= 23) AND (b = 'ab'::bpchar))
+-   ->  Seq Scan on part_21_30_ab range_list_parted_3
+-         Filter: ((a >= 3) AND (a <= 23) AND (b = 'ab'::bpchar))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where a between 3 and 23 and b in ('ab')
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ /* Should select no rows because range partition key cannot be null */
+ explain (costs off) select * from range_list_parted where a is null;
+-        QUERY PLAN        
+---------------------------
+- Result
+-   One-Time Filter: false
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where a is null
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ /* Should only select rows from the null-accepting partition */
+ explain (costs off) select * from range_list_parted where b is null;
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Seq Scan on part_40_inf_null range_list_parted
+-   Filter: (b IS NULL)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where b is null
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_list_parted where a is not null and a < 67;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_1_10_ab range_list_parted_1
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_1_10_cd range_list_parted_2
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_10_20_ab range_list_parted_3
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_10_20_cd range_list_parted_4
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_21_30_ab range_list_parted_5
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_21_30_cd range_list_parted_6
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_40_inf_ab range_list_parted_7
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_40_inf_cd range_list_parted_8
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-   ->  Seq Scan on part_40_inf_null range_list_parted_9
+-         Filter: ((a IS NOT NULL) AND (a < 67))
+-(19 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where a is not null and a < 67
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_list_parted where a >= 30;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- Append
+-   ->  Seq Scan on part_40_inf_ab range_list_parted_1
+-         Filter: (a >= 30)
+-   ->  Seq Scan on part_40_inf_cd range_list_parted_2
+-         Filter: (a >= 30)
+-   ->  Seq Scan on part_40_inf_null range_list_parted_3
+-         Filter: (a >= 30)
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_list_parted where a >= 30
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table list_parted;
++ERROR:  relation "list_parted" does not exist
+ drop table range_list_parted;
++ERROR:  relation "range_list_parted" does not exist
+ -- check that constraint exclusion is able to cope with the partition
+ -- constraint emitted for multi-column range partitioned tables
+ create table mcrparted (a int, b int, c int) partition by range (a, abs(b), c);
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++create table mcrparted (a int, b int, c int) partition by range (a, abs(b), c)
++                                                                       ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted_def partition of mcrparted default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted_def partition of mcrparted default
++                           ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted0 partition of mcrparted for values from (minvalue, minvalue, minvalue) to (1, 1, 1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted0 partition of mcrparted for values from (minvalue, minvalue, minvalue) to (1, 1, 1)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted1 partition of mcrparted for values from (1, 1, 1) to (10, 5, 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted1 partition of mcrparted for values from (1, 1, 1) to (10, 5, 10)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted2 partition of mcrparted for values from (10, 5, 10) to (10, 10, 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted2 partition of mcrparted for values from (10, 5, 10) to (10, 10, 10)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted3 partition of mcrparted for values from (11, 1, 1) to (20, 10, 10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted3 partition of mcrparted for values from (11, 1, 1) to (20, 10, 10)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted4 partition of mcrparted for values from (20, 10, 10) to (20, 20, 20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted4 partition of mcrparted for values from (20, 10, 10) to (20, 20, 20)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted5 partition of mcrparted for values from (20, 20, 20) to (maxvalue, maxvalue, maxvalue);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted5 partition of mcrparted for values from (20, 20, 20) to (maxvalue, maxvalue, maxvalue)
++                        ^
++HINT:  try \h CREATE TABLE
+ explain (costs off) select * from mcrparted where a = 0;	-- scans mcrparted0, mcrparted_def
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted0 mcrparted_1
+-         Filter: (a = 0)
+-   ->  Seq Scan on mcrparted_def mcrparted_2
+-         Filter: (a = 0)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 0
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where a = 10 and abs(b) < 5;	-- scans mcrparted1, mcrparted_def
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted1 mcrparted_1
+-         Filter: ((a = 10) AND (abs(b) < 5))
+-   ->  Seq Scan on mcrparted_def mcrparted_2
+-         Filter: ((a = 10) AND (abs(b) < 5))
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 10 and abs(b) < 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where a = 10 and abs(b) = 5;	-- scans mcrparted1, mcrparted2, mcrparted_def
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted1 mcrparted_1
+-         Filter: ((a = 10) AND (abs(b) = 5))
+-   ->  Seq Scan on mcrparted2 mcrparted_2
+-         Filter: ((a = 10) AND (abs(b) = 5))
+-   ->  Seq Scan on mcrparted_def mcrparted_3
+-         Filter: ((a = 10) AND (abs(b) = 5))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 10 and abs(b) = 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where abs(b) = 5;	-- scans all partitions
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted0 mcrparted_1
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted1 mcrparted_2
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted2 mcrparted_3
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted3 mcrparted_4
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted4 mcrparted_5
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted5 mcrparted_6
+-         Filter: (abs(b) = 5)
+-   ->  Seq Scan on mcrparted_def mcrparted_7
+-         Filter: (abs(b) = 5)
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where abs(b) = 5
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where a > -1;	-- scans all partitions
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted0 mcrparted_1
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted1 mcrparted_2
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted2 mcrparted_3
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted3 mcrparted_4
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted4 mcrparted_5
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted5 mcrparted_6
+-         Filter: (a > '-1'::integer)
+-   ->  Seq Scan on mcrparted_def mcrparted_7
+-         Filter: (a > '-1'::integer)
+-(15 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a > -1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where a = 20 and abs(b) = 10 and c > 10;	-- scans mcrparted4
+-                     QUERY PLAN                      
+------------------------------------------------------
+- Seq Scan on mcrparted4 mcrparted
+-   Filter: ((c > 10) AND (a = 20) AND (abs(b) = 10))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 20 and abs(b) = 10 and c > 10
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mcrparted where a = 20 and c > 20; -- scans mcrparted3, mcrparte4, mcrparte5, mcrparted_def
+-                 QUERY PLAN                  
+----------------------------------------------
+- Append
+-   ->  Seq Scan on mcrparted3 mcrparted_1
+-         Filter: ((c > 20) AND (a = 20))
+-   ->  Seq Scan on mcrparted4 mcrparted_2
+-         Filter: ((c > 20) AND (a = 20))
+-   ->  Seq Scan on mcrparted5 mcrparted_3
+-         Filter: ((c > 20) AND (a = 20))
+-   ->  Seq Scan on mcrparted_def mcrparted_4
+-         Filter: ((c > 20) AND (a = 20))
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 20 and c > 20
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check that partitioned table Appends cope with being referenced in
+ -- subplans
+ create table parted_minmax (a int, b varchar(16)) partition by range (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_minmax (a int, b varchar(16)) partition by range (a)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ create table parted_minmax1 partition of parted_minmax for values from (1) to (10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_minmax1 partition of parted_minmax for values from (1) to (10)
++                            ^
++HINT:  try \h CREATE TABLE
+ create index parted_minmax1i on parted_minmax1 (a, b);
++ERROR:  relation "parted_minmax1" does not exist
+ insert into parted_minmax values (1,'12345');
++ERROR:  relation "parted_minmax" does not exist
+ explain (costs off) select min(a), max(a) from parted_minmax where b = '12345';
+-                                           QUERY PLAN                                           
+-------------------------------------------------------------------------------------------------
+- Result
+-   InitPlan 1 (returns $0)
+-     ->  Limit
+-           ->  Index Only Scan using parted_minmax1i on parted_minmax1 parted_minmax
+-                 Index Cond: ((a IS NOT NULL) AND (b = '12345'::text))
+-   InitPlan 2 (returns $1)
+-     ->  Limit
+-           ->  Index Only Scan Backward using parted_minmax1i on parted_minmax1 parted_minmax_1
+-                 Index Cond: ((a IS NOT NULL) AND (b = '12345'::text))
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select min(a), max(a) from parted_minmax where b = '12345'
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select min(a), max(a) from parted_minmax where b = '12345';
+- min | max 
+------+-----
+-   1 |   1
+-(1 row)
+-
++ERROR:  relation "parted_minmax" does not exist
+ drop table parted_minmax;
++ERROR:  relation "parted_minmax" does not exist
+ -- Test code that uses Append nodes in place of MergeAppend when the
+ -- partition ordering matches the desired ordering.
+ create index mcrparted_a_abs_c_idx on mcrparted (a, abs(b), c);
++ERROR:  relation "mcrparted" does not exist
+ -- MergeAppend must be used when a default partition exists
+ explain (costs off) select * from mcrparted order by a, abs(b), c;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mcrparted.a, (abs(mcrparted.b)), mcrparted.c
+-   ->  Index Scan using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-   ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-   ->  Index Scan using mcrparted4_a_abs_c_idx on mcrparted4 mcrparted_5
+-   ->  Index Scan using mcrparted5_a_abs_c_idx on mcrparted5 mcrparted_6
+-   ->  Index Scan using mcrparted_def_a_abs_c_idx on mcrparted_def mcrparted_7
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table mcrparted_def;
++ERROR:  relation "mcrparted_def" does not exist
+ -- Append is used for a RANGE partitioned table with no default
+ -- and no subpartitions
+ explain (costs off) select * from mcrparted order by a, abs(b), c;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Append
+-   ->  Index Scan using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-   ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-   ->  Index Scan using mcrparted4_a_abs_c_idx on mcrparted4 mcrparted_5
+-   ->  Index Scan using mcrparted5_a_abs_c_idx on mcrparted5 mcrparted_6
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Append is used with subpaths in reverse order with backwards index scans
+ explain (costs off) select * from mcrparted order by a desc, abs(b) desc, c desc;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Append
+-   ->  Index Scan Backward using mcrparted5_a_abs_c_idx on mcrparted5 mcrparted_6
+-   ->  Index Scan Backward using mcrparted4_a_abs_c_idx on mcrparted4 mcrparted_5
+-   ->  Index Scan Backward using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-   ->  Index Scan Backward using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-   ->  Index Scan Backward using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-   ->  Index Scan Backward using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted order by a desc, abs(b) desc, c desc
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check that Append plan is used containing a MergeAppend for sub-partitions
+ -- that are unordered.
+ drop table mcrparted5;
++ERROR:  relation "mcrparted5" does not exist
+ create table mcrparted5 partition of mcrparted for values from (20, 20, 20) to (maxvalue, maxvalue, maxvalue) partition by list (a);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted5 partition of mcrparted for values from (20, 20, 20) to (maxvalue, maxvalue, maxvalue) partition by list (a)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted5a partition of mcrparted5 for values in(20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted5a partition of mcrparted5 for values in(20)
++                         ^
++HINT:  try \h CREATE TABLE
+ create table mcrparted5_def partition of mcrparted5 default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mcrparted5_def partition of mcrparted5 default
++                            ^
++HINT:  try \h CREATE TABLE
+ explain (costs off) select * from mcrparted order by a, abs(b), c;
+-                                      QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+- Append
+-   ->  Index Scan using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-   ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-   ->  Index Scan using mcrparted4_a_abs_c_idx on mcrparted4 mcrparted_5
+-   ->  Merge Append
+-         Sort Key: mcrparted_7.a, (abs(mcrparted_7.b)), mcrparted_7.c
+-         ->  Index Scan using mcrparted5a_a_abs_c_idx on mcrparted5a mcrparted_7
+-         ->  Index Scan using mcrparted5_def_a_abs_c_idx on mcrparted5_def mcrparted_8
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table mcrparted5_def;
++ERROR:  relation "mcrparted5_def" does not exist
+ -- check that an Append plan is used and the sub-partitions are flattened
+ -- into the main Append when the sub-partition is unordered but contains
+ -- just a single sub-partition.
+ explain (costs off) select a, abs(b) from mcrparted order by a, abs(b), c;
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Append
+-   ->  Index Scan using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-   ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-   ->  Index Scan using mcrparted4_a_abs_c_idx on mcrparted4 mcrparted_5
+-   ->  Index Scan using mcrparted5a_a_abs_c_idx on mcrparted5a mcrparted_6
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select a, abs(b) from mcrparted order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check that Append is used when the sub-partitioned tables are pruned
+ -- during planning.
+ explain (costs off) select * from mcrparted where a < 20 order by a, abs(b), c;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Append
+-   ->  Index Scan using mcrparted0_a_abs_c_idx on mcrparted0 mcrparted_1
+-         Index Cond: (a < 20)
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-         Index Cond: (a < 20)
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-         Index Cond: (a < 20)
+-   ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-         Index Cond: (a < 20)
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a < 20 order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ set enable_bitmapscan to off;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_sort to off;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create table mclparted (a int) partition by list(a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table mclparted (a int) partition by list(a)
++                                                   ^
++HINT:  try \h CREATE TABLE
+ create table mclparted1 partition of mclparted for values in(1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted1 partition of mclparted for values in(1)
++                        ^
++HINT:  try \h CREATE TABLE
+ create table mclparted2 partition of mclparted for values in(2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted2 partition of mclparted for values in(2)
++                        ^
++HINT:  try \h CREATE TABLE
+ create index on mclparted (a);
++ERROR:  relation "mclparted" does not exist
+ -- Ensure an Append is used for a list partition with an order by.
+ explain (costs off) select * from mclparted order by a;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure a MergeAppend is used when a partition exists with interleaved
+ -- datums in the partition bound.
+ create table mclparted3_5 partition of mclparted for values in(3,5);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted3_5 partition of mclparted for values in(3,5)
++                          ^
++HINT:  try \h CREATE TABLE
+ create table mclparted4 partition of mclparted for values in(4);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted4 partition of mclparted for values in(4)
++                        ^
++HINT:  try \h CREATE TABLE
+ explain (costs off) select * from mclparted order by a;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mclparted.a
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-   ->  Index Only Scan using mclparted3_5_a_idx on mclparted3_5 mclparted_3
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_4
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mclparted where a in(3,4,5) order by a;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mclparted.a
+-   ->  Index Only Scan using mclparted3_5_a_idx on mclparted3_5 mclparted_1
+-         Index Cond: (a = ANY ('{3,4,5}'::integer[]))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_2
+-         Index Cond: (a = ANY ('{3,4,5}'::integer[]))
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(3,4,5) order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Introduce a NULL and DEFAULT partition so we can test more complex cases
+ create table mclparted_null partition of mclparted for values in(null);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted_null partition of mclparted for values in(null)
++                            ^
++HINT:  try \h CREATE TABLE
+ create table mclparted_def partition of mclparted default;
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted_def partition of mclparted default
++                           ^
++HINT:  try \h CREATE TABLE
+ -- Append can be used providing we don't scan the interleaved partition
+ explain (costs off) select * from mclparted where a in(1,2,4) order by a;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_3
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(1,2,4) order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mclparted where a in(1,2,4) or a is null order by a;
+-                                   QUERY PLAN                                   
+---------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_3
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted_null_a_idx on mclparted_null mclparted_4
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-(9 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(1,2,4) or a is null order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Test a more complex case where the NULL partition allows some other value
+ drop table mclparted_null;
++ERROR:  relation "mclparted_null" does not exist
+ create table mclparted_0_null partition of mclparted for values in(0,null);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table mclparted_0_null partition of mclparted for values in(0,null)
++                              ^
++HINT:  try \h CREATE TABLE
+ -- Ensure MergeAppend is used since 0 and NULLs are in the same partition.
+ explain (costs off) select * from mclparted where a in(1,2,4) or a is null order by a;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mclparted.a
+-   ->  Index Only Scan using mclparted_0_null_a_idx on mclparted_0_null mclparted_1
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_2
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_3
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_4
+-         Filter: ((a = ANY ('{1,2,4}'::integer[])) OR (a IS NULL))
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(1,2,4) or a is null order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from mclparted where a in(0,1,2,4) order by a;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mclparted.a
+-   ->  Index Only Scan using mclparted_0_null_a_idx on mclparted_0_null mclparted_1
+-         Index Cond: (a = ANY ('{0,1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_2
+-         Index Cond: (a = ANY ('{0,1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_3
+-         Index Cond: (a = ANY ('{0,1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_4
+-         Index Cond: (a = ANY ('{0,1,2,4}'::integer[]))
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(0,1,2,4) order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure Append is used when the null partition is pruned
+ explain (costs off) select * from mclparted where a in(1,2,4) order by a;
+-                               QUERY PLAN                               
+-------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_3
+-         Index Cond: (a = ANY ('{1,2,4}'::integer[]))
+-(7 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(1,2,4) order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure MergeAppend is used when the default partition is not pruned
+ explain (costs off) select * from mclparted where a in(1,2,4,100) order by a;
+-                                  QUERY PLAN                                  
+-------------------------------------------------------------------------------
+- Merge Append
+-   Sort Key: mclparted.a
+-   ->  Index Only Scan using mclparted1_a_idx on mclparted1 mclparted_1
+-         Index Cond: (a = ANY ('{1,2,4,100}'::integer[]))
+-   ->  Index Only Scan using mclparted2_a_idx on mclparted2 mclparted_2
+-         Index Cond: (a = ANY ('{1,2,4,100}'::integer[]))
+-   ->  Index Only Scan using mclparted4_a_idx on mclparted4 mclparted_3
+-         Index Cond: (a = ANY ('{1,2,4,100}'::integer[]))
+-   ->  Index Only Scan using mclparted_def_a_idx on mclparted_def mclparted_4
+-         Index Cond: (a = ANY ('{1,2,4,100}'::integer[]))
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mclparted where a in(1,2,4,100) order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table mclparted;
++ERROR:  relation "mclparted" does not exist
+ reset enable_sort;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure subplans which don't have a path with the correct pathkeys get
+ -- sorted correctly.
+ drop index mcrparted_a_abs_c_idx;
++ERROR:  index "mcrparted_a_abs_c_idx" does not exist
+ create index on mcrparted1 (a, abs(b), c);
++ERROR:  relation "mcrparted1" does not exist
+ create index on mcrparted2 (a, abs(b), c);
++ERROR:  relation "mcrparted2" does not exist
+ create index on mcrparted3 (a, abs(b), c);
++ERROR:  relation "mcrparted3" does not exist
+ create index on mcrparted4 (a, abs(b), c);
++ERROR:  relation "mcrparted4" does not exist
+ explain (costs off) select * from mcrparted where a < 20 order by a, abs(b), c limit 1;
+-                                  QUERY PLAN                                   
+--------------------------------------------------------------------------------
+- Limit
+-   ->  Append
+-         ->  Sort
+-               Sort Key: mcrparted_1.a, (abs(mcrparted_1.b)), mcrparted_1.c
+-               ->  Seq Scan on mcrparted0 mcrparted_1
+-                     Filter: (a < 20)
+-         ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_2
+-               Index Cond: (a < 20)
+-         ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_3
+-               Index Cond: (a < 20)
+-         ->  Index Scan using mcrparted3_a_abs_c_idx on mcrparted3 mcrparted_4
+-               Index Cond: (a < 20)
+-(12 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a < 20 order by a, abs(b), c limit 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ set enable_bitmapscan = 0;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Ensure Append node can be used when the partition is ordered by some
+ -- pathkeys which were deemed redundant.
+ explain (costs off) select * from mcrparted where a = 10 order by a, abs(b), c;
+-                               QUERY PLAN                                
+--------------------------------------------------------------------------
+- Append
+-   ->  Index Scan using mcrparted1_a_abs_c_idx on mcrparted1 mcrparted_1
+-         Index Cond: (a = 10)
+-   ->  Index Scan using mcrparted2_a_abs_c_idx on mcrparted2 mcrparted_2
+-         Index Cond: (a = 10)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from mcrparted where a = 10 order by a, abs(b), c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table mcrparted;
++ERROR:  relation "mcrparted" does not exist
+ -- Ensure LIST partitions allow an Append to be used instead of a MergeAppend
+ create table bool_lp (b bool) partition by list(b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table bool_lp (b bool) partition by list(b)
++                                                  ^
++HINT:  try \h CREATE TABLE
+ create table bool_lp_true partition of bool_lp for values in(true);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_lp_true partition of bool_lp for values in(true)
++                          ^
++HINT:  try \h CREATE TABLE
+ create table bool_lp_false partition of bool_lp for values in(false);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_lp_false partition of bool_lp for values in(false)
++                           ^
++HINT:  try \h CREATE TABLE
+ create index on bool_lp (b);
++ERROR:  relation "bool_lp" does not exist
+ explain (costs off) select * from bool_lp order by b;
+-                                 QUERY PLAN                                 
+-----------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using bool_lp_false_b_idx on bool_lp_false bool_lp_1
+-   ->  Index Only Scan using bool_lp_true_b_idx on bool_lp_true bool_lp_2
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from bool_lp order by b
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table bool_lp;
++ERROR:  relation "bool_lp" does not exist
+ -- Ensure const bool quals can be properly detected as redundant
+ create table bool_rp (b bool, a int) partition by range(b,a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table bool_rp (b bool, a int) partition by range(b,a)
++                                                            ^
++HINT:  try \h CREATE TABLE
+ create table bool_rp_false_1k partition of bool_rp for values from (false,0) to (false,1000);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_rp_false_1k partition of bool_rp for values from (false,0) to (false,1000)
++                              ^
++HINT:  try \h CREATE TABLE
+ create table bool_rp_true_1k partition of bool_rp for values from (true,0) to (true,1000);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_rp_true_1k partition of bool_rp for values from (true,0) to (true,1000)
++                             ^
++HINT:  try \h CREATE TABLE
+ create table bool_rp_false_2k partition of bool_rp for values from (false,1000) to (false,2000);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_rp_false_2k partition of bool_rp for values from (false,1000) to (false,2000)
++                              ^
++HINT:  try \h CREATE TABLE
+ create table bool_rp_true_2k partition of bool_rp for values from (true,1000) to (true,2000);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table bool_rp_true_2k partition of bool_rp for values from (true,1000) to (true,2000)
++                             ^
++HINT:  try \h CREATE TABLE
+ create index on bool_rp (b,a);
++ERROR:  relation "bool_rp" does not exist
+ explain (costs off) select * from bool_rp where b = true order by b,a;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using bool_rp_true_1k_b_a_idx on bool_rp_true_1k bool_rp_1
+-         Index Cond: (b = true)
+-   ->  Index Only Scan using bool_rp_true_2k_b_a_idx on bool_rp_true_2k bool_rp_2
+-         Index Cond: (b = true)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from bool_rp where b = true order by b,a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from bool_rp where b = false order by b,a;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using bool_rp_false_1k_b_a_idx on bool_rp_false_1k bool_rp_1
+-         Index Cond: (b = false)
+-   ->  Index Only Scan using bool_rp_false_2k_b_a_idx on bool_rp_false_2k bool_rp_2
+-         Index Cond: (b = false)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from bool_rp where b = false order by b,a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from bool_rp where b = true order by a;
+-                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using bool_rp_true_1k_b_a_idx on bool_rp_true_1k bool_rp_1
+-         Index Cond: (b = true)
+-   ->  Index Only Scan using bool_rp_true_2k_b_a_idx on bool_rp_true_2k bool_rp_2
+-         Index Cond: (b = true)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from bool_rp where b = true order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from bool_rp where b = false order by a;
+-                                     QUERY PLAN                                     
+-------------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using bool_rp_false_1k_b_a_idx on bool_rp_false_1k bool_rp_1
+-         Index Cond: (b = false)
+-   ->  Index Only Scan using bool_rp_false_2k_b_a_idx on bool_rp_false_2k bool_rp_2
+-         Index Cond: (b = false)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from bool_rp where b = false order by a
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table bool_rp;
++ERROR:  relation "bool_rp" does not exist
+ -- Ensure an Append scan is chosen when the partition order is a subset of
+ -- the required order.
+ create table range_parted (a int, b int, c int) partition by range(a, b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table range_parted (a int, b int, c int) partition by range(a, b)
++                                                                        ^
++HINT:  try \h CREATE TABLE
+ create table range_parted1 partition of range_parted for values from (0,0) to (10,10);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table range_parted1 partition of range_parted for values from (0,0) to (10,10)
++                           ^
++HINT:  try \h CREATE TABLE
+ create table range_parted2 partition of range_parted for values from (10,10) to (20,20);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table range_parted2 partition of range_parted for values from (10,10) to (20,20)
++                           ^
++HINT:  try \h CREATE TABLE
+ create index on range_parted (a,b,c);
++ERROR:  relation "range_parted" does not exist
+ explain (costs off) select * from range_parted order by a,b,c;
+-                                     QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan using range_parted1_a_b_c_idx on range_parted1 range_parted_1
+-   ->  Index Only Scan using range_parted2_a_b_c_idx on range_parted2 range_parted_2
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_parted order by a,b,c
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off) select * from range_parted order by a desc,b desc,c desc;
+-                                          QUERY PLAN                                          
+-----------------------------------------------------------------------------------------------
+- Append
+-   ->  Index Only Scan Backward using range_parted2_a_b_c_idx on range_parted2 range_parted_2
+-   ->  Index Only Scan Backward using range_parted1_a_b_c_idx on range_parted1 range_parted_1
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off) select * from range_parted order by a desc,b desc,c desc
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table range_parted;
++ERROR:  relation "range_parted" does not exist
+ -- Check that we allow access to a child table's statistics when the user
+ -- has permissions only for the parent table.
+ create table permtest_parent (a int, b text, c text) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table permtest_parent (a int, b text, c text) partition by list (a)
++                                                                          ^
++HINT:  try \h CREATE TABLE
+ create table permtest_child (b text, c text, a int) partition by list (b);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table permtest_child (b text, c text, a int) partition by list (b)
++                                                                         ^
++HINT:  try \h CREATE TABLE
+ create table permtest_grandchild (c text, b text, a int);
+ alter table permtest_child attach partition permtest_grandchild for values in ('a');
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table permtest_child attach partition permtest_grandchild for values in ('a')
++                           ^
++HINT:  try \h ALTER TABLE
+ alter table permtest_parent attach partition permtest_child for values in (1);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++alter table permtest_parent attach partition permtest_child for values in (1)
++                            ^
++HINT:  try \h ALTER TABLE
+ create index on permtest_parent (left(c, 3));
++ERROR:  relation "permtest_parent" does not exist
+ insert into permtest_parent
+   select 1, 'a', left(fipshash(i::text), 5) from generate_series(0, 100) i;
++ERROR:  relation "permtest_parent" does not exist
+ analyze permtest_parent;
++ERROR:  relation "permtest_parent" does not exist
+ create role regress_no_child_access;
+ revoke all on permtest_grandchild from regress_no_child_access;
+ grant select on permtest_parent to regress_no_child_access;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "permtest_parent" does not exist
+ set session authorization regress_no_child_access;
++ERROR:  at or near "regress_no_child_access": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_no_child_access
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ -- without stats access, these queries would produce hash join plans:
+ explain (costs off)
+   select * from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and p1.c ~ 'a1$';
+-                QUERY PLAN                
+-------------------------------------------
+- Nested Loop
+-   Join Filter: (p1.a = p2.a)
+-   ->  Seq Scan on permtest_grandchild p1
+-         Filter: (c ~ 'a1$'::text)
+-   ->  Seq Scan on permtest_grandchild p2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (costs off)
+   select * from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and left(p1.c, 3) ~ 'a1$';
+-                  QUERY PLAN                  
+-----------------------------------------------
+- Nested Loop
+-   Join Filter: (p1.a = p2.a)
+-   ->  Seq Scan on permtest_grandchild p1
+-         Filter: ("left"(c, 3) ~ 'a1$'::text)
+-   ->  Seq Scan on permtest_grandchild p2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset session authorization;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++reset session authorization
++              ^
++HINT:  try \h RESET
+ revoke all on permtest_parent from regress_no_child_access;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "permtest_parent" does not exist
+ grant select(a,c) on permtest_parent to regress_no_child_access;
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++grant select(a,c) on permtest_parent to regress_no_child_access
++            ^
++HINT:  try \h GRANT
+ set session authorization regress_no_child_access;
++ERROR:  at or near "regress_no_child_access": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++set session authorization regress_no_child_access
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/40283/_version_
+ explain (costs off)
+   select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and p1.c ~ 'a1$';
+-                QUERY PLAN                
+-------------------------------------------
+- Nested Loop
+-   Join Filter: (p1.a = p2.a)
+-   ->  Seq Scan on permtest_grandchild p1
+-         Filter: (c ~ 'a1$'::text)
+-   ->  Seq Scan on permtest_grandchild p2
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- we will not have access to the expression index's stats here:
+ explain (costs off)
+   select p2.a, p1.c from permtest_parent p1 inner join permtest_parent p2
+   on p1.a = p2.a and left(p1.c, 3) ~ 'a1$';
+-                     QUERY PLAN                     
+-----------------------------------------------------
+- Hash Join
+-   Hash Cond: (p2.a = p1.a)
+-   ->  Seq Scan on permtest_grandchild p2
+-   ->  Hash
+-         ->  Seq Scan on permtest_grandchild p1
+-               Filter: ("left"(c, 3) ~ 'a1$'::text)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ reset session authorization;
++ERROR:  at or near "authorization": syntax error
++DETAIL:  source SQL:
++reset session authorization
++              ^
++HINT:  try \h RESET
+ revoke all on permtest_parent from regress_no_child_access;
++ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "permtest_parent" does not exist
+ drop role regress_no_child_access;
+ drop table permtest_parent;
++ERROR:  relation "permtest_parent" does not exist
+ -- Verify that constraint errors across partition root / child are
+ -- handled correctly (Bug #16293)
+ CREATE TABLE errtst_parent (
+@@ -2633,6 +2624,16 @@
+     data int NOT NULL DEFAULT 0,
+     CONSTRAINT shdata_small CHECK(shdata < 3)
+ ) PARTITION BY RANGE (partid);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE errtst_parent (
++    partid int not null,
++    shdata int not null,
++    data int NOT NULL DEFAULT 0,
++    CONSTRAINT shdata_small CHECK(shdata < 3)
++) PARTITION BY RANGE (partid)
++                             ^
++HINT:  try \h CREATE TABLE
+ -- fast defaults lead to attribute mapping being used in one
+ -- direction, but not the other
+ CREATE TABLE errtst_child_fastdef (
+@@ -2659,58 +2660,67 @@
+ ALTER TABLE errtst_child_fastdef ADD COLUMN data int NOT NULL DEFAULT 0;
+ ALTER TABLE errtst_child_fastdef ADD CONSTRAINT errtest_child_fastdef_data_check CHECK (data < 10);
+ ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_fastdef FOR VALUES FROM (0) TO (10);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_fastdef FOR VALUES FROM (0) TO (10)
++                          ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_plaindef FOR VALUES FROM (10) TO (20);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_plaindef FOR VALUES FROM (10) TO (20)
++                          ^
++HINT:  try \h ALTER TABLE
+ ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_reorder FOR VALUES FROM (20) TO (30);
++ERROR:  at or near "attach": syntax error
++DETAIL:  source SQL:
++ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_reorder FOR VALUES FROM (20) TO (30)
++                          ^
++HINT:  try \h ALTER TABLE
+ -- insert without child check constraint error
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ( '0', '1', '5');
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('10', '1', '5');
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('20', '1', '5');
++ERROR:  relation "errtst_parent" does not exist
+ -- insert with child check constraint error
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ( '0', '1', '10');
+-ERROR:  new row for relation "errtst_child_fastdef" violates check constraint "errtest_child_fastdef_data_check"
+-DETAIL:  Failing row contains (0, 1, 10).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('10', '1', '10');
+-ERROR:  new row for relation "errtst_child_plaindef" violates check constraint "errtst_child_plaindef_data_check"
+-DETAIL:  Failing row contains (10, 1, 10).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('20', '1', '10');
+-ERROR:  new row for relation "errtst_child_reorder" violates check constraint "errtst_child_reorder_data_check"
+-DETAIL:  Failing row contains (20, 1, 10).
++ERROR:  relation "errtst_parent" does not exist
+ -- insert with child not null constraint error
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ( '0', '1', NULL);
+-ERROR:  null value in column "data" of relation "errtst_child_fastdef" violates not-null constraint
+-DETAIL:  Failing row contains (0, 1, null).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('10', '1', NULL);
+-ERROR:  null value in column "data" of relation "errtst_child_plaindef" violates not-null constraint
+-DETAIL:  Failing row contains (10, 1, null).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('20', '1', NULL);
+-ERROR:  null value in column "data" of relation "errtst_child_reorder" violates not-null constraint
+-DETAIL:  Failing row contains (20, 1, null).
++ERROR:  relation "errtst_parent" does not exist
+ -- insert with shared check constraint error
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ( '0', '5', '5');
+-ERROR:  new row for relation "errtst_child_fastdef" violates check constraint "shdata_small"
+-DETAIL:  Failing row contains (0, 5, 5).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('10', '5', '5');
+-ERROR:  new row for relation "errtst_child_plaindef" violates check constraint "shdata_small"
+-DETAIL:  Failing row contains (10, 5, 5).
++ERROR:  relation "errtst_parent" does not exist
+ INSERT INTO errtst_parent(partid, shdata, data) VALUES ('20', '5', '5');
+-ERROR:  new row for relation "errtst_child_reorder" violates check constraint "shdata_small"
+-DETAIL:  Failing row contains (20, 5, 5).
++ERROR:  relation "errtst_parent" does not exist
+ -- within partition update without child check constraint violation
+ BEGIN;
+ UPDATE errtst_parent SET data = data + 1 WHERE partid = 0;
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET data = data + 1 WHERE partid = 10;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE errtst_parent SET data = data + 1 WHERE partid = 20;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- within partition update with child check constraint violation
+ UPDATE errtst_parent SET data = data + 10 WHERE partid = 0;
+-ERROR:  new row for relation "errtst_child_fastdef" violates check constraint "errtest_child_fastdef_data_check"
+-DETAIL:  Failing row contains (0, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET data = data + 10 WHERE partid = 10;
+-ERROR:  new row for relation "errtst_child_plaindef" violates check constraint "errtst_child_plaindef_data_check"
+-DETAIL:  Failing row contains (10, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET data = data + 10 WHERE partid = 20;
+-ERROR:  new row for relation "errtst_child_reorder" violates check constraint "errtst_child_reorder_data_check"
+-DETAIL:  Failing row contains (20, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ -- direct leaf partition update, without partition id violation
+ BEGIN;
+ UPDATE errtst_child_fastdef SET partid = 1 WHERE partid = 0;
+@@ -2719,32 +2729,26 @@
+ ROLLBACK;
+ -- direct leaf partition update, with partition id violation
+ UPDATE errtst_child_fastdef SET partid = partid + 10 WHERE partid = 0;
+-ERROR:  new row for relation "errtst_child_fastdef" violates partition constraint
+-DETAIL:  Failing row contains (10, 1, 5).
+ UPDATE errtst_child_plaindef SET partid = partid + 10 WHERE partid = 10;
+-ERROR:  new row for relation "errtst_child_plaindef" violates partition constraint
+-DETAIL:  Failing row contains (20, 1, 5).
+ UPDATE errtst_child_reorder SET partid = partid + 10 WHERE partid = 20;
+-ERROR:  new row for relation "errtst_child_reorder" violates partition constraint
+-DETAIL:  Failing row contains (5, 1, 30).
+ -- partition move, without child check constraint violation
+ BEGIN;
+ UPDATE errtst_parent SET partid = 10, data = data + 1 WHERE partid = 0;
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET partid = 20, data = data + 1 WHERE partid = 10;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ UPDATE errtst_parent SET partid = 0, data = data + 1 WHERE partid = 20;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ ROLLBACK;
+ -- partition move, with child check constraint violation
+ UPDATE errtst_parent SET partid = 10, data = data + 10 WHERE partid = 0;
+-ERROR:  new row for relation "errtst_child_plaindef" violates check constraint "errtst_child_plaindef_data_check"
+-DETAIL:  Failing row contains (10, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET partid = 20, data = data + 10 WHERE partid = 10;
+-ERROR:  new row for relation "errtst_child_reorder" violates check constraint "errtst_child_reorder_data_check"
+-DETAIL:  Failing row contains (20, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ UPDATE errtst_parent SET partid = 0, data = data + 10 WHERE partid = 20;
+-ERROR:  new row for relation "errtst_child_fastdef" violates check constraint "errtest_child_fastdef_data_check"
+-DETAIL:  Failing row contains (0, 1, 15).
++ERROR:  relation "errtst_parent" does not exist
+ -- partition move, without target partition
+ UPDATE errtst_parent SET partid = 30, data = data + 10 WHERE partid = 20;
+-ERROR:  no partition of relation "errtst_parent" found for row
+-DETAIL:  Partition key of the failing row contains (partid) = (30).
++ERROR:  relation "errtst_parent" does not exist
+ DROP TABLE errtst_parent;
++ERROR:  relation "errtst_parent" does not exist
