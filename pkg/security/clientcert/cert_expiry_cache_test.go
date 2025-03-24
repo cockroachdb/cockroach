@@ -9,6 +9,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -22,8 +23,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var defaultSerial = "1"
+
+func setup(t *testing.T) (context.Context, *timeutil.ManualTime, *stop.Stopper, func()) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+
+	clock := timeutil.NewManualTime(timeutil.Now())
+	leaktestChecker := leaktest.AfterTest(t)
+
+	teardown := func() {
+		stopper.Stop(ctx)
+		leaktestChecker()
+	}
+
+	return ctx, clock, stopper, teardown
+}
+
+func assertMetricsHasUser(
+	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggGauge, user string,
+) {
+	if !expiration.Has(user) {
+		t.Fatal("expiration metrics does not contain user", user)
+	}
+	if !ttl.Has(user) {
+		t.Fatal("ttl metrics does not contain user", user)
+	}
+}
+
+func assertMetricsMissingUser(
+	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggGauge, user string,
+) {
+	if expiration.Has(user) {
+		t.Fatal("expiration metrics contains user", user)
+	}
+	if ttl.Has(user) {
+		t.Fatal("ttl metrics contains user", user)
+	}
+}
+
 func TestEntryCache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	ctx, clock, stopper, teardown := setup(t)
+	defer teardown()
 
 	const (
 		fooUser  = "foo"
@@ -35,89 +76,42 @@ func TestEntryCache(t *testing.T) {
 		closerExpiration = int64(1584359292)
 	)
 
-	ctx := context.Background()
-
-	timesource := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	// Create a cache with a capacity of 3.
-	cache, expMetric, ttlMetric := newCache(
-		ctx,
-		&cluster.Settings{},
-		3, /* capacity */
-		timesource,
-	)
+	cache := newCache(ctx, clock, stopper)
 	require.Equal(t, 0, cache.Len())
 
 	// Verify insert.
-	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, laterExpiration)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify update.
-	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify retrieval.
-	expiration, found := cache.GetExpiration(fooUser)
-	require.Equal(t, true, found)
+	expiration := cache.GetExpiration(fooUser)
 	require.Equal(t, closerExpiration, expiration)
 
 	// Verify the cache retains the minimum expiration for a user, assuming no
 	// eviction.
-	cache.MaybeUpsert(ctx, barUser, closerExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, barUser, defaultSerial, closerExpiration)
 	require.Equal(t, 2, cache.Len())
-	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, barUser, defaultSerial, laterExpiration)
 	require.Equal(t, 2, cache.Len())
-	expiration, found = cache.GetExpiration(barUser)
-	require.Equal(t, true, found)
+	expiration = cache.GetExpiration(barUser)
 	require.Equal(t, closerExpiration, expiration)
 
 	// Verify indication of absence for non-existent values.
-	expiration, found = cache.GetExpiration(fakeUser)
-	require.Equal(t, false, found)
+	expiration = cache.GetExpiration(fakeUser)
 	require.Equal(t, int64(0), expiration)
-
-	// Verify eviction when the capacity is exceeded.
-	cache.MaybeUpsert(ctx, blahUser, laterExpiration, expMetric, ttlMetric)
-	require.Equal(t, 3, cache.Len())
-	cache.MaybeUpsert(ctx, fakeUser, closerExpiration, expMetric, ttlMetric)
-	require.Equal(t, 3, cache.Len())
-	_, found = cache.GetExpiration(fooUser)
-	require.Equal(t, false, found)
-	_, found = cache.GetExpiration(barUser)
-	require.Equal(t, true, found)
-
-	// Verify previous entries can be inserted after the cache is cleared.
-	cache.Clear()
-	require.Equal(t, 0, cache.Len())
-	_, found = cache.GetExpiration(fooUser)
-	require.Equal(t, false, found)
-	_, found = cache.GetExpiration(barUser)
-	require.Equal(t, false, found)
-	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
-	require.Equal(t, 1, cache.Len())
-	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
-	require.Equal(t, 2, cache.Len())
-	expiration, found = cache.GetExpiration(fooUser)
-	require.Equal(t, true, found)
-	require.Equal(t, laterExpiration, expiration)
-	expiration, found = cache.GetExpiration(barUser)
-	require.Equal(t, true, found)
-	require.Equal(t, laterExpiration, expiration)
-
-	// Verify expirations in the past cannot be inserted into the cache.
-	cache.Clear()
-	cache.MaybeUpsert(ctx, fooUser, int64(0), expMetric, ttlMetric)
-	require.Equal(t, 0, cache.Len())
 
 	// Verify value of TTL metrics
 	cache.Clear()
-	timesource.AdvanceTo(timeutil.Unix(closerExpiration+20, 0))
-	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
-	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
-	ttl, found := cache.GetTTL(fooUser)
-	require.Equal(t, false, found)
+	clock.AdvanceTo(timeutil.Unix(closerExpiration+20, 0))
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
+	cache.MaybeUpsert(ctx, barUser, defaultSerial, laterExpiration)
+	ttl := cache.GetTTL(fooUser)
 	require.Equal(t, int64(0), ttl)
-	ttl, found = cache.GetTTL(barUser)
-	require.Equal(t, true, found)
+	ttl = cache.GetTTL(barUser)
 	require.Equal(t, laterExpiration-(closerExpiration+20), ttl)
 }
 
@@ -125,7 +119,8 @@ func TestEntryCache(t *testing.T) {
 // when entries are inserted and updated. It checks that the cache length and
 // expiration times are properly updated and reflected in the metrics.
 func TestCacheMetricsSync(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+	ctx, clock, stopper, teardown := setup(t)
+	defer teardown()
 
 	findChildMetric := func(metrics *aggmetric.AggGauge, childName string) *io_prometheus_client.Metric {
 		var result *io_prometheus_client.Metric
@@ -144,93 +139,32 @@ func TestCacheMetricsSync(t *testing.T) {
 		closerExpiration = int64(1584359292)
 	)
 
-	ctx := context.Background()
-
-	timesource := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	// Create a cache with a capacity of 3.
-	cache, expMetric, ttlMetric := newCache(
-		ctx,
-		&cluster.Settings{},
-		3, /* capacity */
-		timesource,
-	)
+	cache, expMetric, ttlMetric := newCacheAndMetrics(ctx, clock, stopper)
 	require.Equal(t, 0, cache.Len())
 
 	// insert.
-	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, laterExpiration)
 	// update.
-	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
 
-	metricFloat := *(findChildMetric(expMetric, fooUser).Gauge.Value)
-	expiration, found := cache.GetExpiration(fooUser)
+	expFloat := *(findChildMetric(expMetric, fooUser).Gauge.Value)
+	expiration := cache.GetExpiration(fooUser)
+	ttlFloat := *(findChildMetric(ttlMetric, fooUser).Gauge.Value)
+	ttl := cache.GetTTL(fooUser)
 
 	// verify that both the cache and metric are in sync.
-	require.Equal(t, true, found)
 	require.Equal(t, closerExpiration, expiration)
-	require.Equal(t, closerExpiration, int64(metricFloat))
-}
-
-func TestPurgePastEntries(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const (
-		fooUser  = "foo"
-		barUser  = "bar"
-		blahUser = "blah"
-		bazUser  = "baz"
-
-		pastExpiration1  = int64(1000000000)
-		pastExpiration2  = int64(2000000000)
-		futureExpiration = int64(3000000000)
-	)
-
-	ctx := context.Background()
-
-	// Create a cache with a capacity of 4.
-	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cache, expMetric, ttlMetric := newCache(ctx, &cluster.Settings{}, 4 /* capacity */, clock)
-
-	// Insert entries that we expect to be cleaned up after advancing in time.
-	cache.MaybeUpsert(ctx, fooUser, pastExpiration1, expMetric, ttlMetric)
-	cache.MaybeUpsert(ctx, barUser, pastExpiration2, expMetric, ttlMetric)
-	cache.MaybeUpsert(ctx, blahUser, pastExpiration2, expMetric, ttlMetric)
-	// Insert an entry that should NOT be removed after advancing in time
-	// because it is still in the future.
-	cache.MaybeUpsert(ctx, bazUser, futureExpiration, expMetric, ttlMetric)
-	require.Equal(t, 4, cache.Len())
-
-	// Advance time so that expirations have been reached already.
-	clock.AdvanceTo(timeutil.Unix(2000000000, 123))
-
-	// Verify an expiration from the past cannot be retrieved. Confirm it has
-	// been removed after the attempt as well.
-	_, found := cache.GetExpiration(fooUser)
-	require.Equal(t, false, found)
-	require.Equal(t, 3, cache.Len())
-
-	// Verify that when the cache gets cleaned of the past expirations.
-	// Confirm that expirations in the future do not get removed.
-	cache.PurgePastExpirations()
-	require.Equal(t, 1, cache.Len())
-	_, found = cache.GetExpiration(bazUser)
-	require.Equal(t, true, found)
+	require.Equal(t, closerExpiration, int64(expFloat))
+	require.Equal(t, closerExpiration, ttl)
+	require.Equal(t, closerExpiration, int64(ttlFloat))
 }
 
 // TestConcurrentUpdates ensures that concurrent updates do not race with each
 // other.
 func TestConcurrentUpdates(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	st := &cluster.Settings{}
-
-	// Create a cache with a large capacity.
-	cache, expMetric, ttlMetric := newCache(
-		ctx,
-		st,
-		10000, /* capacity */
-		timeutil.NewManualTime(timeutil.Unix(0, 123)),
-	)
+	ctx, clock, stopper, teardown := setup(t)
+	defer teardown()
+	cache := newCache(ctx, clock, stopper)
 
 	var (
 		user       = "testUser"
@@ -244,7 +178,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < N; i++ {
 		go func(i int) {
 			if i%2 == 1 {
-				cache.MaybeUpsert(ctx, user, expiration, expMetric, ttlMetric)
+				cache.MaybeUpsert(ctx, user, defaultSerial, expiration)
 			} else {
 				cache.Clear()
 			}
@@ -257,28 +191,39 @@ func TestConcurrentUpdates(t *testing.T) {
 
 func BenchmarkCertExpirationCacheInsert(b *testing.B) {
 	ctx := context.Background()
-	st := &cluster.Settings{}
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cache, expMetric, ttlMetric := newCache(ctx, st, 1000 /* capacity */, clock)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cache := newCache(ctx, clock, stopper)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cache.MaybeUpsert(ctx, "foo", clock.Now().Unix(), expMetric, ttlMetric)
-		cache.MaybeUpsert(ctx, "bar", clock.Now().Unix(), expMetric, ttlMetric)
-		cache.MaybeUpsert(ctx, "blah", clock.Now().Unix(), expMetric, ttlMetric)
+		cache.MaybeUpsert(ctx, "foo", defaultSerial, clock.Now().Unix())
+		cache.MaybeUpsert(ctx, "bar", defaultSerial, clock.Now().Unix())
+		cache.MaybeUpsert(ctx, "blah", defaultSerial, clock.Now().Unix())
 	}
 }
 
 func newCache(
-	ctx context.Context, st *cluster.Settings, capacity int, clock *timeutil.ManualTime,
+	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
+) *clientcert.ClientCertExpirationCache {
+	cache, _, _ := newCacheAndMetrics(ctx, clock, stopper)
+	return cache
+}
+
+func newCacheAndMetrics(
+	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
 ) (*clientcert.ClientCertExpirationCache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	clientcert.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
+	st := &cluster.Settings{}
 	parentMon := mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     mon.MakeMonitorName("test"),
 		Settings: st,
 	})
-	cache := clientcert.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
-	return cache, aggmetric.MakeBuilder("user").Gauge(metric.Metadata{}), aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
+
+	clientcert.CacheTTL = time.Minute
+
+	expirationMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
+	ttlMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
+	cache := clientcert.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon, expirationMetrics, ttlMetrics)
+	return cache, expirationMetrics, ttlMetrics
 }

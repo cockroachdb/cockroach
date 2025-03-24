@@ -120,6 +120,13 @@ func (g *AggGauge) AddFunctionalChild(fn func() int64, labelVals ...string) *Gau
 	return child
 }
 
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggGauge) RemoveChild(labelVals ...string) {
+	key := &Gauge{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
+}
+
 // Gauge is a child of a AggGauge. When it is incremented or decremented, so
 // too is the parent. When metrics are collected by prometheus, each of the
 // children will appear with a distinct label, however, when cockroach
