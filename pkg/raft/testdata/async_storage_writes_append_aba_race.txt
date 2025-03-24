@@ -32,7 +32,7 @@ ok
 
 process-ready 2
 ----
-Ready MustSync=true:
+Ready:
 Entries:
 1/12 EntryNormal "init_prop"
 Messages:
@@ -60,7 +60,7 @@ dropped: 2->7 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "init_p
 
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 Entries:
 1/12 EntryNormal "init_prop"
 Messages:
@@ -95,7 +95,7 @@ INFO 3 [logterm: 1, index: 11] sent MsgVote request to 7 at term 2
 
 process-ready 3
 ----
-Ready MustSync=true:
+Ready:
 State:StateCandidate
 HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
 Messages:
@@ -127,21 +127,21 @@ INFO 6 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 1
 process-ready 4 5 6
 ----
 > 4 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     4->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 5 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
     5->3 MsgVoteResp Term:2 Log:0/0
   ]
 > 6 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
@@ -194,7 +194,7 @@ INFO 3 became leader at term 2
 
 process-ready 3
 ----
-Ready MustSync=true:
+Ready:
 State:StateLeader
 HardState Term:2 Vote:3 Commit:11 Lead:3 LeadEpoch:1
 Entries:
@@ -243,7 +243,7 @@ dropped: 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 HardState Term:2 Commit:11 Lead:3 LeadEpoch:1
 Entries:
 2/12 EntryNormal ""
@@ -270,7 +270,7 @@ INFO 4 [logterm: 1, index: 11] sent MsgVote request to 7 at term 3
 
 process-ready 4
 ----
-Ready MustSync=true:
+Ready:
 State:StateCandidate
 HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
 Messages:
@@ -302,21 +302,21 @@ INFO 7 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 1
 process-ready 5 6 7
 ----
 > 5 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     5->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 6 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
     6->4 MsgVoteResp Term:3 Log:0/0
   ]
 > 7 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
@@ -364,7 +364,7 @@ INFO 4 became leader at term 3
 
 process-ready 4
 ----
-Ready MustSync=true:
+Ready:
 State:StateLeader
 HardState Term:3 Vote:4 Commit:11 Lead:4 LeadEpoch:1
 Entries:
@@ -406,7 +406,7 @@ ok
 
 process-ready 4
 ----
-Ready MustSync=false:
+Ready:
 Messages:
 4->1 MsgFortifyLeader Term:3 Log:0/0
 4->2 MsgFortifyLeader Term:3 Log:0/0
@@ -435,7 +435,7 @@ INFO replace the unstable entries from index 12
 
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 HardState Term:3 Commit:11 Lead:4 LeadEpoch:1
 Entries:
 3/12 EntryNormal ""

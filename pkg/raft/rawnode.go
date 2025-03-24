@@ -240,7 +240,6 @@ func (rn *RawNode) Ready() Ready {
 	// TODO(pav-kv): remove "accept" methods down the stack, since we now accept
 	// all updates unconditionally.
 	r.raftLog.acceptUnstable()
-	rd.MustSync = MustSync(hardSt, prevHardSt, len(rd.Entries))
 
 	allowUnstable := rn.applyUnstableEntries()
 	if r.raftLog.hasNextCommittedEnts(allowUnstable) {
@@ -260,23 +259,6 @@ func (rn *RawNode) Ready() Ready {
 	r.msgsAfterAppend = nil
 
 	return rd
-}
-
-// MustSync returns true if the hard state and count of Raft entries indicate
-// that a synchronous write to persistent storage is required.
-//
-// TODO(pav-kv): MustSync isn't used, because all writes are asynchronous.
-// Remove this, or repurpose it to fit the asynchronous writes API.
-func MustSync(st, prevst pb.HardState, entsnum int) bool {
-	// Persistent state on all servers:
-	// (Updated on stable storage before responding to RPCs)
-	// currentTerm
-	// currentLead
-	// currentLeadEpoch
-	// votedFor
-	// log entries[]
-	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term ||
-		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch || st.Commit != prevst.Commit
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
