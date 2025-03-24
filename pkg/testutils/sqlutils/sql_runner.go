@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -250,17 +251,19 @@ func (sr *SQLRunner) ExpectErrWithRetry(
 ) {
 	helperOrNoop(t)()
 	var err error
-	sr.succeedsWithin(t, func() error {
+
+	retryOpts := retry.Options{MaxRetries: 5}
+	err = retryOpts.DoWithRetryable(context.Background(), func(ctx context.Context) (error, bool) {
 		_, err = sr.DB.ExecContext(context.Background(), query, args...)
-		if testutils.IsError(err, errRE) {
-			// This is our expected error. Do not retry.
-			return nil
+		if testutils.IsError(err, retryableErrorRE) {
+			// This is a retryable error, so we should retry.
+			return err, true
 		}
-		if err == nil || !testutils.IsError(err, retryableErrorRE) {
-			// This is not a retryable error. Do not retry.
-			return nil
+		if err == nil {
+			return nil, false
 		}
-		return err
+		// This is not a retryable error, so we should not retry.
+		return err, false
 	})
 	sr.expectErr(t, query, err, errRE)
 }
