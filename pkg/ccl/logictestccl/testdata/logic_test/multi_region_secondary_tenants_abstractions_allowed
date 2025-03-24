@@ -46,3 +46,26 @@ statement error pgcode 23514 voter constraint for "us-east-1" exceeds the config
 ALTER DATABASE db CONFIGURE ZONE USING voter_constraints = '{+region=us-east-1: 2}'
 
 subtest end
+
+subtest privileged_range
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.default_range_modifiable_by_non_root.enabled = false
+
+user root
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET ROLE admin
+
+statement error pgcode 42501 only root users are allowed to modify the default range
+ALTER RANGE default CONFIGURE ZONE USING num_replicas = 10
+
+subtest end

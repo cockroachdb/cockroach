@@ -102,6 +102,14 @@ var MaxReplicasPerRegion = settings.RegisterIntSetting(
 	settings.WithVisibility(settings.Reserved),
 	settings.NonNegativeInt)
 
+var DefaultRangeModifiableByNonRoot = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.zone_configs.default_range_modifiable_by_non_root.enabled",
+	"if true, allows non-root to modify zone config for the default "+
+		"range for secondary tenants",
+	true,
+	settings.WithVisibility(settings.Reserved))
+
 // MultiRegionZoneConfigFieldsSet contain the items in
 // MultiRegionZoneConfigFields but in a set form for fast lookup.
 var MultiRegionZoneConfigFieldsSet = func() map[tree.Name]struct{} {
