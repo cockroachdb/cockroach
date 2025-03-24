@@ -36,6 +36,9 @@ func NewCounter(metadata metric.Metadata, childLabels ...string) *AggCounter {
 // GetName is part of the metric.Iterable interface.
 func (c *AggCounter) GetName() string { return c.g.GetName() }
 
+// GetLabeledName is part of the metric.Iterable interface.
+func (c *AggCounter) GetLabeledName() string { return c.g.GetLabeledName() }
+
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounter) GetHelp() string { return c.g.GetHelp() }
 
@@ -57,8 +60,8 @@ func (c *AggCounter) GetType() *io_prometheus_client.MetricType {
 }
 
 // GetLabels is part of the metric.PrometheusExportable interface.
-func (c *AggCounter) GetLabels() []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels()
+func (c *AggCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return c.g.GetLabels(useStaticLabels)
 }
 
 // ToPrometheusMetric is part of the metric.PrometheusExportable interface.
@@ -145,6 +148,9 @@ func NewCounterFloat64(metadata metric.Metadata, childLabels ...string) *AggCoun
 // GetName is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetName() string { return c.g.GetName() }
 
+// GetLabeledName is part of the metric.Iterable interface.
+func (c *AggCounterFloat64) GetLabeledName() string { return c.g.GetLabeledName() }
+
 // GetHelp is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) GetHelp() string { return c.g.GetHelp() }
 
@@ -166,8 +172,8 @@ func (c *AggCounterFloat64) GetType() *io_prometheus_client.MetricType {
 }
 
 // GetLabels is part of the metric.PrometheusExportable interface.
-func (c *AggCounterFloat64) GetLabels() []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels()
+func (c *AggCounterFloat64) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return c.g.GetLabels(useStaticLabels)
 }
 
 // ToPrometheusMetric is part of the metric.PrometheusExportable interface.
