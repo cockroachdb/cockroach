@@ -42,6 +42,9 @@ type MMAStoreRebalancer struct {
 	// pendingTicket is the ticket of the operation currently in progress, if
 	// there is one, otherwise -1.
 	pendingTicket op.DispatchedTicket
+	// currentlyRebalancing is true if the rebalancer is currently in the process of
+	// computing or applying rebalance changes.
+	currentlyRebalancing bool
 }
 
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
@@ -53,13 +56,14 @@ func NewMMAStoreRebalancer(
 	settings *config.SimulationSettings,
 ) *MMAStoreRebalancer {
 	msr := &MMAStoreRebalancer{
-		AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
-		localStoreID:     localStoreID,
-		allocator:        allocator,
-		controller:       controller,
-		settings:         settings,
-		pendingChangeIdx: 0,
-		pendingTicket:    -1,
+		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		localStoreID:         localStoreID,
+		allocator:            allocator,
+		controller:           controller,
+		settings:             settings,
+		pendingChangeIdx:     0,
+		pendingTicket:        -1,
+		currentlyRebalancing: false,
 	}
 	msr.AddLogTag(fmt.Sprintf("n%ds%d", localNodeID, localStoreID), "")
 	return msr
@@ -70,7 +74,7 @@ func NewMMAStoreRebalancer(
 func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state.State) {
 	ctx = msr.ResetAndAnnotateCtx(ctx)
 	ctx = logtags.AddTag(ctx, "t", tick.Sub(msr.settings.StartTime))
-	if msr.pendingTicket == -1 &&
+	if !msr.currentlyRebalancing &&
 		tick.Sub(msr.lastRebalanceTime) < msr.settings.LBRebalancingInterval {
 		// We are waiting out the rebalancing interval. Nothing to do.
 		return
@@ -82,21 +86,17 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		return
 	}
 
-	if msr.pendingTicket == -1 &&
-		msr.pendingChangeIdx == len(msr.pendingChanges) {
-		// No pending operations and there are no more pending changes. Can call
-		// into allocator.ComputeChanges again.
-		storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
-		msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
+	if !msr.currentlyRebalancing {
+		// NB: This path is only hit when the rebalancer is first started, or when
+		// the rebalancing interval has elapsed and we have waited out the
+		// LBRebalancingInterval.
+		msr.currentlyRebalancing = true
 		msr.lastRebalanceTime = tick
-		msr.pendingChangeIdx = 0
-		msr.pendingChanges = msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
-			LocalStoreID: roachpb.StoreID(msr.localStoreID),
-		})
-		log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
 	}
 
 	for {
+		// First, check for any pending changes that are in progress from prior
+		// loop iterations on this tick, or prior ticks.
 		if msr.pendingTicket != -1 {
 			curChange := msr.pendingChanges[msr.pendingChangeIdx]
 			// There is a pending operation we are waiting on. Check the status.
@@ -125,13 +125,26 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				return
 			}
 		}
-
 		if msr.pendingChangeIdx == len(msr.pendingChanges) {
-			// No more pending changes to process.
+			// No pending changes to process, see if there are any new changes to
+			// compute.
 			msr.pendingChanges = nil
 			msr.pendingChangeIdx = 0
-			log.VInfof(ctx, 1, "no more pending changes to process")
-			return
+			log.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
+			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
+			msr.allocator.ProcessStoreLeaseholderMsg(&storeLeaseholderMsg)
+			msr.lastRebalanceTime = tick
+			msr.pendingChangeIdx = 0
+			msr.pendingChanges = msr.allocator.ComputeChanges(ctx, mma.ChangeOptions{
+				LocalStoreID: roachpb.StoreID(msr.localStoreID),
+			})
+			log.Infof(ctx, "store %d: computed %d changes %v", msr.localStoreID, len(msr.pendingChanges), msr.pendingChanges)
+			if len(msr.pendingChanges) == 0 {
+				// Nothing to do, there were no changes returned.
+				msr.currentlyRebalancing = false
+				log.VInfof(ctx, 1, "no pending changes to process, will wait for next tick")
+				return
+			}
 		}
 
 		curChange := msr.pendingChanges[msr.pendingChangeIdx]
