@@ -37,7 +37,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  select concat_ws('#','one');
   concat_ws 
  -----------
-@@ -71,29 +62,16 @@
+@@ -71,11 +62,7 @@
  (1 row)
  
  select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
@@ -48,33 +48,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
 -
 +ERROR:  unknown function: to_date()
  select concat_ws(',',10,20,null,30);
-- concat_ws 
-------------
-- 10,20,30
--(1 row)
--
-+ERROR:  unknown signature: concat_ws(string, int, int, unknown, int)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select concat_ws('',10,20,null,30);
-- concat_ws 
-------------
-- 102030
--(1 row)
--
-+ERROR:  unknown signature: concat_ws(string, int, int, unknown, int)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select concat_ws(NULL,10,20,null,30) is null;
-- ?column? 
------------
-- t
--(1 row)
--
-+ERROR:  unknown signature: concat_ws(unknown, int, int, unknown, int)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- select reverse('abcde');
-  reverse 
- ---------
-@@ -125,51 +103,113 @@
+  concat_ws 
+ -----------
+@@ -125,51 +112,113 @@
  select quote_literal('abc''');
   quote_literal 
  ---------------
@@ -213,7 +189,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  /*
   * format
   */
-@@ -205,12 +245,11 @@
+@@ -205,12 +254,11 @@
  
  -- should fail
  select format('Hello %s %s', 'World');
@@ -229,7 +205,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check literal and sql identifiers
  select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
                   format                 
-@@ -238,7 +277,7 @@
+@@ -238,7 +286,7 @@
  
  -- should fail, sql identifier cannot be NULL
  select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
@@ -238,7 +214,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check positional placeholders
  select format('%1$s %3$s', 1, 2, 3);
   format 
-@@ -254,19 +293,17 @@
+@@ -254,19 +302,17 @@
  
  -- should fail
  select format('%1$s %4$s', 1, 2, 3);
@@ -264,7 +240,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check mix of positional and ordered placeholders
  select format('Hello %s %1$s %s', 'World', 'Hello again');
              format             
-@@ -282,56 +319,136 @@
+@@ -282,56 +328,136 @@
  
  -- check variadic labeled arguments
  select format('%s, %s', variadic array['Hello','World']);
