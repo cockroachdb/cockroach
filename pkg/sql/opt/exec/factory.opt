@@ -7,6 +7,16 @@ define Scan {
     ReqOrdering exec.OutputOrdering
 }
 
+# PlaceholderScan runs a constrained scan of a specified index of a table with
+# some placeholders that are not known during optimization. Span contains a
+# constant datums and placeholders the correspond to a prefix of the index key
+# columns.
+define PlaceholderScan {
+    Table cat.Table
+    Index cat.Index
+    Params exec.PlaceholderScanParams
+}
+
 define Values {
     Rows [][]tree.TypedExpr
     Columns colinfo.ResultColumns
