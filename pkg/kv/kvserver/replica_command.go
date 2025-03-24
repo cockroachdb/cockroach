@@ -915,7 +915,7 @@ func (r *Replica) AdminMerge(
 		// This must be a single request in a BatchRequest: there are multiple
 		// places that do special logic (needed for safety) that rely on
 		// BatchRequest.IsSingleSubsumeRequest() returning true.
-		shouldPreserveLocks := concurrency.UnreplicatedLockReliability.Get(&r.ClusterSettings().SV)
+		shouldPreserveLocks := concurrency.UnreplicatedLockReliabilityMerge.Get(&r.ClusterSettings().SV)
 		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&kvpb.SubsumeRequest{
 				RequestHeader: kvpb.RequestHeader{
