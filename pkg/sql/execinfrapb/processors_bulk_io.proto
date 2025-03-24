@@ -535,7 +535,8 @@ message LogicalReplicationWriterSpec {
 
     optional string metrics_label = 11 [(gogoproto.nullable) = false];
 
-    // Next ID: 13.
+    repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 13;
+    // Next ID: 14.
 }
 
 message LogicalReplicationOfflineScanSpec {

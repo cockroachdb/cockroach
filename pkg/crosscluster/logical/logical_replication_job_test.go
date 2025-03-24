@@ -2176,6 +2176,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 func TestUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "this needs to be multi-node but that tends to be too slow for duressed builds")
 
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{
@@ -2187,7 +2188,7 @@ func TestUserDefinedTypes(t *testing.T) {
 		},
 	}
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 3)
 	defer server.Stopper().Stop(ctx)
 
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
@@ -2206,6 +2207,8 @@ func TestUserDefinedTypes(t *testing.T) {
 			dbB.Exec(t, "CREATE TABLE data2 (pk INT PRIMARY KEY, val1 my_enum DEFAULT 'two', val2 my_composite)")
 
 			dbB.Exec(t, "INSERT INTO data VALUES (1, 'one', (3, 'cat'))")
+			dbB.Exec(t, "ALTER TABLE data SPLIT AT VALUES (1), (2), (3)")
+			dbB.Exec(t, "ALTER TABLE data SCATTER")
 			// Force default expression evaluation.
 			dbB.Exec(t, "INSERT INTO data (pk, val2) VALUES (2, (4, 'dog'))")
 
@@ -2216,8 +2219,8 @@ func TestUserDefinedTypes(t *testing.T) {
 			).Scan(&jobAID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 			require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, dbA.DB, "A"))
-			dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
-			dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+			dbB.CheckQueryResults(t, "SELECT * FROM data ORDER BY pk", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
+			dbA.CheckQueryResults(t, "SELECT * FROM data ORDER BY pk", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
 
 			var jobBID jobspb.JobID
 			dbB.QueryRow(t,
