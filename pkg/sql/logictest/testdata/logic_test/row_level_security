@@ -1280,6 +1280,124 @@ DROP FUNCTION my_non_sec_definer_reader_function;
 statement ok
 DROP TABLE sensitive_data_table CASCADE;
 
+subtest alter_policy
+
+statement ok
+CREATE TABLE alter_policy_table (c1 INT NOT NULL PRIMARY KEY, c2 TEXT, FAMILY (c1, c2));
+
+statement ok
+ALTER TABLE alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE ROLE alter_policy_role;
+
+statement ok
+CREATE ROLE aux1;
+
+statement ok
+CREATE USER aux2;
+
+statement ok
+CREATE SEQUENCE seq1;
+
+statement ok
+GRANT ALL ON seq1 TO alter_policy_role;
+
+statement ok
+ALTER TABLE alter_policy_table OWNER TO alter_policy_role;
+
+statement ok
+SET ROLE alter_policy_role;
+
+statement ok
+CREATE POLICY p ON alter_policy_table FOR INSERT WITH CHECK (false);
+
+statement error pq: new row violates row-level security policy for table "alter_policy_table"
+INSERT INTO alter_policy_table VALUES (1, 'one'), (2, 'two'), (3, 'three');
+
+statement error pq: only WITH CHECK expression allowed for INSERT
+ALTER POLICY p ON alter_policy_table USING (true);
+
+statement ok
+ALTER POLICY p ON alter_policy_table WITH CHECK (nextval('seq1') < 10000);
+
+statement ok
+INSERT INTO alter_policy_table VALUES (1, 'one'), (2, 'two'), (3, 'three');
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+
+statement ok
+ALTER POLICY p ON alter_policy_table RENAME TO p_ins;
+
+statement ok
+CREATE POLICY p ON alter_policy_table FOR SELECT TO aux1 USING (c1 > 0);
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+
+statement error pq: policy "p_sel" for table "alter_policy_table" does not exist
+ALTER POLICY p_sel ON alter_policy_table WITH CHECK (true);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+ALTER POLICY p ON alter_policy_table WITH CHECK (true);
+
+statement ok
+ALTER POLICY p ON alter_policy_table TO alter_policy_role,aux1,aux2 USING (c1 != 1);
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+2
+3
+
+statement ok
+ALTER POLICY p ON alter_policy_table RENAME TO p_sel;
+
+query TT
+SHOW CREATE TABLE alter_policy_table;
+----
+alter_policy_table  CREATE TABLE public.alter_policy_table (
+                      c1 INT8 NOT NULL,
+                      c2 STRING NULL,
+                      CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
+                      FAMILY fam_0_c1_c2 (c1, c2)
+                    );
+                    ALTER TABLE public.alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+                    CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
+                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8)
+
+# TODO(143358): Include roles in the SHOW POLICIES output.
+query TTTTT colnames
+SELECT name,cmd,type,using_expr,with_check_expr
+FROM [SHOW POLICIES FOR alter_policy_table]
+ORDER BY name DESC;
+----
+name   cmd     type        using_expr      with_check_expr
+p_sel  SELECT  permissive  c1 != 1:::INT8  ·
+p_ins  INSERT  permissive  ·               nextval('public.seq1'::REGCLASS) < 10000:::INT8
+
+statement ok
+SET ROLE root;
+
+statement error pq: cannot drop sequence seq1 because other objects depend on it
+DROP SEQUENCE seq1;
+
+# Change the policy so there isn't a dependency on seq1 anymore.
+statement ok
+ALTER POLICY p_ins ON alter_policy_table WITH CHECK (true);
+
+statement ok
+DROP SEQUENCE seq1;
+
+statement ok
+DROP TABLE alter_policy_table;
+
+statement ok
+DROP ROLE alter_policy_role, aux1, aux2;
+
 # Verify that you need to be the table owner to do any of the RLS DDLs
 subtest table_owner_and_rls_ddl
 
@@ -1313,14 +1431,14 @@ DROP POLICY p1 on table_owner_test;
 statement ok
 CREATE POLICY new_p1 on table_owner_test;
 
-statement error pq: unimplemented: ALTER POLICY is not yet implemented
+statement ok
 ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
 
-statement error pq: unimplemented: ALTER POLICY is not yet implemented
+statement ok
 ALTER POLICY p1 on table_owner_test RENAME TO new_p1;
 
-statement error pq: unimplemented: ALTER POLICY is not yet implemented
-ALTER POLICY p1 on table_owner_test USING (true);
+statement ok
+ALTER POLICY new_p1 on table_owner_test USING (true);
 
 statement ok
 SET ROLE nontab_owner;
@@ -1337,10 +1455,10 @@ CREATE POLICY p2 on table_owner_test;
 statement error pq: must be owner of relation table_owner_test
 DROP POLICY new_p1 on table_owner_test;
 
-statement error pq: unimplemented: ALTER POLICY is not yet implemented
+statement error pq: must be owner of relation table_owner_test
 ALTER POLICY new_p1 on table_owner_test WITH CHECK (true);
 
-statement error pq: unimplemented: ALTER POLICY is not yet implemented
+statement error pq: must be owner of relation table_owner_test
 ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
 
 statement ok
@@ -2634,12 +2752,9 @@ query I
 UPDATE cnt SET counter = counter + 1 RETURNING counter;
 ----
 
-# Now replace the UPDATE policy with one that allows everything.
+# Now alter the UPDATE policy with one that allows everything.
 statement ok
-DROP POLICY upd1 ON cnt;
-
-statement ok
-CREATE POLICY upd1 ON cnt FOR UPDATE USING (true);
+ALTER POLICY upd1 ON cnt USING (true);
 
 query I
 UPDATE cnt SET counter = counter + 1 RETURNING counter;
@@ -2648,10 +2763,7 @@ UPDATE cnt SET counter = counter + 1 RETURNING counter;
 
 # Update the UPDATE policy so that it allows old rows but blocks all new rows.
 statement ok
-DROP POLICY upd1 ON cnt;
-
-statement ok
-CREATE POLICY upd1 ON cnt FOR UPDATE USING (true) WITH CHECK (false);
+ALTER POLICY upd1 ON cnt USING (true) WITH CHECK (false);
 
 # We are able to read the row but cannot write a new row as it violates the
 # update policy.
@@ -2673,10 +2785,7 @@ select counter from cnt;
 
 # Now change the select policy to be always false, and delete policy to be always true.
 statement ok
-DROP POLICY sel1 ON cnt;
-
-statement ok
-CREATE POLICY sel1 ON cnt FOR SELECT USING (false);
+ALTER POLICY sel1 ON cnt USING (false);
 
 statement ok
 CREATE POLICY del1 ON cnt FOR DELETE USING (true);
