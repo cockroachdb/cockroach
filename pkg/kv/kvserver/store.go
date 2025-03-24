@@ -2435,11 +2435,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
 
-		// TODO(kvoli): We will want something here to switch between the two store
-		// rebalancers.
 		s.mmStoreRebalancer = &multiMetricStoreRebalancer{
 			allocator: s.cfg.MMAllocator,
 			store:     s,
+			st:        s.cfg.Settings,
 		}
 		s.mmStoreRebalancer.start(ctx, s.stopper)
 	}
