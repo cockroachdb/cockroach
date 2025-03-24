@@ -48,6 +48,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/backfill",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
