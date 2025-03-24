@@ -405,7 +405,6 @@ func newRaftConfig(
 	return &raft.Config{
 		ID:                          id,
 		Applied:                     uint64(appliedIndex),
-		AsyncStorageWrites:          true,
 		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
 		ElectionJitterTick:          storeCfg.RaftElectionTimeoutJitterTicks,
 		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,

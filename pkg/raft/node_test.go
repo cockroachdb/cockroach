@@ -297,7 +297,6 @@ func TestNodeStart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
-		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -369,7 +368,6 @@ func TestNodeRestart(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
-		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -422,7 +420,6 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            s,
-		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -449,7 +446,6 @@ func TestNodeAdvance(t *testing.T) {
 		ElectionJitterTick: 10,
 		HeartbeatTick:      1,
 		Storage:            storage,
-		AsyncStorageWrites: true,
 		MaxSizePerMsg:      noLimit,
 		MaxInflightMsgs:    256,
 		StoreLiveness:      raftstoreliveness.AlwaysLive{},
@@ -554,7 +550,6 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 func TestAppendPagination(t *testing.T) {
 	const maxSizePerMsg = 2048
 	n := newNetworkWithConfig(func(c *Config) {
-		c.AsyncStorageWrites = true
 		c.MaxSizePerMsg = maxSizePerMsg
 	}, nil, nil, nil)
 
