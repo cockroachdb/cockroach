@@ -909,20 +909,50 @@ func (opc *optPlanningCtx) runExecBuilder(
 		defer opc.gf.Reset()
 		f = &opc.gf
 	}
+	// TODO: Find the right place to do this.
+	opc.p.compiledPlan = nil
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld = execbuilder.New(
-			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
-		)
-		if disableTelemetryAndPlanGists {
-			bld.DisableTelemetry()
+		prep := opc.p.stmt.Prepared
+		a := opc.p.SessionData().ApplicationName == "marcus"
+		_ = a
+		isGeneric := prep != nil && prep.GenericMemo == mem
+		if isGeneric && prep.CompiledPlan != nil {
+			// plan, err := prep.CompiledPlan(
+			// 	ctx, opc.p.EvalContext(), opc.p.extendedEvalCtx.indexUsageStats,
+			// )
+			// if err != nil {
+			// 	return err
+			// }
+			// result = plan.(*planComponents)
+			opc.p.compiledPlan = prep.CompiledPlan.(planNode)
+		} else {
+			compile := isGeneric && !opc.p.SessionData().Internal
+			if compile {
+				f.EnableCompilation()
+			}
+			bld = execbuilder.New(
+				ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+				semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+			)
+			if disableTelemetryAndPlanGists {
+				bld.DisableTelemetry()
+			}
+			plan, err := bld.Build()
+			if err != nil {
+				return err
+			}
+			if compile {
+				// Save the compiled plan.
+				if plan := f.CompiledPlan(); plan != nil {
+					p := plan.(planNode)
+					prep.CompiledPlan = p
+					opc.p.compiledPlan = p
+				}
+				f.DisableCompilation()
+			}
+			result = plan.(*planComponents)
 		}
-		plan, err := bld.Build()
-		if err != nil {
-			return err
-		}
-		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
@@ -941,15 +971,16 @@ func (opc *optPlanningCtx) runExecBuilder(
 		result = explainPlan.WrappedPlan.(*planComponents)
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
-	planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
-	planTop.instrumentation.totalScanRows = bld.TotalScanRows
-	planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
-	planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
-	planTop.instrumentation.nanosSinceStatsForecasted = bld.NanosSinceStatsForecasted
-	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
-	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
-	planTop.instrumentation.scanCounts = bld.ScanCounts
-	planTop.instrumentation.indexesUsed = bld.IndexesUsed
+	// TODO: Need to figure out what to do with this shit...
+	// planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
+	// planTop.instrumentation.totalScanRows = bld.TotalScanRows
+	// planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
+	// planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+	// planTop.instrumentation.nanosSinceStatsForecasted = bld.NanosSinceStatsForecasted
+	// planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
+	// planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
+	// planTop.instrumentation.scanCounts = bld.ScanCounts
+	// planTop.instrumentation.indexesUsed = bld.IndexesUsed
 
 	if opc.gf.Initialized() {
 		planTop.instrumentation.planGist = opc.gf.PlanGist()
@@ -962,13 +993,20 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 
 	if stmt.ExpectedTypes != nil {
-		cols := result.main.planColumns()
+		var cols colinfo.ResultColumns
+		if opc.p.compiledPlan != nil {
+			cols = planColumns(opc.p.compiledPlan)
+		} else {
+			cols = result.main.planColumns()
+		}
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
 		}
 	}
 
-	planTop.planComponents = *result
+	if result != nil {
+		planTop.planComponents = *result
+	}
 	planTop.stmt = stmt
 	planTop.flags |= opc.flags
 	if planTop.flags.IsSet(planFlagIsDDL) {

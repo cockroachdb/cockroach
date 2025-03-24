@@ -53,6 +53,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *scanNode:
 		return n.columns
+	case *pkLookup:
+		return n.columns
 	case *unionNode:
 		return n.columns
 	case *valuesNode:

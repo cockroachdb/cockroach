@@ -2851,6 +2851,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
+		// TODO
 		ctx, err = ex.makeExecPlan(ctx, planner)
 		defer planner.curPlan.close(ctx)
 	}
@@ -2888,7 +2889,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var cols colinfo.ResultColumns
 	if stmt.AST.StatementReturnType() == tree.Rows {
-		cols = planner.curPlan.main.planColumns()
+		if planner.compiledPlan != nil {
+			cols = planColumns(planner.compiledPlan)
+		} else {
+			cols = planner.curPlan.main.planColumns()
+		}
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
 		res.SetError(err)
@@ -2896,6 +2901,38 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+
+	// TODO: Do something with the plan here.
+	if p := planner.compiledPlan; p != nil {
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, crtime.NowMono())
+		params := runParams{
+			ctx:             ctx,
+			extendedEvalCtx: ex.planner.ExtendedEvalContext(),
+			p:               &ex.planner,
+		}
+		if err := startExec(params, p); err != nil {
+			return err
+		}
+		for {
+			hasRow, err := p.Next(params)
+			if err != nil {
+				return err
+			}
+			if !hasRow {
+				break
+			}
+			if err := res.AddRow(ctx, p.Values()); err != nil {
+				return err
+			}
+			// TODO
+			ex.extraTxnState.rowsRead += 1
+			ex.extraTxnState.bytesRead += 1
+			ex.extraTxnState.rowsWritten += 1
+		}
+		p.Close(ctx)
+		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, crtime.NowMono())
+		return nil
+	}
 
 	var afterGetPlanDistribution func()
 	if planner.pausablePortal != nil {

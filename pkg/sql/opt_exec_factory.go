@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,7 +51,10 @@ type execFactory struct {
 	planner *planner
 	// isExplain is true if this factory is used to build a statement inside
 	// EXPLAIN or EXPLAIN ANALYZE.
-	isExplain bool
+	isExplain        bool
+	compile          bool
+	compiled         exec.CompiledPlan
+	compiledPlanNode exec.Node
 }
 
 var _ exec.Factory = &execFactory{}
@@ -65,6 +70,33 @@ func newExecFactory(ctx context.Context, p *planner) *execFactory {
 func (ef *execFactory) Ctx() context.Context {
 	return ef.ctx
 }
+
+// EnableCompilation implements the Factory interface.
+func (f *execFactory) EnableCompilation() {
+	f.compile = true
+}
+
+// DisableCompilation implements the Factory interface.
+func (f *execFactory) DisableCompilation() {
+	f.compile = false
+}
+
+// Compiled implements the Factory interface.
+func (f *execFactory) Compiled() exec.CompiledPlan {
+	return f.compiled
+}
+
+// CompiledPlanNode implements the Factory interface.
+func (f *execFactory) CompiledPlan() exec.Node {
+	return f.compiledPlanNode
+}
+
+// func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
+// 	if ef.alloc == nil {
+// 		ef.alloc = &tree.DatumAlloc{}
+// 	}
+// 	return ef.alloc
+// }
 
 // ConstructValues is part of the exec.Factory interface.
 func (ef *execFactory) ConstructValues(
@@ -124,7 +156,7 @@ func (ef *execFactory) ConstructScan(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	// Create a scanNode.
-	scan := ef.planner.Scan()
+	scan := NewScanNode()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	if err := scan.initDescDefaults(tabDesc, colCfg); err != nil {
@@ -199,6 +231,140 @@ func (ef *execFactory) constructVirtualScan(
 		ef, ef.planner, table, index, params, reqOrdering,
 		func(d *delayedNode) (exec.Node, error) { return d, nil },
 	)
+}
+
+func (ef *execFactory) ConstructPlaceholderScan(
+	table cat.Table, index cat.Index, params exec.PlaceholderScanParams,
+) (exec.Node, error) {
+	if table.IsVirtualTable() {
+		return nil, errors.AssertionFailedf("cannot plan placeholder scan on virtual table")
+	}
+
+	evalCtx := ef.planner.EvalContext()
+	tabDesc := table.(*optTable).desc
+	idx := index.(*optIndex).idx
+
+	colCfg := makeScanColumnsConfig(table, params.NeededCols)
+
+	var planningInfo fetchPlanningInfo
+	if err := planningInfo.initDescDefaults(tabDesc, colCfg); err != nil {
+		return nil, err
+	}
+
+	// TODO: Estimated row count. Move this to planning info, I think, if it is
+	// indeed needed.
+	// scan.estimatedRowCount = params.EstimatedRowCount
+
+	splitter := span.MakeSplitter(tabDesc, idx, params.NeededCols)
+
+	if ef.compile && params.PKPointLookup && !ef.isExplain && !ef.planner.SessionData().Internal {
+		// ef.compiled = func(
+		// 	ctx context.Context,
+		// 	evalCtx *eval.Context,
+		// 	idxUsage *idxusage.LocalIndexUsageStats,
+		// ) (exec.Plan, error) {
+		// 	// Make local copies to avoid allocations if ef.compile is false.
+		// 	planningInfo := planningInfo
+		// 	sb := sb
+		// 	splitter := splitter
+		// 	node, err := finalizePlaceholderScan(
+		// 		ctx, evalCtx, &planningInfo,
+		// 		tabDesc, idx, sb, splitter, params,
+		// 		idxUsage, false /* isExplain */, false, /* isInternal */
+		// 	)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// 	// TODO: Use ef flags here?
+		// 	var flags exec.PlanFlags
+		// 	return constructPlan(node, nil, nil, nil, nil, 0 /* rootRowCount */, flags)
+		// }
+		// TODO: Cannot copy sb because of copy lock.
+		var sb span.Builder
+		codec := ef.planner.ExecCfg().Codec
+		sb.InitAllowingExternalRowData(evalCtx, codec, tabDesc, idx)
+		n := &pkLookup{
+			params:   params,
+			sb:       &sb,
+			splitter: splitter,
+			columns:  planningInfo.columns,
+			// spec: &fetchpb.IndexFetchSpec{
+			// 	Version:          fetchpb.IndexFetchSpecVersionInitial,
+			// 	TableID:          tabDesc.GetID(),
+			// 	TableName:        tabDesc.GetName(),
+			// 	IndexID:          idx.GetID(),
+			// 	IndexName:        idx.GetName(),
+			// 	IsSecondaryIndex: false,
+			// 	IsUniqueIndex:    true,
+			// 	// GeoConfig:            geopb.Config{},
+			// 	// EncodingType:         0,
+			// 	NumKeySuffixColumns:  idx.Nu,
+			// 	MaxKeysPerRow:        0,
+			// 	KeyPrefixLength:      0,
+			// 	MaxFamilyID:          0,
+			// 	FamilyDefaultColumns: nil,
+			// 	KeyAndSuffixColumns:  nil,
+			// 	FetchedColumns:       nil,
+			// 	External:             nil,
+			// },
+		}
+		err := rowenc.InitIndexFetchSpec(&n.spec, codec, tabDesc, idx, colCfg.wantedColumns)
+		if err != nil {
+			return nil, err
+		}
+		ef.compiledPlanNode = n
+	}
+
+	var sb span.Builder
+	sb.InitAllowingExternalRowData(evalCtx, ef.planner.ExecCfg().Codec, tabDesc, idx)
+	return finalizePlaceholderScan(
+		ef.ctx, evalCtx, &planningInfo,
+		tabDesc, idx, sb, splitter, params,
+		ef.planner.extendedEvalCtx.indexUsageStats,
+		ef.isExplain, ef.planner.SessionData().Internal,
+	)
+}
+
+func finalizePlaceholderScan(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	planningInfo *fetchPlanningInfo,
+	tabDesc catalog.TableDescriptor,
+	idx catalog.Index,
+	sb span.Builder,
+	splitter span.Splitter,
+	params exec.PlaceholderScanParams,
+	idxUsage *idxusage.LocalIndexUsageStats,
+	isExplain bool,
+	internal bool,
+) (exec.Node, error) {
+	// Create a scanNode.
+	scan := NewScanNode()
+	scan.fetchPlanningInfo = *planningInfo
+
+	scan.index = idx
+	// scan.softLimit = params.SoftLimit
+
+	var c constraint.Constraint
+	params.InitConstraint(ctx, evalCtx, &c)
+
+	var err error
+	scan.spans, err = sb.SpansFromConstraint(&c, splitter)
+	if err != nil {
+		return nil, err
+	}
+
+	scan.isFull = false
+
+	if !isExplain && !internal {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		idxUsage.RecordRead(idxUsageKey)
+	}
+
+	return scan, nil
 }
 
 // ConstructFilter is part of the exec.Factory interface.
@@ -1220,7 +1386,7 @@ func (ef *execFactory) ConstructPlan(
 	if spool, ok := root.(*spoolNode); ok {
 		root = spool.input
 	}
-	return constructPlan(ef.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
+	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 // urlOutputter handles writing strings into an encoded URL for EXPLAIN (OPT,

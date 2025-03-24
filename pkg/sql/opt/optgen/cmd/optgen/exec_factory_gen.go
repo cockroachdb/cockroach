@@ -41,7 +41,7 @@ func (g *execFactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 }
 
 func (g *execFactoryGen) genExecFactory() {
-	g.w.write("// Factory defines the interface for building an execution plan, which consists\n")
+	g.w.write("// factory defines the interface for building an execution plan, which consists\n")
 	g.w.write("// of a tree of execution nodes (currently a sql.planNode tree).\n")
 	g.w.write("//\n")
 	g.w.write("// The tree is always built bottom-up. The Construct methods either construct\n")
@@ -57,7 +57,7 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.write("//\n")
 	g.w.write("// The TypedExprs passed to these functions refer to columns of the input node\n")
 	g.w.write("// via IndexedVars.\n")
-	g.w.nest("type Factory interface {\n")
+	g.w.nest("type factory interface {\n")
 	g.w.writeIndent("// ConstructPlan creates a plan enclosing the given plan and (optionally)\n")
 	g.w.writeIndent("// subqueries, cascades, and checks.\n")
 	g.w.writeIndent("//\n")
@@ -109,7 +109,7 @@ func (g *execFactoryGen) genStubFactory() {
 	g.w.write("// StubFactory is a do-nothing implementation of Factory, used for testing.\n")
 	g.w.write("type StubFactory struct{}\n")
 	g.w.write("\n")
-	g.w.write("var _ Factory = StubFactory{}\n")
+	g.w.write("var _ factory = StubFactory{}\n")
 	g.w.write("\n")
 	g.w.nestIndent("func (StubFactory) ConstructPlan(\n")
 	g.w.writeIndent("root Node,\n")

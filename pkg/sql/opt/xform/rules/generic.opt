@@ -56,3 +56,28 @@
     []
     (OutputCols (Root))
 )
+
+# TODO: For the prototype:
+# 1. Move constraint building to the distsql/exec factory constructors.
+# 2. Build closures over immutable planning data in constructors and reuse them
+#    for PlaceholderScans, Updates, Deletes, maybe others?
+# 3. Benchmark the gains.
+#
+# TODO: For productions:
+# 1. We need to actually cost these PlaceholderScans now. Maybe they can have
+# the same cost as the lookup join, but like a little bit less?
+# TODO: Check for empty on filters here?
+[ConvertParameterizedJoinToPlaceholderScan, Explore]
+(LookupJoin
+    $values:(Values [ (Tuple $row:[ ... ]) ]) &
+        (Let
+            ($span $private $ok):(PlaceholderScanSpanAndPrivate
+                (Root)
+                $values
+                $row
+            )
+            $ok
+        )
+)
+=>
+(PlaceholderScan $span $private)
