@@ -34,13 +34,10 @@ var ErrStepPeerNotFound = errors.New("raft: cannot step as peer not found")
 // The methods of this struct correspond to the methods of Node and are described
 // more fully there.
 type RawNode struct {
-	raft               *raft
-	asyncStorageWrites bool
-
+	raft *raft
 	// Mutable fields.
-	prevSoftSt     *SoftState
-	prevHardSt     pb.HardState
-	stepsOnAdvance []pb.Message
+	prevSoftSt *SoftState
+	prevHardSt pb.HardState
 }
 
 // NewRawNode instantiates a RawNode from the given configuration.
@@ -55,7 +52,9 @@ func NewRawNode(config *Config) (*RawNode, error) {
 	rn := &RawNode{
 		raft: r,
 	}
-	rn.asyncStorageWrites = config.AsyncStorageWrites
+	if !config.AsyncStorageWrites {
+		panic("synchronous storage writes are no longer supported")
+	}
 	ss := r.softState()
 	rn.prevSoftSt = &ss
 	rn.prevHardSt = r.hardState()
@@ -254,39 +253,12 @@ func (rn *RawNode) Ready() Ready {
 		rd.CommittedEntries = entries
 	}
 
-	if rn.asyncStorageWrites {
-		// If async storage writes are enabled, enqueue messages to local storage
-		// threads, where applicable.
-		if needStorageAppendMsg(r, rd) {
-			rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
-		}
-		if needStorageApplyMsg(rd) {
-			rd.Messages = append(rd.Messages, newStorageApplyMsg(r, rd))
-		}
-	} else {
-		// TODO(pav-kv): remove this branch and synchronous log writes.
-		if len(rn.stepsOnAdvance) != 0 {
-			r.logger.Panicf("two accepted Ready structs without call to Advance")
-		}
-		// If async storage writes are disabled, immediately enqueue msgsAfterAppend
-		// to be sent out. The Ready struct contract mandates that Messages cannot
-		// be sent until after Entries are written to stable storage. Enqueue the
-		// self-directed messages to be processed after Ready/Advance.
-		for _, m := range r.msgsAfterAppend {
-			if m.To != r.id {
-				rd.Messages = append(rd.Messages, m)
-			} else {
-				rn.stepsOnAdvance = append(rn.stepsOnAdvance, m)
-			}
-		}
-		if needStorageAppendRespMsg(rd) {
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance,
-				newStorageAppendRespMsg(r, rd))
-		}
-		if needStorageApplyRespMsg(rd) {
-			rn.stepsOnAdvance = append(rn.stepsOnAdvance,
-				newStorageApplyRespMsg(r, rd.CommittedEntries))
-		}
+	// For async storage writes, enqueue messages to local storage threads.
+	if needStorageAppendMsg(r, rd) {
+		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
+	}
+	if needStorageApplyMsg(rd) {
+		rd.Messages = append(rd.Messages, newStorageApplyMsg(r, rd))
 	}
 	r.msgsAfterAppend = nil
 
@@ -452,8 +424,7 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	return m
 }
 
-func needStorageApplyMsg(rd Ready) bool     { return len(rd.CommittedEntries) > 0 }
-func needStorageApplyRespMsg(rd Ready) bool { return needStorageApplyMsg(rd) }
+func needStorageApplyMsg(rd Ready) bool { return len(rd.CommittedEntries) > 0 }
 
 // newStorageApplyMsg creates the message that should be sent to the local
 // apply thread to instruct it to apply committed log entries. The message
@@ -490,7 +461,7 @@ func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
 // they are known to be committed but before they have been written locally to
 // stable storage.
 func (rn *RawNode) applyUnstableEntries() bool {
-	return !rn.asyncStorageWrites || rn.raft.testingKnobs.ApplyUnstableEntries()
+	return rn.raft.testingKnobs.ApplyUnstableEntries()
 }
 
 // HasReady called when RawNode user need to check if any Ready pending.
@@ -513,26 +484,6 @@ func (rn *RawNode) HasReady() bool {
 		return true
 	}
 	return false
-}
-
-// Advance notifies the RawNode that the application has applied all the updates
-// from the last Ready() call. It prepares the node to the next Ready handling
-// iteration.
-//
-// Advance must not be called when using AsyncStorageWrites. Response messages
-// from the local append and apply threads take its place.
-func (rn *RawNode) Advance(_ Ready) {
-	// The actions performed by this function are encoded into stepsOnAdvance in
-	// acceptReady. In earlier versions of this library, they were computed from
-	// the provided Ready struct. Retain the unused parameter for compatibility.
-	if rn.asyncStorageWrites {
-		rn.raft.logger.Panicf("Advance must not be called when using AsyncStorageWrites")
-	}
-	for i, m := range rn.stepsOnAdvance {
-		_ = rn.raft.Step(m)
-		rn.stepsOnAdvance[i] = pb.Message{}
-	}
-	rn.stepsOnAdvance = rn.stepsOnAdvance[:0]
 }
 
 // SplitMessages splits the messages in Ready into two buckets:
@@ -566,8 +517,8 @@ func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Messag
 	return send, advance
 }
 
-// AdvanceHack does the same thing as the Advance method, but when asynchronous
-// storage writes are enabled.
+// AdvanceHack notifies the RawNode that the application has applied all the
+// updates from the given Ready() call.
 //
 // This is a helper for transitioning from synchronous storage API to the
 // asynchronous one. Tests are being migrated to the async API, and temporarily
@@ -580,9 +531,6 @@ func (rn *RawNode) AdvanceHack(rd Ready) {
 }
 
 func (rn *RawNode) advance(msgs []pb.Message) {
-	if !rn.asyncStorageWrites {
-		rn.raft.logger.Panicf("AdvanceHack must be called when using AsyncStorageWrites")
-	}
 	for _, msg := range msgs {
 		_ = rn.Step(msg)
 	}
