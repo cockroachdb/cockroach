@@ -179,7 +179,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		MinBufferSize:            minBufferSize,
 		MaxBufferSize:            maxBufferSize,
 		SkipDuplicates:           ib.ContainsInvertedIndex(),
-		BatchTimestamp:           ib.spec.ReadAsOf,
+		BatchTimestamp:           ib.spec.WriteAsOf,
 		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
 		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
 	}
