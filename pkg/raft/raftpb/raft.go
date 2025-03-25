@@ -54,6 +54,17 @@ type LogSpan struct {
 	Last Index
 }
 
+// Empty returns whether the given log span is empty.
+func (s LogSpan) Empty() bool {
+	return s.After >= s.Last
+}
+
+// Len returns the number of entries in the given span.
+// Requires the span to be valid, i.e. Last >= After.
+func (s LogSpan) Len() uint64 {
+	return uint64(s.Last - s.After)
+}
+
 // Contains returns true iff the given index is within the span.
 func (s LogSpan) Contains(index Index) bool {
 	return index > s.After && index <= s.Last

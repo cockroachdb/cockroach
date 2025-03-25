@@ -151,7 +151,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 		t.Log(DescribeReady(rd, nil))
 		require.NoError(t, s.Append(rd.Entries))
 		applied := false
-		for _, e := range rd.CommittedEntries {
+		for _, e := range committedEntries(t, rn, rd) {
 			allCommittedEntries = append(allCommittedEntries, e)
 			switch e.Type {
 			case raftpb.EntryNormal:
@@ -272,19 +272,17 @@ func TestNodeStart(t *testing.T) {
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
-			CommittedEntries: []raftpb.Entry{
-				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
-			},
+			Committed: raftpb.LogSpan{After: 0, Last: 1},
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
-			Entries:          []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 2, Data: nil}},
+			HardState: raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:   []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			Committed: raftpb.LogSpan{After: 1, Last: 2},
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
-			Entries:          nil,
-			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
+			HardState: raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:   nil,
+			Committed: raftpb.LogSpan{After: 2, Last: 3},
 		},
 	}
 	storage := NewMemoryStorage()
@@ -351,7 +349,7 @@ func TestNodeRestart(t *testing.T) {
 		// No HardState is emitted because there was no change.
 		HardState: raftpb.HardState{},
 		// commit up to index commit index in st
-		CommittedEntries: entries[:st.Commit],
+		Committed: raftpb.LogSpan{After: 0, Last: raftpb.Index(st.Commit)},
 	}
 
 	storage := NewMemoryStorage()
@@ -399,7 +397,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		// already persisted.
 		HardState: raftpb.HardState{},
 		// commit up to index commit index in st
-		CommittedEntries: entries,
+		Committed: raftpb.LogSpan{After: 2, Last: 3},
 	}
 
 	s := NewMemoryStorage()
@@ -507,7 +505,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 		rd := rn.Ready()
 		require.NoError(t, s.Append(rd.Entries))
 		t.Logf("raft: %v", rd.Entries)
-		for _, ent := range rd.CommittedEntries {
+		for _, ent := range committedEntries(t, rn, rd) {
 			if ent.Type != raftpb.EntryConfChange {
 				continue
 			}
@@ -602,7 +600,7 @@ func TestCommitPagination(t *testing.T) {
 	rn.AdvanceHack(rd)
 	// Apply empty entry.
 	rd = rn.Ready()
-	require.Len(t, rd.CommittedEntries, 1)
+	require.Equal(t, uint64(1), rd.Committed.Len())
 	require.NoError(t, s.Append(rd.Entries))
 	rn.AdvanceHack(rd)
 
@@ -619,12 +617,20 @@ func TestCommitPagination(t *testing.T) {
 
 	// The 3 proposals will commit in two batches.
 	rd = rn.Ready()
-	require.Len(t, rd.CommittedEntries, 2)
+	// TODO(pav-kv): we no longer need this test after the flow control policy is
+	// moved up the stack.
+	committed, err := rn.LogSnapshot().Slice(
+		rd.Committed, uint64(rn.raft.raftLog.maxApplyingEntsSize))
+	require.NoError(t, err)
+	require.Len(t, committed, 2)
 	require.NoError(t, s.Append(rd.Entries))
 	rn.AdvanceHack(rd)
 
 	rd = rn.Ready()
-	require.Len(t, rd.CommittedEntries, 1)
+	committed, err = rn.LogSnapshot().Slice(
+		rd.Committed, uint64(rn.raft.raftLog.maxApplyingEntsSize))
+	require.NoError(t, err)
+	require.Len(t, committed, 1)
 	require.NoError(t, s.Append(rd.Entries))
 	rn.AdvanceHack(rd)
 }
@@ -813,8 +819,9 @@ func TestNodeCommitPaginationAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	rd := rn.Ready()
+	committed := committedEntries(t, rn, rd)
 	assert.False(t, !IsEmptyHardState(rd.HardState) && rd.HardState.Commit < persistedHardState.Commit,
 		"HardState regressed: Commit %d -> %d\nCommitting:\n%+v",
 		persistedHardState.Commit, rd.HardState.Commit,
-		DescribeEntries(rd.CommittedEntries, func(data []byte) string { return fmt.Sprintf("%q", data) }))
+		DescribeEntries(committed, func(data []byte) string { return fmt.Sprintf("%q", data) }))
 }

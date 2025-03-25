@@ -63,7 +63,13 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
 			return err
 		}
-		if apply := rd.CommittedEntries; len(apply) > 0 {
+
+		if !rd.Committed.Empty() {
+			ls := n.RawNode.LogSnapshot()
+			apply, err := ls.Slice(rd.Committed, n.Config.MaxCommittedSizePerReady)
+			if err != nil {
+				return err
+			}
 			// TODO(pav-kv): move printing to processApply when the async write path
 			// is refactored to also use LogSnapshot.
 			env.Output.WriteString("Applying:\n")

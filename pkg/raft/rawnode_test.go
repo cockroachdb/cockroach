@@ -219,7 +219,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			for cs == nil {
 				rd := rawNode.Ready()
 				s.Append(rd.Entries)
-				for _, ent := range rd.CommittedEntries {
+				for _, ent := range committedEntries(t, rawNode, rd) {
 					var cc pb.ConfChangeI
 					if ent.Type == pb.EntryConfChange {
 						var ccc pb.ConfChange
@@ -372,7 +372,7 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	for cs == nil {
 		rd := rawNode.Ready()
 		s.Append(rd.Entries)
-		for _, ent := range rd.CommittedEntries {
+		for _, ent := range committedEntries(t, rawNode, rd) {
 			var cc pb.ConfChangeI
 			if ent.Type == pb.EntryConfChangeV2 {
 				var ccc pb.ConfChangeV2
@@ -492,7 +492,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 		rawNode.ProposeConfChange(cc)
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
-		for _, entry := range rd.CommittedEntries {
+		for _, entry := range committedEntries(t, rawNode, rd) {
 			if entry.Type == pb.EntryConfChange {
 				var cc pb.ConfChange
 				cc.Unmarshal(entry.Data)
@@ -543,10 +543,10 @@ func TestRawNodeStart(t *testing.T) {
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
-		SoftState:        &SoftState{RaftState: pb.StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
-		Entries:          nil, // emitted & checked in intermediate Ready cycle
-		CommittedEntries: entries,
+		SoftState: &SoftState{RaftState: pb.StateLeader},
+		HardState: pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+		Entries:   nil, // emitted & checked in intermediate Ready cycle
+		Committed: pb.LogSpan{After: 1, Last: 3},
 	}
 
 	storage := NewMemoryStorage()
@@ -631,7 +631,7 @@ func TestRawNodeRestart(t *testing.T) {
 	want := Ready{
 		HardState: emptyState, // no HardState is emitted because there was no change
 		// commit up to commit index in st
-		CommittedEntries: entries[:st.Commit],
+		Committed: pb.LogSpan{After: 0, Last: pb.Index(st.Commit)},
 	}
 
 	storage := newTestMemoryStorage(withPeers(1, 2))
@@ -693,7 +693,7 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	want := Ready{
 		HardState: emptyState,
 		// commit up to commit index in st
-		CommittedEntries: entries,
+		Committed: pb.LogSpan{After: 2, Last: 3},
 	}
 
 	s := NewMemoryStorage()
@@ -791,13 +791,14 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 
 	for highestApplied := uint64(0); highestApplied != 11; {
 		rd := rawNode.Ready()
-		n := len(rd.CommittedEntries)
+		committed := committedEntries(t, rawNode, rd)
+		n := len(committed)
 		require.NotZero(t, n, "stopped applying entries at index %d", highestApplied)
-		next := rd.CommittedEntries[0].Index
+		next := committed[0].Index
 		require.False(t, highestApplied != 0 && highestApplied+1 != next,
 			"attempting to apply index %d after index %d, leaving a gap", next, highestApplied)
 
-		highestApplied = rd.CommittedEntries[n-1].Index
+		highestApplied = committed[n-1].Index
 		rawNode.AdvanceHack(rd)
 		rawNode.Step(pb.Message{
 			Type:    pb.MsgApp,
@@ -886,7 +887,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 		rd := rawNode.Ready()
 		s.Append(rd.Entries)
 		rawNode.AdvanceHack(rd)
-		if len(rd.CommittedEntries) > 0 {
+		if !rd.Committed.Empty() {
 			break
 		}
 	}
@@ -918,7 +919,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
-	require.Len(t, rd.CommittedEntries, maxEntries)
+	require.Equal(t, uint64(maxEntries), rd.Committed.Len())
 	rawNode.AdvanceHack(rd)
 
 	checkUncommitted(0)
@@ -1062,8 +1063,8 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 			if debug {
 				b.Log(DescribeReady(rd, nil))
 			}
-			if n := len(rd.CommittedEntries); n > 0 {
-				applied = rd.CommittedEntries[n-1].Index
+			if !rd.Committed.Empty() {
+				applied = uint64(rd.Committed.Last)
 			}
 			s.Append(rd.Entries)
 			for _, m := range rd.Messages {
@@ -1115,4 +1116,11 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 	b.ReportMetric(float64(s.callStats.term)/float64(b.N), "term/op")
 	b.ReportMetric(float64(numReady)/float64(b.N), "ready/op")
 	b.Logf("storage access stats: %+v", s.callStats)
+}
+
+func committedEntries(t *testing.T, rn *RawNode, rd Ready) []pb.Entry {
+	t.Helper()
+	entries, err := rn.LogSnapshot().Slice(rd.Committed, math.MaxUint64)
+	require.NoError(t, err)
+	return entries
 }

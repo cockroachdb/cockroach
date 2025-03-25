@@ -241,21 +241,17 @@ func (rn *RawNode) Ready() Ready {
 	// all updates unconditionally.
 	r.raftLog.acceptUnstable()
 
-	allowUnstable := rn.applyUnstableEntries()
-	if r.raftLog.hasNextCommittedEnts(allowUnstable) {
-		entries := r.raftLog.nextCommittedEnts(allowUnstable)
-		r.raftLog.acceptApplying(entries[len(entries)-1].Index)
-		rd.CommittedEntries = entries
-	}
-
 	// For async storage writes, enqueue messages to local storage threads.
 	if needStorageAppendMsg(r, rd) {
 		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
 	}
-	if needStorageApplyMsg(rd) {
-		rd.Messages = append(rd.Messages, newStorageApplyMsg(r, rd))
-	}
 	r.msgsAfterAppend = nil
+
+	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
+	if !rd.Committed.Empty() {
+		// TODO(pav-kv): remove MsgStorageApply messages and API.
+		rd.Messages = append(rd.Messages, rn.newStorageApplyMsg())
+	}
 
 	return rd
 }
@@ -403,22 +399,28 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	return m
 }
 
-func needStorageApplyMsg(rd Ready) bool { return len(rd.CommittedEntries) > 0 }
-
 // newStorageApplyMsg creates the message that should be sent to the local
 // apply thread to instruct it to apply committed log entries. The message
 // also carries a response that should be delivered after the rest of the
 // message is processed.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
-	ents := rd.CommittedEntries
+func (rn *RawNode) newStorageApplyMsg() pb.Message {
+	r := rn.raft
+	// TODO(pav-kv): the caller already knows the committed span. We should use it
+	// here, instead of recomputing it in nextCommittedEnts().
+	entries := r.raftLog.nextCommittedEnts(rn.applyUnstableEntries())
+	if len(entries) == 0 {
+		r.logger.Panic("should not happen")
+	}
+	r.raftLog.acceptApplying(entries[len(entries)-1].Index)
+
 	return pb.Message{
 		Type:    pb.MsgStorageApply,
 		To:      LocalApplyThread,
 		From:    r.id,
 		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
+		Entries: entries,
 		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, ents),
+			newStorageApplyRespMsg(r, entries),
 		},
 	}
 }
@@ -459,7 +461,10 @@ func (rn *RawNode) HasReady() bool {
 	if len(r.msgs) > 0 || len(r.msgsAfterAppend) > 0 {
 		return true
 	}
-	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
+	if r.raftLog.hasNextUnstableEnts() {
+		return true
+	}
+	if !r.raftLog.nextCommittedSpan(rn.applyUnstableEntries()).Empty() {
 		return true
 	}
 	return false
