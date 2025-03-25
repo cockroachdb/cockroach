@@ -428,8 +428,6 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 143394, "flaky test")
-
 	ctx := context.Background()
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
@@ -470,10 +468,16 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
 
 	var jobID jobspb.JobID
-	th.sqlDB.QueryRow(
-		t,
-		`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
-	).Scan(&jobID)
+	// The scheduler is notified of the backup job completion and then the
+	// compaction job is created in a separate transaction. As such, we need to
+	// poll for the compaction job to be created.
+	testutils.SucceedsSoon(t, func() error {
+		return th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&jobID)
+	})
+
 	testutils.SucceedsSoon(t, func() error {
 		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 		var unused int64
