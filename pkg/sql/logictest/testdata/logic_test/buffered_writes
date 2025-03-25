@@ -60,3 +60,25 @@ DELETE FROM t1 WHERE pk = 1
 
 statement ok
 COMMIT
+
+subtest delete_then_insert
+
+statement ok
+INSERT INTO t1 VALUES (1,1)
+
+statement ok
+BEGIN
+
+statement count 1
+DELETE FROM t1 WHERE pk = 1
+
+statement ok
+INSERT INTO t1 VALUES (1,1)
+
+statement ok
+COMMIT
+
+query II
+SELECT * FROM t1
+----
+1 1
