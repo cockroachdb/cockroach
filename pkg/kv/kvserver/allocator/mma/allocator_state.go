@@ -160,7 +160,7 @@ func (a *allocatorState) rebalanceStores(
 	// very fast, so we set a much higher limit.
 	//
 	// TODO: revisit these constants.
-	const maxRangeMoveCount = 2
+	const maxRangeMoveCount = 1
 	const maxLeaseTransferCount = 8
 	rangeMoveCount := 0
 	leaseTransferCount := 0
