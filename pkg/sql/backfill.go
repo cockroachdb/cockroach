@@ -1011,8 +1011,6 @@ func (sc *SchemaChanger) distIndexBackfill(
 		log.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
 	}
 
-	readAsOf := sc.clock.Now()
-
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
@@ -1044,7 +1042,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
 		if err != nil {
 			return err
 		}
