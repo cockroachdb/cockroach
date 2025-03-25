@@ -36,7 +36,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 	}
 
 	const (
-		nodesPerRegion = 20
+		nodesPerRegion = 13
 		// These values are somewhat arbitrary: currently, they are
 		// sufficient to keep the cluster relatively busy (CPU utilization
 		// varying from 10-60%). In the future, these values might be
@@ -75,7 +75,7 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				mixedversion.NeverUseFixtures,
 				// Allow migrations to run for a longer period of time due to
 				// added latency and cluster size.
-				mixedversion.UpgradeTimeout(1*time.Hour),
+				mixedversion.UpgradeTimeout(2*time.Hour),
 				// There are known issues upgrading from older patch releases
 				// in MR clusters (e.g., #113908), so use the latest patch
 				// releases to avoid flakes.
