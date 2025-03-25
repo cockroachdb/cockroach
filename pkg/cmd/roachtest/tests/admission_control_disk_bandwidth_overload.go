@@ -36,7 +36,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          3 * time.Hour,
 		Benchmark:        true,
-		CompatibleClouds: registry.AllExceptAzure,
+		CompatibleClouds: registry.AllClouds.NoAzure().NoIBM(),
 		// TODO(aaditya): change to weekly once the test stabilizes.
 		Suites:  registry.Suites(registry.Nightly),
 		Cluster: r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.ReuseNone()),

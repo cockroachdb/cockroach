@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ibm",
+    srcs = [
+        "account_config.go",
+        "helpers.go",
+        "ibm_extended_types.go",
+        "provider.go",
+        "provider_flags.go",
+        "provider_opts.go",
+        "startup.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/flagstub",
+        "//pkg/util/randutil",
+        "//pkg/util/retry",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ibm_go_sdk_core_v5//core",
+        "@com_github_ibm_networking_go_sdk//transitgatewayapisv1",
+        "@com_github_ibm_platform_services_go_sdk//globalsearchv2",
+        "@com_github_ibm_platform_services_go_sdk//globaltaggingv1",
+        "@com_github_ibm_platform_services_go_sdk//resourcecontrollerv2",
+        "@com_github_ibm_platform_services_go_sdk//resourcemanagerv2",
+        "@com_github_ibm_vpc_go_sdk//vpcv1",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_crypto//ssh",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "ibm_test",
+    srcs = [
+        "helpers_test.go",
+        "provider_test.go",
+        "startup_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":ibm"],
+    deps = [
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

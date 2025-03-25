@@ -30,7 +30,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(ctx, t, c)

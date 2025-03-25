@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
@@ -80,6 +81,9 @@ var (
 			Default: Public,
 		},
 		azure.ProviderName: {
+			Default: Public,
+		},
+		ibm.ProviderName: {
 			Default: Public,
 		},
 	}

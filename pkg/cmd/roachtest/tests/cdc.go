@@ -1487,7 +1487,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1646,7 +1646,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:    registry.MetamorphicLeases,
 		// TODO(radu): fix this.
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.ManualOnly,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1672,7 +1672,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1694,7 +1694,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1724,7 +1724,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1802,7 +1802,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1840,7 +1840,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:                  true,
 		Cluster:                    r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		Leases:                     registry.MetamorphicLeases,
-		CompatibleClouds:           registry.AllExceptAWS,
+		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses ledger
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2096,7 +2096,7 @@ func registerCDC(r registry.Registry) {
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
@@ -2142,7 +2142,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -2297,7 +2297,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          60 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2309,7 +2309,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(1),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)

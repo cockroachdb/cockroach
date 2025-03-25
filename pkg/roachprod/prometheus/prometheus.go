@@ -347,7 +347,7 @@ sudo systemd-run --unit prometheus --same-dir \
 		return nil, err
 	}
 
-	if cfg.Grafana.Enabled {
+	if cfg.Grafana.Enabled && c.Cluster.VMs[0].CPUArch != vm.ArchS390x {
 		// Install Grafana.
 		if err := c.Run(ctx, l,
 			l.Stdout,

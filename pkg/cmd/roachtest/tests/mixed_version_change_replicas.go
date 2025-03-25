@@ -29,7 +29,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		Name:             "change-replicas/mixed-version",
 		Owner:            registry.OwnerKV,
 		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,
