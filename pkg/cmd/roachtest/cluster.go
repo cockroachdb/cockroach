@@ -1395,9 +1395,16 @@ func (c *clusterImpl) FetchDebugZip(
 	c.status("fetching debug zip")
 
 	nodes := selectedNodesOrDefault(opts, c.All())
+	// Shuffle the nodes to avoid always trying the same node first.
+	rand.Shuffle(len(nodes), func(i, j int) { nodes[i], nodes[j] = nodes[j], nodes[i] })
+	defaultTimeout := 10 * time.Minute
+	if c.spec.NodeCount >= 30 {
+		// For "large" clusters, double the timeout.
+		defaultTimeout *= 2
+	}
 
 	// Don't hang forever if we can't fetch the debug zip.
-	return timeutil.RunWithTimeout(ctx, "debug zip", 10*time.Minute, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "debug zip", defaultTimeout, func(ctx context.Context) error {
 		const zipName = "debug.zip"
 		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

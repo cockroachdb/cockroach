@@ -1753,8 +1753,11 @@ func (r *testRunner) collectArtifacts(
 		if err := c.FetchPebbleCheckpoints(ctx, t.L()); err != nil {
 			t.L().Printf("failed to fetch Pebble checkpoints: %s", err)
 		}
-		if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
-			t.L().Printf("failed to fetch timeseries data: %s", err)
+		// Bypass the collection of timeseries data for "large" clusters.
+		if c.spec.NodeCount < 30 {
+			if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
+				t.L().Printf("failed to fetch timeseries data: %s", err)
+			}
 		}
 		if err := c.FetchDebugZip(ctx, t.L(), "debug.zip"); err != nil {
 			t.L().Printf("failed to collect zip: %s", err)
