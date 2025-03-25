@@ -30,7 +30,7 @@ var _ metric.PrometheusExportable = (*AggCounter)(nil)
 // NewCounter constructs a new AggCounter.
 func NewCounter(metadata metric.Metadata, childLabels ...string) *AggCounter {
 	c := &AggCounter{g: *metric.NewCounter(metadata)}
-	c.init(childLabels)
+	c.initWithBTreeStorageType(childLabels)
 	return c
 }
 
@@ -86,7 +86,8 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 // Inc increments the counter value by i for the given label values. If a
 // counter with the given label values doesn't exist yet, it creates a new
 // counter and increments it. Panics if the number of label values doesn't
-// match the number of labels defined for this counter.
+// match the number of labels defined for this counter and if the storage type
+// is not StorageTypeCache.
 func (c *AggCounter) Inc(i int64, labelVals ...string) {
 	if len(c.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
@@ -161,7 +162,7 @@ var _ metric.PrometheusExportable = (*AggCounterFloat64)(nil)
 // NewCounterFloat64 constructs a new AggCounterFloat64.
 func NewCounterFloat64(metadata metric.Metadata, childLabels ...string) *AggCounterFloat64 {
 	c := &AggCounterFloat64{g: *metric.NewCounterFloat64(metadata)}
-	c.init(childLabels)
+	c.initWithBTreeStorageType(childLabels)
 	return c
 }
 
