@@ -35,6 +35,7 @@ go_test(
     ],
     visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
+        "//pkg/build",
         "//pkg/build/bazel",
         "//pkg/cmd/urlcheck/lib/urlcheck",
         "//pkg/internal/codeowners",
