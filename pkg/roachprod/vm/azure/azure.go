@@ -299,11 +299,7 @@ func parseZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]Zone, error) 
 	}
 
 	if len(zonesFlag) == 0 {
-		if opts.GeoDistributed {
-			zonesFlag = DefaultZones
-		} else {
-			zonesFlag = []string{DefaultZones[0]}
-		}
+		zonesFlag = DefaultZones(opts.GeoDistributed)
 	}
 
 	var zones []Zone
@@ -320,6 +316,13 @@ func parseZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]Zone, error) 
 		zones = append(zones, Zone{Location: parts[0], AvailabilityZone: parts[1]})
 	}
 	return zones, nil
+}
+
+func DefaultZones(geoDistributed bool) []string {
+	if geoDistributed {
+		return defaultZones
+	}
+	return []string{defaultZones[0]}
 }
 
 // Create implements vm.Provider.

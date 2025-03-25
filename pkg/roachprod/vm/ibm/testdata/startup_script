@@ -1,35 +1,79 @@
 echo
 ----
 ----
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Script for setting up a Azure machine for roachprod use.
+# Script for setting up an IBM machine for roachprod use.
 
 function setup_disks() {
-	mount_opts="defaults"
+	mount_prefix="/mnt/data"
+	use_multiple_disks=''
 
-	devices=()
+
+	mount_opts="defaults,nofail"
+	
 
 
-	if (( ${#devices[@]} == 0 ));
-	then
-		# Use /mnt directly.
-		echo "No attached or NVME disks found, creating /mnt/data1"
-		mkdir -p /mnt/data1
-		chown ubuntu /mnt/data1
+	# List the attached data disks
+	disks=()
+	for d in $(find /dev/disk/by-id/ -type l -not -name *cloud-init* -not -name *part* -exec readlink -f {} \;); do
+		mounted="no"
+
+		# Check if the disk is already mounted; skip if so.
+
+		if mount | grep -q ${d}; then
+			mounted="yes"
+		fi
+
+
+		if [ "$mounted" = "no" ]; then
+			disks+=("${d}")
+			echo "Disk ${d} is not mounted, mounting it"
 		else
-		for d in "${!devices[@]}"; do
-			disk=${devices[$d]}
-			mount="/data$((d+1))"
-			sudo mkdir -p "${mount}"
-			sudo mkfs.ext4 -F "${disk}"
-			sudo mount -o "${mount_opts}" "${disk}" "${mount}"
-			echo "${disk} ${mount} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
-			ln -s "${mount}" "/mnt/$(basename $mount)"
+			echo "Disk ${d} is already mounted, skipping"
+		fi
+	done
+
+	if [ "${#disks[@]}" -eq "0" ]; then
+		mountpoint="${mount_prefix}1"
+		echo "No disks mounted, creating ${mountpoint}"
+		mkdir -p ${mountpoint}
+		chmod 777 ${mountpoint}
+	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+		disknum=1
+		for disk in "${disks[@]}"
+		do
+			mountpoint="${mount_prefix}${disknum}"
+			disknum=$(( disknum + 1 ))
+			echo "Mounting ${disk} at ${mountpoint}"
+			mkdir -p ${mountpoint}
+
+			mkfs.ext4 -F ${disk}
+			mount -o ${mount_opts} ${disk} ${mountpoint}
+			echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
 			tune2fs -m 0 ${disk}
+
+			chmod 777 ${mountpoint}
 		done
-		chown ubuntu /data*
+	else
+		mountpoint="${mount_prefix}1"
+		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+		mkdir -p ${mountpoint}
+
+		raiddisk="/dev/md0"
+		mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+		mkfs.ext4 -F ${raiddisk}
+		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+		echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+		tune2fs -m 0 ${raiddisk}
+
+		chmod 777 ${mountpoint}
 	fi
+
+	# Print the block device and FS usage output. This is useful for debugging.
+	lsblk
+	df -h
+
 	sudo touch /mnt/data1/.roachprod-initialized
 }
 
@@ -62,12 +106,6 @@ sudo apt-get install -qy --no-install-recommends mdadm
 
 # Initialize disks.
 setup_disks
-
-# Disable Hyper-V Time Synchronization device
-# See https://www.cockroachlabs.com/docs/stable/deploy-cockroachdb-on-microsoft-azure#step-3-synchronize-clocks
-curl -O https://raw.githubusercontent.com/torvalds/linux/master/tools/hv/lsvmbus
-ts_dev_id=$(python3 lsvmbus -vv | grep -w "Time Synchronization" -A 3 | grep "Device_ID" | awk -F '[{}]' '{print $2}')
-echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 
 
 
@@ -125,8 +163,7 @@ dumpdir /var/lib/chrony
 logchange 0.01
 hwclockfile /etc/adjtime
 rtcsync
-server time1.google.com prefer iburst
-server time2.google.com prefer iburst
+server time.adn.networklayer.com prefer iburst
 makestep 0.1 3
 EOF
 

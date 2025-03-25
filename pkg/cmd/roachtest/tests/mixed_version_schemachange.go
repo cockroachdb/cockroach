@@ -27,7 +27,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		Name:                       "schemachange/mixed-versions",
 		Owner:                      registry.OwnerSQLFoundations,
 		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
-		CompatibleClouds:           registry.AllExceptAWS,
+		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
 		Suites:                     registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:                 true,
 		NativeLibs:                 registry.LibGEOS,
