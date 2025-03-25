@@ -184,9 +184,8 @@ func (ib *IndexBackfillPlanner) plan(
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
 		const writeAtRequestTimestamp = true
 		spec, err := initIndexBackfillerSpec(
-			*td.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize,
-			indexesToBackfill,
-			sourceIndexID,
+			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
+			indexesToBackfill, sourceIndexID,
 		)
 		if err != nil {
 			return err
