@@ -112,8 +112,8 @@ func BinaryVersion() string {
 func VersionForURLs() string {
 	if parsedVersionTxt.IsPrerelease() {
 		phaseAndOrdinal := parsedVersionTxt.Format("%P.%o")
-		// builds prior to "alpha.1" use 'dev' in their URLs
-		if phaseAndOrdinal < "alpha.1" {
+		// builds prior to "rc.1" use 'dev' in their URLs
+		if phaseAndOrdinal < "rc.1" {
 			return "dev"
 		}
 	} else if parsedVersionTxt.IsCustomOrNightlyBuild() {
