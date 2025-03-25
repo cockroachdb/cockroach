@@ -53,13 +53,6 @@ var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
-// ForceWriterParallelism configures an engine to be opened with disabled
-// automatic compactions. Used primarily for debugCompactCmd.
-var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
-	cfg.opts.Experimental.ForceWriterParallelism = true
-	return nil
-}
-
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
@@ -137,17 +130,6 @@ func TargetFileSize(size int64) ConfigOption {
 		for i := range cfg.opts.Levels {
 			cfg.opts.Levels[i].TargetFileSize = size
 		}
-		return nil
-	}
-}
-
-// MaxWriterConcurrency sets the concurrency of the sstable Writers. A concurrency
-// of 0 implies no parallelism in the Writer, and a concurrency of 1 or more implies
-// parallelism in the Writer. Currently, there's no difference between a concurrency
-// of 1 or more.
-func MaxWriterConcurrency(concurrency int) ConfigOption {
-	return func(cfg *engineConfig) error {
-		cfg.opts.Experimental.MaxWriterConcurrency = concurrency
 		return nil
 	}
 }
