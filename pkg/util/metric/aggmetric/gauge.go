@@ -9,7 +9,6 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -32,7 +31,7 @@ var _ metric.PrometheusExportable = (*AggGauge)(nil)
 // NewGauge constructs a new AggGauge.
 func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
 	g := &AggGauge{g: *metric.NewGauge(metadata)}
-	g.init(childLabels)
+	g.initWithBTreeStorageType(childLabels)
 	return g
 }
 
@@ -47,14 +46,14 @@ func NewFunctionalGauge(
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()
-		g.childSet.mu.children.Do(func(e *cache.Entry) {
-			cg := e.Value.(*Gauge)
+		g.childSet.mu.children.Do(func(e interface{}) {
+			cg := g.childSet.mu.children.GetChildMetric(e).(*Gauge)
 			values = append(values, cg.Value())
 		})
 		return f(values)
 	}
 	g.g = *metric.NewFunctionalGauge(metadata, gaugeFn)
-	g.init(childLabels)
+	g.initWithBTreeStorageType(childLabels)
 	return g
 }
 
@@ -240,7 +239,7 @@ var _ metric.PrometheusExportable = (*AggGaugeFloat64)(nil)
 // NewGaugeFloat64 constructs a new AggGaugeFloat64.
 func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeFloat64 {
 	g := &AggGaugeFloat64{g: *metric.NewGaugeFloat64(metadata)}
-	g.init(childLabels)
+	g.initWithBTreeStorageType(childLabels)
 	return g
 }
 

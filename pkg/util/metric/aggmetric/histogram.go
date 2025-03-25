@@ -87,7 +87,7 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 				childHist.h.Tick()
 			})
 		})
-	a.init(childLabels)
+	a.initWithBTreeStorageType(childLabels)
 	return a
 }
 
@@ -159,21 +159,21 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 // match the number of labels defined for this histogram.
 // Recording a value in excess of the configured maximum value for that histogram
 // results in recording the maximum value instead.
-func (c *AggHistogram) RecordValue(v int64, labelVals ...string) {
-	if len(c.labels) != len(labelVals) {
+func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
+	if len(a.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
 			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(c.labels), c.labels))
+			len(labelVals), labelVals, len(a.labels), a.labels))
 	}
 
 	// If the child already exists, update it.
-	if child, ok := c.get(labelVals...); ok {
+	if child, ok := a.get(labelVals...); ok {
 		child.(*Histogram).RecordValue(v)
 		return
 	}
 
 	// Otherwise, create a new child and update it.
-	child := c.AddChild(labelVals...)
+	child := a.AddChild(labelVals...)
 	child.RecordValue(v)
 }
 
