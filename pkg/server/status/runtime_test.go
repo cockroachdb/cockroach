@@ -6,11 +6,13 @@
 package status
 
 import (
+	"context"
 	"math"
 	"reflect"
 	"runtime/metrics"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/stretchr/testify/require"
@@ -193,4 +195,18 @@ func TestFloat64HistogramSum(t *testing.T) {
 	for _, tc := range testCases {
 		require.Equal(t, tc.sum, int64(float64HistogramSum(&tc.h)))
 	}
+}
+
+func TestSampleEnvironment(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+
+	s := NewRuntimeStatSampler(ctx, clock.WallClock())
+
+	cgoStats := GetCGoMemStats(ctx)
+	s.SampleEnvironment(ctx, cgoStats)
+
+	require.GreaterOrEqual(t, s.HostCPUCombinedPercentNorm.Value(), s.CPUCombinedPercentNorm.Value())
 }
