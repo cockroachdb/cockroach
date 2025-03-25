@@ -1392,6 +1392,9 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	clusterSettings := map[string]string{
 		"cluster.organization": "Cockroach Labs - Production Testing",
 		"enterprise.license":   license,
+		// N.B. We now enable `PanicOnAssertions` for all roachprod clusters.
+		// (See https://github.com/cockroachdb/cockroach/issues/136858)
+		"debug.panic_on_failed_assertions.enabled": "true",
 	}
 	for name, value := range c.ClusterSettings.ClusterSettings {
 		clusterSettings[name] = value
