@@ -2090,17 +2090,24 @@ func (s *storeIDPostingList) hash() uint64 {
 	return h
 }
 
+const notMatchedLeasePreferencIndex = math.MaxInt32
+
+// matchedLeasePreferenceIndex returns the index of the lease preference that
+// matches, else notMatchedLeasePreferencIndex
 func matchedLeasePreferenceIndex(
 	storeID roachpb.StoreID,
 	leasePreferences []internedLeasePreference,
 	constraintMatcher storeMatchesConstraintInterface,
 ) int32 {
+	if len(leasePreferences) == 0 {
+		return 0
+	}
 	for j := range leasePreferences {
 		if constraintMatcher.storeMatches(storeID, leasePreferences[j].constraints) {
 			return int32(j)
 		}
 	}
-	return math.MaxInt32
+	return notMatchedLeasePreferencIndex
 }
 
 // Avoid unused lint errors.

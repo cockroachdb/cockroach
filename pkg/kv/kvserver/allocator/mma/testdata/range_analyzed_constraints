@@ -604,8 +604,8 @@ constraints:
   :5
     voters: 2 3 5
     non-voters: 6 7
-leaseholder pref-index s3:none
-lease pref-indices: s2:none s3:none s5:none
+leaseholder pref-index s3:0
+lease pref-indices: s2:0 s3:0 s5:0
 diversity: voter 0.666667, all 0.833333
 
 candidates
@@ -633,7 +633,7 @@ replaceNonVoterRebalance replace=6
 replaceNonVoterRebalance replace=7
 	add: ()
 toMoveLease
-  leaseholder-pref-index: none cands: s2:none s5:none
+  leaseholder-pref-index: 0 cands: s2:0 s5:0
 
 # Same as multi-region1, but containing some duplication of constraints within
 # conjunctions. The constraints in a conjunction are de-duplicated and sorted
