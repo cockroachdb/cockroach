@@ -2867,4 +2867,66 @@ DROP TABLE cnt;
 statement ok
 DROP USER r1_user;
 
+subtest show_policies_roles_and_users
+
+statement ok
+CREATE ROLE test_role1;
+
+statement ok
+CREATE ROLE test_role2;
+
+statement ok
+CREATE USER test_user1;
+
+statement ok
+CREATE USER test_user2;
+
+statement ok
+CREATE TABLE policy_roles_test (id INT PRIMARY KEY, val TEXT);
+
+statement ok
+CREATE POLICY mixed_policy ON policy_roles_test TO test_role1, test_user1, test_role2, test_user2;
+
+query TTTTTT colnames
+SHOW POLICIES FOR policy_roles_test
+----
+name          cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy  ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+
+statement ok
+CREATE POLICY users_only_policy ON policy_roles_test TO test_user1, test_user2;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR policy_roles_test
+----
+name               cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy       ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+users_only_policy  ALL  permissive  {test_user1,test_user2}                        ·           ·
+
+statement ok
+CREATE POLICY roles_only_policy ON policy_roles_test TO test_role1, test_role2;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR policy_roles_test
+----
+name               cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy       ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+roles_only_policy  ALL  permissive  {test_role1,test_role2}                        ·           ·
+users_only_policy  ALL  permissive  {test_user1,test_user2}                        ·           ·
+
+statement ok
+DROP TABLE policy_roles_test;
+
+statement ok
+DROP USER test_user1;
+
+statement ok
+DROP USER test_user2;
+
+statement ok
+DROP ROLE test_role1;
+
+statement ok
+DROP ROLE test_role2;
+
 subtest end
