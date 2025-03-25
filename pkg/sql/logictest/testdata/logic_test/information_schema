@@ -2,7 +2,7 @@
 # the tenant table for tenants. Legacy schema changer is also skipped, because
 # some of the queries relating internal state will be impacted in terms of
 # descriptor versions, etc..
-# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer
+# LogicTest: !3node-tenant-default-configs !local-legacy-schema-changer !local-mixed-25.1
 
 # Verify information_schema database handles mutation statements correctly.
 
@@ -1347,6 +1347,7 @@ system              public             29_33_4_not_null                         
 system              public             29_34_1_not_null                                                                                                id IS NOT NULL
 system              public             29_34_3_not_null                                                                                                data IS NOT NULL
 system              public             29_35_11_not_null                                                                                               redacted IS NOT NULL
+system              public             29_35_12_not_null                                                                                               username IS NOT NULL
 system              public             29_35_1_not_null                                                                                                id IS NOT NULL
 system              public             29_35_2_not_null                                                                                                completed IS NOT NULL
 system              public             29_35_3_not_null                                                                                                statement_fingerprint IS NOT NULL
@@ -1668,6 +1669,7 @@ system              public             29_33_4_not_null                         
 system              public             29_34_1_not_null                                                                                                id IS NOT NULL
 system              public             29_34_3_not_null                                                                                                data IS NOT NULL
 system              public             29_35_11_not_null                                                                                               redacted IS NOT NULL
+system              public             29_35_12_not_null                                                                                               username IS NOT NULL
 system              public             29_35_1_not_null                                                                                                id IS NOT NULL
 system              public             29_35_2_not_null                                                                                                completed IS NOT NULL
 system              public             29_35_3_not_null                                                                                                statement_fingerprint IS NOT NULL
