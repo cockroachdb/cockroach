@@ -124,6 +124,9 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 0
 │ vectorized batch count: 0
+│ KV contention time: 0µs
+│ KV lock wait time: 0µs
+│ KV latch wait time: 0µs
 │ estimated row count: 0 (missing stats)
 │ table: xy
 │ set: x, y
@@ -340,6 +343,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 0
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -416,6 +422,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -690,6 +699,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 0
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -765,6 +777,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -817,6 +832,9 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ KV contention time: 0µs
+        │   │ KV lock wait time: 0µs
+        │   │ KV latch wait time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ table: child
         │   │ set: fk
@@ -1039,6 +1057,9 @@ quality of service: regular
 │     regions: <hidden>
 │     actual row count: 1
 │     vectorized batch count: 0
+│     KV contention time: 0µs
+│     KV lock wait time: 0µs
+│     KV latch wait time: 0µs
 │     estimated row count: 0 (missing stats)
 │     from: parent
 │     spans: /2/0
@@ -1055,6 +1076,9 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ KV contention time: 0µs
+        │   │ KV lock wait time: 0µs
+        │   │ KV latch wait time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ from: child
         │   │
