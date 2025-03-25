@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -109,11 +110,18 @@ type Request struct {
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
 	redacted            bool
+	username            string
 }
 
 // IsRedacted returns whether this diagnostic request is for a redacted bundle.
 func (r *Request) IsRedacted() bool {
 	return r.redacted
+}
+
+// Username returns the normalized username of the user that initiated this
+// request. It can be empty in which case the requester user is unknown.
+func (r *Request) Username() string {
+	return r.username
 }
 
 func (r *Request) isExpired(now time.Time) bool {
@@ -224,6 +232,7 @@ func (r *Registry) addRequestInternalLocked(
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
 	redacted bool,
+	username string,
 ) {
 	if r.findRequestLocked(id) {
 		// Request already exists.
@@ -240,6 +249,7 @@ func (r *Registry) addRequestInternalLocked(
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
 		redacted:            redacted,
+		username:            username,
 	}
 }
 
@@ -278,10 +288,11 @@ func (r *Registry) InsertRequest(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
+	username string,
 ) error {
 	_, err := r.insertRequestInternal(
 		ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, redacted,
+		minExecutionLatency, expiresAfter, redacted, username,
 	)
 	return err
 }
@@ -295,7 +306,17 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
+	username string,
 ) (RequestID, error) {
+	if username != "" && !r.st.Version.IsActive(ctx, clusterversion.V25_2_AddUsernameToStmtDiagRequest) {
+		// Setting username is only supported after 25.2 version migrations have
+		// completed.
+		//
+		// Note that we could have required the caller to ensure that the
+		// migration has been completed and then returned an error here, but
+		// doing this silent override seems cleaner.
+		username = ""
+	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -338,7 +359,7 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 8)
+		qargs := make([]interface{}, 2, 9)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
 		if planGist != "" {
@@ -362,6 +383,10 @@ func (r *Registry) insertRequestInternal(
 		if redacted {
 			insertColumns += ", redacted"
 			qargs = append(qargs, redacted) // redacted
+		}
+		if username != "" {
+			insertColumns += ", username"
+			qargs = append(qargs, username) // username
 		}
 		valuesClause := "$1, $2"
 		for i := range qargs[2:] {
@@ -394,7 +419,10 @@ func (r *Registry) insertRequestInternal(
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.mu.epoch++
-		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted)
+		r.addRequestInternalLocked(
+			ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
+			minExecutionLatency, expiresAt, redacted, username,
+		)
 	}()
 
 	return reqID, nil
@@ -640,6 +668,8 @@ func (r *Registry) InsertStatementDiagnostics(
 			// Insert a completed request into system.statement_diagnostics_request.
 			// This is necessary because the UI uses this table to discover completed
 			// diagnostics.
+			//
+			// This bundle was collected via explicit EXPLAIN ANALYZE (DEBUG).
 			_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
 				"INSERT INTO system.statement_diagnostics_requests"+
@@ -662,6 +692,7 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
+	isUsernameSet := r.st.Version.IsActive(ctx, clusterversion.V25_2_AddUsernameToStmtDiagRequest)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -669,11 +700,15 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
+		var extraColumns string
+		if isUsernameSet {
+			extraColumns = ", username"
+		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted
+			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted%s
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
 		)
 		if err != nil {
 			return err
@@ -707,7 +742,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
-		var planGist string
+		var planGist, username string
 		var antiPlanGist, redacted bool
 
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
@@ -733,8 +768,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if b, ok := row[7].(*tree.DBool); ok {
 			redacted = bool(*b)
 		}
+		if u, ok := row[8].(*tree.DString); ok {
+			username = string(*u)
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
 	}
 
 	// Remove all other requests.

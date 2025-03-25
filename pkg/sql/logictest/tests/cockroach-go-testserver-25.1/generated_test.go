@@ -87,6 +87,13 @@ func TestLogic_mixed_version_bootstrap_tenant(
 	runLogicTest(t, "mixed_version_bootstrap_tenant")
 }
 
+func TestLogic_mixed_version_bundle(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_bundle")
+}
+
 func TestLogic_mixed_version_can_login(
 	t *testing.T,
 ) {
