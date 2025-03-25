@@ -121,12 +121,16 @@ func (ib *indexBackfiller) constructIndexEntries(
 		todo := ib.spec.Spans[i]
 		for todo.Key != nil {
 			startKey := todo.Key
-			readAsOf := ib.spec.ReadAsOf
-			if readAsOf.IsEmpty() { // old gateway
+			// Pick an arbitrary timestamp close to now as the read timestamp for the
+			// backfill. It's safe to use this timestamp to read even if we've
+			// partially backfilled at an earlier timestamp because other writing
+			// transactions have been writing at the appropriate timestamps
+			// in-between.
+			readAsOf := ib.flowCtx.Cfg.DB.KV().Clock().Now().AddDuration(-30 * time.Second)
+			if readAsOf.Less(ib.spec.WriteAsOf) {
 				readAsOf = ib.spec.WriteAsOf
 			}
-			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo,
-				readAsOf)
+			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo, readAsOf)
 			if err != nil {
 				return err
 			}
