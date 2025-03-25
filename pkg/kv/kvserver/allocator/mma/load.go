@@ -522,6 +522,20 @@ func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
 	return fractionUsed > 0.9
 }
 
+const loadMultiplierForAddition = 1.1
+
+func loadToAdd(l LoadValue) LoadValue {
+	return LoadValue(float64(l) * loadMultiplierForAddition)
+}
+
+func loadVectorToAdd(lv LoadVector) LoadVector {
+	var result LoadVector
+	for i := range lv {
+		result[i] = loadToAdd(lv[i])
+	}
+	return result
+}
+
 // Avoid unused lint errors.
 
 var _ = meansForStoreSetSlicePoolImpl{}.newEntry
