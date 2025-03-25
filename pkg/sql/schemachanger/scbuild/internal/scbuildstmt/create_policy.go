@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -41,12 +42,22 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 		IsExistenceOptional: true,
 		RequiredPrivilege:   privilege.CREATE,
 	})
+	var policyExists bool
 	policyElems.FilterPolicyName().ForEachTarget(func(target scpb.TargetStatus, e *scpb.PolicyName) {
 		if target == scpb.ToPublic {
-			panic(pgerror.Newf(pgcode.DuplicateObject, "policy with name %q already exists on table %q",
-				n.PolicyName, n.TableName.String()))
+			policyExists = true
 		}
 	})
+	if policyExists {
+		if n.IfNotExists {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
+				pgnotice.Newf("policy %q already exists on table %q, skipping",
+					n.PolicyName, n.TableName.String()))
+			return
+		}
+		panic(pgerror.Newf(pgcode.DuplicateObject, "policy with name %q already exists on table %q",
+			n.PolicyName, n.TableName.String()))
+	}
 
 	validateExprsForCmd(convertPolicyCommand(n.Cmd), &n.Exprs)
 

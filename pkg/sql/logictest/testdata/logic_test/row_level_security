@@ -39,8 +39,21 @@ create_policy
 statement error pq: policy with name "p1" already exists on table "sanity1"
 CREATE POLICY p1 on sanity1 WITH CHECK (true);
 
+statement notice NOTICE: policy "p1" already exists on table "sanity1", skipping
+CREATE POLICY IF NOT EXISTS p1 on sanity1;
+
 statement ok
-CREATE POLICY p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
+
+query TT
+SHOW CREATE TABLE sanity1;
+----
+sanity1  CREATE TABLE public.sanity1 (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT sanity1_pkey PRIMARY KEY (rowid ASC)
+         );
+         CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
+         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
 
 statement notice NOTICE: relation "nonexist" does not exist, skipping
 DROP POLICY IF EXISTS notthere on nonexist;
@@ -87,7 +100,7 @@ statement ok
 DROP POLICY p1 on explicit1;
 
 statement ok
-CREATE POLICY p1 on explicit1 AS PERMISSIVE USING (false);
+CREATE POLICY IF NOT EXISTS p1 on explicit1 AS PERMISSIVE USING (false);
 
 statement ok
 COMMIT;
@@ -122,7 +135,7 @@ statement ok
 CREATE POLICY "policy2" ON multi_pol_tab1 AS RESTRICTIVE
 
 statement ok
-CREATE POLICY "policy3" ON multi_pol_tab1 FOR ALL
+CREATE POLICY IF NOT EXISTS "policy3" ON multi_pol_tab1 FOR ALL
 
 statement ok
 CREATE POLICY "policy4" ON multi_pol_tab1 FOR INSERT
@@ -321,7 +334,7 @@ statement ok
 CREATE TABLE role_exist_chk();
 
 statement error pq: role/user "zeke" does not exist
-CREATE POLICY p1 on role_exist_chk to zeke;
+CREATE POLICY IF NOT EXISTS p1 on role_exist_chk to zeke;
 
 statement ok
 CREATE USER zeke;
@@ -417,7 +430,7 @@ statement ok
 CREATE TABLE z1 (c1 text);
 
 statement ok
-CREATE POLICY p1 on z1 WITH CHECK (c1::greeting = 'hi'::greeting);
+CREATE POLICY IF NOT EXISTS p1 on z1 WITH CHECK (c1::greeting = 'hi'::greeting);
 
 query T rowsort
 select polwithcheck from pg_catalog.pg_policy
@@ -950,7 +963,7 @@ statement ok
 CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck WITH CHECK (false);
 
 statement ok
-CREATE POLICY restrict_delete ON bbteams FOR DELETE TO buck USING (false);
+CREATE POLICY IF NOT EXISTS restrict_delete ON bbteams FOR DELETE TO buck USING (false);
 
 statement ok
 CREATE POLICY restrict_update ON bbteams FOR UPDATE TO buck USING (false);
@@ -1236,7 +1249,7 @@ statement ok
 CREATE POLICY p2 ON sensitive_data_table FOR INSERT TO sensitive_user WITH CHECK (C1 != 55);
 
 statement ok
-CREATE POLICY p3 ON sensitive_data_table FOR UPDATE TO sensitive_user USING (true) WITH CHECK (C1 >= 10);
+CREATE POLICY IF NOT EXISTS p3 ON sensitive_data_table FOR UPDATE TO sensitive_user USING (true) WITH CHECK (C1 >= 10);
 
 statement ok
 SET ROLE sensitive_user;
@@ -1450,7 +1463,7 @@ statement error pq: must be owner of relation table_owner_test
 ALTER TABLE table_owner_test NO FORCE ROW LEVEL SECURITY;
 
 statement error pq: must be owner of relation table_owner_test
-CREATE POLICY p2 on table_owner_test;
+CREATE POLICY IF NOT EXISTS p2 on table_owner_test;
 
 statement error pq: must be owner of relation table_owner_test
 DROP POLICY new_p1 on table_owner_test;
@@ -1895,7 +1908,7 @@ statement ok
 CREATE POLICY p_sel ON rgb_only FOR SELECT USING (true);
 
 statement ok
-CREATE POLICY p_subset ON rgb_only FOR INSERT WITH CHECK (col = 'red' or col = 'brown');
+CREATE POLICY IF NOT EXISTS p_subset ON rgb_only FOR INSERT WITH CHECK (col = 'red' or col = 'brown');
 
 statement ok
 INSERT INTO rgb_only VALUES ('red')
@@ -2091,7 +2104,11 @@ statement ok
 SET ROLE root
 
 statement ok
-CREATE POLICY rls_cache_policy ON rls_cache_test FOR SELECT TO rls_cache_user USING (c1 != 'a');
+CREATE POLICY IF NOT EXISTS rls_cache_policy ON rls_cache_test FOR SELECT TO rls_cache_user USING (c1 != 'a');
+
+# Should be a no-op because the policy already exists
+statement ok
+CREATE POLICY IF NOT EXISTS rls_cache_policy ON rls_cache_test;
 
 statement ok
 SET ROLE rls_cache_user;
@@ -2219,7 +2236,7 @@ statement ok
 ALTER TABLE rlsInsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
 statement ok
-CREATE POLICY p_insert ON rlsInsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 not between '2012-01-01' and '2012-12-31');
+CREATE POLICY IF NOT EXISTS p_insert ON rlsInsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 not between '2012-01-01' and '2012-12-31');
 
 statement ok
 CREATE POLICY p_select ON rlsInsert AS PERMISSIVE FOR SELECT TO buck USING (true);
@@ -2321,7 +2338,11 @@ statement ok
 CREATE POLICY p_select ON bbteams FOR SELECT TO buck USING (true);
 
 statement ok
-CREATE POLICY p_insert ON bbteams FOR INSERT TO buck WITH CHECK (nextval('seq1') < 1000);
+CREATE POLICY IF NOT EXISTS p_insert ON bbteams FOR INSERT TO buck WITH CHECK (nextval('seq1') < 1000);
+
+# Should be a no-op because policy already exists
+statement ok
+CREATE POLICY IF NOT EXISTS p_insert ON bbteams;
 
 statement ok
 GRANT ALL on bbteams TO buck;
@@ -2394,7 +2415,7 @@ statement ok
 CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
 
 statement ok
-CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
+CREATE POLICY IF NOT EXISTS or3 ON multip AS PERMISSIVE USING (key = 3);
 
 statement ok
 CREATE POLICY and1 ON multip AS RESTRICTIVE USING (value not like '%sensitive%')
@@ -2690,7 +2711,7 @@ statement ok
 SET ROLE r1_user;
 
 statement ok
-CREATE POLICY upd1 ON cnt FOR UPDATE USING (true);
+CREATE POLICY IF NOT EXISTS upd1 ON cnt FOR UPDATE USING (true);
 
 # Only an UPDATE policy and no SELECT policy. Nothing is updated.
 query I
@@ -2838,7 +2859,7 @@ statement ok
 CREATE POLICY sel1 ON cnt FOR SELECT USING (true);
 
 statement ok
-CREATE POLICY del1 ON cnt FOR DELETE USING (false);
+CREATE POLICY IF NOT EXISTS del1 ON cnt FOR DELETE USING (false);
 
 query I
 DELETE FROM cnt WHERE counter > 0 RETURNING counter;
