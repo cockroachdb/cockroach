@@ -1004,13 +1004,6 @@ func TestLogic_inflight_trace_spans(
 	runLogicTest(t, "inflight_trace_spans")
 }
 
-func TestLogic_information_schema(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "information_schema")
-}
-
 func TestLogic_inner_join(
 	t *testing.T,
 ) {
