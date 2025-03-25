@@ -120,6 +120,10 @@ type Provider struct {
 	vm.DNSProvider
 }
 
+func (p *Provider) DefaultZones(_ string, _ bool) []string {
+	return []string{}
+}
+
 func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
