@@ -981,6 +981,8 @@ LIMIT
 subtest end
 
 # Regression test for #104009.
+subtest regression_104009
+
 statement ok
 CREATE TABLE ab104009(a INT PRIMARY KEY, b INT)
 
@@ -1005,6 +1007,10 @@ PREPARE p AS SELECT f($1::REGCLASS::INT)
 statement ok
 EXECUTE p(10)
 
+subtest end
+
+subtest regression_142886
+
 # Regression test for #142886 - we should not be able to create an overload that
 # differs only in the type width of the input type.
 statement ok
@@ -1015,3 +1021,28 @@ CREATE FUNCTION f142886(p VARCHAR(100)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0;
 
 statement ok
 DROP FUNCTION f142886;
+
+subtest end
+
+# Regression test for #142615.
+subtest regression_142615
+
+statement ok
+create function app_to_db_id(app_id INT8) RETURNS INT8 LANGUAGE plpgsql AS $$ BEGIN RETURN app_id * 2; END; $$;
+
+statement ok
+create sequence seq1;
+
+statement ok
+create table test (id int8 not null default app_to_db_id(nextval('seq1'::REGCLASS)));
+
+query TTITT rowsort
+select * from pg_catalog.pg_attrdef;
+----
+1508958170  132  2  unique_rowid()                                         unique_rowid()
+1202826234  151  1  gen_random_uuid()                                      gen_random_uuid()
+1202826232  151  3  now()                                                  now()
+3466299042  175  1  public.app_to_db_id(nextval('public.seq1'::REGCLASS))  public.app_to_db_id(nextval('public.seq1'::REGCLASS))
+3466299041  175  2  unique_rowid()                                         unique_rowid()
+
+subtest end
