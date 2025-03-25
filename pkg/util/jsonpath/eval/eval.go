@@ -143,6 +143,11 @@ func (ctx *jsonpathCtx) executeAnyItem(
 	}
 	var agg []json.JSON
 	for _, item := range childItems {
+		// The case when this will happen is if jsonValue is an empty array,
+		// in which case we just skip the evaluation.
+		if item.Len() == 0 {
+			continue
+		}
 		if item.Len() != 1 {
 			return nil, errors.AssertionFailedf("unexpected path length")
 		}
