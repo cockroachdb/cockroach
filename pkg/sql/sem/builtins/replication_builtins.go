@@ -553,13 +553,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
-					return nil, err
-				}
 				reqBytes := []byte(tree.MustBeDBytes(args[0]))
 				req := streampb.ReplicationProducerRequest{}
 				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
 					return nil, err
+				}
+				if err := mgr.AuthorizeViaReplicationPriv(ctx, req.TableNames...); err != nil {
+					return nil, errors.Wrapf(err, "failed to auth")
 				}
 
 				spec, err := mgr.StartReplicationStreamForTables(ctx, req)

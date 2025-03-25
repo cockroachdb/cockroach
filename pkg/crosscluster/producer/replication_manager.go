@@ -450,12 +450,30 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	return nil
 }
 
-func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.Context) error {
-	err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
-		syntheticprivilege.GlobalPrivilegeObject,
-		privilege.REPLICATIONSOURCE)
+// AuthorizeViaReplicationPriv ensures the user has the REPLICATIONSOUCE privilege. If tableNames is passed, then table level auth is tried.
+func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(
+	ctx context.Context, tableNames ...string,
+) (err error) {
 
-	if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+	authorize := func() error {
+		// First try fast path for system level priv.
+		err = r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.REPLICATIONSOURCE)
+		if err == nil {
+			return nil
+		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return err
+		}
+		if len(tableNames) != 0 {
+			err = replicationutils.AuthorizeTableLevelPriv(ctx, r.resolver, r.evalCtx.SessionAccessor, privilege.REPLICATIONSOURCE, tableNames)
+			if err == nil {
+				return nil
+			} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+				return err
+			}
+		}
+
 		// Fallback to legacy REPLICATION priv.
 		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
 			syntheticprivilege.GlobalPrivilegeObject,
@@ -465,10 +483,12 @@ func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.C
 			// the deprecated REPLICATION priv.
 			return err
 		}
-	} else if err != nil {
-		return err
+		return nil
 	}
 
+	if err = authorize(); err != nil {
+		return err
+	}
 	r.authorized = true
 	return nil
 }

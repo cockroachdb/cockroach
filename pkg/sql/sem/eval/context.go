@@ -934,7 +934,7 @@ type ReplicationStreamManager interface {
 	) (streampb.ReplicationProducerSpec, error)
 
 	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
-	AuthorizeViaReplicationPriv(ctx context.Context) error
+	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports
