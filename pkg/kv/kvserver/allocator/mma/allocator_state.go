@@ -222,6 +222,10 @@ func (a *allocatorState) rebalanceStores(
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
+					// TODO: this early filtering for load and maxFractionPending is
+					// unnecessary, since sortTargetCandidateSetAndPick will do it too.
+					// For now, we leave it as we are used to this log statement for
+					// debugging.
 					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK ||
 						sls.maxFractionPending >= maxFractionPendingThreshold {
 						log.Infof(
@@ -359,16 +363,6 @@ func (a *allocatorState) rebalanceStores(
 			}
 			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
 			cands := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
-			n := len(cands.candidates)
-			for i := 0; i < n; {
-				if cands.candidates[i].fd != fdOK {
-					// Remove it.
-					n--
-					cands.candidates[i], cands.candidates[n] = cands.candidates[n], cands.candidates[i]
-					continue
-				}
-				i++
-			}
 			if len(cands.candidates) == 0 {
 				continue
 			}
@@ -525,22 +519,23 @@ type candidateSet struct {
 	means      *meansForStoreSet
 }
 
+// In the set of candidates it is possible that some are overloaded, or have
+// too many pending changes. It divides them into sets with equal diversity
+// score and sorts such that the set with higher diversity score is considered
+// before one with lower diversity score. Then it finds the best diversity set
+// which has some candidates that are not overloaded wrt disk capacity. Within
+// this set it will exclude candidates that are overloaded or have too many
+// pending changes, and then pick randomly among the least loaded ones.
 //
-// TODO:
-
-// Once have that set, it is in non-increasing order of load. None of
-// these decrease diversity. We need to group ones that are similar in
-// terms of load and pick a random one. See candidateList.selectBest in
-// allocator_scorer.go. Our enum for loadSummary is quite coarse. This
-// has pros and cons: the pro is that the coarseness increases the
-// probability that we do eventually find something that can handle the
-// multi-dimensional load of this range. The con is that we may not
-// select the candidate that is the very best. For instance if a new
-// store is added it will also be loadLow like many others, but we want
-// more ranges to go to it. One refinement we can try is to make the
-// summary more fine-grained, and increment a count of times this store
-// has tried to shed this range and failed, and widen the scope of what
-// we pick from after some failures.
+// Our enum for loadSummary is quite coarse. This has pros and cons: the pro
+// is that the coarseness increases the probability that we do eventually find
+// something that can handle the multi-dimensional load of this range. The con
+// is that we may not select the candidate that is the very best. For instance
+// if a new store is added it will also be loadLow like many others, but we
+// want more ranges to go to it. One refinement we can try is to make the
+// summary more fine-grained, and increment a count of times this store has
+// tried to shed this range and failed, and widen the scope of what we pick
+// from after some failures.
 //
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
@@ -549,7 +544,6 @@ func sortTargetCandidateSetAndPick(
 ) roachpb.StoreID {
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
-			// Since we have already excluded overloaded nodes, we only consider sls.
 			return cmp.Or(cmp.Compare(a.sls, b.sls), cmp.Compare(a.StoreID, b.StoreID))
 		}
 		return -cmp.Compare(a.diversityScore, b.diversityScore)
@@ -581,9 +575,18 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
-	// TODO: see the to do in computeCandidatesForRange about early filtering.
-	// If we haven't filtered for overloaded stores, need to do that now by
-	// looking at the value of lowestLoad.
+	j = 0
+	for _, cand := range cands.candidates {
+		if cand.sls > loadNormal || cand.nls > loadNormal ||
+			cand.maxFractionPending >= maxFractionPendingThreshold {
+			continue
+		}
+		cands.candidates[j] = cand
+		j++
+	}
+	if j == 0 {
+		return 0
+	}
 	lowestLoad := cands.candidates[0].sls
 	for j = 1; j < len(cands.candidates); j++ {
 		if cands.candidates[j].sls != lowestLoad {
@@ -701,14 +704,8 @@ func (a *allocatorState) computeCandidatesForRange(
 			return candidateSet{}
 		}
 	}
-	// Not going to try to add to stores that are > loadNormal.
-	//
-	// TODO: Early filtering based on load is not desirable when we
-	// are unwilling to reduce diversity. For instance, we are already not
-	// filtering below based on maxFractionPending. Figure out which situations
-	// are ok with early filtering and only do those here (based on a parameter
-	// to computeCandidatesForRange). For others, the only filtering would be
-	// storesToExclude.
+	// We only filter out stores that are not fdOK. The rest of the filtering
+	// happens later.
 	var cset candidateSet
 	for _, storeID := range means.stores {
 		if storesToExclude.contains(storeID) {
@@ -716,8 +713,7 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.cs.meansMemo.getStoreLoadSummary(means, storeID, ss.loadSeqNum)
-		if csls.sls > loadNormal || csls.nls > loadNormal || csls.fd != fdOK ||
-			csls.maxFractionPending >= maxFractionPendingThreshold {
+		if csls.fd != fdOK {
 			continue
 		}
 		cset.candidates = append(cset.candidates, candidateInfo{
