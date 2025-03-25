@@ -5322,16 +5322,22 @@ func checkScanParallelizationIfLocal(
 			return
 		case *groupNode:
 			for _, f := range n.funcs {
-				prohibitParallelization = f.hasFilter()
+				if f.hasFilter() {
+					prohibitParallelization = true
+					// Do not recurse.
+					return
+				}
 			}
 		case *joinNode:
 			prohibitParallelization = n.pred.onCond != nil
 		case *renderNode:
-			// Only support projections since render expressions might be handled
-			// via a wrapped row-by-row processor.
+			// Only support projections since render expressions might be
+			// handled via a wrapped row-by-row processor.
 			for _, e := range n.render {
 				if _, isIVar := e.(*tree.IndexedVar); !isIVar {
 					prohibitParallelization = true
+					// Do not recurse.
+					return
 				}
 			}
 		case *scanNode:
