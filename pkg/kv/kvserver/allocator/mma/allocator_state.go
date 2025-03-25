@@ -82,10 +82,6 @@ func (a *allocatorState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
 	now := timeutil.Now()
-	// NB: We interpret the local NodeID based on the given localStoreID because
-	// the allocator is initialized when starting a server so the NodeID is not
-	// yet known.
-	localNodeID := a.cs.stores[localStoreID].NodeID
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
 	// capacities). We do not want to loop through all ranges in the cluster,
@@ -191,7 +187,7 @@ func (a *allocatorState) rebalanceStores(
 			log.Infof(ctx, "top-K ranges %s: %s", topKRanges.dim, b.String())
 		}
 
-		if ss.NodeID == localNodeID && store.storeCPUSummary >= overloadSlow {
+		if ss.StoreID == localStoreID && store.storeCPUSummary >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
 			// NB: any ranges at this store that don't have pending changes must
