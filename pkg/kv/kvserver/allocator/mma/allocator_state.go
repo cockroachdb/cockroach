@@ -235,11 +235,10 @@ func (a *allocatorState) rebalanceStores(
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
-						StoreID:          cand.storeID,
-						storeLoadSummary: sls,
-						// TODO: should we change this field to say score and set it to
-						// negative of cand.leasePreferenceIndex.
-						diversityScore: 0,
+						StoreID:              cand.storeID,
+						storeLoadSummary:     sls,
+						diversityScore:       0,
+						leasePreferenceIndex: cand.leasePreferenceIndex,
 					})
 				}
 				if len(candsSet.candidates) == 0 {
@@ -377,6 +376,8 @@ func (a *allocatorState) rebalanceStores(
 			for _, cand := range cands.candidates {
 				cand.diversityScore = localities.getScoreChangeForRebalance(
 					ss.localityTiers, a.cs.stores[cand.StoreID].localityTiers)
+				cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
+					cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
 			}
 			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, a.rand)
 			if targetStoreID == 0 {
@@ -511,7 +512,10 @@ func (a *allocatorState) AdminScatterOne(
 type candidateInfo struct {
 	roachpb.StoreID
 	storeLoadSummary
+	// Higher is better.
 	diversityScore float64
+	// Lower is better.
+	leasePreferenceIndex int32
 }
 
 type candidateSet struct {
@@ -544,7 +548,9 @@ func sortTargetCandidateSetAndPick(
 ) roachpb.StoreID {
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
-			return cmp.Or(cmp.Compare(a.sls, b.sls), cmp.Compare(a.StoreID, b.StoreID))
+			return cmp.Or(cmp.Compare(a.sls, b.sls),
+				cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex),
+				cmp.Compare(a.StoreID, b.StoreID))
 		}
 		return -cmp.Compare(a.diversityScore, b.diversityScore)
 	})
@@ -594,6 +600,13 @@ func sortTargetCandidateSetAndPick(
 		}
 	}
 	cands.candidates = cands.candidates[:j]
+	// Candidates have equal load value and sorted in non-decreasing
+	// leasePreferenceIndex. We would like to pick among the candidates with the
+	// lowest leasePreferenceIndex, however it is possible that due to the
+	// multi-dimensional nature of the load, those candidates are not able to
+	// accept the load we are planning to add, while some other candidate can.
+	//
+	// TODO(sumeer): use the failure count for this replica to expand the pool.
 	var b strings.Builder
 	for i := range cands.candidates {
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)

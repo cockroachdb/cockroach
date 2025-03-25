@@ -786,7 +786,8 @@ type rangeAnalyzedConstraints struct {
 	// TODO: need []localityTiers for voters and all replicas so can call into
 	// diversityScoringMemo.
 
-	buf analyzeConstraintsBuf
+	spanConfig *normalizedSpanConfig
+	buf        analyzeConstraintsBuf
 }
 
 func (rac *rangeAnalyzedConstraints) String() string {
@@ -864,6 +865,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	constraintMatcher storeMatchesConstraintInterface,
 	leaseholder roachpb.StoreID,
 ) {
+	rac.spanConfig = spanConfig
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
 	rac.replicas = rac.buf.replicas
@@ -967,17 +969,10 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 
 	rac.leaseholderID = leaseholder
 	rac.leaseholderPreferenceIndex = -1
-	matchLeasePreferenceFunc := func(storeID roachpb.StoreID) int32 {
-		for j := range spanConfig.leasePreferences {
-			if constraintMatcher.storeMatches(storeID, spanConfig.leasePreferences[j].constraints) {
-				return int32(j)
-			}
-		}
-		return math.MaxInt32
-	}
 	for i := range rac.replicas[voterIndex] {
 		storeID := rac.replicas[voterIndex][i].StoreID
-		leasePreferenceIndex := matchLeasePreferenceFunc(storeID)
+		leasePreferenceIndex := matchedLeasePreferenceIndex(
+			storeID, spanConfig.leasePreferences, constraintMatcher)
 		rac.leasePreferenceIndices = append(rac.leasePreferenceIndices, leasePreferenceIndex)
 		if storeID == leaseholder {
 			rac.leaseholderPreferenceIndex = leasePreferenceIndex
@@ -988,7 +983,8 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		for i := range rac.replicas[nonVoterIndex] {
 			storeID := rac.replicas[nonVoterIndex][i].StoreID
 			if storeID == leaseholder {
-				rac.leaseholderPreferenceIndex = matchLeasePreferenceFunc(storeID)
+				rac.leaseholderPreferenceIndex = matchedLeasePreferenceIndex(
+					storeID, spanConfig.leasePreferences, constraintMatcher)
 				break
 			}
 		}
@@ -2092,6 +2088,19 @@ func (s *storeIDPostingList) hash() uint64 {
 		h *= prime64
 	}
 	return h
+}
+
+func matchedLeasePreferenceIndex(
+	storeID roachpb.StoreID,
+	leasePreferences []internedLeasePreference,
+	constraintMatcher storeMatchesConstraintInterface,
+) int32 {
+	for j := range leasePreferences {
+		if constraintMatcher.storeMatches(storeID, leasePreferences[j].constraints) {
+			return int32(j)
+		}
+	}
+	return math.MaxInt32
 }
 
 // Avoid unused lint errors.
