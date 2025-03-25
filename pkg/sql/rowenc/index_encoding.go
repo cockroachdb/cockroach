@@ -1740,7 +1740,7 @@ func EncodeSecondaryIndexes(
 		// TODO(annie): For now, we recompute the key prefix of inverted indexes. This is because index
 		// keys with multiple associated values somehow get encoded into the same kv pair when using
 		// our precomputed key prefix. `inverted_index/arrays` (logictest) illustrates this issue.
-		if idx.GetType() == idxtype.INVERTED {
+		if idx.GetType() == idxtype.INVERTED || idx.GetType() == idxtype.VECTOR {
 			keyPrefix = MakeIndexKeyPrefix(codec, tableDesc.GetID(), idx.GetID())
 		}
 		entries, err := encodeSecondaryIndexWithKeyPrefix(
