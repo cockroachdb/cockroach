@@ -39,7 +39,11 @@ func (s *splitData) Init(
 	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
 	quantizedSet := quantizer.Quantize(w, s.Vectors)
-	metadata := PartitionMetadata{Level: level, Centroid: quantizedSet.GetCentroid()}
+	metadata := PartitionMetadata{
+		Level:        level,
+		Centroid:     quantizedSet.GetCentroid(),
+		StateDetails: MakeReadyDetails(),
+	}
 	s.Partition = NewPartition(metadata, quantizer, quantizedSet, childKeys, valueBytes)
 }
 

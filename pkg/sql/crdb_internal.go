@@ -768,15 +768,11 @@ CREATE TABLE crdb_internal.table_row_statistics (
 		// contention on the stats table. We pass a nil transaction so that the AS
 		// OF clause can be independent of any outer query.
 		query := fmt.Sprintf(`
-           SELECT s."tableID", max(s."rowCount")
-             FROM system.table_statistics AS s
-             JOIN (
-                    SELECT "tableID", max("createdAt") AS last_dt
-                      FROM system.table_statistics
-                     GROUP BY "tableID"
-                  ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
-            AS OF SYSTEM TIME '%s'
-            GROUP BY s."tableID"`, statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
+			SELECT DISTINCT ON ("tableID") "tableID", "rowCount"
+			FROM system.table_statistics
+			AS OF SYSTEM TIME '%s'
+			ORDER BY "tableID", "createdAt" DESC, "rowCount" DESC`,
+			statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
 			sessiondata.NodeUserSessionDataOverride,

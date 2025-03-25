@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -595,11 +594,15 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 
 	// Remap partitions to protobufs.
 	for qkey, memPart := range s.mu.partitions {
-		func() {
+		err = func() error {
 			memPart.lock.AcquireShared(uniqueOwner)
 			defer memPart.lock.ReleaseShared()
 
 			partition := memPart.lock.partition
+			if partition.Metadata().StateDetails.State != cspann.ReadyState {
+				return errors.AssertionFailedf("cannot save store with non-ready partition %v", qkey)
+			}
+
 			partitionProto := PartitionProto{
 				TreeId:       qkey.treeID,
 				PartitionKey: qkey.partitionKey,
@@ -616,7 +619,12 @@ func (s *Store) MarshalBinary() (data []byte, err error) {
 			}
 
 			storeProto.Partitions = append(storeProto.Partitions, partitionProto)
+
+			return nil
 		}()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Remap vectors to protobufs.
@@ -784,12 +792,9 @@ func (s *Store) makeEmptyRootPartitionMetadata() cspann.PartitionMetadata {
 		s.mu.emptyVec = make(vector.T, s.dims)
 	}
 	return cspann.PartitionMetadata{
-		Level:    cspann.LeafLevel,
-		Centroid: s.mu.emptyVec,
-		StateDetails: cspann.PartitionStateDetails{
-			State:     cspann.ReadyState,
-			Timestamp: timeutil.Now(),
-		},
+		Level:        cspann.LeafLevel,
+		Centroid:     s.mu.emptyVec,
+		StateDetails: cspann.MakeReadyDetails(),
 	}
 }
 
