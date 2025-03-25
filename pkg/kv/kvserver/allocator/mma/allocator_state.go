@@ -372,19 +372,21 @@ func (a *allocatorState) rebalanceStores(
 				rlocalities = rstate.constraints.replicaLocalityTiers
 			}
 			localities := a.diversityScoringMemo.getExistingReplicaLocalities(rlocalities.replicas)
-			// Set the diversity score of the candidates.
+			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
+			// Set the diversity score and lease preference index of the candidates.
 			for _, cand := range cands.candidates {
 				cand.diversityScore = localities.getScoreChangeForRebalance(
 					ss.localityTiers, a.cs.stores[cand.StoreID].localityTiers)
-				cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
-					cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
+				if isLeaseholder {
+					cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
+						cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
+				}
 			}
 			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}
 			targetSS := a.cs.stores[targetStoreID]
-			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
 			addedLoad := rstate.load.Load
 			if !isLeaseholder {
 				addedLoad[CPURate] = rstate.load.RaftCPU
@@ -560,7 +562,8 @@ func sortTargetCandidateSetAndPick(
 	// not disk capacity constrained is where we stop. Even if they can't accept
 	// because they have too many pending changes or can't handle the addition
 	// of the range. That is, we are not willing to reduce diversity when
-	// rebalancing.
+	// rebalancing ranges. When rebalancing leases, the diversityScore of all
+	// the candidates will be 0.
 	for _, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			if j == 0 {
@@ -580,8 +583,12 @@ func sortTargetCandidateSetAndPick(
 	if j == 0 {
 		return 0
 	}
+	// Every candidate in [0:j] has same diversity and is sorted by increasing
+	// load, and within the same load by increasing leasePreferenceIndex.
 	cands.candidates = cands.candidates[:j]
 	j = 0
+	// Filter out the candidates that are overloaded or have too many pending
+	// changes.
 	for _, cand := range cands.candidates {
 		if cand.sls > loadNormal || cand.nls > loadNormal ||
 			cand.maxFractionPending >= maxFractionPendingThreshold {
@@ -593,6 +600,7 @@ func sortTargetCandidateSetAndPick(
 	if j == 0 {
 		return 0
 	}
+	// Find the set of candidates with the lowest load.
 	lowestLoad := cands.candidates[0].sls
 	for j = 1; j < len(cands.candidates); j++ {
 		if cands.candidates[j].sls != lowestLoad {
@@ -600,13 +608,20 @@ func sortTargetCandidateSetAndPick(
 		}
 	}
 	cands.candidates = cands.candidates[:j]
-	// Candidates have equal load value and sorted in non-decreasing
-	// leasePreferenceIndex. We would like to pick among the candidates with the
-	// lowest leasePreferenceIndex, however it is possible that due to the
-	// multi-dimensional nature of the load, those candidates are not able to
-	// accept the load we are planning to add, while some other candidate can.
-	//
-	// TODO(sumeer): use the failure count for this replica to expand the pool.
+	// Candidates have equal load value and sorted by non-decreasing
+	// leasePreferenceIndex. Eliminate ones that have
+	// notMatchedLeasePreferenceIndex.
+	j = 0
+	for _, cand := range cands.candidates {
+		if cand.leasePreferenceIndex == notMatchedLeasePreferencIndex {
+			break
+		}
+		j++
+	}
+	if j == 0 {
+		return 0
+	}
+	cands.candidates = cands.candidates[:j]
 	var b strings.Builder
 	for i := range cands.candidates {
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
