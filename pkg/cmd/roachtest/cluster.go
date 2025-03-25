@@ -1082,17 +1082,21 @@ func attachToExistingCluster(
 	ctx context.Context,
 	name string,
 	l *logger.Logger,
-	spec spec.ClusterSpec,
+	clusterSpec spec.ClusterSpec,
 	opt attachOpt,
 	r *clusterRegistry,
 ) (*clusterImpl, error) {
-	exp := spec.Expiration()
+	exp := clusterSpec.Expiration()
+	var attachedCloud spec.Cloud
+
 	if name == "local" {
 		exp = timeutil.Now().Add(100000 * time.Hour)
+		attachedCloud = spec.Local
 	}
 	c := &clusterImpl{
 		name:       name,
-		spec:       spec,
+		cloud:      attachedCloud,
+		spec:       clusterSpec,
 		l:          l,
 		expiration: exp,
 		destroyState: destroyState{
@@ -1103,7 +1107,7 @@ func attachToExistingCluster(
 	}
 
 	if !opt.skipValidation {
-		if err := c.validate(ctx, spec, l); err != nil {
+		if err := c.validate(clusterSpec, l); err != nil {
 			return nil, err
 		}
 	}
@@ -1157,9 +1161,7 @@ var errClusterNotFound = errors.New("cluster not found")
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *clusterImpl) validate(
-	ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger,
-) error {
+func (c *clusterImpl) validate(nodes spec.ClusterSpec, l *logger.Logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
@@ -1193,6 +1195,16 @@ func (c *clusterImpl) validate(
 			if vmCPUs > 1 && vmCPUs&1 == 1 {
 				return fmt.Errorf("node %d has an _odd_ number of CPUs (%d)", nodeID, vmCPUs)
 			}
+		}
+	}
+	// Find cloud providers from the list of VMs.
+	for _, vm := range cDetails.VMs {
+		// N.B. At this time roachtest clusters use a single provider, so we grab the first one.
+		if provider, ok := spec.TryCloudFromString(vm.Provider); ok {
+			c.cloud = provider
+			break
+		} else {
+			return fmt.Errorf("unknown cloud provider %q", vm.Provider)
 		}
 	}
 	return nil
