@@ -550,6 +550,8 @@ type StmtDiagnosticsRequester interface {
 	// - expiresAfter, if non-zero, indicates for how long the request should
 	//   stay active.
 	// - redacted, if true, indicates that the redacted bundle is requested.
+	// - username, if set, specifies the user that initiated this request. It
+	//   must be normalized.
 	InsertRequest(
 		ctx context.Context,
 		stmtFingerprint string,
@@ -559,6 +561,7 @@ type StmtDiagnosticsRequester interface {
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 		redacted bool,
+		username string,
 	) error
 	// CancelRequest updates an entry in system.statement_diagnostics_requests
 	// for tracing a query with the given fingerprint to be expired (thus,

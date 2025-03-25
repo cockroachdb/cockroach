@@ -12048,6 +12048,10 @@ argument is true, then the bundle will be redacted`
 					redacted = bool(tree.MustBeDBool(args[eaIdx+1]))
 				}
 			}
+			var username string
+			if sd := evalCtx.SessionData(); sd != nil {
+				username = sd.User().Normalized()
+			}
 
 			hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 			if err != nil {
@@ -12076,6 +12080,7 @@ argument is true, then the bundle will be redacted`
 				minExecutionLatency,
 				expiresAfter,
 				redacted,
+				username,
 			); err != nil {
 				return nil, err
 			}

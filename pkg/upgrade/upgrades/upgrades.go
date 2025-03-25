@@ -109,6 +109,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add 'username' column to stmt diagnostics requests table",
+		clusterversion.V25_2_AddUsernameToStmtDiagRequest.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagAddUsernameMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
