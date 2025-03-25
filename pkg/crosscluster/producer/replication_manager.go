@@ -450,26 +450,42 @@ func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	return nil
 }
 
-func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(ctx context.Context) error {
-	err := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+// AuthorizeViaReplicationPriv ensures the user has the REPLICATIONSOUCE privilege. If tableNames is passed, then table level auth is tried.
+func (r *replicationStreamManagerImpl) AuthorizeViaReplicationPriv(
+	ctx context.Context, tableNames ...string,
+) (err error) {
+	defer func() {
+		if err == nil {
+			r.authorized = true
+		}
+	}()
+
+	err = r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
 		privilege.REPLICATIONSOURCE)
-
-	if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
-		// Fallback to legacy REPLICATION priv.
-		if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
-			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.REPLICATION); fallbackErr != nil {
-			// We want to return the original error which relates to authorizing with
-			// the REPLICATIONSOURCE priv instead of the error from authorizing with
-			// the deprecated REPLICATION priv.
-			return err
-		}
-	} else if err != nil {
+	if err == nil {
+		return
+	} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 		return err
 	}
+	if len(tableNames) != 0 {
+		err = replicationutils.AuthorizeTableLevelPriv(ctx, r.resolver, r.evalCtx.SessionAccessor, privilege.REPLICATIONSOURCE, tableNames)
+		if err == nil {
+			return
+		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return err
+		}
+	}
 
-	r.authorized = true
+	// Fallback to legacy REPLICATION priv.
+	if fallbackErr := r.evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.REPLICATION); fallbackErr != nil {
+		// We want to return the original error which relates to authorizing with
+		// the REPLICATIONSOURCE priv instead of the error from authorizing with
+		// the deprecated REPLICATION priv.
+		return err
+	}
 	return nil
 }
 
