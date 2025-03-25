@@ -239,7 +239,7 @@ func makeLeaseTransferChanges(
 	// lease.
 	nonRaftCPU := rLoad.Load[CPURate] - rLoad.RaftCPU
 	removeLease.loadDelta[CPURate] = -nonRaftCPU
-	addLease.loadDelta[CPURate] = nonRaftCPU
+	addLease.loadDelta[CPURate] = loadToAdd(nonRaftCPU)
 	return [2]replicaChange{removeLease, addLease}
 }
 
@@ -248,6 +248,13 @@ func makeLeaseTransferChanges(
 // account for whether the replica is becoming the leaseholder or not.
 //
 // TODO(kvoli,sumeerbhola): Add promotion/demotion changes.
+//
+// TODO: makeAddReplicaChange and makeRemoveReplicaChange are not quite
+// symmetrical. Former takes a roachpb.ReplicaType parameter and the latter a
+// ReplicaState parameter. Hence the latter knows whether it is a leaseholder,
+// but then ignores whether it is a leaseholder in the loadDelta computation,
+// leaving it to the caller to fix it. We should be doing the correct
+// computation here by accepting a ReplicaState parameter in both cases.
 func makeAddReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
@@ -270,10 +277,10 @@ func makeAddReplicaChange(
 		},
 	}
 
-	addReplica.loadDelta.add(rLoad.Load)
+	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
 	// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
 	// assume is associated with the lease.
-	addReplica.loadDelta[CPURate] = rLoad.RaftCPU
+	addReplica.loadDelta[CPURate] = loadToAdd(rLoad.RaftCPU)
 	return addReplica
 }
 
@@ -331,7 +338,7 @@ func makeRebalanceReplicaChanges(
 		addReplicaChange.next.IsLeaseholder = true
 		addReplicaChange.loadDelta = LoadVector{}
 		removeReplicaChange.loadDelta = LoadVector{}
-		addReplicaChange.loadDelta.add(rLoad.Load)
+		addReplicaChange.loadDelta.add(loadVectorToAdd(rLoad.Load))
 		removeReplicaChange.loadDelta.subtract(rLoad.Load)
 		addReplicaChange.secondaryLoadDelta[LeaseCount] = 1
 		removeReplicaChange.secondaryLoadDelta[LeaseCount] = -1
@@ -1454,19 +1461,13 @@ func (cs *clusterState) canAddLoad(
 ) bool {
 	ns := cs.nodes[ss.NodeID]
 	// Add the delta.
-	//
-	// TODO: consider adding more than the delta, say 1.1x the delta, in case
-	// our estimates are slightly lower than actual.
-	for i := range delta {
-		ss.adjusted.load[i] += delta[i]
-	}
-	ns.adjustedCPU += delta[CPURate]
+	deltaToAdd := loadVectorToAdd(delta)
+	ss.adjusted.load.add(deltaToAdd)
+	ns.adjustedCPU += deltaToAdd[CPURate]
 	sls := computeLoadSummary(ss, ns, &means.storeLoad, &means.nodeLoad)
 	// Undo the addition.
-	for i := range delta {
-		ss.adjusted.load[i] -= delta[i]
-	}
-	ns.adjustedCPU -= delta[CPURate]
+	ss.adjusted.load.subtract(deltaToAdd)
+	ns.adjustedCPU -= deltaToAdd[CPURate]
 	// We already filtered out stores >= loadNoChange before attempting to add
 	// this load, so we could allow everyone <= loadNoChange now, since those
 	// equal to loadNoChange must be due to this addition. But loadNoChange
