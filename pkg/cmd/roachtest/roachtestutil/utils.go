@@ -279,3 +279,12 @@ func PortLatency(
 	}
 	return time.Duration(avgRTT * float64(time.Second)), nil
 }
+
+// PrefixCmdOutputWithTimestamp wraps a remote command such that it pipes
+// stdout and stderr through awk and prepends the timestamp. Can be used to aid
+// debugging long-running commands that don't already prefix output with timestamps.
+func PrefixCmdOutputWithTimestamp(cmd string) string {
+	// Don't prefix blank lines with timestamps.
+	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
+	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
+}

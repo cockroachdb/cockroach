@@ -195,9 +195,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		t.Status("preparing workload")
 		cmd := opts.cmd(useHAProxy /* haproxy */)
 		{
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" prepare")
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" prepare"))
 			if err != nil {
 				return err
+			} else if msg, crashed := detectSysbenchCrash(result); crashed {
+				t.Skipf("%s; skipping test", msg)
 			} else if strings.Contains(result.Stdout, "FATAL") {
 				// sysbench prepare doesn't exit on errors for some reason, so we have
 				// to check that it didn't silently fail. We've seen it do so, causing
@@ -225,11 +227,10 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("running workload")
 		start = timeutil.Now()
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd+" run")
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" run"))
 
 		if msg, crashed := detectSysbenchCrash(result); crashed {
-			t.L().Printf("%s; passing test anyway", msg)
-			return nil
+			t.Skipf("%s; skipping test", msg)
 		}
 
 		if err != nil {
