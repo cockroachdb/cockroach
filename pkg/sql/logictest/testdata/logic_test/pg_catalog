@@ -3060,6 +3060,7 @@ prefer_lookup_joins_for_fks                                off                 N
 prepared_statements_cache_size                             0 B                 NULL      NULL        NULL        string
 propagate_input_ordering                                   off                 NULL      NULL        NULL        string
 recursion_depth_limit                                      1000                NULL      NULL        NULL        string
+register_latch_wait_contention_events                      off                 NULL      NULL        NULL        string
 reorder_joins_limit                                        8                   NULL      NULL        NULL        string
 require_explicit_primary_keys                              off                 NULL      NULL        NULL        string
 results_buffer_size                                        524288              NULL      NULL        NULL        string
@@ -3270,6 +3271,7 @@ prefer_lookup_joins_for_fks                                off                 N
 prepared_statements_cache_size                             0 B                 NULL  user     NULL      0 B                 0 B
 propagate_input_ordering                                   off                 NULL  user     NULL      off                 off
 recursion_depth_limit                                      1000                NULL  user     NULL      1000                1000
+register_latch_wait_contention_events                      off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                        8                   NULL  user     NULL      8                   8
 require_explicit_primary_keys                              off                 NULL  user     NULL      off                 off
 results_buffer_size                                        524288              NULL  user     NULL      524288              524288
@@ -3479,6 +3481,7 @@ prefer_lookup_joins_for_fks                                NULL    NULL     NULL
 prepared_statements_cache_size                             NULL    NULL     NULL     NULL        NULL
 propagate_input_ordering                                   NULL    NULL     NULL     NULL        NULL
 recursion_depth_limit                                      NULL    NULL     NULL     NULL        NULL
+register_latch_wait_contention_events                      NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                                        NULL    NULL     NULL     NULL        NULL
 require_explicit_primary_keys                              NULL    NULL     NULL     NULL        NULL
 results_buffer_size                                        NULL    NULL     NULL     NULL        NULL

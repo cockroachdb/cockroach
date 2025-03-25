@@ -291,13 +291,15 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	default:
 	}
 
-	var foundContention bool
+	var foundContention, foundLockWait, foundLatchWait bool
 	errCh2 := make(chan error, 1)
 	go func() {
 		defer close(errCh2)
 		// Execute the mutation via EXPLAIN ANALYZE and check whether the
 		// contention is reported.
 		contentionRE := regexp.MustCompile(`cumulative time spent due to contention.*`)
+		lockRE := regexp.MustCompile(`cumulative time spent in the lock table`)
+		latchRE := regexp.MustCompile(`cumulative time spent waiting to acquire latches`)
 		rows := runner.Query(t, "EXPLAIN ANALYZE UPSERT INTO t VALUES (1, 2)")
 		for rows.Next() {
 			var line string
@@ -305,9 +307,9 @@ func TestContentionTimeOnWrites(t *testing.T) {
 				errCh2 <- err
 				return
 			}
-			if contentionRE.MatchString(line) {
-				foundContention = true
-			}
+			foundContention = foundContention || contentionRE.MatchString(line)
+			foundLockWait = foundLockWait || lockRE.MatchString(line)
+			foundLatchWait = foundLatchWait || latchRE.MatchString(line)
 		}
 	}()
 
@@ -340,6 +342,10 @@ func TestContentionTimeOnWrites(t *testing.T) {
 
 	// Meat of the test - verify that the contention was reported.
 	require.True(t, foundContention)
+
+	// Verify that either lock or latch wait time was reported. The contention
+	// time is (usually) the sum of these two.
+	require.True(t, foundLockWait || foundLatchWait)
 }
 
 func TestRetryFields(t *testing.T) {

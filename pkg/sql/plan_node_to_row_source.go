@@ -126,6 +126,9 @@ func (p *planNodeToRowSource) Init(
 		return err
 	}
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if txn := p.params.p.Txn(); txn != nil {
+			p.contentionEventsListener.Init(txn.ID())
+		}
 		p.ExecStatsForTrace = p.execStatsForTrace
 	}
 	return nil
@@ -261,12 +264,17 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
 	// Propagate contention time and RUs from IO requests.
-	if p.contentionEventsListener.GetContentionTime() == 0 && p.tenantConsumptionListener.GetConsumedRU() == 0 {
+	if p.contentionEventsListener.GetContentionTime() == 0 &&
+		p.contentionEventsListener.GetLockWaitTime() == 0 &&
+		p.contentionEventsListener.GetLatchWaitTime() == 0 &&
+		p.tenantConsumptionListener.GetConsumedRU() == 0 {
 		return nil
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.GetContentionTime()),
+			LockWaitTime:   optional.MakeTimeValue(p.contentionEventsListener.GetLockWaitTime()),
+			LatchWaitTime:  optional.MakeTimeValue(p.contentionEventsListener.GetLatchWaitTime()),
 		},
 		Exec: execinfrapb.ExecStats{
 			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.GetConsumedRU()),

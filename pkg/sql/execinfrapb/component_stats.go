@@ -188,6 +188,12 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.ContentionTime.HasValue() {
 		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
+	if s.KV.LockWaitTime.HasValue() {
+		fn("KV lock wait time", humanizeutil.Duration(s.KV.LockWaitTime.Value()))
+	}
+	if s.KV.LatchWaitTime.HasValue() {
+		fn("KV latch wait time", humanizeutil.Duration(s.KV.LatchWaitTime.Value()))
+	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV rows decoded", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
@@ -292,6 +298,12 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.KV.ContentionTime.HasValue() {
 		result.KV.ContentionTime = other.KV.ContentionTime
+	}
+	if !result.KV.LockWaitTime.HasValue() {
+		result.KV.LockWaitTime = other.KV.LockWaitTime
+	}
+	if !result.KV.LatchWaitTime.HasValue() {
+		result.KV.LatchWaitTime = other.KV.LatchWaitTime
 	}
 	if !result.KV.NumInterfaceSteps.HasValue() {
 		result.KV.NumInterfaceSteps = other.KV.NumInterfaceSteps
@@ -436,6 +448,8 @@ func (s *ComponentStats) MakeDeterministic() {
 	// KV.
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
+	timeVal(&s.KV.LockWaitTime)
+	timeVal(&s.KV.LatchWaitTime)
 	resetUint(&s.KV.NumInterfaceSteps)
 	resetUint(&s.KV.NumInternalSteps)
 	resetUint(&s.KV.NumInterfaceSeeks)

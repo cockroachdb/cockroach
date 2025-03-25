@@ -503,6 +503,8 @@ quality of service: regular
     │ actual row count: 0
     │ KV time: 0µs
     │ KV contention time: 0µs
+    │ KV lock wait time: 0µs
+    │ KV latch wait time: 0µs
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
@@ -563,6 +565,8 @@ quality of service: regular
     │ actual row count: 0
     │ KV time: 0µs
     │ KV contention time: 0µs
+    │ KV lock wait time: 0µs
+    │ KV latch wait time: 0µs
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
@@ -579,6 +583,8 @@ quality of service: regular
         │ actual row count: 0
         │ KV time: 0µs
         │ KV contention time: 0µs
+        │ KV lock wait time: 0µs
+        │ KV latch wait time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
