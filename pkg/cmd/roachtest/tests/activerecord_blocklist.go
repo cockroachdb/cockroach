@@ -36,6 +36,7 @@ var activeRecordIgnoreList = blocklist{
 	`PostgresqlEnumTest#test_schema_dump_renamed_enum_with_to_option`:                                                                                          "affected by autocommit_before_ddl",
 	`PostgresqlInvertibleMigrationTest#test_migrate_revert_create_enum`:                                                                                        "affected by autocommit_before_ddl",
 	`PostgresqlInvertibleMigrationTest#test_migrate_revert_drop_enum`:                                                                                          "affected by autocommit_before_ddl",
+	`PostgresqlInvertibleMigrationTest#test_migrate_revert_rename_enum_value`:                                                                                  "affected by autocommit_before_ddl",
 	`TestAutosaveAssociationOnAHasAndBelongsToManyAssociation#test_should_not_save_and_return_false_if_a_callback_cancelled_saving_in_either_create_or_update`: "flaky",
 	`TestAutosaveAssociationOnAHasAndBelongsToManyAssociation#test_should_not_update_children_when_parent_creation_with_no_reason`:                             "flaky",
 	`TestAutosaveAssociationOnAHasAndBelongsToManyAssociation#test_should_update_children_when_autosave_is_true_and_parent_is_new_but_child_is_not`:            "flaky",
