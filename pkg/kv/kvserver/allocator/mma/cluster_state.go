@@ -1147,9 +1147,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		}
 		if sls.highDiskSpaceUtilization {
 			topk.dim = ByteSize
-		} else if sls.storeCPUSummary > loadNoChange {
+		} else if sls.storeCPUSummary > loadNoChange && sls.storeCPUSummary >= sls.sls {
 			topk.dim = CPURate
 		} else if sls.sls > loadNoChange {
+			// WriteBandwidth is the only remaining dimension, and storeCPUSummary
+			// <= loadNoChange || storeCPUSummary < sls. So WriteBandwidth must be
+			// more overloaded than CPU and be responsible for the fact that the
+			// store is overloaded.
+			//
 			// TODO: WriteBandwidth is the only remaining dimension. But we can add
 			// more dimensions. So we should keep the per dimension loadSummary in
 			// sls.
