@@ -14,9 +14,9 @@ type LogEngine interface {
 	// assigned one unless the LogEntry contains a Split or Merge.
 	Append(ctx context.Context, id FullLogID, entry LogEntry) error
 
-	// Create initializes a new log via a snapshot. The assigned LogID and
+	// CreateRequest initializes a new log via a snapshot. The assigned LogID and
 	// WAGIndex are returned.
-	Create(ctx context.Context, req Create) (FullLogID, WAGIndex, error)
+	Create(ctx context.Context, req CreateRequest) (FullLogID, WAGIndex, error)
 
 	// Destroy marks a replica for destruction.
 	Destroy(ctx context.Context, id FullLogID, req Destroy) (WAGIndex, error)

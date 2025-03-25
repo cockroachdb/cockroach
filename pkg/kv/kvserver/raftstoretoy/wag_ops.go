@@ -38,11 +38,16 @@ type Merge struct {
 
 func (Merge) Apply() {}
 
-// Create represents a request to initialize a replica via snapshot.
-type Create struct {
+// CreateRequest represents a request to initialize a replica via snapshot.
+type CreateRequest struct {
 	RangeID   roachpb.RangeID
 	ReplicaID roachpb.ReplicaID
 	// Additional snapshot metadata would go here
+}
+
+type CreateOp struct {
+	ID FullLogID
+	// TODO(tbg): snap metadata, or at least HardState
 }
 
 // Destroy represents a range destruction operation.

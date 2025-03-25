@@ -6,7 +6,6 @@
 package raftstoretoy
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/datadriven"
-	"gopkg.in/yaml.v2"
 )
 
 // TestRaftStoreToy is the main entry point for our datadriven tests.
@@ -63,7 +61,7 @@ func (e *Env) Handle(t *testing.T, d *datadriven.TestData) {
 		var replID int64
 		d.ScanArgs(t, "range", &rangeID)
 		d.ScanArgs(t, "repl", &replID)
-		id, wix, err := e.Create(Create{
+		id, wix, err := e.Create(CreateRequest{
 			RangeID:   roachpb.RangeID(rangeID),
 			ReplicaID: roachpb.ReplicaID(replID),
 		})
@@ -77,15 +75,6 @@ func (e *Env) Handle(t *testing.T, d *datadriven.TestData) {
 	}
 }
 
-func y(obj any) string {
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	if err := enc.Encode(obj); err != nil {
-		return err.Error()
-	}
-	return buf.String()
-}
-
-func (e *Env) Create(op Create) (FullLogID, WAGIndex, error) {
+func (e *Env) Create(op CreateRequest) (FullLogID, WAGIndex, error) {
 	return e.logEng.Create(context.Background(), op)
 }

@@ -9,7 +9,7 @@ type LogKeyKind byte
 
 const (
 	LKKIdent LogKeyKind = iota
-	LGGSentinel
+	LKKInvalid
 )
 
 type LogEncodable interface {
@@ -17,6 +17,14 @@ type LogEncodable interface {
 }
 
 type Encoding interface {
+	Register(kind LogKeyKind, new func() LogEncodable)
+
 	Encode(buf []byte, e LogEncodable) ([]byte, error)
-	Decode(b []byte) (LogEncodable, error)
+	Decode(b []byte, dstOrNil LogEncodable) (LogEncodable, error)
+}
+
+func RegisterAll(enc Encoding) {
+	enc.Register(LKKIdent, func() LogEncodable {
+		return &FullLogID{}
+	})
 }

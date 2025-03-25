@@ -26,6 +26,10 @@ type FullLogID struct {
 	LogID     logpb.LogID
 }
 
+func (id *FullLogID) LogKeyKind() LogKeyKind {
+	return LKKIdent
+}
+
 func (id FullLogID) String() string {
 	return fmt.Sprintf("r%d/%d.%d", id.RangeID, id.ReplicaID, id.LogID)
 }

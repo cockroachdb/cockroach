@@ -5,7 +5,30 @@
 
 package raftstoretoy
 
-// Bad idea, delete and use the Encoder properly everywhere
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/logpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+type LogMetaKeyType byte
+
+const (
+	LMKHardState LogMetaKeyType = iota
+	LMKInit
+	LMKDestroy
+	// NB: log entries have their own struct due to storing an extra int
+)
+
+type LogMetaKey struct {
+	RangeID roachpb.RangeID
+	LogID   logpb.LogID
+	Typ     LogMetaKeyType
+}
+
+type LogRaftEntryKey struct {
+	LogMetaKey
+	Index RaftIndex
+}
 
 /*
 

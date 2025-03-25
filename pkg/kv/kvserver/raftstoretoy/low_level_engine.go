@@ -12,6 +12,7 @@ import (
 	"io"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/logpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -28,15 +29,15 @@ type LowLevelBatch struct {
 	b storage.Batch
 }
 
-func (llb *LowLevelBatch) Put(ctx context.Context, key Key, value []byte) error {
+func (llb *LowLevelBatch) Put(ctx context.Context, key roachpb.Key, value []byte) error {
 	var v roachpb.Value
 	v.SetBytes(value)
-	_, err := storage.MVCCPut(ctx, llb.b, key.Encode(), hlc.Timestamp{}, v, storage.MVCCWriteOptions{})
+	_, err := storage.MVCCPut(ctx, llb.b, key, hlc.Timestamp{}, v, storage.MVCCWriteOptions{})
 	return err
 }
 
-func (llb *LowLevelBatch) Clear(ctx context.Context, key Key) error {
-	_, _, err := storage.MVCCDelete(ctx, llb.b, key.Encode(), hlc.Timestamp{}, storage.MVCCWriteOptions{})
+func (llb *LowLevelBatch) Clear(ctx context.Context, key roachpb.Key) error {
+	_, _, err := storage.MVCCDelete(ctx, llb.b, key, hlc.Timestamp{}, storage.MVCCWriteOptions{})
 	return err
 }
 
@@ -56,7 +57,7 @@ func (lle *LowLevelEngine) Flush() error {
 	return lle.eng.Flush()
 }
 
-func (lle *LowLevelEngine) Dump(w io.Writer) error {
+func (lle *LowLevelEngine) Dump(w io.Writer, enc Encoding) error {
 	type strMVCCKey struct {
 		key string
 		ts  hlc.Timestamp
@@ -137,7 +138,11 @@ func (lle *LowLevelEngine) Dump(w io.Writer) error {
 	})
 
 	for _, f := range sl {
-		_, _ = fmt.Fprint(w, DecodeKey([]byte(f.k.key)))
+		obj, err := enc.Decode([]byte(f.k.key), nil)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(w, "%+v", obj)
 		if !f.k.ts.IsEmpty() {
 			_, _ = fmt.Fprint(w, " ", f.k.ts)
 		}
@@ -176,6 +181,8 @@ func NewLowLevelEngine() *LowLevelEngine {
 type llLogEngine struct {
 	enc Encoding
 	e   *LowLevelEngine
+
+	buf []byte // scratch buf
 }
 
 func (llle *llLogEngine) Append(ctx context.Context, id FullLogID, entry LogEntry) error {
@@ -183,11 +190,24 @@ func (llle *llLogEngine) Append(ctx context.Context, id FullLogID, entry LogEntr
 	panic("implement me")
 }
 
-func (llle *llLogEngine) Create(ctx context.Context, req Create) (FullLogID, WAGIndex, error) {
-	llle.get(ctx)
+func (llle *llLogEngine) Create(
+	ctx context.Context, req CreateRequest,
+) (FullLogID, WAGIndex, error) {
 	b := llle.e.NewBatch()
 	defer b.Close()
 
+	lid := logpb.LogID(1) // TODO(tbg): allocate
+	// wix := WAGIndex(123)  // TODO(tbg): allocate
+
+	op := CreateOp{
+		ID: FullLogID{
+			RangeID:   req.RangeID,
+			ReplicaID: req.ReplicaID,
+			LogID:     lid,
+		},
+	}
+
+	llle.enc.Encode(llle.buf[:0], op)
 	err := b.Put(ctx, MakeKey(req.RangeID, req.ReplicaID), []byte("hi"))
 	return FullLogID{}, 0, err
 }
