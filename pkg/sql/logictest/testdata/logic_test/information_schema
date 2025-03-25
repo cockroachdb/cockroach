@@ -4049,6 +4049,7 @@ prefer_lookup_joins_for_fks                                off
 prepared_statements_cache_size                             0 B
 propagate_input_ordering                                   off
 recursion_depth_limit                                      1000
+register_latch_wait_contention_events                      off
 reorder_joins_limit                                        8
 require_explicit_primary_keys                              off
 results_buffer_size                                        524288

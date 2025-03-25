@@ -220,7 +220,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
-					BaFmt:                  ba,
+					Batch:                  ba,
 				}
 				return ""
 

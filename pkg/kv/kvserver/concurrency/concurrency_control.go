@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/redact"
 )
 
 // Manager is a structure that sequences incoming requests and provides
@@ -446,9 +445,8 @@ type Request struct {
 	// not also passed an exiting Guard.
 	LockSpans *lockspanset.LockSpanSet
 
-	// The SafeFormatter capable of formatting the request. This is used to enrich
-	// logging with request level information when latches conflict.
-	BaFmt redact.SafeFormatter
+	// Batch is the batch to which the request belongs.
+	Batch *kvpb.BatchRequest
 
 	// DeadlockTimeout is the amount of time that the request will wait on a lock
 	// before pushing the lock holder's transaction for deadlock detection.
@@ -531,7 +529,12 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter) *Error
+	WaitFor(
+		ctx context.Context,
+		spans *spanset.SpanSet,
+		pp poison.Policy,
+		ba *kvpb.BatchRequest,
+	) *Error
 
 	// Poison a guard's latches, allowing waiters to fail fast.
 	Poison(latchGuard)
