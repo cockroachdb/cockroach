@@ -286,22 +286,24 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
 func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
-	lo, hi := l.applying, l.maxAppliableIndex(allowUnstable) // (lo, hi]
-	if lo >= hi {
-		// Nothing to apply.
+	span := l.nextCommittedSpan(allowUnstable)
+	if span.Empty() {
 		return nil
 	}
-	ents, err := l.slice(lo, hi, l.maxApplyingEntsSize)
+	ents, err := l.slice(uint64(span.After), uint64(span.Last), l.maxApplyingEntsSize)
 	if err != nil {
 		l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
 	}
 	return ents
 }
 
-// hasNextCommittedEnts returns if there is any available entries for execution.
+// nextCommittedSpan returns the span of committed entries that can be applied.
 // This is a fast check without heavy raftLog.slice() in nextCommittedEnts().
-func (l *raftLog) hasNextCommittedEnts(allowUnstable bool) bool {
-	return l.applying < l.maxAppliableIndex(allowUnstable)
+func (l *raftLog) nextCommittedSpan(allowUnstable bool) pb.LogSpan {
+	return pb.LogSpan{
+		After: pb.Index(l.applying),
+		Last:  pb.Index(l.maxAppliableIndex(allowUnstable)),
+	}
 }
 
 // maxAppliableIndex returns the maximum committed index that can be applied.
@@ -569,7 +571,15 @@ func (l LogSnapshot) LeadSlice(lo, hi uint64, maxSize uint64) (LeadSlice, error)
 	}, nil
 }
 
-// TODO(pav-kv): return LogSlice.
+// Slice returns log entries forming a prefix of the given log span, with the
+// total entries size not exceeding maxSize.
+//
+// Returns at least one entry if the interval contains any. The maxSize can only
+// be exceeded if the first entry (span.After+1) is larger.
+func (l LogSnapshot) Slice(span pb.LogSpan, maxSize uint64) ([]pb.Entry, error) {
+	return l.slice(uint64(span.After), uint64(span.Last), entryEncodingSize(maxSize))
+}
+
 func (l LogSnapshot) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
