@@ -1458,28 +1458,53 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	return nil
 }
 
-// canAddLoad returns true if the delta can be added to the store without
-// causing it to be overloaded (or the node to be overloaded). It does not
-// change any state between the call and return.
-func (cs *clusterState) canAddLoad(
-	ctx context.Context, ss *storeState, delta LoadVector, means *meansForStoreSet,
+// canShedAndAddLoad returns true if the delta can be added to the target
+// store and removed from the src store, such that the relative load summaries
+// will not get worse.
+//
+// It does not change any state between the call and return.
+func (cs *clusterState) canShedAndAddLoad(
+	ctx context.Context,
+	srcSS *storeState,
+	targetSS *storeState,
+	delta LoadVector,
+	means *meansForStoreSet,
 ) bool {
-	ns := cs.nodes[ss.NodeID]
+	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
-	ss.adjusted.load.add(deltaToAdd)
-	ns.adjustedCPU += deltaToAdd[CPURate]
-	sls := computeLoadSummary(ss, ns, &means.storeLoad, &means.nodeLoad)
+	targetSS.adjusted.load.add(deltaToAdd)
+	targetNS.adjustedCPU += deltaToAdd[CPURate]
+	targetSLS := computeLoadSummary(targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the addition.
-	ss.adjusted.load.subtract(deltaToAdd)
-	ns.adjustedCPU -= deltaToAdd[CPURate]
+	targetSS.adjusted.load.subtract(deltaToAdd)
+	targetNS.adjustedCPU -= deltaToAdd[CPURate]
+
+	// Remove the delta.
+	srcNS := cs.nodes[srcSS.NodeID]
+	srcSS.adjusted.load.subtract(delta)
+	srcNS.adjustedCPU -= delta[CPURate]
+	srcSLS := computeLoadSummary(srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
+	// Undo the removal.
+	srcSS.adjusted.load.add(delta)
+	srcNS.adjustedCPU += delta[CPURate]
+
+	// If there is no pending change in targetSS, we are willing to tolerate
+	// this move as long as targetSS is no worst than srcSS. Else we are
+	// stricter and expect targetSS to be better than loadNoChange -- this will
+	// delay making a potentially non-ideal choice of targetSS until it has no
+	// pending changes.
+	canAddLoad := !targetSLS.highDiskSpaceUtilization &&
+		((targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange) ||
+			(targetSLS.maxFractionPending < epsilon && targetSLS.sls <= srcSLS.sls &&
+				targetSLS.nls <= srcSLS.nls))
 	// We already filtered out stores >= loadNoChange before attempting to add
 	// this load, so we could allow everyone <= loadNoChange now, since those
 	// equal to loadNoChange must be due to this addition. But loadNoChange
 	// implies this addition is going above the mean, so don't allow that.
-	canAddLoad := sls.sls < loadNoChange && sls.nls < loadNoChange
-	log.Infof(ctx, "can add load to n%vs%v: %v sls[%v]",
-		ns.NodeID, ss.StoreID, canAddLoad, sls)
+	// canAddLoad := targetSLS.sls < loadNoChange && targetSLS.nls < loadNoChange
+	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 	return canAddLoad
 }
 
