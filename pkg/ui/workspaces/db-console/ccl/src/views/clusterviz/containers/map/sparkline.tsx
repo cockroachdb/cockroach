@@ -4,7 +4,10 @@
 // included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
-import d3 from "d3";
+import { extent } from "d3-array";
+import { scaleLinear } from "d3-scale";
+import { Selection } from "d3-selection";
+import { line } from "d3-shape";
 import React from "react";
 
 import { BACKGROUND_BLUE, MAIN_BLUE } from "src/views/shared/colors";
@@ -43,20 +46,21 @@ function sparklineChart(config: SparklineConfig) {
     bottom: 1,
   };
 
-  const xScale = d3.scale.linear().range([margin.left, width - margin.right]);
-  const yScale = d3.scale.linear().range([height - margin.bottom, margin.top]);
+  const xScale = scaleLinear().range([margin.left, width - margin.right]);
+  const yScale = scaleLinear().range([height - margin.bottom, margin.top]);
 
-  const drawPath = d3.svg
-    .line<Datapoint>()
+  const drawPath = line<Datapoint>()
     .x((d: Datapoint) => xScale(d.timestamp))
     .y((d: Datapoint) => yScale(d.value));
 
-  return function renderSparkline(sel: d3.Selection<SparklineChartProps>) {
+  return function renderSparkline(
+    sel: Selection<SVGElement, SparklineChartProps, null, undefined>,
+  ) {
     // TODO(couchand): unsingletonize this
     const { results } = sel.datum();
 
-    xScale.domain(d3.extent(results, (d: Datapoint) => d.timestamp));
-    yScale.domain(d3.extent(results, (d: Datapoint) => d.value));
+    xScale.domain(extent(results, (d: Datapoint) => d.timestamp));
+    yScale.domain(extent(results, (d: Datapoint) => d.value));
 
     const bg = sel.selectAll("rect").data([null]);
 
