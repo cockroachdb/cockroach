@@ -488,6 +488,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		// During an offline initial scan, we need to replicate the whole table, not
 		// just the primary keys.
 		UseTableSpan: payload.CreateTable && progress.ReplicatedTime.IsEmpty(),
+		StreamID:     streampb.StreamID(payload.StreamID),
 	}
 	for _, pair := range payload.ReplicationPairs {
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
