@@ -1608,7 +1608,7 @@ const noIndirection = ""
 func (b *plpgsqlBuilder) handleIndirectionForAssign(
 	inScope *scope, typ *types.T, ident ast.Variable, indirection tree.Name, val tree.Expr,
 ) opt.ScalarExpr {
-	elemName := indirection.Normalize()
+	elemName := string(indirection)
 
 	// We do not yet support qualifying a variable with a block label.
 	b.checkBlockLabelReference(elemName)

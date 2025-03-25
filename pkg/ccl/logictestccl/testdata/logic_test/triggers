@@ -4247,6 +4247,125 @@ SELECT id, a, b FROM tab_141810 ORDER BY id
 3  1     2
 4  NULL  NULL
 
+# ==============================================================================
+# Test case sensitivity of column names in triggers
+# ==============================================================================
+
+subtest case_sensitivity
+
+# Setup: clean up any existing tables and functions
+statement ok
+DROP TABLE IF EXISTS t1, t2, t3;
+
+statement ok
+DROP TRIGGER IF EXISTS tr1 ON t1;
+DROP TRIGGER IF EXISTS tr2 ON t1;
+DROP TRIGGER IF EXISTS tr3 ON t1;
+-- tr4 failed to create, so no need to drop
+
+statement ok
+DROP TRIGGER IF EXISTS tr5 ON t2;
+DROP TRIGGER IF EXISTS tr6 ON t2;
+DROP TRIGGER IF EXISTS tr7 ON t2;
+-- tr8 failed to create, so no need to drop
+
+statement ok
+DROP TRIGGER IF EXISTS tr12 ON t3;
+-- tr9, tr10, tr11 failed to create, so no need to drop
+
+# Setup: Create tables with different casing
+statement ok
+CREATE TABLE t1 (foo_bar INT);
+CREATE TABLE t2 ("foo_bar" INT);
+CREATE TABLE t3 ("FOO_BAR" INT);
+
+# Trigger functions with different quoting/casing styles
+statement ok
+CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW.foo_bar := 1;
+    RETURN NEW;
+  END;
+$$;
+
+statement ok
+CREATE FUNCTION f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW.FOO_BAR := 1;
+    RETURN NEW;
+  END;
+$$;
+
+statement ok
+CREATE FUNCTION f3() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW."foo_bar" := 1;
+    RETURN NEW;
+  END;
+$$;
+
+statement ok
+CREATE FUNCTION f4() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW."FOO_BAR" := 1;
+    RETURN NEW;
+  END;
+$$;
+
+# Attach each function to each table and check success/failure
+
+# Unquoted table
+statement ok
+CREATE TRIGGER tr1 BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f1();
+
+statement ok
+CREATE TRIGGER tr2 BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f2();
+
+statement ok
+CREATE TRIGGER tr3 BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f3();
+
+statement error pgcode 42703 pq: record "new" has no field "FOO_BAR"
+CREATE TRIGGER tr4 BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION f4();
+
+# Quoted lowercase column
+statement ok
+CREATE TRIGGER tr5 BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f1();
+
+statement ok
+CREATE TRIGGER tr6 BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f2();
+
+statement ok
+CREATE TRIGGER tr7 BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f3();
+
+statement error pgcode 42703 pq: record "new" has no field "FOO_BAR"
+CREATE TRIGGER tr8 BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION f4();
+
+# Quoted uppercase column
+statement error pgcode 42703 pq: record "new" has no field "foo_bar"
+CREATE TRIGGER tr9 BEFORE INSERT ON t3 FOR EACH ROW EXECUTE FUNCTION f1();
+
+statement error pgcode 42703 pq: record "new" has no field "foo_bar"
+CREATE TRIGGER tr10 BEFORE INSERT ON t3 FOR EACH ROW EXECUTE FUNCTION f2();
+
+statement error pgcode 42703 pq: record "new" has no field "foo_bar"
+CREATE TRIGGER tr11 BEFORE INSERT ON t3 FOR EACH ROW EXECUTE FUNCTION f3();
+
+statement ok
+CREATE TRIGGER tr12 BEFORE INSERT ON t3 FOR EACH ROW EXECUTE FUNCTION f4();
+
+# Drop all tables
+statement ok
+DROP TABLE t1;
+DROP TABLE t2;
+DROP TABLE t3;
+
+# Drop all functions
+statement ok
+DROP FUNCTION f1();
+DROP FUNCTION f2();
+DROP FUNCTION f3();
+DROP FUNCTION f4();
+
 subtest end
 
 # Until #135311 can be fixed, disallow TG_ARGV references by default. There is
