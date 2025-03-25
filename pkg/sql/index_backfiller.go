@@ -44,23 +44,19 @@ func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
 	if !current.MinimumWriteTimestamp.IsEmpty() {
 		return current, nil
 	}
-	// Pick an arbitrary read timestamp for the reads of the backfill.
-	// It's safe to use any timestamp to read even if we've partially backfilled
-	// at an earlier timestamp because other writing transactions have been
-	// writing at the appropriate timestamps in-between.
-	backfillReadTimestamp := ib.execCfg.Clock.Now()
+	minWriteTimestamp := ib.execCfg.Clock.Now()
 	targetSpans := make([]roachpb.Span, len(current.DestIndexIDs))
 	for i, idxID := range current.DestIndexIDs {
 		targetSpans[i] = td.IndexSpan(ib.execCfg.Codec, idxID)
 	}
 	if err := scanTargetSpansToPushTimestampCache(
-		ctx, ib.execCfg.DB, backfillReadTimestamp, targetSpans,
+		ctx, ib.execCfg.DB, minWriteTimestamp, targetSpans,
 	); err != nil {
 		return scexec.BackfillProgress{}, err
 	}
 	return scexec.BackfillProgress{
 		Backfill:              current.Backfill,
-		MinimumWriteTimestamp: backfillReadTimestamp,
+		MinimumWriteTimestamp: minWriteTimestamp,
 	}, nil
 }
 
@@ -117,12 +113,17 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		return nil
 	}
 	now := ib.execCfg.DB.Clock().Now()
+	// Pick now as the read timestamp for the backfill. It's safe to use this
+	// timestamp to read even if we've partially backfilled at an earlier
+	// timestamp because other writing transactions have been writing at the
+	// appropriate timestamps in-between.
+	readAsOf := now
 	run, retErr := ib.plan(
 		ctx,
 		descriptor,
 		now,
 		progress.MinimumWriteTimestamp,
-		progress.MinimumWriteTimestamp,
+		readAsOf,
 		spansToDo,
 		progress.DestIndexIDs,
 		updateFunc,
