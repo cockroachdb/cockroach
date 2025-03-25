@@ -607,7 +607,11 @@ func (tx *Txn) createRootPartition(
 	ctx context.Context, metadataKey roachpb.Key,
 ) (cspann.PartitionMetadata, error) {
 	b := tx.kv.NewBatch()
-	metadata := cspann.PartitionMetadata{Level: cspann.LeafLevel, Centroid: tx.store.emptyVec}
+	metadata := cspann.PartitionMetadata{
+		Level:        cspann.LeafLevel,
+		Centroid:     tx.store.emptyVec,
+		StateDetails: cspann.MakeReadyDetails(),
+	}
 	encoded, err := vecencoding.EncodePartitionMetadata(metadata.Level, metadata.Centroid)
 	if err != nil {
 		return cspann.PartitionMetadata{}, err
@@ -664,7 +668,11 @@ func (tx *Txn) getMetadataFromKVResult(
 		}
 
 		// Construct synthetic metadata.
-		metadata := cspann.PartitionMetadata{Level: cspann.LeafLevel, Centroid: tx.store.emptyVec}
+		metadata := cspann.PartitionMetadata{
+			Level:        cspann.LeafLevel,
+			Centroid:     tx.store.emptyVec,
+			StateDetails: cspann.MakeReadyDetails(),
+		}
 		return metadata, nil
 	}
 
@@ -674,7 +682,11 @@ func (tx *Txn) getMetadataFromKVResult(
 	}
 
 	// Return the metadata.
-	return cspann.PartitionMetadata{Level: level, Centroid: centroid}, nil
+	return cspann.PartitionMetadata{
+		Level:        level,
+		Centroid:     centroid,
+		StateDetails: cspann.MakeReadyDetails(),
+	}, nil
 }
 
 // calculateMetaKeyLen returns the length of the metadata partition key.

@@ -6,15 +6,43 @@
 package cspann
 
 import (
+	"bytes"
 	"slices"
+	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
 
 // PartitionState enumerates the possible states in the state machine that
 // governs building and maintaining a K-means tree in the C-SPANN index.
 type PartitionState int
+
+// String returns the state formatted as a string.
+func (s PartitionState) String() string {
+	switch s {
+	case MissingState:
+		return "Missing"
+	case ReadyState:
+		return "Ready"
+	case SplittingState:
+		return "Splitting"
+	case MergingState:
+		return "Merging"
+	case UpdatingState:
+		return "Updating"
+	case DrainingForSplitState:
+		return "DrainingForSplit"
+	case DrainingForMergeState:
+		return "DrainingForMerge"
+	case AddingLevelState:
+		return "AddingLevel"
+	case RemovingLevelState:
+		return "RemovingLevel"
+	}
+	return "Unknown"
+}
 
 // Here is the state transition diagram for partition states. There are a few
 // possible flows:
@@ -120,6 +148,69 @@ type PartitionStateDetails struct {
 	Source PartitionKey
 	// Timestamp is the time of the last state transition for the partition.
 	Timestamp time.Time
+}
+
+// MakeReadyDetails constructs state for a Ready partition.
+func MakeReadyDetails() PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     ReadyState,
+		Timestamp: timeutil.Now(),
+	}
+}
+
+// MakeSplittingDetails constructs state for a Splitting partition, including
+// the two target sub-partitions to which vectors are copied.
+func MakeSplittingDetails(target1, target2 PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     SplittingState,
+		Target1:   target1,
+		Target2:   target2,
+		Timestamp: timeutil.Now(),
+	}
+}
+
+// MakeDrainingForSplitDetails constructs state for a Splitting partition,
+// including the two target sub-partitions to which vectors are copied.
+func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     DrainingForSplitState,
+		Target1:   target1,
+		Target2:   target2,
+		Timestamp: timeutil.Now(),
+	}
+}
+
+// MakeUpdatingDetails constructs state for an Updating partition, including the
+// source partition from which vectors are being copied.
+func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     UpdatingState,
+		Source:    source,
+		Timestamp: timeutil.Now(),
+	}
+}
+
+// String returns the partition state details formatted as a string in this
+// format:
+//
+//	Ready
+//	Splitting:2,3
+//	Updating:4
+func (psd *PartitionStateDetails) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(psd.State.String())
+	if psd.Target1 != InvalidKey {
+		buf.WriteByte(':')
+		buf.WriteString(strconv.Itoa(int(psd.Target1)))
+		if psd.Target2 != InvalidKey {
+			buf.WriteByte(',')
+			buf.WriteString(strconv.Itoa(int(psd.Target2)))
+		}
+	} else if psd.Source != InvalidKey {
+		buf.WriteByte(':')
+		buf.WriteString(strconv.Itoa(int(psd.Source)))
+	}
+	return buf.String()
 }
 
 // Level specifies a level in the K-means tree. Levels are numbered from leaf to
