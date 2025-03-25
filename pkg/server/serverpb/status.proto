@@ -1444,6 +1444,8 @@ message HotRangesResponseV2 {
     repeated string tables = 17;
     // Indexes for the range
     repeated string indexes = 18;
+    // Range Descriptor for the range
+    cockroach.roachpb.RangeDescriptor desc = 19;
 
     // previously used for database, table, and index name
     reserved 4 to 6;

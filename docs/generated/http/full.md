@@ -3646,6 +3646,7 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | databases | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Databases for the range. | [reserved](#support-status) |
 | tables | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Tables for the range | [reserved](#support-status) |
 | indexes | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Indexes for the range | [reserved](#support-status) |
+| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.roachpb.RangeDescriptor) |  | Range Descriptor for the range | [reserved](#support-status) |
 
 
 
