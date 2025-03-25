@@ -40,7 +40,7 @@ func initColumnBackfillerSpec(
 
 func initIndexBackfillerSpec(
 	desc descpb.TableDescriptor,
-	writeAsOf, readAsOf hlc.Timestamp,
+	writeAsOf hlc.Timestamp,
 	writeAtBatchTimestamp bool,
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
@@ -50,7 +50,6 @@ func initIndexBackfillerSpec(
 		Table:                 desc,
 		WriteAsOf:             writeAsOf,
 		WriteAtBatchTimestamp: writeAtBatchTimestamp,
-		ReadAsOf:              readAsOf,
 		Type:                  execinfrapb.BackfillerSpec_Index,
 		ChunkSize:             chunkSize,
 		IndexesToBackfill:     indexesToBackfill,

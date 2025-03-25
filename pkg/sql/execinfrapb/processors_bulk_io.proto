@@ -61,9 +61,9 @@ message BackfillerSpec {
   optional uint64 update_chunk_size_threshold_bytes = 14 [(gogoproto.nullable) = false];
 
   // WriteAsOf is the time that the backfill entries should be written.
-  // Note: Older nodes may also use this as the read time instead of readAsOf.
   optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
+  // This is only used by the column backfiller.
   optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   // IndexesToBackfill is the set of indexes to backfill. This is populated only
