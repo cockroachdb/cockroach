@@ -7,6 +7,7 @@
 package kvpb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -183,36 +184,6 @@ type LeaseAppliedIndex uint64
 // SafeValue implements the redact.SafeValue interface.
 func (s LeaseAppliedIndex) SafeValue() {}
 
-// RaftTerm represents the term of a raft message. This corresponds to Term in
-// HardState.Term in the Raft library. That type is a uint64, so it is necessary
-// to cast to/from that type when dealing with the Raft library, however
-// internally RaftTerm is used for all fields in CRDB.
-type RaftTerm uint64
-
-// SafeValue implements the redact.SafeValue interface.
-func (s RaftTerm) SafeValue() {}
-
-// RaftIndex represents the term of a raft message. This corresponds to Index in
-// HardState.Index in the Raft library. That type is a uint64, so it is
-// necessary to cast to/from that type when dealing with the Raft library,
-// however internally RaftIndex is used for all fields in CRDB.
-type RaftIndex uint64
-
-// SafeValue implements the redact.SafeValue interface.
-func (s RaftIndex) SafeValue() {}
-
-// RaftSpan represents a (begin, end] span of indices in a raft log. The choice
-// of excluding the left bound and including the right bound is deliberate and
-// principled. When working with raft logs, it almost always helps to avoid
-// off-by-one errors and risk of integer underflow.
-type RaftSpan struct {
-	// After is the left bound of the log indices span. Exclusive.
-	After RaftIndex
-	// Last is the right bound of the log indices span. Inclusive.
-	Last RaftIndex
-}
-
-// Contains returns true iff the given index is within the span.
-func (s RaftSpan) Contains(index RaftIndex) bool {
-	return index > s.After && index <= s.Last
-}
+type RaftTerm = raftpb.Term
+type RaftIndex = raftpb.Index
+type RaftSpan = raftpb.LogSpan

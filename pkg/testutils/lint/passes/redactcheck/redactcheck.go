@@ -141,6 +141,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
 						"Epoch":                {},
 						"PeerID":               {},
+						"Index":                {},
+						"Term":                 {},
 						"MessageType":          {},
 						"EntryType":            {},
 						"ConfChangeType":       {},
