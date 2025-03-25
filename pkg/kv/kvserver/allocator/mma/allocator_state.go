@@ -222,16 +222,7 @@ func (a *allocatorState) rebalanceStores(
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
-					// TODO: this early filtering for load and maxFractionPending is
-					// unnecessary, since sortTargetCandidateSetAndPick will do it too.
-					// For now, we leave it as we are used to this log statement for
-					// debugging.
-					if sls.nls >= loadNoChange || sls.sls >= loadNoChange || sls.fd != fdOK ||
-						sls.maxFractionPending >= maxFractionPendingThreshold {
-						log.Infof(
-							ctx,
-							"shedding=n%vs%v store %v not a candidate to move lease for range %v sls=%v constraints=%v",
-							ss.NodeID, store.StoreID, cand.storeID, rangeID, sls, rstate.constraints)
+					if sls.fd != fdOK {
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
@@ -545,6 +536,9 @@ type candidateSet struct {
 //
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
+
+// The caller must not exclude any candidates based on load or maxFractionPending.
+// That filtering must happen here.
 func sortTargetCandidateSetAndPick(
 	ctx context.Context, cands candidateSet, rng *rand.Rand,
 ) roachpb.StoreID {
@@ -592,6 +586,8 @@ func sortTargetCandidateSetAndPick(
 	for _, cand := range cands.candidates {
 		if cand.sls > loadNormal || cand.nls > loadNormal ||
 			cand.maxFractionPending >= maxFractionPendingThreshold {
+			log.Infof(ctx,
+				"store %v not a candidate sls=%v", cand.StoreID, cand.storeLoadSummary)
 			continue
 		}
 		cands.candidates[j] = cand
