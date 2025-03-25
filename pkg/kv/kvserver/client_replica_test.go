@@ -5781,7 +5781,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	// txn2 is never unblocked (from the perspective of the client).
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
-	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
@@ -5891,7 +5891,7 @@ func TestMergeReplicatesLocks(t *testing.T) {
 		ctx = context.Background()
 		st  = cluster.MakeClusterSettings()
 	)
-	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 
 	for _, b := range []bool{true, false} {
 		name := "lhs-lock"

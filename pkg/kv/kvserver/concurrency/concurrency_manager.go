@@ -114,13 +114,31 @@ var BatchPushedLockResolution = settings.RegisterBoolSetting(
 	true,
 )
 
-// UnreplicatedLockReliability controls whether the replica will attempt
-// to keep unreplicated locks during node operations such as split.
-var UnreplicatedLockReliability = settings.RegisterBoolSetting(
+// UnreplicatedLockReliabilitySplit controls whether the replica will attempt
+// to keep unreplicated locks during range split operations.
+var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.lock_table.unreplicated_lock_reliability.enabled",
-	"whether the replica should attempt to keep unreplicated locks during various node operations",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.enabled", true),
+	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range splits",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
+)
+
+// UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
+// to keep unreplicated locks during lease transfer operations.
+var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
+	"whether the replica should attempt to keep unreplicated locks during lease transfers",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
+)
+
+// UnreplicatedLockReliabilityMerge controls whether the replica will
+// attempt to keep unreplicated locks during range merge operations.
+var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range merges",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
 )
 
 // managerImpl implements the Manager interface.
@@ -590,7 +608,7 @@ var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
 
 // OnRangeLeaseTransferEval implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeLeaseTransferEval() []*roachpb.LockAcquisition {
-	if !UnreplicatedLockReliability.Get(&m.st.SV) {
+	if !UnreplicatedLockReliabilityLeaseTransfer.Get(&m.st.SV) {
 		return nil
 	}
 
@@ -606,7 +624,7 @@ func (m *managerImpl) OnRangeLeaseTransferEval() []*roachpb.LockAcquisition {
 // during evalutation of Subsume. The returned LockAcquisition structs represent
 // held locks that we may want to flush to disk as replicated.
 func (m *managerImpl) OnRangeSubsumeEval() []*roachpb.LockAcquisition {
-	if !UnreplicatedLockReliability.Get(&m.st.SV) {
+	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
 		return nil
 	}
 
@@ -636,7 +654,7 @@ func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeasehold
 // LHS replica of a split and should be passed the new RHS start key (LHS
 // EndKey).
 func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquisition {
-	if UnreplicatedLockReliability.Get(&m.st.SV) {
+	if UnreplicatedLockReliabilitySplit.Get(&m.st.SV) {
 		lockToMove := m.lt.ClearGE(rhsStartKey)
 		m.twq.ClearGE(rhsStartKey)
 		return lockToMove
