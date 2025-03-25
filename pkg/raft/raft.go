@@ -335,16 +335,6 @@ type raft struct {
 
 	state pb.StateType
 
-	// idxPreLeading is the last log index as of when this node became the
-	// leader. Separates entries proposed by previous leaders from the entries
-	// proposed by the current leader. Used only in StateLeader, and updated
-	// when entering StateLeader (in becomeLeader()).
-	//
-	// Invariants (when in StateLeader at raft.Term):
-	//	- entries at indices <= idxPreLeading have term < raft.Term
-	//	- entries at indices > idxPreLeading have term == raft.Term
-	idxPreLeading uint64
-
 	// isLearner is true if the local raft node is a learner.
 	isLearner bool
 
@@ -1047,7 +1037,9 @@ func (r *raft) maybeCommit() bool {
 	// This comparison is equivalent in output to:
 	// if !r.raftLog.matchTerm(entryID{term: r.Term, index: index})
 	// But avoids (potentially) loading the entry term from storage.
-	if index <= r.idxPreLeading {
+	// termCache.last() stores the first entryID added to raftLog in the
+	// current leader term by invariants.
+	if index < r.raftLog.termCache.last().index {
 		return false
 	}
 
@@ -1385,11 +1377,6 @@ func (r *raft) becomeLeader() {
 	// pending log entries, and scanning the entire tail of the log
 	// could be expensive.
 	r.pendingConfIndex = r.raftLog.lastIndex()
-
-	// Remember the last log index before the term advances to
-	// our current (leader) term.
-	// See the idxPreLeading comment for more details.
-	r.idxPreLeading = r.raftLog.lastIndex()
 
 	emptyEnt := pb.Entry{Data: nil}
 	if !r.appendEntry(emptyEnt) {
