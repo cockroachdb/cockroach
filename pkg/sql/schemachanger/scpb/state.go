@@ -97,7 +97,7 @@ func (s *CurrentState) Rollback() {
 		switch t.TargetStatus {
 		case Status_ABSENT:
 			t.TargetStatus = Status_PUBLIC
-		// Transient public elements always have the end goal
+		// TransientAbsent public elements always have the end goal
 		// of always returning back to public. So, the target
 		// always stays the same (i.e. turn schema locked off
 		// and on again).
