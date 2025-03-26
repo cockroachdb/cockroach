@@ -5,7 +5,7 @@
 # (2) Where its possible to shed leases from the CPU overloaded store, so we
 #     should observe a period of lease transfers before any replica based
 #     rebalancing away from the store occurs.
-gen_cluster nodes=5
+gen_cluster nodes=5 node_cpu_rate_capacity=90000
 ----
 
 # Disable everything but the mma store rebalancer.
