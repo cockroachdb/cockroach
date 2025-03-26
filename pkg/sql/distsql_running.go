@@ -2559,24 +2559,29 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// For parallel checks we must make all `scanBufferNode`s in the plans
 	// concurrency-safe. (The need to be able to walk the planNode tree is why
 	// we currently disable the usage of the new DistSQL spec factory.)
-	observer := planObserver{
-		enterNode: func(_ context.Context, _ string, plan planNode) (bool, error) {
-			if s, ok := plan.(*scanBufferNode); ok {
-				s.makeConcurrencySafe(&mu)
+	var makeScanBuffersConcurrencySafe func(p planNode) error
+	makeScanBuffersConcurrencySafe = func(p planNode) error {
+		if s, ok := p.(*scanBufferNode); ok {
+			s.makeConcurrencySafe(&mu)
+		}
+		for i, n := 0, p.InputCount(); i < n; i++ {
+			input, err := p.Input(i)
+			if err != nil {
+				return err
 			}
-			return true, nil
-		},
+			if err := makeScanBuffersConcurrencySafe(input); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	for i := range checkPlans {
 		if checkPlans[i].plan.isPhysicalPlan() {
 			return errors.AssertionFailedf("unexpectedly physical plan is used for a parallel CHECK")
 		}
-		// Ignore the error since our observer never returns an error.
-		_ = walkPlan(
-			ctx,
-			checkPlans[i].plan.planNode,
-			observer,
-		)
+		if err := makeScanBuffersConcurrencySafe(checkPlans[i].plan.planNode); err != nil {
+			return err
+		}
 	}
 	var getSaveFlowsFunc func() SaveFlowsFunc
 	if planner.instrumentation.ShouldSaveFlows() {
