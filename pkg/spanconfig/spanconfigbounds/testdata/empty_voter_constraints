@@ -1,0 +1,72 @@
+### Define config bounds that allow two regions and hava a fallback.
+
+bounds name=foo
+constraint_bounds: <
+    allowed: <key: "region" value: "gcp-us-west2">
+    allowed: <key: "region" value: "gcp-europe-west1">
+    fallback: <constraints: <key: "region" value: "gcp-europe-west1">>
+>
+----
+
+bounds-fields bounds=foo
+----
+range_min_bytes: *
+range_max_bytes: *
+global_reads: *
+num_voters: *
+num_replicas: *
+gc.ttlseconds: *
+constraints: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+voter_constraints: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+lease_preferences: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+
+
+### Define a config with empty voter constraints and replica constraints in the
+### two allowed regions. It satisfies the config bounds above.
+
+config name=empty-voter-constraints
+num_voters: 5
+num_replicas: 5
+constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+voter_constraints: <>
+----
+
+conforms bounds=foo config=empty-voter-constraints
+----
+true
+
+### Define a config with missing voter constraints and replica constraints in
+### the two allowed regions. It does not satisfy the config bounds above and
+### applies the fallback.
+
+config name=missing-voter-constraints
+num_voters: 5
+num_replicas: 5
+constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+----
+
+conforms bounds=foo config=missing-voter-constraints
+----
+false
+
+check bounds=foo config=missing-voter-constraints
+----
+span config bounds violated for fields: voter_constraints
+span config bounds violated for fields: voter_constraints
+(1) span config bounds violated for fields: voter_constraints
+  | voter_constraints: [] does not conform to {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}, will be clamped to [+region=gcp-europe-west1:5]
+Error types: (1) *spanconfigbounds.ViolationError
