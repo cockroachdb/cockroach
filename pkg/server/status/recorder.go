@@ -336,34 +336,50 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 // ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
 func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-	if mr.mu.nodeRegistry == nil {
-		// We haven't yet processed initialization information; output nothing.
-		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
+	mr.ScrapeIntoPrometheusWithStaticLabels(false)(pm)
+}
+
+func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
+	useStaticLabels bool,
+) func(pm *metric.PrometheusExporter) {
+	return func(pm *metric.PrometheusExporter) {
+		mr.mu.RLock()
+		defer mr.mu.RUnlock()
+
+		includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
+		includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
+		scrapeOptions := []metric.ScrapeOption{
+			metric.WithIncludeChildMetrics(includeChildMetrics),
+			metric.WithIncludeAggregateMetrics(includeAggregateMetrics),
+			metric.WithUseStaticLabels(useStaticLabels),
 		}
-	}
-	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
-	includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
-	pm.ScrapeRegistry(mr.mu.nodeRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.appRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.logRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.sysRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	}
-	for _, tenantRegistry := range mr.mu.tenantRegistries {
-		pm.ScrapeRegistry(tenantRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+		if mr.mu.nodeRegistry == nil {
+			// We haven't yet processed initialization information; output nothing.
+			if log.V(1) {
+				log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
+			}
+		}
+		pm.ScrapeRegistry(mr.mu.nodeRegistry, scrapeOptions...)
+		pm.ScrapeRegistry(mr.mu.appRegistry, scrapeOptions...)
+		pm.ScrapeRegistry(mr.mu.logRegistry, scrapeOptions...)
+		pm.ScrapeRegistry(mr.mu.sysRegistry, scrapeOptions...)
+		for _, reg := range mr.mu.storeRegistries {
+			pm.ScrapeRegistry(reg, scrapeOptions...)
+		}
+		for _, tenantRegistry := range mr.mu.tenantRegistries {
+			pm.ScrapeRegistry(tenantRegistry, scrapeOptions...)
+		}
 	}
 }
 
 // PrintAsText writes the current metrics values as plain-text to the writer.
 // We write metrics to a temporary buffer which is then copied to the writer.
 // This is to avoid hanging requests from holding the lock.
-func (mr *MetricsRecorder) PrintAsText(w io.Writer, contentType expfmt.Format) error {
+func (mr *MetricsRecorder) PrintAsText(
+	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
+) error {
 	var buf bytes.Buffer
-	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheus); err != nil {
+	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)); err != nil {
 		return err
 	}
 	_, err := buf.WriteTo(w)
