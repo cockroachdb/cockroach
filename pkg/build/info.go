@@ -225,3 +225,8 @@ func TestingOverrideVersion(v string) func() {
 func MakeIssueURL(issue int) string {
 	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, VersionForURLs())
 }
+
+// ParsedVersion returns the parsed version.txt.
+func ParsedVersion() *version.Version {
+	return parsedVersionTxt
+}
