@@ -204,6 +204,17 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 		return scerrors.ConcurrentSchemaChangeError(fnMutable)
 	}
 
+	// Drop dependent functions first.
+	for _, ref := range fnMutable.DependedOnBy {
+		depFuncMutable, err := p.Descriptors().MutableByID(p.txn).Function(ctx, ref.ID)
+		if err != nil {
+			return err
+		}
+		if err := p.dropFunctionImpl(ctx, depFuncMutable); err != nil {
+			return err
+		}
+	}
+
 	// Remove backreference from tables/views/sequences referenced by this UDF.
 	for _, id := range fnMutable.DependsOn {
 		refMutable, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
