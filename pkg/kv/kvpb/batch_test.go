@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -554,6 +555,7 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 }
 
 func TestResponseKeyIterate(t *testing.T) {
+	skip.UnderNonTestBuild(t) // some assertions that are checked are only returned in test builds
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 

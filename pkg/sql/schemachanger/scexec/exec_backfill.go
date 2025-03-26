@@ -44,23 +44,6 @@ func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.O
 		if errors.HasType(err, (*kvpb.InsufficientSpaceError)(nil)) {
 			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
-		if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
-			// We will not ever move the timestamp forward so this will fail forever.
-			// Mark as a permanent error.
-			if scerrors.HasSchemaChangerUserError(err) {
-				// We need to unwrap this so that the PermanentJobError is marked
-				// at the correct level.
-				err = scerrors.UnwrapSchemaChangerUserError(err)
-			}
-			return scerrors.SchemaChangerUserError(
-				jobs.MarkAsPermanentJobError(
-					errors.Wrap(
-						err,
-						"unable to retry backfill since fixed timestamp is before the GC timestamp",
-					),
-				),
-			)
-		}
 		return err
 	}
 	return nil
