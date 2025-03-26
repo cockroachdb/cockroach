@@ -474,6 +474,7 @@ func makeSQLProcessor(
 	}
 
 	lwwQuerier := &lwwQuerier{
+		sd:       sd,
 		settings: settings,
 		codec:    codec,
 		db:       db,
@@ -559,6 +560,7 @@ func (m *muxQuerier) ReleaseLeases(ctx context.Context) {
 //
 // See the design document for possible solutions to these problems.
 type lwwQuerier struct {
+	sd                *sessiondata.SessionData
 	settings          *cluster.Settings
 	codec             keys.SQLCodec
 	db                descs.DB
@@ -588,6 +590,7 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) 
 		lww.db.KV(),
 		lww.leaseMgr,
 		catid.DescID(targetDescID),
+		lww.sd,
 		lww.settings,
 	)
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // tombstoneUpdater is a helper for updating the mvcc origin timestamp assigned
@@ -27,6 +28,7 @@ type tombstoneUpdater struct {
 	codec    keys.SQLCodec
 	db       *kv.DB
 	leaseMgr *lease.Manager
+	sd       *sessiondata.SessionData
 	settings *cluster.Settings
 	descID   descpb.ID
 
@@ -63,6 +65,7 @@ func newTombstoneUpdater(
 	db *kv.DB,
 	leaseMgr *lease.Manager,
 	descID descpb.ID,
+	sd *sessiondata.SessionData,
 	settings *cluster.Settings,
 ) *tombstoneUpdater {
 	return &tombstoneUpdater{
@@ -70,6 +73,7 @@ func newTombstoneUpdater(
 		db:       db,
 		leaseMgr: leaseMgr,
 		descID:   descID,
+		sd:       sd,
 		settings: settings,
 	}
 }
@@ -175,7 +179,7 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 			tu.leased.columns = append(tu.leased.columns, col.GetName())
 		}
 
-		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil, cols, &tu.settings.SV, true, nil)
+		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
 	}
 	if err := txn.UpdateDeadline(ctx, tu.leased.descriptor.Expiration(ctx)); err != nil {
 		return row.Deleter{}, err
