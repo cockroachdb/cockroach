@@ -2035,7 +2035,6 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	}
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 
 	// Ensure the request is entirely contained within the range's key bounds
 	// (even) after the storage engine has been pinned by the iterator. Given we
@@ -2043,8 +2042,25 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// meaningful in the context of follower reads. This is because latches on
 	// followers don't provide the synchronization with concurrent splits like
 	// they do on leaseholders.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
-		return err
+
+	// NB: this was inlined below with an early return before the ContainsKeyRange call.
+	// if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	// 	return err
+	// }
+
+	// this is cheap except when global reads are on,
+	// which they're not in my testing.
+	policy := r.closedTimestampPolicyRLocked()
+
+	desc := r.shMu.state.Desc   // pretty sure this field is copy on write, so never mutated
+	lease := r.shMu.state.Lease // NB: this field is *probably* copy on write, so never muted
+
+	r.mu.RUnlock() // keep crit section small
+
+	if !desc.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
+			ctx, rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey(), desc,
+			lease, policy)
 	}
 
 	// NB: For read-only requests, the GC threshold check is performed after the
