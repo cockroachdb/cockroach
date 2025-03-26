@@ -547,7 +547,7 @@ func (p *planner) removeDependents(
 			droppedViews = append(droppedViews, cascadedViews...)
 			droppedViews = append(droppedViews, qualifiedView.FQString())
 		case *funcdesc.Mutable:
-			if err := p.removeDependentFunction(ctx, tableDesc, t); err != nil {
+			if err := p.removeDependentFunction(ctx, tableDesc, t, dropBehavior); err != nil {
 				return nil, err
 			}
 		}
