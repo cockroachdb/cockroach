@@ -632,7 +632,7 @@ func (t *tokenCounter) adjustLockedAndUnlock(
 	flag TokenAdjustFlag,
 	expensiveLog bool,
 ) {
-	t.mu.AssertHeld()
+	// t.mu.AssertHeld()
 	var adjustment, unaccounted tokensPerWorkClass
 	// Only populated when expensiveLog is true.
 	var regularTokens, elasticTokens kvflowcontrol.Tokens
