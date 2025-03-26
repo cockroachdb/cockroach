@@ -81,6 +81,11 @@ type Ready struct {
 	// has been applied, the caller should call RawNode.AckApplied, to prevent
 	// these entries from showing up in subsequent Ready signals.
 	//
+	// The caller can also only confirm obligation to apply entries, using the
+	// RawNode.AckApplying(index) call, which stops committed indices <= index
+	// from causing other Ready events, but the entries are still not considered
+	// applied by raft.
+	//
 	// Invariants:
 	//	- Committed.After <= Committed.Last
 	//	- Committed.After == last index previously accepted for application

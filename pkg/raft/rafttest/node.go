@@ -19,6 +19,7 @@ package rafttest
 
 import (
 	"log"
+	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -117,9 +118,17 @@ func (n *node) start() {
 		if !raft.IsEmptyHardState(rd.HardState) {
 			_ = n.storage.SetHardState(rd.HardState)
 		}
-		_ = n.storage.Append(rd.Entries)
 		// Simulate disk latency.
 		time.Sleep(time.Millisecond)
+		_ = n.storage.Append(rd.Entries)
+		if !rd.Committed.Empty() {
+			n.mu.Lock()
+			ls := n.mu.rn.LogSnapshot()
+			entries, _ := ls.Slice(rd.Committed, math.MaxUint64)
+			n.mu.rn.AckApplied(entries)
+			n.mu.Unlock()
+		}
+
 		// Send messages, with a simulated latency.
 		send := func(m raftpb.Message) {
 			go func() {

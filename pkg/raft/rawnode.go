@@ -246,12 +246,7 @@ func (rn *RawNode) Ready() Ready {
 		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
 	}
 	r.msgsAfterAppend = nil
-
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
-	if !rd.Committed.Empty() {
-		// TODO(pav-kv): remove MsgStorageApply messages and API.
-		rd.Messages = append(rd.Messages, rn.newStorageApplyMsg())
-	}
 
 	return rd
 }
@@ -399,50 +394,18 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	return m
 }
 
-// newStorageApplyMsg creates the message that should be sent to the local
-// apply thread to instruct it to apply committed log entries. The message
-// also carries a response that should be delivered after the rest of the
-// message is processed.
-func (rn *RawNode) newStorageApplyMsg() pb.Message {
-	r := rn.raft
-	// TODO(pav-kv): the caller already knows the committed span. We should use it
-	// here, instead of recomputing it in nextCommittedEnts().
-	entries := r.raftLog.nextCommittedEnts(rn.applyUnstableEntries())
-	if len(entries) == 0 {
-		r.logger.Panic("should not happen")
-	}
-	r.raftLog.acceptApplying(entries[len(entries)-1].Index)
-
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
-		To:      LocalApplyThread,
-		From:    r.id,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: entries,
-		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, entries),
-		},
-	}
-}
-
-// newStorageApplyRespMsg creates the message that should be returned to node
-// after the committed entries in the current Ready (along with those in all
-// prior Ready structs) have been applied to the local state machine.
-func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
-	return pb.Message{
-		Type:    pb.MsgStorageApplyResp,
-		To:      r.id,
-		From:    LocalApplyThread,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
-	}
+// AckApplying accepts all committed entries <= index as being applied to the
+// state machine. The caller gives a promise to eventually apply these entries
+// and call AckApplied to confirm. They can do so asynchronously.
+//
+// AckApplying prevents committed indices <= index from causing Ready.
+func (rn *RawNode) AckApplying(index pb.Index) {
+	rn.raft.raftLog.acceptApplying(uint64(index))
 }
 
 // AckApplied acknowledges that the given entries have been applied. Must be
 // called for a prefix of Ready.Committed span, during the ready handling.
 func (rn *RawNode) AckApplied(entries []pb.Entry) {
-	// TODO(pav-kv): this is identical to MsgStorageApplyResp handling, to be
-	// removed in the next commit.
 	if len(entries) == 0 {
 		return
 	}
