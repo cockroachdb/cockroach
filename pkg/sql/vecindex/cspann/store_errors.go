@@ -19,11 +19,6 @@ var ErrPartitionNotFound = errors.New("partition not found")
 // been refreshed.
 var ErrRestartOperation = errors.New("conflict detected, restart operation")
 
-// ErrRemoveNotAllowed is returned by the store when an attempt is made to
-// remove all vectors from a non-leaf partition. This would result in an
-// unbalanced K-means tree, which is not allowed.
-var ErrRemoveNotAllowed = errors.New("cannot remove last remaining vector from non-leaf partition")
-
 // ConditionFailedError is returned by an operation that fails because a
 // partition's metadata does not match some expected value. This is used to
 // detect races between multiple agents operating on a partition.
