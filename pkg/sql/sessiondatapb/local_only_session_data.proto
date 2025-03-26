@@ -621,6 +621,33 @@ message LocalOnlySessionData {
   // defaults to false in order to avoid registering a large number of
   // uninformative latch wait events.
   bool register_latch_wait_contention_events = 159;
+  // UseCPutsOnNonUniqueIndexes, when true, indicates that CPuts should be used
+  // when writing new KVs into the non-unique indexes. It is an escape hatch in
+  // case our thinking that we don't need the CPut in such a scenario is wrong.
+  //
+  // This will have impact regardless of the buffered writes.
+  bool use_cputs_on_non_unique_indexes = 160 [(gogoproto.customname) = "UseCPutsOnNonUniqueIndexes"];
+  // BufferedWritesUseLockingOnNonUniqueIndexes, when true, indicates that
+  // locking Puts and Dels should be used when writing into the non-unique
+  // indexes.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool buffered_writes_use_locking_on_non_unique_indexes = 161;
+  // OptimizerUseLockElisionMultipleFamilies, when true, indicates that the lock
+  // eliding optimization should be enabled for tables with multiple column
+  // families.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_use_lock_elision_multiple_families = 162;
+  // OptimizerEnableLockElision, when false, indicates that the lock eliding
+  // optimization should be disabled for tables with any number of column
+  // families. It takes precedence over OptimizerUseLockElisionMultipleFamilies.
+  //
+  // This will only have impact when BufferedWritesEnabled is set.
+  bool optimizer_enable_lock_elision = 163;
+  // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
+  // should try to use the delete range fast-path when possible.
+  bool optimizer_use_delete_range_fast_path = 164;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

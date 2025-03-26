@@ -22,8 +22,7 @@ import (
 type tableDeleter struct {
 	tableWriterBase
 
-	rd    row.Deleter
-	alloc *tree.DatumAlloc
+	rd row.Deleter
 }
 
 // init initializes the tableDeleter with a Txn.

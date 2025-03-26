@@ -141,13 +141,16 @@ func (v *vectorInserter) Next() coldata.Batch {
 	// In the future we could sort across multiple goroutines, not worth it yet,
 	// time here is minimal compared to time spent executing batch.
 	p = &row.SortingPutter{Putter: p}
-	enc := colenc.MakeEncoder(v.flowCtx.Codec(), v.desc, &v.flowCtx.Cfg.Settings.SV, b, v.insertCols, v.flowCtx.GetRowMetrics(), partialIndexColMap,
+	enc := colenc.MakeEncoder(
+		v.flowCtx.Codec(), v.desc, v.flowCtx.EvalCtx.SessionData(), &v.flowCtx.Cfg.Settings.SV,
+		b, v.insertCols, v.flowCtx.GetRowMetrics(), partialIndexColMap,
 		func() error {
 			if kvba.Batch.ApproximateMutationBytes() > v.mutationQuota {
 				return colenc.ErrOverMemLimit
 			}
 			return nil
-		})
+		},
+	)
 	// PrepareBatch is called in a loop to partially insert till everything is
 	// done, if there are a ton of secondary indexes we could hit raft
 	// command limit building kv batch so we need to be able to do

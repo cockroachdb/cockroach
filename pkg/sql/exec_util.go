@@ -4099,6 +4099,26 @@ func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
 	m.data.RegisterLatchWaitContentionEvents = val
 }
 
+func (m *sessionDataMutator) SetUseCPutsOnNonUniqueIndexes(val bool) {
+	m.data.UseCPutsOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetBufferedWritesUseLockingOnNonUniqueIndexes(val bool) {
+	m.data.BufferedWritesUseLockingOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseLockElisionMultipleFamilies(val bool) {
+	m.data.OptimizerUseLockElisionMultipleFamilies = val
+}
+
+func (m *sessionDataMutator) SetOptimizerEnableLockElision(val bool) {
+	m.data.OptimizerEnableLockElision = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
+	m.data.OptimizerUseDeleteRangeFastPath = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
