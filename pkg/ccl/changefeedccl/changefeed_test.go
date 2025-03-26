@@ -4408,6 +4408,8 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 									"job_id":       map[string]any{"string": jobIDStr},
 									// Note that the field is still present in the avro schema, so it appears here as nil.
 									"mvcc_timestamp":       nil,
+									"ts_ns":                nil,
+									"ts_hlc":               nil,
 									"node_id":              map[string]any{"string": nodeID},
 									"node_name":            map[string]any{"string": nodeName},
 									"changefeed_sink":      map[string]any{"string": sink},
@@ -4460,7 +4462,128 @@ func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 					feedTestUseLocality(testLocality))
 			}
 		})
+
+		testutils.RunTrueAndFalse(t, "ts_{ns,hlc}", func(t *testing.T, withUpdated bool) {
+			clusterName := "clusterName123"
+			dbVersion := "v999.0.0"
+			defer build.TestingOverrideVersion(dbVersion)()
+			mkTestFn := func(sink string) func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+					clusterID := s.Server.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID().String()
+
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+					sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+					sqlDB.Exec(t, `INSERT INTO foo values (0)`)
+					stmt := fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, enriched_properties='source', format=%s`, testCase.format)
+					if withUpdated {
+						stmt += ", updated"
+					}
+					testFeed := feed(t, f, stmt)
+					defer closeFeed(t, testFeed)
+
+					var jobID int64
+					var nodeName string
+					var sourceAssertion func(actualSource map[string]any)
+					if ef, ok := testFeed.(cdctest.EnterpriseTestFeed); ok {
+						jobID = int64(ef.JobID())
+					}
+					sqlDB.QueryRow(t, `SELECT value FROM crdb_internal.node_runtime_info where component = 'DB' and field = 'Host'`).Scan(&nodeName)
+
+					sourceAssertion = func(actualSource map[string]any) {
+						var nodeID any
+						if testCase.format == "avro" {
+							actualSourceValue := actualSource["source"].(map[string]any)
+							nodeID = actualSourceValue["node_id"].(map[string]any)["string"]
+						} else {
+							nodeID = actualSource["node_id"]
+						}
+						require.NotNil(t, nodeID)
+
+						sourceNodeLocality := fmt.Sprintf(`region=%s`, testServerRegion)
+
+						// There are some differences between how we specify sinks here and their actual names.
+						if sink == "sinkless" {
+							sink = sinkTypeSinklessBuffer.String()
+						}
+
+						const dummyUpdatedTSNS = "1234567890.0001"
+						const dummyUpdatedTSHLC = dummyUpdatedTSNS + ",0"
+						jobIDStr := strconv.FormatInt(jobID, 10)
+
+						var assertion string
+						if testCase.format == "avro" {
+							assertionMap := map[string]any{
+								"source": map[string]any{
+									"cluster_id":     map[string]any{"string": clusterID},
+									"cluster_name":   map[string]any{"string": clusterName},
+									"db_version":     map[string]any{"string": dbVersion},
+									"job_id":         map[string]any{"string": jobIDStr},
+									"mvcc_timestamp": nil,
+									// Note that the fields are still present in the avro schema, so it appears here as nil.
+									"ts_ns":                nil,
+									"ts_hlc":               nil,
+									"node_id":              map[string]any{"string": nodeID},
+									"node_name":            map[string]any{"string": nodeName},
+									"changefeed_sink":      map[string]any{"string": sink},
+									"source_node_locality": map[string]any{"string": sourceNodeLocality},
+								},
+							}
+							if withUpdated {
+								tsnsMap := actualSource["source"].(map[string]any)["ts_ns"].(map[string]any)
+								assertReasonableMVCCTimestamp(t, tsnsMap["string"].(string))
+								tsnsMap["string"] = dummyUpdatedTSNS
+								assertionMap["source"].(map[string]any)["ts_ns"] = map[string]any{"string": dummyUpdatedTSNS}
+
+								tshlcMap := actualSource["source"].(map[string]any)["ts_hlc"].(map[string]any)
+								assertEqualWallTime(t, tsnsMap["string"].(string), tshlcMap["string"].(string))
+								tshlcMap["string"] = dummyUpdatedTSHLC
+								assertionMap["source"].(map[string]any)["ts_hlc"] = map[string]any{"string": dummyUpdatedTSHLC}
+							}
+							assertion = toJSON(t, assertionMap)
+						} else {
+							assertionMap := map[string]any{
+								"cluster_id":           clusterID,
+								"cluster_name":         clusterName,
+								"db_version":           dbVersion,
+								"job_id":               jobIDStr,
+								"node_id":              nodeID,
+								"node_name":            nodeName,
+								"changefeed_sink":      sink,
+								"source_node_locality": sourceNodeLocality,
+							}
+							if withUpdated {
+								assertReasonableMVCCTimestamp(t, actualSource["ts_ns"].(string))
+								actualSource["ts_ns"] = dummyUpdatedTSNS
+								assertionMap["ts_ns"] = dummyUpdatedTSNS
+								assertEqualWallTime(t, actualSource["ts_ns"].(string), actualSource["ts_hlc"].(string))
+								actualSource["ts_hlc"] = dummyUpdatedTSHLC
+								assertionMap["ts_hlc"] = dummyUpdatedTSHLC
+							}
+							assertion = toJSON(t, assertionMap)
+						}
+
+						value, err := reformatJSON(actualSource)
+						require.NoError(t, err)
+						require.JSONEq(t, assertion, string(value))
+					}
+
+					assertPayloadsEnriched(t, testFeed, []string{testCase.expectedMessage}, sourceAssertion)
+				}
+			}
+
+			for _, sink := range testCase.supportedSinks {
+				testLocality := roachpb.Locality{
+					Tiers: []roachpb.Tier{{
+						Key:   "region",
+						Value: testServerRegion,
+					}}}
+				cdcTest(t, mkTestFn(sink), feedTestForceSink(sink), feedTestUseClusterName(clusterName),
+					feedTestUseLocality(testLocality))
+			}
+		})
 	}
+
 }
 
 func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
@@ -11019,4 +11142,10 @@ func assertReasonableMVCCTimestamp(t *testing.T, ts string) {
 	epochNanos := parseTimeToHLC(t, ts).WallTime
 	now := timeutil.Now()
 	require.GreaterOrEqual(t, epochNanos, now.Add(-1*time.Hour).UnixNano())
+}
+
+func assertEqualWallTime(t *testing.T, tsns string, tshlc string) {
+	tsnsWallTimeNano := parseTimeToHLC(t, tsns).WallTime
+	tshlcWallTimeNano := parseTimeToHLC(t, tsns).WallTime
+	require.Equal(t, tsnsWallTimeNano, tshlcWallTimeNano)
 }
