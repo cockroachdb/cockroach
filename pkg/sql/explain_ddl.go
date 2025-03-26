@@ -62,6 +62,14 @@ func (n *explainDDLNode) Input(i int) (planNode, error) {
 	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }
 
+func (n *explainDDLNode) SetInput(i int, p planNode) error {
+	if i == 0 && n.plan.main.planNode != nil {
+		n.plan.main.planNode = p
+		return nil
+	}
+	return errors.AssertionFailedf("input index %d is out of range", i)
+}
+
 var _ planNode = (*explainDDLNode)(nil)
 
 var explainNotPossibleError = pgerror.New(pgcode.FeatureNotSupported,

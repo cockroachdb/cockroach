@@ -427,11 +427,11 @@ CREATE TABLE foo (
 			plan, err := PlanCDCExpression(ctx, p, expr, tc.opts...)
 			require.NoError(t, err)
 			collected := make(map[uint32]string)
-			plan.CollectPlanColumns(
-				func(c colinfo.ResultColumn) bool {
-					collected[c.PGAttributeNum] = c.Name
-					return false
-				})
+			err = plan.CollectPlanColumns(func(c colinfo.ResultColumn) bool {
+				collected[c.PGAttributeNum] = c.Name
+				return false
+			})
+			require.NoError(t, err)
 			collectedNames := make([]string, 0, len(collected))
 			for _, v := range collected {
 				collectedNames = append(collectedNames, v)

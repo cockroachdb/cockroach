@@ -84,13 +84,15 @@ func normalizeExpression(
 
 	// Determine if we need diff option.
 	var withDiff bool
-	plan.CollectPlanColumns(func(column colinfo.ResultColumn) bool {
+	if err := plan.CollectPlanColumns(func(column colinfo.ResultColumn) bool {
 		if uint32(prevCol.GetID()) == column.PGAttributeNum {
 			withDiff = true
 			return true // stop.
 		}
 		return false // keep going.
-	})
+	}); err != nil {
+		return nil, false, err
+	}
 	return norm, withDiff, nil
 }
 
