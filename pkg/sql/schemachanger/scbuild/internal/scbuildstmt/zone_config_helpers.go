@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -600,6 +601,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 ) error {
+	if err := validateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
@@ -711,6 +715,71 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 		}
 	}
 	return retConstraints
+}
+
+// validateNewUniqueConstraintsForSecondaryTenants validates that none of our
+// zonepb.ConstraintsConjunction violate the given max replicas per region
+// set by sql.zone_configs.max_replicas_per_region.
+func validateNewUniqueConstraintsForSecondaryTenants(
+	sv *settings.Values, currentZone, newZone *zonepb.ZoneConfig,
+) error {
+	maxReplicas := zonepb.MaxReplicas.Get(sv)
+	if maxReplicas == 0 {
+		return nil
+	}
+
+	// First scan all the current zone config constraints.
+	seenConstraints := make(map[zonepb.Constraint]int32)
+	for _, constraints := range currentZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = constraints.NumReplicas
+		}
+	}
+
+	seenVoterConstraints := make(map[zonepb.Constraint]int32)
+	for _, constraints := range currentZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			seenVoterConstraints[constraint] = constraints.NumReplicas
+		}
+	}
+
+	validateConstraints := func(
+		constraintPrefix string,
+		seen map[zonepb.Constraint]int32,
+		newConstraints zonepb.ConstraintsConjunction,
+	) error {
+		for _, constraint := range newConstraints.Constraints {
+			if replicas, ok := seen[constraint]; ok {
+				// If we are not changing the amount of replicas being
+				// constrained, we don't need to validate anything.
+				if replicas == newConstraints.NumReplicas {
+					continue
+				}
+			}
+			if int64(newConstraints.NumReplicas) > maxReplicas {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"%sconstraint for %q exceeds the configured maximum of %d replicas",
+					constraintPrefix,
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+		}
+		return nil
+	}
+
+	for _, constraints := range newZone.Constraints {
+		if err := validateConstraints("", seenConstraints, constraints); err != nil {
+			return err
+		}
+	}
+	for _, voterConstraints := range newZone.VoterConstraints {
+		if err := validateConstraints("voter ", seenVoterConstraints, voterConstraints); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // partitionKey is used to group a partition's name and its index ID for
