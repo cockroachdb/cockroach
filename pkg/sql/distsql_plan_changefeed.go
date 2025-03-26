@@ -94,7 +94,7 @@ func PlanCDCExpression(
 
 	familyID, err := extractFamilyID(cdcExpr)
 	if err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 
 	cdcCat := &cdcOptCatalog{
@@ -110,7 +110,7 @@ func PlanCDCExpression(
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 	if log.V(2) {
 		log.Infof(ctx, "Optimized CDC expression: %s", memo)
@@ -122,13 +122,13 @@ func PlanCDCExpression(
 		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(),
 		p.EvalContext(), allowAutoCommit, disableTelemetryAndPlanGists,
 	); err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 
 	// The top node contains the list of columns to return.
 	presentation := planColumns(p.curPlan.main.planNode)
 	if len(presentation) == 0 {
-		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
+		return CDCExpressionPlan{}, errors.AssertionFailedf("unable to determine result columns")
 	}
 
 	// Walk the plan, perform sanity checks and extract information we need.
@@ -166,17 +166,17 @@ func PlanCDCExpression(
 		return nil
 	}
 	if err := validatePlanAndCollectSpans(p.curPlan.main.planNode); err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 
 	if len(spans) == 0 {
 		// Should have been handled by the zeroNode check above.
-		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
+		return CDCExpressionPlan{}, errors.AssertionFailedf("expected at least 1 span to scan")
 	}
 
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
 		len(p.curPlan.checkPlans) > 0 || len(p.curPlan.triggers) > 0 {
-		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
+		return CDCExpressionPlan{}, errors.AssertionFailedf("unexpected query structure")
 	}
 
 	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, LocalDistribution)
