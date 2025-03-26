@@ -1125,14 +1125,13 @@ SELECT pow(0::int, 3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 ----
 0 1 1
 
-statement error integer out of range
+statement error pgcode 2201F zero raised to a negative power is undefined
 SELECT pow(0::int, -3::int)
 
-# TODO(mjibson): This uses the decimal implementation internally, which
-# returns NaN, hence the below error. However postgres returns 1 for this,
-# which we should probably match.
-statement error integer out of range
+query I
 SELECT pow(0::int, 0::int)
+----
+1
 
 query RRR
 SELECT pow(-3.0::float, 2.0), power(3.0::float, 2.0), pow(5.0::decimal, 2.0)
@@ -1144,16 +1143,11 @@ SELECT pow(CAST (pi() AS DECIMAL), DECIMAL '2.0')
 ----
 9.8696044010893571205
 
-query R
+statement error pgcode 2201F zero raised to a negative power is undefined
 SELECT power(0::decimal, -1)
-----
-Infinity
 
-# TODO(mjibson): Postgres returns an error for this.
-query R
+statement error pgcode 2201F a negative number raised to a non-integer power yields a complex result
 SELECT power(-1, -.1)
-----
-NaN
 
 query RR
 SELECT radians(-45.0), radians(45.0)
@@ -2761,6 +2755,20 @@ query I
 SELECT width_bucket(1, array[]::int[]);
 ----
 0
+
+query I
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10);
+----
+11
+
+query I
+SELECT width_bucket('-Infinity'::numeric, 1, 10, 10);
+----
+0
+
+statement error pgcode 2201G pq: width_bucket\(\): operand, lower bound, and upper bound cannot be NaN
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+
 
 # Sanity check pg_type_is_visible.
 query BBB

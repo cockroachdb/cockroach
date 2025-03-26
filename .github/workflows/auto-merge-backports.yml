@@ -1,0 +1,74 @@
+name: Auto-Merge Test Backport PRs
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour
+  workflow_dispatch:
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Merge qualifying PRs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get timestamp for 24 hours ago in ISO format
+            const now = new Date();
+            const iso24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+            const query = `repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only created:<${iso24HoursAgo}`;
+            const searchResults = await github.paginate(github.rest.search.issuesAndPullRequests, {
+              q: query,
+              per_page: 100,
+            });
+
+            for (const prItem of searchResults) {
+              const prNumber = prItem.number;
+
+              // Fetch full PR details
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+
+              // Check for approvals
+              const reviews = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+
+              const approved = reviews.some(
+                r =>
+                r.state === 'APPROVED' &&
+                r.user?.login === 'blathers-crl[bot]'
+                );
+
+              if (!approved) {
+                console.log(`Skipping PR #${prNumber}: not approved`);
+                continue;
+              }
+
+              const labels = prItem.labels.map(l => l.name).join(', ');
+              console.log(`Merging PR #${prNumber}, Created at: ${pr.created_at}, Approved: ${approved}, Labels: ${labels}`);
+              // Merge the PR
+              // try {
+              //  console.log(`Merging PR #${prNumber}`);
+              //  await github.rest.pulls.merge({
+              //    owner: context.repo.owner,
+              //    repo: context.repo.repo,
+              //    pull_number: prNumber,
+              //    merge_method: "merge",
+              //  });
+              // } catch (err) {
+              //  console.warn(`Failed to merge PR #${prNumber}: ${err.message}`);
+              // }
+            }

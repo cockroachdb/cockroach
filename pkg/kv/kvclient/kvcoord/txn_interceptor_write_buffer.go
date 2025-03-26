@@ -8,6 +8,7 @@ package kvcoord
 import (
 	"context"
 	"encoding/binary"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -952,6 +953,21 @@ func (twb *txnWriteBuffer) flushWithEndTxn(
 	for it.First(); it.Valid(); it.Next() {
 		reqs = append(reqs, it.Cur().toRequest())
 	}
+
+	// Layers below us expect that writes inside a batch are in sequence number
+	// order but the iterator above returns data in key order. Here we re-sort it
+	// which is unfortunate but required we make a change to the pipeliner.
+	slices.SortFunc(reqs, func(a kvpb.RequestUnion, b kvpb.RequestUnion) int {
+		aHeader := a.GetInner().Header()
+		bHeader := b.GetInner().Header()
+		if aHeader.Sequence == bHeader.Sequence {
+			return aHeader.Key.Compare(bHeader.Key)
+		} else if aHeader.Sequence < bHeader.Sequence {
+			return -1
+		} else {
+			return 1
+		}
+	})
 
 	ba = ba.ShallowCopy()
 	reqs = append(reqs, ba.Requests...)
