@@ -102,6 +102,8 @@ func RegisterTests(r registry.Registry) {
 	registerLoadSplits(r)
 	registerLogicalDataReplicationTests(r)
 	registerLDRMixedVersions(r)
+	registerMetricsAPITest(r)
+	registerMetricsAPIExample(r)
 	registerMVCCGC(r)
 	registerMultiStoreRemove(r)
 	registerMultiTenantDistSQL(r)
