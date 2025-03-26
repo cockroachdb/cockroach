@@ -247,14 +247,7 @@ func (a *allocatorState) rebalanceStores(
 						ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
-				// Have underloaded candidates.
-				//
-				// TODO: this is questionable. We should refactor
-				// sortTargetCandidateSetAndPick into multiple functions, one for
-				// sorting, one for picking etc. and compose them differently for
-				// different use cases. And we possibly don't want to pick just one
-				// since we can possibly afford to go through all (since a range has
-				// few replicas).
+				// Have candidates.
 				targetStoreID := sortTargetCandidateSetAndPick(ctx, candsSet, a.rand)
 				if targetStoreID == 0 {
 					continue
