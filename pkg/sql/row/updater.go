@@ -415,10 +415,6 @@ func (ru *Updater) UpdateRow(
 	if ru.primaryLocked {
 		// Since the row PK doesn't change, and we've already locked it, we can
 		// skip the lock acquisition.
-		// TODO(#139106): think through a scenario where we read and locked only
-		// some column families stored in the index. Is it possible that we
-		// don't lock some column families since we issued multiple Gets for a
-		// single row during the initial scan?
 		kvOp = PutOp
 	}
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(

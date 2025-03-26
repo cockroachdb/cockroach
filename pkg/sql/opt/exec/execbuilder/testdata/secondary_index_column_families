@@ -48,10 +48,10 @@ Del /Table/106/4/1/1/3/1
 Del (locking) /Table/106/5/1/0
 Del (locking) /Table/106/5/1/2/1
 Del (locking) /Table/106/5/1/3/1
-Del /Table/106/1/1/0
-Del /Table/106/1/1/1/1
-Del /Table/106/1/1/2/1
-Del /Table/106/1/1/3/1
+Del (locking) /Table/106/1/1/0
+Del (locking) /Table/106/1/1/1/1
+Del (locking) /Table/106/1/1/2/1
+Del (locking) /Table/106/1/1/3/1
 
 # Put some data back into the table.
 statement ok
@@ -250,7 +250,7 @@ UPDATE t SET y = 5 WHERE x = 1
 ----
 Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
 Put (locking) /Table/107/1/0/1/1 -> /INT/5
-Put /Table/107/2/1/1/1 -> /TUPLE/3:3:Int/5
+Put (locking) /Table/107/2/1/1/1 -> /TUPLE/3:3:Int/5
 Put /Table/107/3/1/0/1/1 -> /TUPLE/3:3:Int/5
 
 query T kvtrace(prefix=/Table/107)
@@ -258,7 +258,7 @@ UPDATE t SET z = 6 WHERE x = 1
 ----
 Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
 Put (locking) /Table/107/1/0/2/1 -> /INT/6
-Put /Table/107/2/1/2/1 -> /TUPLE/4:4:Int/6
+Put (locking) /Table/107/2/1/2/1 -> /TUPLE/4:4:Int/6
 Put /Table/107/3/1/0/2/1 -> /TUPLE/4:4:Int/6
 
 # Test composite datatypes.

@@ -258,8 +258,8 @@ kvtrace
 UPSERT INTO mcf VALUES (1, 1, 'baz')
 ----
 Scan /Table/112/1/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
-Put /Table/112/1/1/1/1 -> /BYTES/baz
+Put (locking) /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
+Put (locking) /Table/112/1/1/1/1 -> /BYTES/baz
 Put (delete) /Table/112/2/2/1/0
 Put /Table/112/2/1/1/0 -> /BYTES/0x0a0103
 
@@ -268,6 +268,6 @@ kvtrace
 UPSERT INTO mcf VALUES (1, 1, 'bat')
 ----
 Scan /Table/112/1/{1-2} lock Exclusive (Block, Unreplicated)
-Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
-Put /Table/112/1/1/1/1 -> /BYTES/bat
+Put (locking) /Table/112/1/1/0 -> /TUPLE/2:2:Int/1
+Put (locking) /Table/112/1/1/1/1 -> /BYTES/bat
 Put /Table/112/2/1/1/0 -> /BYTES/0x0a0103
