@@ -374,6 +374,110 @@ func TestMaxStatTracker(t *testing.T) {
 	require.Equal(t, 1, mt.curIdx)
 }
 
+func TestSplitStatisticsGeneral(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, test := range []struct {
+		name        string
+		useWeighted bool
+		expected    *SplitStatistics
+	}{
+		{"unweighted", false, &SplitStatistics{
+			AccessDirection: 0.4945791444904396,
+			PopularKey: PopularKey{
+				Key:       keys.SystemSQLCodec.TablePrefix(uint32(52)),
+				Frequency: 0.05,
+			},
+		}},
+		{"weighted", true, &SplitStatistics{
+			AccessDirection: 0.3885786802030457,
+			PopularKey: PopularKey{
+				Key:       keys.SystemSQLCodec.TablePrefix(uint32(111)),
+				Frequency: 0.05,
+			},
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rand := rand.New(rand.NewPCG(11, 11))
+			timeStart := 1000
+
+			var decider Decider
+			loadSplitConfig := testLoadSplitConfig{
+				randSource:    rand,
+				useWeighted:   test.useWeighted,
+				statRetention: time.Second,
+				statThreshold: 1,
+			}
+
+			Init(&decider, &loadSplitConfig, &LoadSplitterMetrics{
+				PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+				NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+			}, SplitCPU)
+
+			for i := 1; i <= 1000; i++ {
+				k := i
+				if i > 500 {
+					k = 500 - i
+				}
+				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
+					return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(k))}
+				})
+			}
+
+			assert.Equal(t, decider.SplitStatistics(), test.expected)
+		})
+	}
+}
+
+func TestSplitStatisticsPopularKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, test := range []struct {
+		name        string
+		useWeighted bool
+		expected    *SplitStatistics
+	}{
+		{"unweighted", false, &SplitStatistics{
+			AccessDirection: 1,
+			PopularKey: PopularKey{
+				Key:       keys.SystemSQLCodec.TablePrefix(uint32(100)),
+				Frequency: 1,
+			},
+		}},
+		{"weighted", true, &SplitStatistics{
+			AccessDirection: 1,
+			PopularKey: PopularKey{
+				Key:       keys.SystemSQLCodec.TablePrefix(uint32(100)),
+				Frequency: 1,
+			},
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rand := rand.New(rand.NewPCG(11, 11))
+			timeStart := 1000
+
+			var decider Decider
+			loadSplitConfig := testLoadSplitConfig{
+				randSource:    rand,
+				useWeighted:   test.useWeighted,
+				statRetention: time.Second,
+				statThreshold: 1,
+			}
+
+			Init(&decider, &loadSplitConfig, &LoadSplitterMetrics{
+				PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+				NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+			}, SplitCPU)
+
+			for i := 1; i <= 1000; i++ {
+				decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
+					return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(100))}
+				})
+			}
+
+			assert.Equal(t, decider.SplitStatistics(), test.expected)
+		})
+	}
+}
+
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng := rand.New(rand.NewPCG(11, 11))
