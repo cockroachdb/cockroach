@@ -17,7 +17,6 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/execinfra",
         "//pkg/sql/sqltestutils",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util",
