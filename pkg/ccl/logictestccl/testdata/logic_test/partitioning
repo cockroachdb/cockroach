@@ -411,6 +411,46 @@ ok1  CREATE TABLE public.ok1 (
      )
      -- Warning: Partitioned table with no zone configurations.
 
+subtest partition_with_rls
+
+statement ok
+set enable_row_level_security=on;
+
+statement ok
+ALTER TABLE ok1 ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY test_policy ON ok1 FOR SELECT USING (true);
+
+query TT
+SHOW CREATE TABLE ok1
+----
+ok1  CREATE TABLE public.ok1 (
+       a INT8 NOT NULL,
+       b INT8 NOT NULL,
+       c INT8 NULL,
+       CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION p1 VALUES IN ((1)),
+       PARTITION p2 VALUES IN ((2))
+     )
+     -- Warning: Partitioned table with no zone configurations.
+     ;
+     ALTER TABLE public.ok1 ENABLE ROW LEVEL SECURITY;
+     CREATE POLICY test_policy ON public.ok1 AS PERMISSIVE FOR SELECT TO public USING (true)
+
+# Clean up by dropping the policy and table after testing
+statement ok
+DROP POLICY test_policy ON ok1;
+
+statement ok
+ALTER TABLE ok1 DISABLE ROW LEVEL SECURITY;
+
+statement ok
+set enable_row_level_security=off;
+
+subtest end
+
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.create' AND usage_count > 0
 ----
