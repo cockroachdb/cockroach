@@ -1084,6 +1084,9 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ from: loop_a
 │   │
 │   └── • buffer
@@ -1120,6 +1123,9 @@ quality of service: regular
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
         │   │ actual row count: 0
+        │   │ KV contention time: 0µs
+        │   │ KV lock wait time: 0µs
+        │   │ KV latch wait time: 0µs
         │   │ from: loop_b
         │   │
         │   └── • buffer
@@ -1169,6 +1175,9 @@ quality of service: regular
                 │   │ sql nodes: <hidden>
                 │   │ regions: <hidden>
                 │   │ actual row count: 0
+                │   │ KV contention time: 0µs
+                │   │ KV lock wait time: 0µs
+                │   │ KV latch wait time: 0µs
                 │   │ from: loop_a
                 │   │
                 │   └── • buffer
@@ -1494,6 +1503,9 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ from: p138974
 │   │
 │   └── • buffer
