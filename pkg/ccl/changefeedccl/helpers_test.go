@@ -11,6 +11,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"net/url"
@@ -868,7 +869,7 @@ func loadCheckpoint(t *testing.T, progress jobspb.Progress) *jobspb.TimestampSpa
 	if spanLevelCheckpoint.IsEmpty() {
 		return nil
 	}
-	t.Logf("found checkpoint: %#v", spanLevelCheckpoint)
+	t.Logf("found checkpoint: %v", maps.Collect(spanLevelCheckpoint.All()))
 	return spanLevelCheckpoint
 }
 
