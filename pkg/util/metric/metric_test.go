@@ -1068,3 +1068,59 @@ func TestMetadataGetLabels(t *testing.T) {
 		})
 	}
 }
+
+func TestMakeLabelPairs(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		want        []*LabelPair
+		expectPanic bool
+	}{
+		{
+			name: "empty args",
+			args: []string{},
+			want: []*LabelPair{},
+		},
+		{
+			name:        "single arg",
+			args:        []string{"label1"},
+			expectPanic: true,
+		},
+		{
+			name:        "odd number of args",
+			args:        []string{"label1", "value1", "label2", "value2", "label3"},
+			expectPanic: true,
+		},
+		{
+			name: "even number of args",
+			args: []string{"label1", "value1", "label2", "value2"},
+			want: []*LabelPair{
+				{Name: proto.String("label1"), Value: proto.String("value1")},
+				{Name: proto.String("label2"), Value: proto.String("value2")},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectPanic {
+				require.Panics(t, func() { MakeLabelPairs(tt.args...) })
+				return
+			}
+
+			got := MakeLabelPairs(tt.args...)
+			if len(got) != len(tt.want) {
+				t.Errorf("MakeLabelPairs() returned %d pairs, want %d", len(got), len(tt.want))
+				return
+			}
+			for i := range got {
+				if *got[i].Name != *tt.want[i].Name {
+					t.Errorf("pair %d: got name %q, want %q", i, *got[i].Name, *tt.want[i].Name)
+				}
+				if *got[i].Value != *tt.want[i].Value {
+					t.Errorf("pair %d: got value %q, want %q", i, *got[i].Value, *tt.want[i].Value)
+				}
+			}
+		})
+	}
+}
