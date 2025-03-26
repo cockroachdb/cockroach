@@ -125,6 +125,12 @@ func PlanCDCExpression(
 		return cdcPlan, err
 	}
 
+	// The top node contains the list of columns to return.
+	presentation := planColumns(p.curPlan.main.planNode)
+	if len(presentation) == 0 {
+		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
+	}
+
 	// Walk the plan, perform sanity checks and extract information we need.
 	var spans roachpb.Spans
 	var presentation colinfo.ResultColumns
@@ -147,12 +153,6 @@ func PlanCDCExpression(
 				return false, errors.Newf(
 					"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
 			}
-
-			// Because the walk is top down, the top node is the node containing the
-			// list of columns to return.
-			if len(presentation) == 0 {
-				presentation = planColumns(plan)
-			}
 			return true, nil
 		},
 	}); err != nil {
@@ -162,10 +162,6 @@ func PlanCDCExpression(
 	if len(spans) == 0 {
 		// Should have been handled by the zeroNode check above.
 		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
-	}
-
-	if len(presentation) == 0 {
-		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
 	}
 
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
