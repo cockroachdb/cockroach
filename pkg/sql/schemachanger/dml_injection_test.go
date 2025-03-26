@@ -14,6 +14,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -53,11 +57,13 @@ func toAnySlice(strings []string) []any {
 }
 
 const (
-	valInitial = "1"
-	valUpdated = "2"
-	opDelete   = "delete"
-	opUpdate   = "update"
-	na         = "n/a"
+	valInitial       = "1"
+	valUpdated       = "2"
+	opBackfillUpdate = "backfillUpdate"
+	opBackfillDelete = "backfillDelete"
+	opDelete         = "delete"
+	opUpdate         = "update"
+	na               = "n/a"
 	// insert_phase_ordinal is the phaseOrdinal the record was inserted by
 	// operation_phase_ordinal is the phaseOrdinal that will modify the record
 	// operation is the operation the operation_phase_ordinal will do to the record
@@ -93,6 +99,24 @@ func (po phaseOrdinal) deleteRow(operationPO phaseOrdinal) []string {
 		po.String(),
 		operationPO.String(),
 		opDelete,
+		valInitial,
+	}
+}
+
+func (po phaseOrdinal) backfillCallbackDeleteRow(operationPO phaseOrdinal, isAfter bool) []string {
+	return []string{
+		po.String(),
+		operationPO.String(),
+		fmt.Sprintf("%s_%t", opBackfillDelete, isAfter),
+		valInitial,
+	}
+}
+
+func (po phaseOrdinal) backfillCallbackUpdateRow(operationPO phaseOrdinal, isAfter bool) []string {
+	return []string{
+		po.String(),
+		operationPO.String(),
+		fmt.Sprintf("%s_%t", opBackfillUpdate, isAfter),
 		valInitial,
 	}
 }
@@ -542,6 +566,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			poMap := make(map[phaseOrdinal]int)
 			poCompleted := make(map[phaseOrdinal]struct{})
 			var poSlice []phaseOrdinal
+			// Separate rows are updated and deleted within the backfill.
+			var currentPOForBackFill atomic.Value
+			currentPOForBackFill.Store(phaseOrdinal{})
+			var beforeBackfillCallbackDone, afterBackfillCallbackDone atomic.Bool
+			var backfillCallback func(isAfter bool)
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
@@ -549,6 +578,27 @@ func TestAlterTableDMLInjection(t *testing.T) {
 							// We disable the randomization of some batch sizes because with
 							// some low values the test takes much longer.
 							ForceProductionValues: true,
+						},
+						// Intentionally modify data during the backfill process
+						// as well.
+						DistSQL: &execinfra.TestingKnobs{
+							RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+								backfillCallback(false)
+								return nil
+							},
+							RunAfterBackfillChunk: func() {
+								backfillCallback(true)
+							},
+							IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+								RunBeforeScanChunk: func(startKey roachpb.Key) error {
+									backfillCallback(false)
+									return nil
+								},
+								RunBeforeMergeTxn: func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkipCount int) error {
+									backfillCallback(true)
+									return nil
+								},
+							},
 						},
 						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 							BeforeStage: func(p scplan.Plan, stageIdx int) error {
@@ -572,6 +622,9 @@ func TestAlterTableDMLInjection(t *testing.T) {
 
 								currentStage := p.Stages[stageIdx]
 								currentPO := toPhaseOrdinal(currentStage)
+								currentPOForBackFill.Store(currentPO)
+								afterBackfillCallbackDone.Store(false)
+								beforeBackfillCallbackDone.Store(false)
 								errorMessage := fmt.Sprintf("phaseOrdinal=%s", currentPO)
 
 								// Capture all stages in the StatementPhase before they disappear,
@@ -620,7 +673,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									}
 									panic(fmt.Sprintf("slice contains duplicate elements a=%s b=%s %s", a, b, errorMessage))
 								})
-								actualResults := sqlDB.QueryStr(t, `SELECT 	insert_phase_ordinal, operation_phase_ordinal, operation, val FROM tbl`)
+								actualResults := sqlDB.QueryStr(t, `SELECT insert_phase_ordinal, operation_phase_ordinal, operation, val FROM tbl WHERE operation NOT LIKE 'backfill%'`)
 								// Transaction retry errors can occur, so don't repeat the same
 								// DML if hit such a case to avoid flaky tests.
 								if _, exists := poCompleted[currentPO]; exists {
@@ -672,6 +725,34 @@ func TestAlterTableDMLInjection(t *testing.T) {
 					},
 				},
 			})
+
+			// Invoked via backfill / merge testing knobs.
+			backfillCallback = func(isAfter bool) {
+				currentPO := currentPOForBackFill.Load().(phaseOrdinal)
+				poIdx := poMap[currentPO]
+				errorMessage := fmt.Sprintf("backfill phaseOrdinal=%s", currentPO)
+
+				// Insert for later stages, there is a risk of these
+				// callbacks invoked multiple times.
+				backfillDone := false
+				if isAfter {
+					backfillDone = afterBackfillCallbackDone.Swap(true)
+				} else {
+					backfillDone = beforeBackfillCallbackDone.Swap(true)
+				}
+				if !backfillDone {
+					for j := poIdx; j < len(poMap); j++ {
+						sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.backfillCallbackUpdateRow(poSlice[j], isAfter))...)
+						sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.backfillCallbackDeleteRow(poSlice[j], isAfter))...)
+					}
+				}
+				// Execute queries to modify rows.
+				operationUpdate := fmt.Sprintf("%s_%t", opBackfillUpdate, isAfter)
+				operationDelete := fmt.Sprintf("%s_%t", opBackfillDelete, isAfter)
+				sqlDB.ExecWithMessage(t, errorMessage, "UPDATE tbl SET val=val WHERE operation=$1 AND operation_phase_ordinal = $2", operationUpdate, currentPO.String())
+				sqlDB.ExecWithMessage(t, errorMessage, "DELETE FROM  tbl WHERE operation=$1 AND operation_phase_ordinal = $2", operationDelete, currentPO.String())
+
+			}
 			defer testCluster.Stopper().Stop(ctx)
 			sqlDB = sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 			create := tc.createTable

@@ -853,7 +853,7 @@ func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
 	var mu syncutil.Mutex
 	var iteration = 0
 	// Upserts rows in the table. If sampleData is false,
-	// then all rows are updated. Otherwise, 1 in 4 rouws are
+	// then all rows are updated. Otherwise, 1 in 4 rows are
 	// updated.
 	writeMore = func(sampleData bool) error {
 		const rowsPerWrite = 500
