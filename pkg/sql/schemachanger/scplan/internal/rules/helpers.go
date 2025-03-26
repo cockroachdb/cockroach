@@ -249,7 +249,7 @@ func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.C
 		oldIndex.Type((*scpb.SecondaryIndex)(nil)),
 		newIndex.Type((*scpb.SecondaryIndex)(nil)),
 		oldIndex.TargetStatus(scpb.ToAbsent),
-		newIndex.TargetStatus(scpb.ToPublic, scpb.Transient),
+		newIndex.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
 		JoinOnDescID(oldIndex, newIndex, tableIDVar),
 		newIndex.El.AttrEqVar(screl.IndexID, indexIdVar),
 		JoinOn(oldIndex,
@@ -511,7 +511,7 @@ func Not(predicate elementTypePredicate) elementTypePredicate {
 }
 
 // RegisterDepRuleForDrop is a convenience function which calls
-// RegisterDepRule with the cross-product of (ToAbsent,Transient)^2 Target
+// RegisterDepRule with the cross-product of (ToAbsent,TransientAbsent)^2 Target
 // states, which can't easily be composed.
 func RegisterDepRuleForDrop(
 	r *Registry,
@@ -548,7 +548,7 @@ func RegisterDepRuleForDrop(
 	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			from.TargetStatus(scpb.Transient),
+			from.TargetStatus(scpb.TransientAbsent),
 			from.CurrentStatus(transientFromStatus),
 			to.TargetStatus(scpb.ToAbsent),
 			to.CurrentStatus(toStatus),
@@ -560,7 +560,7 @@ func RegisterDepRuleForDrop(
 			fn(from, to),
 			from.TargetStatus(scpb.ToAbsent),
 			from.CurrentStatus(fromStatus),
-			to.TargetStatus(scpb.Transient),
+			to.TargetStatus(scpb.TransientAbsent),
 			to.CurrentStatus(transientToStatus),
 		)
 	})

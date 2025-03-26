@@ -214,17 +214,17 @@ func (c *ElementCollection[E]) NotToAbsent() *ElementCollection[E] {
 	})
 }
 
-// Transient filters by elements targeting the TRANSIENT_ABSENT state.
+// TransientAbsent filters by elements targeting the TRANSIENT_ABSENT state.
 func (c *ElementCollection[E]) Transient() *ElementCollection[E] {
 	return c.FilterTarget(func(target TargetStatus, _ E) bool {
-		return target == Transient
+		return target == TransientAbsent
 	})
 }
 
 // NotTransient filters by elements not targeting the TRANSIENT_ABSENT state.
 func (c *ElementCollection[E]) NotTransient() *ElementCollection[E] {
 	return c.FilterTarget(func(target TargetStatus, _ E) bool {
-		return target != Transient
+		return target != TransientAbsent
 	})
 }
 

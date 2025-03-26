@@ -45,7 +45,7 @@ func init() {
 				JoinOnDescID(from, to, "table-id"),
 				to.El.AttrEqVar(screl.ColumnID, colID),
 				from.ReferencedColumnIDsContains(colID),
-				from.TargetStatus(scpb.Transient),
+				from.TargetStatus(scpb.TransientAbsent),
 				to.TargetStatus(scpb.ToPublic),
 				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
 				to.CurrentStatus(scpb.Status_PUBLIC),
@@ -63,7 +63,7 @@ func init() {
 				to.Type((*scpb.ColumnComputeExpression)(nil)),
 				JoinOnDescID(from, to, "table-id"),
 				from.TargetStatus(scpb.ToPublic),
-				to.TargetStatus(scpb.Transient),
+				to.TargetStatus(scpb.TransientAbsent),
 				from.CurrentStatus(scpb.Status_VALIDATED),
 				to.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
 			}

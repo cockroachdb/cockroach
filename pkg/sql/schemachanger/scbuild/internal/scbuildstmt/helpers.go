@@ -108,7 +108,7 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			}
 			// Ignore any other elements with undefined targets.
 			return false
-		case scpb.ToAbsent, scpb.Transient:
+		case scpb.ToAbsent, scpb.TransientAbsent:
 			// If the target is already ABSENT or TRANSIENT then the element is going
 			// away anyway and so it doesn't need to have a target set for this DROP.
 			return false
@@ -443,7 +443,7 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 }
 
 func transientTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
-	return target == scpb.Transient
+	return target == scpb.TransientAbsent
 }
 
 func validTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
