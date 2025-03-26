@@ -941,6 +941,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
