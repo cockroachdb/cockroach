@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -123,6 +122,8 @@ type Context struct {
 	// forInsert indicates that this is an insert operation (or a search for
 	// insert operation).
 	forInsert bool
+	// deDuper is used to de-duplicate search results.
+	deDuper ChildKeyDeDup
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
@@ -676,7 +677,7 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 			// Aggregate all stats from searching lower levels of the tree.
 			searchSet.Stats.Add(&subSearchSet.Stats)
 
-			results = vi.pruneDuplicates(results)
+			results = vi.pruneDuplicates(idxCtx, results)
 			if !idxCtx.options.SkipRerank || idxCtx.options.ReturnVectors {
 				// Re-rank search results with full vectors.
 				searchSet.Stats.FullVectorCount += len(results)
@@ -809,7 +810,7 @@ func (vi *Index) searchChildPartitions(
 // long as we rerank candidates using the original full-size vectors. Even if
 // we're not reranking, the impact of this should be minimal, since duplicates
 // are so rare and there's already quite a bit of inaccuracy when not reranking.
-func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
+func (vi *Index) pruneDuplicates(idxCtx *Context, candidates []SearchResult) []SearchResult {
 	if len(candidates) <= 1 {
 		// No possibility of duplicates.
 		return candidates
@@ -820,16 +821,21 @@ func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
 		return candidates
 	}
 
-	// TODO DURING REVIEW: this is O(n * log(n)) instead of O(n) like the previous
-	// code, but is probably faster in practice for small values of n because it
-	// is allocation free. It is also cleaner and easier to understand. Choose an
-	// approach.
-	slices.SortFunc(candidates, func(a, b SearchResult) int {
-		return bytes.Compare(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
-	return slices.CompactFunc(candidates, func(a, b SearchResult) bool {
-		return bytes.Equal(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
+	idxCtx.deDuper.Init(len(candidates))
+	i := 0
+	for i < len(candidates) {
+		if !idxCtx.deDuper.TryAdd(candidates[i].ChildKey) {
+			// Found duplicate, remove it from search results by swapping it with
+			// the last search result.
+			last := len(candidates) - 1
+			candidates[i] = candidates[last]
+			candidates = candidates[:last]
+			continue
+		}
+		i++
+	}
+
+	return candidates
 }
 
 // rerankSearchResults updates the given set of candidates with their exact
