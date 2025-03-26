@@ -561,8 +561,12 @@ func (s *Stopper) Stop(ctx context.Context) {
 	// Run the closers without holding s.mu. There's no concern around new
 	// closers being added; we've marked this stopper as `stopping` above, so
 	// any attempts to do so will be refused.
-	for _, c := range s.mu.closers {
-		c.Close()
+	//
+	// We want to run the closers in the reverse order they were added. This is
+	// similar to using `defer` and makes sense since we have to initialize lower
+	// levels first.
+	for i := len(s.mu.closers) - 1; i >= 0; i-- {
+		s.mu.closers[i].Close()
 	}
 }
 
