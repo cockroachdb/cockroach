@@ -47,9 +47,8 @@ module.exports = (env, argv) => {
       profile: true,
     }),
 
-    // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
+    // Use MomentTimezoneDataPlugin to include all timezone data
     new MomentTimezoneDataPlugin({
-      matchZones: ["Etc/UTC", "America/New_York"],
       startYear: 2021,
       endYear: currentYear + 10,
       // We have to tell the plugin where to store the pruned file
