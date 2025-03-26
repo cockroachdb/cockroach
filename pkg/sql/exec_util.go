@@ -4101,6 +4101,18 @@ func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
 	m.data.RegisterLatchWaitContentionEvents = val
 }
 
+func (m *sessionDataMutator) SetUseCPutsOnNonUniqueIndexes(val bool) {
+	m.data.UseCPutsOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetUseLockingDelsOnNonUniqueIndexes(val bool) {
+	m.data.UseLockingDelsOnNonUniqueIndexes = val
+}
+
+func (m *sessionDataMutator) SetLockElidingOptimizationAlwaysEnabled(val bool) {
+	m.data.LockElidingOptimizationAlwaysEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

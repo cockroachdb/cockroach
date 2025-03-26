@@ -10,12 +10,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,20 +38,17 @@ type Inserter struct {
 // insertCols must contain every column in the primary key. Virtual columns must
 // be present if they are part of any index.
 func MakeInserter(
-	ctx context.Context,
-	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
 	insertCols []catalog.Column,
-	alloc *tree.DatumAlloc,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: NewRowHelper(
-			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sv, internal, metrics,
+			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sd, sv, metrics,
 		),
 
 		InsertCols:            insertCols,
@@ -219,7 +216,7 @@ func (ri *Inserter) InsertRow(
 		if ok {
 			for i := range entries {
 				e := &entries[i]
-				if index.ForcePut() || !index.IsUnique() {
+				if index.ForcePut() || (!index.IsUnique() && !ri.Helper.sd.UseCPutsOnNonUniqueIndexes) {
 					// See the comment on (catalog.Index).ForcePut() for more
 					// details.
 					// TODO(#140695): re-evaluate the lock need when we enable

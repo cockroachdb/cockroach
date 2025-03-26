@@ -622,6 +622,19 @@ message LocalOnlySessionData {
   // defaults to false in order to avoid registering a large number of
   // uninformative latch wait events.
   bool register_latch_wait_contention_events = 159;
+  // UseCPutsOnNonUniqueIndexes, when true, indicates that CPuts should be used
+  // when writing into the non-unique indexes. This will have impact regardless
+  // of the buffered writes.
+  bool use_cputs_on_non_unique_indexes = 160 [(gogoproto.customname) = "UseCPutsOnNonUniqueIndexes"];
+  // UseLockingDelsOnNonUniqueIndexes, when true, indicates that locking Dels
+  // should be used when deleting from the non-unique indexes. This will only
+  // have impact when BufferedWritesEnabled is set.
+  bool use_locking_dels_on_non_unique_indexes = 161;
+  // LockElidingOptimizationAlwaysEnabled, when true, indicates that the lock
+  // eliding optimization should always be enabled, even for tables with
+  // multiple column families. This will only have impact when
+  // BufferedWritesEnabled is set.
+  bool lock_eliding_optimization_always_enabled = 162;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

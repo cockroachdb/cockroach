@@ -3857,6 +3857,57 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`use_cputs_on_non_unique_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_cputs_on_non_unique_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_cputs_on_non_unique_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseCPutsOnNonUniqueIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseCPutsOnNonUniqueIndexes), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`use_locking_dels_on_non_unique_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_locking_dels_on_non_unique_indexes`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_locking_dels_on_non_unique_indexes", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseLockingDelsOnNonUniqueIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseLockingDelsOnNonUniqueIndexes), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`lock_eliding_optimization_always_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`lock_eliding_optimization_always_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("lock_eliding_optimization_always_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetLockElidingOptimizationAlwaysEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().LockElidingOptimizationAlwaysEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
