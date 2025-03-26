@@ -105,6 +105,7 @@ UPDATE tpfp SET b = b - 1
 ----
 Scan /Table/107/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/107/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
+Put /Table/107/2/"foo"/0 -> /BYTES/0x8b
 
 # Update a row that matches the partial index before and after, and the index
 # entry changes.
@@ -183,7 +184,13 @@ UPDATE tifp SET b = ARRAY[1, 2, 2, NULL, 4, 4]
 ----
 Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
 Put /Table/109/1/1/0 -> /TUPLE/2:2:Array/ARRAY[1,2,2,NULL,4,4]
+Del /Table/109/2/NULL/1/0
+Del /Table/109/2/1/1/0
+Del /Table/109/2/2/1/0
 Del /Table/109/2/3/1/0
+Put /Table/109/2/NULL/1/0 -> /BYTES/
+Put /Table/109/2/1/1/0 -> /BYTES/
+Put /Table/109/2/2/1/0 -> /BYTES/
 Put /Table/109/2/4/1/0 -> /BYTES/
 
 # ---------------------------------------------------------
