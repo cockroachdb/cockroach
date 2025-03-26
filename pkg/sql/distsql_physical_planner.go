@@ -5289,7 +5289,7 @@ func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
 // processors eagerly move into the draining state which will cancel the context
 // of parallel TableReaders which might "poison" the transaction.
 func checkScanParallelizationIfLocal(
-	ctx context.Context, plan *planComponents, c *localScanParallelizationChecker,
+	ctx context.Context, plan *planComponents,
 ) (prohibitParallelization, hasScanNodeToParallelize bool) {
 	if plan.main.planNode == nil || len(plan.cascades) != 0 ||
 		len(plan.checkPlans) != 0 || len(plan.triggers) != 0 {
@@ -5298,82 +5298,76 @@ func checkScanParallelizationIfLocal(
 		// the scan parallelization.
 		return true, false
 	}
-	*c = localScanParallelizationChecker{}
-	o := planObserver{enterNode: c.enterNode}
-	_ = walkPlan(ctx, plan.main.planNode, o)
-	for _, s := range plan.subqueryPlans {
-		_ = walkPlan(ctx, s.plan.planNode, o)
-	}
-	return c.prohibitParallelization, c.hasScanNodeToParallelize
-}
 
-type localScanParallelizationChecker struct {
-	prohibitParallelization  bool
-	hasScanNodeToParallelize bool
-}
-
-func (c *localScanParallelizationChecker) enterNode(
-	ctx context.Context, _ string, plan planNode,
-) (bool, error) {
-	if c.prohibitParallelization {
-		return false, nil
-	}
-	switch n := plan.(type) {
-	case *distinctNode:
-		return true, nil
-	case *explainPlanNode:
-		// walkPlan doesn't recurse into explainPlanNode, so we have to manually
-		// walk over the wrapped plan.
-		plan := n.plan.WrappedPlan.(*planComponents)
-		prohibit, has := checkScanParallelizationIfLocal(ctx, plan, c)
-		c.prohibitParallelization = c.prohibitParallelization || prohibit
-		c.hasScanNodeToParallelize = c.hasScanNodeToParallelize || has
-		return false, nil
-	case *explainVecNode:
-		return true, nil
-	case *filterNode:
-		// Some filter expressions might be handled by falling back to the
-		// wrapped processors, so we choose to be safe.
-		c.prohibitParallelization = true
-		return false, nil
-	case *groupNode:
-		for _, f := range n.funcs {
-			c.prohibitParallelization = f.hasFilter()
+	var checkRec func(p planNode)
+	checkRec = func(p planNode) {
+		if prohibitParallelization {
+			return
 		}
-		return true, nil
-	case *indexJoinNode:
-		return true, nil
-	case *joinNode:
-		c.prohibitParallelization = n.pred.onCond != nil
-		return true, nil
-	case *limitNode:
-		return true, nil
-	case *ordinalityNode:
-		return true, nil
-	case *renderNode:
-		// Only support projections since render expressions might be handled
-		// via a wrapped row-by-row processor.
-		for _, e := range n.render {
-			if _, isIVar := e.(*tree.IndexedVar); !isIVar {
-				c.prohibitParallelization = true
+		switch n := p.(type) {
+		case *explainPlanNode:
+			// explainPlanNode is a zeroInputPlanNode, so we have to manually
+			// recurse.
+			plan := n.plan.WrappedPlan.(*planComponents)
+			prohibit, has := checkScanParallelizationIfLocal(ctx, plan)
+			prohibitParallelization = prohibitParallelization || prohibit
+			hasScanNodeToParallelize = hasScanNodeToParallelize || has
+			// Do not recurse.
+			return
+		case *filterNode:
+			// Some filter expressions might be handled by falling back to the
+			// wrapped processors, so we choose to be safe.
+			prohibitParallelization = true
+			// Do not recurse.
+			return
+		case *groupNode:
+			for _, f := range n.funcs {
+				if f.hasFilter() {
+					prohibitParallelization = true
+					// Do not recurse.
+					return
+				}
 			}
+		case *joinNode:
+			prohibitParallelization = n.pred.onCond != nil
+		case *renderNode:
+			// Only support projections since render expressions might be
+			// handled via a wrapped row-by-row processor.
+			for _, e := range n.render {
+				if _, isIVar := e.(*tree.IndexedVar); !isIVar {
+					prohibitParallelization = true
+					// Do not recurse.
+					return
+				}
+			}
+		case *scanNode:
+			if len(n.reqOrdering) == 0 && n.parallelize {
+				hasScanNodeToParallelize = true
+			}
+		case *distinctNode, *explainVecNode, *indexJoinNode, *limitNode,
+			*ordinalityNode, *sortNode, *unionNode, *valuesNode:
+		default:
+			prohibitParallelization = true
+			// Do not recurse into any unmatched nodes.
+			return
 		}
-		return true, nil
-	case *scanNode:
-		if len(n.reqOrdering) == 0 && n.parallelize {
-			c.hasScanNodeToParallelize = true
+		// Recurse into input nodes.
+		for i, n := 0, p.InputCount(); i < n; i++ {
+			input, err := p.Input(i)
+			if err != nil {
+				// This error should never occur with correct usage of Input
+				// and InputCount. If it does, ignore it and prohibit
+				// parallelization.
+				prohibitParallelization = true
+			}
+			checkRec(input)
 		}
-		return true, nil
-	case *sortNode:
-		return true, nil
-	case *unionNode:
-		return true, nil
-	case *valuesNode:
-		return true, nil
-	default:
-		c.prohibitParallelization = true
-		return false, nil
 	}
+	checkRec(plan.main.planNode)
+	for _, s := range plan.subqueryPlans {
+		checkRec(s.plan.planNode)
+	}
+	return prohibitParallelization, hasScanNodeToParallelize
 }
 
 // NewPlanningCtx returns a new PlanningCtx. When distribute is false, a
@@ -5435,7 +5429,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 			return planCtx
 		}
 		prohibitParallelization, hasScanNodeToParallelize := checkScanParallelizationIfLocal(
-			ctx, &planner.curPlan.planComponents, &planner.parallelizationChecker,
+			ctx, &planner.curPlan.planComponents,
 		)
 		if prohibitParallelization || !hasScanNodeToParallelize {
 			return planCtx

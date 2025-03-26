@@ -1995,6 +1995,17 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 		{
+			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs: []*aggregateFuncHolder{
+					{filterRenderIdx: 0},
+					{filterRenderIdx: tree.NoColumnIdx},
+				}},
+			}},
+			// Filtering aggregation is not natively supported.
+			prohibitParallelization: true,
+		},
+		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
 				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
 				indexJoinPlanningInfo: indexJoinPlanningInfo{
@@ -2022,6 +2033,16 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
 				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
 				render:              []tree.TypedExpr{&tree.IsNullExpr{}},
+			}}},
+			// Not a simple projection (some expressions might be handled by
+			// wrapping a row-execution processor, so we choose to be safe and
+			// prohibit the parallelization for all non-IndexedVar expressions).
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}, &tree.IsNullExpr{}},
 			}}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
@@ -2064,8 +2085,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 	} {
-		var c localScanParallelizationChecker
-		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan, &c)
+		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
 		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
 	}
