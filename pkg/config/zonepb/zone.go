@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -90,6 +91,16 @@ var MultiRegionZoneConfigFields = []tree.Name{
 	"voter_constraints",
 	"lease_preferences",
 }
+
+var MaxReplicasPerRegion = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.zone_configs.max_replicas_per_region",
+	"for secondary tenants, the maximum number of replicas that can be "+
+		"configured per region (0 for unlimited); this is only enforced on "+
+		"new zone config modifications",
+	0,
+	settings.WithVisibility(settings.Reserved),
+	settings.NonNegativeInt)
 
 // MultiRegionZoneConfigFieldsSet contain the items in
 // MultiRegionZoneConfigFields but in a set form for fast lookup.
