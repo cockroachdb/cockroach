@@ -114,7 +114,7 @@ func init() {
 			addRules(el, scpb.ToPublic)
 		}
 		if opgen.HasTransient(el) {
-			addRules(el, scpb.Transient)
+			addRules(el, scpb.TransientAbsent)
 		}
 		if opgen.HasTransientPublic(el) {
 			addRules(el, scpb.TransientPublic)
