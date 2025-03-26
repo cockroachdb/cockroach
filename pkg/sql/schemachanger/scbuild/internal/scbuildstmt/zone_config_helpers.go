@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -601,6 +602,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := validateNewUniqueConstraintsForSecondaryTenants(&settings.SV, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
@@ -711,6 +715,40 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 		}
 	}
 	return retConstraints
+}
+
+// validateNewUniqueConstraintsForSecondaryTenants validates that none of our
+// zonepb.ConstraintsConjunction violate the given max replicas per region
+// set by sql.zone_configs.max_replicas_per_region.
+func validateNewUniqueConstraintsForSecondaryTenants(
+	sv *settings.Values, newZone *zonepb.ZoneConfig,
+) error {
+	maxReplicas := zonepb.MaxReplicas.Get(sv)
+	for _, constraints := range newZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			if maxReplicas != 0 && int64(constraints.NumReplicas) > maxReplicas {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"constraint for %q exceeds the configured maximum of %d replicas",
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+		}
+	}
+	for _, constraints := range newZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			if maxReplicas != 0 && int64(constraints.NumReplicas) > maxReplicas {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"voter constraint for %q exceeds the configured maximum of %d replicas",
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+		}
+	}
+	return nil
 }
 
 // partitionKey is used to group a partition's name and its index ID for
