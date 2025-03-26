@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -356,12 +357,12 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 		unaffectedRead  int
 		unaffectedWrite int
 	}
-	getRWBytes := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode int) (rwBytes, error) {
-		stalledReadBytes, stalledWriteBytes, err := f.GetReadWriteBytes(ctx, l, c.Node(stalledNode).InstallNodes())
+	getRWBytes := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
+		stalledReadBytes, stalledWriteBytes, err := f.GetReadWriteBytes(ctx, l, stalledNode.InstallNodes())
 		if err != nil {
 			return rwBytes{}, err
 		}
-		unaffectedNodeReadBytes, unaffectedNodeWriteBytes, err := f.GetReadWriteBytes(ctx, l, c.Node(unaffectedNode).InstallNodes())
+		unaffectedNodeReadBytes, unaffectedNodeWriteBytes, err := f.GetReadWriteBytes(ctx, l, unaffectedNode.InstallNodes())
 		if err != nil {
 			return rwBytes{}, err
 		}
@@ -376,7 +377,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 
 	// Returns the read and write bytes read/written to disk over the last 30 seconds of the
 	// stalled node and a control unaffected node.
-	getRWBytesOverTime := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode int) (rwBytes, error) {
+	getRWBytesOverTime := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
 		beforeRWBytes, err := getRWBytes(ctx, l, c, f, stalledNode, unaffectedNode)
 		if err != nil {
 			return rwBytes{}, err
@@ -433,7 +434,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 		// Same assertions as above but for reads instead. Note that if
 		// writes are stalled, the node should be dead which means no
 		// reads as well.
-		if readsStalled {
+		if readsStalled || writesStalled {
 			if bytes.stalledRead > threshold {
 				return errors.Errorf("expected stalled node to have read no bytes from disk, but read %d", bytes.stalledRead)
 			}
@@ -455,14 +456,18 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 				continue
 			}
 
-			nodes := c.CRDBNodes()
-			rand.Shuffle(len(nodes), func(i, j int) {
-				nodes[i], nodes[j] = nodes[j], nodes[i]
-			})
-			stalledNode := nodes[0]
-			unaffectedNode := nodes[1]
+			rng, _ := randutil.NewPseudoRand()
+			// SeededRandGroups only returns an error if the requested size is larger than the
+			// number of nodes, so we can safely ignore the error.
+			groups, _ := c.CRDBNodes().SeededRandGroups(rng, 2 /* numGroups */)
+			stalledNodeGroup := groups[0]
+			unaffectedNodeGroup := groups[1]
+			// To simplify the smoke test, only run validation on these two
+			// randomly chosen nodes.
+			stalledNode := stalledNodeGroup.SeededRandNode(rng)
+			unaffectedNode := unaffectedNodeGroup.SeededRandNode(rng)
 
-			testName := fmt.Sprintf("%s: WritesStalled=%t ReadsStalled=%t", failures.CgroupsDiskStallName, stallWrites, stallReads)
+			testName := fmt.Sprintf("%s/WritesStalled=%t/ReadsStalled=%t", failures.CgroupsDiskStallName, stallWrites, stallReads)
 			tests = append(tests, failureSmokeTest{
 				testName:    testName,
 				failureName: failures.CgroupsDiskStallName,
@@ -470,9 +475,10 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 					StallWrites:  stallWrites,
 					StallReads:   stallReads,
 					RestartNodes: true,
-					Nodes:        install.Nodes{install.Node(stalledNode)},
+					Nodes:        stalledNodeGroup.InstallNodes(),
 				},
 				validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+					l.Printf("Stalled nodes: %d, Unaffected nodes: %d, Stalled validation node: %d, Unaffected validation node: %d", stalledNodeGroup, unaffectedNodeGroup, stalledNode, unaffectedNode)
 					res, err := getRWBytesOverTime(ctx, l, c, f.(*failures.CGroupDiskStaller), stalledNode, unaffectedNode)
 					if err != nil {
 						return err
@@ -486,7 +492,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 					// TODO(darryl): The failure mode itself should do this in WaitForFailureToRestore.
 					// It should also wait for replicas to rebalance, although this test is not large
 					// enough for that to matter.
-					db := c.Conn(ctx, l, stalledNode)
+					db := c.Conn(ctx, l, stalledNode[0])
 					defer db.Close()
 					if err := roachtestutil.WaitForReplication(ctx, l, db, 3 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor); err != nil {
 						return err
@@ -521,17 +527,20 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 }
 
 var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
-	nodes := c.CRDBNodes()
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
-	stalledNode := nodes[0]
-	unaffectedNode := nodes[1]
+	rng, _ := randutil.NewPseudoRand()
+	// SeededRandGroups only returns an error if the requested size is larger than the
+	// number of nodes, so we can safely ignore the error.
+	groups, _ := c.CRDBNodes().SeededRandGroups(rng, 2 /* numGroups */)
+	stalledNodeGroup := groups[0]
+	unaffectedNodeGroup := groups[1]
+	// These are the nodes that we will run validation on.
+	stalledNode := stalledNodeGroup.SeededRandNode(rng)
+	unaffectedNode := unaffectedNodeGroup.SeededRandNode(rng)
 
-	ableToCreateFile := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, node int) bool {
+	ableToCreateFile := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption) bool {
 		timeoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
-		err := c.RunE(timeoutCtx, option.WithNodes(c.Node(node)), "touch /mnt/data1/test.txt")
+		err := c.RunE(timeoutCtx, option.WithNodes(node), "touch /mnt/data1/test.txt")
 		if err != nil {
 			l.Printf("failed to create file on node %d: %v", node, err)
 			return false
@@ -543,10 +552,11 @@ var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 		testName:    failures.DmsetupDiskStallName,
 		failureName: failures.DmsetupDiskStallName,
 		args: failures.DiskStallArgs{
-			Nodes:        install.Nodes{install.Node(stalledNode)},
+			Nodes:        stalledNodeGroup.InstallNodes(),
 			RestartNodes: true,
 		},
 		validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+			l.Printf("Stalled nodes: %d, Unaffected nodes: %d, Stalled validation node: %d, Unaffected validation node: %d", stalledNodeGroup, unaffectedNodeGroup, stalledNode, unaffectedNode)
 			if ableToCreateFile(ctx, l, c, stalledNode) {
 				return errors.Errorf("expected node %d to be stalled and creating a file to hang", stalledNode)
 			}
