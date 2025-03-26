@@ -23,7 +23,11 @@ export const selectTimezoneSetting = createSelector(
     if (!settings) {
       return CoordinatedUniversalTime;
     }
-    return settings["ui.display_timezone"]?.value || CoordinatedUniversalTime;
+    return (
+      settings["ui.default_timezone"]?.value ||
+      settings["ui.display_timezone"]?.value ||
+      CoordinatedUniversalTime
+    );
   },
 );
 

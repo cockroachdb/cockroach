@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -40,19 +41,39 @@ const (
 		"connect-src 'self' https://register.cockroachdb.com;"
 )
 
-var _ = settings.RegisterEnumSetting(
+var DisplayTimezoneEnums = map[int64]string{
+	utc:            "Etc/UTC",
+	americaNewYork: "America/New_York",
+}
+
+// TODO (kyle.wong): This setting is deprecated and should be removed
+// in a future version, probably v25.4.
+var DisplayTimezone = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"ui.display_timezone",
-	"the timezone used to format timestamps in the ui",
+	"the timezone used to format timestamps in the ui. This setting is deprecated"+
+		"and will be removed in a future version. Use the 'ui.default_timezone' setting "+
+		"instead. 'ui.default_timezone' takes precedence over this setting.",
 	"Etc/UTC",
-	map[int64]string{
-		utc:            "Etc/UTC",
-		americaNewYork: "America/New_York",
-		// Adding new timezones?
-		// Add them to the allowlist of included timezones!
-		// See pkg/ui/workspaces/cluster-ui/webpack.config.js
-		// and pkg/ui/workspaces/db-console/webpack.config.js.
-	},
+	DisplayTimezoneEnums,
+	settings.WithPublic)
+
+// DefaultTimezone is the timezone used to format timestamps in the UI. Any valid
+// timezone is supported. For the sake of backwards compatability, the default of
+// this setting is empty, which ultimately allows for the frontend to choose the
+// final default value if none is set in the cluster.
+var DefaultTimezone = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"ui.default_timezone",
+	"the default timezone used to format timestamps in the ui",
+	"",
+	settings.WithValidateString(func(sv *settings.Values, v string) error {
+		_, err := timeutil.LoadLocation(v)
+		if err != nil {
+			return errors.Wrap(err, "invalid timezone")
+		}
+		return nil
+	}),
 	settings.WithPublic)
 
 // TODO(davidh): This setting can be removed after 24.3 since it only
