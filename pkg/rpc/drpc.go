@@ -90,12 +90,16 @@ func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
 	}, nil
 }
 
-func dialDRPC(rpcCtx *Context) func(ctx context.Context, target string) (drpcpool.Conn, error) {
+func dialDRPC(
+	rpcCtx *Context, pm *peerMetrics,
+) func(ctx context.Context, target string) (drpcpool.Conn, error) {
 	return func(ctx context.Context, target string) (drpcpool.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
 		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{})
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
+
+			pm.ConnectionDrpcNew.Inc(1)
 
 			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
 			if err != nil {
@@ -149,6 +153,7 @@ type closeEntirePoolConn struct {
 }
 
 func (c *closeEntirePoolConn) Close() error {
+	// maybe set the counter to zero here. Make it Gauge.
 	_ = c.Conn.Close()
 	return c.pool.Close()
 }

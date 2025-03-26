@@ -54,6 +54,20 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaDrpcDialNewConnection = metric.Metadata{
+		Name:        "rpc.drpc.new_connections",
+		Help:        "Number of new connections created by DRPC",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDrpcDialCloseConnection = metric.Metadata{
+		Name:        "rpc.drpc.close_connections",
+		Help:        "Number of close connections created by DRPC",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaConnectionHealthyNanos = metric.Metadata{
 		Name: "rpc.connection.healthy_nanos",
 		Help: `Gauge of nanoseconds of healthy connection time
@@ -193,6 +207,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionUnhealthyFor:        aggmetric.NewGauge(metaConnectionUnhealthyNanos, childLabels...),
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
 		ConnectionFailures:            aggmetric.NewCounter(metaConnectionFailures, childLabels...),
+		ConnectionDrpcNew:             aggmetric.NewCounter(metaDrpcDialNewConnection, childLabels...),
 		ConnectionConnected:           aggmetric.NewGauge(metaConnectionConnected, localityLabels...),
 		ConnectionBytesSent:           aggmetric.NewCounter(metaNetworkBytesEgress, localityLabels...),
 		ConnectionBytesRecv:           aggmetric.NewCounter(metaNetworkBytesIngress, localityLabels...),
@@ -237,6 +252,7 @@ type Metrics struct {
 	ConnectionUnhealthyFor        *aggmetric.AggGauge
 	ConnectionHeartbeats          *aggmetric.AggCounter
 	ConnectionFailures            *aggmetric.AggCounter
+	ConnectionDrpcNew             *aggmetric.AggCounter
 	ConnectionConnected           *aggmetric.AggGauge
 	ConnectionBytesSent           *aggmetric.AggCounter
 	ConnectionBytesRecv           *aggmetric.AggCounter
@@ -300,6 +316,8 @@ type peerMetrics struct {
 	ConnectionHeartbeats *aggmetric.Counter
 	// Updated before each loop around in breakerProbe.run.
 	ConnectionFailures *aggmetric.Counter
+
+	ConnectionDrpcNew *aggmetric.Counter
 }
 
 type localityMetrics struct {
@@ -323,6 +341,7 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 			ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
 			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
+			ConnectionDrpcNew:      m.ConnectionDrpcNew.AddChild(labelVals...),
 			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
 			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 			// and operates on a ~60s decay rate.

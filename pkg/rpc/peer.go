@@ -247,7 +247,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
 		},
-		dialDRPC:          dialDRPC(rpcCtx),
+		dialDRPC:          dialDRPC(rpcCtx, &pm),
 		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
 		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
 	}
