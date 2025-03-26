@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -600,7 +601,11 @@ func validateZoneLocalitiesForSecondaryTenants(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 ) error {
-	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	toValidate, err := validateAndAccumulateNewUniqueConstraintsForSecondaryTenants(
+		&settings.SV, currentZone, newZone)
+	if err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
@@ -711,6 +716,79 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 		}
 	}
 	return retConstraints
+}
+
+// validateAndAccumulateNewUniqueConstraintsForSecondaryTenants returns a list
+// of unique constraints in the given newZone config proto that are not in the
+// currentZone. During the accumulation, we also validate that none of our
+// zonepb.ConstraintsConjunction violate `sql.zone.max_replicas`.
+func validateAndAccumulateNewUniqueConstraintsForSecondaryTenants(
+	sv *settings.Values, currentZone, newZone *zonepb.ZoneConfig,
+) ([]zonepb.Constraint, error) {
+	seenConstraints := make(map[zonepb.Constraint]struct{})
+	retConstraints := make([]zonepb.Constraint, 0)
+	addToValidate := func(c zonepb.Constraint) {
+		if _, ok := seenConstraints[c]; ok {
+			// Already in the list or in the current zone config, nothing to do.
+			return
+		}
+		retConstraints = append(retConstraints, c)
+		seenConstraints[c] = struct{}{}
+	}
+	// First scan all the current zone config constraints.
+	for _, constraints := range currentZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+	for _, constraints := range currentZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+	for _, leasePreferences := range currentZone.LeasePreferences {
+		for _, constraint := range leasePreferences.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+
+	maxReplicas := zonepb.MaxReplicas.Get(sv)
+	// Then scan all the new zone config constraints, adding the ones that
+	// were not seen already.
+	for _, constraints := range newZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			if maxReplicas != 0 && int64(constraints.NumReplicas) > maxReplicas {
+				return nil, pgerror.Newf(
+					pgcode.CheckViolation,
+					"constraining %d replicas for region %q not allowed; %d is the max number",
+					constraints.NumReplicas,
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+			addToValidate(constraint)
+		}
+	}
+	for _, constraints := range newZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			if maxReplicas != 0 && int64(constraints.NumReplicas) > maxReplicas {
+				return nil, pgerror.Newf(
+					pgcode.CheckViolation,
+					"constraining %d replicas for region %q not allowed; %d is the max number",
+					constraints.NumReplicas,
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+			addToValidate(constraint)
+		}
+	}
+	for _, leasePreferences := range newZone.LeasePreferences {
+		for _, constraint := range leasePreferences.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	return retConstraints, nil
 }
 
 // partitionKey is used to group a partition's name and its index ID for
