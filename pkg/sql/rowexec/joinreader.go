@@ -514,7 +514,8 @@ func newJoinReader(
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
-			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.Mon, false, /* longLiving */
+			mon.MakeName("joinreader-streamer").Unlimited(), math.MaxInt64, flowCtx.Mon,
+			false, /* longLiving */
 		)
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
@@ -548,7 +549,7 @@ func newJoinReader(
 		if jr.streamerInfo.maintainOrdering {
 			diskBufferMemAcc := jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
-				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+				ctx, jr.FlowCtx.DiskMonitor, mon.MakeName("streamer-disk"),
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 				jr.FlowCtx.Cfg.TempStorage, diskBufferMemAcc, jr.streamerInfo.diskMonitor, spec.ReverseScans,
@@ -729,13 +730,14 @@ func (jr *joinReader) initJoinReaderStrategy(
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
-	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, "joinreader-limited")
+	mn := mon.MakeName("joinreader")
+	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, mn.Limited())
 	// We want to make sure that if the disk-backed container is spilled to
 	// disk, it releases all of the memory reservations, so we make the
 	// corresponding memory monitor not hold on to any bytes.
 	jr.limitedMemMonitor.RelinquishAllOnReleaseBytes()
-	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "joinreader-unlimited")
-	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
+	jr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
+	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,

@@ -440,7 +440,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		Settings: st,
 	})
 
@@ -551,7 +551,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	updater := st.MakeUpdater()
 	monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		Settings: st,
 	})
 
@@ -2043,7 +2043,7 @@ func BenchmarkSqlStatsDrain(b *testing.B) {
 func createNewSqlStats() *sslocal.SQLStats {
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		Settings: st,
 	})
 	sqlstats.MaxMemSQLStatsStmtFingerprints.Override(context.Background(), &st.SV, 100000)

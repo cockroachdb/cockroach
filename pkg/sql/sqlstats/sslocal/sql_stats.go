@@ -58,7 +58,7 @@ func newSQLStats(
 	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:       mon.MakeMonitorName("SQLStats"),
+		Name:       mon.MakeName("SQLStats"),
 		CurCount:   curMemBytesCount,
 		MaxHist:    maxMemBytesHist,
 		Settings:   st,

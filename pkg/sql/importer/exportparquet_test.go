@@ -392,7 +392,7 @@ func TestMemoryMonitor(t *testing.T) {
 	// Arrange for a small memory budget.
 	budget := int64(4096)
 	mm := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("test-mm"),
+		Name:      mon.MakeName("test-mm"),
 		Limit:     budget,
 		Increment: 128, /* small allocation increment */
 		Settings:  cluster.MakeTestingClusterSettings(),

@@ -5509,8 +5509,10 @@ func newTestLearnerRaft(
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(id pb.PeerID, election, heartbeat int64, storage Storage) *RawNode {
-	cfg := newTestConfig(id, election, heartbeat, storage)
+func newTestRawNode(
+	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
+) *RawNode {
+	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	rn, err := NewRawNode(cfg)
 	if err != nil {
 		panic(err)

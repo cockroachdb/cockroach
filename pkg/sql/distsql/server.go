@@ -77,7 +77,7 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: mon.MakeMonitorName("distsql"),
+			Name: mon.MakeName("distsql"),
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
@@ -239,13 +239,13 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorNameWithID("flow ", req.Flow.FlowID.Short()),
+		Name:     mon.MakeName("flow").WithUUID(req.Flow.FlowID.Short()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
-	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
+	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, mon.MakeName("flow-disk-monitor"))
 
 	makeLeaf := func(ctx context.Context) (*kv.Txn, error) {
 		tis := req.LeafTxnInputState

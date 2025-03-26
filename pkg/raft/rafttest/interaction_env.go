@@ -41,7 +41,18 @@ type Node struct {
 	*raft.RawNode
 	Storage
 
-	Config     *raft.Config
+	Config *raft.Config
+	// asyncWrites configures this node to use async storage writes on Ready
+	// handling. All datadriven tests now use the async storage API, but most were
+	// written with the sync storage API in mind, and for those we still have
+	// asyncWrites == false.
+	//
+	// Once the legacy API is fully removed, we could convert all the tests to
+	// asyncWrites == true, though they would become verbose. For simple tests
+	// that don't need to create some kind of race between RawNode operation and
+	// storage writes, using asyncWrites == false is unnecessary.
+	asyncWrites bool
+
 	AppendWork []pb.Message // []MsgStorageAppend
 	ApplyWork  []pb.Message // []MsgStorageApply
 	History    []pb.Snapshot
@@ -105,6 +116,9 @@ func raftConfigStub() raft.Config {
 		HeartbeatTick:      1,
 		MaxSizePerMsg:      math.MaxUint64,
 		MaxInflightMsgs:    math.MaxInt32,
+		TestingKnobs: &raft.TestingKnobs{
+			EnableApplyUnstableEntries: true,
+		},
 	}
 }
 

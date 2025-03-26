@@ -598,7 +598,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Create a monitor to be used to track memory usage in a Collection.
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test_monitor"),
+		Name:     mon.MakeName("test_monitor"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 
@@ -1239,7 +1239,7 @@ func TestDescriptorErrorWrap(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test_monitor"),
+		Name:     mon.MakeName("test_monitor"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1))

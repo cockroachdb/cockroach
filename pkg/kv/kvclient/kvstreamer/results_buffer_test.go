@@ -44,7 +44,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	require.NoError(t, err)
 	defer tempEngine.Close()
 	memMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-mem"),
+		Name:     mon.MakeName("test-mem"),
 		Res:      mon.MemoryResource,
 		Settings: st,
 	})
@@ -52,7 +52,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	defer memMonitor.Stop(ctx)
 	memAcc := memMonitor.MakeBoundAccount()
 	diskMonitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-disk"),
+		Name:     mon.MakeName("test-disk"),
 		Res:      mon.DiskResource,
 		Settings: st,
 	})

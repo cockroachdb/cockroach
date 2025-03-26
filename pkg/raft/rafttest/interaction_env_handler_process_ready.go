@@ -48,22 +48,33 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	// TODO(tbg): Allow simulating crashes here.
 	n := &env.Nodes[idx]
 	rd := n.Ready()
-	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
-	if !n.Config.AsyncStorageWrites {
+	if !n.asyncWrites {
+		send, _ := raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
+		// When imitating a synchronous writes API, print only the outgoing
+		// messages. The self-addressed responses conditional to storage syncs are
+		// skipped, for compatibility with existing tests.
+		// TODO(pav-kv): print all messages.
+		fork := rd
+		fork.Messages, _ = raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)
+		env.Output.WriteString(raft.DescribeReady(fork, defaultEntryFormatter))
+
+		// TODO(pav-kv): use the same code paths as the asynchronous writes.
 		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
 			return err
-		}
-		if err := processApply(n, rd.CommittedEntries); err != nil {
+		} else if err := processApply(n, rd.CommittedEntries); err != nil {
 			return err
 		}
+
+		env.Messages = append(env.Messages, send...)
+		n.AdvanceHack(rd)
+		return nil
 	}
+
+	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
 	for _, m := range rd.Messages {
 		if raft.IsLocalMsgTarget(m.To) {
-			if !n.Config.AsyncStorageWrites {
-				panic("unexpected local msg target")
-			}
 			switch m.Type {
 			case raftpb.MsgStorageAppend:
 				n.AppendWork = append(n.AppendWork, m)
@@ -77,8 +88,5 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		}
 	}
 
-	if !n.Config.AsyncStorageWrites {
-		n.Advance(rd)
-	}
 	return nil
 }

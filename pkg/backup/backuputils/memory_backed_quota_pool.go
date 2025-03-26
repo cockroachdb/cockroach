@@ -40,7 +40,7 @@ func NewMemoryBackedQuotaPool(
 	}
 
 	if m != nil {
-		q.mon = mon.NewMonitorInheritWithLimit(name, limit, m, false /* longLiving */)
+		q.mon = mon.NewMonitorInheritWithLimit(mon.MakeName(name), limit, m, false /* longLiving */)
 		q.mon.StartNoReserved(ctx, m)
 		mem := q.mon.MakeBoundAccount()
 		q.mem = &mem

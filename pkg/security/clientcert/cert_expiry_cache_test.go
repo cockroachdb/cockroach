@@ -276,7 +276,7 @@ func newCache(
 	defer stopper.Stop(ctx)
 	clientcert.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 	parentMon := mon.NewUnlimitedMonitor(ctx, mon.Options{
-		Name:     mon.MakeMonitorName("test"),
+		Name:     mon.MakeName("test"),
 		Settings: st,
 	})
 	cache := clientcert.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)

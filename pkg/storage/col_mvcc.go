@@ -440,7 +440,7 @@ func mvccScanToCols(
 		// If we don't have the monitor, then we create a "fake" one that is not
 		// connected to the memory accounting system.
 		monitor = mon.NewMonitor(mon.Options{
-			Name:     mon.MakeMonitorName("mvcc-scan-to-cols"),
+			Name:     mon.MakeName("mvcc-scan-to-cols"),
 			Settings: st,
 		})
 		monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
