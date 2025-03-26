@@ -286,10 +286,6 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
 func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
-	if l.hasNextOrInProgressSnapshot() {
-		// See comment in hasNextCommittedEnts.
-		return nil
-	}
 	lo, hi := l.applying, l.maxAppliableIndex(allowUnstable) // (lo, hi]
 	if lo >= hi {
 		// Nothing to apply.
@@ -305,26 +301,35 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 // hasNextCommittedEnts returns if there is any available entries for execution.
 // This is a fast check without heavy raftLog.slice() in nextCommittedEnts().
 func (l *raftLog) hasNextCommittedEnts(allowUnstable bool) bool {
-	if l.hasNextOrInProgressSnapshot() {
-		// If we have a snapshot to apply, don't also return any committed
-		// entries. Doing so raises questions about what should be applied
-		// first.
-		return false
-	}
-	lo, hi := l.applying+1, l.maxAppliableIndex(allowUnstable)+1 // [lo, hi)
-	return lo < hi
+	return l.applying < l.maxAppliableIndex(allowUnstable)
 }
 
 // maxAppliableIndex returns the maximum committed index that can be applied.
 // If allowUnstable is true, committed entries from the unstable log can be
 // applied; otherwise, only entries known to reside locally on stable storage
 // can be applied.
+//
+// If there is a pending snapshot, the application is paused, and
+// maxAppliableIndex returns l.applying.
 func (l *raftLog) maxAppliableIndex(allowUnstable bool) uint64 {
-	hi := l.committed
-	if !allowUnstable {
-		hi = min(hi, l.unstable.prev.index)
+	if l.hasNextOrInProgressSnapshot() {
+		// If we have a snapshot to apply, don't return any committed entries. Doing
+		// so raises questions about what should be applied first.
+		//
+		// TODO(pav-kv): the answer to the questions is - the snapshot should be
+		// applied first, and then the entries. The code must make sure that the
+		// overall sequence of "apply" batches is in the increasing order of the
+		// commit index.
+		return l.applying
 	}
-	return hi
+	if allowUnstable {
+		return l.committed
+	}
+	// NB: assuming allowUnstable has always been false, there are no in-flight
+	// entries from the unstable part, so l.applying <= prev.index. Thus, the
+	// returned index is >= l.applying. This is a nice property because
+	// (l.applying, returnedIndex] is always a valid interval.
+	return min(l.committed, l.unstable.prev.index)
 }
 
 // nextUnstableSnapshot returns the snapshot, if present, that is available to
