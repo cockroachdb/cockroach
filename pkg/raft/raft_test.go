@@ -2592,10 +2592,15 @@ func TestLeaderAppResp(t *testing.T) {
 		// Follower 2 responds to leader, indicating log index 2 is replicated.
 		// Leader tries to commit, but commit index doesn't advance since the index
 		// is from a previous term.
-		// We hit maybeCommit() and do term check comparison by using the invariant
-		// raft.idxPreLeading.
+		// We hit maybeCommit() and do term check comparison by using the
+		// last "term flip" entryID stored in the termCache.
 		// There is no storage access for term in the maybeCommit() code path
 		{2, false, 2, 7, 1, 2, 0, 2},
+
+		// Follower 2 responds to leader, indicating log index 3 is replicated.
+		// Leader tries to commit, but commit index doesn't advance since the index
+		// is from a previous term. Same as above.
+		{3, false, 3, 7, 1, 3, 0, 1},
 
 		// NB: For the following tests, we are skipping the MsgAppResp for the first
 		// 3 entries, by directly processing MsgAppResp for later entries.
@@ -2604,14 +2609,17 @@ func TestLeaderAppResp(t *testing.T) {
 		// to StateReplicate and as many entries as possible are sent to it (5, 6).
 		// Correspondingly the Next is then 7 (entry 7 does not exist, indicating
 		// the follower will be up to date should it process the emitted MsgApp).
-		// accept resp; leader commits; respond with commit index
+		// accept resp; leader commits; respond with commit index.
+		// maybeCommit() is successful.
 		{4, false, 4, 7, 1, 4, 4, 1},
 
 		// Follower 2 says term2, index5 is already replicated.
 		// The leader responds with the updated commit index to follower 2.
+		// maybeCommit() is successful.
 		{5, false, 5, 7, 1, 5, 5, 1},
 		// Follower 2 says term2, index6 is already replicated.
 		// The leader responds with the updated commit index to follower 2.
+		// maybeCommit() is successful.
 		{6, false, 6, 7, 1, 6, 6, 1},
 	} {
 		t.Run("", func(t *testing.T) {
