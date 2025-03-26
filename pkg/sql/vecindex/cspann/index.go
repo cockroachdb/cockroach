@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -336,9 +335,8 @@ func (vi *Index) Close() {
 // NOTE: This can result in two vectors with the same primary key being inserted
 // into the index. To minimize this possibility, callers should call Delete
 // before Insert when a vector is updated. Even then, it's not guaranteed that
-// Delete will find the old vector. Vector index methods handle this rare case
-// by checking for duplicates when returning search results. For details, see
-// Index.pruneDuplicates.
+// Delete will find the old vector. The search set handles this rare case by
+// filtering out results with duplicate key bytes.
 func (vi *Index) Insert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) error {
@@ -456,7 +454,7 @@ func (vi *Index) SearchForDelete(
 		if err != nil {
 			return nil, err
 		}
-		results := idxCtx.tempSearchSet.PopUnsortedResults()
+		results := idxCtx.tempSearchSet.PopResults()
 		if len(results) == 0 {
 			// Retry search with significantly higher beam size.
 			baseBeamSize *= 8
@@ -564,7 +562,7 @@ func (vi *Index) searchForInsertHelper(
 	if err != nil {
 		return nil, err
 	}
-	results := idxCtx.tempSearchSet.PopUnsortedResults()
+	results := idxCtx.tempSearchSet.PopResults()
 	if len(results) != 1 {
 		return nil, errors.AssertionFailedf(
 			"SearchForInsert should return exactly one result, got %d", len(results))
@@ -658,7 +656,7 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 	}
 
 	for {
-		results := subSearchSet.PopUnsortedResults()
+		results := subSearchSet.PopResults()
 		if len(results) == 0 && searchLevel > LeafLevel {
 			// This should never happen, as it means that interior partition(s)
 			// have no children. The vector deletion logic should prevent that.
@@ -668,10 +666,6 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 
 		var zscore float64
 		if searchLevel > LeafLevel {
-			// Results need to be sorted in order to calculate their "spread". This
-			// also sorts them for determining which partitions to search next.
-			results.Sort()
-
 			// Compute the Z-score of the candidate list if there are enough
 			// samples. Otherwise, use the default Z-score of 0.
 			if len(results) >= vi.options.QualitySamples {
@@ -695,7 +689,6 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 			// Aggregate all stats from searching lower levels of the tree.
 			searchSet.Stats.Add(&subSearchSet.Stats)
 
-			results = vi.pruneDuplicates(results)
 			if !idxCtx.options.SkipRerank || idxCtx.options.ReturnVectors {
 				// Re-rank search results with full vectors.
 				searchSet.Stats.FullVectorCount += len(results)
@@ -803,7 +796,7 @@ func (vi *Index) searchChildPartitions(
 		// If one of the searched partitions has only 1 vector remaining, do not
 		// return that vector when "ignoreLonelyVector" is true.
 		if idxCtx.ignoreLonelyVector && idxCtx.level == level && count == 1 {
-			searchSet.RemoveResults(parentResults[i].ChildKey.PartitionKey)
+			searchSet.RemoveByParent(parentResults[i].ChildKey.PartitionKey)
 		}
 
 		// Enqueue background fixup if a split or merge operation needs to be
@@ -823,38 +816,6 @@ func (vi *Index) searchChildPartitions(
 	}
 
 	return level, nil
-}
-
-// pruneDuplicates removes candidates with duplicate child keys. This is rare,
-// but it can happen when a vector updated in the primary index cannot be
-// located in the secondary index.
-// NOTE: This logic will reorder the candidates slice.
-// NOTE: This logic can remove the "wrong" duplicate, with a quantized distance
-// that doesn't correspond to the true distance. However, this has no impact as
-// long as we rerank candidates using the original full-size vectors. Even if
-// we're not reranking, the impact of this should be minimal, since duplicates
-// are so rare and there's already quite a bit of inaccuracy when not reranking.
-func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
-	if len(candidates) <= 1 {
-		// No possibility of duplicates.
-		return candidates
-	}
-
-	if candidates[0].ChildKey.KeyBytes == nil {
-		// Only leaf partitions can have duplicates.
-		return candidates
-	}
-
-	// TODO DURING REVIEW: this is O(n * log(n)) instead of O(n) like the previous
-	// code, but is probably faster in practice for small values of n because it
-	// is allocation free. It is also cleaner and easier to understand. Choose an
-	// approach.
-	slices.SortFunc(candidates, func(a, b SearchResult) int {
-		return bytes.Compare(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
-	return slices.CompactFunc(candidates, func(a, b SearchResult) bool {
-		return bytes.Equal(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
 }
 
 // rerankSearchResults updates the given set of candidates with their exact

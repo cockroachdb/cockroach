@@ -119,9 +119,9 @@ func TestSearcher(t *testing.T) {
 	searcher.Init(idx, tx)
 	require.NoError(t, searcher.Search(ctx, prefix, vector.T{1, 1}, 2))
 	res := searcher.NextResult()
-	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
-	res = searcher.NextResult()
 	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
+	res = searcher.NextResult()
+	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search for a vector to delete.
