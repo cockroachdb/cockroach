@@ -895,6 +895,8 @@ func createCompactionManifest(
 
 // getBackupChain fetches the current shortest chain of backups (and its
 // associated info) required to restore the to the end time specified in the details.
+// It assumes the encryption options stored in the job details contain the raw
+// password/KMS URIs.
 func getBackupChain(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,

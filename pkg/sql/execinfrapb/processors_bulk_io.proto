@@ -569,3 +569,15 @@ message LogicalReplicationOfflineScanSpec {
     optional string metrics_label = 8 [(gogoproto.nullable) = false];
 
 }
+
+message CompactBackupsSpec {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  repeated string collectionURI = 2 [(gogoproto.nullable) = false];
+  repeated string incrementalStorage = 3 [(gogoproto.nullable) = false];
+  optional string subdir = 4 [(gogoproto.nullable) = false];
+  optional jobs.jobspb.BackupEncryptionOptions encryption = 5;
+  optional util.hlc.Timestamp startTime = 6 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp endTime = 7 [(gogoproto.nullable) = false];
+  optional ElidePrefix elide_mode = 8 [(gogoproto.nullable) = false];
+  repeated roachpb.Span spans = 9 [(gogoproto.nullable) = false];
+}
