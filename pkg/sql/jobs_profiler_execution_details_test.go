@@ -378,12 +378,12 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
 
 		patterns := []string{
-			"distsql\\..*\\.html",
+			".*/distsql-plan.html",
 		}
 		if !s.DeploymentMode().IsExternal() {
-			patterns = append(patterns, "goroutines\\..*\\.txt")
+			patterns = append(patterns, ".*/job-goroutines.txt")
 		}
-		patterns = append(patterns, "trace\\..*\\.zip")
+		patterns = append(patterns, ".*/trace.zip")
 
 		require.Len(t, files, len(patterns))
 		for i, pattern := range patterns {
@@ -426,17 +426,19 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 			return nil
 		})
 		patterns = []string{
-			"[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
-			"[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
-			"[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
-			"[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
-			"distsql\\..*\\.html",
-			"distsql\\..*\\.html",
+			".*/distsql-plan.html",
+			".*/distsql-plan.html",
 		}
 		if !s.DeploymentMode().IsExternal() {
-			patterns = append(patterns, "goroutines\\..*\\.txt", "goroutines\\..*\\.txt")
+			patterns = append(patterns, ".*/job-goroutines.txt", ".*/job-goroutines.txt")
 		}
-		patterns = append(patterns, "trace\\..*\\.zip", "trace\\..*\\.zip")
+		patterns = append(patterns,
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
+		)
+		patterns = append(patterns, ".*/trace.zip", ".*/trace.zip")
 		for i, pattern := range patterns {
 			require.Regexp(t, pattern, files[i])
 		}
@@ -465,8 +467,9 @@ func listExecutionDetails(
 
 	edResp := serverpb.ListJobProfilerExecutionDetailsResponse{}
 	require.NoError(t, protoutil.Unmarshal(body, &edResp))
+	// Sort the responses with the variable date/time digits in the prefix removed.
 	sort.Slice(edResp.Files, func(i, j int) bool {
-		return edResp.Files[i] < edResp.Files[j]
+		return strings.TrimLeft(edResp.Files[i], "0123456789_.") < strings.TrimLeft(edResp.Files[j], "0123456789_.")
 	})
 	return edResp.Files
 }

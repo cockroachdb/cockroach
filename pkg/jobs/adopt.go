@@ -76,7 +76,7 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	}
 
 	resumerTraceFilename := fmt.Sprintf("%s/resumer-trace/%s",
-		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
+		timeutil.Now().Format("20060102_150405.00"), r.ID().String())
 	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
 		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
