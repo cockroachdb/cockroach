@@ -228,20 +228,31 @@ func prepareCDCPlan(
 	// CDCExpressionPlan) with a cdcValuesNode that reads from the source, which
 	// includes specified column IDs.
 	replaced := false
-	v := makePlanVisitor(ctx, planObserver{
-		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
-			scan, ok := plan.(*scanNode)
-			if !ok {
-				return nil, nil
-			}
+	var replaceScanNode func(plan planNode) (planNode, error)
+	replaceScanNode = func(plan planNode) (planNode, error) {
+		if scan, ok := plan.(*scanNode); ok {
 			replaced = true
 			defer scan.Close(ctx)
 			return newCDCValuesNode(scan, source, sourceCols)
-		},
-	})
-	plan = v.visit(plan)
-	if v.err != nil {
-		return nil, v.err
+		}
+		for i, n := 0, plan.InputCount(); i < n; i++ {
+			input, err := plan.Input(i)
+			if err != nil {
+				return nil, err
+			}
+			input, err = replaceScanNode(input)
+			if err != nil {
+				return nil, err
+			}
+			if err := plan.SetInput(i, input); err != nil {
+				return nil, err
+			}
+		}
+		return plan, nil
+	}
+	plan, err := replaceScanNode(plan)
+	if err != nil {
+		return nil, err
 	}
 	if !replaced {
 		return nil, errors.AssertionFailedf("expected to find one scan node, found none")
@@ -252,20 +263,30 @@ func prepareCDCPlan(
 // CollectPlanColumns invokes collector callback for each column accessed
 // by this plan.  Collector may return false to stop iteration.
 // Collector function may be invoked multiple times for the same column.
-func (p CDCExpressionPlan) CollectPlanColumns(collector func(column colinfo.ResultColumn) bool) {
-	v := makePlanVisitor(context.Background(), planObserver{
-		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
-			cols := planColumns(plan)
-			for _, c := range cols {
-				stop := collector(c)
-				if stop {
-					return false, nil
-				}
+func (p CDCExpressionPlan) CollectPlanColumns(
+	collector func(column colinfo.ResultColumn) bool,
+) error {
+	var walkPlan func(plan planNode) error
+	walkPlan = func(plan planNode) error {
+		cols := planColumns(plan)
+		for _, c := range cols {
+			stop := collector(c)
+			if stop {
+				return nil
 			}
-			return true, nil // Continue onto the next node.
-		},
-	})
-	_ = v.visit(p.Plan.planNode)
+		}
+		for i, n := 0, plan.InputCount(); i < n; i++ {
+			input, err := plan.Input(i)
+			if err != nil {
+				return err
+			}
+			if err := walkPlan(input); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walkPlan(p.Plan.planNode)
 }
 
 // cdcValuesNode replaces regular scanNode with cdc specific implementation
