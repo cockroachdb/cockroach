@@ -222,7 +222,11 @@ func (b *backupResumer) ResumeCompaction(
 		// Resolve the backup destination. If we have already resolved and persisted
 		// the destination during a previous resumption of this job, we can re-use
 		// the previous resolution.
-		backupDest, err := backupdest.ResolveDestForCompaction(ctx, execCtx, initialDetails)
+		backupDest, err := backupdest.ResolveDest(
+			ctx, execCtx.User(), initialDetails.Destination,
+			initialDetails.StartTime, initialDetails.EndTime,
+			execCtx.ExecCfg(), initialDetails.EncryptionOptions, kmsEnv,
+		)
 		if err != nil {
 			return err
 		}

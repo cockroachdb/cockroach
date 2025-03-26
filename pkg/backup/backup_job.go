@@ -577,7 +577,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		backupDest, err := backupdest.ResolveDest(
-			ctx, p.User(), initialDetails.Destination, initialDetails.EndTime, p.ExecCfg(),
+			ctx, p.User(), initialDetails.Destination, hlc.Timestamp{}, initialDetails.EndTime,
+			p.ExecCfg(), initialDetails.EncryptionOptions, &kmsEnv,
 		)
 		if err != nil {
 			return err

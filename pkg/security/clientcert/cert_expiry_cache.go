@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -34,10 +33,19 @@ var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
 	1000,
 	settings.WithPublic)
 
-type clientCertExpirationMetrics struct {
-	expiration *aggmetric.Gauge
-	ttl        *aggmetric.Gauge
+// certInfo holds information about a certificate, including its expiration
+// time and the last time it was seen.
+type certInfo struct {
+	expiration int64
+	last_seen  time.Time
 }
+
+// CacheTTL is an overridable duration for when certificates should be evicted.
+var CacheTTL = 24 * time.Hour
+
+// The size of the cache and the certInfo struct. To be used for memory tracking.
+var GaugeSize = int64(unsafe.Sizeof(aggmetric.AggGauge{}))
+var CertInfoSize = int64(unsafe.Sizeof(certInfo{}))
 
 // ClientCertExpirationCache contains a cache of gauge objects keyed by
 // SQL username strings. It is a FIFO cache that stores gauges valued by
@@ -47,8 +55,10 @@ type ClientCertExpirationCache struct {
 		// NB: Cannot be a RWMutex for Get because UnorderedCache.Get manipulates
 		// an internal hashmap.
 		syncutil.Mutex
-		cache *cache.UnorderedCache
-		acc   mon.BoundAccount
+		cache             map[string]map[string]certInfo
+		acc               mon.BoundAccount
+		expirationMetrics *aggmetric.AggGauge
+		ttlMetrics        *aggmetric.AggGauge
 	}
 	settings *cluster.Settings
 	stopper  *stop.Stopper
@@ -63,9 +73,13 @@ func NewClientCertExpirationCache(
 	stopper *stop.Stopper,
 	timeSrc timeutil.TimeSource,
 	parentMon *mon.BytesMonitor,
+	expirationMetrics *aggmetric.AggGauge,
+	ttlMetrics *aggmetric.AggGauge,
 ) *ClientCertExpirationCache {
 	c := &ClientCertExpirationCache{settings: st}
 	c.stopper = stopper
+	c.mu.expirationMetrics = expirationMetrics
+	c.mu.ttlMetrics = ttlMetrics
 
 	switch timeSrc := timeSrc.(type) {
 	case *timeutil.DefaultTimeSource, *timeutil.ManualTime:
@@ -74,29 +88,7 @@ func NewClientCertExpirationCache(
 		c.timeSrc = &timeutil.DefaultTimeSource{}
 	}
 
-	c.mu.cache = cache.NewUnorderedCache(cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, _, value interface{}) bool {
-			var capacity int64
-			settingCapacity := ClientCertExpirationCacheCapacity.Get(&st.SV)
-			if settingCapacity < CacheCapacityMax {
-				capacity = settingCapacity
-			} else {
-				capacity = CacheCapacityMax
-			}
-			return int64(size) > capacity
-		},
-		OnEvictedEntry: func(entry *cache.Entry) {
-			metrics := entry.Value.(*clientCertExpirationMetrics)
-			// The child metric will continue to report into the parent metric even
-			// after unlinking, so we also reset it to 0.
-			metrics.expiration.Update(0)
-			metrics.expiration.Unlink()
-			metrics.ttl.Update(0)
-			metrics.ttl.Unlink()
-			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*metrics)))
-		},
-	})
+	c.mu.cache = make(map[string]map[string]certInfo)
 	c.mon = mon.NewMonitorInheritWithLimit(
 		mon.MakeName("client-expiration-cache"), 0 /* limit */, parentMon, true, /* longLiving */
 	)
@@ -116,54 +108,42 @@ func NewClientCertExpirationCache(
 
 // GetTTL retrieves seconds till cert expiration for the given username, if it exists.
 // A TTL of 0 indicates an entry was not found.
-func (c *ClientCertExpirationCache) GetTTL(key string) (int64, bool) {
+func (c *ClientCertExpirationCache) GetTTL(user string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	value, ok := c.mu.cache.Get(key)
-	if !ok {
-		return 0, ok
+
+	expiration := c.getExpirationLocked(user)
+	ttl := expiration - c.timeNow()
+
+	if ttl > 0 {
+		return ttl
+	} else {
+		return 0
 	}
-	// If the metrics has already been reached, remove the entry and indicate
-	// that the entry was not found.
-	metrics := value.(*clientCertExpirationMetrics)
-	if metrics.expiration.Value() < c.timeNow() {
-		c.mu.cache.Del(key)
-		return 0, false
-	}
-	return metrics.ttl.Value(), ok
 }
 
 // GetExpiration retrieves the cert expiration for the given username, if it exists.
 // An expiration of 0 indicates an entry was not found.
-func (c *ClientCertExpirationCache) GetExpiration(key string) (int64, bool) {
+func (c *ClientCertExpirationCache) GetExpiration(user string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	value, ok := c.mu.cache.Get(key)
-	if !ok {
-		return 0, ok
-	}
-	// If the metrics has already been reached, remove the entry and indicate
-	// that the entry was not found.
-	metrics := value.(*clientCertExpirationMetrics)
-	if metrics.expiration.Value() < c.timeNow() {
-		c.mu.cache.Del(key)
-		return 0, false
-	}
-	return metrics.expiration.Value(), ok
+
+	return c.getExpirationLocked(user)
 }
 
-// ttlFunc returns a function function which takes a time,
-// if the time is past returns 0, otherwise returns the number
-// of seconds until that timestamp
-func ttlFunc(now func() int64, exp int64) func() int64 {
-	return func() int64 {
-		ttl := exp - now()
-		if ttl > 0 {
-			return ttl
-		} else {
-			return 0
+func (c *ClientCertExpirationCache) getExpirationLocked(user string) int64 {
+	if certs, ok := c.mu.cache[user]; ok {
+		// compute the earliest expiration time.
+		var minExpiration int64
+		for _, cert := range certs {
+			if minExpiration == 0 || cert.expiration < minExpiration {
+				minExpiration = cert.expiration
+			}
 		}
+
+		return minExpiration
 	}
+	return 0
 }
 
 // MaybeUpsert may update or insert a client cert expiration gauge for a
@@ -171,32 +151,35 @@ func ttlFunc(now func() int64, exp int64) func() int64 {
 // old expiration is after the new expiration. This ensures that the cache
 // maintains the minimum expiration for each user.
 func (c *ClientCertExpirationCache) MaybeUpsert(
-	ctx context.Context,
-	key string,
-	newExpiry int64,
-	parentExpirationGauge *aggmetric.AggGauge,
-	parentTTLGauge *aggmetric.AggGauge,
+	ctx context.Context, user string, serial string, newExpiry int64,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	value, ok := c.mu.cache.Get(key)
-	if !ok {
-		err := c.mu.acc.Grow(ctx, int64(unsafe.Sizeof(clientCertExpirationMetrics{})))
-		if err == nil {
-			// Only create new gauges for expirations in the future.
-			if newExpiry > c.timeNow() {
-				expiration := parentExpirationGauge.AddChild(key)
-				expiration.Update(newExpiry)
-				ttl := parentTTLGauge.AddFunctionalChild(ttlFunc(c.timeNow, newExpiry), key)
-				c.mu.cache.Add(key, &clientCertExpirationMetrics{expiration, ttl})
-			}
-		} else {
+	// if the user is not in the cache, add them, and add their expiration to a gauge.
+	if _, ok := c.mu.cache[user]; !ok {
+		err := c.mu.acc.Grow(ctx, 2*GaugeSize)
+		if err != nil {
 			log.Ops.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+			return
 		}
-	} else if metrics := value.(*clientCertExpirationMetrics); newExpiry < metrics.expiration.Value() || metrics.expiration.Value() == 0 {
-		metrics.expiration.Update(newExpiry)
-		metrics.ttl.UpdateFn(ttlFunc(c.timeNow, newExpiry))
+		c.mu.cache[user] = map[string]certInfo{}
+		c.mu.expirationMetrics.AddFunctionalChild(func() int64 { return c.GetExpiration(user) }, user)
+		c.mu.ttlMetrics.AddFunctionalChild(func() int64 { return c.GetTTL(user) }, user)
+
+	}
+
+	err := c.mu.acc.Grow(ctx, CertInfoSize)
+	if err != nil {
+		log.Warningf(ctx, "no memory available to cache cert expiry: %v", err)
+		c.evictLocked(ctx, user, serial)
+	}
+
+	// insert / update the certificate expiration time.
+	certs := c.mu.cache[user]
+	certs[serial] = certInfo{
+		expiration: newExpiry,
+		last_seen:  timeutil.Unix(c.timeNow(), 0),
 	}
 }
 
@@ -204,14 +187,20 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 func (c *ClientCertExpirationCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.mu.cache.Clear()
+
+	for user, certs := range c.mu.cache {
+		for serial := range certs {
+			c.evictLocked(context.Background(), user, serial)
+		}
+	}
 }
 
 // Len returns the number of cert expirations in the cache.
 func (c *ClientCertExpirationCache) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.mu.cache.Len()
+
+	return len(c.mu.cache)
 }
 
 // timeNow returns the current time depending on the time source of the cache.
@@ -220,6 +209,14 @@ func (c *ClientCertExpirationCache) timeNow() int64 {
 		return timeSrc.Now().Unix()
 	}
 	return timeutil.Now().Unix()
+}
+
+// timeSince returns the current time depending on the time source of the cache.
+func (c *ClientCertExpirationCache) timeSince(t time.Time) time.Duration {
+	if timeSrc, ok := c.timeSrc.(timeutil.TimeSource); ok {
+		return timeSrc.Since(t)
+	}
+	return timeutil.Since(t)
 }
 
 // startPurgePastExpirations runs an infinite loop in a goroutine which
@@ -237,7 +234,7 @@ func (c *ClientCertExpirationCache) startPurgePastExpirations(ctx context.Contex
 			select {
 			case <-timer.C:
 				timer.Read = true
-				c.PurgePastExpirations()
+				c.Purge(ctx)
 			case <-c.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
@@ -248,22 +245,37 @@ func (c *ClientCertExpirationCache) startPurgePastExpirations(ctx context.Contex
 	)
 }
 
-// PurgePastExpirations removes entries associated with expiration values that
-// have already passed. This helps ensure that the cache contains gauges
-// with expiration values in the future only.
-func (c *ClientCertExpirationCache) PurgePastExpirations() {
+// Purge removes any certificates which have not been seen in the last 24 hours.
+func (c *ClientCertExpirationCache) Purge(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	var deleteEntryKeys []interface{}
-	now := c.timeNow()
-	c.mu.cache.Do(func(entry *cache.Entry) {
-		metrics := entry.Value.(*clientCertExpirationMetrics)
-		if metrics.expiration.Value() <= now {
-			deleteEntryKeys = append(deleteEntryKeys, entry.Key)
+
+	for user, certs := range c.mu.cache {
+		for serial, cert := range certs {
+			if c.timeSince(cert.last_seen) >= CacheTTL {
+				c.evictLocked(ctx, user, serial)
+			}
 		}
-	})
-	for _, key := range deleteEntryKeys {
-		c.mu.cache.Del(key)
+	}
+}
+
+func (c *ClientCertExpirationCache) Account() *mon.BoundAccount {
+	return &c.mu.acc
+}
+
+// evictLocked is a utility function for removing a specific certificate from the
+// cache and removing the corresponding user if they have no more certificates.
+func (c *ClientCertExpirationCache) evictLocked(ctx context.Context, user, serial string) {
+	c.mu.acc.Shrink(ctx, CertInfoSize)
+	delete(c.mu.cache[user], serial)
+
+	// if there are no more certificates for the user, remove the user from the cache.
+	// and remove their corresponding gauge.
+	if len(c.mu.cache[user]) == 0 {
+		delete(c.mu.cache, user)
+		c.mu.acc.Shrink(ctx, 2*GaugeSize)
+		c.mu.expirationMetrics.RemoveChild(user)
+		c.mu.ttlMetrics.RemoveChild(user)
 	}
 }
 

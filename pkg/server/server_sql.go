@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -957,9 +956,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return nil, errors.Wrap(err, "initializing certificate manager")
 		}
 		certMgr.RegisterExpirationCache(
-			clientcert.NewClientCertExpirationCache(
-				ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
-			),
+			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
 		)
 	}
 
