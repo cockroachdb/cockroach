@@ -374,6 +374,45 @@ func TestMaxStatTracker(t *testing.T) {
 	require.Equal(t, 1, mt.curIdx)
 }
 
+func TestSplitStatistics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rand := rand.New(rand.NewSource(11))
+	timeStart := 1000
+
+	var decider Decider
+	loadSplitConfig := testLoadSplitConfig{
+		randSource:    rand,
+		useWeighted:   false,
+		statRetention: time.Second,
+		statThreshold: 1,
+	}
+
+	Init(&decider, &loadSplitConfig, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	}, SplitCPU)
+
+	// No split key, popular key
+	for i := 0; i < 20; i++ {
+		decider.Record(context.Background(), ms(timeStart), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+	for i := 1; i <= 2000; i++ {
+		decider.Record(context.Background(), ms(timeStart+i*50), ld(1), func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+
+	assert.Equal(t, decider.SplitStatistics(), &SplitStatistics{
+		AccessDirection: 1,
+		PopularKey: PopularKey{
+			Key:       keys.SystemSQLCodec.TablePrefix(uint32(0)),
+			Frequency: 1,
+		},
+	})
+}
+
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rand := rand.New(rand.NewSource(11))

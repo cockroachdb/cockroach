@@ -28,6 +28,11 @@ type PopularKey struct {
 	Frequency float64
 }
 
+type SplitStatistics struct {
+	AccessDirection float64
+	PopularKey      PopularKey
+}
+
 type LoadBasedSplitter interface {
 	redact.SafeFormatter
 	// Record informs the LoadBasedSplitter about where the span lies with regard
@@ -357,6 +362,21 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 		key = d.mu.splitFinder.Key()
 	}
 	return key
+}
+
+// SplitStatistics gets the split stats of the current replica if load-based
+// splitting has been engaged.
+func (d *Decider) SplitStatistics() *SplitStatistics {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.mu.splitFinder != nil {
+		return &SplitStatistics{
+			AccessDirection: d.mu.splitFinder.AccessDirection(),
+			PopularKey:      d.mu.splitFinder.PopularKey(),
+		}
+	}
+	return nil
 }
 
 // Reset deactivates any current attempt at determining a split key. The method
