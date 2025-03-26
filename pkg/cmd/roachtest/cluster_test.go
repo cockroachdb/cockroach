@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -61,6 +62,35 @@ func TestClusterNodes(t *testing.T) {
 			nodes := c.MakeNodes(tc.opts...)
 			if tc.expected != nodes {
 				t.Fatalf("expected %s, but found %s", tc.expected, nodes)
+			}
+		})
+	}
+}
+
+func TestSeededRandGroups(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	testCases := []struct {
+		numNodes  int
+		numGroups int
+		expected  []string
+	}{
+		{numNodes: 1, numGroups: 1, expected: []string{":1"}},
+		{numNodes: 10, numGroups: 1, expected: []string{":1-10"}},
+		{numNodes: 10, numGroups: 2, expected: []string{":1,3,8,10", ":2,4-7,9"}},
+		{numNodes: 3, numGroups: 3, expected: []string{":3", ":2", ":1"}},
+		{numNodes: 5, numGroups: 3, expected: []string{":2", ":1,3-4", ":5"}},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			c := &clusterImpl{spec: spec.MakeClusterSpec(tc.numNodes)}
+			nodes := c.All()
+			groups, err := nodes.SeededRandGroups(rng, tc.numGroups)
+			require.NoError(t, err)
+			for i, group := range groups {
+				nodeList := c.MakeNodes(group)
+				if tc.expected[i] != nodeList {
+					t.Errorf("expected %s, but found %s", tc.expected[i], nodeList)
+				}
 			}
 		})
 	}
