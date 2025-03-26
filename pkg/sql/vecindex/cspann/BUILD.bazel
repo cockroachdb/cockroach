@@ -11,6 +11,7 @@ filegroup(
 go_library(
     name = "cspann",
     srcs = [
+        "childkey_dedup.go",
         "cspannpb.go",
         "fixup_processor.go",
         "fixup_split.go",
@@ -49,6 +50,7 @@ go_library(
 go_test(
     name = "cspann_test",
     srcs = [
+        "childkey_dedup_test.go",
         "cspannpb_test.go",
         "fixup_processor_test.go",
         "fixup_worker_test.go",

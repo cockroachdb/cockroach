@@ -639,7 +639,7 @@ func (fw *fixupWorker) linkNearbyVectors(
 	defer fw.workspace.FreeVector(tempVector)
 
 	// Filter the results.
-	results := idxCtx.tempSearchSet.PopUnsortedResults()
+	results := idxCtx.tempSearchSet.PopResults()
 	for i := range results {
 		result := &results[i]
 
