@@ -341,15 +341,15 @@ func (t *tokenCounter) TryDeduct(
 		expensiveLog = true
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	tokensAvailable := t.tokensLocked(wc)
 	if tokensAvailable <= 0 {
+		t.mu.Unlock()
 		return 0
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
+	t.adjustLockedAndUnlock(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -620,15 +620,11 @@ func (t *tokenCounter) adjust(
 	if log.V(2) {
 		expensiveLog = true
 	}
-	func() {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
-	}()
-
+	t.mu.Lock()
+	t.adjustLockedAndUnlock(ctx, class, delta, now, flag, expensiveLog)
 }
 
-func (t *tokenCounter) adjustLocked(
+func (t *tokenCounter) adjustLockedAndUnlock(
 	ctx context.Context,
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
@@ -636,23 +632,33 @@ func (t *tokenCounter) adjustLocked(
 	flag TokenAdjustFlag,
 	expensiveLog bool,
 ) {
+	t.mu.AssertHeld()
 	var adjustment, unaccounted tokensPerWorkClass
-	switch class {
-	case admissionpb.RegularWorkClass:
-		adjustment.regular, unaccounted.regular =
-			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(
-				ctx, delta, now, false /* isReset */, flag)
+	// Only populated when expensiveLog is true.
+	var regularTokens, elasticTokens kvflowcontrol.Tokens
+	func() {
+		defer t.mu.Unlock()
+		switch class {
+		case regular:
+			adjustment.regular, unaccounted.regular =
+				t.mu.counters[regular].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
 			// Regular {deductions,returns} also affect elastic flow tokens.
-		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
-				ctx, delta, now, false /* isReset */, flag)
+			adjustment.elastic, unaccounted.elastic =
+				t.mu.counters[elastic].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
 
-	case admissionpb.ElasticWorkClass:
-		// Elastic {deductions,returns} only affect elastic flow tokens.
-		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
-				ctx, delta, now, false /* isReset */, flag)
-	}
+		case elastic:
+			// Elastic {deductions,returns} only affect elastic flow tokens.
+			adjustment.elastic, unaccounted.elastic =
+				t.mu.counters[elastic].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
+		}
+		if expensiveLog {
+			regularTokens = t.tokensLocked(regular)
+			elasticTokens = t.tokensLocked(elastic)
+		}
+	}()
 
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
@@ -664,7 +670,7 @@ func (t *tokenCounter) adjustLocked(
 	}
 	if expensiveLog {
 		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
+			t.tokenType, class, t.stream, delta, flag, regularTokens, elasticTokens)
 	}
 }
 
