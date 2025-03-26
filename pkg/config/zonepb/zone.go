@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -90,6 +91,16 @@ var MultiRegionZoneConfigFields = []tree.Name{
 	"voter_constraints",
 	"lease_preferences",
 }
+
+var MaxReplicasPerRegion = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.zone_configs.max_replicas_per_region",
+	"the maximum number of replicas that can be "+
+		"configured per region (0 for unlimited); this is only enforced on "+
+		"new zone config modifications",
+	0,
+	settings.WithVisibility(settings.Reserved),
+	settings.NonNegativeInt)
 
 // MultiRegionZoneConfigFieldsSet contain the items in
 // MultiRegionZoneConfigFields but in a set form for fast lookup.
@@ -1474,3 +1485,68 @@ func (v ReplaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr
 
 // VisitPost satisfies the Visitor interface.
 func (ReplaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// ValidateNewUniqueConstraintsForSecondaryTenants validates that none of our
+// zonepb.ConstraintsConjunction violate the given max replicas per region
+// set by sql.zone_configs.max_replicas_per_region.
+func ValidateNewUniqueConstraintsForSecondaryTenants(
+	sv *settings.Values, currentZone, newZone *ZoneConfig,
+) error {
+	maxReplicas := MaxReplicasPerRegion.Get(sv)
+	if maxReplicas == 0 {
+		return nil
+	}
+
+	// First scan all the current zone config constraints.
+	seenConstraints := make(map[Constraint]int32)
+	for _, constraints := range currentZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = constraints.NumReplicas
+		}
+	}
+
+	seenVoterConstraints := make(map[Constraint]int32)
+	for _, constraints := range currentZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			seenVoterConstraints[constraint] = constraints.NumReplicas
+		}
+	}
+
+	validateConstraints := func(
+		constraintPrefix string,
+		seen map[Constraint]int32,
+		newConstraints ConstraintsConjunction,
+	) error {
+		for _, constraint := range newConstraints.Constraints {
+			if replicas, ok := seen[constraint]; ok {
+				// If we are not changing the amount of replicas being
+				// constrained, we don't need to validate anything.
+				if replicas == newConstraints.NumReplicas {
+					continue
+				}
+			}
+			if int64(newConstraints.NumReplicas) > maxReplicas {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"%sconstraint for %q exceeds the configured maximum of %d replicas",
+					constraintPrefix,
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+		}
+		return nil
+	}
+
+	for _, constraints := range newZone.Constraints {
+		if err := validateConstraints("", seenConstraints, constraints); err != nil {
+			return err
+		}
+	}
+	for _, voterConstraints := range newZone.VoterConstraints {
+		if err := validateConstraints("voter ", seenVoterConstraints, voterConstraints); err != nil {
+			return err
+		}
+	}
+	return nil
+}
