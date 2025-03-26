@@ -490,6 +490,11 @@ func loadSummaryForDimension(
 	}
 	if capacity != UnknownCapacity {
 		// Further tune the summary based on utilization.
+		//
+		// Currently we only tune towards overload based on utilization, and not
+		// towards underload. The idea is that the former allows us to identify
+		// overload due to heterogeneity, while we primarily still want to focus
+		// on balancing towards the mean usage.
 		fractionUsed := float64(load) / float64(capacity)
 		if fractionUsed > 0.9 {
 			if meanUtil < fractionUsed {
@@ -506,8 +511,8 @@ func loadSummaryForDimension(
 			}
 		}
 		// INVARIANT: fractionUsed <= 0.75
-		if fractionUsed < 0.5 && fractionUsed < meanUtil {
-			return loadLow
+		if fractionUsed > meanUtil*1.05 {
+			return max(loadSummary, loadNoChange)
 		}
 	}
 	return loadSummary
