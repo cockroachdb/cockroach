@@ -103,7 +103,7 @@ vec2: (-5, -5)
 search max-results=10 beam-size=8
 (-5, -5)
 ----
-vec2: 0 (centroid=2.11)
+vec2: 0 (centroid=5.43)
 vec7: 50 (centroid=1.67)
 vec1: 85 (centroid=3.8)
 vec8: 106 (centroid=2.24)
