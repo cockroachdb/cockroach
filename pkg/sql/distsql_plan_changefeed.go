@@ -94,7 +94,7 @@ func PlanCDCExpression(
 
 	familyID, err := extractFamilyID(cdcExpr)
 	if err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 
 	cdcCat := &cdcOptCatalog{
@@ -110,7 +110,7 @@ func PlanCDCExpression(
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
 	}
 	if log.V(2) {
 		log.Infof(ctx, "Optimized CDC expression: %s", memo)
@@ -122,55 +122,61 @@ func PlanCDCExpression(
 		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(),
 		p.EvalContext(), allowAutoCommit, disableTelemetryAndPlanGists,
 	); err != nil {
-		return cdcPlan, err
+		return CDCExpressionPlan{}, err
+	}
+
+	// The top node contains the list of columns to return.
+	presentation := planColumns(p.curPlan.main.planNode)
+	if len(presentation) == 0 {
+		return CDCExpressionPlan{}, errors.AssertionFailedf("unable to determine result columns")
 	}
 
 	// Walk the plan, perform sanity checks and extract information we need.
 	var spans roachpb.Spans
-	var presentation colinfo.ResultColumns
-
-	if err := walkPlan(ctx, p.curPlan.main.planNode, planObserver{
-		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
-			switch n := plan.(type) {
-			case *scanNode:
-				// Collect spans we wanted to scan.  The select statement used for this
-				// plan should result in a single table scan of primary index span.
-				if len(spans) > 0 {
-					return false, errors.AssertionFailedf("unexpected multiple primary index scan operations")
-				}
-				if n.index.GetID() != n.desc.GetPrimaryIndexID() {
-					return false, errors.AssertionFailedf(
-						"expect scan of primary index, found scan of %d", n.index.GetID())
-				}
-				spans = n.spans
-			case *zeroNode:
-				return false, errors.Newf(
-					"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
+	var validatePlanAndCollectSpans func(p planNode) error
+	validatePlanAndCollectSpans = func(p planNode) error {
+		switch n := p.(type) {
+		case *scanNode:
+			// Collect spans we wanted to scan. The select statement used for
+			// this plan should result in a single table scan of primary index
+			// span.
+			if len(spans) > 0 {
+				return errors.AssertionFailedf("unexpected multiple primary index scan operations")
 			}
-
-			// Because the walk is top down, the top node is the node containing the
-			// list of columns to return.
-			if len(presentation) == 0 {
-				presentation = planColumns(plan)
+			if n.index.GetID() != n.desc.GetPrimaryIndexID() {
+				return errors.AssertionFailedf(
+					"expect scan of primary index, found scan of %d", n.index.GetID())
 			}
-			return true, nil
-		},
-	}); err != nil {
-		return cdcPlan, err
+			spans = n.spans
+		case *zeroNode:
+			return errors.Newf(
+				"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
+		default:
+			// Recurse into input nodes.
+			for i, n := 0, p.InputCount(); i < n; i++ {
+				input, err := p.Input(i)
+				if err != nil {
+					return err
+				}
+				if err = validatePlanAndCollectSpans(input); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := validatePlanAndCollectSpans(p.curPlan.main.planNode); err != nil {
+		return CDCExpressionPlan{}, err
 	}
 
 	if len(spans) == 0 {
 		// Should have been handled by the zeroNode check above.
-		return cdcPlan, errors.AssertionFailedf("expected at least 1 span to scan")
-	}
-
-	if len(presentation) == 0 {
-		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
+		return CDCExpressionPlan{}, errors.AssertionFailedf("expected at least 1 span to scan")
 	}
 
 	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
 		len(p.curPlan.checkPlans) > 0 || len(p.curPlan.triggers) > 0 {
-		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
+		return CDCExpressionPlan{}, errors.AssertionFailedf("unexpected query structure")
 	}
 
 	planCtx := p.DistSQLPlanner().NewPlanningCtx(ctx, &p.extendedEvalCtx, p, p.txn, LocalDistribution)
