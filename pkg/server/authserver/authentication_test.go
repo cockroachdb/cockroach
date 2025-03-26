@@ -167,12 +167,6 @@ func TestSSLEnforcement(t *testing.T) {
 		{ts.URLPrefix, insecureContext, http.StatusTemporaryRedirect},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
-			if tc.path == apiconstants.StatusPrefix+"nodes" && srv.TenantController().StartedDefaultTestTenant() {
-				// TODO(multitenant): The /_status/nodes endpoint should be
-				// available subject to a tenant capability.
-				skip.WithIssue(t, 110009)
-			}
-
 			client, err := tc.ctx.GetHTTPClient()
 			if err != nil {
 				t.Fatal(err)
