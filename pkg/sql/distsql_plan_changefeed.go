@@ -133,29 +133,39 @@ func PlanCDCExpression(
 
 	// Walk the plan, perform sanity checks and extract information we need.
 	var spans roachpb.Spans
-	var presentation colinfo.ResultColumns
-
-	if err := walkPlan(ctx, p.curPlan.main.planNode, planObserver{
-		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
-			switch n := plan.(type) {
-			case *scanNode:
-				// Collect spans we wanted to scan.  The select statement used for this
-				// plan should result in a single table scan of primary index span.
-				if len(spans) > 0 {
-					return false, errors.AssertionFailedf("unexpected multiple primary index scan operations")
-				}
-				if n.index.GetID() != n.desc.GetPrimaryIndexID() {
-					return false, errors.AssertionFailedf(
-						"expect scan of primary index, found scan of %d", n.index.GetID())
-				}
-				spans = n.spans
-			case *zeroNode:
-				return false, errors.Newf(
-					"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
+	var validatePlanAndCollectSpans func(p planNode) error
+	validatePlanAndCollectSpans = func(p planNode) error {
+		switch n := p.(type) {
+		case *scanNode:
+			// Collect spans we wanted to scan. The select statement used for
+			// this plan should result in a single table scan of primary index
+			// span.
+			if len(spans) > 0 {
+				return errors.AssertionFailedf("unexpected multiple primary index scan operations")
 			}
-			return true, nil
-		},
-	}); err != nil {
+			if n.index.GetID() != n.desc.GetPrimaryIndexID() {
+				return errors.AssertionFailedf(
+					"expect scan of primary index, found scan of %d", n.index.GetID())
+			}
+			spans = n.spans
+		case *zeroNode:
+			return errors.Newf(
+				"changefeed expression %s does not match any rows", tree.AsString(cdcExpr))
+		default:
+			// Recurse into input nodes.
+			for i, n := 0, p.InputCount(); i < n; i++ {
+				input, err := p.Input(i)
+				if err != nil {
+					return err
+				}
+				if err = validatePlanAndCollectSpans(input); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := validatePlanAndCollectSpans(p.curPlan.main.planNode); err != nil {
 		return cdcPlan, err
 	}
 
