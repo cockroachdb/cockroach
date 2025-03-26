@@ -48,8 +48,22 @@ import (
 //     longer visible to searches.
 //  12. Delete the splitting partition from the index.
 //
-// TODO(andyk): Describe the flow for splitting a root partition once it's
-// implemented.
+// Splitting a root partition changes the above flow in the following ways:
+//
+//	a. The root partition does not have a parent, so step #3 is skipped.
+//	b. Similarly, step #5 is skipped.
+//	c. The root partition cannot be removed from its parent and is not deleted,
+//	   so steps #11 and #12 are skipped.
+//	d. Instead, all vectors in the root partition are cleared so that it is
+//	   temporarily empty. Searches can still find these vectors because they
+//	   were copied to the left and right sub-partitions in steps #7 and #9.
+//	   Searches can find the keys of the sub-partitions in the Target fields of
+//	   the root partition metadata.
+//	e. Update the root partition's state to AddingLevel and increase its level
+//	   by one.
+//	f. Add the left sub-partition as a child of the root partition.
+//	g. Add the right sub-partition as a child of the root partition.
+//	h. Update the root partition's state to Ready.
 //
 // The following diagrams show the partition state machines for the split
 // operation:
@@ -106,13 +120,15 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	if metadata.Level != LeafLevel && partition.Count() == 0 {
-		// Something's terribly wrong, abort and hope that merge can clean this up.
-		return errors.AssertionFailedf(
-			"non-leaf partition %d should not have 0 vectors", partitionKey)
+		if partitionKey != RootKey || metadata.StateDetails.State == ReadyState {
+			// Something's terribly wrong, abort and hope that merge can clean this up.
+			return errors.AssertionFailedf("non-leaf partition %d (state=%s) should not have 0 vectors",
+				partitionKey, metadata.StateDetails.State.String())
+		}
 	}
 
 	log.VEventf(ctx, 2, "splitting partition %d with %d vectors (parent=%d, state=%s)",
-		partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
+		partitionKey, parentPartitionKey, partition.Count(), metadata.StateDetails.String())
 
 	// Update partition's state to Splitting.
 	if metadata.StateDetails.State == ReadyState {
@@ -206,9 +222,55 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// The source partition has been drained, so remove it from its parent
-		// and delete it.
-		err = fw.deletePartition(ctx, parentPartitionKey, partitionKey)
+		// Check whether the splitting partition is the root.
+		if parentPartitionKey != InvalidKey {
+			// The source partition has been drained, so remove it from its parent
+			// and delete it.
+			err = fw.deletePartition(ctx, parentPartitionKey, partitionKey)
+			if err != nil {
+				return err
+			}
+		} else {
+			// This is the root partition, so remove all of its vectors rather than
+			// delete the root partition itself. Note that the vectors have already
+			// been copied to the two target partitions.
+			err = fw.clearPartition(ctx, partitionKey, partition)
+			if err != nil {
+				return err
+			}
+
+			// Increase level by one and move to the AddingLevel state.
+			expected := metadata
+			metadata.Level++
+			metadata.StateDetails = MakeAddingLevelDetails(leftPartitionKey, rightPartitionKey)
+			err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if metadata.StateDetails.State == AddingLevelState {
+		fw.tempChildKey[0] = ChildKey{PartitionKey: leftPartitionKey}
+		fw.tempValueBytes[0] = nil
+		err = fw.addToPartition(ctx, partitionKey,
+			leftMetadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], metadata)
+		if err != nil {
+			return err
+		}
+
+		fw.tempChildKey[0] = ChildKey{PartitionKey: rightPartitionKey}
+		fw.tempValueBytes[0] = nil
+		err = fw.addToPartition(ctx, partitionKey,
+			rightMetadata.Centroid.AsSet(), fw.tempChildKey[:1], fw.tempValueBytes[:1], metadata)
+		if err != nil {
+			return err
+		}
+
+		// Move to the Ready state.
+		expected := metadata
+		metadata.StateDetails = MakeReadyDetails()
+		err = fw.updateMetadata(ctx, partitionKey, metadata, expected)
 		if err != nil {
 			return err
 		}
@@ -280,19 +342,53 @@ func (fw *fixupWorker) addToPartition(
 	valueBytes []ValueBytes,
 	expected PartitionMetadata,
 ) error {
+	if !expected.StateDetails.State.AllowAddOrRemove() {
+		return errors.AssertionFailedf("cannot add to partition in state that disallows adds/removes")
+	}
+
 	added, err := fw.index.store.TryAddToPartition(ctx, fw.treeKey, partitionKey,
 		vectors, childKeys, valueBytes, expected)
 	if err != nil {
 		metadata, err := suppressRaceErrors(err)
 		if err == nil {
 			// Another worker raced to update the metadata, so abort.
-			return errors.Wrapf(errFixupAborted, "adding % vectors to partition %d expected %s, found %s",
-				vectors.Count, partitionKey, expected.StateDetails.String(), metadata.StateDetails.String())
+			return errors.Wrapf(errFixupAborted,
+				"adding %d vectors to partition %d expected %s, found %s", vectors.Count, partitionKey,
+				expected.StateDetails.String(), metadata.StateDetails.String())
 		}
 		return errors.Wrap(err, "adding to partition")
 	} else if fw.singleStep && added {
 		return errFixupAborted
 	}
+	return nil
+}
+
+// clearPartition removes all vectors and associated data from the given
+// partition, leaving it empty, on the condition that the partition's state has
+// not changed unexpectedly. If that's the case, it returns errFixupAborted.
+func (fw *fixupWorker) clearPartition(
+	ctx context.Context, partitionKey PartitionKey, partition *Partition,
+) (err error) {
+	if partition.Metadata().StateDetails.State.AllowAddOrRemove() {
+		return errors.AssertionFailedf("cannot clear partition in state that allows adds/removes")
+	}
+
+	// Remove all children in the partition.
+	removed, err := fw.index.store.TryRemoveFromPartition(ctx, fw.treeKey,
+		partitionKey, partition.ChildKeys(), *partition.Metadata())
+	if err != nil {
+		metadata, err := suppressRaceErrors(err)
+		if err == nil {
+			// Another worker raced to update the metadata, so abort.
+			return errors.Wrapf(errFixupAborted,
+				"clearing % vectors from partition, %d expected %s, found %s", partition.Count(),
+				partitionKey, metadata.StateDetails.String(), metadata.StateDetails.String())
+		}
+		return errors.Wrap(err, "clearing vectors")
+	} else if fw.singleStep && removed {
+		return errFixupAborted
+	}
+
 	return nil
 }
 
