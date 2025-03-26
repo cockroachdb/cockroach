@@ -196,7 +196,7 @@ type meanNodeLoad struct {
 type storeLoadSummary struct {
 	sls                      loadSummary
 	nls                      loadSummary
-	storeCPUSummary          loadSummary
+	dimSummary               [NumLoadDimensions]loadSummary
 	highDiskSpaceUtilization bool
 	fd                       failureDetectionSummary
 	maxFractionPending       float64
@@ -209,8 +209,9 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v store_cpu=%v node=%v high_disk=%v fd=%v)",
-		sls.sls, sls.storeCPUSummary, sls.nls, sls.highDiskSpaceUtilization, sls.fd)
+	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v)",
+		sls.sls, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
+		sls.nls, sls.highDiskSpaceUtilization, sls.fd)
 }
 
 // The allocator often needs mean load information for a set of stores. This

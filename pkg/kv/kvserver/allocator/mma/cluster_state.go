@@ -1147,18 +1147,15 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		}
 		if sls.highDiskSpaceUtilization {
 			topk.dim = ByteSize
-		} else if sls.storeCPUSummary > loadNoChange && sls.storeCPUSummary >= sls.sls {
-			topk.dim = CPURate
 		} else if sls.sls > loadNoChange {
-			// WriteBandwidth is the only remaining dimension, and storeCPUSummary
-			// <= loadNoChange || storeCPUSummary < sls. So WriteBandwidth must be
-			// more overloaded than CPU and be responsible for the fact that the
-			// store is overloaded.
-			//
-			// TODO: WriteBandwidth is the only remaining dimension. But we can add
-			// more dimensions. So we should keep the per dimension loadSummary in
-			// sls.
-			topk.dim = WriteBandwidth
+			// If multiple dimensions are contributing the same loadSummary, we will pick
+			// CPURate before WriteBandwidth before ByteSize.
+			for i := range sls.dimSummary {
+				if sls.dimSummary[i] == sls.sls {
+					topk.dim = LoadDimension(i)
+					break
+				}
+			}
 		}
 		// TODO: setting a threshold such that only ranges > some threshold of the
 		// store's load in the top-k dimension are included in the top-k. We
@@ -1521,26 +1518,24 @@ func computeLoadSummary(
 ) storeLoadSummary {
 	sls := loadLow
 	var highDiskSpaceUtil bool
-	var cpuSummary loadSummary
+	var dimSummary [NumLoadDimensions]loadSummary
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
 		ls := loadSummaryForDimension(ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
 		}
+		dimSummary[i] = ls
 		switch LoadDimension(i) {
 		case ByteSize:
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
-		case CPURate:
-			cpuSummary = ls
 		}
-
 	}
 	nls := loadSummaryForDimension(ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		sls:                      sls,
 		nls:                      nls,
-		storeCPUSummary:          cpuSummary,
+		dimSummary:               dimSummary,
 		highDiskSpaceUtilization: highDiskSpaceUtil,
 		fd:                       ns.fdSummary,
 		maxFractionPending:       ss.maxFractionPending,

@@ -187,7 +187,7 @@ func (a *allocatorState) rebalanceStores(
 			log.Infof(ctx, "top-K ranges %s: %s", topKRanges.dim, b.String())
 		}
 
-		if ss.StoreID == localStoreID && store.storeCPUSummary >= overloadSlow {
+		if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
 			// NB: any ranges at this store that don't have pending changes must
@@ -222,7 +222,7 @@ func (a *allocatorState) rebalanceStores(
 				sls := a.cs.computeLoadSummary(store.StoreID, &means.storeLoad, &means.nodeLoad)
 				log.Infof(ctx, "range %v store %v sls=%v means %v store %v", rangeID, store.StoreID,
 					sls, means.storeLoad.load, ss.adjusted.load)
-				if sls.storeCPUSummary < overloadSlow {
+				if sls.dimSummary[CPURate] < overloadSlow {
 					// This store is not cpu overloaded relative to these candidates for
 					// this range.
 					continue
