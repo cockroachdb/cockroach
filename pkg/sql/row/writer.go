@@ -218,13 +218,17 @@ func prepareInsertOrUpdateBatch(
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
 				} else {
-					// TODO(yuzefovich): in case of 3+ column families, whenever
-					// we locked the primary index during the initial scan, we
-					// might not have locked the key for a column family where
-					// all columns had NULL values (because the KV didn't exist)
-					// and now at least one becomes non-NULL. In this scenario
-					// we're inserting a new KV with non-locking Put, yet we
-					// don't have the lock. Think more about this.
+					// TODO(yuzefovich): in case of multiple column families,
+					// whenever we locked the primary index during the initial
+					// scan, we might not have locked the key for a column
+					// family where all columns had NULL values (because the KV
+					// didn't exist) and now at least one becomes non-NULL. In
+					// this scenario we're inserting a new KV with non-locking
+					// Put, yet we don't have the lock.
+					//
+					// However, at the moment we disable the lock eliding
+					// optimization with multiple column families, so we'll use
+					// the locking Put because of that.
 					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper.primIndexValDirs)
 				}
 			}
