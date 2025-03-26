@@ -66,20 +66,26 @@ type raftLog struct {
 
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
+	//
+	// Invariant: committed does not regress.
 	committed uint64
 	// applying is the highest log position that the application has
 	// been instructed to apply to its state machine. Some of these
 	// entries may be in the process of applying and have not yet
 	// reached applied.
 	// Use: The field is incremented when accepting a Ready struct.
-	// Invariant: applied <= applying && applying <= committed
+	//
+	// Invariant: applied <= applying <= committed.
+	// Invariant: applying does not regress.
 	applying uint64
 	// applied is the highest log position that the application has
 	// successfully applied to its state machine.
 	// Use: The field is incremented when advancing after the committed
 	// entries in a Ready struct have been applied (either synchronously
 	// or asynchronously).
-	// Invariant: applied <= committed
+	//
+	// Invariant: applied <= committed.
+	// Invariant: applied does not regress.
 	applied uint64
 
 	logger raftlogger.Logger
