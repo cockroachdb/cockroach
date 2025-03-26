@@ -248,7 +248,7 @@ func (a *allocatorState) rebalanceStores(
 					continue
 				}
 				// Have candidates.
-				targetStoreID := sortTargetCandidateSetAndPick(ctx, candsSet, a.rand)
+				targetStoreID := sortTargetCandidateSetAndPick(ctx, candsSet, sls.sls, a.rand)
 				if targetStoreID == 0 {
 					continue
 				}
@@ -353,7 +353,7 @@ func (a *allocatorState) rebalanceStores(
 				}
 			}
 			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-			cands := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
+			cands, ssSLS := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
 			if len(cands.candidates) == 0 {
 				continue
 			}
@@ -374,7 +374,7 @@ func (a *allocatorState) rebalanceStores(
 						cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
 				}
 			}
-			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, a.rand)
+			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, ssSLS.sls, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}
@@ -538,11 +538,17 @@ type candidateSet struct {
 // TODO(sumeer): implement that refinement after some initial
 // experimentation and learnings.
 
-// The caller must not exclude any candidates based on load or maxFractionPending.
-// That filtering must happen here.
+// The caller must not exclude any candidates based on load or
+// maxFractionPending. That filtering must happen here. Only candidates <
+// loadThreshold will be considered.
 func sortTargetCandidateSetAndPick(
-	ctx context.Context, cands candidateSet, rng *rand.Rand,
+	ctx context.Context, cands candidateSet, loadThreshold loadSummary, rng *rand.Rand,
 ) roachpb.StoreID {
+	if loadThreshold <= loadNoChange {
+		panic("loadThreshold must be > loadNoChange")
+	} else {
+		log.Infof(ctx, "sortTargetCandidateSetAndPick: loadThreshold=%v", loadThreshold)
+	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
 			return cmp.Or(cmp.Compare(a.sls, b.sls),
@@ -584,9 +590,27 @@ func sortTargetCandidateSetAndPick(
 	j = 0
 	// Filter out the candidates that are overloaded or have too many pending
 	// changes.
+	//
+	// lowestLoad is the load of the set of candidates with the lowest load,
+	// among which we will later pick. If the set is found to be empty in the
+	// following loop, the lowestLoad is updated.
+	lowestLoad := cands.candidates[0].sls
+	discardedCandsAtOrBeforeLowestLoadHadPendingChanges := false
 	for _, cand := range cands.candidates {
-		if cand.sls > loadNormal || cand.nls > loadNormal ||
+		if cand.sls > lowestLoad {
+			if j == 0 {
+				// This is the lowestLoad set being considered now.
+				lowestLoad = cand.sls
+			} else {
+				// Past the lowestLoad set. We don't care about these.
+				break
+			}
+		}
+		if cand.sls >= loadThreshold || cand.nls >= loadThreshold ||
 			cand.maxFractionPending >= maxFractionPendingThreshold {
+			// Discard this candidate.
+			discardedCandsAtOrBeforeLowestLoadHadPendingChanges =
+				discardedCandsAtOrBeforeLowestLoadHadPendingChanges || (cand.maxFractionPending > epsilon)
 			log.Infof(ctx,
 				"store %v not a candidate sls=%v", cand.StoreID, cand.storeLoadSummary)
 			continue
@@ -597,17 +621,45 @@ func sortTargetCandidateSetAndPick(
 	if j == 0 {
 		return 0
 	}
-	// Find the set of candidates with the lowest load.
-	lowestLoad := cands.candidates[0].sls
-	for j = 1; j < len(cands.candidates); j++ {
-		if cands.candidates[j].sls != lowestLoad {
-			break
-		}
-	}
 	cands.candidates = cands.candidates[:j]
+	// TODO(sumeer): remove this override. Consider a cluster where s1 is
+	// overloadSlow, s2 is loadNoChange, and s3, s4 are loadNormal. Now s4 is
+	// considering rebalancing load away from s1, but the candidate top-k range
+	// has replicas {s1, s3, s4}. So the only way to shed load from s1 is a s1
+	// => s2 move. But there may be other ranges at other leaseholder stores
+	// which can be moved from s1 => {s3, s4}. So we should not be doing this
+	// sub-optimal transfer of load from s1 => s2 unless s1 is not seeing any
+	// load shedding for some interval of time. We need a way to capture this
+	// information in a simple but effective manner.
+	const tempOverrideToIgnoreLoadNoChangeAndHigher = true
+	// The set of candidates we will consider all have lowestLoad.
+	//
+	// If this set has load >= loadNoChange, we have a set that we would not
+	// ordinarily consider as candidates. But we are willing to shed to from
+	// overloadUrgent => {overloadSlow, loadNoChange} or overloadSlow =>
+	// loadNoChange, when absolutely necessary. This necessity is defined by the
+	// fact that we didn't have any candidate in an earlier or this set that was
+	// ignored because of pending changes. Because if a candidate was ignored
+	// because of pending work, we want to wait for that pending work to finish
+	// and then see if we can transfer to those. Note that we used the condition
+	// cand.maxFractionPending>epsilon and not
+	// cand.maxFractionPending>=maxFractionPendingThreshold when setting
+	// discardedCandsAtOrBeforeLowestLoadHadPendingChanges. This is an
+	// additional conservative choice, since pending added work is slightly
+	// inflated in size, and we want to have a true picture of all of these
+	// potential candidates before we start using the ones with load >=
+	// loadNoChange.
+	if lowestLoad >= loadNoChange &&
+		(discardedCandsAtOrBeforeLowestLoadHadPendingChanges || tempOverrideToIgnoreLoadNoChangeAndHigher) {
+		return 0
+	}
 	// Candidates have equal load value and sorted by non-decreasing
 	// leasePreferenceIndex. Eliminate ones that have
-	// notMatchedLeasePreferenceIndex.
+	// notMatchedLeasePreferenceIndex. Also eliminate ones that are >= loadNoChange,
+	// if discardedCandsAtOrBeforeLowestLoadHadPendingChanges is true, or the cand
+	// has some pending changes. The idea here is that we will only pick a candidate
+	// with load >= loadNoChange once it has no pending changes, or any candidates
+	// ordered before it also had
 	j = 0
 	for _, cand := range cands.candidates {
 		if cand.leasePreferenceIndex == notMatchedLeasePreferencIndex {
@@ -625,6 +677,9 @@ func sortTargetCandidateSetAndPick(
 	}
 	j = rng.Intn(j)
 	log.Infof(ctx, "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
+	if cands.candidates[j].sls >= loadNoChange && tempOverrideToIgnoreLoadNoChangeAndHigher {
+		panic("saw higher load candidate than expected")
+	}
 	return cands.candidates[j].StoreID
 }
 
@@ -719,14 +774,14 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 // happening because of overload.
 func (a *allocatorState) computeCandidatesForRange(
 	expr constraintsDisj, storesToExclude storeIDPostingList, loadSheddingStore roachpb.StoreID,
-) candidateSet {
+) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := a.cs.meansMemo.getMeans(expr)
 	if loadSheddingStore > 0 {
 		sheddingSS := a.cs.stores[loadSheddingStore]
-		sheddingSLS := a.cs.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
+		sheddingSLS = a.cs.meansMemo.getStoreLoadSummary(means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
-			return candidateSet{}
+			return candidateSet{}, sheddingSLS
 		}
 	}
 	// We only filter out stores that are not fdOK. The rest of the filtering
@@ -747,7 +802,7 @@ func (a *allocatorState) computeCandidatesForRange(
 		})
 	}
 	cset.means = means
-	return cset
+	return cset, sheddingSLS
 }
 
 // Diversity scoring is very amenable to caching, since the set of unique
