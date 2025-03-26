@@ -106,6 +106,13 @@ func (c *AggCounter) Inc(i int64, labelVals ...string) {
 	child.Inc(i)
 }
 
+// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// does not exist for this set of labelVals.
+func (g *AggCounter) RemoveChild(labelVals ...string) {
+	key := &Counter{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
+}
+
 // Counter is a child of a AggCounter. When it is incremented, so too is the
 // parent. When metrics are collected by prometheus, each of the children will
 // appear with a distinct label, however, when cockroach internally collects
