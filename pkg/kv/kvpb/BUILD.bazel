@@ -78,6 +78,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils/echotest",
+        "//pkg/testutils/skip",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

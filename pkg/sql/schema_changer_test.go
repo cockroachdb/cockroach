@@ -4088,6 +4088,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
 	var gcAt hlc.Timestamp
+	shouldRunGC := atomic.Bool{}
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
@@ -4108,9 +4109,8 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if fn := runGC; fn != nil {
-					runGC = nil
-					return fn(sp)
+				if shouldRunGC.Swap(false) {
+					return runGC(sp)
 				}
 				return nil
 			},
@@ -4124,29 +4124,45 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
 	codec := tc.Server(0).ApplicationLayer().Codec()
+	db.SetMaxOpenConns(1)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 	sqlDB.Exec(t, `CREATE DATABASE t`)
-	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
-	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
-		t.Fatal(err)
-	}
 
-	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, codec, 2, 0); err != nil {
-		t.Fatal(err)
-	}
+	testutils.RunTrueAndFalse(t, "useDeclarative", func(t *testing.T, useDeclarative bool) {
+		writeTSFromJob := "p->'schemaChange'->'writeTimestamp'->>'wallTime'"
+		indexName := "index_created_in_test_legacy"
+		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
+		if useDeclarative {
+			writeTSFromJob = "p->'newSchemaChange'->'backfillProgress'->0->'writeTimestamp'->>'wallTime'"
+			indexName = "index_created_in_test_declarative"
+			sqlDB.Exec(t, "SET use_declarative_schema_changer='on'")
+		}
+		sqlDB.Exec(t, "DROP TABLE IF EXISTS t.test")
+		sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
+		sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
 
-	got := sqlDB.QueryStr(t, `
-		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		shouldRunGC.Store(true)
+		if _, err := db.Exec(
+			fmt.Sprintf(`CREATE UNIQUE INDEX %s ON t.test (v)`, indexName),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, codec, 2, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		got := sqlDB.QueryStr(t, fmt.Sprintf(`
+		SELECT %s < $1, jsonb_pretty(p)
 		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM crdb_internal.system_jobs)
-		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
-		gcAt.WallTime,
-	)[0]
-	if got[0] != "true" {
-		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
-	}
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX %s%%'`, writeTSFromJob, indexName),
+			gcAt.WallTime,
+		)[0]
+		if got[0] != "true" {
+			t.Fatalf("expected write-ts < gc time (%d). details: %s", gcAt.WallTime, got[1])
+		}
+
+	})
 }
 
 // TestAddComputedColumn verifies that while a column backfill is happening
