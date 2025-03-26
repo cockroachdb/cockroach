@@ -234,7 +234,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 						cs = rawNode.ApplyConfChange(cc)
 					}
 				}
-				rawNode.Advance(rd)
+				rawNode.AdvanceHack(rd)
 				if storeLivenessEnabled {
 					// Revert the support state to how it was so that the test can run
 					// without having peer 1 not supported.
@@ -296,7 +296,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			var context []byte
 			if !tc.exp.AutoLeave {
 				require.Empty(t, rd.Entries)
-				rawNode.Advance(rd)
+				rawNode.AdvanceHack(rd)
 				if tc.exp2 == nil {
 					return
 				}
@@ -318,7 +318,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			cs = rawNode.ApplyConfChange(cc)
 			require.Equal(t, tc.exp2, cs)
 
-			rawNode.Advance(rd)
+			rawNode.AdvanceHack(rd)
 		})
 	}
 }
@@ -404,7 +404,7 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 				cs = rawNode.ApplyConfChange(cc)
 			}
 		}
-		rawNode.Advance(rd)
+		rawNode.AdvanceHack(rd)
 		// Once we are the leader, propose a command and a ConfChange.
 		if !proposed && rawNode.raft.state == pb.StateLeader {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
@@ -435,22 +435,22 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	rd := rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	require.Empty(t, rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
@@ -475,17 +475,17 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 
 	rd := rawNode.Ready()
 	s.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	rawNode.Campaign()
 	for {
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
 		if rd.HardState.Lead == rawNode.raft.id {
-			rawNode.Advance(rd)
+			rawNode.AdvanceHack(rd)
 			break
 		}
-		rawNode.Advance(rd)
+		rawNode.AdvanceHack(rd)
 	}
 
 	proposeConfChangeAndApply := func(cc pb.ConfChange) {
@@ -499,7 +499,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 				rawNode.ApplyConfChange(cc)
 			}
 		}
-		rawNode.Advance(rd)
+		rawNode.AdvanceHack(rd)
 	}
 
 	cc1 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 1}
@@ -601,22 +601,23 @@ func TestRawNodeStart(t *testing.T) {
 	rawNode.Campaign()
 	rd := rawNode.Ready()
 	storage.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 	rawNode.Propose([]byte("foo"))
 	require.True(t, rawNode.HasReady())
 
 	rd = rawNode.Ready()
 	require.Equal(t, entries, rd.Entries)
 	storage.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	require.True(t, rawNode.HasReady())
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
 	require.True(t, rd.MustSync)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	rd.SoftState, want.SoftState = nil, nil
+	rd.Messages, _ = SplitMessages(1, rd.Messages)
 
 	require.Equal(t, want, rd)
 	assert.False(t, rawNode.HasReady())
@@ -644,8 +645,10 @@ func TestRawNodeRestart(t *testing.T) {
 	rawNode2, err := NewRawNode(newTestConfig(2, 10, 1, storage))
 	require.NoError(t, err)
 	rd := rawNode1.Ready()
+	var advance []pb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, want, rd)
-	rawNode1.Advance(rd)
+	rawNode1.advance(advance)
 	assert.False(t, rawNode1.HasReady())
 
 	// Ensure that the HardState was correctly loaded post rawNode1 restart.
@@ -704,8 +707,10 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 	require.NoError(t, err)
 	rd := rawNode.Ready()
+	var advance []pb.Message
+	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
-		rawNode.Advance(rd)
+		rawNode.advance(advance)
 	}
 	assert.False(t, rawNode.HasReady())
 }
@@ -721,7 +726,7 @@ func TestRawNodeStatus(t *testing.T) {
 
 	rd := rn.Ready()
 	s.Append(rd.Entries)
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 	status := rn.Status()
 	require.Equal(t, pb.PeerID(1), status.Lead)
 	require.Equal(t, pb.StateLeader, status.RaftState)
@@ -797,7 +802,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 			"attempting to apply index %d after index %d, leaving a gap", next, highestApplied)
 
 		highestApplied = rd.CommittedEntries[n-1].Index
-		rawNode.Advance(rd)
+		rawNode.AdvanceHack(rd)
 		rawNode.Step(pb.Message{
 			Type:    pb.MsgApp,
 			To:      1,
@@ -884,7 +889,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	for {
 		rd := rawNode.Ready()
 		s.Append(rd.Entries)
-		rawNode.Advance(rd)
+		rawNode.AdvanceHack(rd)
 		if len(rd.CommittedEntries) > 0 {
 			break
 		}
@@ -910,7 +915,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	rd := rawNode.Ready()
 	require.Len(t, rd.Entries, maxEntries)
 	s.Append(rd.Entries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	// Entries are appended, but not applied.
 	checkUncommitted(maxEntrySize)
@@ -918,7 +923,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
 	require.Len(t, rd.CommittedEntries, maxEntries)
-	rawNode.Advance(rd)
+	rawNode.AdvanceHack(rd)
 
 	checkUncommitted(0)
 }
@@ -1008,7 +1013,7 @@ func TestRawNodeConsumeReady(t *testing.T) {
 	require.Equal(t, m1, rd.Messages[0])
 	// Add a message to raft to make sure that Advance() doesn't drop it.
 	rn.raft.msgs = append(rn.raft.msgs, m2)
-	rn.Advance(rd)
+	rn.AdvanceHack(rd)
 	require.Len(t, rn.raft.msgs, 1)
 	require.Equal(t, m2, rn.raft.msgs[0])
 }
@@ -1085,7 +1090,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 					rn.Step(resp)
 				}
 			}
-			rn.Advance(rd)
+			rn.AdvanceHack(rd)
 		}
 		return applied
 	}

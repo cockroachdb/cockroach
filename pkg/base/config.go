@@ -947,11 +947,11 @@ func InheritTempStorageConfig(
 func newTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
 ) TempStorageConfig {
-	var monitorName mon.MonitorName
+	var monitorName mon.Name
 	if inMemory {
-		monitorName = mon.MakeMonitorName("in-mem temp storage")
+		monitorName = mon.MakeName("in-mem temp storage")
 	} else {
-		monitorName = mon.MakeMonitorName("temp disk storage")
+		monitorName = mon.MakeName("temp disk storage")
 	}
 	monitor := mon.NewMonitor(mon.Options{
 		Name:      monitorName,

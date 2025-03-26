@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -246,7 +247,7 @@ type BytesMonitor struct {
 	}
 
 	// name identifies this monitor in logging messages.
-	name MonitorName
+	name Name
 
 	// reserved indicates how many bytes were already reserved for this
 	// monitor before it was instantiated. Allocations registered to
@@ -277,35 +278,125 @@ type BytesMonitor struct {
 	settings *cluster.Settings
 }
 
-// MonitorName is used to identify monitors in logging messages. It consists of
-// a string name and an optional ID.
-type MonitorName struct {
-	name redact.SafeString
-	id   uuid.Short
+// Name is used to identify monitors in logging messages and populate the
+// crdb_internal.node_memory_monitors virtual table. It consists of:
+//
+//   - a string prefix
+//   - an optional int32 id or uuid.Short
+//   - an optional suffix
+//   - an optional uint16
+//
+// When printed, the fields are separated by "-", if present.
+type Name struct {
+	prefix redact.SafeString
+	// id contains either an int32 or a uuid.Short, depending on the value of
+	// the uuid boolean.
+	id     int32
+	uuid   bool
+	suffix nameSuffix
+	i      uint16
 }
 
-// MakeMonitorName constructs a MonitorName with the given name.
-func MakeMonitorName(name redact.SafeString) MonitorName {
-	return MonitorName{name: name}
+// nameSuffix is an enum the represents one of a finite list of possible
+// monitor name suffixes.
+type nameSuffix uint8
+
+const (
+	nameSuffixNone nameSuffix = iota
+	nameSuffixLimited
+	nameSuffixUnlimited
+	nameSuffixDisk
+)
+
+func (mns nameSuffix) safeString() redact.SafeString {
+	switch mns {
+	case nameSuffixLimited:
+		return "limited"
+	case nameSuffixUnlimited:
+		return "unlimited"
+	case nameSuffixDisk:
+		return "disk"
+	default:
+		return "unknown-suffix"
+	}
 }
 
-// MakeMonitorNameWithID constructs a MonitorName with the given name and
-// ID.
-func MakeMonitorNameWithID(name redact.SafeString, id uuid.Short) MonitorName {
-	return MonitorName{name: name, id: id}
+// MakeName constructs a Name with the given prefix.
+func MakeName(prefix redact.SafeString) Name {
+	return Name{prefix: prefix}
 }
 
-// String returns the monitor name as a string.
-func (mn MonitorName) String() string {
+// WithID returns a new Name with the given ID attached. A previously set
+// UUID is cleared.
+func (mn Name) WithID(id int32) Name {
+	mn.id = id
+	mn.uuid = false
+	return mn
+}
+
+// WithUUID returns a new Name with the given uuid.Short attached.
+// A previously set ID is cleared.
+func (mn Name) WithUUID(uuid uuid.Short) Name {
+	mn.id = uuid.ToInt32()
+	mn.uuid = true
+	return mn
+}
+
+// Limited sets the suffix to "limited".
+func (mn Name) Limited() Name {
+	mn.suffix = nameSuffixLimited
+	return mn
+}
+
+// Unlimited sets the suffix to "unlimited".
+func (mn Name) Unlimited() Name {
+	mn.suffix = nameSuffixUnlimited
+	return mn
+}
+
+// Disk sets the suffix to "disk".
+func (mn Name) Disk() Name {
+	mn.suffix = nameSuffixDisk
+	return mn
+}
+
+// WithSuffix returns a new Name with the given suffix attached.
+func (mn Name) WithSuffix(suffix nameSuffix) Name {
+	mn.suffix = suffix
+	return mn
+}
+
+// WithInt returns a new Name with the given integer attached.
+func (mn Name) WithInt(i uint16) Name {
+	mn.i = i
+	return mn
+}
+
+// String returns the monitor prefix as a string.
+func (mn Name) String() string {
 	return redact.StringWithoutMarkers(mn)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
-	w.SafeString(mn.name)
-	var nullShort uuid.Short
-	if mn.id != nullShort {
-		w.SafeString(redact.SafeString(mn.id.String()))
+func (mn Name) SafeFormat(w redact.SafePrinter, r rune) {
+	w.SafeString(mn.prefix)
+	if mn.id != 0 {
+		w.SafeString("-")
+		if mn.uuid {
+			var u uuid.Short
+			u.FromInt32(mn.id)
+			w.SafeString(redact.SafeString(u.String()))
+		} else {
+			w.SafeString(redact.SafeString(strconv.Itoa(int(mn.id))))
+		}
+	}
+	if mn.suffix != nameSuffixNone {
+		w.SafeString("-")
+		w.SafeString(mn.suffix.safeString())
+	}
+	if mn.i != 0 {
+		w.SafeString("-")
+		w.SafeString(redact.SafeString(strconv.Itoa(int(mn.i))))
 	}
 }
 
@@ -315,17 +406,8 @@ const (
 	expectedAccountSize = 24
 )
 
-func init() {
-	monitorSize := unsafe.Sizeof(BytesMonitor{})
-	if !util.RaceEnabled {
-		if monitorSize != expectedMonitorSize {
-			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
-		}
-	}
-	if accountSize := unsafe.Sizeof(BoundAccount{}); accountSize != expectedAccountSize {
-		panic(errors.AssertionFailedf("expected account size to be %d, found %d", expectedAccountSize, accountSize))
-	}
-}
+var _ [0]struct{} = [expectedMonitorSize - unsafe.Sizeof(BytesMonitor{})]struct{}{}
+var _ [0]struct{} = [expectedAccountSize - unsafe.Sizeof(BoundAccount{})]struct{}{}
 
 // enableMonitorTreeTrackingEnvVar indicates whether tracking of all children of
 // a BytesMonitor (which is what powers TraverseTree) is enabled.
@@ -347,7 +429,7 @@ type MonitorState struct {
 	// root.
 	Level int
 	// Name is the name of the monitor.
-	Name MonitorName
+	Name Name
 	// ID is the "id" of the monitor (its address converted to int64).
 	ID int64
 	// ParentID is the "id" of the parent monitor (parent's address converted to
@@ -447,7 +529,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 type Options struct {
 	// Name is used to annotate log messages, can be used to distinguish
 	// monitors.
-	Name MonitorName
+	Name Name
 	// Res specifies what kind of resource the monitor is tracking allocations
 	// for (e.g. memory or disk). If unset, MemoryResource is assumed.
 	Res   Resource
@@ -495,14 +577,14 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
+	name Name, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {
 		res = DiskResource
 	}
 	return NewMonitor(Options{
-		Name:       MakeMonitorName(name),
+		Name:       name,
 		Res:        res,
 		Limit:      limit,
 		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
@@ -621,8 +703,8 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 	mm.doStop(ctx, true)
 }
 
-// Name returns the name of the monitor.
-func (mm *BytesMonitor) Name() MonitorName {
+// Name returns the prefix of the monitor.
+func (mm *BytesMonitor) Name() Name {
 	return mm.name
 }
 

@@ -793,7 +793,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		sb.WriteString(s.StreamID.String())
 	}
 	streamIDs := redact.SafeString(sb.String())
-	mmName := "hash-router-[" + streamIDs + "]"
+	mmName := mon.MakeName("hash-router-[" + streamIDs + "]")
 
 	numOutputs := len(output.Streams)
 	// We need to create two memory accounts for each output (one for the

@@ -321,9 +321,12 @@ func newInvertedJoiner(
 	ij.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &ij.fetchSpec)
 
 	// Initialize memory monitors and row container for index rows.
-	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "invertedjoiner-limited")
-	ij.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "invertedjoiner-unlimited")
-	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
+	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx,
+		mon.MakeName("invertedjoiner").Limited())
+	ij.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon,
+		mon.MakeName("invertedjoiner").Unlimited())
+	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor,
+		mon.MakeName("invertedjoiner").Disk())
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
 		rightColTypes,
