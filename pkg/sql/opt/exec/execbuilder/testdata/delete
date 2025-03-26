@@ -617,6 +617,8 @@ Del /Table/114/2/10/1/0
 Del /Table/114/3/100/1/0
 Del /Table/114/1/1/0
 
+subtest locking_behavior
+
 statement ok
 CREATE TABLE t139160 (
   k INT PRIMARY KEY,
@@ -811,9 +813,6 @@ Del (locking) /Table/115/1/1/0
 statement ok
 CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 
-statement ok
-INSERT INTO t139160 VALUES (1, 2);
-
 query T
 EXPLAIN DELETE FROM t139105 WHERE k = 1
 ----
@@ -830,3 +829,108 @@ query T kvtrace
 DELETE FROM t139105 WHERE k = 1
 ----
 Del (locking) /Table/116/1/1/0
+
+subtest end
+
+subtest locking_behavior_families
+
+# Same tests as above, but now the table has multiple column families. With
+# multiple families we do not use the optimization that elides lock acquisition
+# if the initial scan was locking.
+statement ok
+CREATE TABLE t139160_families (
+  k INT PRIMARY KEY,
+  i INT,
+  u INT,
+  v INT,
+  INDEX (i) STORING (u),
+  UNIQUE INDEX (u) STORING (i),
+  FAMILY (k),
+  FAMILY (i),
+  FAMILY (u),
+  FAMILY (v)
+);
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4);
+
+query T kvtrace
+DELETE FROM t139160_families WHERE k = 1
+----
+Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
+Del /Table/117/2/2/1/0
+Del /Table/117/2/2/1/2/1
+Del (locking) /Table/117/3/3/0
+Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4);
+
+query T kvtrace
+DELETE FROM t139160_families WHERE i = 2
+----
+Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
+Del /Table/117/2/2/1/0
+Del /Table/117/2/2/1/2/1
+Del (locking) /Table/117/3/3/0
+Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4);
+
+query T kvtrace
+DELETE FROM t139160_families WHERE i = 2 RETURNING v
+----
+Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
+Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
+Del /Table/117/2/2/1/0
+Del /Table/117/2/2/1/2/1
+Del (locking) /Table/117/3/3/0
+Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4);
+
+query T kvtrace
+DELETE FROM t139160_families WHERE u = 3
+----
+Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
+Del /Table/117/2/2/1/0
+Del /Table/117/2/2/1/2/1
+Del (locking) /Table/117/3/3/0
+Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
+
+statement ok
+INSERT INTO t139160_families VALUES (1, 2, 3, 4);
+
+query T kvtrace
+DELETE FROM t139160_families WHERE u = 3 RETURNING v
+----
+Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
+Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
+Del /Table/117/2/2/1/0
+Del /Table/117/2/2/1/2/1
+Del (locking) /Table/117/3/3/0
+Del (locking) /Table/117/3/3/1/1
+Del (locking) /Table/117/1/1/0
+Del (locking) /Table/117/1/1/1/1
+Del (locking) /Table/117/1/1/2/1
+Del (locking) /Table/117/1/1/3/1
+
+subtest end
