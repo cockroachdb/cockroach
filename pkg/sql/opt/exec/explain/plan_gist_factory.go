@@ -295,10 +295,12 @@ func (f *PlanGistFactory) decodeID() cat.StableID {
 }
 
 func (f *PlanGistFactory) decodeTable() cat.Table {
+	// We need to consume the ID even if we don't have the catalog to actually
+	// decode the table.
+	id := f.decodeID()
 	if f.catalog == nil {
 		return &unknownTable{}
 	}
-	id := f.decodeID()
 	ds, _, err := f.catalog.ResolveDataSourceByID(f.Ctx(), cat.Flags{}, id)
 	if err == nil {
 		return ds.(cat.Table)
