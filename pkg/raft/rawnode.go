@@ -244,8 +244,7 @@ func (rn *RawNode) Ready() Ready {
 	allowUnstable := rn.applyUnstableEntries()
 	if r.raftLog.hasNextCommittedEnts(allowUnstable) {
 		entries := r.raftLog.nextCommittedEnts(allowUnstable)
-		index := entries[len(entries)-1].Index
-		r.raftLog.acceptApplying(index, entsSize(entries), allowUnstable)
+		r.raftLog.acceptApplying(entries[len(entries)-1].Index)
 		rd.CommittedEntries = entries
 	}
 
