@@ -1,0 +1,62 @@
+### Define config bounds that allow two regions and hava a fallback.
+
+bounds name=foo
+constraint_bounds: <
+    allowed: <key: "region" value: "aws-us-east-1">
+    allowed: <key: "region" value: "aws-eu-central-1">
+    fallback: <constraints: <key: "region" value: "aws-us-central-1">>
+>
+----
+
+bounds-fields bounds=foo
+----
+range_min_bytes: *
+range_max_bytes: *
+global_reads: *
+num_voters: *
+num_replicas: *
+gc.ttlseconds: *
+constraints: {allowed: [{+region=aws-eu-central-1}, {+region=aws-us-east-1}], fallback: [[{+region=aws-us-central-1}]]}
+voter_constraints: {allowed: [{+region=aws-eu-central-1}, {+region=aws-us-east-1}], fallback: [[{+region=aws-us-central-1}]]}
+lease_preferences: {allowed: [{+region=aws-eu-central-1}, {+region=aws-us-east-1}], fallback: [[{+region=aws-us-central-1}]]}
+
+
+### Define a config with empty constraints and voter constraints in an
+### allowed region. It satisfies the config bounds above.
+
+config name=empty-constraints
+num_voters: 3
+num_replicas: 3
+voter_constraints: <
+  constraints: <key: "region" value: "aws-us-east-1">
+>
+constraints: <>
+----
+
+conforms bounds=foo config=empty-constraints
+----
+true
+
+### Define a config with missing constraints and voter replica constraints in
+### an allowed region. It does not satisfy the config bounds above and
+### applies the fallback.
+
+config name=missing-constraints
+num_voters: 3
+num_replicas: 3
+voter_constraints: <
+  constraints: <key: "region" value: "aws-us-east-1">
+>
+----
+
+conforms bounds=foo config=missing-constraints
+----
+false
+
+check bounds=foo config=missing-constraints
+----
+span config bounds violated for fields: constraints
+span config bounds violated for fields: constraints
+(1) span config bounds violated for fields: constraints
+  | constraints: [] does not conform to {allowed: [{+region=aws-eu-central-1}, {+region=aws-us-east-1}], fallback: [[{+region=aws-us-central-1}]]}, will be clamped to [+region=aws-us-central-1:3]
+Error types: (1) *spanconfigbounds.ViolationError
