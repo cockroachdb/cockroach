@@ -10,12 +10,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,20 +38,17 @@ type Inserter struct {
 // insertCols must contain every column in the primary key. Virtual columns must
 // be present if they are part of any index.
 func MakeInserter(
-	ctx context.Context,
-	txn *kv.Txn,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
 	insertCols []catalog.Column,
-	alloc *tree.DatumAlloc,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: NewRowHelper(
-			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sv, internal, metrics,
+			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sd, sv, metrics,
 		),
 
 		InsertCols:            insertCols,
@@ -217,29 +214,38 @@ func (ri *Inserter) InsertRow(
 	for idx, index := range ri.Helper.Indexes {
 		entries, ok := secondaryIndexEntries[index]
 		if ok {
+			var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
+			if index.ForcePut() {
+				// See the comment on (catalog.Index).ForcePut() for more
+				// details.
+				// TODO(#140695): re-evaluate the lock need when we enable
+				// buffered writes with DDLs.
+				putFn = insertPutFn
+			} else if index.IsUnique() || ri.Helper.sd.UseCPutsOnNonUniqueIndexes {
+				// For unique indexes we need to ensure that the key doesn't
+				// exist already. This will also acquire the lock on the key.
+				//
+				// For non-unique indexes we'll use CPuts if the session
+				// variable dictates that.
+				putFn = insertCPutFn
+			} else {
+				// For non-unique indexes we don't care whether there exists an
+				// entry already, so we can just use the Put. (In fact, since we
+				// always include the PK columns into the non-unique secondary
+				// index key, the current key should never already exist (unless
+				// we have a duplicate PK which will be detected when inserting
+				// into the primary index).)
+				//
+				// We also don't need the lock (unless the session variable
+				// tells us to acquire it).
+				putFn = insertPutFn
+				if ri.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes {
+					putFn = insertPutMustAcquireExclusiveLockFn
+				}
+			}
 			for i := range entries {
 				e := &entries[i]
-				if index.ForcePut() || !index.IsUnique() {
-					// See the comment on (catalog.Index).ForcePut() for more
-					// details.
-					// TODO(#140695): re-evaluate the lock need when we enable
-					// buffered writes with DDLs.
-					//
-					// For non-unique indexes we don't care whether there exists
-					// an entry already, so we can just use the Put. (In fact,
-					// since we always include the PK columns into the
-					// non-unique secondary index key, the current key should
-					// never already exist (unless we have a duplicate PK which
-					// will be detected when inserting into the primary index).)
-					//
-					// We also don't need the lock.
-					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
-				} else {
-					// For unique indexes we need to ensure that the key doesn't
-					// exist already. This will also acquire the lock on the
-					// key.
-					insertCPutFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
-				}
+				putFn(ctx, b, &e.Key, &e.Value, traceKV, ri.Helper.secIndexValDirs[idx])
 			}
 
 			// If a row does not satisfy a partial index predicate, it will have no
