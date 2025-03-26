@@ -207,7 +207,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantIdentity)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -220,7 +220,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantIdentity)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -253,7 +253,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantIdentity)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -266,7 +266,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantIdentity)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -280,11 +280,11 @@ func TestGetCertificateUserScope(t *testing.T) {
 			require.Equal(t, 2, len(userScopes))
 
 			require.Equal(t, "bar", userScopes[0].Username)
-			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantName)
+			require.Equal(t, roachpb.TenantName("tenant10"), userScopes[0].TenantIdentity)
 			require.False(t, userScopes[0].Global)
 
 			require.Equal(t, "foo", userScopes[1].Username)
-			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[1].TenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[1].TenantIdentity)
 			require.False(t, userScopes[1].Global)
 		}
 	})
@@ -506,7 +506,6 @@ func TestAuthenticationHook(t *testing.T) {
 				tc.insecure,
 				makeFakeTLSState(t, tc.tlsSpec),
 				tc.tenantID,
-				"",
 				nil, /* certManager */
 				roleSubject,
 				tc.subjectRequired,

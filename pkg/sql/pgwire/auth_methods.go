@@ -448,8 +448,7 @@ func authCert(
 		hook, err := security.UserAuthCertHook(
 			false, /*insecure*/
 			&tlsState,
-			execCfg.RPCContext.TenantID,
-			execCfg.RPCContext.TenantName,
+			execCfg.RPCContext.SecurityContext.GetTenantIdentity(),
 			cm,
 			roleSubject,
 			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),

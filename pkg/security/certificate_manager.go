@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/clientcert"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -44,8 +45,8 @@ import (
 //   - client.node.crt    client certificate for the 'node' user. If it does not exist,
 //     fall back on 'node.crt'.
 type CertificateManager struct {
-	tenantIdentifier uint64
-	timeSource       timeutil.TimeSource
+	tenantIdentity roachpb.TenantIdentity
+	timeSource     timeutil.TimeSource
 	certnames.Locator
 
 	tlsSettings TLSSettings
@@ -95,20 +96,24 @@ func makeCertificateManager(
 		fn(&o)
 	}
 
+	var tenantIdentity roachpb.TenantIdentity = roachpb.TenantID{}
+	if o.tenantIdentity != nil {
+		tenantIdentity = o.tenantIdentity
+	}
 	cm := &CertificateManager{
-		Locator:          certnames.MakeLocator(certsDir),
-		tenantIdentifier: o.tenantIdentifier,
-		timeSource:       o.timeSource,
-		tlsSettings:      tlsSettings,
+		Locator:        certnames.MakeLocator(certsDir),
+		tenantIdentity: tenantIdentity,
+		timeSource:     o.timeSource,
+		tlsSettings:    tlsSettings,
 	}
 	cm.certMetrics = createMetricsLocked(cm)
 	return cm
 }
 
 type cmOptions struct {
-	// tenantIdentifier, if set, specifies the tenant to use for loading tenant
+	// tenantIdentity, if set, specifies the tenant to use for loading tenant
 	// client certs.
-	tenantIdentifier uint64
+	tenantIdentity roachpb.TenantIdentity
 
 	// timeSource, if set, specifies the time source with which the metrics are set.
 	timeSource timeutil.TimeSource
@@ -120,9 +125,9 @@ type Option func(*cmOptions)
 // ForTenant is an option to NewCertificateManager which ties the manager to
 // the provided tenant. Without this option, tenant client certs are not
 // available.
-func ForTenant(tenantIdentifier uint64) Option {
+func ForTenant(tenantIdentity roachpb.TenantIdentity) Option {
 	return func(opts *cmOptions) {
-		opts.tenantIdentifier = tenantIdentifier
+		opts.tenantIdentity = tenantIdentity
 	}
 }
 
@@ -160,7 +165,7 @@ func NewCertificateManagerFirstRun(
 // IsForTenant returns true iff this certificate manager is handling certs
 // for a SQL-only server process.
 func (cm *CertificateManager) IsForTenant() bool {
-	return cm.tenantIdentifier != 0
+	return cm.tenantIdentity.IsSet()
 }
 
 // Metrics returns the metrics struct.
@@ -315,7 +320,14 @@ func (cm *CertificateManager) LoadCertificates() error {
 			if err != nil {
 				return errors.Errorf("invalid tenant id %s", ci.Name)
 			}
-			if tenantID == cm.tenantIdentifier {
+
+			// TODO(chandrat): For now, this can't be anything other than TenantID.
+			// Once we add support for TenantName, we should revisit this.
+			cmTenantID, ok := cm.tenantIdentity.(roachpb.TenantID)
+			if !ok {
+				return errors.Errorf("invalid tenant ID: %v", cm.tenantIdentity)
+			}
+			if tenantID == cmTenantID.InternalValue {
 				tenantCert = ci
 			}
 		case TenantSigningPem:
@@ -326,7 +338,13 @@ func (cm *CertificateManager) LoadCertificates() error {
 			if err != nil {
 				return errors.Errorf("invalid tenant id %s", ci.Name)
 			}
-			if tenantID == cm.tenantIdentifier {
+			// TODO(chandrat): For now, this can't be anything other than TenantID.
+			// Once we add support for TenantName, we should revisit this.
+			cmTenantID, ok := cm.tenantIdentity.(roachpb.TenantID)
+			if !ok {
+				return errors.Errorf("invalid tenant ID: %v", cm.tenantIdentity)
+			}
+			if tenantID == cmTenantID.InternalValue {
 				tenantSigningCert = ci
 			}
 		case TenantCAPem:
@@ -375,8 +393,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 		}
 	}
 
-	if tenantCert == nil && cm.tenantIdentifier != 0 {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.CertsDir())
+	if tenantCert == nil && cm.tenantIdentity.IsSet() {
+		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentity, cm.CertsDir())
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {

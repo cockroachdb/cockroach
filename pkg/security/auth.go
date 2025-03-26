@@ -92,9 +92,8 @@ func UnsetNodeSubject() {
 // GetCertificateUserScope function expands a cert into a set of "scopes" with
 // each possible username (and tenant ID).
 type CertificateUserScope struct {
-	Username   string
-	TenantID   roachpb.TenantID
-	TenantName roachpb.TenantName
+	Username       string
+	TenantIdentity roachpb.TenantIdentity
 	// global is set to true to indicate that the certificate unscoped to
 	// any tenant is a global client certificate which can authenticate
 	// on any tenant. This is ONLY for backward compatibility with old
@@ -237,8 +236,8 @@ func forEachCertificateUserScope(
 				return err
 			}
 			scope = CertificateUserScope{
-				Username:   user,
-				TenantName: tenantName,
+				Username:       user,
+				TenantIdentity: tenantName,
 			}
 		} else {
 			tenantID, user, err := parseTenantURISAN(uri)
@@ -246,8 +245,8 @@ func forEachCertificateUserScope(
 				return err
 			}
 			scope = CertificateUserScope{
-				Username: user,
-				TenantID: tenantID,
+				Username:       user,
+				TenantIdentity: tenantID,
 			}
 		}
 		if halt, err := fn(scope); halt || err != nil {
@@ -289,8 +288,7 @@ func Contains(sl []string, s string) bool {
 func UserAuthCertHook(
 	insecureMode bool,
 	tlsState *tls.ConnectionState,
-	tenantID roachpb.TenantID,
-	tenantName roachpb.TenantName,
+	tenantIdentity roachpb.TenantIdentity,
 	certManager *CertificateManager,
 	roleSubject *ldap.DN,
 	subjectRequired bool,
@@ -351,7 +349,7 @@ func UserAuthCertHook(
 			}
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject) {
+		if ValidateUserScope(certUserScope, systemIdentity, tenantIdentity, roleSubject, certSubject) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -381,12 +379,7 @@ func FormatUserScopes(certUserScope []CertificateUserScope) string {
 		if scope.Global {
 			buf.WriteString("all tenants")
 		} else {
-			if scope.TenantID.IsSet() {
-				fmt.Fprintf(&buf, "tenantID %v", scope.TenantID)
-			}
-			if scope.TenantName != "" {
-				fmt.Fprintf(&buf, "tenantName %v", scope.TenantName)
-			}
+			fmt.Fprintf(&buf, "tenant identity %v", scope.TenantIdentity)
 		}
 		comma = ", "
 	}
@@ -479,8 +472,7 @@ func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 func ValidateUserScope(
 	certUserScope []CertificateUserScope,
 	user string,
-	tenantID roachpb.TenantID,
-	tenantName roachpb.TenantName,
+	tenantIdentity roachpb.TenantIdentity,
 	roleSubject *ldap.DN,
 	certSubject *ldap.DN,
 ) bool {
@@ -495,10 +487,7 @@ func ValidateUserScope(
 			if scope.Global {
 				return true
 			}
-			if scope.TenantID.IsSet() && scope.TenantID == tenantID {
-				return true
-			}
-			if scope.TenantName != "" && scope.TenantName == tenantName {
+			if scope.TenantIdentity.IsSet() && scope.TenantIdentity == tenantIdentity {
 				return true
 			}
 		}

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -108,7 +109,8 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// Make a new CertificateManager for the tenant. We could've used this one
 	// for the server as well, but this way it's closer to reality.
-	cm, err = security.NewCertificateManager(certsDir, security.CommandTLSSettings{}, security.ForTenant(tenant))
+	cm, err = security.NewCertificateManager(certsDir, security.CommandTLSSettings{},
+		security.ForTenant(roachpb.MustMakeTenantID(tenant)))
 	require.NoError(t, err)
 
 	// The client in turn trusts the server CA and presents its tenant certs to the

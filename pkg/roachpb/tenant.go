@@ -7,6 +7,7 @@ package roachpb
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"regexp"
 	"strconv"
@@ -223,3 +224,83 @@ func (c *TenantNameContainer) Get() TenantName {
 func (c *TenantNameContainer) String() string {
 	return (*syncutil.AtomicString)(c).Get()
 }
+
+// TenantIdentity is an interface that represents a tenant's identity. Both
+// TenantID and TenantName implement this interface.
+type TenantIdentity interface {
+	// IsSet returns whether this tenant identity is set or not.
+	IsSet() bool
+	// IsValid returns an error if the tenant identity is invalid.
+	IsValid() error
+	// IsSystem returns whether this tenant identity is that of the system tenant.
+	IsSystem() bool
+	// IsEqual returns whether this tenant identity is equal to another.
+	IsEqual(o TenantIdentity) bool
+	// ToString returns a string representation of the tenant identity.
+	ToString() string
+}
+
+func (t TenantID) IsValid() error {
+	if t.InternalValue < MinTenantID.ToUint64() || t.InternalValue > MaxTenantID.ToUint64() {
+		return errors.Newf("invalid tenant ID %d", t.InternalValue)
+	}
+	return nil
+}
+
+func (t TenantID) ToString() string {
+	return fmt.Sprintf("%d", t.InternalValue)
+}
+
+func (t TenantID) IsEqual(o TenantIdentity) bool {
+	if _, ok := o.(TenantID); !ok {
+		return false
+	}
+	return t.Equal(o)
+}
+
+func (t TenantName) IsSet() bool {
+	return t.IsValid() == nil
+}
+
+func (t TenantName) IsSystem() bool {
+	return IsSystemTenantName(t)
+}
+
+func (t TenantName) IsEqual(o TenantIdentity) bool {
+	if _, ok := o.(TenantName); !ok {
+		return false
+	}
+	return t.Equal(o.(TenantName))
+}
+
+func (t TenantName) ToString() string {
+	return string(t)
+}
+
+// TenantIdentityFromString takes a name and converts it to a tenant identity. Name can be
+// either tenant ID or tenant name. We attempt to parse it as a tenant ID
+// first, and if that fails, we assume it's a tenant name.
+//
+// NB: While this may be unlikely to happen in practice, if tenant name is a
+// valid uint64, we'll parse it as a tenant ID.
+func TenantIdentityFromString(name string) (TenantIdentity, error) {
+	var tenantIdentity TenantIdentity
+	tenantID, err := strconv.ParseUint(name, 10, 64)
+	if err == nil {
+		tenantIdentity, err = MakeTenantID(tenantID)
+		if err != nil {
+			return nil, errors.Errorf("invalid tenant id %s", name)
+		}
+	} else {
+		// Treat it as tenant name.
+		tenantIdentity = TenantName(name)
+		if tenantIdentity.IsValid() != nil {
+			return nil, errors.Errorf("invalid tenant name %s", name)
+		}
+	}
+
+	return tenantIdentity, nil
+}
+
+var _ TenantIdentity = &TenantID{}
+var _ TenantIdentity = TenantName("")
