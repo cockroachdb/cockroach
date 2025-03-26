@@ -3911,6 +3911,7 @@ authentication_method                                      cert-password
 avoid_buffering                                            off
 avoid_full_table_scans_in_mutations                        on
 backslash_quote                                            safe_encoding
+buffered_writes_use_locking_on_non_unique_indexes          off
 bypass_pcr_reader_catalog_aost                             off
 bytea_output                                               hex
 check_function_bodies                                      on
@@ -3997,6 +3998,7 @@ lc_time                                                    C.UTF-8
 legacy_varchar_typing                                      off
 locality                                                   region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on
+lock_eliding_optimization_always_enabled                   off
 lock_timeout                                               0
 log_timezone                                               UTC
 max_connections                                            -1
@@ -4094,6 +4096,7 @@ troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
 unsafe_allow_triggers_modifying_cascades                   off
+use_cputs_on_non_unique_indexes                            off
 variable_inequality_lookup_join_enabled                    on
 xmloption                                                  content
 

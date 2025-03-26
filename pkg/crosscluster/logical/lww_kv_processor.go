@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -40,11 +39,9 @@ import (
 type kvRowProcessor struct {
 	decoder cdcevent.Decoder
 	lastRow cdcevent.Row
-	alloc   *tree.DatumAlloc
 	cfg     *execinfra.ServerConfig
 	spec    execinfrapb.LogicalReplicationWriterSpec
 	evalCtx *eval.Context
-	sd      *sessiondata.SessionData
 
 	dstBySrc map[descpb.ID]descpb.ID
 	writers  map[descpb.ID]*kvTableWriter
@@ -60,7 +57,6 @@ func newKVRowProcessor(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	evalCtx *eval.Context,
-	sd *sessiondata.SessionData,
 	spec execinfrapb.LogicalReplicationWriterSpec,
 	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 ) (*kvRowProcessor, error) {
@@ -90,11 +86,9 @@ func newKVRowProcessor(
 		cfg:      cfg,
 		spec:     spec,
 		evalCtx:  evalCtx,
-		sd:       sd,
 		dstBySrc: dstBySrc,
 		writers:  make(map[descpb.ID]*kvTableWriter, len(procConfigByDestID)),
 		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
-		alloc:    &tree.DatumAlloc{},
 	}
 	return p, nil
 }
@@ -380,7 +374,7 @@ func (p *kvRowProcessor) getWriter(
 	}
 
 	// New lease and desc version; make a new writer.
-	w, err = newKVTableWriter(ctx, l, p.alloc, p.evalCtx)
+	w, err = newKVTableWriter(ctx, l, p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,12 +401,10 @@ type kvTableWriter struct {
 }
 
 func newKVTableWriter(
-	ctx context.Context, leased lease.LeasedDescriptor, a *tree.DatumAlloc, evalCtx *eval.Context,
+	ctx context.Context, leased lease.LeasedDescriptor, evalCtx *eval.Context,
 ) (*kvTableWriter, error) {
 
 	tableDesc := leased.Underlying().(catalog.TableDescriptor)
-
-	const internal = true
 
 	// TODO(dt): figure out the right sets of columns here and in fillNew/fillOld.
 	writeCols, err := writeableColunms(ctx, tableDesc)
@@ -423,13 +415,13 @@ func newKVTableWriter(
 
 	// TODO(dt): pass these some sort fo flag to have them use versions of CPut
 	// or a new LWW KV API. For now they're not detecting/handling conflicts.
-	ri, err := row.MakeInserter(ctx, nil, evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, writeCols, a, &evalCtx.Settings.SV, internal, nil)
+	ri, err := row.MakeInserter(evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, writeCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
 	if err != nil {
 		return nil, err
 	}
-	rd := row.MakeDeleter(evalCtx.Codec, tableDesc, nil /* lockedIndexes */, readCols, &evalCtx.Settings.SV, internal, nil)
+	rd := row.MakeDeleter(evalCtx.Codec, tableDesc, nil /* lockedIndexes */, readCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
 	ru, err := row.MakeUpdater(
-		ctx, nil, evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, nil /* lockedIndexes */, readCols, writeCols, row.UpdaterDefault, a, &evalCtx.Settings.SV, internal, nil,
+		evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, nil /* lockedIndexes */, readCols, writeCols, row.UpdaterDefault, evalCtx.SessionData(), &evalCtx.Settings.SV, nil, /* metrics */
 	)
 	if err != nil {
 		return nil, err

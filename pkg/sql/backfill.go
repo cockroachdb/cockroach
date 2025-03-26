@@ -2957,15 +2957,13 @@ func indexTruncateInTxn(
 	idx catalog.Index,
 	traceKV bool,
 ) error {
-	alloc := &tree.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		internal := evalCtx.SessionData().Internal
 		rd := row.MakeDeleter(
 			execCfg.Codec, tableDesc, nil /* lockedIndexes */, nil, /* requestedCols */
-			&execCfg.Settings.SV, internal, execCfg.GetRowMetrics(internal),
+			evalCtx.SessionData(), &execCfg.Settings.SV, execCfg.GetRowMetrics(evalCtx.SessionData().Internal),
 		)
-		td := tableDeleter{rd: rd, alloc: alloc}
+		td := tableDeleter{rd: rd}
 		if err := td.init(ctx, txn.KV(), evalCtx); err != nil {
 			return err
 		}

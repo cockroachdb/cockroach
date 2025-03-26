@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
@@ -58,8 +59,8 @@ func MakeDeleter(
 	tableDesc catalog.TableDescriptor,
 	lockedIndexes []catalog.Index,
 	requestedCols []catalog.Column,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
@@ -121,7 +122,7 @@ func MakeDeleter(
 		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
 	}
 	rd := Deleter{
-		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
+		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 		primaryLocked:        primaryLocked,
@@ -169,7 +170,8 @@ func (rd *Deleter) DeleteRow(
 		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
-				ctx, b, index, &e.Key, alreadyLocked, traceKV, rd.Helper.secIndexValDirs[i],
+				ctx, b, index, &e.Key, alreadyLocked, rd.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
+				traceKV, rd.Helper.secIndexValDirs[i],
 			); err != nil {
 				return err
 			}
