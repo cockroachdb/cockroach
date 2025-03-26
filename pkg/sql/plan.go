@@ -100,21 +100,27 @@ type planNode interface {
 
 	InputCount() int
 	Input(i int) (planNode, error)
+	SetInput(i int, p planNode) error
 }
 
 // zeroInputPlanNode is embedded in planNode implementations that have no input
-// planNode. It implements the InputCount and Input methods of planNode.
+// planNode. It implements the InputCount, Input, and SetInput methods of
+// planNode.
 type zeroInputPlanNode struct{}
 
 func (zeroInputPlanNode) InputCount() int { return 0 }
 
 func (zeroInputPlanNode) Input(i int) (planNode, error) {
-	return nil, errors.AssertionFailedf("input node has no inputs")
+	return nil, errors.AssertionFailedf("node has no inputs")
+}
+
+func (zeroInputPlanNode) SetInput(i int, p planNode) error {
+	return errors.AssertionFailedf("node has no inputs")
 }
 
 // singleInputPlanNode is embedded in planNode implementations that have a
-// single input planNode. It implements the InputCount and Input methods of
-// planNode.
+// single input planNode. It implements the InputCount, Input, and SetInput
+// methods of planNode.
 type singleInputPlanNode struct {
 	input planNode
 }
@@ -126,6 +132,14 @@ func (n *singleInputPlanNode) Input(i int) (planNode, error) {
 		return n.input, nil
 	}
 	return nil, errors.AssertionFailedf("input index %d is out of range", i)
+}
+
+func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
+	if i == 0 {
+		n.input = p
+		return nil
+	}
+	return errors.AssertionFailedf("input index %d is out of range", i)
 }
 
 // mutationPlanNode is a specification of planNode for mutations operations
