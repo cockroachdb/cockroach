@@ -243,7 +243,7 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		if err := p.canDropFunction(ctx, fn); err != nil {
 			return err
 		}
-		if err := p.dropFunctionImpl(ctx, fn); err != nil {
+		if err := p.dropFunctionImpl(ctx, fn, tree.DropCascade); err != nil {
 			return err
 		}
 	}
