@@ -291,6 +291,8 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 // appended them to the local raft log yet. If allowUnstable is true, committed
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
+//
+// TODO(pav-kv): only used in tests. Downgrade to a test helper or remove.
 func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 	span := l.nextCommittedSpan(allowUnstable)
 	if span.Empty() {

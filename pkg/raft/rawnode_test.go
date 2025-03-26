@@ -219,7 +219,8 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			for cs == nil {
 				rd := rawNode.Ready()
 				s.Append(rd.Entries)
-				for _, ent := range committedEntries(t, rawNode, rd) {
+				apply := committedEntries(t, rawNode, rd)
+				for _, ent := range apply {
 					var cc pb.ConfChangeI
 					if ent.Type == pb.EntryConfChange {
 						var ccc pb.ConfChange
@@ -235,6 +236,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 					}
 				}
 				rawNode.AdvanceHack(rd)
+				rawNode.AckApplied(apply)
 				if storeLivenessEnabled {
 					// Revert the support state to how it was so that the test can run
 					// without having peer 1 not supported.
@@ -297,6 +299,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			if !tc.exp.AutoLeave {
 				require.Empty(t, rd.Entries)
 				rawNode.AdvanceHack(rd)
+				rawNode.AckApplied(committedEntries(t, rawNode, rd))
 				if tc.exp2 == nil {
 					return
 				}
@@ -319,6 +322,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			require.Equal(t, tc.exp2, cs)
 
 			rawNode.AdvanceHack(rd)
+			rawNode.AckApplied(committedEntries(t, rawNode, rd))
 		})
 	}
 }
@@ -372,7 +376,8 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	for cs == nil {
 		rd := rawNode.Ready()
 		s.Append(rd.Entries)
-		for _, ent := range committedEntries(t, rawNode, rd) {
+		apply := committedEntries(t, rawNode, rd)
+		for _, ent := range apply {
 			var cc pb.ConfChangeI
 			if ent.Type == pb.EntryConfChangeV2 {
 				var ccc pb.ConfChangeV2
@@ -405,6 +410,7 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 			}
 		}
 		rawNode.AdvanceHack(rd)
+		rawNode.AckApplied(apply)
 		// Once we are the leader, propose a command and a ConfChange.
 		if !proposed && rawNode.raft.state == pb.StateLeader {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
@@ -436,21 +442,17 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	t.Log(DescribeReady(rd, nil))
 	require.Empty(t, rd.Entries)
 	rawNode.AdvanceHack(rd)
+	rawNode.AckApplied(committedEntries(t, rawNode, rd))
 
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
-	rd = rawNode.Ready()
-	t.Log(DescribeReady(rd, nil))
-	s.Append(rd.Entries)
-	rawNode.AdvanceHack(rd)
-	rd = rawNode.Ready()
-	t.Log(DescribeReady(rd, nil))
-	s.Append(rd.Entries)
-	rawNode.AdvanceHack(rd)
-	rd = rawNode.Ready()
-	t.Log(DescribeReady(rd, nil))
-	s.Append(rd.Entries)
-	rawNode.AdvanceHack(rd)
+	for i := 0; i < 3; i++ {
+		rd = rawNode.Ready()
+		t.Log(DescribeReady(rd, nil))
+		s.Append(rd.Entries)
+		rawNode.AdvanceHack(rd)
+		rawNode.AckApplied(committedEntries(t, rawNode, rd))
+	}
 	rd = rawNode.Ready()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
@@ -466,8 +468,8 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	require.Equal(t, exp2Cs, *cs)
 }
 
-// TestRawNodeProposeAddDuplicateNode ensures that two proposes to add the same node should
-// not affect the later propose to add new node.
+// TestRawNodeProposeAddDuplicateNode ensures that two proposals to add the same
+// node should not affect a later proposal to add a new node.
 func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
@@ -481,18 +483,19 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	for {
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
+		rawNode.AdvanceHack(rd)
+		rawNode.AckApplied(committedEntries(t, rawNode, rd))
 		if rd.HardState.Lead == rawNode.raft.id {
-			rawNode.AdvanceHack(rd)
 			break
 		}
-		rawNode.AdvanceHack(rd)
 	}
 
 	proposeConfChangeAndApply := func(cc pb.ConfChange) {
 		rawNode.ProposeConfChange(cc)
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
-		for _, entry := range committedEntries(t, rawNode, rd) {
+		committed := committedEntries(t, rawNode, rd)
+		for _, entry := range committed {
 			if entry.Type == pb.EntryConfChange {
 				var cc pb.ConfChange
 				cc.Unmarshal(entry.Data)
@@ -500,6 +503,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 			}
 		}
 		rawNode.AdvanceHack(rd)
+		rawNode.AckApplied(committed)
 	}
 
 	cc1 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 1}
@@ -613,6 +617,7 @@ func TestRawNodeStart(t *testing.T) {
 	rd = rawNode.Ready()
 	require.Empty(t, rd.Entries)
 	rawNode.AdvanceHack(rd)
+	rawNode.AckApplied(committedEntries(t, rawNode, rd))
 
 	rd.SoftState, want.SoftState = nil, nil
 	rd.Messages, _ = SplitMessages(1, rd.Messages)
@@ -646,6 +651,7 @@ func TestRawNodeRestart(t *testing.T) {
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, want, rd)
 	rawNode1.advance(advance)
+	rawNode1.AckApplied(committedEntries(t, rawNode1, rd))
 	assert.False(t, rawNode1.HasReady())
 
 	// Ensure that the HardState was correctly loaded post rawNode1 restart.
@@ -707,6 +713,7 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
 		rawNode.advance(advance)
+		rawNode.AckApplied(committedEntries(t, rawNode, rd))
 	}
 	assert.False(t, rawNode.HasReady())
 }
@@ -800,6 +807,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 
 		highestApplied = committed[n-1].Index
 		rawNode.AdvanceHack(rd)
+		rawNode.AckApplied(committed)
 		rawNode.Step(pb.Message{
 			Type:    pb.MsgApp,
 			To:      1,
@@ -888,6 +896,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 		s.Append(rd.Entries)
 		rawNode.AdvanceHack(rd)
 		if !rd.Committed.Empty() {
+			rawNode.AckApplied(committedEntries(t, rawNode, rd))
 			break
 		}
 	}
@@ -911,6 +920,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	// disappear as entries are committed.
 	rd := rawNode.Ready()
 	require.Len(t, rd.Entries, maxEntries)
+	require.True(t, rd.Committed.Empty())
 	s.Append(rd.Entries)
 	rawNode.AdvanceHack(rd)
 
@@ -921,6 +931,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	require.Empty(t, rd.Entries)
 	require.Equal(t, uint64(maxEntries), rd.Committed.Len())
 	rawNode.AdvanceHack(rd)
+	rawNode.AckApplied(committedEntries(t, rawNode, rd))
 
 	checkUncommitted(0)
 }

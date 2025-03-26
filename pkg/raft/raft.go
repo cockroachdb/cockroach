@@ -1730,12 +1730,6 @@ func (r *raft) Step(m pb.Message) error {
 			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
 		}
 
-	case pb.MsgStorageApplyResp:
-		if ln := len(m.Entries); ln > 0 {
-			r.appliedTo(m.Entries[ln-1].Index)
-			r.reduceUncommittedSize(payloadsSize(m.Entries))
-		}
-
 	case pb.MsgVote, pb.MsgPreVote:
 		// We can vote if this is a repeat of a vote we've already cast...
 		canVote := r.Vote == m.From ||

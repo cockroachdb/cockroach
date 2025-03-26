@@ -314,6 +314,7 @@ func TestNextCommittedEnts(t *testing.T) {
 		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
+	stable := LogMark{Term: init.term, Index: 4}
 	span := func(after, last uint64) pb.LogSpan {
 		return pb.LogSpan{After: pb.Index(after), Last: pb.Index(last)}
 	}
@@ -349,7 +350,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			require.NoError(t, storage.Append(init.sub(3, 4)))
 			raftLog.checkInvariants(t)
 
-			raftLog.stableTo(LogMark{Term: init.term, Index: 4})
+			raftLog.stableTo(stable)
 			raftLog.commitTo(LogMark{Term: init.term, Index: 5})
 			raftLog.appliedTo(tt.applied)
 			raftLog.acceptApplying(tt.applying)

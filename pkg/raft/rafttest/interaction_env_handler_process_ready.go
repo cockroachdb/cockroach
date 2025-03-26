@@ -77,6 +77,7 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 			if err := processApply(n, apply); err != nil {
 				return err
 			}
+			n.AckApplied(apply)
 		}
 
 		env.Messages = append(env.Messages, send...)
@@ -92,14 +93,13 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		} else {
 			n.ApplyWork.Last = span.Last
 		}
+		n.AckApplying(span.Last)
 	}
 	for _, m := range rd.Messages {
 		if raft.IsLocalMsgTarget(m.To) {
 			switch m.Type {
 			case raftpb.MsgStorageAppend:
 				n.AppendWork = append(n.AppendWork, m)
-			case raftpb.MsgStorageApply:
-				// ignore
 			default:
 				panic(fmt.Sprintf("unexpected message type %s", m.Type))
 			}
