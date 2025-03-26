@@ -219,6 +219,14 @@ func (a *allocatorState) rebalanceStores(
 				clear(scratchNodes)
 				means.stores = candsPL
 				computeMeansForStoreSet(a.cs, &means, scratchNodes)
+				sls := a.cs.computeLoadSummary(store.StoreID, &means.storeLoad, &means.nodeLoad)
+				log.Infof(ctx, "range %v store %v sls=%v means %v store %v", rangeID, store.StoreID,
+					sls, means.storeLoad.load, ss.adjusted.load)
+				if sls.storeCPUSummary < overloadSlow {
+					// This store is not cpu overloaded relative to these candidates for
+					// this range.
+					continue
+				}
 				var candsSet candidateSet
 				for _, cand := range cands {
 					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
