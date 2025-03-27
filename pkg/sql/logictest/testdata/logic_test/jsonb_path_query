@@ -956,5 +956,80 @@ SELECT jsonb_path_query('{"a": {"x": {"y": 1}}, "b": {"x": {"z": 2}}}', '$.*.x.*
 1
 2
 
-# select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
-# select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
+query T
+SELECT jsonb_path_query('{}', '-1');
+----
+-1
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3]', '-$[*]');
+----
+-1
+-2
+-3
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3]', '-$');
+----
+-1
+-2
+-3
+
+query T
+SELECT jsonb_path_query('{}', '1 + 2 * -4');
+----
+-7
+
+query T
+SELECT jsonb_path_query('{"a": -10, "b": -5}', '$.a * -2 + $.b');
+----
+15
+
+query T rowsort
+SELECT jsonb_path_query('[1, -2, 3, -4]', '$[*] ? (@ < -1)');
+----
+-2
+-4
+
+query T
+SELECT jsonb_path_query('{"x": 5, "y": -3}', '(-$.x * 2 + $.y) / -1')
+----
+13.000000000000000000
+
+statement error pgcode 22012 pq: division by zero
+SELECT jsonb_path_query('{"x": 5, "y": -3}', '(-$.x * 2 + $.y) / -0')
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
+
+statement error pgcode 22033 pq: jsonpath array subscript is out of bounds
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
+
+statement error pgcode 22038 pq: operand of unary jsonpath operator - is not a numeric value
+SELECT jsonb_path_query('[1, 2, 3, 4, "hello"]', '-$[*]');
+
+statement error pgcode 22038 pq: operand of unary jsonpath operator \+ is not a numeric value
+SELECT jsonb_path_query('null', '+$');
+
+query T
+SELECT jsonb_path_query('{}', '+1');
+----
+1
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3]', '+$[*]');
+----
+1
+2
+3
+
+query T
+SELECT jsonb_path_query('{}', '+1 + 2 * +4');
+----
+9
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, 4]', '$[*] ? (@ > +2)');
+----
+3
+4
