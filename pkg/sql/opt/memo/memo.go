@@ -217,6 +217,10 @@ type Memo struct {
 	// curWithID is the highest currently in-use WITH ID.
 	curWithID opt.WithID
 
+	// curRoutineResultBufferID is the highest currently in-use routine result
+	// buffer ID. See the RoutineResultBufferID comment for more details.
+	curRoutineResultBufferID RoutineResultBufferID
+
 	newGroupFn func(opt.Expr)
 
 	// disableCheckExpr disables expression validation performed by CheckExpr,
@@ -563,14 +567,12 @@ func (m *Memo) NextRank() opt.ScalarRank {
 	return m.curRank
 }
 
-// CopyNextRankFrom copies the next ScalarRank from the other memo.
-func (m *Memo) CopyNextRankFrom(other *Memo) {
+// CopyRankAndIDsFrom copies the next ScalarRank, WithID, and
+// RoutineResultBufferID from the other memo.
+func (m *Memo) CopyRankAndIDsFrom(other *Memo) {
 	m.curRank = other.curRank
-}
-
-// CopyNextWithIDFrom copies the next WithID from the other memo.
-func (m *Memo) CopyNextWithIDFrom(other *Memo) {
 	m.curWithID = other.curWithID
+	m.curRoutineResultBufferID = other.curRoutineResultBufferID
 }
 
 // RequestColStat calculates and returns the column statistic calculated on the
@@ -612,6 +614,13 @@ func (m *Memo) RowsProcessed(expr RelExpr) (_ float64, ok bool) {
 func (m *Memo) NextWithID() opt.WithID {
 	m.curWithID++
 	return m.curWithID
+}
+
+// NextRoutineResultBufferID returns a not-yet-assigned identifier for the
+// result buffer of a PL/pgSQL set-returning function.
+func (m *Memo) NextRoutineResultBufferID() RoutineResultBufferID {
+	m.curRoutineResultBufferID++
+	return m.curRoutineResultBufferID
 }
 
 // Detach is used when we detach a memo that is to be reused later (either for
