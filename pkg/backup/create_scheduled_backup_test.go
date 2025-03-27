@@ -67,7 +67,7 @@ func (th *testHelper) protectedTimestamps() protectedts.Manager {
 
 // newTestHelper creates and initializes appropriate state for a test,
 // returning testHelper as well as a cleanup function.
-func newTestHelper(t *testing.T) (*testHelper, func()) {
+func newTestHelper(t *testing.T, testKnobs ...func(*base.TestingKnobs)) (*testHelper, func()) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 
 	th := &testHelper{
@@ -76,18 +76,23 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		iodir: dir,
 	}
 
-	knobs := &jobs.TestingKnobs{
-		JobSchedulerEnv: th.env,
-		TakeOverJobsScheduling: func(fn execSchedulesFn) {
-			th.executeSchedules = func() error {
-				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return fn(context.Background(), allSchedules)
-			}
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: &jobs.TestingKnobs{
+			JobSchedulerEnv: th.env,
+			TakeOverJobsScheduling: func(fn execSchedulesFn) {
+				th.executeSchedules = func() error {
+					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+					return fn(context.Background(), allSchedules)
+				}
+			},
+			CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
+				th.cfg = config
+			},
+			IntervalOverrides: jobs.NewTestingKnobsWithShortIntervals().IntervalOverrides,
 		},
-		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
-			th.cfg = config
-		},
-		IntervalOverrides: jobs.NewTestingKnobsWithShortIntervals().IntervalOverrides,
+	}
+	for _, testKnob := range testKnobs {
+		testKnob(&knobs)
 	}
 
 	args := base.TestServerArgs{
@@ -97,9 +102,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		// Some scheduled backup tests fail when run within a tenant. More
 		// investigation is required. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: knobs,
-		},
+		Knobs:             knobs,
 	}
 	jobs.PollJobsMetricsInterval.Override(context.Background(), &args.Settings.SV, 250*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
