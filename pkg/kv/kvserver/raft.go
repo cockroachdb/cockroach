@@ -179,7 +179,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 			i, raft.DescribeMessage(m, raftEntryFormatter))
 	}
-	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
+	log.Infof(ctx, "raft ready\n%s", buf.String())
 }
 
 func raftEntryFormatter(data []byte) string {

@@ -17,7 +17,7 @@ INFO 1 became candidate at term 1
 
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 State:StateCandidate
 HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
 INFO 1 received MsgVoteResp from 1 at term 1
@@ -44,7 +44,7 @@ INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 # Process n1 once, so that it can append the entry.
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 State:StateLeader
 HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:1
 Entries:
@@ -57,7 +57,7 @@ Entries:
 # it has to since we're carrying out two additions at once.
 process-ready 1
 ----
-Ready MustSync=true:
+Ready:
 HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
 CommittedEntries:
 1/3 EntryNormal ""
@@ -70,7 +70,7 @@ INFO initiating automatic transition out of joint configuration voters=(1 2 3)&&
 stabilize 1
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/5 EntryNormal ""
   Messages:
@@ -94,7 +94,7 @@ stabilize 1 2
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 v2 v3]
   DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
   Messages:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
@@ -107,7 +107,7 @@ stabilize 1 2
   DEBUG 1 [firstindex: 3, commit: 4] sent snapshot[index: 4, term: 1] to 2 [StateProbe match=0 next=1 sentCommit=0 matchCommit=0]
   DEBUG 1 paused sending replication messages to 2 [StateSnapshot match=0 next=5 sentCommit=4 matchCommit=0 paused pendingSnap=4]
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->2 MsgSnap Term:1 Log:0/0
     Snapshot: Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
@@ -119,7 +119,7 @@ stabilize 1 2
   INFO 2 [commit: 4, lastindex: 4, lastterm: 1] restored snapshot [index: 4, term: 1]
   INFO 2 [commit: 4] restored snapshot [index: 4, term: 1]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:4 Lead:1 LeadEpoch:1
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[1] Learners:[] LearnersNext:[] AutoLeave:true
   Messages:
@@ -128,13 +128,13 @@ stabilize 1 2
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 sentCommit=4 matchCommit=4 paused pendingSnap=4]
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/5 EntryNormal ""
   Messages:
@@ -142,7 +142,7 @@ stabilize 1 2
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/5 EntryNormal ""
@@ -152,13 +152,13 @@ stabilize 1 2
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/5 Commit:5
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/6 EntryConfChangeV2
   Messages:
   1->2 MsgApp Term:1 Log:1/5 Commit:5 Entries:[1/6 EntryConfChangeV2]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:5 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/5 EntryNormal ""
@@ -169,7 +169,7 @@ stabilize 1 2
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/5 Commit:5 Entries:[1/6 EntryConfChangeV2]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/6 EntryConfChangeV2
   Messages:
@@ -177,7 +177,7 @@ stabilize 1 2
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/6 EntryConfChangeV2
@@ -187,11 +187,11 @@ stabilize 1 2
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/6 Commit:6
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/6 EntryConfChangeV2
@@ -213,7 +213,7 @@ stabilize 1 3
   DEBUG 3 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
   Messages:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
@@ -228,7 +228,7 @@ stabilize 1 3
   DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=7 sentCommit=6 matchCommit=0 paused pendingSnap=6]
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgSnap Term:1 Log:0/0
     Snapshot: Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
@@ -240,7 +240,7 @@ stabilize 1 3
   INFO 3 [commit: 6, lastindex: 6, lastterm: 1] restored snapshot [index: 6, term: 1]
   INFO 3 [commit: 6] restored snapshot [index: 6, term: 1]
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
   Snapshot Index:6 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
@@ -266,7 +266,7 @@ ok
 stabilize 1
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
   Messages:
@@ -281,13 +281,13 @@ stabilize 2 3
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/6 Commit:6 Entries:[1/7 EntryConfChangeV2 r2 r3 l2 l3]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
   Messages:
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
   Messages:
@@ -309,7 +309,7 @@ ok
 stabilize 1
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/8 EntryNormal "foo"
   1/9 EntryNormal "bar"
@@ -322,7 +322,7 @@ stabilize 1
   2->1 MsgAppResp Term:1 Log:0/7 Commit:6
   3->1 MsgAppResp Term:1 Log:0/7 Commit:6
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/7 EntryConfChangeV2 r2 r3 l2 l3
@@ -332,7 +332,7 @@ stabilize 1
   INFO 1 switched to configuration voters=(1)&&(1 2 3) learners_next=(2 3) autoleave
   INFO initiating automatic transition out of joint configuration voters=(1)&&(1 2 3) learners_next=(2 3) autoleave
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   Entries:
   1/10 EntryConfChangeV2
   Messages:
@@ -353,7 +353,7 @@ stabilize 2 3
   1->3 MsgApp Term:1 Log:1/9 Commit:7
   1->3 MsgApp Term:1 Log:1/9 Commit:7 Entries:[1/10 EntryConfChangeV2]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:7 Lead:1 LeadEpoch:1
   Entries:
   1/8 EntryNormal "foo"
@@ -368,7 +368,7 @@ stabilize 2 3
   2->1 MsgAppResp Term:1 Log:0/10 Commit:7
   INFO 2 switched to configuration voters=(1)&&(1 2 3) learners_next=(2 3) autoleave
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:7 Lead:1 LeadEpoch:1
   Entries:
   1/8 EntryNormal "foo"
@@ -398,7 +398,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/9 Commit:7
   3->1 MsgAppResp Term:1 Log:0/10 Commit:7
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/8 EntryNormal "foo"
@@ -421,7 +421,7 @@ stabilize
   1->3 MsgApp Term:1 Log:1/10 Commit:9
   1->3 MsgApp Term:1 Log:1/10 Commit:10
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:10 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/8 EntryNormal "foo"
@@ -433,7 +433,7 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/10 Commit:10
   INFO 2 switched to configuration voters=(1) learners=(2 3)
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Commit:10 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/8 EntryNormal "foo"

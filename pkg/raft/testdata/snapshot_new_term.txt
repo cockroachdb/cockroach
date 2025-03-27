@@ -40,7 +40,7 @@ DEBUG 1 reset election elapsed to 0
 stabilize 1 2
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateFollower
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -53,7 +53,7 @@ stabilize 1 2
   INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
   INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 2
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -68,7 +68,7 @@ stabilize 1 2
   DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgVoteResp Term:2 Log:0/0
@@ -78,7 +78,7 @@ stabilize 1 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateLeader
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
   Entries:
@@ -92,7 +92,7 @@ stabilize 1 2
   2->1 MsgFortifyLeader Term:2 Log:0/0
   2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
   Entries:
   2/12 EntryNormal ""
@@ -103,7 +103,7 @@ stabilize 1 2
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
   CommittedEntries:
   2/12 EntryNormal ""
@@ -112,7 +112,7 @@ stabilize 1 2
 > 1 receiving messages
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
   CommittedEntries:
   2/12 EntryNormal ""
@@ -148,7 +148,7 @@ stabilize
   INFO 3 [commit: 12, lastindex: 12, lastterm: 2] restored snapshot [index: 12, term: 2]
   INFO 3 [commit: 12] restored snapshot [index: 12, term: 2]
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Commit:12 Lead:0 LeadEpoch:0
   Snapshot Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:

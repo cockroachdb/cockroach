@@ -94,13 +94,6 @@ type Ready struct {
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
 	Messages []pb.Message
-
-	// MustSync indicates whether the HardState and Entries must be durably
-	// written to disk or if a non-durable write is permissible.
-	//
-	// TODO(pav-kv): This flag isn't used at the moment, and the user code
-	// determines MustSync from the content of Messages. Make the API explicit.
-	MustSync bool
 }
 
 func isHardStateEqual(a, b pb.HardState) bool {

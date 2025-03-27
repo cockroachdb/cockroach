@@ -30,7 +30,7 @@ INFO 3 [logterm: 1, index: 10] sent MsgVote request to 2 at term 1
 stabilize 3
 ----
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:1 Vote:3 Commit:10 Lead:0 LeadEpoch:0
   Messages:
@@ -55,7 +55,7 @@ INFO 3 [logterm: 1, index: 10] sent MsgVote request to 2 at term 2
 stabilize 3
 ----
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Vote:3 Commit:10 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgVote Term:2 Log:1/10
@@ -77,7 +77,7 @@ INFO 3 [logterm: 1, index: 10] sent MsgVote request to 2 at term 3
 stabilize 3
 ----
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:3 Vote:3 Commit:10 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgVote Term:3 Log:1/10
@@ -114,7 +114,7 @@ INFO 1 [logterm: 1, index: 10] sent MsgVote request to 3 at term 1
 stabilize 1 2
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
   Messages:
@@ -129,7 +129,7 @@ stabilize 1 2
   DEBUG 2 reset election elapsed to 0
   INFO 2 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVoteResp Term:1 Log:0/0
@@ -139,7 +139,7 @@ stabilize 1 2
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 1
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateLeader
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
@@ -153,7 +153,7 @@ stabilize 1 2
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
@@ -164,7 +164,7 @@ stabilize 1 2
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/11 Commit:10
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
@@ -173,7 +173,7 @@ stabilize 1 2
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   CommittedEntries:
   1/11 EntryNormal ""
@@ -206,7 +206,7 @@ ok
 stabilize 1 3
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
@@ -214,7 +214,7 @@ stabilize 1 3
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
 > 3 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   3->1 MsgAppResp Term:3 Log:0/0
   3->1 MsgAppResp Term:3 Log:0/0
@@ -259,7 +259,7 @@ INFO 1 [logterm: 1, index: 11] sent MsgVote request to 3 at term 4
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:4 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
@@ -286,12 +286,12 @@ stabilize
   DEBUG 3 reset election elapsed to 0
   INFO 3 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 11] at term 4
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVoteResp Term:4 Log:0/0
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateFollower
   HardState Term:4 Vote:1 Commit:10 Lead:0 LeadEpoch:0
   Messages:
@@ -303,7 +303,7 @@ stabilize
   INFO 1 became leader at term 4
   3->1 MsgVoteResp Term:4 Log:0/0
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateLeader
   HardState Term:4 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Entries:
@@ -321,7 +321,7 @@ stabilize
   1->3 MsgApp Term:4 Log:1/11 Commit:11 Entries:[4/12 EntryNormal ""]
   DEBUG 3 [logterm: 0, index: 11] rejected MsgApp [logterm: 1, index: 11] from 1
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Entries:
   4/12 EntryNormal ""
@@ -329,7 +329,7 @@ stabilize
   2->1 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:4 Log:0/12 Commit:11
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Messages:
   3->1 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
@@ -342,7 +342,7 @@ stabilize
   DEBUG 1 received MsgAppResp(rejected, hint: (index 10, term 1)) from 3 for index 11
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=11 sentCommit=10 matchCommit=10]
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   CommittedEntries:
   4/12 EntryNormal ""
@@ -360,14 +360,14 @@ stabilize
     4/12 EntryNormal ""
   ]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   CommittedEntries:
   4/12 EntryNormal ""
   Messages:
   2->1 MsgAppResp Term:4 Log:0/12 Commit:12
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""

@@ -131,7 +131,7 @@ INFO 3 [commit: 15] restored snapshot [index: 15, term: 1]
 stabilize 3
 ----
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Commit:15 Lead:2 LeadEpoch:0
   Snapshot Index:15 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
@@ -143,7 +143,7 @@ stabilize 3
   INFO 3 [logterm: 1, index: 15, vote: 0] rejected MsgVote from 2 [logterm: 1, index: 15] at term 2
   2->3 MsgFortifyLeader Term:2 Log:0/0
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:2 Commit:15 Lead:2 LeadEpoch:1
   Messages:
   3->2 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
@@ -182,7 +182,7 @@ stabilize 2
   3->2 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   2->3 MsgSnap Term:2 Log:0/0
     Snapshot: Index:16 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
