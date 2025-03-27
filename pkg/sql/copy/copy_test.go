@@ -218,9 +218,6 @@ func TestDataDriven(t *testing.T) {
 								err = conn.Exec(ctx, fmt.Sprintf(`SET COPY_FROM_ATOMIC_ENABLED='%s'`, atomic))
 								require.NoError(t, err)
 
-								err = conn.Exec(ctx, `SET enable_row_level_security=on`)
-								require.NoError(t, err)
-
 								datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 									return doTest(t, d, conn)
 								})

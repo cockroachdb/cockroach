@@ -12,7 +12,6 @@ import (
 
 // AlterPolicy implements ALTER POLICY.
 func AlterPolicy(b BuildCtx, n *tree.AlterPolicy) {
-	failIfRLSIsNotEnabled(b)
 	b.IncrementSchemaChangeAlterCounter("policy")
 
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{

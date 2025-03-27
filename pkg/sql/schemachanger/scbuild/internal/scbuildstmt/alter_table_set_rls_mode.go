@@ -17,8 +17,6 @@ func alterTableSetRLSMode(
 	stmt tree.Statement,
 	n *tree.AlterTableSetRLSMode,
 ) {
-	failIfRLSIsNotEnabled(b)
-
 	// The table is already known to exist, and we would have checked for
 	// the CREATE privilege. However, changing the RLS mode is different,
 	// as it can only be done by the table owner.
