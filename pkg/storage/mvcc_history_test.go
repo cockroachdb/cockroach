@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,9 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/block"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -260,111 +258,6 @@ func TestMVCCHistories(t *testing.T) {
 			return err
 		}
 
-		// reportSSTEntries outputs entries from a raw SSTable. It uses a raw
-		// SST iterator in order to accurately represent the raw SST data.
-		reportSSTEntries := func(buf *redact.StringBuilder, name string, sst []byte) error {
-			r, err := sstable.NewMemReader(sst, sstable.ReaderOptions{
-				Comparer:   &storage.EngineComparer,
-				KeySchemas: sstable.MakeKeySchemas(storage.KeySchemas...),
-			})
-			if err != nil {
-				return err
-			}
-			defer func() { _ = r.Close() }()
-			buf.Printf(">> %s:\n", name)
-
-			// Dump point keys.
-			iter, err := r.NewIter(sstable.NoTransforms, nil, nil, sstable.AssertNoBlobHandles)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = iter.Close() }()
-			for kv := iter.First(); kv != nil; kv = iter.Next() {
-				if err := iter.Error(); err != nil {
-					return err
-				}
-				key, err := storage.DecodeMVCCKey(kv.K.UserKey)
-				if err != nil {
-					return err
-				}
-				v, _, err := kv.Value(nil)
-				if err != nil {
-					return err
-				}
-				value, err := storage.DecodeMVCCValue(v)
-				if err != nil {
-					return err
-				}
-				buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
-			}
-
-			// Dump rangedels.
-			if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
-				return err
-			} else if rdIter != nil {
-				defer rdIter.Close()
-				s, err := rdIter.First()
-				for ; s != nil; s, err = rdIter.Next() {
-					start, err := storage.DecodeMVCCKey(s.Start)
-					if err != nil {
-						return err
-					}
-					end, err := storage.DecodeMVCCKey(s.End)
-					if err != nil {
-						return err
-					}
-					for _, k := range s.Keys {
-						buf.Printf("%s: %s\n", strings.ToLower(k.Kind().String()),
-							roachpb.Span{Key: start.Key, EndKey: end.Key})
-					}
-				}
-				if err != nil {
-					return err
-				}
-			}
-
-			// Dump range keys.
-			if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, block.NoReadEnv); err != nil {
-				return err
-			} else if rkIter != nil {
-				defer rkIter.Close()
-				s, err := rkIter.First()
-				for ; s != nil; s, err = rkIter.Next() {
-					start, err := storage.DecodeMVCCKey(s.Start)
-					if err != nil {
-						return err
-					}
-					end, err := storage.DecodeMVCCKey(s.End)
-					if err != nil {
-						return err
-					}
-					for _, k := range s.Keys {
-						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
-							roachpb.Span{Key: start.Key, EndKey: end.Key})
-						if len(k.Suffix) > 0 {
-							ts, err := mvccencoding.DecodeMVCCTimestampSuffix(k.Suffix)
-							if err != nil {
-								return err
-							}
-							buf.Printf("/%s", ts)
-						}
-						if k.Kind() == pebble.InternalKeyKindRangeKeySet {
-							value, err := storage.DecodeMVCCValue(k.Value)
-							if err != nil {
-								return err
-							}
-							buf.Printf(" -> %s", value)
-						}
-						buf.Printf("\n")
-					}
-				}
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
 		// reportLockTable outputs the contents of the lock table.
 		reportLockTable := func(e *evalCtx, buf *redact.StringBuilder) error {
 			// Replicated locks.
@@ -542,7 +435,7 @@ func TestMVCCHistories(t *testing.T) {
 							}
 						}
 						for i, sst := range e.ssts {
-							err = reportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
+							err = storageutils.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
 							if err != nil {
 								if foundErr == nil {
 									// Handle the error below.
