@@ -1,15 +1,20 @@
 echo
 ----
 >> sst0:
-rangedel: /Local/RangeID/0/{r""-s""}
+rangedel: /Local/RangeID/0/r"{"-\x00"}
+rangedel: /Local/RangeID/0/{r"\x00"-s""}
 rangekeydel: /Local/RangeID/0/{r""-s""}
 >> sst1:
+rangedel: /Local/Range"d"{-}
 rangedel: /Local/Range{"d"-/Max}
 rangekeydel: /Local/Range{"d"-/Max}
 >> sst2:
-rangedel: /Local/Lock/Local/Range{"d"-/Max}
+rangedel: /Local/Lock/{Local/Range"d"-""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""}
+rangedel: /Local/Lock/{""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""-Local/Range/Max}
 rangekeydel: /Local/Lock/Local/Range{"d"-/Max}
 >> sst3:
-rangedel: /Local/Lock{"d"-/Max}
+rangedel: /Local/Lock{"d"-/""\x12d\x00\x01\x00""}
+rangedel: /Local/Lock/{""\x12d\x00\x01\x00""-Max}
 rangekeydel: /Local/Lock{"d"-/Max}
 >> sst4:
+rangedel: d{-\x00}

@@ -300,14 +300,6 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	// NB: we have (basic) coverage for *MVCC* range deletions, which require
 	// similar considerations, through TestRaftSnapshotsWithMVCCRangeKeysEverywhere.
 	for _, span := range keySpans {
-		// TODO(tbg): enable this, once I've added a rangedel fragmenter to msstw
-		// in a follow up commit.
-		//
-		// pebble: keys must be added in order:
-		// /Local/RangeID/0/r""/0,0-/Local/RangeID/0/s""/0,0:{(#0,RANGEDEL)},
-		// /Local/RangeID/0/r""/0,0-/Local/RangeID/0/r"\x00"/0,0:{(#0,RANGEDEL)}
-		continue
-
 		// NB: we avoid covering the entire span because an SST can actually contain
 		// the same rangedel twice (as long as they're added in increasing seqno
 		// order), and we want to exercise the "tricky" case where pebble would
