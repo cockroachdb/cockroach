@@ -289,6 +289,38 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		false, /* rangeKeysInOrder */
 	)
 	require.NoError(t, err)
+
+	// Put a rangedel into the span. This case can occur in shared SST snapshots
+	// and if we don't fragment these additional rangedels properly against the
+	// one the msstw lays down, pebble will error out (since the resulting SST
+	// would be invalid).
+	//
+	// In practice additional rangedels would likely only occur on the MVCC span,
+	// which doesn't get a covering rangedel from msstw, so this case is slightly
+	// academical. Still, we don't want to make assumptions on what data we're
+	// required to handle.
+	//
+	// NB: we have (basic) coverage for *MVCC* range deletions, which require
+	// similar considerations, through TestRaftSnapshotsWithMVCCRangeKeysEverywhere.
+	for _, span := range keySpans {
+		// TODO(tbg): enable this, once I've added a rangedel fragmenter to msstw
+		// in a follow up commit.
+		//
+		// pebble: keys must be added in order:
+		// /Local/RangeID/0/r""/0,0-/Local/RangeID/0/s""/0,0:{(#0,RANGEDEL)},
+		// /Local/RangeID/0/r""/0,0-/Local/RangeID/0/r"\x00"/0,0:{(#0,RANGEDEL)}
+		continue
+
+		// NB: we avoid covering the entire span because an SST can actually contain
+		// the same rangedel twice (as long as they're added in increasing seqno
+		// order), and we want to exercise the "tricky" case where pebble would
+		// complain about lack of proper fragmentation.
+		rdsp := roachpb.Span{Key: span.Key, EndKey: span.Key.Next()}
+		require.NoError(t, msstw.PutInternalRangeDelete(ctx, storage.EngineKey{Key: rdsp.Key}.Encode(),
+			storage.EngineKey{Key: rdsp.EndKey}.Encode()))
+
+	}
+
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
