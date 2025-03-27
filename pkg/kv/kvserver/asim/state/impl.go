@@ -1067,7 +1067,7 @@ func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.Range
 	if !ok {
 		panic(fmt.Sprintf("no range found for range %v", rangeID))
 	}
-	if _, ok := r.Replica(storeID); !ok {
+	if _, ok = r.Replica(storeID); !ok {
 		panic(fmt.Sprintf("no replica found for range %v on store %v [replicas=%v]",
 			rangeID, storeID, r.Replicas()))
 	}

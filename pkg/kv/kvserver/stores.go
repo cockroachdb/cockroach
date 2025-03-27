@@ -343,7 +343,7 @@ func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Regist
 
 func (ls *Stores) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
 	var nc roachpb.NodeCapacity
-	ls.VisitStores(func(s *Store) error {
+	_ = ls.VisitStores(func(s *Store) error {
 		c, err := s.Capacity(context.Background(), useCached)
 		if err != nil {
 			panic(err)

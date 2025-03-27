@@ -271,7 +271,7 @@ func TestDataDriven(t *testing.T) {
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
-					StoreByteCapacity:   int64(storeByteCapacity),
+					StoreByteCapacity:   storeByteCapacity,
 					NodeCPURateCapacity: nodeCPURateCapacity,
 				}
 				return ""

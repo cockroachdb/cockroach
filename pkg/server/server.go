@@ -521,7 +521,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// but passing into the Stores struct seems odd, given this is w.r.t a
 	// Server, or ignoring SQL, a KVServer Node.
 	kvRuntimeLoadMonitor := load.NewRuntimeLoadMonitor()
-	kvRuntimeLoadMonitor.Start(ctx, stopper)
+	_ = kvRuntimeLoadMonitor.Start(ctx, stopper)
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock, kvRuntimeLoadMonitor)
 
 	decomNodeMap := &decommissioningNodeMap{
