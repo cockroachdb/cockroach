@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -43,10 +42,6 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 		return nil, err
 	}
 
-	if n.DropBehavior == tree.DropCascade {
-		// TODO(chengxiong): remove this check when drop function cascade is supported.
-		return nil, unimplemented.Newf("DROP FUNCTION...CASCADE", "drop function cascade not supported")
-	}
 	dropNode := &dropFunctionNode{
 		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Routines)),
 		dropBehavior: n.DropBehavior,

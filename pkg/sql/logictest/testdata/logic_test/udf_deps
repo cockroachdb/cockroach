@@ -321,3 +321,97 @@ SELECT del()
 
 statement ok
 DROP TABLE t
+
+# --------------------------------------------------
+# DROP FUNCTION CASCADE
+# --------------------------------------------------
+
+statement ok
+CREATE TABLE t1 (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t2 (a INT PRIMARY KEY)
+
+# Create a chain of function dependencies:
+# f1 -> f2 -> f3
+# where f1 depends on f2, and f2 depends on f3
+statement ok
+CREATE FUNCTION f3() RETURNS INT LANGUAGE SQL AS $$
+  SELECT COUNT(*) FROM t1;
+$$
+
+statement ok
+CREATE FUNCTION f2() RETURNS INT LANGUAGE SQL AS $$
+  SELECT f3() + (SELECT COUNT(*) FROM t2);
+$$
+
+statement ok
+CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$
+  SELECT f2() * 2;
+$$
+
+# Test that we can't drop f2 without CASCADE due to f1's dependency
+statement error pgcode 2BP01 cannot drop function "f2" because other objects \(\[test.public.f1\]\) still depend on it
+DROP FUNCTION f2
+
+# Test that we can't drop f3 without CASCADE due to f2's dependency
+statement error pgcode 2BP01 cannot drop function "f3" because other objects \(\[test.public.f2\]\) still depend on it
+DROP FUNCTION f3
+
+# Test that DROP FUNCTION CASCADE works and removes dependent functions
+statement ok
+DROP FUNCTION f3 CASCADE
+
+# Verify that all dependent functions were dropped
+statement error pgcode 42883 unknown function: f1\(\)
+SELECT f1()
+
+statement error pgcode 42883 unknown function: f2\(\)
+SELECT f2()
+
+statement error pgcode 42883 unknown function: f3\(\)
+SELECT f3()
+
+# Clean up
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+# --------------------------------------------------
+# DROP FUNCTION CASCADE with DEFAULT column references
+# --------------------------------------------------
+
+statement ok
+CREATE FUNCTION next_day() RETURNS TIMESTAMP LANGUAGE SQL AS $$
+  SELECT current_timestamp() + INTERVAL '1 day'
+$$
+
+statement ok
+CREATE TABLE scheduled_jobs (
+  id INT PRIMARY KEY,
+  name STRING NOT NULL,
+  created_at TIMESTAMP DEFAULT current_timestamp(),
+  due_at TIMESTAMP NOT NULL DEFAULT next_day()
+)
+
+# Cannot drop the function without CASCADE since table depends on it
+statement error pgcode 2BP01 cannot drop function "next_day" because other objects \(\[.*scheduled_jobs.*\]\) still depend on it
+DROP FUNCTION next_day
+
+# Test that DROP FUNCTION CASCADE works
+statement ok
+DROP FUNCTION next_day CASCADE
+
+# Verify the table still exists but the column default was removed
+statement ok
+INSERT INTO scheduled_jobs (id, name, due_at) VALUES (2, 'backup2', current_timestamp())
+
+# But we can't insert without specifying the due_at column now
+statement error pgcode 23502 null value in column "due_at" violates not-null constraint
+INSERT INTO scheduled_jobs (id, name) VALUES (3, 'backup3')
+
+# Clean up
+statement ok
+DROP TABLE scheduled_jobs
