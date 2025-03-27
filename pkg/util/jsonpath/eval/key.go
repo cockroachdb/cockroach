@@ -33,3 +33,17 @@ func (ctx *jsonpathCtx) evalKey(
 	}
 	return []json.JSON{}, nil
 }
+
+func (ctx *jsonpathCtx) evalAnyKey(
+	anyKey jsonpath.AnyKey, jsonValue json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	if jsonValue.Type() == json.ObjectJSONType {
+		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
+	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
+	} else if ctx.strict {
+		return nil, pgerror.Newf(pgcode.SQLJSONObjectNotFound,
+			"jsonpath wildcard member accessor can only be applied to an object")
+	}
+	return []json.JSON{}, nil
+}
