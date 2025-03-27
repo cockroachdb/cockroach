@@ -104,11 +104,7 @@ func (ctx *jsonpathCtx) eval(
 		}
 		return []json.JSON{resolved}, nil
 	case jsonpath.Operation:
-		res, err := ctx.evalOperation(path, jsonValue)
-		if err != nil {
-			return nil, err
-		}
-		return []json.JSON{res}, nil
+		return ctx.evalOperation(path, jsonValue)
 	case jsonpath.Filter:
 		return ctx.evalFilter(path, jsonValue, unwrap)
 	default:
