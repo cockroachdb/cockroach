@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "0 * * * *"  # Every hour
   workflow_dispatch:
+  push:
 
 jobs:
   auto-merge:
@@ -21,54 +22,70 @@ jobs:
           script: |
             // Get timestamp for 24 hours ago in ISO format
             const now = new Date();
-            const iso24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+            const iso24HoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-            const query = `repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only created:<${iso24HoursAgo}`;
-            const searchResults = await github.paginate(github.rest.search.issuesAndPullRequests, {
-              q: query,
-              per_page: 100,
-            });
+            const query = `
+              query SearchPRs() {
+                search(query: "repo:${context.repo.owner}/${context.repo.repo} is:pr is:open label:backport label:blathers-backport label:backport-test-only", type: ISSUE, first: 100) {
+                  nodes {
+                    ... on PullRequest {
+                      number
+                      createdAt
+                      labels(first: 10) {
+                        nodes {
+                          name
+                        }
+                      }
+                      reviews(last: 50) {
+                        nodes {
+                          state
+                          author {
+                            login
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
 
-            for (const prItem of searchResults) {
-              const prNumber = prItem.number;
+            const result = await github.graphql(query);
+            const prs = result.search.nodes;
 
-              // Fetch full PR details
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-              });
+            for (const pr of prs) {
+              const createdAt = new Date(pr.createdAt);
+              const isOldEnough = createdAt <= iso24HoursAgo;
 
-              // Check for approvals
-              const reviews = await github.rest.pulls.listReviews({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-              });
-
-              const approved = reviews.some(
-                r =>
-                r.state === 'APPROVED' &&
-                r.user?.login === 'blathers-crl[bot]'
-                );
-
-              if (!approved) {
-                console.log(`Skipping PR #${prNumber}: not approved`);
+              if (!isOldEnough) {
+                console.log(`Skipping PR #${pr.number}: not old enough, only created at ${pr.createdAt}`);
                 continue;
               }
 
-              const labels = prItem.labels.map(l => l.name).join(', ');
-              console.log(`Merging PR #${prNumber}, Created at: ${pr.created_at}, Approved: ${approved}, Labels: ${labels}`);
+              const approved = pr.reviews.nodes.some(
+                r =>
+                  r.state === 'APPROVED' &&
+                  r.author?.login === 'blathers-crl[bot]'
+              );
+
+              if (!approved) {
+                console.log(`Skipping PR #${pr.number}: not approved`);
+                continue;
+              }
+
+              const labels = pr.labels.nodes.map(l => l.name).join(', ');
+              console.log(`Merging PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Labels: ${labels}`);
+
               // Merge the PR
               // try {
-              //  console.log(`Merging PR #${prNumber}`);
+              //  console.log(`Merging PR #${pr.number}`);
               //  await github.rest.pulls.merge({
               //    owner: context.repo.owner,
               //    repo: context.repo.repo,
-              //    pull_number: prNumber,
+              //    pull_number: pr.number,
               //    merge_method: "merge",
               //  });
               // } catch (err) {
-              //  console.warn(`Failed to merge PR #${prNumber}: ${err.message}`);
+              //  console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
               // }
             }
