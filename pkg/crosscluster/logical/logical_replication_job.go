@@ -751,7 +751,7 @@ func (rh *rowHandler) handleTraceAgg(agg *execinfrapb.TracingAggregatorEvents) {
 	// aggregate.
 	rh.r.mu.Lock()
 	defer rh.r.mu.Unlock()
-	rh.r.mu.perNodeAggregatorStats[componentID] = agg.Events
+	rh.r.mu.perNodeAggregatorStats[componentID] = *agg
 }
 
 func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
