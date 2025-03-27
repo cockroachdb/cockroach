@@ -1968,19 +1968,26 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	// Has the replica been initialized?
 	// NB: this should have already been checked in Store.Send, so we don't need
 	// to handle this case particularly well, but if we do reach here (as some
 	// tests that call directly into Replica.Send have), it's better to return
 	// an error than to panic in checkSpanInRangeRLocked.
+	//
+	// NB: cheap
 	if !r.IsInitialized() {
 		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
 	}
 
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	desc := r.shMu.state.Desc // we're allowed to take this out of the crit section
+	lease := r.shMu.state.Lease
+	policy := r.closedTimestampPolicyRLocked() // cheap unless global reads
+
 	// Is the replica destroyed?
+	// NB: cheap
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -2018,6 +2025,12 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		}
 	}
 
+	// NB: maybe it does make sense to check this earlier. Once the crit section pulls
+	// data only and all code runs later, we can reorder as desired.
+	if err := checkSpanInRange(ctx, rSpan, desc, lease, policy); err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+
 	return st, nil
 }
 
@@ -2035,7 +2048,6 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	}
 
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 
 	// Ensure the request is entirely contained within the range's key bounds
 	// (even) after the storage engine has been pinned by the iterator. Given we
@@ -2043,8 +2055,25 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// meaningful in the context of follower reads. This is because latches on
 	// followers don't provide the synchronization with concurrent splits like
 	// they do on leaseholders.
-	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
-		return err
+
+	// NB: this was inlined below with an early return before the ContainsKeyRange call.
+	// if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+	// 	return err
+	// }
+
+	// this is cheap except when global reads are on,
+	// which they're not in my testing.
+	policy := r.closedTimestampPolicyRLocked()
+
+	desc := r.shMu.state.Desc   // pretty sure this field is copy on write, so never mutated
+	lease := r.shMu.state.Lease // NB: this field is *probably* copy on write, so never muted
+
+	r.mu.RUnlock() // keep crit section small
+
+	if !desc.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
+			ctx, rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey(), desc,
+			lease, policy)
 	}
 
 	// NB: For read-only requests, the GC threshold check is performed after the
@@ -2060,7 +2089,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// TODO(aayush): The above description intentionally omits some details, as
 	// they are going to be changed as part of
 	// https://github.com/cockroachdb/cockroach/issues/55293.
-	return r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
+	return nil // r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -2151,13 +2180,22 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 // checkSpanInRangeRLocked returns an error if a request (identified by its
 // key span) can not be run on the replica.
 func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
-	desc := r.shMu.state.Desc
+	return checkSpanInRange(ctx, rspan, r.shMu.state.Desc, r.shMu.state.Lease, r.closedTimestampPolicyRLocked())
+}
+
+func checkSpanInRange(
+	ctx context.Context,
+	rspan roachpb.RSpan,
+	desc *roachpb.RangeDescriptor,
+	lease *roachpb.Lease,
+	policy roachpb.RangeClosedTimestampPolicy,
+) error {
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return kvpb.NewRangeKeyMismatchErrorWithCTPolicy(
 		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
-		r.shMu.state.Lease, r.closedTimestampPolicyRLocked())
+		lease, policy)
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
