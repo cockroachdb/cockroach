@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/spf13/cobra"
 )
 
@@ -292,11 +291,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 }
 
 // This function determines if any test_logic or execbuilder/testdata files were
-// modified in the current branch, and if so, determines if we should re-generate logic tests.
+// modified in the current branch, and if so, determines if we should
+// re-generate logic tests.
 func (d *dev) shouldGenerateLogicTests(ctx context.Context) bool {
-	if buildutil.CrdbTestBuild {
-		return true
-	}
 	base, _ := d.getMergeBaseHash(ctx)
 	// Generate logic tests if the merge base hash isn't found
 	if base == "" {
