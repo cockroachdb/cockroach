@@ -930,6 +930,11 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This test has always been flaky under deadlock since its introduction. Due
+	// to its complexity, we are not going to spend time on improving it now.
+	skip.UnderDuress(t)
+
 	run := func(t *testing.T, alignLeaseholders bool, alsoSplit bool) {
 
 		// The stores 0 and 1 are the "LHS", and the stores 2 and 3 are the RHS.

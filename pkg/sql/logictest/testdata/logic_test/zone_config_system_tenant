@@ -141,6 +141,18 @@ FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ORDER BY start_key
 ----
+/Table/110  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
+/Table/111  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
+
+# Run the same query again and make sure there are 2 rows. This assertion is
+# only here to prevent the previous test case from being rewritten accidentally.
+statement count 2
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
+FROM system.span_configurations
+WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
+ORDER BY start_key
 
 subtest transactional_schemachanges
 
