@@ -149,6 +149,13 @@ func (cs *childSet) get(labelVals ...string) (ChildMetric, bool) {
 	return cs.mu.children.Get(labelVals...)
 }
 
+// clear removes all children from the childSet.
+func (cs *childSet) clear() {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.mu.children.Clear()
+}
+
 type MetricItem interface {
 	labelValuer
 }
@@ -185,6 +192,7 @@ type ChildrenStorage interface {
 	Del(key ChildMetric)
 	Do(f func(e interface{}))
 	GetChildMetric(e interface{}) ChildMetric
+	Clear()
 }
 
 var _ ChildrenStorage = &UnorderedCacheWrapper{}
@@ -229,6 +237,10 @@ func (ucw *UnorderedCacheWrapper) Do(f func(e interface{})) {
 	})
 }
 
+func (ucw *UnorderedCacheWrapper) Clear() {
+	ucw.cache.Clear()
+}
+
 type BtreeWrapper struct {
 	tree *btree.BTree
 }
@@ -261,6 +273,10 @@ func (b BtreeWrapper) Do(f func(e interface{})) {
 
 func (b BtreeWrapper) GetChildMetric(e interface{}) ChildMetric {
 	return e.(ChildMetric)
+}
+
+func (b BtreeWrapper) Clear() {
+	b.tree.Clear(false)
 }
 
 func (lv *labelValuesSlice) Less(o btree.Item) bool {
