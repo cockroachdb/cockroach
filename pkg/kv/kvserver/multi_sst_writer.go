@@ -59,6 +59,7 @@ type multiSSTWriter struct {
 	// fragmenter is emits these range keys into the SST at finalization
 	// time.
 	rangeKeyFrag rangekey.Fragmenter
+	rangeDelFrag Fragmenter // keyspan.Fragmenter
 }
 
 func newMultiSSTWriter(
@@ -154,6 +155,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 			msstw.currSST.Close()
 			return errors.Wrap(err, "failed to clear range on sst file writer")
 		}
+		msstw.rangeDelFrag.Add(FragSpan{Start: startKey.Encode(), End: endKey.Encode()})
 	}
 	return nil
 }
@@ -173,12 +175,14 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 
 	}
 
-	// If we're at the last span, call Finish on the fragmenter. If we're not at the
+	// If we're at the last span, call Finish on the fragmenters. If we're not at the
 	// last span, call Truncate.
 	if msstw.currSpan == len(msstw.localKeySpans)+len(msstw.mvccSSTSpans)-1 {
 		msstw.rangeKeyFrag.Finish()
+		msstw.rangeDelFrag.Finish()
 	} else {
 		msstw.rangeKeyFrag.Truncate(currEngineSpan.End.Encode())
+		msstw.rangeDelFrag.Truncate(currEngineSpan.End.Encode())
 	}
 
 	err := msstw.currSST.Finish()
@@ -353,6 +357,9 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 		return errors.Wrap(err, "failed to put range delete in sst")
 	}
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
+
+	msstw.rangeDelFrag.Add(FragSpan{Start: start, End: end})
+
 	return nil
 }
 
