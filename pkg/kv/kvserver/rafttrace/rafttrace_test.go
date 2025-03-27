@@ -268,28 +268,21 @@ func TestNoTraceMsgStorageAppendResp(t *testing.T) {
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 }
 
-func TestTraceMsgStorageApplyResp(t *testing.T) {
+func TestTraceApplied(t *testing.T) {
 	rt := createTracer(10)
 	ctx, finish := tracing.ContextWithRecordingSpan(context.Background(), rt.tracer, "test")
 
 	require.True(t, rt.MaybeRegister(ctx, raftpb.Entry{Index: 1}))
-	require.Empty(t, rt.MaybeTrace(
-		raftpb.Message{
-			From: 1,
-			To:   2,
-			Type: raftpb.MsgStorageApplyResp,
-			Entries: []raftpb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 4},
-			},
-		}))
+	rt.MaybeTraceApplied([]raftpb.Entry{
+		{Term: 1, Index: 1},
+		{Term: 2, Index: 4},
+	})
 
 	output := finish().String()
 	require.NoError(t, testutils.MatchInOrder(output,
-		[]string{
-			`1->2 MsgStorageApplyResp LastEntry:2/4`,
-			`unregistered log index`,
-		}...))
+		"applied entries \\[1-4\\]",
+		"unregistered log index 1",
+	))
 	require.Equal(t, int64(0), rt.numRegisteredStore.Load())
 }
 
@@ -306,38 +299,28 @@ func TestDuplicateIndex(t *testing.T) {
 	require.Equal(t, int64(1), rt.numRegisteredStore.Load())
 	require.Equal(t, int64(1), rt.numRegisteredReplica.Load())
 
-	// Unregister the entry with a MsgStorageApplyResp.
-	require.Empty(t, rt.MaybeTrace(
-		raftpb.Message{
-			From: 1,
-			To:   2,
-			Type: raftpb.MsgStorageApplyResp,
-			Entries: []raftpb.Entry{
-				{Term: 1, Index: 1},
-				{Term: 2, Index: 4},
-			},
-		}))
+	// Unregister the entry with MaybeTraceApplied.
+	rt.MaybeTraceApplied([]raftpb.Entry{
+		{Term: 1, Index: 1},
+		{Term: 2, Index: 4},
+	})
 	// We expect the logs to go to the first trace.
 	output1 := trace1().String()
 	output2 := trace2().String()
 	require.NoError(t, testutils.MatchInOrder(output1,
-		[]string{
-			`1->2 MsgStorageApplyResp LastEntry:2/4`,
-			`unregistered log index`,
-		}...))
+		"applied entries \\[1-4\\]",
+		"unregistered log index 1",
+	))
 	require.NoError(t, testutils.MatchInOrder(output1,
-		[]string{
-			`additional registration for same index`,
-		}...))
+		"additional registration for same index",
+	))
 	require.Error(t, testutils.MatchInOrder(output2,
-		[]string{
-			`1->2 MsgStorageApplyResp LastEntry:2/4`,
-			`unregistered log index`,
-		}...))
+		"applied entries \\[1-4\\]",
+		"unregistered log index 1",
+	))
 	require.NoError(t, testutils.MatchInOrder(output2,
-		[]string{
-			`duplicate registration ignored`,
-		}...))
+		"duplicate registration ignored",
+	))
 
 	require.Equal(t, int64(0), rt.numRegisteredStore.Load())
 	require.Equal(t, int64(0), rt.numRegisteredReplica.Load())

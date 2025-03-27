@@ -197,7 +197,7 @@ func registerRestore(r registry.Registry) {
 						var fraction gosql.NullFloat64
 						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOB $1]`,
 							jobID).Scan(&fraction)
-						t.L().Printf("RESTORE Progress %.2f", fraction)
+						t.L().Printf("RESTORE Progress %.2f", fraction.Float64)
 						if !fraction.Valid || fraction.Float64 < pauseAtProgress[pauseIndex] {
 							continue
 						}

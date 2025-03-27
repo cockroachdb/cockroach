@@ -1098,6 +1098,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	dec := r.getDecoder()
 	var appTask apply.Task
 	if hasMsg(msgStorageApply) {
+		r.mu.raftTracer.MaybeTraceApplying(msgStorageApply.Entries)
 		appTask = apply.MakeTask(sm, dec)
 		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 		defer appTask.Close()
@@ -1265,7 +1266,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	stats.tApplicationBegin = crtime.NowMono()
 	if hasMsg(msgStorageApply) {
-		r.mu.raftTracer.MaybeTrace(msgStorageApply)
 		r.traceEntries(msgStorageApply.Entries, "committed, before applying any entries")
 
 		err := appTask.ApplyCommittedEntries(ctx)
@@ -1303,6 +1303,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 		}
 
+		r.mu.raftTracer.MaybeTraceApplied(msgStorageApply.Entries)
 		// Send MsgStorageApply's responses.
 		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
 	}
