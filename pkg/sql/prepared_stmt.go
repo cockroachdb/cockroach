@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,7 +48,7 @@ const (
 // References need to be registered with incRef() and de-registered with
 // decRef().
 type PreparedStatement struct {
-	querycache.PrepareMetadata
+	prep.Metadata
 
 	// BaseMemo is the memoized data structure constructed by the cost-based
 	// optimizer during prepare of a SQL statement.
@@ -90,7 +90,7 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	// Account for the memory used by this prepared statement:
 	//   1. Size of the prepare metadata.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
-	size := p.PrepareMetadata.MemoryEstimate()
+	size := p.Metadata.MemoryEstimate()
 	if p.BaseMemo != nil {
 		size += p.BaseMemo.MemoryEstimate()
 	}

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package querycache
+package prep
 
 import (
 	"unsafe"
@@ -15,9 +15,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// PrepareMetadata encapsulates information about a statement that is gathered
+// Metadata encapsulates information about a statement that is gathered
 // during Prepare and is later used during Describe or Execute.
-type PrepareMetadata struct {
+type Metadata struct {
 	// Note that AST may be nil if the prepared statement is empty.
 	statements.Statement[tree.Statement]
 
@@ -42,7 +42,7 @@ type PrepareMetadata struct {
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
 // the prepare metadata.
-func (pm *PrepareMetadata) MemoryEstimate() int64 {
+func (pm *Metadata) MemoryEstimate() int64 {
 	res := int64(unsafe.Sizeof(*pm))
 	res += int64(len(pm.SQL))
 	// We don't have a good way of estimating the size of the AST. Just assume

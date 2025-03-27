@@ -2482,7 +2482,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 	schema: vtable.PGCatalogPreparedStatements,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for name, stmt := range p.preparedStatements.List() {
-			placeholderTypes := stmt.PrepareMetadata.PlaceholderTypesInfo.Types
+			placeholderTypes := stmt.Metadata.PlaceholderTypesInfo.Types
 			paramTypes := tree.NewDArray(types.RegType)
 			paramTypes.Array = make(tree.Datums, len(placeholderTypes))
 			paramNames := make([]string, len(placeholderTypes))

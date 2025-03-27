@@ -2151,6 +2151,7 @@ GO_TARGETS = [
     "//pkg/sql/plpgsql/parser/lexbase:lexbase",
     "//pkg/sql/plpgsql/parser:parser_test",
     "//pkg/sql/plpgsql/parser:plpgparser",
+    "//pkg/sql/prep:prep",
     "//pkg/sql/privilege:privilege",
     "//pkg/sql/privilege:privilege_test",
     "//pkg/sql/protoreflect/gprototest:gprototest",
