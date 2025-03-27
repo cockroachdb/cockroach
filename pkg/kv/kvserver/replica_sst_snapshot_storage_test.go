@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -254,7 +258,9 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 
 // TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
 // SST files associated with the replicated key ranges by writing a range
-// deletion tombstone that spans the entire range of each respectively.
+// deletion tombstone that spans the entire range of each respectively. The
+// exception is the last SST (the MVCC SST), which is always ingested via
+// excise and so does not need this rangedel.
 func TestMultiSSTWriterInitSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -291,26 +297,13 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		actualSSTs = append(actualSSTs, sst)
 	}
 
-	// Construct an SST file for each of the key ranges and write a rangedel
-	// tombstone that spans from Start to End.
-	var expectedSSTs [][]byte
-	for i, s := range keySpans {
-		func() {
-			sstFile := &storage.MemObject{}
-			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
-			defer sst.Close()
-			if i != len(keySpans)-1 { // MVCC range gets excised instead
-				require.NoError(t, sst.ClearRawRange(s.Key, s.EndKey, true, true))
-			}
-			require.NoError(t, sst.Finish())
-			expectedSSTs = append(expectedSSTs, sstFile.Data())
-		}()
-	}
+	var buf redact.StringBuilder
 
-	require.Equal(t, len(actualSSTs), len(expectedSSTs))
 	for i := range fileNames {
-		require.Equal(t, actualSSTs[i], expectedSSTs[i])
+		name := fmt.Sprintf("sst%d", i)
+		require.NoError(t, storage.ReportSSTEntries(&buf, name, actualSSTs[i]))
 	}
+	echotest.Require(t, buf.String(), filepath.Join(datapathutils.TestDataPath(t, "echotest", t.Name())))
 }
 
 func buildIterForScratch(
