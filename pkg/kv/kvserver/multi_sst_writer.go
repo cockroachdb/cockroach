@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangedel"
 	"github.com/cockroachdb/pebble/rangekey"
 )
 
@@ -59,6 +60,7 @@ type multiSSTWriter struct {
 	// fragmenter is emits these range keys into the SST at finalization
 	// time.
 	rangeKeyFrag rangekey.Fragmenter
+	rangeDelFrag rangedel.Fragmenter
 }
 
 func newMultiSSTWriter(
@@ -95,6 +97,11 @@ func newMultiSSTWriter(
 		Format: storage.EngineComparer.FormatKey,
 		Emit:   msstw.emitRangeKey,
 	}
+	msstw.rangeDelFrag = rangedel.Fragmenter{
+		Cmp:    storage.EngineComparer.Compare,
+		Format: storage.EngineComparer.FormatKey,
+		Emit:   msstw.emitRangeDel,
+	}
 
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
@@ -107,6 +114,12 @@ func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
 		if err := msstw.currSST.PutInternalRangeKey(key.Start, key.End, key.Keys[i]); err != nil {
 			panic(fmt.Sprintf("failed to put range key in sst: %s", err))
 		}
+	}
+}
+
+func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
+	if err := msstw.currSST.ClearRawEncodedRange(key.Start, key.End); err != nil {
+		panic(fmt.Sprintf("failed to put range del in sst: %s", err))
 	}
 }
 
@@ -144,15 +157,15 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 		sp := msstw.currentSpan()
 		startKey := storage.EngineKey{Key: sp.Key}
 		endKey := storage.EngineKey{Key: sp.EndKey}
-		trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-		s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
-		msstw.rangeKeyFrag.Add(s)
-
-		if err := msstw.currSST.ClearEngineRange(
-			startKey, endKey,
-		); err != nil {
-			msstw.currSST.Close()
-			return errors.Wrap(err, "failed to clear range on sst file writer")
+		{
+			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
+			s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
+			msstw.rangeKeyFrag.Add(s)
+		}
+		{
+			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete)
+			s := rangedel.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangedel.Key{{Trailer: trailer}}}
+			msstw.rangeDelFrag.Add(s)
 		}
 	}
 	return nil
@@ -173,12 +186,14 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context, nextKey *storage.E
 
 	}
 
-	// If we're at the last span, call Finish on the fragmenter. If we're not at the
+	// If we're at the last span, call Finish on the fragmenters. If we're not at the
 	// last span, call Truncate.
 	if msstw.currSpan == len(msstw.localKeySpans)+len(msstw.mvccSSTSpans)-1 {
 		msstw.rangeKeyFrag.Finish()
+		msstw.rangeDelFrag.Finish()
 	} else {
 		msstw.rangeKeyFrag.Truncate(currEngineSpan.End.Encode())
+		msstw.rangeDelFrag.Truncate(currEngineSpan.End.Encode())
 	}
 
 	err := msstw.currSST.Finish()
@@ -349,10 +364,8 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 		return err
 	}
 	prevWriteBytes := msstw.currSST.EstimatedSize()
-	if err := msstw.currSST.ClearRawEncodedRange(start, end); err != nil {
-		return errors.Wrap(err, "failed to put range delete in sst")
-	}
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
+	msstw.rangeDelFrag.Add(rangedel.Span{Start: start, End: end})
 	return nil
 }
 
