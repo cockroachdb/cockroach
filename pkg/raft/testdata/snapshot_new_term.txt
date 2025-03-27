@@ -105,19 +105,21 @@ stabilize 1 2
 > 2 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
-  CommittedEntries:
-  2/12 EntryNormal ""
+  Committed: (11,12]
   Messages:
   2->1 MsgApp Term:2 Log:2/12 Commit:12
+  Applying:
+  2/12 EntryNormal ""
 > 1 receiving messages
   2->1 MsgApp Term:2 Log:2/12 Commit:12
 > 1 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:1
-  CommittedEntries:
-  2/12 EntryNormal ""
+  Committed: (11,12]
   Messages:
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
+  Applying:
+  2/12 EntryNormal ""
 > 2 receiving messages
   1->2 MsgAppResp Term:2 Log:0/12 Commit:12
 
