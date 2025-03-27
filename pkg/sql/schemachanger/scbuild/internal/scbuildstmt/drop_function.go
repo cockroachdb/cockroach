@@ -10,18 +10,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func DropFunction(b BuildCtx, n *tree.DropRoutine) {
-	if n.DropBehavior == tree.DropCascade {
-		// TODO(chengxiong): remove this when we allow UDF usage.
-		panic(scerrors.NotImplementedErrorf(n, "cascade dropping functions"))
-	}
-
 	routineType := tree.UDFRoutine
 	if n.Procedure {
 		routineType = tree.ProcedureRoutine
@@ -40,7 +34,9 @@ func DropFunction(b BuildCtx, n *tree.DropRoutine) {
 			continue
 		}
 		f.FuncName.ObjectNamePrefix = b.NamePrefix(fn)
-		if dropRestrictDescriptor(b, fn.FunctionID) {
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, fn.FunctionID)
+		} else if dropRestrictDescriptor(b, fn.FunctionID) {
 			toCheckBackRefs = append(toCheckBackRefs, fn.FunctionID)
 			_, _, fnName := scpb.FindFunctionName(elts)
 			toCheckBackRefsNames = append(toCheckBackRefsNames, fnName)
@@ -58,7 +54,6 @@ func DropFunction(b BuildCtx, n *tree.DropRoutine) {
 				"cannot drop function %q because other objects ([%v]) still depend on it",
 				toCheckBackRefsNames[i].Name, strings.Join(dependentNames, ", "),
 			))
-
 		}
 	}
 }

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -43,10 +42,6 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 		return nil, err
 	}
 
-	if n.DropBehavior == tree.DropCascade {
-		// TODO(chengxiong): remove this check when drop function cascade is supported.
-		return nil, unimplemented.Newf("DROP FUNCTION...CASCADE", "drop function cascade not supported")
-	}
 	dropNode := &dropFunctionNode{
 		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Routines)),
 		dropBehavior: n.DropBehavior,
@@ -102,7 +97,7 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 
 func (n *dropFunctionNode) startExec(params runParams) error {
 	for _, fnMutable := range n.toDrop {
-		if err := params.p.dropFunctionImpl(params.ctx, fnMutable); err != nil {
+		if err := params.p.dropFunctionImpl(params.ctx, fnMutable, n.dropBehavior); err != nil {
 			return err
 		}
 	}
@@ -192,7 +187,9 @@ func (p *planner) canDropFunction(ctx context.Context, fnDesc catalog.FunctionDe
 	return nil
 }
 
-func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Mutable) error {
+func (p *planner) dropFunctionImpl(
+	ctx context.Context, fnMutable *funcdesc.Mutable, dropBehavior tree.DropBehavior,
+) error {
 	if fnMutable.Dropped() {
 		return errors.Errorf("function %q is already being dropped", fnMutable.Name)
 	}
@@ -202,6 +199,17 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 	// createOrUpdateSchemaChangeJob.
 	if catalog.HasConcurrentDeclarativeSchemaChange(fnMutable) {
 		return scerrors.ConcurrentSchemaChangeError(fnMutable)
+	}
+
+	// Drop dependent functions first.
+	for _, ref := range fnMutable.DependedOnBy {
+		depFuncMutable, err := p.Descriptors().MutableByID(p.txn).Function(ctx, ref.ID)
+		if err != nil {
+			return err
+		}
+		if err := p.dropFunctionImpl(ctx, depFuncMutable, dropBehavior); err != nil {
+			return err
+		}
 	}
 
 	// Remove backreference from tables/views/sequences referenced by this UDF.
@@ -310,11 +318,11 @@ func (p *planner) writeDropFuncSchemaChange(ctx context.Context, funcDesc *funcd
 }
 
 func (p *planner) removeDependentFunction(
-	ctx context.Context, tbl *tabledesc.Mutable, fn *funcdesc.Mutable,
+	ctx context.Context, tbl *tabledesc.Mutable, fn *funcdesc.Mutable, dropBehavior tree.DropBehavior,
 ) error {
 	// In the table whose index is being removed, filter out all back-references
 	// that refer to the view that's being removed.
 	tbl.DependedOnBy = removeMatchingReferences(tbl.DependedOnBy, fn.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	return p.dropFunctionImpl(ctx, fn)
+	return p.dropFunctionImpl(ctx, fn, dropBehavior)
 }
