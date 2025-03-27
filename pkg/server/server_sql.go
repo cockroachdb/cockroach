@@ -499,15 +499,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				log.Warningf(ctx, "failed to get new liveness session ID: %v", err)
 				continue
 			}
-			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
-				ctx,
-				s,
-				r.cfg.AdvertiseAddr,
-				r.cfg.SQLAdvertiseAddr,
-				r.cfg.Locality,
-				r.cfg.Settings.Version.LatestVersion(),
-				nodeID,
-			); err != nil {
+			if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(ctx, s, r.cfg.AdvertiseAddr, r.cfg.SQLAdvertiseAddr, r.cfg.Locality, r.cfg.Settings.Version.LatestVersion(), nodeID, []roachpb.LocalityAddress{}); err != nil {
 				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
 				continue
 			}
@@ -1572,24 +1564,9 @@ func (s *SQLServer) preStart(
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
 			if hasNodeID {
 				// Write/acquire our instance row.
-				return s.sqlInstanceStorage.CreateNodeInstance(
-					ctx,
-					session,
-					s.cfg.AdvertiseAddr,
-					s.cfg.SQLAdvertiseAddr,
-					s.distSQLServer.Locality,
-					s.execCfg.Settings.Version.LatestVersion(),
-					nodeID,
-				)
+				return s.sqlInstanceStorage.CreateNodeInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), nodeID, []roachpb.LocalityAddress{})
 			}
-			return s.sqlInstanceStorage.CreateInstance(
-				ctx,
-				session,
-				s.cfg.AdvertiseAddr,
-				s.cfg.SQLAdvertiseAddr,
-				s.distSQLServer.Locality,
-				s.execCfg.Settings.Version.LatestVersion(),
-			)
+			return s.sqlInstanceStorage.CreateInstance(ctx, session, s.cfg.AdvertiseAddr, s.cfg.SQLAdvertiseAddr, s.distSQLServer.Locality, s.execCfg.Settings.Version.LatestVersion(), []roachpb.LocalityAddress{})
 		})
 	if err != nil {
 		return err
