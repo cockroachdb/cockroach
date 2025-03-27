@@ -297,6 +297,7 @@ func registerSysbench(r registry.Registry) {
 					`set cluster setting sql.metrics.statement_details.enabled = false`,
 					`set cluster setting kv.split_queue.enabled = false`,
 					`set cluster setting kv.consistency_queue.enabled = false`,
+					`set cluster setting kv.transaction.write_buffering.enabled = true`,
 				},
 				useDRPC: true,
 			},
