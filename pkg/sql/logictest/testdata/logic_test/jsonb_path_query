@@ -108,6 +108,9 @@ SELECT jsonb_path_query(data, 'strict $.aa.aaa.aaaa') FROM a
 query empty
 SELECT jsonb_path_query('{}', '$.a')
 
+query empty
+SELECT jsonb_path_query('[]', '$.a')
+
 statement ok
 CREATE TABLE b (j JSONB)
 
