@@ -284,8 +284,12 @@ func testsToRun(
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
 					s.Name, TeamCityEscape(s.Skip))
 			}
+			skipDetails := s.Skip
+			if skipDetails != "" {
+				skipDetails = " (" + s.SkipDetails + ")"
+			}
 			if print {
-				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", skipDetails)
 			}
 		}
 	}
