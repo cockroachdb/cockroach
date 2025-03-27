@@ -94,14 +94,12 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		// Build appropriate partitions.
 		partitions[i] = b.buildWindowPartition(def.Partitions, i, w.def.Name, inScope, argScope)
 
-		var isRangeModeWithOffsets bool
 		if def.Frame != nil {
 			windowFrames[i] = *def.Frame
-			isRangeModeWithOffsets = windowFrames[i].Mode == treewindow.RANGE && def.Frame.Bounds.HasOffset()
 		}
 
 		// Build appropriate orderings.
-		ord := b.buildWindowOrdering(def.OrderBy, i, w.def.Name, inScope, argScope, isRangeModeWithOffsets)
+		ord := b.buildWindowOrdering(def.OrderBy, i, w.def.Name, inScope, argScope)
 		orderings[i].FromOrdering(ord)
 
 		if w.Filter != nil {
@@ -266,7 +264,7 @@ func (b *Builder) buildAggregationAsWindow(
 
 		// Build appropriate orderings.
 		if !agg.isCommutative() {
-			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, g.aggInScope, false /* isRangeModeWithOffsets */)
+			ord := b.buildWindowOrdering(agg.OrderBy, i, agg.def.Name, fromScope, g.aggInScope)
 			orderings[i].FromOrdering(ord)
 		}
 
@@ -411,11 +409,7 @@ func (b *Builder) buildWindowPartition(
 
 // buildWindowOrdering builds the appropriate orderings for window functions.
 func (b *Builder) buildWindowOrdering(
-	orderBy tree.OrderBy,
-	windowIndex int,
-	funcName string,
-	inScope, outScope *scope,
-	isRangeModeWithOffsets bool,
+	orderBy tree.OrderBy, windowIndex int, funcName string, inScope, outScope *scope,
 ) opt.Ordering {
 	ord := make(opt.Ordering, 0, len(orderBy))
 	for j, t := range orderBy {
