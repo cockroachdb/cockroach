@@ -3645,10 +3645,6 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
-func (m *sessionDataMutator) SetRowLevelSecurity(val bool) {
-	m.data.RowLevelSecurityEnabled = val
-}
-
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }

@@ -658,7 +658,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/equivclass.out --
  explain (costs off)
    select * from ec1,
      (select ff + 1 as x from
-@@ -362,92 +525,110 @@
+@@ -362,92 +525,108 @@
       union all
       select ff + 4 as x from ec1) as ss1
    where ss1.x = ec1.f1 and ec1.ff = 42::int8;
@@ -714,9 +714,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/equivclass.out --
  alter table ec1 enable row level security;
 +ERROR:  relation "ec1" does not exist
  create policy p1 on ec1 using (f1 < '5'::int8alias1);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "ec1" does not exist
  create user regress_user_ectest;
  grant select on ec0 to regress_user_ectest;
  grant select on ec1 to regress_user_ectest;

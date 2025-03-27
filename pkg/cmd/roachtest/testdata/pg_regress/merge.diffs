@@ -2008,7 +2008,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  -- try updating the partition key column
  BEGIN;
-@@ -1732,64 +1690,102 @@
+@@ -1732,64 +1690,100 @@
      UPDATE SET tid = tid + 1, balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (sid, delta, 'inserted by merge');
@@ -2045,9 +2045,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ALTER TABLE pa_target FORCE ROW LEVEL SECURITY;
 +ERROR:  relation "pa_target" does not exist
  CREATE POLICY pa_target_pol ON pa_target USING (tid != 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "pa_target" does not exist
  MERGE INTO pa_target t
    USING pa_source s
    ON t.tid = s.sid AND t.tid IN (1,2,3,4)
@@ -2130,7 +2128,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try simple MERGE
  BEGIN;
  MERGE INTO pa_target t
-@@ -1799,91 +1795,78 @@
+@@ -1799,91 +1793,78 @@
      UPDATE SET balance = balance + delta, val = val || ' updated by merge'
    WHEN NOT MATCHED THEN
      INSERT VALUES (slogts::timestamp, sid, delta, 'inserted by merge');
@@ -2262,7 +2260,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO cj_source1 VALUES (1, 10, 100);
  INSERT INTO cj_source1 VALUES (1, 20, 200);
  INSERT INTO cj_source1 VALUES (2, 20, 300);
-@@ -1898,6 +1881,10 @@
+@@ -1898,6 +1879,10 @@
  ON t.tid = sid1
  WHEN NOT MATCHED THEN
  	INSERT VALUES (sid1, delta, sval);
@@ -2273,7 +2271,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- try accessing columns from either side of the source join
  MERGE INTO cj_target t
  USING cj_source2 s2
-@@ -1907,6 +1894,10 @@
+@@ -1907,6 +1892,10 @@
  	INSERT VALUES (sid2, delta, sval)
  WHEN MATCHED THEN
  	DELETE;
@@ -2284,7 +2282,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  -- some simple expressions in INSERT targetlist
  MERGE INTO cj_target t
  USING cj_source2 s2
-@@ -1916,20 +1907,24 @@
+@@ -1916,20 +1905,24 @@
  	INSERT VALUES (sid2, delta + scat, sval)
  WHEN MATCHED THEN
  	UPDATE SET val = val || ' updated by merge';
@@ -2316,7 +2314,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  -- try it with an outer join and PlaceHolderVar
  MERGE INTO cj_target t
-@@ -1938,19 +1933,14 @@
+@@ -1938,19 +1931,14 @@
  ON t.tid = fj.scat
  WHEN NOT MATCHED THEN
  	INSERT (tid, balance, val) VALUES (fj.scat, fj.delta, fj.phv);
@@ -2343,7 +2341,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  ALTER TABLE cj_source1 RENAME COLUMN sid1 TO sid;
  ALTER TABLE cj_source2 RENAME COLUMN sid2 TO sid;
-@@ -1961,10 +1951,15 @@
+@@ -1961,10 +1949,15 @@
  ON t.tid = s1.sid
  WHEN NOT MATCHED THEN
  	INSERT VALUES (s2.sid, delta, sval);
@@ -2359,7 +2357,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  MERGE INTO fs_target t
  USING generate_series(1,100,1) AS id
  ON t.a = id
-@@ -1972,6 +1967,10 @@
+@@ -1972,6 +1965,10 @@
  	UPDATE SET b = b + id
  WHEN NOT MATCHED THEN
  	INSERT VALUES (id, -1);
@@ -2370,7 +2368,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  MERGE INTO fs_target t
  USING generate_series(1,100,2) AS id
  ON t.a = id
-@@ -1979,10 +1978,14 @@
+@@ -1979,10 +1976,14 @@
  	UPDATE SET b = b + id, c = 'updated '|| id.*::text
  WHEN NOT MATCHED THEN
  	INSERT VALUES (id, -1, 'inserted ' || id.*::text);
@@ -2386,7 +2384,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  (1 row)
  
  DROP TABLE fs_target;
-@@ -1995,12 +1998,29 @@
+@@ -1995,12 +1996,29 @@
      peaktemp        int,
      unitsales       int
  ) WITH (autovacuum_enabled=off);
@@ -2416,7 +2414,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  CREATE TABLE measurement_y2007m01 (
      filler          text,
      peaktemp        int,
-@@ -2009,8 +2029,14 @@
+@@ -2009,8 +2027,14 @@
      unitsales       int
      CHECK ( logdate >= DATE '2007-01-01' AND logdate < DATE '2007-02-01')
  ) WITH (autovacuum_enabled=off);
@@ -2431,7 +2429,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO measurement VALUES (0, '2005-07-21', 5, 15);
  CREATE OR REPLACE FUNCTION measurement_insert_trigger()
  RETURNS TRIGGER AS $$
-@@ -2034,6 +2060,7 @@
+@@ -2034,6 +2058,7 @@
  CREATE TRIGGER insert_measurement_trigger
      BEFORE INSERT ON measurement
      FOR EACH ROW EXECUTE PROCEDURE measurement_insert_trigger();
@@ -2439,7 +2437,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO measurement VALUES (1, '2006-02-10', 35, 10);
  INSERT INTO measurement VALUES (1, '2006-02-16', 45, 20);
  INSERT INTO measurement VALUES (1, '2006-03-17', 25, 10);
-@@ -2041,18 +2068,19 @@
+@@ -2041,18 +2066,19 @@
  INSERT INTO measurement VALUES (1, '2007-01-15', 10, 10);
  INSERT INTO measurement VALUES (1, '2007-01-17', 10, 10);
  SELECT tableoid::regclass, * FROM measurement ORDER BY city_id, logdate;
@@ -2468,7 +2466,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  INSERT INTO new_measurement VALUES (0, '2005-07-21', 25, 20);
  INSERT INTO new_measurement VALUES (1, '2006-03-01', 20, 10);
  INSERT INTO new_measurement VALUES (1, '2006-02-16', 50, 10);
-@@ -2072,25 +2100,12 @@
+@@ -2072,25 +2098,12 @@
  WHEN NOT MATCHED THEN INSERT
       (city_id, logdate, peaktemp, unitsales)
     VALUES (city_id, logdate, peaktemp, unitsales);
@@ -2499,7 +2497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  ROLLBACK;
  MERGE into measurement m
   USING new_measurement nm ON
-@@ -2102,56 +2117,64 @@
+@@ -2102,56 +2115,64 @@
  WHEN NOT MATCHED THEN INSERT
       (city_id, logdate, peaktemp, unitsales)
     VALUES (city_id, logdate, peaktemp, unitsales);

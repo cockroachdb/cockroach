@@ -44,19 +44,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE uaccount (
      pguser      name primary key,
      seclv       int
-@@ -73,426 +99,299 @@
-     ( 9, 22, 1, 'regress_rls_dave', 'awesome science fiction'),
-     (10, 33, 2, 'regress_rls_dave', 'awesome technology book');
- ALTER TABLE document ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
+@@ -76,13 +102,15 @@
  -- user's security level must be higher than or equal to document's
  CREATE POLICY p1 ON document AS PERMISSIVE
      USING (dlevel <= (SELECT seclv FROM uaccount WHERE pguser = current_user));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "seclv" does not exist
  -- try to create a policy of bogus type
  CREATE POLICY p1 ON document AS UGLY
      USING (dlevel <= (SELECT seclv FROM uaccount WHERE pguser = current_user));
@@ -72,18 +64,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- but Dave isn't allowed to anything at cid 50 or above
  -- this is to make sure that we sort the policies by name first
  -- when applying WITH CHECK, a later INSERT by Dave should fail due
- -- to p1r first
- CREATE POLICY p2r ON document AS RESTRICTIVE TO regress_rls_dave
-     USING (cid <> 44 AND cid < 50);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- -- and Dave isn't allowed to see manga documents
+@@ -93,354 +121,162 @@
  CREATE POLICY p1r ON document AS RESTRICTIVE TO regress_rls_dave
      USING (cid <> 44);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  \dp
 -                                                                  Access privileges
 -       Schema       |   Name   | Type  |              Access privileges              | Column privileges |                  Policies                  
@@ -421,16 +404,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- only owner can change policies
  ALTER POLICY p1 ON document USING (true);    --fail
 -ERROR:  must be owner of table document
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  policy "p1" for table "document" does not exist
  DROP POLICY p1 ON document;                  --fail
 -ERROR:  must be owner of relation document
--SET SESSION AUTHORIZATION regress_rls_alice;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_alice;
++ERROR:  policy "p1" for table "document" does not exist
+ SET SESSION AUTHORIZATION regress_rls_alice;
 +ERROR:  at or near "regress_rls_alice": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_alice
@@ -438,9 +416,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  ALTER POLICY p1 ON document USING (dauthor = current_user);
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  policy "p1" for table "document" does not exist
  -- viewpoint from regress_rls_bob again
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -551,14 +527,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p2 ON category
      USING (CASE WHEN current_user = 'regress_rls_bob' THEN cid IN (11, 33)
             WHEN current_user = 'regress_rls_carol' THEN cid IN (22, 44)
-            ELSE false END);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
+@@ -448,51 +284,91 @@
  ALTER TABLE category ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  -- cannot delete PK referenced by invisible FK
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -673,7 +643,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     1 |  11 |      1 | regress_rls_bob   | my first novel
     2 |  11 |      2 | regress_rls_bob   | my second novel
     3 |  22 |      2 | regress_rls_bob   | my science fiction
-@@ -503,8 +402,9 @@
+@@ -503,8 +379,9 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -685,7 +655,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -517,10 +417,15 @@
+@@ -517,10 +394,15 @@
  
  -- database superuser does bypass RLS policy when disabled
  RESET SESSION AUTHORIZATION;
@@ -703,7 +673,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     1 |  11 |      1 | regress_rls_bob   | my first novel
     2 |  11 |      2 | regress_rls_bob   | my second novel
     3 |  22 |      2 | regress_rls_bob   | my science fiction
-@@ -531,8 +436,9 @@
+@@ -531,8 +413,9 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -715,7 +685,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -545,10 +451,16 @@
+@@ -545,10 +428,16 @@
  
  -- database non-superuser with bypass privilege can bypass RLS policy when disabled
  SET SESSION AUTHORIZATION regress_rls_exempt_user;
@@ -734,7 +704,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     1 |  11 |      1 | regress_rls_bob   | my first novel
     2 |  11 |      2 | regress_rls_bob   | my second novel
     3 |  22 |      2 | regress_rls_bob   | my science fiction
-@@ -559,8 +471,9 @@
+@@ -559,8 +448,9 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -746,7 +716,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -573,10 +486,16 @@
+@@ -573,10 +463,16 @@
  
  -- RLS policy does not apply to table owner when RLS enabled.
  SET SESSION AUTHORIZATION regress_rls_alice;
@@ -765,7 +735,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     1 |  11 |      1 | regress_rls_bob   | my first novel
     2 |  11 |      2 | regress_rls_bob   | my second novel
     3 |  22 |      2 | regress_rls_bob   | my science fiction
-@@ -587,8 +506,9 @@
+@@ -587,8 +483,9 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -777,7 +747,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -601,10 +521,16 @@
+@@ -601,10 +498,16 @@
  
  -- RLS policy does not apply to table owner when RLS disabled.
  SET SESSION AUTHORIZATION regress_rls_alice;
@@ -796,7 +766,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
     1 |  11 |      1 | regress_rls_bob   | my first novel
     2 |  11 |      2 | regress_rls_bob   | my second novel
     3 |  22 |      2 | regress_rls_bob   | my science fiction
-@@ -615,8 +541,9 @@
+@@ -615,8 +518,9 @@
     8 |  44 |      1 | regress_rls_carol | great manga
     9 |  22 |      1 | regress_rls_dave  | awesome science fiction
    10 |  33 |      2 | regress_rls_dave  | awesome technology book
@@ -808,7 +778,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT * FROM category;
   cid |      cname      
-@@ -631,278 +558,210 @@
+@@ -631,278 +535,205 @@
  -- Table inheritance and RLS policy
  --
  SET SESSION AUTHORIZATION regress_rls_alice;
@@ -885,13 +855,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +301	1	xxx	X
 +^
  CREATE POLICY p2 ON t2 FOR ALL TO PUBLIC USING (a % 2 = 1); -- be odd number
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "t2" does not exist
  ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE t2 ENABLE ROW LEVEL SECURITY;
 +ERROR:  relation "t2" does not exist
  SET SESSION AUTHORIZATION regress_rls_bob;
@@ -1238,7 +1203,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE part_document (
      did         int,
      cid         int,
-@@ -910,14 +769,44 @@
+@@ -910,14 +741,44 @@
      dauthor     name,
      dtitle      text
  ) PARTITION BY RANGE (cid);
@@ -1283,7 +1248,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  INSERT INTO part_document VALUES
      ( 1, 11, 1, 'regress_rls_bob', 'my first novel'),
      ( 2, 11, 2, 'regress_rls_bob', 'my second novel'),
-@@ -929,1067 +818,919 @@
+@@ -929,1067 +790,844 @@
      ( 8, 55, 2, 'regress_rls_carol', 'great satire'),
      ( 9, 11, 1, 'regress_rls_dave', 'awesome science fiction'),
      (10, 99, 2, 'regress_rls_dave', 'awesome technology book');
@@ -1294,15 +1259,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- user's security level must be higher than or equal to document's
  CREATE POLICY pp1 ON part_document AS PERMISSIVE
      USING (dlevel <= (SELECT seclv FROM uaccount WHERE pguser = current_user));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "part_document" does not exist
  -- Dave is only allowed to see cid < 55
  CREATE POLICY pp1r ON part_document AS RESTRICTIVE TO regress_rls_dave
      USING (cid < 55);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "part_document" does not exist
  \d+ part_document
 -                    Partitioned table "regress_rls_schema.part_document"
 - Column  |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
@@ -1536,9 +1497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +ERROR:  relation "part_document_satire" does not exist
  CREATE POLICY pp3 ON part_document_satire AS RESTRICTIVE
      USING (cid < 55);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "part_document_satire" does not exist
  -- This should fail with RLS violation now.
  SET SESSION AUTHORIZATION regress_rls_dave;
 +ERROR:  at or near "regress_rls_dave": syntax error: unimplemented: this syntax
@@ -1647,16 +1606,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- only owner can change policies
  ALTER POLICY pp1 ON part_document USING (true);    --fail
 -ERROR:  must be owner of table part_document
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  relation "part_document" does not exist
  DROP POLICY pp1 ON part_document;                  --fail
 -ERROR:  must be owner of relation part_document
--SET SESSION AUTHORIZATION regress_rls_alice;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_alice;
++ERROR:  relation "part_document" does not exist
+ SET SESSION AUTHORIZATION regress_rls_alice;
 +ERROR:  at or near "regress_rls_alice": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_alice
@@ -1664,9 +1618,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  ALTER POLICY pp1 ON part_document USING (dauthor = current_user);
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  relation "part_document" does not exist
  -- viewpoint from regress_rls_bob again
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -1858,11 +1810,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  CREATE POLICY pp3 ON part_document AS RESTRICTIVE
      USING ((SELECT dlevel <= seclv FROM uaccount WHERE pguser = current_user));
--SET SESSION AUTHORIZATION regress_rls_carol;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_carol;
++ERROR:  relation "part_document" does not exist
+ SET SESSION AUTHORIZATION regress_rls_carol;
 +ERROR:  at or near "regress_rls_carol": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_carol
@@ -1886,9 +1835,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY d1 ON dependent FOR ALL
      TO PUBLIC
      USING (x = (SELECT d.x FROM dependee d WHERE d.y = y));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  no data source matches prefix: d in this context
  DROP TABLE dependee; -- Should fail without CASCADE due to dependency on row security qual?
 -ERROR:  cannot drop table dependee because other objects depend on it
 -DETAIL:  policy d1 on table dependent depends on table dependee
@@ -1920,15 +1867,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE TABLE rec1 (x integer, y integer);
  CREATE POLICY r1 ON rec1 USING (x = (SELECT r.x FROM rec1 r WHERE y = r.y));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  no data source matches prefix: r in this context
  ALTER TABLE rec1 ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -1953,19 +1894,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE TABLE rec2 (a integer, b integer);
  ALTER POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2 WHERE b = y));
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  policy "r1" for table "rec1" does not exist
  CREATE POLICY r2 ON rec2 USING (a = (SELECT x FROM rec1 WHERE y = b));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "x" does not exist
  ALTER TABLE rec2 ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -1998,15 +1931,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  ALTER POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2v WHERE b = y));
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
++ERROR:  policy "r1" for table "rec1" does not exist
  ALTER POLICY r2 ON rec2 USING (a = (SELECT x FROM rec1v WHERE y = b));
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  policy "r2" for table "rec2" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2054,15 +1982,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2v WHERE b = y));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "a" does not exist
  CREATE POLICY r2 ON rec2 USING (a = (SELECT x FROM rec1v WHERE y = b));
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  column "x" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2093,27 +2016,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +ERROR:  unknown function: public.fipshash()
  GRANT SELECT ON s1, s2 TO regress_rls_bob;
  CREATE POLICY p1 ON s1 USING (a in (select x from s2 where y like '%2f%'));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "x" does not exist
  CREATE POLICY p2 ON s2 USING (x in (select a from s1 where b like '%22%'));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "a" does not exist
  CREATE POLICY p3 ON s1 FOR INSERT WITH CHECK (a = (SELECT a FROM s1));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  variable sub-expressions are not allowed in POLICY WITH CHECK
  ALTER TABLE s1 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE s2 ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2134,15 +2044,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  DROP POLICY p3 on s1;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p3" for table "s1" does not exist
  ALTER POLICY p2 ON s2 USING (x % 2 = 0);
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  policy "p2" for table "s2" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2181,11 +2086,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  ALTER POLICY p1 ON s1 USING (a in (select x from v2)); -- using VIEW in RLS policy
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  policy "p1" for table "s1" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2252,11 +2154,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  policy "p2" for table "s2" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2806,13 +2705,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  INSERT INTO b1 (SELECT x, public.fipshash(x::text) FROM generate_series(-10,10) x);
 +ERROR:  unknown function: public.fipshash()
  CREATE POLICY p1 ON b1 USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE b1 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  GRANT ALL ON b1 TO regress_rls_bob;
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -2953,29 +2846,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  DROP POLICY p1 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p1" for table "document" does not exist
  DROP POLICY p1r ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p1 ON document FOR SELECT USING (true);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p2 ON document FOR INSERT WITH CHECK (dauthor = current_user);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p3 ON document FOR UPDATE
    USING (cid = (SELECT cid from category WHERE cname = 'novel'))
    WITH CHECK (dauthor = current_user);
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  column "cname" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -2985,7 +2864,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Exists...
  SELECT * FROM document WHERE did = 2;
   did | cid | dlevel |     dauthor     |     dtitle      
-@@ -2001,7 +1742,6 @@
+@@ -2001,7 +1639,6 @@
  -- alternative UPDATE path happens to be taken):
  INSERT INTO document VALUES (2, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_carol', 'my first novel')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle, dauthor = EXCLUDED.dauthor;
@@ -2993,7 +2872,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Violates USING qual for UPDATE policy p3.
  --
  -- UPDATE path is taken, but UPDATE fails purely because *existing* row to be
-@@ -2010,14 +1750,13 @@
+@@ -2010,14 +1647,13 @@
  INSERT INTO document VALUES (33, 22, 1, 'regress_rls_bob', 'okay science fiction'); -- preparation for next statement
  INSERT INTO document VALUES (33, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'Some novel, replaces sci-fi') -- takes UPDATE path
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle;
@@ -3011,7 +2890,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Fine (we INSERT, so "cid = 33" ("technology") isn't evaluated):
-@@ -2041,7 +1780,11 @@
+@@ -2041,7 +1677,11 @@
  -- passing quals:
  INSERT INTO document VALUES (78, (SELECT cid from category WHERE cname = 'novel'), 1, 'regress_rls_bob', 'some technology novel')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle, cid = 33 RETURNING *;
@@ -3024,7 +2903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Don't fail just because INSERT doesn't satisfy WITH CHECK option that
  -- originated as a barrier/USING() qual from the UPDATE.  Note that the UPDATE
  -- path *isn't* taken, and so UPDATE-related policy does not apply:
-@@ -2058,15 +1801,43 @@
+@@ -2058,15 +1698,33 @@
  -- irrelevant, in fact.
  INSERT INTO document VALUES (79, (SELECT cid from category WHERE cname = 'technology'), 1, 'regress_rls_bob', 'technology book, can only insert')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle RETURNING *;
@@ -3043,24 +2922,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  DROP POLICY p1 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  DROP POLICY p2 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  DROP POLICY p3 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p3" for table "document" does not exist
  CREATE POLICY p3_with_default ON document FOR UPDATE
    USING (cid = (SELECT cid from category WHERE cname = 'novel'));
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  column "cname" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -3070,7 +2938,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Just because WCO-style enforcement of USING quals occurs with
  -- existing/target tuple does not mean that the implementation can be allowed
  -- to fail to also enforce this qual against the final tuple appended to
-@@ -2080,16 +1851,33 @@
+@@ -2080,16 +1738,31 @@
  -- UPDATE to make this fail:
  INSERT INTO document VALUES (79, (SELECT cid from category WHERE cname = 'technology'), 1, 'regress_rls_bob', 'technology book, can only insert')
      ON CONFLICT (did) DO UPDATE SET dtitle = EXCLUDED.dtitle RETURNING *;
@@ -3100,21 +2968,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  DROP POLICY p3_with_default ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p3_with_default" for table "document" does not exist
  --
  -- Test ALL policies with ON CONFLICT DO UPDATE (much the same as existing UPDATE
  -- tests)
-@@ -2097,76 +1885,121 @@
+@@ -2097,25 +1770,35 @@
  CREATE POLICY p3_with_all ON document FOR ALL
    USING (cid = (SELECT cid from category WHERE cname = 'novel'))
    WITH CHECK (dauthor = current_user);
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  column "cname" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -3144,33 +3007,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +              ^
 +HINT:  try \h RESET
  DROP POLICY p3_with_all ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p3_with_all" for table "document" does not exist
  ALTER TABLE document ADD COLUMN dnotes text DEFAULT '';
  -- all documents are readable
  CREATE POLICY p1 ON document FOR SELECT USING (true);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- -- one may insert documents only authored by them
- CREATE POLICY p2 ON document FOR INSERT WITH CHECK (dauthor = current_user);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- -- one may only update documents in 'novel' category and new dlevel must be > 0
+@@ -2125,48 +1808,69 @@
  CREATE POLICY p3 ON document FOR UPDATE
    USING (cid = (SELECT cid from category WHERE cname = 'novel'))
    WITH CHECK (dlevel > 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "cname" does not exist
  -- one may only delete documents in 'manga' category
  CREATE POLICY p4 ON document FOR DELETE
    USING (cid = (SELECT cid from category WHERE cname = 'manga'));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  column "cname" does not exist
  SELECT * FROM document;
   did | cid | dlevel |      dauthor      |              dtitle              | dnotes 
  -----+-----+--------+-------------------+----------------------------------+--------
@@ -3239,7 +3088,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- There is a MATCH for did = 3, but UPDATE's USING qual does not allow
  -- updating an item in category 'science fiction'
  MERGE INTO document d
-@@ -2174,7 +2007,10 @@
+@@ -2174,7 +1878,10 @@
  ON did = s.sdid
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge ';
@@ -3251,7 +3100,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- The same thing with DELETE action, but fails again because no permissions
  -- to delete items in 'science fiction' category that did 3 belongs to.
  MERGE INTO document d
-@@ -2182,7 +2018,10 @@
+@@ -2182,7 +1889,10 @@
  ON did = s.sdid
  WHEN MATCHED THEN
  	DELETE;
@@ -3263,7 +3112,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Document with did 4 belongs to 'manga' category which is allowed for
  -- deletion. But this fails because the UPDATE action is matched first and
  -- UPDATE policy does not allow updation in the category.
-@@ -2193,7 +2032,10 @@
+@@ -2193,7 +1903,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -3275,7 +3124,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- UPDATE action is not matched this time because of the WHEN qual.
  -- DELETE still fails because role regress_rls_bob does not have SELECT
  -- privileges on 'manga' category row in the category table.
-@@ -2204,7 +2046,10 @@
+@@ -2204,7 +1917,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -3287,7 +3136,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- OK if DELETE is replaced with DO NOTHING
  MERGE INTO document d
  USING (SELECT 4 as sdid) s
-@@ -2213,16 +2058,31 @@
+@@ -2213,16 +1929,31 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DO NOTHING;
@@ -3321,7 +3170,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  MERGE INTO document d
  USING (SELECT 4 as sdid) s
  ON did = s.sdid
-@@ -2230,9 +2090,24 @@
+@@ -2230,9 +1961,24 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge '
  WHEN MATCHED THEN
  	DELETE;
@@ -3347,7 +3196,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Try INSERT action. This fails because we are trying to insert
  -- dauthor = regress_rls_dave and INSERT's WITH CHECK does not allow
  -- that
-@@ -2243,7 +2118,10 @@
+@@ -2243,7 +1989,10 @@
  	DELETE
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_dave', 'another novel');
@@ -3359,7 +3208,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- This should be fine
  MERGE INTO document d
  USING (SELECT 12 as sdid) s
-@@ -2252,6 +2130,10 @@
+@@ -2252,6 +2001,10 @@
  	DELETE
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -3370,7 +3219,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- ok
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2260,13 +2142,34 @@
+@@ -2260,13 +2013,29 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge4 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -3387,16 +3236,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +              ^
 +HINT:  try \h RESET
  DROP POLICY p1 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p1 ON document FOR SELECT
    USING (cid = (SELECT cid from category WHERE cname = 'novel'));
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  column "cname" does not exist
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -3406,7 +3249,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- MERGE can no longer see the matching row and hence attempts the
  -- NOT MATCHED action, which results in unique key violation
  MERGE INTO document d
-@@ -2276,7 +2179,10 @@
+@@ -2276,7 +2045,10 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge5 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (12, 11, 1, 'regress_rls_bob', 'another novel');
@@ -3418,7 +3261,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- UPDATE action fails if new row is not visible
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2284,7 +2190,10 @@
+@@ -2284,7 +2056,10 @@
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge6 ',
  			   cid = (SELECT cid from category WHERE cname = 'technology');
@@ -3430,7 +3273,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- but OK if new row is visible
  MERGE INTO document d
  USING (SELECT 1 as sdid) s
-@@ -2292,6 +2201,10 @@
+@@ -2292,6 +2067,10 @@
  WHEN MATCHED THEN
  	UPDATE SET dnotes = dnotes || ' notes added by merge7 ',
  			   cid = (SELECT cid from category WHERE cname = 'novel');
@@ -3441,7 +3284,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- OK to insert a new row that is not visible
  MERGE INTO document d
  USING (SELECT 13 as sdid) s
-@@ -2300,35 +2213,54 @@
+@@ -2300,35 +2079,52 @@
  	UPDATE SET dnotes = dnotes || ' notes added by merge8 '
  WHEN NOT MATCHED THEN
  	INSERT VALUES (13, 44, 1, 'regress_rls_bob', 'new manga');
@@ -3458,9 +3301,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- drop the restrictive SELECT policy so that we can look at the
  -- final state of the table
  DROP POLICY p1 ON document;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy "p1" for table "document" does not exist
  -- Just check everything went per plan
  SELECT * FROM document;
 - did | cid | dlevel |      dauthor      |              dtitle              |                                            dnotes                                            
@@ -3505,23 +3346,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE z1 (a int, b text);
  CREATE TABLE z2 (a int, b text);
  GRANT SELECT ON z1,z2 TO regress_rls_group1, regress_rls_group2,
-@@ -2339,582 +2271,654 @@
-     (3, 'ccc'),
-     (4, 'dad');
- CREATE POLICY p1 ON z1 TO regress_rls_group1 USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
+@@ -2342,579 +2138,636 @@
  CREATE POLICY p2 ON z1 TO regress_rls_group2 USING (a % 2 = 1);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE z1 ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -4045,9 +3873,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE z1_blacklist (a int);
  INSERT INTO z1_blacklist VALUES (3), (4);
  CREATE POLICY p3 ON z1 AS RESTRICTIVE USING (a NOT IN (SELECT a FROM z1_blacklist));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  must be owner of relation z1
  -- Query as role that is not owner of table but is owner of view without permissions.
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -4162,11 +3988,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +See: https://go.crdb.dev/issue-v/40283/_version_
  REVOKE SELECT ON z1_blacklist FROM regress_rls_bob;
  DROP POLICY p3 ON z1;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
++ERROR:  must be owner of relation z1
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -4417,9 +4240,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE POLICY p3 ON z1 AS RESTRICTIVE USING (a NOT IN (SELECT a FROM z1_blacklist));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  must be owner of relation z1
  -- Query as role that is not owner of table but is owner of view without permissions.
  SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
@@ -4573,35 +4394,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE x1 (a int, b text, c text);
  GRANT ALL ON x1 TO PUBLIC;
  INSERT INTO x1 VALUES
-@@ -2927,516 +2931,402 @@
-     (7, 'fgh', 'regress_rls_carol'),
-     (8, 'fgh', 'regress_rls_carol');
- CREATE POLICY p0 ON x1 FOR ALL USING (c = current_user);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- CREATE POLICY p1 ON x1 FOR SELECT USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- CREATE POLICY p2 ON x1 FOR INSERT WITH CHECK (a % 2 = 1);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- CREATE POLICY p3 ON x1 FOR UPDATE USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
+@@ -2933,103 +2786,46 @@
  CREATE POLICY p4 ON x1 FOR DELETE USING (a < 8);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE x1 ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -4719,32 +4515,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE y2 (a int, b text);
  GRANT ALL ON y1, y2 TO regress_rls_bob;
  CREATE POLICY p1 ON y1 FOR ALL USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p2 ON y1 FOR SELECT USING (a > 2);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p1 ON y1 FOR SELECT USING (a % 2 = 1);  --fail
 -ERROR:  policy "p1" for table "y1" already exists
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  policy with name "p1" already exists on table "y1"
  CREATE POLICY p1 ON y2 FOR ALL USING (a % 2 = 0);  --OK
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE y1 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE y2 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- --
- -- Expression structure with SBV
+@@ -3038,188 +2834,121 @@
  --
  -- Create view as table owner.  RLS should NOT be applied.
  SET SESSION AUTHORIZATION regress_rls_alice;
@@ -4817,15 +4595,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  INSERT INTO y2 (SELECT x, public.fipshash(x::text) FROM generate_series(0,20) x);
 +ERROR:  unknown function: public.fipshash()
  CREATE POLICY p2 ON y2 USING (a % 3 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE POLICY p3 ON y2 USING (a % 4 = 0);
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -5016,19 +4787,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE t1 (a integer);
  GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
  CREATE POLICY p1 ON t1 TO regress_rls_bob USING ((a % 2) = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- CREATE POLICY p2 ON t1 TO regress_rls_carol USING ((a % 4) = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- -- Prepare as regress_rls_bob
- SET ROLE regress_rls_bob;
+@@ -3230,112 +2959,85 @@
  PREPARE role_inval AS SELECT * FROM t1;
  -- Check plan
  EXPLAIN (COSTS OFF) EXECUTE role_inval;
@@ -5087,9 +4846,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE t1 (a integer, b text);
 +ERROR:  relation "root.regress_rls_schema.t1" already exists
  CREATE POLICY p1 ON t1 USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  must be owner of relation t1
  ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
 +ERROR:  must be owner of table t1 or have CREATE privilege on table t1
  GRANT ALL ON t1 TO regress_rls_bob;
@@ -5187,32 +4944,30 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  try \h RESET
  ALTER POLICY p1 ON t1 RENAME TO p1; --fail
 -ERROR:  policy "p1" for table "t1" already exists
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136996/_version_
++ERROR:  must be owner of relation t1
  SELECT polname, relname
      FROM pg_policy pol
      JOIN pg_class pc ON (pc.oid = pol.polrelid)
-     WHERE relname = 't1';
+@@ -3343,95 +3045,74 @@
   polname | relname 
  ---------+---------
-- p1      | t1
+  p1      | t1
 -(1 row)
-+(0 rows)
++ p2      | t1
++(2 rows)
  
  ALTER POLICY p1 ON t1 RENAME TO p2; --ok
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136996/_version_
++ERROR:  must be owner of relation t1
  SELECT polname, relname
      FROM pg_policy pol
      JOIN pg_class pc ON (pc.oid = pol.polrelid)
      WHERE relname = 't1';
   polname | relname 
  ---------+---------
-- p2      | t1
++ p1      | t1
+  p2      | t1
 -(1 row)
-+(0 rows)
++(2 rows)
  
  --
  -- Check INSERT SELECT
@@ -5328,18 +5083,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE blog (id integer, author text, post text);
  CREATE TABLE comment (blog_id integer, message text);
  GRANT ALL ON blog, comment TO regress_rls_bob;
- CREATE POLICY blog_1 ON blog USING (id % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- ALTER TABLE blog ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
- INSERT INTO blog VALUES
-     (1, 'alice', 'blog #1'),
-     (2, 'bob', 'blog #1'),
-@@ -3451,1097 +3341,412 @@
+@@ -3451,1097 +3132,392 @@
      (4, 'insane!'),
      (2, 'who did it?');
  SET SESSION AUTHORIZATION regress_rls_bob;
@@ -5384,15 +5128,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE POLICY comment_1 ON comment USING (blog_id < 4);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE comment ENABLE ROW LEVEL SECURITY;
--SET SESSION AUTHORIZATION regress_rls_bob;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
-+SET SESSION AUTHORIZATION regress_rls_bob;
+ SET SESSION AUTHORIZATION regress_rls_bob;
 +ERROR:  at or near "regress_rls_bob": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +SET SESSION AUTHORIZATION regress_rls_bob
@@ -5442,9 +5179,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +              ^
 +HINT:  try \h RESET
  DROP POLICY p2 ON t1;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  must be owner of relation t1
  ALTER TABLE t1 OWNER TO regress_rls_alice;
 +ERROR:  must be owner of table t1
  -- Check that default deny does not apply to superuser.
@@ -5613,13 +5348,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +ERROR:  relation "copy_t" does not exist
  CREATE TABLE copy_t (a integer, b text);
  CREATE POLICY p1 ON copy_t USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE copy_t ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  GRANT ALL ON copy_t TO regress_rls_bob, regress_rls_exempt_user;
 +ERROR:  role/user "regress_rls_exempt_user" does not exist
  INSERT INTO copy_t (SELECT x, public.fipshash(x::text) FROM generate_series(0,10) x);
@@ -5734,13 +5463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  CREATE TABLE copy_rel_to (a integer, b text);
  CREATE POLICY p1 ON copy_rel_to USING (a % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER TABLE copy_rel_to ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  GRANT ALL ON copy_rel_to TO regress_rls_bob, regress_rls_exempt_user;
 +ERROR:  role/user "regress_rls_exempt_user" does not exist
  INSERT INTO copy_rel_to VALUES (1, public.fipshash('1'));

@@ -583,7 +583,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  -- Don't drop trans_updatetrig yet. It is required below.
  -- Test with transition tuple conversion happening for rows moved into the
  -- new partition. This requires a trigger that references transition table
-@@ -545,74 +521,84 @@
+@@ -545,74 +521,80 @@
  END $$ language plpgsql;
  CREATE TRIGGER trig_c1_100 BEFORE UPDATE OR INSERT ON part_c_1_100
     FOR EACH ROW EXECUTE PROCEDURE func_parted_mod_b();
@@ -671,13 +671,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  GRANT ALL ON range_parted, mintab TO regress_range_parted_user;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "range_parted" does not exist
  CREATE POLICY seeall ON range_parted AS PERMISSIVE FOR SELECT USING (true);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  CREATE POLICY policy_range_parted ON range_parted for UPDATE USING (true) WITH CHECK (c % 2 = 0);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  :init_range_parted;
 +ERROR:  relation "range_parted" does not exist
 +ERROR:  relation "range_parted" does not exist
@@ -702,7 +698,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  -- Create a trigger on part_d_1_15
  CREATE FUNCTION func_d_1_15() RETURNS trigger AS $$
  BEGIN
-@@ -621,61 +607,154 @@
+@@ -621,61 +603,144 @@
  END $$ LANGUAGE plpgsql;
  CREATE TRIGGER trig_d_1_15 BEFORE INSERT ON part_d_1_15
     FOR EACH ROW EXECUTE PROCEDURE func_d_1_15();
@@ -767,9 +763,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  CREATE POLICY policy_range_parted_subplan on range_parted
      AS RESTRICTIVE for UPDATE USING (true)
      WITH CHECK ((SELECT range_parted.c <= c1 FROM mintab));
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  SET SESSION AUTHORIZATION regress_range_parted_user;
 +ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -796,9 +790,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
 +ERROR:  relation "range_parted" does not exist
  CREATE POLICY policy_range_parted_wholerow on range_parted AS RESTRICTIVE for UPDATE USING (true)
     WITH CHECK (range_parted = row('b', 10, 112, 1, NULL)::range_parted);
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  SET SESSION AUTHORIZATION regress_range_parted_user;
 +ERROR:  at or near "regress_range_parted_user": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -837,17 +829,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
 +              ^
 +HINT:  try \h RESET
  DROP POLICY policy_range_parted ON range_parted;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  DROP POLICY policy_range_parted_subplan ON range_parted;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  DROP POLICY policy_range_parted_wholerow ON range_parted;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
++ERROR:  relation "range_parted" does not exist
  REVOKE ALL ON range_parted, mintab FROM regress_range_parted_user;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "range_parted" does not exist
  DROP USER regress_range_parted_user;
@@ -860,7 +846,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  CREATE FUNCTION trigfunc() returns trigger language plpgsql as
  $$
    begin
-@@ -687,235 +766,271 @@
+@@ -687,235 +752,271 @@
  -- Triggers on root partition
  CREATE TRIGGER parent_delete_trig
    AFTER DELETE ON range_parted for each statement execute procedure trigfunc();
@@ -1235,7 +1221,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  -- Test the case where BR UPDATE triggers change the partition key.
  CREATE FUNCTION func_parted_mod_b() returns trigger as $$
  BEGIN
-@@ -925,26 +1040,13 @@
+@@ -925,26 +1026,13 @@
  CREATE TRIGGER parted_mod_b before update on sub_part1
     for each row execute procedure func_parted_mod_b();
  SELECT tableoid::regclass::text, * FROM list_parted ORDER BY 1, 2, 3, 4;
@@ -1265,7 +1251,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  DROP TRIGGER parted_mod_b ON sub_part1;
  -- If BR DELETE trigger prevented DELETE from happening, we should also skip
  -- the INSERT if that delete is part of UPDATE=>DELETE+INSERT.
-@@ -956,28 +1058,15 @@
+@@ -956,28 +1044,15 @@
  CREATE TRIGGER trig_skip_delete before delete on sub_part2
     for each row execute procedure func_parted_mod_b();
  UPDATE list_parted set b = 1 WHERE c = 70;
@@ -1298,7 +1284,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/update.out --labe
  DROP FUNCTION func_parted_mod_b();
  -- UPDATE partition-key with FROM clause. If join produces multiple output
  -- rows for the same row to be modified, we should tuple-route the row only
-@@ -985,44 +1074,93 @@
+@@ -985,44 +1060,93 @@
  CREATE TABLE non_parted (id int);
  INSERT into non_parted VALUES (1), (1), (1), (2), (2), (2), (3), (3), (3);
  UPDATE list_parted t1 set a = 2 FROM non_parted t2 WHERE t1.a = t2.id and a = 1;

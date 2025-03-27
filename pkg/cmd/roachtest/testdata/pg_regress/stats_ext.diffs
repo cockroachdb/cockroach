@@ -4074,7 +4074,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
  DROP TABLE expr_stats_incompatible_test;
  -- Permission tests. Users should not be able to see specific data values in
  -- the extended statistics, if they lack permission to see those values in
-@@ -3088,205 +2141,511 @@
+@@ -3088,205 +2141,508 @@
       SELECT mod(i,5), mod(i,10) FROM generate_series(1,100) s(i);
  CREATE STATISTICS tststats.priv_test_stats (mcv) ON a, b
    FROM tststats.priv_test_tbl;
@@ -4651,9 +4651,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
 +              ^
 +HINT:  try \h RESET
  ALTER TABLE tststats.priv_test_tbl ENABLE ROW LEVEL SECURITY;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  GRANT SELECT, DELETE ON tststats.priv_test_tbl TO regress_stats_user1;
  -- Should now have direct table access, but see nothing and leak nothing
  SET SESSION AUTHORIZATION regress_stats_user1;

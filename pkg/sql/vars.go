@@ -2006,24 +2006,6 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// CockroachDB extension.
-	`enable_row_level_security`: {
-		Hidden:       true,
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_row_level_security`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_row_level_security", s)
-			if err != nil {
-				return err
-			}
-			m.SetRowLevelSecurity(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().RowLevelSecurityEnabled), nil
-		},
-		GlobalDefault: globalFalse,
-	},
-
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {

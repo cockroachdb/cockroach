@@ -414,9 +414,6 @@ ok1  CREATE TABLE public.ok1 (
 subtest partition_with_rls
 
 statement ok
-set enable_row_level_security=on;
-
-statement ok
 ALTER TABLE ok1 ENABLE ROW LEVEL SECURITY;
 
 statement ok
@@ -445,9 +442,6 @@ DROP POLICY test_policy ON ok1;
 
 statement ok
 ALTER TABLE ok1 DISABLE ROW LEVEL SECURITY;
-
-statement ok
-set enable_row_level_security=off;
 
 subtest end
 

@@ -14,14 +14,6 @@ USE db1;
 statement ok
 GRANT ADMIN to testuser;
 
-statement ok
-SET enable_row_level_security = on;
-
-query T
-show session enable_row_level_security;
-----
-on
-
 subtest create_drop_sanity
 
 statement ok
@@ -371,9 +363,6 @@ GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
 user testuser
 
 statement ok
-SET enable_row_level_security = on;
-
-statement ok
 USE db1;
 
 statement ok
@@ -397,9 +386,6 @@ target  CREATE TABLE public.target (
         CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser
 
 user root
-
-statement ok
-SET enable_row_level_security = on;
 
 statement ok
 USE db1;

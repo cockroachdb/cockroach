@@ -589,8 +589,7 @@ message LocalOnlySessionData {
   // AvoidFullTableScansInMutations indicates whether mutation queries that plan
   // full table scans should be avoided.
   bool avoid_full_table_scans_in_mutations = 151;
-  // RowLevelSecurityEnabled indicates whether row level security is enabled
-  bool row_level_security_enabled = 152;
+  reserved 152;
   // CatalogDigestStalenessCheckEnabled is used to enable using the catalog
   // digest information to do fast memo checks.
   bool catalog_digest_staleness_check_enabled = 153;

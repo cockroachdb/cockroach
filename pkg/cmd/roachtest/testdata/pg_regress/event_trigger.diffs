@@ -914,7 +914,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE TABLE event_trigger_test (a integer, b text);
  CREATE OR REPLACE FUNCTION start_command()
  RETURNS event_trigger AS $$
-@@ -563,37 +780,58 @@
+@@ -563,37 +780,46 @@
  RAISE NOTICE '% - ddl_command_start', tg_tag;
  END;
  $$ LANGUAGE plpgsql;
@@ -957,32 +957,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/event_trigger.out
  CREATE POLICY p1 ON event_trigger_test USING (FALSE);
 -NOTICE:  CREATE POLICY - ddl_command_start
 -NOTICE:  CREATE POLICY - ddl_command_end
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  ALTER POLICY p1 ON event_trigger_test USING (TRUE);
 -NOTICE:  ALTER POLICY - ddl_command_start
 -NOTICE:  ALTER POLICY - ddl_command_end
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136997/_version_
  ALTER POLICY p1 ON event_trigger_test RENAME TO p2;
 -NOTICE:  ALTER POLICY - ddl_command_start
 -NOTICE:  ALTER POLICY - ddl_command_end
-+ERROR:  unimplemented: ALTER POLICY is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/136996/_version_
  DROP POLICY p2 ON event_trigger_test;
 -NOTICE:  DROP POLICY - ddl_command_start
 -NOTICE:  DROP POLICY - sql_drop
 -NOTICE:  DROP POLICY - ddl_command_end
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  -- Check the object addresses of all the event triggers.
  SELECT
      e.evtname,
-@@ -604,13 +842,22 @@
+@@ -604,13 +830,22 @@
      LATERAL pg_identify_object_as_address('pg_event_trigger'::regclass, e.oid, 0) as b,
      LATERAL pg_get_object_address(b.type, b.object_names, b.object_args) as a
    ORDER BY e.evtname;
