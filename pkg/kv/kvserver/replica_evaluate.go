@@ -214,15 +214,6 @@ func evaluateBatch(
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
-	defer func() {
-		// Ensure that errors don't carry the WriteTooOld flag set. The client
-		// handles non-error responses with the WriteTooOld flag set, and errors
-		// with this flag set confuse it.
-		if retErr != nil && retErr.GetTxn() != nil {
-			retErr.GetTxn().WriteTooOld = false
-		}
-	}()
-
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 
@@ -274,12 +265,6 @@ func evaluateBatch(
 
 	var mergedResult result.Result
 
-	// WriteTooOldErrors have particular handling. Evaluation of the current batch
-	// continues after a WriteTooOldError in order to find out if there's more
-	// conflicts and chose the highest timestamp to return for more efficient
-	// retries.
-	var deferredWriteTooOldErr *kvpb.WriteTooOldError
-
 	// Only collect the scan stats if the tracing is enabled.
 	var ss *kvpb.ScanStats
 	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
@@ -301,17 +286,6 @@ func evaluateBatch(
 	for index, union := range baReqs {
 		// Execute the command.
 		args := union.GetInner()
-
-		if deferredWriteTooOldErr != nil && args.Method() == kvpb.EndTxn {
-			// ... unless we have been deferring a WriteTooOld error and have now
-			// reached an EndTxn request. In such cases, break and return the error.
-			// The transaction needs to handle the WriteTooOld error before it tries
-			// to commit. This short-circuiting is not necessary for correctness as
-			// the write batch will be discarded in favor of the deferred error, but
-			// we don't want to bother with potentially expensive EndTxn evaluation if
-			// we know the result will be thrown away.
-			break
-		}
 
 		if baHeader.Txn != nil {
 			// Set the Request's sequence number on the TxnMeta for this
@@ -397,36 +371,10 @@ func evaluateBatch(
 
 		// Handle errors thrown by evaluation, either eagerly or through deferral.
 		if err != nil {
-			var wtoErr *kvpb.WriteTooOldError
-			switch {
-			case errors.As(err, &wtoErr):
-				// We got a WriteTooOldError. We continue on to run all commands in the
-				// batch in order to determine the highest timestamp for more efficient
-				// retries.
-				if deferredWriteTooOldErr != nil {
-					deferredWriteTooOldErr.ActualTimestamp.Forward(wtoErr.ActualTimestamp)
-				} else {
-					deferredWriteTooOldErr = wtoErr
-				}
-
-				if baHeader.Txn != nil {
-					log.VEventf(ctx, 2, "advancing write timestamp due to "+
-						"WriteTooOld error on key: %s. wts: %s -> %s",
-						args.Header().Key, baHeader.Txn.WriteTimestamp, wtoErr.ActualTimestamp)
-					baHeader.Txn.WriteTimestamp.Forward(wtoErr.ActualTimestamp)
-				}
-
-				// Clear error and fall through to the success path; we're done
-				// processing the error for now. We'll return it below after we've
-				// evaluated all requests.
-				err = nil
-
-			default:
-				// For all other error types, immediately propagate the error.
-				pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)
-				pErr.SetErrorIndex(int32(index))
-				return nil, mergedResult, pErr
-			}
+			// Immediately propagate the error.
+			pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)
+			pErr.SetErrorIndex(int32(index))
+			return nil, mergedResult, pErr
 		}
 
 		// If the last request was carried out with a limit, subtract the number
@@ -458,18 +406,6 @@ func evaluateBatch(
 				baHeader.TargetBytes = -1
 			}
 		}
-	}
-
-	// If we made it here, there was no error during evaluation, with the exception of
-	// a deferred WriteTooOld error. Return that now.
-	//
-	// TODO(tbg): we could attach the index of the first WriteTooOldError seen, but does
-	// that buy us anything?
-	if deferredWriteTooOldErr != nil {
-		// NB: we can't do any error wrapping here yet due to compatibility with 20.2 nodes;
-		// there needs to be an ErrorDetail here.
-		// TODO(nvanbenschoten): this comment is now stale. Address it.
-		return nil, mergedResult, kvpb.NewErrorWithTxn(deferredWriteTooOldErr, baHeader.Txn)
 	}
 
 	// Update the batch response timestamp field to the timestamp at which the
