@@ -51,7 +51,7 @@ INFO 1 [logterm: 1, index: 2] sent MsgVote request to 3 at term 1
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateCandidate
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
   Messages:
@@ -70,12 +70,12 @@ stabilize
   INFO 3 became follower at term 1
   INFO 3 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
   Messages:
   2->1 MsgVoteResp Term:1 Log:0/0
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
   Messages:
   3->1 MsgVoteResp Term:1 Log:0/0
@@ -86,7 +86,7 @@ stabilize
   INFO 1 became leader at term 1
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   State:StateLeader
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:3
   Entries:
@@ -101,7 +101,7 @@ stabilize
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:2
   Entries:
   1/3 EntryNormal ""
@@ -109,7 +109,7 @@ stabilize
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
   2->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
   Entries:
   1/3 EntryNormal ""
@@ -120,7 +120,7 @@ stabilize
   2->1 MsgAppResp Term:1 Log:0/3 Commit:2
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
   CommittedEntries:
   1/3 EntryNormal ""
@@ -132,14 +132,14 @@ stabilize
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/3 Commit:3
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:2
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
   CommittedEntries:
   1/3 EntryNormal ""
@@ -175,13 +175,13 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready:
   Messages:
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
   Messages:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
@@ -204,7 +204,7 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:4
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
@@ -214,12 +214,12 @@ stabilize
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
   Messages:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
 > 3 handling Ready
-  Ready MustSync=true:
+  Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:4
   Messages:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:4
