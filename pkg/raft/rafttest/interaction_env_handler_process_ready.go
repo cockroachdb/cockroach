@@ -62,8 +62,15 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		// TODO(pav-kv): use the same code paths as the asynchronous writes.
 		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
 			return err
-		} else if err := processApply(n, rd.CommittedEntries); err != nil {
-			return err
+		}
+		if apply := rd.CommittedEntries; len(apply) > 0 {
+			// TODO(pav-kv): move printing to processApply when the async write path
+			// is refactored to also use LogSnapshot.
+			env.Output.WriteString("Applying:\n")
+			env.Output.WriteString(raft.DescribeEntries(apply, defaultEntryFormatter))
+			if err := processApply(n, apply); err != nil {
+				return err
+			}
 		}
 
 		env.Messages = append(env.Messages, send...)
