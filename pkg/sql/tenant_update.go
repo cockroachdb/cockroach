@@ -369,7 +369,7 @@ func (p *planner) renameTenant(
 	}
 
 	if newName != "" {
-		if err := newName.IsValid(); err != nil {
+		if err := newName.Validate(); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 	}

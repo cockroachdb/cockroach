@@ -215,7 +215,7 @@ func (t tenantNameSetter) Set(v string) error {
 	tenantScopes := strings.Split(v, "," /* separator */)
 	for _, tenantScope := range tenantScopes {
 		tenant := roachpb.TenantName(tenantScope)
-		if err := tenant.IsValid(); err != nil {
+		if err := tenant.Validate(); err != nil {
 			return err
 		}
 		*t.tenantNames = append(*t.tenantNames, roachpb.TenantName(tenantScope))

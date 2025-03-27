@@ -190,7 +190,7 @@ func IsSystemTenantName(tenantName TenantName) bool {
 // be a hyphen at the end.
 var tenantNameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9---]{0,98}[a-z0-9])?$`)
 
-func (n TenantName) IsValid() error {
+func (n TenantName) Validate() error {
 	if !tenantNameRe.MatchString(string(n)) {
 		return errors.WithHint(errors.Newf("invalid tenant name: %q", n),
 			"Tenant names must start and end with a lowercase letter or digit, contain only lowercase letters, digits or hyphens, with a maximum of 100 characters.")
@@ -230,8 +230,8 @@ func (c *TenantNameContainer) String() string {
 type TenantIdentity interface {
 	// IsSet returns whether this tenant identity is set or not.
 	IsSet() bool
-	// IsValid returns an error if the tenant identity is invalid.
-	IsValid() error
+	// Validate returns an error if the tenant identity is invalid.
+	Validate() error
 	// IsSystem returns whether this tenant identity is that of the system tenant.
 	IsSystem() bool
 	// IsEqual returns whether this tenant identity is equal to another.
@@ -240,7 +240,7 @@ type TenantIdentity interface {
 	ToString() string
 }
 
-func (t TenantID) IsValid() error {
+func (t TenantID) Validate() error {
 	if t.InternalValue < MinTenantID.ToUint64() || t.InternalValue > MaxTenantID.ToUint64() {
 		return errors.Newf("invalid tenant ID %d", t.InternalValue)
 	}
@@ -259,7 +259,7 @@ func (t TenantID) IsEqual(o TenantIdentity) bool {
 }
 
 func (t TenantName) IsSet() bool {
-	return t.IsValid() == nil
+	return t.Validate() == nil
 }
 
 func (t TenantName) IsSystem() bool {
@@ -294,7 +294,7 @@ func TenantIdentityFromString(name string) (TenantIdentity, error) {
 	} else {
 		// Treat it as tenant name.
 		tenantIdentity = TenantName(name)
-		if tenantIdentity.IsValid() != nil {
+		if tenantIdentity.Validate() != nil {
 			return nil, errors.Errorf("invalid tenant name %s", name)
 		}
 	}

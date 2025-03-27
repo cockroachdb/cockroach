@@ -1373,7 +1373,7 @@ func (ts *testServer) WaitForTenantCapabilities(
 func (ts *testServer) StartSharedProcessTenant(
 	ctx context.Context, args base.TestSharedProcessTenantArgs,
 ) (serverutils.ApplicationLayerInterface, *gosql.DB, error) {
-	if err := args.TenantName.IsValid(); err != nil {
+	if err := args.TenantName.Validate(); err != nil {
 		return nil, nil, err
 	}
 	// Helper function to execute SQL statements.
