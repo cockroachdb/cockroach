@@ -270,7 +270,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 				numDependedOnByTablesToSkip++
 			}
 		case *funcdesc.Mutable:
-			err = p.dropFunctionImpl(ctx, t)
+			err = p.dropFunctionImpl(ctx, t, tree.DropCascade)
 		default:
 			err = errors.AssertionFailedf(
 				"unexpected dependent %s %s on sequence %s",

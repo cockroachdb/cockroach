@@ -313,7 +313,7 @@ func (p *planner) dropViewImpl(
 				cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
 				cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.FQString())
 			case *funcdesc.Mutable:
-				if err := p.dropFunctionImpl(ctx, t); err != nil {
+				if err := p.dropFunctionImpl(ctx, t, behavior); err != nil {
 					return cascadeDroppedViews, err
 				}
 			}
