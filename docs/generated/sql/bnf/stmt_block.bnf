@@ -555,6 +555,7 @@ alter_ddl_stmt ::=
 	| alter_func_stmt
 	| alter_proc_stmt
 	| alter_backup_schedule
+	| alter_policy_stmt
 	| alter_job_stmt
 
 alter_role_stmt ::=
@@ -617,6 +618,7 @@ create_ddl_stmt ::=
 	| create_func_stmt
 	| create_proc_stmt
 	| create_trigger_stmt
+	| create_policy_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
@@ -684,6 +686,7 @@ drop_ddl_stmt ::=
 	| drop_func_stmt
 	| drop_proc_stmt
 	| drop_trigger_stmt
+	| drop_policy_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -1784,6 +1787,10 @@ alter_proc_stmt ::=
 alter_backup_schedule ::=
 	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
 
+alter_policy_stmt ::=
+	'ALTER' 'POLICY' name 'ON' table_name 'RENAME' 'TO' name
+	| 'ALTER' 'POLICY' name 'ON' table_name opt_policy_roles opt_policy_exprs
+
 alter_job_stmt ::=
 	'ALTER' 'JOB' a_expr 'OWNER' 'TO' role_spec
 
@@ -1867,6 +1874,10 @@ create_proc_stmt ::=
 
 create_trigger_stmt ::=
 	'CREATE' opt_or_replace 'TRIGGER' name trigger_action_time trigger_event_list 'ON' table_name opt_trigger_transition_list trigger_for_each trigger_when 'EXECUTE' function_or_procedure func_name '(' trigger_func_args ')'
+
+create_policy_stmt ::=
+	'CREATE' 'POLICY' name 'ON' table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs
+	| 'CREATE' 'POLICY' 'IF' 'NOT' 'EXISTS' name 'ON' table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs
 
 statistics_name ::=
 	name
@@ -1984,6 +1995,10 @@ drop_proc_stmt ::=
 drop_trigger_stmt ::=
 	'DROP' 'TRIGGER' name 'ON' table_name opt_drop_behavior
 	| 'DROP' 'TRIGGER' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior
+
+drop_policy_stmt ::=
+	'DROP' 'POLICY' name 'ON' table_name opt_drop_behavior
+	| 'DROP' 'POLICY' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -2444,6 +2459,17 @@ iconst64 ::=
 alter_backup_schedule_cmds ::=
 	( alter_backup_schedule_cmd ) ( ( ',' alter_backup_schedule_cmd ) )*
 
+opt_policy_roles ::=
+	'TO' role_spec_list
+	| 
+
+opt_policy_exprs ::=
+	'USING' '(' a_expr ')' 'WITH' 'CHECK' '(' a_expr ')'
+	| 'WITH' 'CHECK' '(' a_expr ')' 'USING' '(' a_expr ')'
+	| 'WITH' 'CHECK' '(' a_expr ')'
+	| 'USING' '(' a_expr ')'
+	| 
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2702,6 +2728,19 @@ function_or_procedure ::=
 
 trigger_func_args ::=
 	( trigger_func_arg |  ) ( ( ',' trigger_func_arg ) )*
+
+opt_policy_type ::=
+	'AS' 'PERMISSIVE'
+	| 'AS' 'RESTRICTIVE'
+	| 
+
+opt_policy_command ::=
+	'FOR' 'ALL'
+	| 'FOR' 'SELECT'
+	| 'FOR' 'INSERT'
+	| 'FOR' 'UPDATE'
+	| 'FOR' 'DELETE'
+	| 
 
 create_stats_option_list ::=
 	( create_stats_option ) ( ( create_stats_option ) )*
@@ -3603,6 +3642,7 @@ alter_table_cmd ::=
 	| partition_by_table
 	| 'SET' '(' storage_parameter_list ')'
 	| 'RESET' '(' storage_parameter_key_list ')'
+	| table_rls_mode 'ROW' 'LEVEL' 'SECURITY'
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
@@ -4591,6 +4631,12 @@ audit_mode ::=
 
 storage_parameter_key_list ::=
 	( storage_parameter_key ) ( ( ',' storage_parameter_key ) )*
+
+table_rls_mode ::=
+	'ENABLE'
+	| 'DISABLE'
+	| 'FORCE'
+	| 'NO' 'FORCE'
 
 partition_by_index ::=
 	partition_by
