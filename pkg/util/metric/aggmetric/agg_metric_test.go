@@ -71,22 +71,7 @@ func TestAggMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r := metric.NewRegistry()
-	writePrometheusMetrics := func(t *testing.T) string {
-		var in bytes.Buffer
-		ex := metric.MakePrometheusExporter()
-		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
-		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
-		var lines []string
-		for sc := bufio.NewScanner(&in); sc.Scan(); {
-			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
-				lines = append(lines, sc.Text())
-			}
-		}
-		sort.Strings(lines)
-		return strings.Join(lines, "\n")
-	}
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
 
 	c := NewCounter(metric.Metadata{
 		Name: "foo_counter",
@@ -295,4 +280,60 @@ func TestAggHistogramRotate(t *testing.T) {
 		now = now.Add(time.Duration(i+1) * 10 * time.Second)
 		// Go to beginning.
 	}
+}
+
+func TestAggMetricClear(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	c := NewCounter(metric.Metadata{
+		Name: "foo_counter",
+	}, "tenant_id")
+	r.AddMetric(c)
+
+	d := NewCounter(metric.Metadata{
+		Name: "bar_counter",
+	}, "tenant_id")
+	d.initWithCacheStorageType([]string{"tenant_id"})
+	r.AddMetric(d)
+
+	tenant2 := roachpb.MustMakeTenantID(2)
+	c1 := c.AddChild(tenant2.String())
+
+	t.Run("before clear", func(t *testing.T) {
+		c1.Inc(2)
+		d.Inc(2, "3")
+		testFile := "aggMetric_pre_clear.txt"
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+
+	c.clear()
+	d.clear()
+
+	t.Run("post clear", func(t *testing.T) {
+		testFile := "aggMetric_post_clear.txt"
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+	})
+}
+
+func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
+	writePrometheusMetrics := func(t *testing.T) string {
+		var in bytes.Buffer
+		ex := metric.MakePrometheusExporter()
+		scrape := func(ex *metric.PrometheusExporter) {
+			ex.ScrapeRegistry(r, true /* includeChildMetrics */, true)
+		}
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
+		var lines []string
+		for sc := bufio.NewScanner(&in); sc.Scan(); {
+			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
+				lines = append(lines, sc.Text())
+			}
+		}
+		sort.Strings(lines)
+		return strings.Join(lines, "\n")
+	}
+	return writePrometheusMetrics
 }
