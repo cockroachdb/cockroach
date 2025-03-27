@@ -206,6 +206,7 @@ func TestRaftTracing(t *testing.T) {
 					// sufficient to just check one of them for tracing.
 					`replica_raft.* 1->2 MsgApp`,
 					`replica_raft.* AppendThread->1 MsgStorageAppendResp`,
+					`replica_raft.* applying entries`,
 					`ack-ing replication success to the client`,
 				}
 				require.NoError(t, testutils.MatchInOrder(output, expectedMessages...))
