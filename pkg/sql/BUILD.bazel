@@ -466,6 +466,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/prep",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",
