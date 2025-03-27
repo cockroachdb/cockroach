@@ -1,5 +1,4 @@
 setup
-SET enable_row_level_security = true;
 CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ language plpgsql;
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
 CREATE USER fred;

@@ -443,7 +443,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter policy name",
 			setup: []string{
-				"SET enable_row_level_security=on",
 				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
 				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
 				"CREATE USER foo",
@@ -455,7 +454,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter policy using expression",
 			setup: []string{
-				"SET enable_row_level_security=on",
 				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
 				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
 				"CREATE USER foo",

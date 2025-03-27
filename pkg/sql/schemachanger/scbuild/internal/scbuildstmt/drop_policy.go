@@ -13,7 +13,6 @@ import (
 
 // DropPolicy implements DROP POLICY.
 func DropPolicy(b BuildCtx, n *tree.DropPolicy) {
-	failIfRLSIsNotEnabled(b)
 	noticeSender := b.EvalCtx().ClientNoticeSender
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{
 		IsExistenceOptional: n.IfExists,

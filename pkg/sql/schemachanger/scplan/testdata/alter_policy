@@ -1,5 +1,4 @@
 setup
-SET enable_row_level_security=on;
 CREATE TYPE pt AS (x int, y int);
 CREATE TABLE t1 (tenant_id uuid, c1 pt, c2 text);
 CREATE SEQUENCE seq1;

@@ -28,7 +28,6 @@ import (
 
 // CreatePolicy implements CREATE POLICY.
 func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
-	failIfRLSIsNotEnabled(b)
 	b.IncrementSchemaChangeCreateCounter("policy")
 
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{

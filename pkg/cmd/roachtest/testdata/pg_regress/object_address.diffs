@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.out --label=/mnt/data1/postgres/src/test/regress/results/object_address.out /mnt/data1/postgres/src/test/regress/expected/object_address.out /mnt/data1/postgres/src/test/regress/results/object_address.out
 --- /mnt/data1/postgres/src/test/regress/expected/object_address.out
 +++ /mnt/data1/postgres/src/test/regress/results/object_address.out
-@@ -10,32 +10,144 @@
+@@ -10,32 +10,141 @@
  CREATE SCHEMA addr_nsp;
  SET search_path TO 'addr_nsp';
  CREATE FOREIGN DATA WRAPPER addr_fdw;
@@ -117,9 +117,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  CREATE FUNCTION addr_nsp.trig() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN END; $$;
  CREATE TRIGGER t BEFORE INSERT ON addr_nsp.gentable FOR EACH ROW EXECUTE PROCEDURE addr_nsp.trig();
  CREATE POLICY genpol ON addr_nsp.gentable;
-+ERROR:  unimplemented: row-level security is not yet implemented
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/73596/_version_
  CREATE PROCEDURE addr_nsp.proc(int4) LANGUAGE SQL AS $$ $$;
  CREATE SERVER "integer" FOREIGN DATA WRAPPER addr_fdw;
 +ERROR:  at or near "integer": syntax error: unimplemented: this syntax
@@ -146,7 +143,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  ALTER DEFAULT PRIVILEGES FOR ROLE regress_addr_user IN SCHEMA public GRANT ALL ON TABLES TO regress_addr_user;
  ALTER DEFAULT PRIVILEGES FOR ROLE regress_addr_user REVOKE DELETE ON TABLES FROM regress_addr_user;
  -- this transform would be quite unsafe to leave lying around,
-@@ -43,22 +155,75 @@
+@@ -43,22 +152,75 @@
  CREATE TRANSFORM FOR int LANGUAGE SQL (
      FROM SQL WITH FUNCTION prsd_lextype(internal),
      TO SQL WITH FUNCTION int4recv(internal));
@@ -227,7 +224,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  -- unrecognized object types
  DO $$
  DECLARE
-@@ -75,21 +240,33 @@
+@@ -75,21 +237,33 @@
      END LOOP;
  END;
  $$;
@@ -271,7 +268,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  DO $$
  DECLARE
      objtype text;
-@@ -123,265 +300,81 @@
+@@ -123,265 +297,81 @@
      END LOOP;
  END;
  $$;
@@ -584,7 +581,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  -- Make sure that NULL handling is correct.
  \pset null 'NULL'
  -- Temporarily disable fancy output, so as future additions never create
-@@ -455,86 +448,86 @@
+@@ -455,86 +445,86 @@
       pg_identify_object_as_address(classid, objid, objsubid) AS ioa (typ, nms, args),
       pg_get_object_address(typ, nms, ioa.args) AS addr2
  ORDER BY addr1.classid, addr1.objid, addr1.objsubid;
@@ -741,7 +738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/object_address.ou
  --
  -- Checks for invalid objects
  --
-@@ -592,47 +585,6 @@
+@@ -592,47 +582,6 @@
           AS descr
  FROM objects
  ORDER BY objects.classid, objects.objid, objects.objsubid;
