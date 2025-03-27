@@ -1,6 +1,11 @@
 # LogicTest: !local-mixed-24.3 !local-mixed-25.1
 
 query T
+SELECT jsonb_path_query('"\\"', '$ ? (@ like_regex "^\\\\$")');
+----
+"\\"
+
+query T
 SELECT jsonb_path_query('{}', '$')
 ----
 {}
@@ -764,12 +769,154 @@ SELECT jsonb_path_query('{"a": "hello"}', '$.a / 2');
 statement error pgcode 22038 pq: right operand of jsonpath operator \+ is not a single numeric value
 SELECT jsonb_path_query('{"a": null}', '2 + $.a');
 
-# when string literals are supported
-# query T rowsort
-# SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}'::jsonb, '$.data ? (@.val == "a")'::jsonpath);
-# ----
-# {"num": 1, "val": "a"}
-# {"num": 3, "val": "a"}
+query T
+SELECT jsonb_path_query('{}', '"a" == "b"');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', '"a" < "b"');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', '"a" > "b"');
+----
+false
+
+statement error pgcode 22038 pq: left operand of jsonpath operator \+ is not a single numeric value
+SELECT jsonb_path_query('{}', '"a" + "b"');
+
+query T rowsort
+SELECT jsonb_path_query('{"data": [{"val": "a", "num": 1}, {"val": "b", "num": 2}, {"val": "a", "num": 3}]}', '$.data ? (@.val == "a")');
+----
+{"num": 1, "val": "a"}
+{"num": 3, "val": "a"}
+
+query T
+SELECT jsonb_path_query('{}', 'null == null');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', 'null != null');
+----
+false
+
+query T
+SELECT jsonb_path_query('{}', 'null != 1');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', 'null <= "null"');
+----
+false
+
+statement error pgcode 22038 pq: left operand of jsonpath operator \% is not a single numeric value
+SELECT jsonb_path_query('{}', 'null % 1');
+
+query T
+SELECT jsonb_path_query('{}', 'null like_regex "^he.*$"');
+----
+null
+
+query T
+SELECT jsonb_path_query('{}', '"hello" like_regex "^he.*$"');
+----
+true
+
+query T
+SELECT jsonb_path_query('{}', '"ahello" like_regex "^he.*$"');
+----
+false
+
+query T
+SELECT jsonb_path_query('{"a": "e"}', '$.a ? (@ like_regex "^[aeiou]")');
+----
+"e"
+
+query T
+SELECT jsonb_path_query('{"a": {"b": "e"}}', '$.a ? (@.b like_regex "^[aeiou]")');
+----
+{"b": "e"}
+
+query empty
+SELECT jsonb_path_query('{"a": {"b": "r"}}', '$.a ? (@.b like_regex "^[aeiou]")');
+
+query T rowsort
+SELECT jsonb_path_query('["apple", "banana", "orange", "umbrella", "grape"]', 'strict $[*] ? (@ like_regex "^[aeiou]")');
+----
+"apple"
+"orange"
+"umbrella"
+
+query T rowsort
+SELECT jsonb_path_query('[{"balance": "987_650", "name": "a"}, {"balance": "987_424", "name": "b"}, {"balance": "100", "name": "c"}]', '$[*] ? (@.balance like_regex "987_.*").balance');
+----
+"987_650"
+"987_424"
+
+query T
+SELECT jsonb_path_query('{"ab\\c": "hello"}', '$."ab\\c"');
+----
+"hello"
+
+query empty
+SELECT jsonb_path_query('"a\nb"', '$ ? (@ like_regex "^.*$")');
+
+query T
+SELECT jsonb_path_query('"\\"', '$ ? (@ like_regex "^\\\\$")');
+----
+"\\"
+
+query T
+SELECT jsonb_path_query('"\\\\"', '$ ? (@ like_regex "^\\\\\\\\$")');
+----
+"\\\\"
+
+query T
+SELECT jsonb_path_query('{"paths": ["C:\\Program Files", "D:\\Data"]}', '$.paths[*] ? (@ like_regex "^[A-Z]:\\\\[A-Za-z]+$")');
+----
+"D:\\Data"
+
+query T rowsort
+SELECT jsonb_path_query('{"paths": ["C:\\Program Files (x86)\\", "D:\\My Documents\\", "E:\\Test!@#$"]}', '$.paths[*] ? (@ like_regex "^[A-Z]:\\\\.*\\\\$")');
+----
+"C:\\Program Files (x86)\\"
+"D:\\My Documents\\"
+
+query T rowsort
+SELECT jsonb_path_query('{"urls": ["http:\/\/example.com", "https:\/\/test.com\/path"]}', '$.urls[*] ? (@ like_regex "^https?:\/\/.*\.com")');
+----
+"http://example.com"
+"https://test.com/path"
+
+query T rowsort
+SELECT jsonb_path_query('{"mixed": ["C:/path\\to/file", "D:\\path/to\\file"]}', '$.mixed[*] ? (@ like_regex "^[A-Z]:[/\\\\].*")');
+----
+"C:/path\\to/file"
+"D:\\path/to\\file"
+
+query T rowsort
+SELECT jsonb_path_query('["a+b", "a*b", "a?b", "a.b", "a[b]", "a{b}"]', '$[*] ? (@ like_regex "^a[\\+\\*\\?\\.]b$|^a\\[b\\]$|^a\\{b\\}$")');
+----
+"a+b"
+"a*b"
+"a?b"
+"a.b"
+"a[b]"
+"a{b}"
+
+query T rowsort
+SELECT jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c")');
+----
+"abc"
+"abdacb"
+
+# TODO(normanchenn): support scanning identQuote within regex.
+# SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H.*\\\\.*!.*\".*")');
+
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
 

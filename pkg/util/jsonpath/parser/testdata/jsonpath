@@ -418,6 +418,47 @@ $.c[$.b - $.a to $.d - $.b]
 ----
 $."c"[($."b" - $."a") to ($."d" - $."b")] -- normalized!
 
+parse
+"hello" == "hello"
+----
+("hello" == "hello") -- normalized!
+
+parse
+$.a ? (@.b == "string")
+----
+$."a"?((@."b" == "string")) -- normalized!
+
+error
+"a" && "b"
+----
+at or near "&": syntax error
+DETAIL: source SQL:
+"a" && "b"
+    ^
+
+parse
+null == null
+----
+(null == null) -- normalized!
+
+parse
+null + null
+----
+(null + null) -- normalized!
+
+error
+!null
+----
+at or near "null": syntax error
+DETAIL: source SQL:
+!null
+ ^
+
+parse
+$.a ? (@.b like_regex "^[aeiou]")
+----
+$."a"?((@."b" like_regex "^[aeiou]")) -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

@@ -171,6 +171,12 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %token <str> CURRENT
 
+%token <str> STRING
+%token <str> NULL
+
+%token <str> LIKE_REGEX
+%token <str> FLAG
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -378,6 +384,16 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
   }
+| expr LIKE_REGEX STRING
+  {
+    regex := jsonpath.Regex{Regex: $3}
+    $$.val = binaryOp(jsonpath.OpLikeRegex, $1.path(), regex)
+  }
+| expr LIKE_REGEX STRING FLAG STRING
+  {
+    // TODO(normanchenn): implement regex flags.
+    return unimplemented(jsonpathlex, "regex with flags")
+  }
 ;
 
 delimited_predicate:
@@ -447,20 +463,28 @@ scalar_value:
   {
     $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
   }
-// TODO(normanchenn): support strings, null.
+| STRING
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+| NULL
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarNull, Value: json.NullJSONValue}
+  }
 ;
 
 any_identifier:
   IDENT
+| STRING
 | unreserved_keyword
 ;
 
 unreserved_keyword:
-  AND
-| FALSE
+  FALSE
+| FLAG
 | LAX
-| NOT
-| OR
+| LIKE_REGEX
+| NULL
 | STRICT
 | TO
 | TRUE
