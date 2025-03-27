@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
@@ -1354,6 +1355,14 @@ func TestTransactionDeadline(t *testing.T) {
 			SessionOverride: sessionOverrideKnob,
 		},
 	}
+	// Previously, this test could flake if the actual session
+	// had a shorter TTL remaining then the fake session. This
+	// would cause the txn to pick a shorter deadline then our fake
+	// session. So, intentionally change the actual session TTL
+	// to a really long time.
+	st := cluster.MakeClusterSettings()
+	slbase.DefaultTTL.Override(ctx, &st.SV, time.Minute*5)
+
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs:             knobs,
@@ -1366,6 +1375,7 @@ func TestTransactionDeadline(t *testing.T) {
 		base.TestTenantArgs{
 			TenantID:     serverutils.TestTenantID(),
 			TestingKnobs: knobs,
+			Settings:     st,
 		})
 	tdb := sqlutils.MakeSQLRunner(sqlConn)
 	// Set up a dummy database and table in the tenant to write to.

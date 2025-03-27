@@ -891,6 +891,7 @@ go_test(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqlliveness/sqllivenesstestutils",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
