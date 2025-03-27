@@ -46,6 +46,7 @@ func TestBalancedKMeans(t *testing.T) {
 		vectors      vector.Set
 		leftOffsets  []uint64
 		rightOffsets []uint64
+		skipPinTest  bool
 	}{
 		{
 			desc:         "partition vector set with only 2 elements",
@@ -74,8 +75,8 @@ func TestBalancedKMeans(t *testing.T) {
 				10, 15, 20,
 				3, 8, 1,
 			}, 3),
-			leftOffsets:  []uint64{1, 3},
-			rightOffsets: []uint64{0, 2, 4},
+			leftOffsets:  []uint64{0, 2, 4},
+			rightOffsets: []uint64{1, 3},
 		},
 		{
 			// Unbalanced vector set, with 4 vectors close together and 1 far.
@@ -100,47 +101,61 @@ func TestBalancedKMeans(t *testing.T) {
 				1.26e-10, 2.61e-10,
 				1.24e-10, 2.59e-10,
 			}, 2),
-			leftOffsets:  []uint64{0, 3},
-			rightOffsets: []uint64{1, 2},
+			leftOffsets:  []uint64{1, 2},
+			rightOffsets: []uint64{0, 3},
 		},
 		{
 			desc:    "high-dimensional unit vectors",
 			vectors: testutils.LoadFeatures(t, 100),
+			// It's challenging to test pinLeftCentroid for this case, due to the
+			// inherent randomness of the K-means++ algorithm. The other test cases
+			// should be sufficient to test that, however.
+			skipPinTest: true,
 		},
 	}
 
 	for _, tc := range testCases {
-		leftCentroid := make(vector.T, tc.vectors.Dims)
-		rightCentroid := make(vector.T, tc.vectors.Dims)
-		offsets := make([]uint64, tc.vectors.Count)
-		leftOffsets, rightOffsets := kmeans.ComputeCentroids(
-			tc.vectors, leftCentroid, rightCentroid, offsets)
-		require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
-		require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
-		ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
-		require.False(t, ratio < 0.5)
-		require.False(t, ratio > 2)
-		if tc.leftOffsets != nil {
-			require.Equal(t, tc.leftOffsets, leftOffsets)
-		}
-		if tc.rightOffsets != nil {
-			require.Equal(t, tc.rightOffsets, rightOffsets)
-		}
+		t.Run(tc.desc, func(t *testing.T) {
+			leftCentroid := make(vector.T, tc.vectors.Dims)
+			rightCentroid := make(vector.T, tc.vectors.Dims)
+			offsets := make([]uint64, tc.vectors.Count)
+			leftOffsets, rightOffsets := kmeans.ComputeCentroids(
+				tc.vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */, offsets)
+			require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
+			require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
+			ratio := float64(len(leftOffsets)) / float64(len(rightOffsets))
+			require.False(t, ratio < 0.5)
+			require.False(t, ratio > 2)
+			if tc.leftOffsets != nil {
+				require.Equal(t, tc.leftOffsets, leftOffsets)
+			}
+			if tc.rightOffsets != nil {
+				require.Equal(t, tc.rightOffsets, rightOffsets)
+			}
 
-		// Ensure that distance to left centroid is less for vectors in the left
-		// partition than those in the right partition.
-		leftMean := calcMeanDistance(tc.vectors, leftCentroid, leftOffsets)
-		rightMean := calcMeanDistance(tc.vectors, leftCentroid, rightOffsets)
-		require.LessOrEqual(t, leftMean, rightMean)
+			// Ensure that distance to left centroid is less for vectors in the left
+			// partition than those in the right partition.
+			leftMean := calcMeanDistance(tc.vectors, leftCentroid, leftOffsets)
+			rightMean := calcMeanDistance(tc.vectors, leftCentroid, rightOffsets)
+			require.LessOrEqual(t, leftMean, rightMean)
 
-		// Check that AssignPartitions returns the same offsets.
-		offsets2 := make([]uint64, tc.vectors.Count)
-		leftOffsets2, rightOffsets2 := kmeans.AssignPartitions(
-			tc.vectors, leftCentroid, rightCentroid, offsets2)
-		slices.Sort(leftOffsets2)
-		slices.Sort(rightOffsets2)
-		require.Equal(t, leftOffsets, leftOffsets2)
-		require.Equal(t, rightOffsets, rightOffsets2)
+			// Check that AssignPartitions returns the same offsets.
+			offsets2 := make([]uint64, tc.vectors.Count)
+			leftOffsets2, rightOffsets2 := kmeans.AssignPartitions(
+				tc.vectors, leftCentroid, rightCentroid, offsets2)
+			slices.Sort(leftOffsets2)
+			slices.Sort(rightOffsets2)
+			require.Equal(t, leftOffsets, leftOffsets2)
+			require.Equal(t, rightOffsets, rightOffsets2)
+
+			if !tc.skipPinTest {
+				// Check that pinning the left centroid returns the same right centroid.
+				leftOffsets, rightOffsets = kmeans.ComputeCentroids(
+					tc.vectors, leftCentroid, rightCentroid, true /* pinLeftCentroid */, offsets)
+				require.Equal(t, calcCentroid(tc.vectors, leftOffsets), leftCentroid)
+				require.Equal(t, calcCentroid(tc.vectors, rightOffsets), rightCentroid)
+			}
+		})
 	}
 
 	t.Run("use global random number generator", func(t *testing.T) {
@@ -149,7 +164,8 @@ func TestBalancedKMeans(t *testing.T) {
 		leftCentroid := make(vector.T, 2)
 		rightCentroid := make(vector.T, 2)
 		offsets := make([]uint64, vectors.Count)
-		kmeans.ComputeCentroids(vectors, leftCentroid, rightCentroid, offsets)
+		kmeans.ComputeCentroids(
+			vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */, offsets)
 	})
 }
 

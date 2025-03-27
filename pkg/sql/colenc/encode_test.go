@@ -767,14 +767,28 @@ func (c *capturePutter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Valu
 	}
 }
 
-// we don't call this
 func (c *capturePutter) PutBytes(kys []roachpb.Key, values [][]byte) {
-	colexecerror.InternalError(errors.New("unimplemented"))
+	for i, k := range kys {
+		if len(k) == 0 {
+			continue
+		}
+		c.kvs.keys = append(c.kvs.keys, k)
+		var kvValue roachpb.Value
+		kvValue.SetBytes(values[i])
+		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
+	}
 }
 
-// we don't call this
 func (c *capturePutter) PutTuples(kys []roachpb.Key, values [][]byte) {
-	colexecerror.InternalError(errors.New("unimplemented"))
+	for i, k := range kys {
+		if len(k) == 0 {
+			continue
+		}
+		c.kvs.keys = append(c.kvs.keys, k)
+		var kvValue roachpb.Value
+		kvValue.SetTuple(values[i])
+		c.kvs.values = append(c.kvs.values, kvValue.RawBytes)
+	}
 }
 
 type kvs struct {

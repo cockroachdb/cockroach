@@ -18,9 +18,62 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// # Split and Merge Fixups
+//
+// Splits and merges are performed as a series of atomic steps that
+// incrementally mutate the index, while still leaving it in a well-defined
+// state that supports searches, inserts, and deletes. Crucially, the
+// incremental operations avoid transactions that can contend with foreground
+// operations, preferring to instead temporarily duplicate data so that
+// foreground operations are not blocked. Each step is designed to be idempotent
+// so that it is safe for multiple workers to concurrently attempt the same
+// step - only one will win the race, and the others will no-op (or duplicate
+// data in harmless ways).
+//
+// # Idempotency
+//
+// Idempotency is made possible by taking advantage of the ConditionalPut (CPut)
+// operation supported by the KV layer. CPut only writes a KV key if its current
+// value matches an expected value. Each partition has a metadata record that is
+// used as an expected value. Only if the metadata is in the expected state will
+// the fixup operation proceed; if it has changed, then some other agent must
+// have intervened. In addition, the fixup operations define state machines for
+// the partitions involved in the operation. Each state defines rules about
+// what's allowed by that partition, e.g. whether vectors can be added to the
+// partition.
+//
+// # Duplicates
+//
+// In order to avoid contending with foreground operations, fixup operations use
+// a variant of the read-copy-update (RCU) pattern that copies vectors to new
+// partitions in one step, and then deletes the vectors from the old partitions
+// in another step. Between steps, the vectors exist in both partitions, meaning
+// that searches can return duplicates. The search machinery expects this, and
+// contains de-duplication logic to handle it. Note that in rare cases where
+// vectors are rapidly copied across multiple partitions, it's possible for
+// duplicates to remain in the index for arbitrary amounts of time - this is an
+// acceptable trade-off for the benefit of greatly reduced contention.
+//
+// # Testing
+//
+// Testing a complex state machine is challenging. To make this easier, each
+// complex fixup operation supports "stepping". After each mutating step, the
+// operation will abort the fixup. This gives tests a chance to perform other
+// operations like searches, inserts, splits, or merges, that might interfere
+// with the aborted operation. After updating the index, the aborted operation
+// can be resumed and the test can validate it handles the interference as
+// expected.
+
+// errFixupAborted is returned by a fixup that cannot be completed, either
+// because some condition prevents it, or because the worker is stepping as part
+// of a test. The worker will remove the fixup from the queue. Depending on the
+// fixup, it may get requeued later.
+var errFixupAborted = errors.New("fixup aborted")
+
 // fixupWorker is a background worker that processes queued fixups. Multiple
 // workers can run at a time in parallel. Once started, a worker continually
 // processes fixups until its context is canceled.
+// NOTE: fixupWorker is *not* thread-safe.
 type fixupWorker struct {
 	// fp points back to the processor that spawned this worker.
 	fp *FixupProcessor
@@ -35,14 +88,18 @@ type fixupWorker struct {
 	// treeKey is the K-means tree in which the worker is currently operating.
 	// It's set when the worker begins processing a new fixup.
 	treeKey TreeKey
+	// singleStep, if true, causes split and merge fixups to abort after each step
+	// in their execution. This is used for testing, in order to deterministically
+	// interleave multiple fixups together in the same tree.
+	singleStep bool
 
-	// workspace is used to stack-allocate temporary memory.
-	workspace workspace.T
-	// tempIndexCtx caches reusable context that's used when interacting with the
-	// index.
-	tempIndexCtx Context
-	// tempVectorsWithKeys is temporary memory for vectors and their keys.
+	// Temporary memory that's reused across calls to avoid extra allocations.
+
+	workspace           workspace.T
+	tempIndexCtx        Context
 	tempVectorsWithKeys []VectorWithKey
+	tempChildKey        [1]ChildKey
+	tempValueBytes      [1]ValueBytes
 }
 
 // ewFixupWorker returns a new worker for the given processor.
@@ -66,16 +123,34 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 			break
 		}
 		fw.treeKey = next.TreeKey
+		fw.singleStep = next.SingleStep
 
 		// Invoke the fixup function. Note that we do not hold the lock while
 		// processing the fixup.
 		var err error
 		switch next.Type {
-		case splitOrMergeFixup:
-			err = fw.splitOrMergePartition(
-				ctx, next.ParentPartitionKey, next.PartitionKey)
+		case splitOrMergeCheckFixup:
+			err = fw.checkSplitOrMergePartition(ctx, next.ParentPartitionKey, next.PartitionKey)
+			if err != nil {
+				err = errors.Wrapf(err, "checking partition %d", next.PartitionKey)
+			}
+
+		case splitFixup:
+			if fw.index.options.UseNewFixups {
+				err = fw.splitPartition(ctx, next.ParentPartitionKey, next.PartitionKey)
+			} else {
+				err = fw.oldSplitOrMergePartition(ctx, next.ParentPartitionKey, next.PartitionKey)
+			}
 			if err != nil {
 				err = errors.Wrapf(err, "splitting partition %d", next.PartitionKey)
+			}
+
+		case mergeFixup:
+			if !fw.index.options.UseNewFixups {
+				err = fw.oldSplitOrMergePartition(ctx, next.ParentPartitionKey, next.PartitionKey)
+				if err != nil {
+					err = errors.Wrapf(err, "merging partition %d", next.PartitionKey)
+				}
 			}
 
 		case vectorDeleteFixup:
@@ -90,6 +165,8 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 
 		if err != nil {
 			// This is a background goroutine, so just log error and continue.
+			// TODO(andyk): Create a backoff mechanism so that bugs don't cause
+			// rapid retries.
 			log.Errorf(ctx, "%v", err)
 		}
 
@@ -99,24 +176,37 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 	}
 }
 
-// splitOrMergePartition splits or merges the partition with the given key and
-// parent key, depending on whether it's over-sized or under-sized. This
-// operation runs in its own transaction.
-func (fw *fixupWorker) splitOrMergePartition(
+// checkSplitOrMergePartition checks whether the partition with the given key
+// needs to be split (if over-sized) or merged (if under-sized).
+func (fw *fixupWorker) checkSplitOrMergePartition(
 	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) (err error) {
+) error {
 	// Do a quick, inconsistent scan of the partition, in order to see if it may
 	// need to be split or merged.
 	count, err := fw.index.store.EstimatePartitionCount(ctx, fw.treeKey, partitionKey)
 	if err != nil {
 		return errors.Wrapf(err, "counting vectors in partition %d", partitionKey)
 	}
+
 	split := count > fw.index.options.MaxPartitionSize
 	merge := partitionKey != RootKey && count < fw.index.options.MinPartitionSize
-	if !split && !merge {
-		return nil
+	if fw.index.options.UseNewFixups {
+		if split {
+			err = fw.splitPartition(ctx, parentPartitionKey, partitionKey)
+		}
+	} else if split || merge {
+		err = fw.oldSplitOrMergePartition(ctx, parentPartitionKey, partitionKey)
 	}
+	return err
+}
 
+// oldSplitOrMergePartition splits or merges the partition with the given key
+// and parent key, depending on whether it's over-sized or under-sized. This
+// operation runs in its own transaction.
+// TODO(andyk): Remove this once splitOrMergePartition is ready.
+func (fw *fixupWorker) oldSplitOrMergePartition(
+	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
+) (err error) {
 	// Run the split or merge within a transaction.
 	fw.txn, err = fw.index.store.BeginTransaction(ctx)
 	if err != nil {
@@ -142,8 +232,8 @@ func (fw *fixupWorker) splitOrMergePartition(
 
 	// Re-check the size of the partition now that it's locked, using a consistent
 	// scan, so that we are not acting based on stale information.
-	split = partition.Count() > fw.index.options.MaxPartitionSize
-	merge = partitionKey != RootKey && partition.Count() < fw.index.options.MinPartitionSize
+	split := partition.Count() > fw.index.options.MaxPartitionSize
+	merge := partitionKey != RootKey && partition.Count() < fw.index.options.MinPartitionSize
 	if !split && !merge {
 		log.VEventf(ctx, 2, "partition %d size is within bounds, do not split or merge", partitionKey)
 		return nil
@@ -179,7 +269,7 @@ func (fw *fixupWorker) splitOrMergePartition(
 	}
 
 	if split {
-		return fw.splitPartition(
+		return fw.oldSplitPartition(
 			ctx, parentPartitionKey, parentPartition, partitionKey, partition, vectors)
 	}
 	return fw.mergePartition(
@@ -188,7 +278,7 @@ func (fw *fixupWorker) splitOrMergePartition(
 
 // splitPartition splits the given partition by separating its vectors into one
 // of two new replacement partitions.
-func (fw *fixupWorker) splitPartition(
+func (fw *fixupWorker) oldSplitPartition(
 	ctx context.Context,
 	parentPartitionKey PartitionKey,
 	parentPartition *Partition,
@@ -216,7 +306,7 @@ func (fw *fixupWorker) splitPartition(
 	defer fw.workspace.FreeUint64s(tempOffsets)
 	kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
 	tempLeftOffsets, tempRightOffsets := kmeans.ComputeCentroids(
-		vectors, tempLeftCentroid, tempRightCentroid, tempOffsets)
+		vectors, tempLeftCentroid, tempRightCentroid, false /* pinLeftCentroid */, tempOffsets)
 
 	leftSplit, rightSplit := splitPartitionData(
 		&fw.workspace, fw.index.quantizer, partition, vectors,
@@ -414,7 +504,6 @@ func splitPartitionData(
 			centroidDistances[right], centroidDistances[left]
 		childKeys[left], childKeys[right] = childKeys[right], childKeys[left]
 		valueBytes[left], valueBytes[right] = valueBytes[right], valueBytes[left]
-
 		li--
 		ri++
 	}
@@ -723,15 +812,40 @@ func (fw *fixupWorker) deleteVector(
 // Discard any dangling vectors in the partition.
 func (fw *fixupWorker) getFullVectorsForPartition(
 	ctx context.Context, partitionKey PartitionKey, partition *Partition,
-) (vector.Set, error) {
+) (vectors vector.Set, err error) {
+	const format = "getting %d full vectors for partition %d"
+
+	func() {
+		err = errors.Wrapf(err, format, partition.Count(), partitionKey)
+	}()
+
+	log.VEventf(ctx, 2, format, partition.Count(), partitionKey)
+
+	// Create transaction if one hasn't yet been created.
+	// TODO(andyk): Convert this to not use transactions once we've moved to the
+	// new fixups.
+	if fw.txn == nil {
+		fw.txn, err = fw.index.store.BeginTransaction(ctx)
+		if err != nil {
+			return vector.Set{}, err
+		}
+		defer func() {
+			if err == nil {
+				err = fw.index.store.CommitTransaction(ctx, fw.txn)
+			}
+			if err != nil {
+				err = errors.CombineErrors(err, fw.index.store.AbortTransaction(ctx, fw.txn))
+			}
+		}()
+	}
+
 	childKeys := partition.ChildKeys()
 	fw.tempVectorsWithKeys = ensureSliceLen(fw.tempVectorsWithKeys, len(childKeys))
 	for i := range childKeys {
 		fw.tempVectorsWithKeys[i] = VectorWithKey{Key: childKeys[i]}
 	}
-	err := fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys)
+	err = fw.txn.GetFullVectors(ctx, fw.treeKey, fw.tempVectorsWithKeys)
 	if err != nil {
-		err = errors.Wrapf(err, "getting full vectors of partition %d to split", partitionKey)
 		return vector.Set{}, err
 	}
 
@@ -749,7 +863,7 @@ func (fw *fixupWorker) getFullVectorsForPartition(
 		i--
 	}
 
-	vectors := vector.MakeSet(fw.index.quantizer.GetDims())
+	vectors = vector.MakeSet(fw.index.quantizer.GetDims())
 	vectors.AddUndefined(len(fw.tempVectorsWithKeys))
 	for i := range fw.tempVectorsWithKeys {
 		// Leaf vectors from the primary index need to be randomized.

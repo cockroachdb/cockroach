@@ -1,3 +1,6 @@
+# ----------------------------------------------------------------------
+# Test inserting into multiple independent trees.
+# ----------------------------------------------------------------------
 new-index min-partition-size=2 max-partition-size=4 beam-size=2 tree=0
 vec1: (1, 2)
 vec2: (7, 4)
@@ -63,7 +66,7 @@ vec6
     └───• vec5 (14, 1)
 
 # Merge partition in tree #2.
-force-split-or-merge partition-key=3 parent-partition-key=1 tree=2
+force-merge partition-key=3 parent-partition-key=1 tree=2
 ----
 • 1 (4.5, 4.0833)
 │

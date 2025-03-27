@@ -51,7 +51,9 @@ type BalancedKmeans struct {
 
 // ComputeCentroids separates the given set of input vectors into a left and
 // right partition using the K-means algorithm. It sets the leftCentroid and
-// rightCentroid inputs to the centroids of those partitions, respectively.
+// rightCentroid inputs to the centroids of those partitions, respectively. If
+// pinLeftCentroid is true, then keep the input value of leftCentroid and only
+// compute the value of rightCentroid.
 //
 // NOTE: The caller is responsible for allocating the input centroids with
 // dimensions equal to the dimensions of the input vector set.
@@ -65,7 +67,7 @@ type BalancedKmeans struct {
 // the size of the input vector set. Compute returns sub-slices of the allocated
 // "offsets" slice.
 func (km *BalancedKmeans) ComputeCentroids(
-	vectors vector.Set, leftCentroid, rightCentroid vector.T, offsets []uint64,
+	vectors vector.Set, leftCentroid, rightCentroid vector.T, pinLeftCentroid bool, offsets []uint64,
 ) (leftOffsets, rightOffsets []uint64) {
 	if vectors.Count < 2 {
 		panic(errors.AssertionFailedf("k-means requires at least 2 vectors"))
@@ -86,7 +88,12 @@ func (km *BalancedKmeans) ComputeCentroids(
 	defer km.Workspace.FreeVector(tempRightCentroid)
 	newRightCentroid := tempRightCentroid
 
-	km.selectInitialCentroids(vectors, leftCentroid, rightCentroid)
+	if !pinLeftCentroid {
+		km.selectInitialLeftCentroid(vectors, leftCentroid)
+	} else {
+		newLeftCentroid = leftCentroid
+	}
+	km.selectInitialRightCentroid(vectors, leftCentroid, rightCentroid)
 
 	// calcPartitionCentroid finds the mean of the vectors referenced by the
 	// provided offsets.
@@ -108,8 +115,10 @@ func (km *BalancedKmeans) ComputeCentroids(
 		leftOffsets, rightOffsets = km.AssignPartitions(
 			vectors, leftCentroid, rightCentroid, tempOffsets)
 
-		// Calculate new centroids of the left and right partitions.
-		calcPartitionCentroid(newLeftCentroid, leftOffsets)
+		// Calculate new centroids.
+		if !pinLeftCentroid {
+			calcPartitionCentroid(newLeftCentroid, leftOffsets)
+		}
 		calcPartitionCentroid(newRightCentroid, rightOffsets)
 
 		// Check if algorithm has converged.
@@ -184,32 +193,35 @@ func (km *BalancedKmeans) calculateTolerance(vectors vector.Set) float32 {
 	return km.calculateMeanOfVariances(vectors) * 1e-4
 }
 
-// selectInitialCentroids uses the K-means++ algorithm to select the initial
-// partition centroids, from this paper:
+// selectInitialLeftCentroid selects the left centroid randomly from the input
+// vector set. This is according to the K-means++ algorithm, from this paper:
 //
 // "k-means++: The Advantages of Careful Seeding", by David Arthur and Sergei
 // Vassilvitskii
 // URL: http://ilpubs.stanford.edu:8090/778/1/2006-13.pdf
 //
-// This works by selecting the first centroid randomly from the input vector
-// set. The next centroid is randomly selected from the remaining vectors, but
-// with probability that is proportional to their distances from the first
-// centroid.
-func (km *BalancedKmeans) selectInitialCentroids(
+// The chosen vector is copied into "leftCentroid".
+func (km *BalancedKmeans) selectInitialLeftCentroid(vectors vector.Set, leftCentroid vector.T) {
+	// Randomly select the left centroid from the vector set.
+	var leftOffset int
+	if km.Rand != nil {
+		leftOffset = km.Rand.Intn(vectors.Count)
+	} else {
+		leftOffset = rand.Intn(vectors.Count)
+	}
+	copy(leftCentroid, vectors.At(leftOffset))
+}
+
+// selectInitialRightCentroid continues the K-means++ algorithm begun in
+// selectInitialLeftCentroid by randomly selecting from the remaining vectors,
+// but with probability that is proportional to their distances from the left
+// centroid. The chosen vector is copied into "rightCentroid".
+func (km *BalancedKmeans) selectInitialRightCentroid(
 	vectors vector.Set, leftCentroid, rightCentroid vector.T,
 ) {
 	count := vectors.Count
 	tempDistances := km.Workspace.AllocFloats(count)
 	defer km.Workspace.FreeFloats(tempDistances)
-
-	// Randomly select the left centroid from the vector set.
-	var leftOffset int
-	if km.Rand != nil {
-		leftOffset = km.Rand.Intn(count)
-	} else {
-		leftOffset = rand.Intn(count)
-	}
-	copy(leftCentroid, vectors.At(leftOffset))
 
 	// Calculate distance of each vector in the set from the left centroid.
 	var distanceSum float32
@@ -221,7 +233,7 @@ func (km *BalancedKmeans) selectInitialCentroids(
 	// Calculate probability of each vector becoming the right centroid, equal
 	// to its distance from the left centroid. Further vectors have a higher
 	// probability. Note that the left centroid has zero distance from itself,
-	// and so will never be selected.
+	// and so will never be selected (unless there are duplicates).
 	num32.Scale(1/distanceSum, tempDistances)
 	var cum, rnd float32
 	if km.Rand != nil {
@@ -229,7 +241,7 @@ func (km *BalancedKmeans) selectInitialCentroids(
 	} else {
 		rnd = rand.Float32()
 	}
-	rightOffset := (leftOffset + 1) % count
+	rightOffset := 0
 	for i := 0; i < len(tempDistances); i++ {
 		cum += tempDistances[i]
 		if rnd < cum {

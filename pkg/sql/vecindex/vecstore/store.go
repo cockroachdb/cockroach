@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -171,6 +172,13 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 	}()
 
 	return fn(txn)
+}
+
+// MakePartitionKey is part of the cspann.Store interface. It allocates a new
+// unique partition key.
+func (s *Store) MakePartitionKey() cspann.PartitionKey {
+	instanceID := s.db.KV().Context().NodeID.SQLInstanceID()
+	return cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 }
 
 // EstimatePartitionCount is part of the cspann.Store interface. It returns an

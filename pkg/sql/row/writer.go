@@ -77,9 +77,8 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 //   - rawValueBuf must be a scratch byte array. This must be reinitialized
 //     to an empty slice on each call but can be preserved at its current
 //     capacity to avoid allocations. The function returns the slice.
-//   - kvOp indicates which KV write operation should be used.
-//   - oldKeysLocked, if true, indicates that the locks have already been
-//     acquired on the old keys (in the UPDATE case).
+//   - kvOp indicates which KV write operation should be used. If it is PutOp,
+//     it also indicates that the old keys have been locked.
 //   - traceKV is to be set to log the KV operations added to the batch.
 func prepareInsertOrUpdateBatch(
 	ctx context.Context,
@@ -96,7 +95,6 @@ func prepareInsertOrUpdateBatch(
 	oth *OriginTimestampCPutHelper,
 	oldValues []tree.Datum,
 	kvOp KVInsertOp,
-	oldKeysLocked bool,
 	traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
@@ -109,16 +107,19 @@ func prepareInsertOrUpdateBatch(
 		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
 	}
 	var putFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
-	var overwrite bool
+	var oldKeysLocked, overwrite bool
 	switch kvOp {
 	case CPutOp:
 		putFn = insertCPutFn
+		oldKeysLocked = false
 		overwrite = false
 	case PutOp:
 		putFn = insertPutFn
+		oldKeysLocked = true
 		overwrite = true
 	case PutMustAcquireExclusiveLockOp:
 		putFn = insertPutMustAcquireExclusiveLockFn
+		oldKeysLocked = false
 		overwrite = true
 	}
 
@@ -217,6 +218,17 @@ func prepareInsertOrUpdateBatch(
 				if oth.IsSet() {
 					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
 				} else {
+					// TODO(yuzefovich): in case of multiple column families,
+					// whenever we locked the primary index during the initial
+					// scan, we might not have locked the key for a column
+					// family where all columns had NULL values (because the KV
+					// didn't exist) and now at least one becomes non-NULL. In
+					// this scenario we're inserting a new KV with non-locking
+					// Put, yet we don't have the lock.
+					//
+					// However, at the moment we disable the lock eliding
+					// optimization with multiple column families, so we'll use
+					// the locking Put because of that.
 					putFn(ctx, batch, kvKey, &marshaled, traceKV, helper.primIndexValDirs)
 				}
 			}
