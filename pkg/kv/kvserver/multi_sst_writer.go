@@ -370,6 +370,13 @@ func (msstw *multiSSTWriter) PutInternalRangeKey(
 	if err := msstw.currSST.PutInternalRangeKey(start, end, key); err != nil {
 		return errors.Wrap(err, "failed to put range key in sst")
 	}
+
+	// TODO(tbg): why isn't this updating `rangeKeyFrag`? PutInternalRangeKey
+	// can only occur with shared SSTs, which I believe is the case in which
+	// incoming range keys aren't already pre-fragmented.
+	// See PutRangeKey below which *does* fragment, though I don't think it
+	// would strictly need to.
+
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
 }
