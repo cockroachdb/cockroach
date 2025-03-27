@@ -159,6 +159,20 @@ func TestClientLockTableDataDriven(t *testing.T) {
 					return fmt.Sprintf("error: %s", err.Error())
 				}
 				return ""
+			case "flush-lock-table":
+				startKey := evalCtx.getNamedKey("start", d)
+				endKey := evalCtx.getNamedKey("end", d)
+				b := db.NewBatch()
+				b.AddRawRequest(&kvpb.FlushLockTableRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:    startKey,
+						EndKey: endKey,
+					},
+				})
+				if err := db.Run(ctx, b); err != nil {
+					return fmt.Sprintf("error: %s", err.Error())
+				}
+				return ""
 			default:
 				d.Fatalf(t, "unknown command: %s", d.Cmd)
 				return ""
