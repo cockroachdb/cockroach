@@ -6,7 +6,6 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"strings"
@@ -17,16 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -40,13 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -203,7 +195,8 @@ func (b *backupResumer) ResumeCompaction(
 	// resolution and writing of backup lock due to the need to verify that the
 	// compaction chain is a valid chain.
 	prevManifests, localityInfo, encryption, allIters, err := getBackupChain(
-		ctx, execCtx.ExecCfg(), execCtx.User(), initialDetails, kmsEnv,
+		ctx, execCtx.ExecCfg(), execCtx.User(), initialDetails.Destination,
+		initialDetails.EncryptionOptions, initialDetails.EndTime, kmsEnv,
 	)
 	if err != nil {
 		return err
@@ -416,116 +409,6 @@ type compactionChain struct {
 	compactedIterFactory backupinfo.LayerToBackupManifestFileIterFactory
 }
 
-// Compact runs compaction on the chain according to the job details and
-// associated backup manifest.
-func (c *compactionChain) Compact(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	details jobspb.BackupDetails,
-	backupManifest *backuppb.BackupManifest,
-	defaultStore cloud.ExternalStorage,
-	kmsEnv cloud.KMSEnv,
-) error {
-	ctx, span := tracing.ChildSpan(ctx, "backup.compaction")
-	defer span.Finish()
-	log.Infof(
-		ctx, "beginning compaction of %d backups: %s",
-		len(c.chainToCompact), util.Map(c.chainToCompact, func(m backuppb.BackupManifest) string {
-			return m.ID.String()
-		}),
-	)
-	backupLocalityMap, err := makeBackupLocalityMap(c.compactedLocalityInfo, execCtx.User())
-	if err != nil {
-		return err
-	}
-
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(c.backupChain, backupManifest.EndTime)
-	if err != nil {
-		return err
-	}
-	defer introducedSpanFrontier.Release()
-
-	spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
-	backupCodec, err := backupinfo.MakeBackupCodec(c.chainToCompact)
-	if err != nil {
-		return err
-	}
-	var tables []catalog.TableDescriptor
-	for _, desc := range backupManifest.Descriptors {
-		catDesc := backupinfo.NewDescriptorForManifest(&desc)
-		if table, ok := catDesc.(catalog.TableDescriptor); ok {
-			tables = append(tables, table)
-		}
-	}
-	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
-	maxFiles := maxFileCount.Get(&execCtx.ExecCfg().Settings.SV)
-
-	var fsc fileSpanComparator = &exclusiveEndKeyComparator{}
-	filter, err := makeSpanCoveringFilter(
-		backupManifest.Spans,
-		[]jobspb.RestoreProgress_FrontierEntry{},
-		introducedSpanFrontier,
-		targetSize,
-		maxFiles,
-	)
-	if err != nil {
-		return err
-	}
-	spans, err := spansForAllRestoreTableIndexes(
-		backupCodec,
-		tables,
-		nil,   /* revs */
-		false, /* schemaOnly */
-		false, /* forOnlineRestore */
-	)
-	if err != nil {
-		return err
-	}
-	completedSpans, completedIntroducedSpans, err := getCompletedSpans(
-		ctx, execCtx, backupManifest, defaultStore, details.EncryptionOptions, kmsEnv,
-	)
-	if err != nil {
-		return err
-	}
-	spans = filterSpans(spans, completedSpans)
-	spans = filterSpans(spans, completedIntroducedSpans)
-
-	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
-		defer close(spanCh)
-		if err != nil {
-			return err
-		}
-		return errors.Wrap(generateAndSendImportSpans(
-			ctx,
-			spans,
-			c.chainToCompact,
-			c.compactedIterFactory,
-			backupLocalityMap,
-			filter,
-			fsc,
-			spanCh,
-		), "generate and send import spans")
-	}
-
-	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	var tasks []func(context.Context) error
-	encryption := details.EncryptionOptions
-	tasks = append(tasks, func(ctx context.Context) error {
-		return genSpan(ctx, spanCh)
-	})
-	tasks = append(tasks, func(ctx context.Context) error {
-		return runCompaction(ctx, execCtx, encryption, spanCh, details, backupManifest, progCh, defaultStore)
-	})
-	tasks = append(tasks, func(ctx context.Context) error {
-		return processProgress(ctx, backupManifest, progCh)
-	})
-
-	if err := ctxgroup.GoAndWait(ctx, tasks...); err != nil {
-		return err
-	}
-	return concludeBackupCompaction(ctx, execCtx, defaultStore, encryption, kmsEnv, backupManifest)
-}
-
 // lastBackup returns the last backup of the chain to compact.
 func (c *compactionChain) lastBackup() backuppb.BackupManifest {
 	return c.backupChain[c.endIdx-1]
@@ -533,6 +416,7 @@ func (c *compactionChain) lastBackup() backuppb.BackupManifest {
 
 // newCompactionChain returns a new compacted backup chain based on the specified start and end
 // timestamps from a chain of backups. The start and end times must specify specific backups.
+// layerToIterFactory must map accordingly to the passed in manifests.
 func newCompactionChain(
 	manifests []backuppb.BackupManifest,
 	start, end hlc.Timestamp,
@@ -578,156 +462,6 @@ func newCompactionChain(
 		compactedLocalityInfo: localityInfo[startIdx:endIdx],
 		allIters:              layerToIterFactory,
 		compactedIterFactory:  compactedIters,
-	}, nil
-}
-
-func runCompaction(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	encryption *jobspb.BackupEncryptionOptions,
-	entries chan execinfrapb.RestoreSpanEntry,
-	details jobspb.BackupDetails,
-	manifest *backuppb.BackupManifest,
-	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	store cloud.ExternalStorage,
-) error {
-	defer close(progCh)
-	var encryptionOptions *kvpb.FileEncryptionOptions
-	if encryption != nil {
-		encryptionOptions = &kvpb.FileEncryptionOptions{Key: encryption.Key}
-	}
-	sinkConf := backupsink.SSTSinkConf{
-		ID:        execCtx.ExecCfg().DistSQLSrv.NodeID.SQLInstanceID(),
-		Enc:       encryptionOptions,
-		ProgCh:    progCh,
-		Settings:  &execCtx.ExecCfg().Settings.SV,
-		ElideMode: manifest.ElidedPrefix,
-	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, nil)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := sink.Flush(ctx); err != nil {
-			log.Warningf(ctx, "failed to flush sink: %v", err)
-			logClose(ctx, sink, "SST sink")
-		}
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case entry, ok := <-entries:
-			if !ok {
-				return nil
-			}
-
-			sstIter, err := openSSTs(ctx, execCtx, entry, encryptionOptions, details)
-			if err != nil {
-				return errors.Wrap(err, "opening SSTs")
-			}
-
-			if err := processSpanEntry(ctx, sstIter, sink); err != nil {
-				return errors.Wrap(err, "processing span entry")
-			}
-		}
-	}
-}
-
-func processSpanEntry(
-	ctx context.Context, sstIter mergedSST, sink *backupsink.SSTSinkKeyWriter,
-) error {
-	defer sstIter.cleanup()
-	entry := sstIter.entry
-	prefix, err := backupsink.ElidedPrefix(entry.Span.Key, entry.ElidedPrefix)
-	if err != nil {
-		return err
-	} else if prefix == nil {
-		return errors.New("backup compactions does not supported non-elided keys")
-	}
-	trimmedStart := storage.MVCCKey{Key: bytes.TrimPrefix(entry.Span.Key, prefix)}
-	trimmedEnd := storage.MVCCKey{Key: bytes.TrimPrefix(entry.Span.EndKey, prefix)}
-	if err := sink.Reset(ctx, entry.Span); err != nil {
-		return err
-	}
-	scratch := make([]byte, 0, len(prefix))
-	scratch = append(scratch, prefix...)
-	iter := sstIter.iter
-	for iter.SeekGE(trimmedStart); ; iter.NextKey() {
-		var key storage.MVCCKey
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-		key = iter.UnsafeKey()
-		if !key.Less(trimmedEnd) {
-			break
-		}
-		value, err := iter.UnsafeValue()
-		if err != nil {
-			return err
-		}
-		// The sst sink requires full keys including their prefix, so for every
-		// key, we need to prepend the prefix to the key. To avoid unnecessary
-		// allocations, we reuse the scratch buffer to build the full key.
-		scratch = append(scratch[:len(prefix)], key.Key...)
-		key.Key = scratch
-		if err := sink.WriteKey(ctx, key, value); err != nil {
-			return err
-		}
-	}
-	sink.AssumeNotMidRow()
-	return nil
-}
-
-func openSSTs(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	entry execinfrapb.RestoreSpanEntry,
-	encryptionOptions *kvpb.FileEncryptionOptions,
-	details jobspb.BackupDetails,
-) (mergedSST, error) {
-	var dirs []cloud.ExternalStorage
-	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
-	for idx := 0; idx < len(entry.Files); idx++ {
-		file := entry.Files[idx]
-		dir, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, file.Dir)
-		if err != nil {
-			return mergedSST{}, err
-		}
-		dirs = append(dirs, dir)
-		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
-	}
-	iterOpts := storage.IterOptions{
-		// TODO (kev-cao): Come back and update this to range keys when
-		// SSTSinkKeyWriter has been updated to support range keys.
-		KeyTypes:   storage.IterKeyTypePointsOnly,
-		LowerBound: keys.LocalMax,
-		UpperBound: keys.MaxKey,
-	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encryptionOptions, iterOpts)
-	if err != nil {
-		return mergedSST{}, err
-	}
-	compactionIter, err := storage.NewBackupCompactionIterator(iter, details.EndTime)
-	if err != nil {
-		return mergedSST{}, err
-	}
-	return mergedSST{
-		entry: entry,
-		iter:  compactionIter,
-		cleanup: func() {
-			log.VInfof(ctx, 1, "finished with and closing %d files in span %d %v", len(entry.Files), entry.ProgressIdx, entry.Span.String())
-			compactionIter.Close()
-			for _, dir := range dirs {
-				if err := dir.Close(); err != nil {
-					log.Warningf(ctx, "close export storage failed: %v", err)
-				}
-			}
-		},
-		completeUpTo: details.EndTime,
 	}, nil
 }
 
@@ -895,13 +629,14 @@ func createCompactionManifest(
 
 // getBackupChain fetches the current shortest chain of backups (and its
 // associated info) required to restore the to the end time specified in the details.
-// It assumes the encryption options stored in the job details contain the raw
-// password/KMS URIs.
+// It assumes the encryption options contain the raw password/KMS URIs.
 func getBackupChain(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
-	details jobspb.BackupDetails,
+	dest jobspb.BackupDetails_Destination,
+	encryptionOpts *jobspb.BackupEncryptionOptions,
+	endTime hlc.Timestamp,
 	kmsEnv cloud.KMSEnv,
 ) (
 	[]backuppb.BackupManifest,
@@ -910,7 +645,6 @@ func getBackupChain(
 	map[int]*backupinfo.IterFactory,
 	error,
 ) {
-	dest := details.Destination
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
 		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
 	)
@@ -941,7 +675,7 @@ func getBackupChain(
 		}
 	}()
 	encryption, err := backupencryption.GetEncryptionFromBaseStore(
-		ctx, baseStores[0], details.EncryptionOptions, kmsEnv,
+		ctx, baseStores[0], encryptionOpts, kmsEnv,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -951,7 +685,7 @@ func getBackupChain(
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, details.EndTime, encryption, kmsEnv,
+		resolvedIncDirs, endTime, encryption, kmsEnv,
 		user, false,
 	)
 	if err != nil {

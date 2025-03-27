@@ -572,12 +572,16 @@ message LogicalReplicationOfflineScanSpec {
 
 message CompactBackupsSpec {
   optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  repeated string collectionURI = 2 [(gogoproto.nullable) = false];
-  repeated string incrementalStorage = 3 [(gogoproto.nullable) = false];
-  optional string subdir = 4 [(gogoproto.nullable) = false];
-  optional jobs.jobspb.BackupEncryptionOptions encryption = 5;
-  optional util.hlc.Timestamp startTime = 6 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp endTime = 7 [(gogoproto.nullable) = false];
-  optional ElidePrefix elide_mode = 8 [(gogoproto.nullable) = false];
-  repeated roachpb.Span spans = 9 [(gogoproto.nullable) = false];
+  optional string default_uri = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
+  optional jobs.jobspb.BackupDetails.Destination destination = 3 [(gogoproto.nullable) = false];
+  optional jobs.jobspb.BackupEncryptionOptions encryption = 4;
+  optional util.hlc.Timestamp startTime = 5 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp endTime = 6 [(gogoproto.nullable) = false];
+  optional ElidePrefix elide_mode = 7 [(gogoproto.nullable) = false];
+  // spans represents the entire set of spans to be compacted.
+  repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
+  // assigned_spans represents the spans assigned to this particular processor 
+  // to compact.
+  repeated roachpb.Span assigned_spans = 9 [(gogoproto.nullable) = false];
+  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
 }

@@ -16,6 +16,7 @@ go_library(
         "backup_telemetry.go",
         "compaction.go",
         "compaction_policy.go",
+        "compaction_processor.go",
         "compaction_processor_planning.go",
         "create_scheduled_backup.go",
         "generative_split_and_scatter_processor.go",

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,6 +42,12 @@ func (c *compactionChain) runCompactionPlan(
 	kmsEnv cloud.KMSEnv,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	log.Infof(
+		ctx, "planning compaction of %d backups: %s",
+		len(c.chainToCompact), util.Map(c.chainToCompact, func(m backuppb.BackupManifest) string {
+			return m.ID.String()
+		}),
+	)
 	backupLocalityMap, err := makeBackupLocalityMap(c.compactedLocalityInfo, execCtx.User())
 	if err != nil {
 		return err
@@ -63,7 +71,9 @@ func (c *compactionChain) runCompactionPlan(
 		return err
 	}
 
-	spansToCompact, err := c.getSpansToCompact(ctx, execCtx, manifest, details, defaultStore, kmsEnv)
+	spansToCompact, err := getSpansToCompact(
+		ctx, execCtx, manifest, c.chainToCompact, details, defaultStore, kmsEnv,
+	)
 	if err != nil {
 		return err
 	}
@@ -82,8 +92,11 @@ func (c *compactionChain) runCompactionPlan(
 	}
 	dsp := execCtx.DistSQLPlanner()
 	plan, planCtx, err := createCompactionPlan(
-		ctx, execCtx, jobID, details, manifest, dsp, genSpan,
+		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact,
 	)
+	if err != nil {
+		return errors.Wrap(err, "creating compaction plan")
+	}
 	sql.FinalizePlan(ctx, planCtx, plan)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -107,7 +120,7 @@ func (c *compactionChain) runCompactionPlan(
 		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
 	)
 
-	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
 	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return nil
 }
@@ -122,6 +135,7 @@ func createCompactionPlan(
 	manifest *backuppb.BackupManifest,
 	dsp *sql.DistSQLPlanner,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
+	spansToCompact roachpb.Spans,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	numEntries, err := countRestoreSpanEntries(ctx, genSpan)
 	if err != nil {
@@ -138,7 +152,8 @@ func createCompactionPlan(
 
 	plan := planCtx.NewPhysicalPlan()
 	corePlacements, err := createCompactionCorePlacements(
-		ctx, jobID, details, manifest.ElidedPrefix, genSpan, sqlInstanceIDs, numEntries,
+		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix,
+		genSpan, spansToCompact, sqlInstanceIDs, numEntries,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -184,9 +199,11 @@ func countRestoreSpanEntries(
 func createCompactionCorePlacements(
 	ctx context.Context,
 	jobID jobspb.JobID,
+	user username.SQLUsername,
 	details jobspb.BackupDetails,
 	elideMode execinfrapb.ElidePrefix,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
+	spansToCompact roachpb.Spans,
 	sqlInstanceIDs []base.SQLInstanceID,
 	numEntries int,
 ) ([]physicalplan.ProcessorCorePlacement, error) {
@@ -217,15 +234,15 @@ func createCompactionCorePlacements(
 			if len(currEntries) == targetNumEntries {
 				corePlacements[currNode].SQLInstanceID = sqlInstanceIDs[currNode]
 				corePlacements[currNode].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
-					JobID:              int64(jobID),
-					CollectionURI:      details.Destination.To,
-					IncrementalStorage: details.Destination.IncrementalStorage,
-					Subdir:             details.Destination.Subdir,
-					Encryption:         details.EncryptionOptions,
-					StartTime:          details.StartTime,
-					EndTime:            details.EndTime,
-					ElideMode:          elideMode,
-					Spans: util.Map(currEntries, func(entry execinfrapb.RestoreSpanEntry) roachpb.Span {
+					JobID:       int64(jobID),
+					Destination: details.Destination,
+					Encryption:  details.EncryptionOptions,
+					StartTime:   details.StartTime,
+					EndTime:     details.EndTime,
+					ElideMode:   elideMode,
+					UserProto:   user.EncodeProto(),
+					Spans:       spansToCompact,
+					AssignedSpans: util.Map(currEntries, func(entry execinfrapb.RestoreSpanEntry) roachpb.Span {
 						return entry.Span
 					}),
 				}
@@ -246,12 +263,13 @@ func createCompactionCorePlacements(
 	return corePlacements, nil
 }
 
-// getSpansToCompact returns the spans that need to be compacted as described by
-// the compacted chain and its manifest.
-func (c *compactionChain) getSpansToCompact(
+// getSpansToCompact returns all remaining spans the backup manifest that
+// need to be compacted.
+func getSpansToCompact(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	manifest *backuppb.BackupManifest,
+	backupChain []backuppb.BackupManifest,
 	details jobspb.BackupDetails,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
@@ -263,7 +281,7 @@ func (c *compactionChain) getSpansToCompact(
 			tables = append(tables, table)
 		}
 	}
-	backupCodec, err := backupinfo.MakeBackupCodec(c.chainToCompact)
+	backupCodec, err := backupinfo.MakeBackupCodec(backupChain)
 	if err != nil {
 		return nil, err
 	}
