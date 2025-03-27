@@ -145,10 +145,11 @@ type testRunner struct {
 
 	status struct {
 		syncutil.Mutex
-		running map[*testImpl]struct{}
-		pass    map[*testImpl]struct{}
-		fail    map[*testImpl]struct{}
-		skip    map[*testImpl]struct{}
+		running     map[*testImpl]struct{}
+		pass        map[*testImpl]struct{}
+		fail        map[*testImpl]struct{}
+		skip        map[*testImpl]struct{}
+		skipDetails map[*testImpl]string
 	}
 
 	// cr keeps track of all live clusters.
@@ -378,6 +379,7 @@ func (r *testRunner) Run(
 	r.status.pass = make(map[*testImpl]struct{})
 	r.status.fail = make(map[*testImpl]struct{})
 	r.status.skip = make(map[*testImpl]struct{})
+	r.status.skipDetails = make(map[*testImpl]string)
 
 	r.work = newWorkPool(tests, count)
 	errs := &workerErrors{}
@@ -1188,9 +1190,9 @@ func (r *testRunner) runTest(
 			// service messages else the test will be reported as having run twice.
 			if roachtestflags.TeamCity {
 				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s' duration='%d']\n",
-					s.Name, TeamCityEscape(s.Skip), t.duration().Milliseconds())
+					s.Name, TeamCityEscape(skipDetails(s)), t.duration().Milliseconds())
 			}
-			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", s.Skip)
+			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", skipDetails(s))
 		} else {
 			// Delaying the ##teamcity[testStarted...] service message until the test is finished allows us to branch
 			// separately for skipped tests. The duration of the test is passed to ##teamcity[testFinished...] for
@@ -1287,8 +1289,9 @@ func (r *testRunner) runTest(
 			run:     runNum,
 			start:   t.start,
 			end:     t.end,
-			pass:    !t.Failed(),
+			pass:    !t.Failed() && s.Skip == "",
 			failure: t.failureMsg(),
+			skip:    skipDetails(s),
 		})
 		r.status.Lock()
 		delete(r.status.running, t)
@@ -1304,6 +1307,7 @@ func (r *testRunner) runTest(
 				}
 			} else if s.Skip != "" {
 				r.status.skip[t] = struct{}{}
+				r.status.skipDetails[t] = skipDetails(s)
 			} else {
 				r.status.pass[t] = struct{}{}
 			}
@@ -2127,6 +2131,7 @@ type completedTestInfo struct {
 	end     time.Time
 	pass    bool
 	failure string
+	skip    string
 }
 
 type workerErrors struct {
