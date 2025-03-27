@@ -1402,8 +1402,6 @@ func splitLocalStorageMsgs(
 				panic("two MsgStorageAppend")
 			}
 			msgStorageAppend = msgs[i]
-		case raftpb.MsgStorageApply:
-			// ignore
 		default:
 			// Local storage messages will always be at the end of the messages slice,
 			// so we can terminate iteration as soon as we reach any other message
@@ -1878,12 +1876,6 @@ func (r *Replica) sendRaftMessages(
 		case raft.LocalAppendThread:
 			// To local append thread.
 			// NOTE: we don't currently split append work off into an async goroutine.
-			// Instead, we handle messages to LocalAppendThread inline on the raft
-			// scheduler goroutine, so this code path is unused.
-			panic("unsupported, currently processed inline on raft scheduler goroutine")
-		case raft.LocalApplyThread:
-			// To local apply thread.
-			// NOTE: we don't currently split apply work off into an async goroutine.
 			// Instead, we handle messages to LocalAppendThread inline on the raft
 			// scheduler goroutine, so this code path is unused.
 			panic("unsupported, currently processed inline on raft scheduler goroutine")
