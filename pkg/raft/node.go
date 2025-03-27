@@ -77,7 +77,9 @@ type Ready struct {
 	// except after a snapshot which can create a "gap" in this sequence.
 	//
 	// The caller should use RawNode.LogSnapshot() to fetch the committed entries
-	// from the log.
+	// from the log and apply them to the state machine. When a batch of entries
+	// has been applied, the caller should call RawNode.AckApplied, to prevent
+	// these entries from showing up in subsequent Ready signals.
 	//
 	// Invariants:
 	//	- Committed.After <= Committed.Last

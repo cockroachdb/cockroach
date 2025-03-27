@@ -438,6 +438,18 @@ func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
 	}
 }
 
+// AckApplied acknowledges that the given entries have been applied. Must be
+// called for a prefix of Ready.Committed span, during the ready handling.
+func (rn *RawNode) AckApplied(entries []pb.Entry) {
+	// TODO(pav-kv): this is identical to MsgStorageApplyResp handling, to be
+	// removed in the next commit.
+	if len(entries) == 0 {
+		return
+	}
+	rn.raft.appliedTo(entries[len(entries)-1].Index)
+	rn.raft.reduceUncommittedSize(payloadsSize(entries))
+}
+
 // applyUnstableEntries returns whether entries are allowed to be applied once
 // they are known to be committed but before they have been written locally to
 // stable storage.
