@@ -216,6 +216,54 @@ func (rd *Deleter) DeleteRow(
 	})
 }
 
+// UpdateTombstone updates MVCC header values for a given tombstone. This is
+// used by LDR to ensure racing deletes have consistent MVCC headers in both
+// clusters.
+//
+// Internally UpdateTombstone uses a cput that asserts there is no previous
+// value. So it will always return an error if the row exists. Note: while it
+// is called update tombstone, it may also create a tombstone if neither a row
+// or tombstone exists. In the LDR replication use case, this is only expected
+// to happen if there was a local tombstone but it was gc'd.
+func (rd *Deleter) UpdateTombstone(
+	ctx context.Context,
+	batch *kv.Batch,
+	values []tree.Datum,
+	oth *OriginTimestampCPutHelper,
+	traceKV bool,
+) error {
+	if !oth.IsSet() {
+		return errors.New("update tombstone only supported with origin timestamp")
+	}
+	if !oth.PreviousWasDeleted {
+		return errors.New("update tombstone only supported with previous was deleted")
+	}
+
+	// LDR does not support multiple column families
+	families := rd.Helper.TableDesc.GetFamilies()
+	if len(families) != 1 {
+		return errors.New("update tombstone not supported with multiple column families")
+	}
+
+	b := &KVBatchAdapter{Batch: batch}
+
+	// Encode the primary index key
+	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
+	if err != nil {
+		return err
+	}
+
+	// Get the default column family (family 0)
+	family := families[0]
+	rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Use CPut with nil expected value to assert the key doesn't exist
+	// This is used only when we know the row doesn't exist
+	oth.DelWithCPut(ctx, b, &rd.key, nil /* expect nil value */, traceKV)
+
+	return nil
+}
+
 // encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value
 // for the given family and valuses.
 //
