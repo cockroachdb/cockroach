@@ -7747,3 +7747,55 @@ func TestMVCCGetForKnownTimestampWithNoIntent(t *testing.T) {
 		})
 	}
 }
+
+func TestApproximateLockTableSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	acq := roachpb.LockAcquisition{
+		Span: roachpb.Span{
+			Key: roachpb.Key("f"),
+		},
+		Txn:        txn1.TxnMeta,
+		Durability: lock.Replicated,
+		Strength:   lock.Exclusive,
+	}
+
+	batch := engine.NewBatch()
+	defer batch.Close()
+	stats := &enginepb.MVCCStats{}
+	require.NoError(t, MVCCAcquireLock(ctx,
+		batch,
+		&acq.Txn,
+		acq.IgnoredSeqNums,
+		acq.Strength,
+		acq.Key,
+		stats,
+		0,
+		0,
+	))
+	require.GreaterOrEqual(t, ApproximateLockTableSize(&acq), stats.LockBytes)
+}
+
+func BenchmarkApproximateLockTableSize(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	acq := roachpb.LockAcquisition{
+		Span: roachpb.Span{
+			Key: roachpb.Key("f"),
+		},
+		Txn:        txn1.TxnMeta,
+		Durability: lock.Replicated,
+		Strength:   lock.Exclusive,
+	}
+	total := int64(0)
+	for i := 0; i < b.N; i++ {
+		total += ApproximateLockTableSize(&acq)
+	}
+	b.Logf("total: %d", total)
+}
