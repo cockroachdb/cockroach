@@ -86,13 +86,20 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 
 	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 
+	if span := rd.Committed; !span.Empty() {
+		if was := n.ApplyWork; span.After > was.Last {
+			n.ApplyWork = span
+		} else {
+			n.ApplyWork.Last = span.Last
+		}
+	}
 	for _, m := range rd.Messages {
 		if raft.IsLocalMsgTarget(m.To) {
 			switch m.Type {
 			case raftpb.MsgStorageAppend:
 				n.AppendWork = append(n.AppendWork, m)
 			case raftpb.MsgStorageApply:
-				n.ApplyWork = append(n.ApplyWork, m)
+				// ignore
 			default:
 				panic(fmt.Sprintf("unexpected message type %s", m.Type))
 			}

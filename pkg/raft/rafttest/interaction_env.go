@@ -54,7 +54,7 @@ type Node struct {
 	asyncWrites bool
 
 	AppendWork []pb.Message // []MsgStorageAppend
-	ApplyWork  []pb.Message // []MsgStorageApply
+	ApplyWork  pb.LogSpan
 	History    []pb.Snapshot
 }
 
