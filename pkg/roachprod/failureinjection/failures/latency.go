@@ -204,7 +204,7 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 	return nil
 }
 
-func (f *NetworkLatency) Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+func (f *NetworkLatency) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	latencies := args.(NetworkLatencyArgs).ArtificialLatencies
 	for _, latency := range latencies {
 		for _, dest := range latency.Destination {
@@ -215,7 +215,7 @@ func (f *NetworkLatency) Restore(ctx context.Context, l *logger.Logger, args Fai
 
 			class, ok := f.filterNameToClassMap[latency.String()]
 			if !ok {
-				return errors.New("failed trying to restore latency failure, ArtificialLatency rule was not found: %+v")
+				return errors.New("failed trying to recover latency failure, ArtificialLatency rule was not found: %+v")
 			}
 
 			cmd := failScriptEarlyCmd
@@ -266,7 +266,7 @@ func (f *NetworkLatency) WaitForFailureToPropagate(
 	return nil
 }
 
-func (f *NetworkLatency) WaitForFailureToRestore(
+func (f *NetworkLatency) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	// TODO(Darryl): Monitor cluster (e.g. for replica convergence) and block until it's stable.

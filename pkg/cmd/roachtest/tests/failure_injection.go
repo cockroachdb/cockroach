@@ -33,23 +33,23 @@ import (
 // 3. Inject()
 // 4. validateFailure()
 // 5. WaitForFailureToPropagate()
-// 6. Restore()
-// 7. WaitForFailureToRestore()
-// 8. validateRestore()
+// 6. Recover()
+// 7. WaitForFailureToRecover()
+// 8. validateRecover()
 // 9. Cleanup()
 //
 // Note the asymmetry in the order of validateFailure() being called before
-// WaitForFailureToPropagate() and validateRestore() being called after WaitForFailureToRestore().
+// WaitForFailureToPropagate() and validateRecover() being called after WaitForFailureToRecover().
 // Both wait methods block until the cluster has stabilized, so we want to validate the failure
-// before the cluster stabilizes but validate the restore after.
+// before the cluster stabilizes but validate the recover after.
 type failureSmokeTest struct {
 	testName    string
 	failureName string
 	args        failures.FailureArgs
 	// Validate that the failure was injected correctly.
 	validateFailure func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error
-	// Validate that the failure was restored correctly.
-	validateRestore func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error
+	// Validate that the failure was recovered correctly.
+	validateRecover func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error
 	// The workload to be run during the failureSmokeTest, if nil, defaultSmokeTestWorkload is used.
 	workload func(ctx context.Context, c cluster.Cluster, args ...string) error
 }
@@ -114,32 +114,32 @@ func (t *failureSmokeTest) run(
 		return err
 	}
 
-	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "restore")
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "recover")
 	if err != nil {
 		return err
 	}
-	l.Printf("%s: Running Restore(); details in %s.log", t.failureName, file)
+	l.Printf("%s: Running Recover(); details in %s.log", t.failureName, file)
 	if err = c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{
-		Text: fmt.Sprintf("%s restored", t.testName),
+		Text: fmt.Sprintf("%s recovered", t.testName),
 	}); err != nil {
 		return err
 	}
-	if err = failureMode.Restore(ctx, quietLogger, t.args); err != nil {
+	if err = failureMode.Recover(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
 	// Allow the cluster to return to normal.
-	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for restore")
+	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "wait for recover")
 	if err != nil {
 		return err
 	}
-	l.Printf("%s: Running WaitForFailureToRestore(); details in %s.log", t.failureName, file)
-	if err = failureMode.WaitForFailureToRestore(ctx, quietLogger, t.args); err != nil {
+	l.Printf("%s: Running WaitForFailureToRecover(); details in %s.log", t.failureName, file)
+	if err = failureMode.WaitForFailureToRecover(ctx, quietLogger, t.args); err != nil {
 		return err
 	}
 
-	l.Printf("validating failure was properly restored")
-	return t.validateRestore(ctx, l, c, failureMode)
+	l.Printf("validating failure was properly recovered")
+	return t.validateRecover(ctx, l, c, failureMode)
 }
 
 func (t *failureSmokeTest) noopRun(
@@ -152,8 +152,8 @@ func (t *failureSmokeTest) noopRun(
 	if err := t.validateFailure(ctx, l, c, failureMode); err == nil {
 		return errors.New("no failure was injected but validation still passed")
 	}
-	if err := t.validateRestore(ctx, l, c, failureMode); err != nil {
-		return errors.Wrapf(err, "no failure was injected but post restore validation still failed")
+	if err := t.validateRecover(ctx, l, c, failureMode); err != nil {
+		return errors.Wrapf(err, "no failure was injected but post recover validation still failed")
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ var bidirectionalNetworkPartitionTest = func(c cluster.Cluster) failureSmokeTest
 			}
 			return nil
 		},
-		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 			blocked, err := roachtestutil.CheckPortBlocked(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode), fmt.Sprintf("{pgport:%d}", destNode))
 			if err != nil {
 				return err
@@ -242,7 +242,7 @@ var asymmetricIncomingNetworkPartitionTest = func(c cluster.Cluster) failureSmok
 			}
 			return nil
 		},
-		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 			blocked, err := roachtestutil.CheckPortBlocked(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode), fmt.Sprintf("{pgport:%d}", destNode))
 			if err != nil {
 				return err
@@ -290,7 +290,7 @@ var asymmetricOutgoingNetworkPartitionTest = func(c cluster.Cluster) failureSmok
 			}
 			return nil
 		},
-		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 			blocked, err := roachtestutil.CheckPortBlocked(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode), fmt.Sprintf("{pgport:%d}", destNode))
 			if err != nil {
 				return err
@@ -346,7 +346,7 @@ var latencyTest = func(c cluster.Cluster) failureSmokeTest {
 			}
 			return nil
 		},
-		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 			delayedLatency, err := roachtestutil.PortLatency(ctx, l, c, c.Nodes(srcNode), c.Nodes(destNode))
 			if err != nil {
 				return err
@@ -359,7 +359,7 @@ var latencyTest = func(c cluster.Cluster) failureSmokeTest {
 				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to be close to latency between nodes without (n%d and n%d)", srcNode, destNode, unaffectedNode, destNode)
 			}
 			if delayedLatency > 500*time.Millisecond {
-				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to have restored to at least less than 500ms", srcNode, destNode)
+				return errors.Errorf("expected latency between nodes with artificial latency (n%d and n%d) to have recovred to at least less than 500ms", srcNode, destNode)
 			}
 			return nil
 		},
@@ -508,9 +508,9 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 
 					return assertRWBytes(ctx, l, res, stallReads, stallWrites)
 				},
-				validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+				validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 					// Wait for replication since the stalled node may have just restarted.
-					// TODO(darryl): The failure mode itself should do this in WaitForFailureToRestore.
+					// TODO(darryl): The failure mode itself should do this in WaitForFailureToRecover.
 					// It should also wait for replicas to rebalance, although this test is not large
 					// enough for that to matter.
 					db := c.Conn(ctx, l, stalledNode[0])
@@ -586,7 +586,7 @@ var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 			}
 			return nil
 		},
-		validateRestore: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
+		validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f failures.FailureMode) error {
 			if !touchFile(ctx, l, c, stalledNode) {
 				return errors.Errorf("expected creating a file to work on stalled node %d", stalledNode)
 			}
@@ -649,7 +649,7 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	failureSmokeTests = append(failureSmokeTests, cgroupsDiskStallTests(c)...)
 
 	// Randomize the order of the tests in case any of the failures have unexpected side
-	// effects that may mask failures, e.g. a cgroups disk stall isn't properly restored
+	// effects that may mask failures, e.g. a cgroups disk stall isn't properly recovered
 	// which causes a dmsetup disk stall to appear to work even if it doesn't.
 	rand.Shuffle(len(failureSmokeTests), func(i, j int) {
 		failureSmokeTests[i], failureSmokeTests[j] = failureSmokeTests[j], failureSmokeTests[i]
