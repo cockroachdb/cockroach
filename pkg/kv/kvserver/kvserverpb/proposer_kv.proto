@@ -226,6 +226,13 @@ message ReplicatedEvalResult {
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
+  // See ExciseRequest.
+  message Excise {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    roachpb.Span lock_table_span = 2 [(gogoproto.nullable) = false];
+  }
+  Excise excise = 30 [(gogoproto.customname) = "Excise"];
+  
   // This is the proposal timestamp for the active lease while evaluating a lease request.
   // It will be used to make sure we know if a lease was extended after we sent out the request
   // but before we tried to apply it.

@@ -306,6 +306,7 @@ go_test(
         "closed_timestamp_test.go",
         "consistency_queue_test.go",
         "debug_print_test.go",
+        "deleted_external_sstable_test.go",
         "errors_test.go",
         "flow_control_integration_test.go",
         "flow_control_raft_transport_test.go",

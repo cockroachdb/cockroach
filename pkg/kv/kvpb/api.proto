@@ -698,6 +698,25 @@ message ScanResponse {
   ColBatches col_batches = 5 [(gogoproto.nullable) = false];
 }
 
+// ExciseRequest is the argument to the Excise() method, which ends up calling
+// the storage Excise() method. It is used to atomically remove all data in the
+// specified key span.
+// It's used as a recovery tool in the event of data loss. It's a non-MVCC
+// command that will destroy MVCC history, and can result in transactional
+// anomalies like lost portions of transactions, uncommiting committed
+// transactions, and possible other anomalies. It allows for inconsistent
+// follower reads.
+// It can not be applied to non-user spans.
+message ExciseRequest {
+  reserved 2, 3;
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// ExciseResponse is the return value from the Excise() method.
+message ExciseResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
 // start and end keys for a descending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
@@ -2536,6 +2555,7 @@ message RequestUnion {
     ProbeRequest probe = 54;
     IsSpanEmptyRequest is_span_empty = 56;
     LinkExternalSSTableRequest link_external_sstable = 57;
+    ExciseRequest excise = 58;
   }
   reserved 8, 15, 23, 25, 27, 31, 34, 52;
 }
@@ -2592,6 +2612,7 @@ message ResponseUnion {
     ProbeResponse probe = 54;
     IsSpanEmptyResponse is_span_empty = 56;
     LinkExternalSSTableResponse link_external_sstable = 57;
+    ExciseResponse excise = 58;
   }
   reserved 8, 15, 23, 25, 27, 28, 31, 34, 52;
 }
