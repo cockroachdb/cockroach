@@ -66,6 +66,8 @@ var (
 // maybeStartCompactionJob will initiate a compaction job off of a triggering
 // incremental job if the backup chain length exceeds the threshold.
 // backupStmt should be the original backup statement that triggered the job.
+// It is the responsibility of the caller to ensure that the backup details'
+// destination contains a resolved subdir.
 func maybeStartCompactionJob(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -116,6 +118,12 @@ func maybeStartCompactionJob(
 	}
 	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
 	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+	testingKnobs := execCfg.BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.RunBeforeTriggeringCompaction != nil {
+		if err := testingKnobs.RunBeforeTriggeringCompaction(); err != nil {
+			return 0, err
+		}
+	}
 	var jobID jobspb.JobID
 	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context,
 		txn isql.Txn) error {
@@ -124,8 +132,9 @@ func maybeStartCompactionJob(
 			"start-compaction-job",
 			txn.KV(),
 			sessiondata.NoSessionDataOverride,
-			`SELECT crdb_internal.backup_compaction($1, $2::DECIMAL, $3::DECIMAL)`,
+			`SELECT crdb_internal.backup_compaction($1, $2, $3::DECIMAL, $4::DECIMAL)`,
 			backupStmt,
+			triggerJob.Destination.Subdir,
 			startTS.AsOfSystemTime(),
 			endTS.AsOfSystemTime(),
 		)
