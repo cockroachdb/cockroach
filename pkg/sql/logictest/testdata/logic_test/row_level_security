@@ -662,6 +662,55 @@ drop table flying_roaches
 statement ok
 drop type roach_type
 
+subtest insert_returning
+
+statement ok
+CREATE TABLE ins (c1 INT);
+
+statement ok
+CREATE USER ins;
+
+statement ok
+ALTER TABLE ins OWNER TO ins;
+
+statement ok
+SET ROLE ins;
+
+statement ok
+CREATE POLICY p_ins ON ins FOR INSERT WITH CHECK (c1 > 0);
+
+statement ok
+CREATE POLICY p_sel ON ins FOR SELECT USING (c1 % 2 = 0);
+
+statement ok
+ALTER TABLE ins FORCE ROW LEVEL SECURITY, ENABLE ROW LEVEL SECURITY;
+
+# Verify that p_ins allows all positive rows to be inserted.
+statement ok
+INSERT INTO ins VALUES (1),(2),(3),(4);
+
+# Verify that the same statement with RETURNING will fail because it enforces
+# the SELECT policy.
+statement error pq: new row violates row-level security policy for table "ins"
+INSERT INTO ins VALUES (1),(2),(3),(4) RETURNING c1;
+
+# Verify that only rows that pass the USING expression are allowed (even numbers).
+statement ok
+INSERT INTO ins VALUES (2),(4) RETURNING c1;
+
+# Verify that insert policy violation applies when using RETURNING
+statement error pq: new row violates row-level security policy for table "ins"
+INSERT INTO ins VALUES (2),(4),(-2),(-4) RETURNING c1;
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE ins;
+
+statement ok
+DROP USER ins;
+
 subtest alter_table_rls_legacy_unimplemented
 
 statement ok
@@ -2932,5 +2981,669 @@ DROP ROLE test_role1;
 
 statement ok
 DROP ROLE test_role2;
+
+subtest insert_on_conflict_update
+
+statement ok
+CREATE TABLE ups (pk INT NOT NULL PRIMARY KEY, comment TEXT);
+
+statement ok
+CREATE USER ups;
+
+statement ok
+ALTER TABLE ups OWNER TO ups;
+
+statement ok
+SET ROLE ups;
+
+statement ok
+ALTER TABLE ups ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+# pk=1: Trigger UPDATE policy violation during conflict resolution, caused by
+# the new row values for the updated row violating the policy's USING clause.
+statement ok
+CREATE POLICY p_sel ON ups FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY p_ins ON ups FOR INSERT WITH CHECK (true);
+
+statement ok
+CREATE POLICY p_upd ON ups FOR UPDATE USING (comment = 'upsert') WITH CHECK (true);
+
+# Okay because there is no conflict
+statement ok
+INSERT INTO ups VALUES (1, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Reject because we hit a conflict, and the old column of comment violates the UPDATE policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (1, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 1;
+----
+original value
+
+# pk=2: Ensure UPDATE policy USING expression doesn't apply to new version of
+# updated row.
+statement ok
+ALTER POLICY p_upd ON ups USING (comment = 'original value') WITH CHECK (true);
+
+# Okay because there is no conflict
+statement ok
+INSERT INTO ups VALUES (2, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Drive a conflict and confirm that the USING expression isn't used against the
+# new version of the row. Otherwise, the policy would be violated.
+statement ok
+INSERT INTO ups VALUES (2, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 2;
+----
+upsert
+
+# pk=3: Confirm no policy violation during conflict resolution when the updated
+# row satisfies the WITH CHECK expression.
+statement ok
+ALTER POLICY p_upd ON ups USING (true) WITH CHECK (comment = 'upsert');
+
+statement ok
+INSERT INTO ups VALUES (3, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement ok
+INSERT INTO ups VALUES (3, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 3;
+----
+upsert
+
+# pk=4: Trigger UPDATE policy violation during conflict resolution, caused by
+# failing the WITH CHECK expression for the updated column values.
+statement ok
+ALTER POLICY p_upd ON ups USING (true) WITH CHECK (comment = 'original value');
+
+statement ok
+INSERT INTO ups VALUES (4, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# This should be rejected because updated value violates the WITH CHECK expression in the update policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (4, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 4;
+----
+original value
+
+# pk=5: Trigger INSERT policy violation before conflict resolution.
+statement ok
+DROP POLICY p_upd ON ups;
+
+statement ok
+CREATE POLICY p_upd ON ups FOR UPDATE USING (true);
+
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (comment = 'upsert');
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (5, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (comment = 'original value');
+
+statement ok
+INSERT INTO ups VALUES (5, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Verify that the INSERT policies are skipped if we hit a conflict and end up
+# updating the existing row.
+statement ok
+INSERT INTO ups VALUES (5, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 5;
+----
+upsert
+
+# pk=6: Trigger SELECT policy violation on conflict resolution.
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (true);
+
+statement ok
+ALTER POLICY p_sel ON ups USING (comment = 'original value');
+
+statement ok
+INSERT INTO ups VALUES (6, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# This should be rejected. The updated rows violate the USING clause expression
+# for the SELECT policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (6, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 6;
+----
+original value
+
+# pk=7: Trigger SELECT policy violation on new inserted row and updated row
+# during conflict resolution.
+statement ok
+ALTER POLICY p_sel ON ups USING (comment = 'upsert');
+
+# This should fail because the USING clause of the SELECT policy violates the
+# new rows being inserted.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (7, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Setup so we can try on a conflict. Disable RLS to properly insert pk=7 in.
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+INSERT INTO ups VALUES (7, 'original value');
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# This should be rejected. When reading the old row, it violates the USING
+# clause of the SELECT policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (7, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query T
+SELECT comment FROM ups WHERE pk = 7;
+----
+original value
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# pk=8: Have an ALL policy with a USING expression that violates the new row.
+statement ok
+DROP POLICY p_sel ON ups;
+
+statement ok
+DROP POLICY p_ins ON ups;
+
+statement ok
+DROP POLICY p_upd ON ups;
+
+statement ok
+CREATE POLICY p_all ON ups FOR ALL USING (comment = 'upsert') WITH CHECK (true);
+
+# This should fail with an RLS violation because the new row violates the USING expression.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (8, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Setup so we can try on a conflict. Disable RLS to properly insert pk=8 in.
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+INSERT INTO ups VALUES (8, 'original value');
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# This fails because the old row violates the USING expression of p_all.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (8, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query T
+SELECT comment FROM ups WHERE pk = 8;
+----
+original value
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# pk=9: Have an ALL policy with a USING expression that violates the updated row
+# during conflict resolution.
+statement ok
+ALTER POLICY p_all ON ups USING (comment = 'original value') WITH CHECK (true);
+
+statement ok
+INSERT INTO ups VALUES (9, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (9, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 9;
+----
+original value
+
+# pk=10: Use an ALL policy with a WITH CHECK expression that applies to the
+# updated value during conflict resolution.
+statement ok
+ALTER POLICY p_all ON ups USING (true) WITH CHECK (comment = 'upsert')
+
+# This should fail with an RLS violation because the new row violates the WITH CHECK expression.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (10, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Setup so we can try on a conflict. Disable RLS to properly insert pk=8 in.
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+INSERT INTO ups VALUES (10, 'original value');
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# Insert a row that triggers a conflict and is handled via UPDATE.
+# The values provided for the initial INSERT would violate a WITH CHECK
+# constraint, but because the conflict resolution results in an UPDATE,
+# we allow the statement to succeed.
+#
+# Note: This behavior slightly deviates from PostgreSQL, which rejects
+# the statement.
+statement ok
+INSERT INTO ups VALUES (10, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# However, if you leave off the conflict, the insert will get rejected due to the policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (10, 'original value')
+
+query T
+SELECT comment FROM ups WHERE pk = 10;
+----
+upsert
+
+# pk=11: Use an ALL policy with a WITH CHECK expression that applies to the
+# inserted row value.
+statement ok
+ALTER POLICY p_all ON ups USING (true) WITH CHECK (comment = 'original value')
+
+statement ok
+INSERT INTO ups VALUES (11, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# This should fail because the updated row violates the INSERT policy.
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (11, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+query T
+SELECT comment FROM ups WHERE pk = 11;
+----
+original value
+
+# pk=12: Test an ALL policy that only includes a WITH CHECK expression.
+# Since there is no USING expression to evaluate during conflict checks,
+# the default behavior is deny-all, causing the statements to fail.
+statement ok
+DROP POLICY p_all ON ups;
+
+statement ok
+CREATE POLICY p_all ON ups FOR ALL WITH CHECK (true);
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (12, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+statement ok
+INSERT INTO ups VALUES (12, 'original value')
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (12, 'original value') ON CONFLICT (pk) DO UPDATE SET comment = 'upsert';
+
+# Turn off force so we can query the row back
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query T
+SELECT comment FROM ups WHERE pk = 12;
+----
+original value
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE ups;
+
+statement ok
+DROP USER ups;
+
+subtest insert_on_conflict_do_nothing
+
+statement ok
+SET enable_row_level_security = on;
+
+statement ok
+CREATE TABLE ups (pk INT NOT NULL PRIMARY KEY, comment TEXT, c SMALLINT);
+
+statement ok
+CREATE USER ups;
+
+statement ok
+ALTER TABLE ups OWNER TO ups;
+
+statement ok
+SET ROLE ups;
+
+statement ok
+ALTER TABLE ups ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+# pk=1: Verify the conflict scan is exempt from RLS policies USING expressions
+# and we don't insert a duplicate value.
+statement ok
+CREATE POLICY p_sel ON ups FOR SELECT USING (comment = 'original value');
+
+statement ok
+CREATE POLICY p_ins ON ups FOR INSERT WITH CHECK (true);
+
+statement ok
+INSERT INTO ups VALUES (1, 'original value', 1) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (1, 'original value', 2) ON CONFLICT (pk) DO NOTHING;
+
+# Verify that input VALUES are not checked against policies when a conflict
+# occurs. This behaviour differs from PostgreSQL, which evaluates VALUES even in
+# conflict cases. The discrepancy stems from a known difference in how CHECK
+# constraints are handled. See issue #35370 for more details.
+statement ok
+INSERT INTO ups VALUES (1, 'upsert', 3) ON CONFLICT (pk) DO NOTHING;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 1;
+----
+original value 1
+
+statement ok
+ALTER POLICY p_sel ON ups USING (comment = 'upsert');
+
+# PostgreSQL would block this, but since a conflict occurs and we do nothing,
+# the constraints are never evaluated.
+statement ok
+INSERT INTO ups VALUES (1, 'original value', 4) ON CONFLICT (pk) DO NOTHING;
+
+# pk=2: Ensure that the INSERT expression is only violated if there is no
+# conflict
+statement ok
+ALTER POLICY p_sel ON ups USING (true);
+
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (comment = 'original value');
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (2, 'first value', 1) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (2, 'original value', 2) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (2, 'original value', 3) ON CONFLICT (pk) DO NOTHING;
+
+# An INSERT that encounters a conflict will skip writing the row and skip the
+# RLS policy checks. Note: This differs from PostgreSQL, which raises a policy
+# violation error because it checks constraints/policies on the input values.
+statement ok
+INSERT INTO ups VALUES (2, 'upsert', 4) ON CONFLICT (pk) DO NOTHING;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 2;
+----
+original value 2
+
+# pk=3: Test an ALL policy with a USING expression that is intentionally violated
+statement ok
+DROP POLICY p_ins ON ups;
+
+statement ok
+DROP POLICY p_sel ON ups;
+
+statement ok
+CREATE POLICY p_all ON ups FOR ALL USING (comment = 'original value') WITH CHECK (true);
+
+statement error pq: new row violates row-level security policy for table "ups"
+INSERT INTO ups VALUES (3, 'first value', 1) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (3, 'original value', 2) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (3, 'original value', 3) ON CONFLICT (pk) DO NOTHING;
+
+# An INSERT that encounters a conflict will skip writing the row and skip the
+# RLS policy checks. Note: This differs from PostgreSQL, which raises a policy
+# violation error because it checks constraints/policies on the input values.
+statement ok
+INSERT INTO ups VALUES (3, 'upsert', 4) ON CONFLICT (pk) DO NOTHING;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 3;
+----
+original value 2
+
+statement ok
+DELETE FROM ups WHERE pk = 3;
+
+statement ok
+INSERT INTO ups VALUES (3, 'first value', 5);
+
+statement ok
+ALTER POLICY p_all ON ups USING (comment = 'upsert');
+
+statement ok
+INSERT INTO ups VALUES (3, 'upsert', 6) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 3;
+----
+first value 5
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# pk=4: ALL policy with a violated WITH CHECK expression
+statement ok
+ALTER POLICY p_all ON ups USING (true) WITH CHECK (comment = 'original value');
+
+statement ok
+INSERT INTO ups VALUES (4, 'original value', 1) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+INSERT INTO ups VALUES (4, 'original value', 2) ON CONFLICT (pk) DO NOTHING;
+
+# An INSERT that encounters a conflict will skip writing the row and skip the
+# RLS policy checks. Note: This differs from PostgreSQL, which raises a policy
+# violation error because it checks constraints/policies on the input values.
+statement ok
+INSERT INTO ups VALUES (4, 'upsert', 3) ON CONFLICT (pk) DO NOTHING;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 4;
+----
+original value 1
+
+statement ok
+ALTER POLICY p_all ON ups WITH CHECK (comment = 'upsert');
+
+statement ok
+INSERT INTO ups VALUES (4, 'upsert', 4) ON CONFLICT (pk) DO NOTHING;
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 4;
+----
+original value 1
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE ups;
+
+statement ok
+DROP USER ups;
+
+subtest upsert
+
+statement ok
+CREATE TABLE ups (pk INT NOT NULL PRIMARY KEY, comment TEXT, c SMALLINT);
+
+statement ok
+CREATE USER ups;
+
+statement ok
+ALTER TABLE ups OWNER TO ups;
+
+statement ok
+SET ROLE ups;
+
+statement ok
+ALTER TABLE ups ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+# pk=1: Trigger an UPDATE policy violation during conflict resolution,
+# caused by the new row values violating the policy's USING expression.
+statement ok
+CREATE POLICY p_sel ON ups FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY p_ins ON ups FOR INSERT WITH CHECK (true);
+
+statement ok
+CREATE POLICY p_upd ON ups FOR UPDATE USING (comment = 'original value') WITH CHECK (true);
+
+#statement ok
+#INSERT INTO ups VALUES (1, 'huh!', 1);
+
+statement ok
+UPSERT INTO ups VALUES (1, 'original value', 1);
+
+# Succeeds because the policy evaluates to true when it reads the old row.
+statement ok
+UPSERT INTO ups VALUES (1, 'upsert', 2);
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 1;
+----
+upsert 2
+
+# Fail because the old row violates the USING expression of the UPDATE policy
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (1, 'upsert', 3);
+
+# Fail because the old row violates the USING expression of the UPDATE policy
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (1, 'original value', 4);
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 1;
+----
+upsert 2
+
+# pk=2: Trigger an UPDATE policy violation during conflict resolution because
+# WITH CHECK expression fails.
+statement ok
+ALTER POLICY p_upd ON ups USING (true) WITH CHECK (comment = 'original value');
+
+statement ok
+UPSERT INTO ups VALUES (2, 'original value', 1);
+
+# Drive a conflict and confirm that the WITH CHECK expression is violated.
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (2, 'upsert', 2);
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 2;
+----
+original value 1
+
+# pk=3: Trigger a SELECT policy violation during conflict resolution.
+statement ok
+ALTER POLICY p_upd ON ups USING (true) WITH CHECK (true);
+
+statement ok
+ALTER POLICY p_sel ON ups USING (comment = 'original value')
+
+# Fails because new row doesn't pass SELECT policy expression
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (3, 'expect fail', 1);
+
+statement ok
+UPSERT INTO ups VALUES (3, 'original value', 2);
+
+statement ok
+UPSERT INTO ups VALUES (3, 'original value', 3);
+
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (3, 'upsert', 4);
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 3;
+----
+original value 3
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+UPSERT INTO ups VALUES (3, 'upsert', 5);
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (3, 'original value', 6);
+
+statement ok
+ALTER TABLE ups NO FORCE ROW LEVEL SECURITY;
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 3;
+----
+upsert 5
+
+statement ok
+ALTER TABLE ups FORCE ROW LEVEL SECURITY;
+
+# pk=4: Trigger INSERT policy violation before conflict resolution.
+statement ok
+ALTER POLICY p_upd ON ups USING (true) WITH CHECK (true);
+
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (comment = 'upsert');
+
+statement ok
+ALTER POLICY p_sel ON ups USING (true);
+
+statement error pq: new row violates row-level security policy for table "ups"
+UPSERT INTO ups VALUES (4, 'original value', 1);
+
+statement ok
+ALTER POLICY p_ins ON ups WITH CHECK (comment = 'original value');
+
+statement ok
+UPSERT INTO ups VALUES (4, 'original value', 2);
+
+# Confirm that the INSERT policy isn't used if there is a conflict.
+statement ok
+UPSERT INTO ups VALUES (4, 'upsert', 3);
+
+query TI
+SELECT comment, c FROM ups WHERE pk = 4;
+----
+upsert 3
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE ups;
+
+statement ok
+DROP USER ups;
 
 subtest end

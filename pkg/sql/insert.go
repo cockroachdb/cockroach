@@ -209,6 +209,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			r.ti.tableDesc(), r.checkOrds, rowVals[:n],
+			catalog.MutationOpInsert, false, /* hasConflict */
 		); err != nil {
 			return err
 		}
