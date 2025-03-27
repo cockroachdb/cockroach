@@ -166,19 +166,21 @@ stabilize 1 2
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/11 EntryNormal ""
+  Committed: (10,11]
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11
+  Applying:
+  1/11 EntryNormal ""
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/11 EntryNormal ""
+  Committed: (10,11]
   Messages:
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  Applying:
+  1/11 EntryNormal ""
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 
@@ -344,14 +346,15 @@ stabilize
 > 1 handling Ready
   Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  4/12 EntryNormal ""
+  Committed: (11,12]
   Messages:
   1->2 MsgApp Term:4 Log:4/12 Commit:12
   1->3 MsgApp Term:4 Log:1/10 Commit:12 Entries:[
     1/11 EntryNormal ""
     4/12 EntryNormal ""
   ]
+  Applying:
+  4/12 EntryNormal ""
 > 2 receiving messages
   1->2 MsgApp Term:4 Log:4/12 Commit:12
 > 3 receiving messages
@@ -362,21 +365,23 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  4/12 EntryNormal ""
+  Committed: (11,12]
   Messages:
   2->1 MsgAppResp Term:4 Log:0/12 Commit:12
+  Applying:
+  4/12 EntryNormal ""
 > 3 handling Ready
   Ready:
   HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
   4/12 EntryNormal ""
-  CommittedEntries:
-  1/11 EntryNormal ""
-  4/12 EntryNormal ""
+  Committed: (10,12]
   Messages:
   3->1 MsgAppResp Term:4 Log:0/12 Commit:12
+  Applying:
+  1/11 EntryNormal ""
+  4/12 EntryNormal ""
 > 1 receiving messages
   2->1 MsgAppResp Term:4 Log:0/12 Commit:12
   3->1 MsgAppResp Term:4 Log:0/12 Commit:12

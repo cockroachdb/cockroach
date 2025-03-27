@@ -59,6 +59,16 @@ func (s LogSpan) Contains(index Index) bool {
 	return index > s.After && index <= s.Last
 }
 
+// String returns the string representation of the LogSpan.
+func (s LogSpan) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s LogSpan) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(%d,%d]", s.After, s.Last)
+}
+
 // Priority specifies per-entry priorities, that are local to the interaction
 // between a leader-replica pair, i.e., they are not an invariant of a
 // particular entry in the raft log (the replica could be the leader itself or

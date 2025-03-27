@@ -59,16 +59,18 @@ stabilize 1
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
   Entries:
   1/5 EntryNormal ""
-  CommittedEntries:
+  Committed: (3,4]
+  Applying:
   1/4 EntryConfChangeV2 l2 l3
   INFO 1 switched to configuration voters=(1)&&(1) learners=(2 3)
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/5 EntryNormal ""
+  Committed: (4,5]
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
+  Applying:
+  1/5 EntryNormal ""

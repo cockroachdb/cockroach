@@ -31,5 +31,6 @@ stabilize
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
-  CommittedEntries:
+  Committed: (3,4]
+  Applying:
   1/4 EntryNormal ""

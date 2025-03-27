@@ -171,9 +171,12 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 	if !IsEmptySnap(rd.Snapshot) {
 		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(rd.Snapshot))
 	}
-	if len(rd.CommittedEntries) > 0 {
-		buf.WriteString("CommittedEntries:\n")
-		fmt.Fprint(&buf, DescribeEntries(rd.CommittedEntries, f))
+	if ln := len(rd.CommittedEntries); ln > 0 {
+		span := pb.LogSpan{
+			After: pb.Index(rd.CommittedEntries[0].Index - 1),
+			Last:  pb.Index(rd.CommittedEntries[ln-1].Index),
+		}
+		fmt.Fprintf(&buf, "Committed: %v\n", span)
 	}
 	if len(rd.Messages) > 0 {
 		buf.WriteString("Messages:\n")
