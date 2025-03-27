@@ -6319,6 +6319,18 @@ func MVCCVerifyLock(
 	return false, nil
 }
 
+var didUpdate bool
+
+func ApproximateLockTableSize(acq *roachpb.LockAcquisition) int64 {
+	keySize := int64(len(acq.Key)) + engineKeyVersionLockTableLen
+	metaSize := int64((&enginepb.MVCCMetadata{
+		Txn:                 &acq.Txn,
+		Timestamp:           acq.Txn.WriteTimestamp.ToLegacyTimestamp(),
+		TxnDidNotUpdateMeta: &didUpdate,
+	}).Size())
+	return keySize + metaSize
+}
+
 // mvccReleaseLockInternal releases a lock at the specified key and strength and
 // by the specified transaction. The function accepts the instructions for how
 // to release the lock (encoded in the LockUpdate), and the current value of the

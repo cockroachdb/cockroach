@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -140,6 +142,24 @@ var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
 	"whether the replica should attempt to keep unreplicated locks during range merges",
 	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
 )
+
+var MaxLockFlushSize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
+	"maximum size of locks that will be flushed during merge and transfer operations (if 0, defaults to half of the MaxCommandSizeDefault)",
+	0,
+)
+
+// MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
+// flush during merge and transfer operations.
+func GetMaxLockFlushSize(sv *settings.Values) int64 {
+	s := MaxLockFlushSize.Get(sv)
+	if s > 0 {
+		return s
+	} else {
+		return kvserverbase.MaxCommandSize.Get(sv) / 2
+	}
+}
 
 // managerImpl implements the Manager interface.
 type managerImpl struct {
@@ -607,33 +627,23 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
 
 // OnRangeLeaseTransferEval implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseTransferEval() []*roachpb.LockAcquisition {
+func (m *managerImpl) OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64) {
 	if !UnreplicatedLockReliabilityLeaseTransfer.Get(&m.st.SV) {
-		return nil
+		return nil, 0
 	}
 
-	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
-	acquistions := make([]*roachpb.LockAcquisition, 0)
-	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
-		acquistions = append(acquistions, acq)
-	})
-	return acquistions
+	return m.exportUnreplicatedLocks()
 }
 
 // OnRangeSubumeEval implements the RangeStateListener interface. It is called
 // during evalutation of Subsume. The returned LockAcquisition structs represent
 // held locks that we may want to flush to disk as replicated.
-func (m *managerImpl) OnRangeSubsumeEval() []*roachpb.LockAcquisition {
+func (m *managerImpl) OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64) {
 	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
-		return nil
+		return nil, 0
 	}
 
-	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
-	acquistions := make([]*roachpb.LockAcquisition, 0)
-	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
-		acquistions = append(acquistions, acq)
-	})
-	return acquistions
+	return m.exportUnreplicatedLocks()
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
@@ -704,6 +714,17 @@ func (m *managerImpl) LatchMetrics() LatchMetrics {
 // LockTableMetrics implements the MetricExporter interface.
 func (m *managerImpl) LockTableMetrics() LockTableMetrics {
 	return m.lt.Metrics()
+}
+
+func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int64) {
+	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
+	approximateBatchSize := int64(0)
+	acquistions := make([]*roachpb.LockAcquisition, 0)
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) {
+		approximateBatchSize += storage.ApproximateLockTableSize(acq)
+		acquistions = append(acquistions, acq)
+	})
+	return acquistions, approximateBatchSize
 }
 
 // TestingLockTableString implements the MetricExporter interface.
