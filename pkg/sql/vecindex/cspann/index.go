@@ -67,6 +67,10 @@ type IndexOptions struct {
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
 	MaxWorkers int
+	// UseNewFixups specifies that the background fixup processor should use new
+	// split and merge fixup implementations that avoid the use of transactions.
+	// TODO(andyk): Remove this once we've fully converted to the new fixups.
+	UseNewFixups bool
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -476,11 +480,26 @@ func (vi *Index) ProcessFixups() {
 	vi.fixups.Process()
 }
 
-// ForceSplitOrMerge enqueues a split or merge fixup. It is used for testing.
-func (vi *Index) ForceSplitOrMerge(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
+// ForceSplit enqueues a split fixup. It is used for testing.
+func (vi *Index) ForceSplit(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
 ) {
-	vi.fixups.AddSplitOrMergeCheck(ctx, treeKey, parentPartitionKey, partitionKey)
+	vi.fixups.AddSplit(ctx, treeKey, parentPartitionKey, partitionKey, singleStep)
+}
+
+// ForceMerge enqueues a merge fixup. It is used for testing.
+func (vi *Index) ForceMerge(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
+) {
+	vi.fixups.AddMerge(ctx, treeKey, parentPartitionKey, partitionKey, singleStep)
 }
 
 // setupInsertContext sets up the given context for an insert operation. Before
@@ -787,13 +806,19 @@ func (vi *Index) searchChildPartitions(
 			searchSet.RemoveResults(parentResults[i].ChildKey.PartitionKey)
 		}
 
+		// Enqueue background fixup if a split or merge operation needs to be
+		// started or continued after stalling.
 		partitionKey := parentResults[i].ChildKey.PartitionKey
-		if count < vi.options.MinPartitionSize && partitionKey != RootKey {
-			vi.fixups.AddSplitOrMergeCheck(
-				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
-		} else if count > vi.options.MaxPartitionSize {
-			vi.fixups.AddSplitOrMergeCheck(
-				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
+		state := idxCtx.tempToSearch[i].StateDetails
+		needSplit := count > vi.options.MaxPartitionSize || state.MaybeSplitStalled()
+		needMerge := count < vi.options.MinPartitionSize && partitionKey != RootKey
+		needMerge = needMerge || state.MaybeMergeStalled()
+		if needSplit {
+			vi.fixups.AddSplit(ctx, idxCtx.treeKey,
+				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+		} else if needMerge {
+			vi.fixups.AddMerge(ctx, idxCtx.treeKey,
+				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
 		}
 	}
 

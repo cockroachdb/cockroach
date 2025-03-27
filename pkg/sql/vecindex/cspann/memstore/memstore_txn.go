@@ -75,7 +75,7 @@ func (tx *memTxn) GetPartition(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so return empty partition.
-			metadata := tx.store.makeEmptyRootPartitionMetadata()
+			metadata := tx.store.makeEmptyRootMetadata()
 			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata), nil
 		}
 		return nil, err
@@ -191,7 +191,7 @@ func (tx *memTxn) GetPartitionMetadata(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so create empty metadata.
-			return tx.store.makeEmptyRootPartitionMetadata(), nil
+			return tx.store.makeEmptyRootMetadata(), nil
 		}
 		return cspann.PartitionMetadata{}, err
 	}
@@ -295,13 +295,14 @@ func (tx *memTxn) SearchPartitions(
 ) (level cspann.Level, err error) {
 	for i := range toSearch {
 		var searchLevel cspann.Level
-		var partitionCount int
 
 		memPart, ok := tx.store.getPartition(treeKey, toSearch[i].Key)
 		if !ok {
 			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
 				searchLevel = cspann.LeafLevel
+				toSearch[i].StateDetails = cspann.MakeReadyDetails()
+				toSearch[i].Count = 0
 			} else {
 				return cspann.InvalidLevel, cspann.ErrPartitionNotFound
 			}
@@ -314,7 +315,9 @@ func (tx *memTxn) SearchPartitions(
 				memPart.lock.AcquireShared(tx.id)
 				defer memPart.lock.ReleaseShared()
 
-				searchLevel, partitionCount = memPart.lock.partition.Search(
+				partition := memPart.lock.partition
+				toSearch[i].StateDetails = partition.Metadata().StateDetails
+				searchLevel, toSearch[i].Count = partition.Search(
 					&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 			}()
 		}
@@ -327,7 +330,6 @@ func (tx *memTxn) SearchPartitions(
 				"caller already searched a partition at level %d, cannot search at level %d",
 				level, searchLevel))
 		}
-		toSearch[i].Count = partitionCount
 	}
 
 	return level, nil
@@ -387,12 +389,11 @@ func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartiti
 		return memPart, err
 	}
 
-	metadata := tx.store.makeEmptyRootPartitionMetadata()
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
-
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
 
+	metadata := tx.store.makeEmptyRootMetadataLocked()
+	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
 	memPart = tx.store.insertPartitionLocked(treeKey, cspann.RootKey, root)
 	memPart.lock.Acquire(tx.id)
 

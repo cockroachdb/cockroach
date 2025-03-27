@@ -406,7 +406,18 @@ const (
 	expectedAccountSize = 24
 )
 
-var _ [0]struct{} = [expectedMonitorSize - unsafe.Sizeof(BytesMonitor{})]struct{}{}
+// Unlike size of BoundAccount, the size of BytesMonitor differs in race builds
+// (because it embeds syncutil.Mutex which has an extra field under race), so we
+// need to have init-time check as opposed to a compile-time one.
+func init() {
+	if !util.RaceEnabled {
+		monitorSize := unsafe.Sizeof(BytesMonitor{})
+		if monitorSize != expectedMonitorSize {
+			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
+		}
+	}
+}
+
 var _ [0]struct{} = [expectedAccountSize - unsafe.Sizeof(BoundAccount{})]struct{}{}
 
 // enableMonitorTreeTrackingEnvVar indicates whether tracking of all children of

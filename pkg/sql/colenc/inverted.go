@@ -94,7 +94,11 @@ func (b *BatchEncoder) encodeInvertedSecondaryIndexNoFamiliesOneRow(
 	}
 	var kvValue roachpb.Value
 	kvValue.SetBytes(value)
-	b.p.CPut(&key, &kvValue, nil /* expValue */)
+	if ind.IsUnique() {
+		b.p.CPut(&key, &kvValue, nil /* expValue */)
+	} else {
+		b.p.Put(&key, &kvValue)
+	}
 	return b.checkMemory()
 }
 

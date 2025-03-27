@@ -289,6 +289,17 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 	return fn(txn)
 }
 
+// MakePartitionKey implements the Store interface.
+func (s *Store) MakePartitionKey() cspann.PartitionKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	partitionKey := s.mu.nextKey
+	s.mu.nextKey++
+
+	return partitionKey
+}
+
 // EstimatePartitionCount implements the Store interface.
 func (s *Store) EstimatePartitionCount(
 	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
@@ -529,6 +540,22 @@ func (s *Store) TryRemoveFromPartition(
 	memPart.count.Store(int64(partition.Count()))
 
 	return removed, err
+}
+
+// EnsureUniquePartitionKey checks that the given partition key is not being
+// used yet and also ensures it won't be given out in the future. This is used
+// for testing.
+func (s *Store) EnsureUniquePartitionKey(treeKey cspann.TreeKey, partitionKey cspann.PartitionKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.getPartitionLocked(treeKey, partitionKey); ok {
+		panic(errors.AssertionFailedf("partition key %d is already being used", partitionKey))
+	}
+
+	if partitionKey <= s.mu.nextKey {
+		s.mu.nextKey = partitionKey + 1
+	}
 }
 
 // InsertVector inserts a new full-size vector into the in-memory store,
@@ -782,12 +809,19 @@ func (s *Store) lockPartition(
 	return memPart
 }
 
-// makeEmptyRootPartitionMetadata returns the partition metadata for an empty
-// root partition.
-func (s *Store) makeEmptyRootPartitionMetadata() cspann.PartitionMetadata {
+// makeEmptyRootMetadata returns the partition metadata for an empty root
+// partition.
+func (s *Store) makeEmptyRootMetadata() cspann.PartitionMetadata {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.makeEmptyRootMetadataLocked()
+}
+
+// makeEmptyRootMetadataLocked returns the partition metadata for an empty root
+// partition.
+// NOTE: Callers must have locked the s.mu mutex.
+func (s *Store) makeEmptyRootMetadataLocked() cspann.PartitionMetadata {
 	if s.mu.emptyVec == nil {
 		s.mu.emptyVec = make(vector.T, s.dims)
 	}

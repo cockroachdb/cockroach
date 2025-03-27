@@ -13,6 +13,7 @@ go_library(
     srcs = [
         "cspannpb.go",
         "fixup_processor.go",
+        "fixup_split.go",
         "fixup_worker.go",
         "index.go",
         "index_stats.go",

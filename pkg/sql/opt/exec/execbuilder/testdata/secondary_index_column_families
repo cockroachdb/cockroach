@@ -4,7 +4,8 @@ statement ok
 CREATE TABLE t1 (
   x INT PRIMARY KEY, y INT, z INT, a INT, b INT,
   FAMILY (x), FAMILY (y), FAMILY (z), FAMILY (a, b),
-  INDEX nonuniqueidx (y), UNIQUE INDEX uniqueidx (y),
+  INDEX nonuniqueidx (y),
+  UNIQUE INDEX uniqueidx (y),
   INDEX nonuniqueidxstoring (y) STORING (z, a, b),
   UNIQUE INDEX uniqueidxstoring (y) STORING (z, a, b)
 )
@@ -15,18 +16,18 @@ CREATE TABLE t1 (
 # be a single kv pair of the old format (BYTES value with PK cols in
 # the value, if needed). Inserts into nonuniqueidxstoring and
 # uniqueidxstoring both should generate 3 K/V pairs.
-query T kvtrace(CPut)
+query T kvtrace(prefix=/Table/106)
 INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
 ----
 CPut /Table/106/1/1/0 -> /TUPLE/
 CPut /Table/106/1/1/1/1 -> /INT/1
 CPut /Table/106/1/1/2/1 -> /INT/1
 CPut /Table/106/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
-CPut /Table/106/2/1/1/0 -> /BYTES/
+Put /Table/106/2/1/1/0 -> /BYTES/
 CPut /Table/106/3/1/0 -> /BYTES/0x89
-CPut /Table/106/4/1/1/0 -> /BYTES/
-CPut /Table/106/4/1/1/2/1 -> /TUPLE/3:3:Int/1
-CPut /Table/106/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+Put /Table/106/4/1/1/0 -> /BYTES/
+Put /Table/106/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+Put /Table/106/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
 CPut /Table/106/5/1/0 -> /BYTES/0x89
 CPut /Table/106/5/1/2/1 -> /TUPLE/3:3:Int/1
 CPut /Table/106/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
@@ -35,9 +36,10 @@ CPut /Table/106/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
 # Deletes on nonuniqueidx or uniqueidx should result in a deletion
 # of a single key. Deletes on nonuniqueidxstoring and uniqueidxstoring
 # should result in 3 K/V pair deletions.
-query T kvtrace(Del,prefix=/Table/106/2/,prefix=/Table/106/3/,prefix=/Table/106/4/,prefix=/Table/106/5/)
+query T kvtrace(prefix=/Table/106)
 DELETE FROM t1 WHERE x = 1
 ----
+Scan /Table/106/1/1/{0-1/2} lock Exclusive (Block, Unreplicated)
 Del /Table/106/2/1/1/0
 Del (locking) /Table/106/3/1/0
 Del /Table/106/4/1/1/0
@@ -46,6 +48,10 @@ Del /Table/106/4/1/1/3/1
 Del (locking) /Table/106/5/1/0
 Del (locking) /Table/106/5/1/2/1
 Del (locking) /Table/106/5/1/3/1
+Del (locking) /Table/106/1/1/0
+Del (locking) /Table/106/1/1/1/1
+Del (locking) /Table/106/1/1/2/1
+Del (locking) /Table/106/1/1/3/1
 
 # Put some data back into the table.
 statement ok
@@ -156,10 +162,10 @@ message LIKE 'Del %/Table/106/3/%' OR
 message LIKE '%Put /Table/106/3/%'
 ORDER BY message
 ----
-CPut /Table/106/2/2/2/0 -> /BYTES/
 CPut /Table/106/3/2/0 -> /BYTES/0x8a
 Del (locking) /Table/106/3/1/0
 Del /Table/106/2/1/1/0
+Put /Table/106/2/2/2/0 -> /BYTES/
 
 # Updates on nonuniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -168,12 +174,12 @@ message LIKE 'Del %/Table/106/4/%' OR
 message LIKE '%Put /Table/106/4/%'
 ORDER BY message
 ----
-CPut /Table/106/4/2/2/0 -> /BYTES/
-CPut /Table/106/4/2/2/2/1 -> /TUPLE/3:3:Int/2
-CPut /Table/106/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 Del /Table/106/4/1/1/0
 Del /Table/106/4/1/1/2/1
 Del /Table/106/4/1/1/3/1
+Put /Table/106/4/2/2/0 -> /BYTES/
+Put /Table/106/4/2/2/2/1 -> /TUPLE/3:3:Int/2
+Put /Table/106/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 
 # Updates on uniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -193,45 +199,67 @@ Del (locking) /Table/106/5/1/3/1
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (
-  x INT, y INT, z INT,
-  FAMILY (x), FAMILY (y), FAMILY (z),
+  k INT PRIMARY KEY, x INT, y INT, z INT,
+  FAMILY (k, x), FAMILY (y), FAMILY (z),
   UNIQUE INDEX i (x) STORING (y, z),
   INDEX i2 (x) STORING (y, z)
 );
-INSERT INTO t VALUES (1, 2, 3)
+INSERT INTO t VALUES (0, 1, 2, 3)
 
 query I
 SELECT y FROM t@i WHERE x = 1
 ----
 2
 
-# In this case, we scan only families 0 and 1.
-query T kvtrace(Scan,prefix=/Table/107/2/)
+# In this case, we scan only families 0 and 1 (one Scan).
+query T kvtrace(prefix=/Table/107)
 SELECT y FROM t@i WHERE x = 1
 ----
 Scan /Table/107/2/1/{0-1/2}
+
+query I
+SELECT z FROM t@i WHERE x = 1
+----
+3
+
+# In this case, we scan only families 0 and 2 (two Gets).
+query T kvtrace(prefix=/Table/107)
+SELECT z FROM t@i WHERE x = 1
+----
+Scan /Table/107/2/1/0, /Table/107/2/1/2/1
 
 # Make sure that family splitting doesn't affect
 # lookups when there are null values along the
 # secondary index.
 statement ok
-INSERT INTO t VALUES (NULL, 3, 4)
+INSERT INTO t VALUES (10, NULL, 3, 4)
 
 query I
 SELECT y FROM t@i WHERE x IS NULL
 ----
 3
 
-query T kvtrace(Scan,prefix=/Table/107/2/)
+query T kvtrace(prefix=/Table/107)
 SELECT y FROM t@i WHERE x IS NULL
 ----
 Scan /Table/107/2/{NULL-!NULL}
 
 # Ensure that updates only touch the changed column families.
-query T kvtrace(Put,prefix=/Table/107/2/)
+query T kvtrace(prefix=/Table/107)
 UPDATE t SET y = 5 WHERE x = 1
 ----
-Put /Table/107/2/1/1/1 -> /TUPLE/2:2:Int/5
+Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/107/1/0/1/1 -> /INT/5
+Put (locking) /Table/107/2/1/1/1 -> /TUPLE/3:3:Int/5
+Put /Table/107/3/1/0/1/1 -> /TUPLE/3:3:Int/5
+
+query T kvtrace(prefix=/Table/107)
+UPDATE t SET z = 6 WHERE x = 1
+----
+Scan /Table/107/2/{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/107/1/0/2/1 -> /INT/6
+Put (locking) /Table/107/2/1/2/1 -> /TUPLE/4:4:Int/6
+Put /Table/107/3/1/0/2/1 -> /TUPLE/4:4:Int/6
 
 # Test composite datatypes.
 statement ok
@@ -256,7 +284,7 @@ SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 
 # We only need a point scan on family 0, because the composite values
 # are stored in family 0, and a scan on family 2 for v.
-query T kvtrace(Scan,prefix=/Table/108/2/)
+query T kvtrace(prefix=/Table/108)
 SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
 Scan /Table/108/2/2.01/3.001/0, /Table/108/2/2.01/3.001/2/1
@@ -292,7 +320,7 @@ SELECT y FROM t@i WHERE y = 2
 2
 
 # Prove that we can scan only column family 0 and find the row.
-query T kvtrace(Scan,prefix=/Table/109/2/)
+query T kvtrace(prefix=/Table/109)
 SELECT y FROM t@i WHERE y = 2
 ----
 Scan /Table/109/2/2/0
@@ -360,9 +388,11 @@ CREATE INDEX i ON t (y) STORING (z, w)
 #
 # We should see a delete on the temporary index for each k/v for i for
 # the row (1, 2, NULL, NULL).
-query T kvtrace(Del,prefix=/Table/111/3/)
+query T kvtrace(prefix=/Table/111)
 UPDATE t SET z = 3 WHERE y = 2
 ----
+Scan /Table/111/{1-2}
+Put (locking) /Table/111/1/1/2/1 -> /INT/3
 Del /Table/111/3/2/1/0
 Del /Table/111/3/2/1/2/1
 Del /Table/111/3/2/1/3/1
@@ -387,13 +417,18 @@ CREATE TABLE t (
 );
 
 # Ensure we only insert the correct keys.
-query T kvtrace(CPut,prefix=/Table/112/2/,prefix=/Table/112/3/)
+query T kvtrace(prefix=/Table/112)
 INSERT INTO t VALUES (1, 2, 3, NULL, 5, 6, NULL, 8)
 ----
-CPut /Table/112/2/2/1/0 -> /BYTES/
-CPut /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3
-CPut /Table/112/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
-CPut /Table/112/2/2/1/5/1 -> /TUPLE/8:8:Int/8
+CPut /Table/112/1/1/0 -> /TUPLE/
+CPut /Table/112/1/1/1/1 -> /INT/2
+CPut /Table/112/1/1/2/1 -> /TUPLE/3:3:Int/3
+CPut /Table/112/1/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
+CPut /Table/112/1/1/5/1 -> /INT/8
+Put /Table/112/2/2/1/0 -> /BYTES/
+Put /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3
+Put /Table/112/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
+Put /Table/112/2/2/1/5/1 -> /TUPLE/8:8:Int/8
 CPut /Table/112/3/2/0 -> /BYTES/0x89
 CPut /Table/112/3/2/2/1 -> /TUPLE/3:3:Int/3
 CPut /Table/112/3/2/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
@@ -404,14 +439,22 @@ CPut /Table/112/3/2/5/1 -> /TUPLE/8:8:Int/8
 # Ensure success when some family k/v's are deleted,
 # some family k/v's have different values, and some
 # family k/v's are added.
-query T kvtrace(Scan,Put,Del,CPut,prefix=/Table/112/2/)
+query T kvtrace(prefix=/Table/112)
 UPDATE t SET b = 4, c = NULL, d = NULL, e = 7, f = NULL WHERE y = 2
 ----
 Scan /Table/112/2/{2-3} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/112/1/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
+Del (locking) /Table/112/1/1/3/1
+Put (locking) /Table/112/1/1/4/1 -> /INT/7
+Del (locking) /Table/112/1/1/5/1
 Put /Table/112/2/2/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
 Del /Table/112/2/2/1/3/1
-CPut /Table/112/2/2/1/4/1 -> /TUPLE/7:7:Int/7
+Put /Table/112/2/2/1/4/1 -> /TUPLE/7:7:Int/7
 Del /Table/112/2/2/1/5/1
+Put (locking) /Table/112/3/2/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4
+Del (locking) /Table/112/3/2/3/1
+CPut /Table/112/3/2/4/1 -> /TUPLE/7:7:Int/7
+Del (locking) /Table/112/3/2/5/1
 
 query IIIIIIII
 SELECT * FROM t@i2
@@ -423,24 +466,41 @@ SELECT * FROM t@i2
 statement ok
 INSERT INTO t VALUES (3, 3, NULL, NULL, NULL, NULL, NULL, NULL)
 
-query T kvtrace(Put,Del,CPut,prefix=/Table/112/2/)
+query T kvtrace(prefix=/Table/112)
 UPDATE t SET a = 10, b = 11, c = 12, d = 13, e = 14, f = 15 WHERE y = 3
 ----
-CPut /Table/112/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
-CPut /Table/112/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
-CPut /Table/112/2/3/3/4/1 -> /TUPLE/7:7:Int/14
-CPut /Table/112/2/3/3/5/1 -> /TUPLE/8:8:Int/15
+Scan /Table/112/2/{3-4} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/112/1/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
+Put (locking) /Table/112/1/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
+Put (locking) /Table/112/1/3/4/1 -> /INT/14
+Put (locking) /Table/112/1/3/5/1 -> /INT/15
+Put /Table/112/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
+Put /Table/112/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
+Put /Table/112/2/3/3/4/1 -> /TUPLE/7:7:Int/14
+Put /Table/112/2/3/3/5/1 -> /TUPLE/8:8:Int/15
+CPut /Table/112/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11
+CPut /Table/112/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13
+CPut /Table/112/3/3/4/1 -> /TUPLE/7:7:Int/14
+CPut /Table/112/3/3/5/1 -> /TUPLE/8:8:Int/15
 
 # Test a case where the update causes all k/v's other than
 # the sentinel k/v to get deleted.
-query T kvtrace(Scan,Del,Put,CPut,prefix=/Table/112/2/)
+query T kvtrace(prefix=/Table/112)
 UPDATE t SET a = NULL, b = NULL, c = NULL, d = NULL, e = NULL, f = NULL WHERE y = 3
 ----
 Scan /Table/112/2/{3-4} lock Exclusive (Block, Unreplicated)
+Del (locking) /Table/112/1/3/2/1
+Del (locking) /Table/112/1/3/3/1
+Del (locking) /Table/112/1/3/4/1
+Del (locking) /Table/112/1/3/5/1
 Del /Table/112/2/3/3/2/1
 Del /Table/112/2/3/3/3/1
 Del /Table/112/2/3/3/4/1
 Del /Table/112/2/3/3/5/1
+Del (locking) /Table/112/3/3/2/1
+Del (locking) /Table/112/3/3/3/1
+Del (locking) /Table/112/3/3/4/1
+Del (locking) /Table/112/3/3/5/1
 
 
 # Test a case that each k/v in the index entry gets
@@ -448,18 +508,27 @@ Del /Table/112/2/3/3/5/1
 statement ok
 INSERT INTO t VALUES (20, 21, 22, NULL, NULL, 25, NULL, 27);
 
-query T kvtrace(Scan,Put,Del,CPut,prefix=/Table/112/2/)
+query T kvtrace(prefix=/Table/112)
 UPDATE t SET y = 22 WHERE y = 21
 ----
 Scan /Table/112/2/2{1-2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/112/1/20/1/1 -> /INT/22
 Del /Table/112/2/21/20/0
-CPut /Table/112/2/22/20/0 -> /BYTES/
+Put /Table/112/2/22/20/0 -> /BYTES/
 Del /Table/112/2/21/20/2/1
-CPut /Table/112/2/22/20/2/1 -> /TUPLE/3:3:Int/22
+Put /Table/112/2/22/20/2/1 -> /TUPLE/3:3:Int/22
 Del /Table/112/2/21/20/3/1
-CPut /Table/112/2/22/20/3/1 -> /TUPLE/6:6:Int/25
+Put /Table/112/2/22/20/3/1 -> /TUPLE/6:6:Int/25
 Del /Table/112/2/21/20/5/1
-CPut /Table/112/2/22/20/5/1 -> /TUPLE/8:8:Int/27
+Put /Table/112/2/22/20/5/1 -> /TUPLE/8:8:Int/27
+Del (locking) /Table/112/3/21/0
+CPut /Table/112/3/22/0 -> /BYTES/0x9c
+Del (locking) /Table/112/3/21/2/1
+CPut /Table/112/3/22/2/1 -> /TUPLE/3:3:Int/22
+Del (locking) /Table/112/3/21/3/1
+CPut /Table/112/3/22/3/1 -> /TUPLE/6:6:Int/25
+Del (locking) /Table/112/3/21/5/1
+CPut /Table/112/3/22/5/1 -> /TUPLE/8:8:Int/27
 
 # Ensure that the final results on both indexes make sense.
 query IIIIIIII rowsort
@@ -491,15 +560,18 @@ statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
 # When the key is changed, we always delete and cput.
-query T kvtrace(Scan,Put,CPut,Del,prefix=/Table/113/2/)
+query T kvtrace(prefix=/Table/113)
 UPDATE t SET y = 5 where y = 2
 ----
 Scan /Table/113/2/{2-3} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/3/1:4:Int/4
 Del /Table/113/2/2/1/0
-CPut /Table/113/2/5/1/0 -> /BYTES/0x33061308
+Put /Table/113/2/5/1/0 -> /BYTES/0x33061308
 
 # Changing the value just results in a cput.
-query T kvtrace(Put,Del,CPut,prefix=/Table/113/2/)
+query T kvtrace(prefix=/Table/113)
 UPDATE t SET z = 5 where y = 5
 ----
+Scan /Table/113/2/{5-6} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/113/1/1/0 -> /TUPLE/2:2:Int/5/1:3:Int/5/1:4:Int/4
 Put /Table/113/2/5/1/0 -> /BYTES/0x330a1308

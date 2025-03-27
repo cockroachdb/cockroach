@@ -23,13 +23,23 @@ import (
 type fixupType int
 
 const (
-	// splitOrMergeFixup is a fixup that includes the key of a partition that
-	// may need to be split or merged, as well as the key of its parent partition
-	// (if it exists). Whether a partition is split or merged depends on its size.
-	splitOrMergeFixup fixupType = iota + 1
-	// vectorDeleteFixup is a fixup that includes the primary key of a vector to
-	// delete from the index, as well as the key of the partition that contains
-	// it.
+	// splitOrMergeCheckFixup checks whether a partition needs to be split (if
+	// over-sized) or merged (if under-sized). It includes the key of the
+	// partition to check, as well as the key of its parent partition (if one
+	// exists).
+	splitOrMergeCheckFixup fixupType = iota + 1
+	// splitFixup starts or continues the split of an over-sized partition. It
+	// includes the key of the partition to split, as well as the key of its
+	// parent partition (if one exists).
+	splitFixup
+	// mergeFixup starts or continues the merge of an under-sized partition. It
+	// includes the key of the partition to split, as well as the key of its
+	// parent partition (if one exists).
+	mergeFixup
+	// vectorDeleteFixup deletes a "dangling vector" that exists in the index,
+	// but with no corresponding row in the primary index. It includes the primary
+	// key bytes of the vector to delete from the index, as well as the key of the
+	// partition that contains it.
 	vectorDeleteFixup
 )
 
@@ -60,6 +70,10 @@ type fixup struct {
 	VectorKey KeyBytes
 	// CachedKey caches the key for the fixup, suitable for use in a map.
 	CachedKey fixupKey
+	// SingleStep, if true, indicates that split and merge fixups will be aborted
+	// after each step in their execution. This is used for testing, in order to
+	// deterministically interleave multiple fixups together in the same tree.
+	SingleStep bool
 }
 
 // fixupKey is used to detect duplicate fixups on the same partition/vector, so
@@ -273,7 +287,7 @@ func (fp *FixupProcessor) AddSplitOrMergeCheck(
 ) {
 	fp.addFixup(ctx, fixup{
 		TreeKey:            treeKey,
-		Type:               splitOrMergeFixup,
+		Type:               splitOrMergeCheckFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
 	})
@@ -287,6 +301,40 @@ func (fp *FixupProcessor) AddDeleteVector(
 		Type:         vectorDeleteFixup,
 		PartitionKey: partitionKey,
 		VectorKey:    vectorKey,
+	})
+}
+
+// AddSplit enqueues a fixup to start or continue the split of a partition.
+func (fp *FixupProcessor) AddSplit(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
+) {
+	fp.addFixup(ctx, fixup{
+		TreeKey:            treeKey,
+		Type:               splitFixup,
+		ParentPartitionKey: parentPartitionKey,
+		PartitionKey:       partitionKey,
+		SingleStep:         singleStep,
+	})
+}
+
+// AddMerge enqueues a fixup to start or continue the merge of a partition.
+func (fp *FixupProcessor) AddMerge(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
+) {
+	fp.addFixup(ctx, fixup{
+		TreeKey:            treeKey,
+		Type:               mergeFixup,
+		ParentPartitionKey: parentPartitionKey,
+		PartitionKey:       partitionKey,
+		SingleStep:         singleStep,
 	})
 }
 
