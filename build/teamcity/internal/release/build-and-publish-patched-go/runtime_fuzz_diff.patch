@@ -1,0 +1,28 @@
+diff --git a/src/runtime/proc.go b/src/runtime/proc.go
+index 15fc0f8dc6..860e08320f 100644
+--- a/src/runtime/proc.go
++++ b/src/runtime/proc.go
+@@ -3214,6 +3214,14 @@ top:
+
+        gp, inheritTime, tryWakeP := findRunnable() // blocks until work is available
+
++       // N.B. can we remove pp.gcMarkWorkerMode != gcMarkWorkerIdleMode?
++       if randomizeScheduler && !_g_.m.spinning && !tryWakeP && pp.gcMarkWorkerMode != gcMarkWorkerIdleMode && pp.gcMarkWorkerMode != gcMarkWorkerNotWorker && gp.lockedm == 0 && fastrandn(2) == 0 {
++               lock(&sched.lock)
++               globrunqput(gp)
++               unlock(&sched.lock)
++               goto top
++       }
++
+        // This thread is going to run a goroutine and is not spinning anymore,
+        // so if it was marked as spinning we need to reset it now and potentially
+        // start a new spinning M.
+@@ -5776,7 +5784,7 @@ func runqempty(_p_ *p) bool {
+ // With the randomness here, as long as the tests pass
+ // consistently with -race, they shouldn't have latent scheduling
+ // assumptions.
+-const randomizeScheduler = raceenabled
++const randomizeScheduler = true
+
+ // runqput tries to put g on the local runnable queue.
+ // If next is false, runqput adds g to the tail of the runnable queue.
