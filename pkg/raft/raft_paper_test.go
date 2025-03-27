@@ -824,7 +824,7 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	// ignore further messages to refresh followers' commit index
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
+	r.raftLog.appliedTo(r.raftLog.committed)
 	r.raftLog.stableTo(r.raftLog.unstable.mark())
 }
 

@@ -735,23 +735,14 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 		}
 	}
 
-	// Third entry should not be returned to be applied until first entry's
-	// application is acknowledged.
-	for rn.HasReady() { // drain the Ready-s
-		rd := rn.Ready()
-		for _, m := range rd.Messages {
-			require.NotEqual(t, raftpb.MsgStorageApply, m.Type, "unexpected message: %v", m)
-		}
-	}
-
 	// Acknowledged first entry application.
 	require.NoError(t, rn.Step(applyResps[0]))
 	applyResps = applyResps[1:]
 
 	// Third entry now returned for application.
 	rd = rn.Ready()
-	require.Len(t, rd.Messages, 1)
-	m = rd.Messages[0]
+	require.Len(t, rd.Messages, 2)
+	m = rd.Messages[1]
 	require.Equal(t, raftpb.MsgStorageApply, m.Type)
 	require.Len(t, m.Entries, 1)
 	applyResps = append(applyResps, m.Responses[0])
