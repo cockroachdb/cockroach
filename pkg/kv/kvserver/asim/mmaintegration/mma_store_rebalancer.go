@@ -168,14 +168,14 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		if msr.pendingChanges[msr.pendingChangeIdx].IsTransferLease() {
 			curOp = op.NewTransferLeaseOp(
 				tick,
-				roachpb.RangeID(curChange.RangeID),
+				curChange.RangeID,
 				roachpb.StoreID(msr.localStoreID),
 				curChange.LeaseTransferTarget(),
 			)
 		} else if curChange.IsChangeReplicas() {
 			curOp = op.NewChangeReplicasOp(
 				tick,
-				roachpb.RangeID(curChange.RangeID),
+				curChange.RangeID,
 				curChange.ReplicationChanges(),
 			)
 		} else {

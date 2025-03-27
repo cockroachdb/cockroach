@@ -127,7 +127,7 @@ type simNodeCapacityProvider struct {
 }
 
 func (s simNodeCapacityProvider) GetNodeCapacity(_ bool) roachpb.NodeCapacity {
-	return s.state.NodeCapacity(state.NodeID(s.localNodeID))
+	return s.state.NodeCapacity(s.localNodeID)
 }
 
 func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID, nodeID state.NodeID) {

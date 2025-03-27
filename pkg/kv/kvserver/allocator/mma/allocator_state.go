@@ -194,8 +194,8 @@ func (a *allocatorState) rebalanceStores(
 			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
-			topKRanges := ss.adjusted.topKRanges[localStoreID]
-			n := topKRanges.len()
+			topKRanges = ss.adjusted.topKRanges[localStoreID]
+			n = topKRanges.len()
 			for i := 0; i < n; i++ {
 				rangeID := topKRanges.index(i)
 				rstate := a.cs.ranges[rangeID]
@@ -231,13 +231,13 @@ func (a *allocatorState) rebalanceStores(
 				}
 				var candsSet candidateSet
 				for _, cand := range cands {
-					sls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
+					candSls := a.cs.computeLoadSummary(cand.storeID, &means.storeLoad, &means.nodeLoad)
 					if sls.fd != fdOK {
 						continue
 					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
 						StoreID:              cand.storeID,
-						storeLoadSummary:     sls,
+						storeLoadSummary:     candSls,
 						diversityScore:       0,
 						leasePreferenceIndex: cand.leasePreferenceIndex,
 					})
