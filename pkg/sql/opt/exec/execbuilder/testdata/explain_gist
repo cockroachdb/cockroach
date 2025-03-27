@@ -202,10 +202,13 @@ SELECT crdb_internal.decode_external_plan_gist('Ag8f')
 
 # Regression test for #130758. Gracefully handle unknown indexes.
 query T nosort
-SELECT crdb_internal.decode_external_plan_gist('AixE')
+SELECT crdb_internal.decode_external_plan_gist('AgICAgYCLNABAgYG')
 ----
 • split
-  index: ?@?
+│ index: ?@?
+│
+└── • values
+      size: 1 column, 1 row
 
 # Regression test for #133015. Gracefully handle decoding negative integers.
 query T
@@ -218,3 +221,61 @@ query T nosort
 SELECT crdb_internal.decode_external_plan_gist('Aj0=':::STRING)
 ----
 • call
+
+# Regression test for hitting an internal error with "external" variant because
+# we didn't consume the table ID.
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAzgIAAAADCQECAgAAEQUQCw4HEBEGDg==':::STRING);
+----
+• sort
+│ order
+│
+└── • render
+    │
+    └── • group (hash)
+        │ group by: unknownCol-1, unknownCol-1, unknownCol-1, unknownCol-1, unknownCol-1, unknownCol-1, unknownCol-1
+        │
+        └── • sort
+            │ order
+            │
+            └── • hash join (left outer)
+                │ equality: (unknownCol-1) = (unknownCol-1)
+                │
+                ├── • filter
+                │   │
+                │   └── • scan
+                │         table: ?@?
+                │         spans: FULL SCAN
+                │
+                └── • filter
+                    │
+                    └── • scan
+                          table: ?@?
+                          spans: FULL SCAN
+
+query T nosort
+SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAzgIAAAADCQECAgAAEQUQCw4HEBEGDg==':::STRING);
+----
+• sort
+│ order
+│
+└── • render
+    │
+    └── • group (hash)
+        │ group by: table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog
+        │
+        └── • sort
+            │ order
+            │
+            └── • hash join (left outer)
+                │ equality: (table_catalog) = (table_catalog)
+                │
+                ├── • filter
+                │   │
+                │   └── • virtual table
+                │         table: @primary
+                │
+                └── • filter
+                    │
+                    └── • virtual table
+                          table: @primary
