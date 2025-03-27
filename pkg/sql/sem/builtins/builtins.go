@@ -12179,7 +12179,9 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 	}
 }
 
-func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+func makeJsonpathExists(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
 	target := tree.MustBeDJSON(args[0])
 	path := tree.MustBeDJsonpath(args[1])
 	vars := tree.EmptyDJSON
@@ -12190,7 +12192,7 @@ func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (t
 	if len(args) > 3 {
 		silent = tree.MustBeDBool(args[3])
 	}
-	exists, err := jsonpath.JsonpathExists(target, path, vars, silent)
+	exists, err := jsonpath.JsonpathExists(evalCtx, target, path, vars, silent)
 	if err != nil {
 		return nil, err
 	}
