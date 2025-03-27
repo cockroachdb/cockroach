@@ -914,7 +914,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			query := b.resolveOpenQuery(t)
 			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
 			fmtCtx.FormatNode(query)
-			openCon.def.CursorDeclaration = &tree.RoutineOpenCursor{
+			openCon.def.FirstStmtOutput.CursorDeclaration = &tree.RoutineOpenCursor{
 				NameArgIdx: source.(*scopeColumn).getParamOrd(),
 				Scroll:     t.Scroll,
 				CursorSQL:  fmtCtx.CloseAndGetString(),

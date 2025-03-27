@@ -317,14 +317,10 @@ func (f *Factory) CopyMetadataFrom(from *memo.Memo) {
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy the next scalar rank to the target memo so that new scalar
-	// expressions built with the new memo will not share scalar ranks with
-	// existing expressions.
-	f.mem.CopyNextRankFrom(from)
-
-	// Copy the next With ID to the target memo so that new CTE expressions built
-	// with the new memo will not share With IDs with existing expressions.
-	f.mem.CopyNextWithIDFrom(from)
+	// Copy the next scalar rank, With ID, and routine buffer ID to the target
+	// memo so that new expressions built with the new memo will not share scalar
+	// ranks, With IDs, or routine buffer IDs with existing expressions.
+	f.mem.CopyRankAndIDsFrom(from)
 
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
