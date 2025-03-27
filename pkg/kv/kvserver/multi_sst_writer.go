@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangedel"
 	"github.com/cockroachdb/pebble/rangekey"
 )
 
@@ -59,7 +60,7 @@ type multiSSTWriter struct {
 	// fragmenter is emits these range keys into the SST at finalization
 	// time.
 	rangeKeyFrag rangekey.Fragmenter
-	rangeDelFrag Fragmenter // keyspan.Fragmenter
+	rangeDelFrag rangedel.Fragmenter
 }
 
 func newMultiSSTWriter(
@@ -155,7 +156,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 			msstw.currSST.Close()
 			return errors.Wrap(err, "failed to clear range on sst file writer")
 		}
-		msstw.rangeDelFrag.Add(FragSpan{Start: startKey.Encode(), End: endKey.Encode()})
+		msstw.rangeDelFrag.Add(rangedel.Span{Start: startKey.Encode(), End: endKey.Encode()})
 	}
 	return nil
 }
