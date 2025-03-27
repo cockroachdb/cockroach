@@ -33,8 +33,6 @@ var isLocalMsg = [...]bool{
 	pb.MsgSnapStatus:        true,
 	pb.MsgStorageAppend:     true,
 	pb.MsgStorageAppendResp: true,
-	pb.MsgStorageApply:      true,
-	pb.MsgStorageApplyResp:  true,
 }
 
 var isResponseMsg = [...]bool{
@@ -44,7 +42,6 @@ var isResponseMsg = [...]bool{
 	pb.MsgUnreachable:       true,
 	pb.MsgPreVoteResp:       true,
 	pb.MsgStorageAppendResp: true,
-	pb.MsgStorageApplyResp:  true,
 	pb.MsgFortifyLeaderResp: true,
 }
 
@@ -97,7 +94,7 @@ func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
 }
 
 func IsLocalMsgTarget(id pb.PeerID) bool {
-	return id == LocalAppendThread || id == LocalApplyThread
+	return id == LocalAppendThread
 }
 
 // senderHasMsgTerm returns true if the message type is one that should have
@@ -250,8 +247,6 @@ func describeTarget(id pb.PeerID) string {
 		return "None"
 	case LocalAppendThread:
 		return "AppendThread"
-	case LocalApplyThread:
-		return "ApplyThread"
 	default:
 		return fmt.Sprintf("%x", id)
 	}

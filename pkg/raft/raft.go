@@ -48,10 +48,6 @@ const (
 	// log entries and snapshots to stable storage. The identifier is used as a
 	// target for MsgStorageAppend messages.
 	LocalAppendThread pb.PeerID = math.MaxUint64
-	// LocalApplyThread is a reference to a local thread that applies committed
-	// log entries to the local state machine. The identifier is used as a
-	// target for MsgStorageApply messages.
-	LocalApplyThread pb.PeerID = math.MaxUint64 - 1
 )
 
 // Possible values for CampaignType
