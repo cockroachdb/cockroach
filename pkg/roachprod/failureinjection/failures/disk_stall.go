@@ -78,7 +78,7 @@ func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args 
 	nodes := args.(DiskStallArgs).Nodes
 
 	// Setting cgroup limits is idempotent so attempt to unlimit reads/writes in case
-	// something went wrong in Restore.
+	// something went wrong in Recover.
 	err := s.setThroughput(ctx, l, stallType, throughput{limited: false}, nodes, cockroachIOController)
 	if err != nil {
 		l.PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
@@ -153,7 +153,7 @@ func (s *CGroupDiskStaller) Inject(ctx context.Context, l *logger.Logger, args F
 	return nil
 }
 
-func (s *CGroupDiskStaller) Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error {
+func (s *CGroupDiskStaller) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	diskStallArgs := args.(DiskStallArgs)
 	stallTypes, err := getStallTypes(diskStallArgs)
 	if err != nil {
@@ -194,7 +194,7 @@ func (s *CGroupDiskStaller) WaitForFailureToPropagate(
 	return nil
 }
 
-func (s *CGroupDiskStaller) WaitForFailureToRestore(
+func (s *CGroupDiskStaller) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	nodes := args.(DiskStallArgs).Nodes
@@ -375,7 +375,7 @@ func (s *DmsetupDiskStaller) Inject(ctx context.Context, l *logger.Logger, args 
 	return s.Run(ctx, l, nodes, `sudo dmsetup suspend --noflush --nolockfs data1`)
 }
 
-func (s *DmsetupDiskStaller) Restore(
+func (s *DmsetupDiskStaller) Recover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	diskStallArgs := args.(DiskStallArgs)
@@ -458,7 +458,7 @@ func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
 	})
 }
 
-func (s *DmsetupDiskStaller) WaitForFailureToRestore(
+func (s *DmsetupDiskStaller) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
 	nodes := args.(DiskStallArgs).Nodes

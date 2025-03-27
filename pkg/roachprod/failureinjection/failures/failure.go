@@ -42,9 +42,9 @@ type FailureMode interface {
 	// Inject a failure into the system.
 	Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
-	// Restore reverses the effects of Inject. The same args passed to Inject
-	// must be passed to Restore.
-	Restore(ctx context.Context, l *logger.Logger, args FailureArgs) error
+	// Recover reverses the effects of Inject. The same args passed to Inject
+	// must be passed to Recover.
+	Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
 	// Cleanup uninstalls any dependencies that were installed by Setup.
 	Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error
@@ -52,8 +52,8 @@ type FailureMode interface {
 	// WaitForFailureToPropagate waits until the failure is at full effect.
 	WaitForFailureToPropagate(ctx context.Context, l *logger.Logger, args FailureArgs) error
 
-	// WaitForFailureToRestore waits until the failure was restored completely along with any side effects.
-	WaitForFailureToRestore(ctx context.Context, l *logger.Logger, args FailureArgs) error
+	// WaitForFailureToRecover waits until the failure was recovered completely along with any side effects.
+	WaitForFailureToRecover(ctx context.Context, l *logger.Logger, args FailureArgs) error
 }
 
 type diskDevice struct {
