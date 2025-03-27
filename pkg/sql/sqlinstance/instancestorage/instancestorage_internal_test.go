@@ -80,19 +80,7 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession()}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, id := range instanceIDs {
-			require.NoError(t, storage.CreateInstanceDataForTest(
-				ctx,
-				region,
-				id,
-				"",
-				"",
-				sqlliveness.SessionID([]byte{}),
-				sessionExpiry,
-				roachpb.Locality{},
-				roachpb.Version{},
-				/* encodeIsDraining */ true,
-				/* isDraining */ false,
-			))
+			require.NoError(t, storage.CreateInstanceDataForTest(ctx, region, id, "", "", sqlliveness.SessionID([]byte{}), sessionExpiry, roachpb.Locality{}, roachpb.Version{}, true, false, nil))
 		}
 
 		// Take instance 4. 1 should be prioritized.
@@ -331,19 +319,7 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 
 		// Preallocate first two, and claim the other two (have not expired)
 		for _, i := range []int{0, 1} {
-			require.NoError(t, storage.CreateInstanceDataForTest(
-				ctx,
-				region,
-				instanceIDs[i],
-				"",
-				"",
-				sqlliveness.SessionID([]byte{}),
-				sessionExpiry,
-				roachpb.Locality{},
-				roachpb.Version{},
-				/* encodeIsDraining */ true,
-				/* isDraining */ false,
-			))
+			require.NoError(t, storage.CreateInstanceDataForTest(ctx, region, instanceIDs[i], "", "", sqlliveness.SessionID([]byte{}), sessionExpiry, roachpb.Locality{}, roachpb.Version{}, false, false, nil))
 		}
 		for _, i := range []int{2, 3} {
 			claim(ctx, t, instanceIDs[i], rpcAddresses[i], sqlAddresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
@@ -474,10 +450,5 @@ func claim(
 	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
 	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
-	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID,
-		sessionExpiration, roachpb.Locality{}, roachpb.Version{},
-		/* encodeIsDraining */ true,
-		/* isDraining */ false,
-	))
+	require.NoError(t, storage.CreateInstanceDataForTest(ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{}, roachpb.Version{}, false, false, nil))
 }
