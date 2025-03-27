@@ -310,7 +310,7 @@ type RangeInfo struct {
 }
 
 func (ri RangeInfo) String() string {
-	return fmt.Sprintf("range %s, leaseholder %d, replicas %s", ri.Descriptor, ri.Leaseholder)
+	return fmt.Sprintf("range %s, leaseholder %d", ri.Descriptor, ri.Leaseholder)
 }
 
 type RangesInfo []RangeInfo

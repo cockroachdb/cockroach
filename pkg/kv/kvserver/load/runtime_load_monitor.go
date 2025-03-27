@@ -73,7 +73,7 @@ func (rlm *RuntimeLoadMonitor) Start(ctx context.Context, stopper *stop.Stopper)
 					defer rlm.mu.Unlock()
 					// TODO: Is the call to gather CPU capacity expensive? If so, we
 					// should only check the capacity every n ticks, say 10.
-					rlm.mu.lastCPURateCapacity = int64(status.GetCPUCapacity()) * int64(time.Second.Nanoseconds())
+					rlm.mu.lastCPURateCapacity = int64(status.GetCPUCapacity()) * time.Second.Nanoseconds()
 					utimeMillis, stimeMillis, err := status.GetProcCPUTime(ctx)
 					if err != nil {
 						panic(err)
