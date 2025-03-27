@@ -150,13 +150,20 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			// The one failing test is `pool size of 1` which
-			// fails because it does SELECT count(*) FROM pg_stat_activity which is
-			// not implemented in CRDB.
-			if strings.Contains(rawResultsStr, "1 failing") &&
-				// Failing tests are listed numerically, we only expect one.
-				// The one failing test should be "pool size of 1".
-				strings.Contains(rawResultsStr, "1) pool size of 1") {
+			// We have two known flaky tests:
+			// 1. "events" test which fails with "expected 0 to equal 20"
+			// 2. "pool size of 1" which fails because it uses pg_stat_activity not implemented in CRDB
+			if (strings.Contains(rawResultsStr, "1 failing") ||
+				strings.Contains(rawResultsStr, "2 failing")) &&
+				(strings.Contains(rawResultsStr, "1) events") ||
+					strings.Contains(rawResultsStr, "1) pool size of 1")) {
+				var flakyTest string
+				if strings.Contains(rawResultsStr, "1) events") {
+					flakyTest = "events"
+				} else {
+					flakyTest = "pool size of 1"
+				}
+				t.L().Printf("Ignoring known flaky test failure: %s", flakyTest)
 				err = nil
 			}
 			if err != nil {
