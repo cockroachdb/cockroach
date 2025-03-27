@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -22,10 +23,33 @@ func init() {
 
 // EvalExcise evaluates a Excise command.
 func EvalExcise(
-	_ context.Context, _ storage.ReadWriter, cArgs CommandArgs, _ kvpb.Response,
+	_ context.Context, _ storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.ExciseRequest)
-	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
+	start, end := args.Key, args.EndKey
+
+	// Verify that the start and end keys are for global key space. Excising
+	// non-global keys is not allowed as it would leave the replica in a bad
+	// state. For example, we don't want to allow excising a range descriptor.
+	rStart, err := keys.Addr(start)
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	rEnd, err := keys.Addr(end)
+	if err != nil {
+		return result.Result{}, err
+	}
+
+	if !start.Equal(rStart.AsRawKey()) {
+		return result.Result{},
+			errors.Errorf("excise can only be run against global keys, but found start key: %s", start)
+	}
+
+	if !end.Equal(rEnd.AsRawKey()) {
+		return result.Result{},
+			errors.Errorf("excise can only be run against global keys, but found end key: %s", end)
+	}
 
 	// Since we can't know the exact range stats, mark it as an estimate.
 	cArgs.Stats.ContainsEstimates++
@@ -36,7 +60,7 @@ func EvalExcise(
 	return result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{
 			Excise: &kvserverpb.ReplicatedEvalResult_Excise{
-				Span:          roachpb.Span{Key: start.Key, EndKey: end.Key},
+				Span:          roachpb.Span{Key: start, EndKey: end},
 				LockTableSpan: roachpb.Span{Key: ltStart, EndKey: ltEnd},
 			},
 		},
