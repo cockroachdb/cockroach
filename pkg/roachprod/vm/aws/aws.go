@@ -41,6 +41,18 @@ var configJson []byte
 //go:embed old.json
 var oldJson []byte
 
+var (
+	// TODO(golgeek, 2025-03-25): remove this in one year or so when all
+	// resources are created with the unified tags.
+	legacyTagsRemapping = map[string]string{
+		"Cluster":   vm.TagCluster,
+		"Created":   vm.TagCreated,
+		"Lifetime":  vm.TagLifetime,
+		"Roachprod": vm.TagRoachprod,
+		"Spot":      vm.TagSpotInstance,
+	}
+)
+
 // Init initializes the AWS provider and registers it into vm.Providers.
 //
 // If the aws tool is not available on the local path, the provider is a stub.
@@ -446,7 +458,17 @@ type Tags []Tag
 func (t Tags) MakeMap() map[string]string {
 	tagMap := make(map[string]string, len(t))
 	for _, entry := range t {
-		tagMap[entry.Key] = entry.Value
+
+		// If the resource was created with the legacy tags, we remap
+		// to the unified ones.
+		// TODO(golgeek, 2025-03-25): remove this in one year or so when all
+		// resources are created with the unified tags.
+		if tag, ok := legacyTagsRemapping[entry.Key]; ok {
+			tagMap[tag] = entry.Value
+		} else {
+			tagMap[entry.Key] = entry.Value
+		}
+
 	}
 	return tagMap
 }
@@ -831,7 +853,7 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 // This will update the Lifetime tag on the instances.
 func (p *Provider) Extend(l *logger.Logger, vms vm.List, lifetime time.Duration) error {
 	return p.AddLabels(l, vms, map[string]string{
-		"Lifetime": lifetime.String(),
+		vm.TagLifetime: lifetime.String(),
 	})
 }
 
@@ -1104,7 +1126,7 @@ func (in *DescribeInstancesOutputInstance) toVM(
 	}
 
 	var lifetime time.Duration
-	if lifeText, ok := tagMap["Lifetime"]; ok {
+	if lifeText, ok := tagMap[vm.TagLifetime]; ok {
 		lifetime, err = time.ParseDuration(lifeText)
 		if err != nil {
 			errs = append(errs, err)
@@ -1220,7 +1242,7 @@ func (p *Provider) describeInstances(
 			tagMap := in.Tags.MakeMap()
 
 			// Ignore any instances that we didn't create
-			if tagMap["Roachprod"] != "true" {
+			if tagMap[vm.TagRoachprod] != "true" {
 				continue in
 			}
 
@@ -1277,16 +1299,14 @@ func (p *Provider) runInstance(
 	m[vm.TagCreated] = timeutil.Now().Format(time.RFC3339)
 	m["Name"] = name
 
+	// TODO(golgeek, 2025-03-25): In an effort to unify tags in lowercase across
+	// all providers, AWS cost analysis dashboard will break as they look for a
+	// capitalized `Cluster` tag. We duplicate the tag for now and will remove it
+	// once all resources are created with the unified tags in a year or so.
+	m["Cluster"] = m[vm.TagCluster]
+
 	if providerOpts.UseSpot {
 		m[vm.TagSpotInstance] = "true"
-	}
-
-	var awsLabelsNameMap = map[string]string{
-		vm.TagCluster:      "Cluster",
-		vm.TagCreated:      "Created",
-		vm.TagLifetime:     "Lifetime",
-		vm.TagRoachprod:    "Roachprod",
-		vm.TagSpotInstance: "Spot",
 	}
 
 	var labelPairs []string
@@ -1305,9 +1325,6 @@ func (p *Provider) runInstance(
 		addLabel(key, value)
 	}
 	for key, value := range m {
-		if n, ok := awsLabelsNameMap[key]; ok {
-			key = n
-		}
 		addLabel(key, value)
 	}
 	labels := strings.Join(labelPairs, ",")
