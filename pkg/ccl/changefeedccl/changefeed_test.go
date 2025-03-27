@@ -393,7 +393,6 @@ func TestRLSBlocking(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE rls (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `SET enable_row_level_security = on`)
 		sqlDB.Exec(t, `INSERT INTO rls VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `INSERT INTO rls VALUES (1, 'second')`)
 

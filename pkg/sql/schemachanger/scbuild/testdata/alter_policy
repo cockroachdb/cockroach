@@ -1,5 +1,4 @@
 setup
-SET enable_row_level_security = true;
 CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
 CREATE USER fred;
 CREATE USER george;
