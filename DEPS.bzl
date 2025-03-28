@@ -7953,6 +7953,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_puzpuzpuz_xsync_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/puzpuzpuz/xsync/v3",
+        sha256 = "f7fcd1eeb1bc96bc497dc0bca05ed0d64d194fdb1a73460dd42cd2bc42ae00e6",
+        strip_prefix = "github.com/puzpuzpuz/xsync/v3@v3.5.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/puzpuzpuz/xsync/v3/com_github_puzpuzpuz_xsync_v3-v3.5.1.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_rcrowley_go_metrics",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rcrowley/go-metrics",

@@ -822,10 +822,10 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
+		token := r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
-		r.mu.RUnlock()
+		r.mu.RUnlock(token)
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
@@ -846,8 +846,8 @@ func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb
 	// finish falling asleep, while holding r.mu, before it's processed here.
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
 		shouldWakeUp := func() bool {
-			r.mu.RLock()
-			defer r.mu.RUnlock()
+			token := r.mu.RLock()
+			defer r.mu.RUnlock(token)
 			// If the replica is not asleep, it shouldn't wake up.
 			if !r.mu.asleep {
 				return false

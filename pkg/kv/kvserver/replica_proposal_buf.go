@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,7 +68,8 @@ type propBuf struct {
 	// proposals coming out of the propBuf don't carry closed timestamps below
 	// currently-evaluating requests.
 	evalTracker tracker.Tracker
-	full        sync.Cond
+	// full        sync.Cond
+	full chan struct{}
 
 	// arr contains the buffered proposals.
 	arr propBufArray
@@ -133,7 +135,7 @@ type singleBatchProposer interface {
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
 type proposer interface {
 	locker() sync.Locker
-	rlocker() sync.Locker
+	rlocker() syncutil.RBLocker
 
 	// The following require the proposer to hold (at least) a shared lock.
 	singleBatchProposer
@@ -177,7 +179,10 @@ func (b *propBuf) Init(
 	p proposer, tracker tracker.Tracker, clock *hlc.Clock, settings *cluster.Settings,
 ) {
 	b.p = p
-	b.full.L = p.rlocker()
+	// NB: It would be possible to use a read lock here, but p.rlocker() does not
+	// currently implement sync.Locker.
+	// b.full.L = p.locker()
+	b.full = make(chan struct{})
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
@@ -223,8 +228,13 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	// insertion attempts will also grab the read lock, so they can insert
 	// concurrently. Consumers of the proposal buffer will grab the write lock,
 	// so they must wait for concurrent insertion attempts to finish.
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	token := b.p.rlocker().RLock()
+	defer func() {
+		// We capture the RUnlock call in a closure since token may be changed
+		// by the call to allocateIndex, and it's important to release the lock
+		// with the correct token.
+		b.p.rlocker().RUnlock(token)
+	}()
 
 	if p.v2SeenDuringApplication {
 		// We should never see a proposal that has already been on the apply loop
@@ -241,7 +251,9 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	idx, err := b.allocateIndex(ctx, false /* wLocked */)
+	var idx int
+	var err error
+	idx, token, err = b.allocateIndex(ctx, token, false /* wLocked */)
 	if err != nil {
 		return err
 	}
@@ -270,7 +282,7 @@ func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
 
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
-	idx, err := b.allocateIndex(ctx, true /* wLocked */)
+	idx, _, err := b.allocateIndex(ctx, nil /* token */, true /* wLocked */)
 	if err != nil {
 		return err
 	}
@@ -287,8 +299,13 @@ func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
 //
 // The method expects that either the proposer's read lock or write lock is
 // held. It does not mandate which, but expects the caller to specify using
-// the wLocked argument.
-func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) {
+// the wLocked argument. If a read lock is held, then token must be given as
+// an argument so that the method can upgrade the lock to a write lock if
+// needed, and later move back to a read lock. The token of the new read lock
+// is returned so the caller can release the read lock.
+func (b *propBuf) allocateIndex(
+	ctx context.Context, token *syncutil.RToken, wLocked bool,
+) (int, *syncutil.RToken, error) {
 	// Repeatedly attempt to find an open index in the buffer's array.
 	for {
 		// NB: We need to check whether the proposer is destroyed before each
@@ -296,33 +313,42 @@ func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) 
 		// check and the current acquisition of the read lock. Failure to do so
 		// will leave pending proposals that never get cleared.
 		if status := b.p.destroyed(); !status.IsAlive() {
-			return 0, status.err
+			return 0, token, status.err
 		}
 
 		idx := b.incAllocatedIdx()
 		if idx < b.arr.len() {
 			// The buffer is not full. Our slot in the array is reserved.
-			return idx, nil
+			return idx, token, nil
 		} else if wLocked {
 			// The buffer is full and we're holding the exclusive lock. Flush
 			// the buffer before trying again.
 			if err := b.flushLocked(ctx); err != nil {
-				return 0, err
+				return 0, token, err
 			}
 		} else if idx == b.arr.len() {
 			// The buffer is full and we were the first request to notice out of
 			// potentially many requests holding the shared lock and trying to
 			// insert concurrently. Eagerly attempt to flush the buffer before
 			// trying again.
-			if err := b.flushRLocked(ctx); err != nil {
-				return 0, err
+			//
+			// The flush will require the read lock to be upgraded to a write lock,
+			// then downgraded back to a read lock. The token of the new read lock
+			// is returned.
+			newToken, err := b.flushRLocked(ctx, token)
+			if err != nil {
+				return 0, newToken, err
 			}
+			token = newToken
 		} else {
 			// The buffer is full and we were not the first request to notice
 			// out of potentially many requests holding the shared lock and
 			// trying to insert concurrently. Wait for the buffer to be flushed
 			// by someone else before trying again.
-			b.full.Wait()
+			// b.full.Wait()
+			b.p.rlocker().RUnlock(token)
+			<-b.full
+			token = b.p.rlocker().RLock()
 		}
 	}
 }
@@ -340,19 +366,27 @@ func (b *propBuf) insertIntoArray(p *ProposalData, idx int) {
 	}
 }
 
-func (b *propBuf) flushRLocked(ctx context.Context) error {
+func (b *propBuf) flushRLocked(
+	ctx context.Context, token *syncutil.RToken,
+) (retToken *syncutil.RToken, _ error) {
 	// Upgrade the shared lock to an exclusive lock. After doing so, check again
 	// whether the proposer has been destroyed. If so, wake up other goroutines
 	// waiting for the flush.
-	b.p.rlocker().Unlock()
-	defer b.p.rlocker().Lock()
+	b.p.rlocker().RUnlock(token)
+	defer func() {
+		// When returning, downgrade the exclusive lock back to a shared lock,
+		// and return the token for the new shared lock.
+		retToken = b.p.rlocker().RLock()
+	}()
 	b.p.locker().Lock()
 	defer b.p.locker().Unlock()
 	if status := b.p.destroyed(); !status.IsAlive() {
-		b.full.Broadcast()
-		return status.err
+		// b.full.Broadcast()
+		close(b.full)
+		b.full = make(chan struct{})
+		return nil, status.err
 	}
-	return b.flushLocked(ctx)
+	return nil, b.flushLocked(ctx)
 }
 
 func (b *propBuf) flushLocked(ctx context.Context) error {
@@ -393,7 +427,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// The buffer is full and at least one writer has tried to allocate
 		// on top of the full buffer, so notify them to try again.
 		used = b.arr.len()
-		defer b.full.Broadcast()
+		// defer b.full.Broadcast()
+		defer close(b.full)
+		b.full = make(chan struct{})
 	}
 
 	// Iterate through the proposals in the buffer and propose them to Raft.
@@ -979,8 +1015,8 @@ func (b *propBuf) OnLeaseChangeLocked(
 // EvaluatingRequestsCount returns the count of requests currently tracked by
 // the propBuf.
 func (b *propBuf) EvaluatingRequestsCount() int {
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	token := b.p.rlocker().RLock()
+	defer b.p.rlocker().RUnlock(token)
 	return b.evalTracker.Count()
 }
 
@@ -1064,8 +1100,8 @@ func (t *TrackedRequestToken) Move(ctx context.Context) TrackedRequestToken {
 func (b *propBuf) TrackEvaluatingRequest(
 	ctx context.Context, wts hlc.Timestamp,
 ) (minTS hlc.Timestamp, _ TrackedRequestToken) {
-	b.p.rlocker().Lock()
-	defer b.p.rlocker().Unlock()
+	token := b.p.rlocker().RLock()
+	defer b.p.rlocker().RUnlock(token)
 
 	minTS = b.assignedClosedTimestamp.Next()
 	wts.Forward(minTS)
@@ -1164,7 +1200,7 @@ func (rp *replicaProposer) locker() sync.Locker {
 	return &rp.mu.ReplicaMutex
 }
 
-func (rp *replicaProposer) rlocker() sync.Locker {
+func (rp *replicaProposer) rlocker() syncutil.RBLocker {
 	return rp.mu.ReplicaMutex.RLocker()
 }
 

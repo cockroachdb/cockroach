@@ -145,8 +145,8 @@ func (r *Replica) raftLastIndexRLocked() kvpb.RaftIndex {
 // GetLastIndex returns the index of the last entry in the raft log.
 // Requires that r.mu is not held.
 func (r *Replica) GetLastIndex() kvpb.RaftIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.raftLastIndexRLocked()
 }
 
@@ -164,8 +164,8 @@ func (r *Replica) raftCompactedIndexRLocked() kvpb.RaftIndex {
 // GetCompactedIndex returns the compacted index of the raft log.
 // Requires that r.mu is not held.
 func (r *Replica) GetCompactedIndex() kvpb.RaftIndex {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.raftCompactedIndexRLocked()
 }
 

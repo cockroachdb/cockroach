@@ -731,8 +731,8 @@ func (r *Replica) CurrentLeaseStatus(ctx context.Context) kvserverpb.LeaseStatus
 func (r *Replica) LeaseStatusAt(
 	ctx context.Context, now hlc.ClockTimestamp,
 ) kvserverpb.LeaseStatus {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.leaseStatusAtRLocked(ctx, now)
 }
 
@@ -773,8 +773,8 @@ func (r *Replica) leaseStatusForRequestRLocked(
 // but returns the status of the current lease and ownership at the
 // specified point in time.
 func (r *Replica) OwnsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.ownsValidLeaseRLocked(ctx, now)
 }
 
@@ -1037,8 +1037,8 @@ func (r *Replica) AdminTransferLease(
 
 // GetLease returns the lease and, if available, the proposed next lease.
 func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.getLeaseRLocked()
 }
 
@@ -1199,8 +1199,8 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 func (r *Replica) leaseGoodToGo(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
 ) (kvserverpb.LeaseStatus, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.leaseGoodToGoRLocked(ctx, now, reqTS)
 }
 
@@ -1559,8 +1559,8 @@ func (r *Replica) maybeSwitchLeaseType(ctx context.Context) *kvpb.Error {
 
 // HasCorrectLeaseType returns true if the lease type is correct for this replica.
 func (r *Replica) HasCorrectLeaseType(lease roachpb.Lease) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	token := r.mu.RLock()
+	defer r.mu.RUnlock(token)
 	return r.hasCorrectLeaseTypeRLocked(lease)
 }
 

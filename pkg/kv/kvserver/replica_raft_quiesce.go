@@ -51,7 +51,7 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 // unquiesced, returning true in that case. See maybeUnquiesceLocked() for
 // details.
 func (r *Replica) maybeUnquiesce(ctx context.Context, wakeLeader, mayCampaign bool) bool {
-	r.mu.TracedLock(ctx)
+	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
 }

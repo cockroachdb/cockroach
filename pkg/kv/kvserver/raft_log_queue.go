@@ -241,7 +241,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
-	r.mu.RLock()
+	token := r.mu.RLock()
 	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.shMu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
@@ -274,7 +274,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.shMu.raftLogSizeTrusted
 	compIndex := r.raftCompactedIndexRLocked()
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 	compIndex = r.pendingLogTruncations.nextCompactedIndex(compIndex)
 
 	if raftStatus == nil {
@@ -302,7 +302,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		},
 	)
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,

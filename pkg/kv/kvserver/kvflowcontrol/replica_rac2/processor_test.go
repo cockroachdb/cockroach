@@ -253,7 +253,7 @@ func (c *testRangeController) StatusRaftMuLocked() serverpb.RACStatus {
 
 func makeTestMutexAsserter() rac2.ReplicaMutexAsserter {
 	var raftMu syncutil.Mutex
-	var replicaMu syncutil.RWMutex
+	var replicaMu syncutil.RBMutex
 	return rac2.MakeReplicaMutexAsserter(&raftMu, &replicaMu)
 }
 

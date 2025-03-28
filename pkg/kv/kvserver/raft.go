@@ -264,13 +264,13 @@ func extractIDs(ids []kvserverbase.CmdIDKey, ents []raftpb.Entry) []kvserverbase
 // command which corresponds to an id in ids.
 func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 	ctxs := make([]context.Context, 0, len(ids))
-	r.mu.RLock()
+	token := r.mu.RLock()
 	for _, id := range ids {
 		if prop, ok := r.mu.proposals[id]; ok {
 			ctxs = append(ctxs, prop.Context())
 		}
 	}
-	r.mu.RUnlock()
+	r.mu.RUnlock(token)
 	for _, ctx := range ctxs {
 		log.Eventf(ctx, "%v", event)
 	}

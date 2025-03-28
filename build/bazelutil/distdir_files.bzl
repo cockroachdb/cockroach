@@ -934,6 +934,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/prometheus/statsd_exporter/com_github_prometheus_statsd_exporter-v0.21.0.zip": "aa848ade6fb019df4f7992808a1d6aa48d6b8276017970af4aabc1bd337c2dc3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pseudomuto/protoc-gen-doc/com_github_pseudomuto_protoc_gen_doc-v1.3.2.zip": "ecf627d6f5b4e55d4844dda45612cbd152f0bc4dbe2ba182c7bc3ad1dc63ce5f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pseudomuto/protokit/com_github_pseudomuto_protokit-v0.2.0.zip": "16d5fe0f6ac5bebbf9f2f05fde72f28bbf05bb18baef045b9ae79c2585f4e127",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/puzpuzpuz/xsync/v3/com_github_puzpuzpuz_xsync_v3-v3.5.1.zip": "f7fcd1eeb1bc96bc497dc0bca05ed0d64d194fdb1a73460dd42cd2bc42ae00e6",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rcrowley/go-metrics/com_github_rcrowley_go_metrics-v0.0.0-20201227073835-cf1acfcdf475.zip": "e4dbd20c185cb05019fd7d4a361266bd5d182938f49fd9577df4d12c16dc81c3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/remyoudompheng/bigfft/com_github_remyoudompheng_bigfft-v0.0.0-20230129092748-24d4a6f8daec.zip": "9be16c32c384d55d0f7bd7b03f1ff1e9a4e4b91b000f0aa87a567a01b9b82398",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/retailnext/hllpp/com_github_retailnext_hllpp-v1.0.1-0.20180308014038-101a6d2f8b52.zip": "7863938cb01dfe9d4495df3c6608bedceec2d1195da05612f3c1b0e27d37729d",

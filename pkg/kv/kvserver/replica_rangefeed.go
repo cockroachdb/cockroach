@@ -348,8 +348,8 @@ func (r *Replica) RangeFeed(
 }
 
 func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Processor, *rangefeed.Filter) {
-	r.rangefeedMu.RLock()
-	defer r.rangefeedMu.RUnlock()
+	token := r.rangefeedMu.RLock()
+	defer r.rangefeedMu.RUnlock(token)
 	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
 }
 
