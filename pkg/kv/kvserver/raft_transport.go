@@ -428,6 +428,7 @@ func (t *RaftTransport) getOutgoingMessageHandler(
 func (t *RaftTransport) handleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
+	isV1 := log.V(1)
 	for i := range req.AdmittedRaftLogEntries {
 		// Process any flow tokens that were returned over the RaftTransport. Do
 		// this first thing, before these requests enter the receive queues
@@ -435,6 +436,10 @@ func (t *RaftTransport) handleRaftRequest(
 		// processing the raft heartbeats. See I8 from kvflowcontrol/doc.go.
 		admittedEntries := req.AdmittedRaftLogEntries[i]
 		handle, found := t.kvflowControl.handles.Lookup(admittedEntries.RangeID)
+		// TODO(admission-control): if the local node got restarted with a store
+		// missing, but the store is still member of some ranges, remote leaders
+		// will track quota for it and append to us. Will Replication Flow Control
+		// stall out completely in this case? This needs to be handled gracefully.
 		if found {
 			handle.ReturnTokensUpto(
 				ctx,
@@ -444,7 +449,7 @@ func (t *RaftTransport) handleRaftRequest(
 			)
 		}
 
-		if log.V(1) {
+		if isV1 {
 			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
 		}
 	}
@@ -457,9 +462,16 @@ func (t *RaftTransport) handleRaftRequest(
 
 	incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(req.ToReplica.StoreID)
 	if !ok {
-		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
-			req.FromReplica, req.ToReplica)
-		return kvpb.NewError(kvpb.NewStoreNotFoundError(req.ToReplica.StoreID))
+		if isV1 {
+			log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
+				req.FromReplica, req.ToReplica)
+		}
+		// We don't return an error to the client. If this node restarted with fewer
+		// stores than it had before (think: hardware failure), then it is expected
+		// for remote ranges to think there should be a replica on this store. We
+		// could still send an error back here, but then it would have to be dropped
+		// at the other node - not a good use of bandwidth.
+		return nil
 	}
 
 	return incomingMessageHandler.HandleRaftRequest(ctx, req, respStream)
