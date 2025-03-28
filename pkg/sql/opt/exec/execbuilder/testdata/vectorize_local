@@ -57,9 +57,6 @@ quality of service: regular
   regions: <hidden>
   actual row count: 2,001
   KV time: 0µs
-  KV contention time: 0µs
-  KV lock wait time: 0µs
-  KV latch wait time: 0µs
   KV rows decoded: 2,001
   KV pairs read: 4,002
   KV bytes read: 16 KiB
@@ -69,7 +66,7 @@ quality of service: regular
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUsFqGzEQvfcrxJxakIk2lB50KnVSMKmbYJtcigmyNHGEtdJWM4ttjD-rP9AvK1rZ0DQJVIdl5723M2_26QD0M4CG-fW36_FCGPF1djsVBiTE5PC7aZFA_4AGlhK6nCwSpVygwyCYuB1oJcHHrucCLyXYlBH0AdhzQNCwMKuAMzQO84UCCQ7Z-DC0NZ_NQ7fBPUgYp9C3kfQwe96Z8joCCTf3ogwiLWJTy4xrnwrNSFwh9i1qoX7_olrbFBkj-xRfUCHZjdgazy8Zw_bpdSqnLQmHNjl0WlxKpU5eVntGEhmN06L5JG78l4qvZ3djYU0I9EzeGZ_P8o9SqUuQML0fjwUxdsKmPrJ4jzu-8JE_aKGG_1UFiJu3BK3ZiRbblPfChJCs4eJSieJlVZZCEqnnrmctin7Y5gxUd8ujhIqcQiQ2awTd_JX65Aq0Osr_D36G1KVI-CzztyapfyaNmuNSAro11ttGqc8W73Kyg7aWt0OjAXBIXNmmFpN4pogzmrbaX0p4DGn74B1oUKczeuVxPlA-MGsqi82f0nZou9h3xdajCYQSpmaDV8iYWx89sbegOfd4PL77EwAA__9C8hAB
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMksFqGz0Qx-_fU4g5fQWZaEPpQadSJwWTugm2yaWYMF5NHGHtaquZxTZmH6sv0CcrWtnQlAaqw7Lzn59m_rOzJ-DvASwsb7_cTlcK1efF_VwhaGijo6_YEIP9BhWsNXQp1sQcU5ZOIzBzB7BGg2-7XrK81lDHRGBPIF4CgYUVbgItCB2lKwMaHAn6MJbFj_jU7egIGqYx9E3Lduy97DC_TkDD3aPKjdiqtiphoq2POS3EUiTxDVllfv7gMxL3rBzV0ZGz6lobc767OQqxSoTOquqDuvOfir5dPExVjSHwK7xDny74e23MNWiYP06nioU6Vce-FfU_HeTKt_LOKjPOVwCi3VtAgwfVUBPTUWEIsUbJLo3KXjYo9Quxir10vViV-XGai1DcrQcNRTl_dBbcEtjqty3NbsCaQf_7ohbEXWyZXu3orU7mj06TalhrILel8ndw7FNNDynWI1vC-7HQKDhiKdmqBLP2kmJJhE2xv9bwHOL-yTuwYM5n8pfH5UC-gFvOgy1f4n4suzp22dYzBiYNc9zRDQmlxreexddgJfU0DP_9CgAA__-pfvP2
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -93,9 +90,6 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ KV rows decoded: 1
 │ KV pairs read: 2
 │ KV bytes read: 8 B
@@ -110,9 +104,6 @@ quality of service: regular
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
-      KV contention time: 0µs
-      KV lock wait time: 0µs
-      KV latch wait time: 0µs
       KV rows decoded: 2
       KV pairs read: 4
       KV bytes read: 16 B
@@ -122,7 +113,7 @@ quality of service: regular
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVNFqGzsQfb9fMczTLSjJrimlCAqmTgpOkzg4IS_FBFmaOKp3pa00i22CP6s_0C8rWsUhiZ3QQgvVw8LMnD0zmnN27zB-q1DixdHJ0eAS9L6CT-PRKWg4Hg3PwMDoDMz-FD6A3p-iQOcNnamaIsovWOJEYBO8phh9SKm7DjA0S5SFQOuallN6IlD7QCjvkC1XhBIv1bSiMSlD4aBAgYZY2aqj1f1IGgUOfNXWLkpQAlLvi0alaA8Ffr6C1ChKcGUOA82sT2WmyDnFtiYJxY_vMcfaOybH1rutUuX1HBbK8nZFsb7dXQp-EcGQ9oaMhF5OTldMEQIpI6F8Bx9zdjY-H4BWVRUfgI2yYQN8iwJPrwYDiEwNaN86hv9pyQfW8RsJRbehDCCavwSo1RJqqn1YgaoqrxWnuYpuhmm6BkXwLTctS0j4bv5NooeTtcAc3UsWWc0IZflI4-EhymItfl3mY2_dvcrlU5VN31w3c1qhwBPv520DX7114J2Efu-x-kn6URqxnxi6Zt3q8yZzHFlV1ZZA_5pFym2LvN_lkHLbIb0_4pA2koHIgVRNAQXSknS7fdu_ZKTeMyOVv2OkMcXGu0hPTPRSp-JZp71yPRFIZkb5JxV9GzSdB687bA5HHVGXMBQ5V8scDN2mlLf38B08ZipfZeq9xjQReFP5xbU1KLG4P3s7HpuD6QU1i2lFF7d-0dFerpp0wRtVRRJ4quZ0SEyhts5Gtholh5bW6_9-BgAA___hOucn
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lN9qGz0Qxe-_pxjm6isoye5SShEUTJ0UnCZxcEJuigmyNHFU70pbjZbYBD9WX6BPVrSyQ_7T0lYXhjk6PjOan_Et8rcaJZ4dHB0Mz0HvKvg0GR-DhsPx6AQMjE_A7M7gA-jdGQp03tCJaohRfsESpwLb4DUx-5Ck294wMkuUhUDr2i4meSpQ-0AobzHaWBNKPFezmiakDIW9AgUaisrWfaweMGkUOPR11ziWoASk3metStUOCvx8AakRS3BlLgPNrU_XkThmKdqGJBQ_vvPG4m8YDGlvyEiosjhbRWIIpIyE8h18zOp8cjoEreqa74ytsmFrfIsCjy-GQ-BILWjfuQj_0zLuWRffSCj6F2UD0eIlQ6OW0FDjwwpUXXutYpqr6GeYqaivicF3se2ihOTv598KFU7XAnO1WTFHNSeU5T0mo32UxVr8OpZDb92GSvmQihmYy3ZBKxR45P2ia-Grtw68kzCo7tNKqMZpxEFK6Jv1q8-bzDVHVddPAP0p0vIp0vfPES2fEq3-CtGOyQDHQKqhgAJpSbqL1ruHg_8j8NUj8OXvgJ8Qt94xPYD-UqfiUaedcj0VSGZO-U-AfRc0nQave28ux31QLxjimG_LXIzc9ipv7-53ez-pfDWpei1pKvCq9jeX1qDEYnN2nvnYHkxfUHNOKzq79jd97PmqTQ-8UjWTwGO1oH2KFBrrLEerUcbQ0Xr9388AAAD__ySury8=
 
 # Regression test for using the Streamer API when we have a cast to an Oid type
 # for which DistSQL is prohibited (#122274). (Note that, unlike above, we don't
@@ -158,9 +149,6 @@ quality of service: regular
           regions: <hidden>
           actual row count: 2
           KV time: 0µs
-          KV contention time: 0µs
-          KV lock wait time: 0µs
-          KV latch wait time: 0µs
           KV rows decoded: 2
           KV pairs read: 4
           KV bytes read: 16 B
@@ -170,7 +158,7 @@ quality of service: regular
           table: c@sec
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykU91qGz0Qvf-eYpirr6Aku6b0QlBw6rjFaWwHO-SmmCBLE0e1VtpKs9gm-LH6An2ysrt2iPNHS3WxcM6cnRmds3uP6YdDidP-Rb93BfpYSTnpfxmdDvvTy9NeHz5PxkPQcD4ejMDAeATmeA4fQR_PUaAPhkaqoITyG-Y4E1jGoCmlEGvqvhEMzBplJtD6suKangnUIRLKe2TLjlDilZo7mpAyFE8yFGiIlXVNW91NpFFgL7iq8EmCElDPnpaqRkco8Os11IOSBJ-3MNLChrrMlLil2BYkIfv1M7VYB8_k2Qb_rOSCXsJKWX5eUazvXi7FsEpgSAdDRkKnJecbpgSRlJGQf4BPLbuYXPZAK-fSg7BUNu6F71Hg8LrXg8RUgg6VZ_if1nxiPb-TkDUOtQKi5WuCQq2hoCLEDSjnglZc75U1O8zra1CCUHFZsYRa3-y_Jzo42wps0S6yxGpBKPNHGQ_OUGZb8ecxnwfrdynnhymbrrkpl7RBgRchLKsSvgfrIXgJ3c7j9OvoJ-QNRQnd_PBjxd30JovW2hYnVs4dJkZr0tXz9P_Bmc4TZ_K_cWZCqQw-0YErr03Knkw6yrczgWQW1P51KVRR02UMutG2cNw0aghDidtq3oKB35cSR1LFQ7CPO-Vvduq81Wkm8NaF1Y01KDHbnaMXHvuD9QtqkWqLpndh1bS92pT1BW-VSyRwqJZ0RkyxsN4mtholx4q22_9-BwAA__-BAIp4
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykU9Fq2zAUfd9XXO7TBmprh7EHwSBdmo10TVKc0pcRiiLdplpkyZOuaULJZ-0H9mXDdlKaspaN6cFwjo7Plc6xHzD9cChxNrwYDq5AHyspi-GXyel4OLs8HQzhczEdg4bz6WgCBqYTMMcL-Aj6eIECfTA0USUllN8wx7nAKgZNKYXYUA-tYGTWKDOB1lc1N_RcoA6RUD4gW3aEEq_UwlFBylA8yVCgIVbWtba6n0ijwEFwdemTBCWgmT2rVIOOUODXa2gGJQk-72CkpQ3NNlPijmJbkoTs18-0k4T7BIZ0MGQk9DpysWFKEEkZCfkH-NSxy-JyAFo5lx6FlbJxL3yPAsfXgwEkpgp0qD3DW1rzifX8TkLW3qgTEK1eEpRqDSWVIW5AORe04uZcWXuGhWJ9RwlCzVXNEhp9e_490cP5VmCHdhEnVktCmT_pZHSGMtuKv6_lPFi_ayU_bMX0zU21og0KvAhhVVfwPVgPwUvo95621VRVkDcUJfTzw48Ld9PbLrpoO5xYOXfYGK1J12yDP6T_I5nes2Tyf0mmoFQFn-gglZcmZc8mHeXbuUAyS-r-khTqqOkyBt1qOzhtjVrCUOJuN-_AyO-3EkdS5WOxT53yV516rznNBd66cH9jDUrMduvoD4_9wuYFtUxNRLO7cN_aXm2q5oK3yiUSOFYrOiOmWFpvE1uNkmNN2-2b3wEAAP__JLtufA==
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -240,9 +228,6 @@ quality of service: regular
 │     regions: <hidden>
 │     actual row count: 2
 │     KV time: 0µs
-│     KV contention time: 0µs
-│     KV lock wait time: 0µs
-│     KV latch wait time: 0µs
 │     KV rows decoded: 2
 │     KV pairs read: 4
 │     KV bytes read: 16 B
@@ -258,9 +243,6 @@ quality of service: regular
       regions: <hidden>
       actual row count: 2
       KV time: 0µs
-      KV contention time: 0µs
-      KV lock wait time: 0µs
-      KV latch wait time: 0µs
       KV rows decoded: 2
       KV pairs read: 4
       KV bytes read: 16 B
@@ -270,7 +252,7 @@ quality of service: regular
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsU91OGz0Qvf-eYjRXoG-B3aXqhSWkqCGtQpsEBcRNFSHHHhYrXnuxvUoilMfqC_TJKu8CJT9QUVXqTfdi5Zk5PjM-x75Hf6eR4UXvS697CeKQw8fxaAAC-sNhbwyD3vhTD85G_SFIGA0bwAnIwykmaKykIS_JI_uKGU4SrJwV5L11MXXfAPpygSxNUJmqDjE9SVBYR8juMaigCRle8qmmMXFJ7ijFBCUFrnRDKzriuprREhPsWl2XxjPgmOBFxePyABP8fAWxkWdgsjZ0VCgby4F8aFNBlcQg_f7Nt7GwJpAJypqtkrZiBnOuwnaFB3G7u-Ts3IMkYSVJBnmbnC4DeXDEJYPsPXxos8X4vAuCa-2fgBVX7hH4DhMcXHW74ANVIGxtAuzRIhwpE_YZpI1CLYBo9hKg5AsoqbRuCVxrK3iIc6XNDNN4DPJg61DVgUHEN_M_JnKcrBJsowfLfOAFIcueedw_RZaukt-zOVu3WXbkls3Tfzb_LZvzDZuzF23-6W5trJPkSK45O4k7fwXZcVcG5Ao6s8qQO8rX74qmm7DXyf7fP3GquG2XmOAoHqkTrwYtSNTbnr-mVaz5Ow2Bygqk8jOoPS_oD0h5vCFl_pYXMyZfWeNpU9KdndKNTgdZFJZkQa1R3tZO0LmzosG24aghahKSfGireRv0TVPKYgdHvHx68M-Zsjcw5c-Zsk2m_FWm4zWmdH2mSYI32s6vlUSG6cN3sOP3-GHcwAsfxb64tfOG9nJZRaluuPaU4IDP6JQCuVIZ5YMSyIKrabX670cAAAD___QQTsM=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk9FO2zAUhu_3FEfnCjQDSZh2YQmpWummsrVFBXEzVci1D8GqEwfbEa1QH2svsCebnAAjXWFj2uVyUcXn_PnPyf81d-hvDHI8G3wZ9M9B7gv4OJ2MQMJwPB5MYTSYfhrAyWQ4BgWTcSM4ArU_R4alVTQWBXnkXzHFGcPKWUneWxdLd41gqJbIE4a6rOoQyzOG0jpCfodBB0PI8VzMDU1JKHIHCTJUFIQ2ja3syctqQStk2LemLkrPQSDDs0rE2z1k-PkC4iDPoUzbo6Nc29gO5ENbCrogDsn3b_5eYm89KJJWkeKQtcX5KpAHR0JxSN_Dh7aaT0_7IIUx_lFYCe0ehO-Q4eii3wcfqAJp6zLADi3DgS7DLoekeaNWQLR4TlCIJRRUWLcCYYyVIsS9kmaHuQjymjzYOlR14BD1zf4PhQxna4bt6T5iH0ROyNMnTIbHyJM1-zssaReL6qlfsMz_Y_lTLNkGlvRZLD9p1KV1ihypDolZfPJ3ki1sR-RyOrG6JHeQddkaugo7vfTt7pHT-XV7iwwn8ZV6ESUtSdZB27KL76WsYs_fGAhUVKC0X0DtRU7_IMrDjSiz1_zDp-QrW3rajHTrpGRj0l4agyWVUwvK29pJOnVWNtr2OGmMmoIiH9pu1h6GZdNK4wRHonj8QJ86pa9wyp46pZtO2YtOhx2npLvTjOGVsbeXWiHH5P7a2_LzcGF8QOQ-hn12bW8b2_NVFaO6EsYTw5FY0DEFcoUutQ9aIg-upvX6zY8AAAD__2SSFss=
 
 statement ok
 RESET vectorize; RESET distsql

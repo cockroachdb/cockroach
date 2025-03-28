@@ -39,9 +39,6 @@ quality of service: background
   regions: <hidden>
   actual row count: 3
   KV time: 0µs
-  KV contention time: 0µs
-  KV lock wait time: 0µs
-  KV latch wait time: 0µs
   KV rows decoded: 3
   KV pairs read: 6
   KV bytes read: 24 B
@@ -96,9 +93,6 @@ quality of service: regular
 │     actual row count: 4
 │     vectorized batch count: 0
 │     KV time: 0µs
-│     KV contention time: 0µs
-│     KV lock wait time: 0µs
-│     KV latch wait time: 0µs
 │     KV rows decoded: 4
 │     KV pairs read: 8
 │     KV bytes read: 32 B
@@ -118,9 +112,6 @@ quality of service: regular
       actual row count: 3
       vectorized batch count: 0
       KV time: 0µs
-      KV contention time: 0µs
-      KV lock wait time: 0µs
-      KV latch wait time: 0µs
       KV rows decoded: 3
       KV pairs read: 6
       KV bytes read: 24 B
