@@ -107,6 +107,17 @@ func (g *AggGauge) AddChild(labelVals ...string) *Gauge {
 	return child
 }
 
+// GetChild gets a child for this Aggregate. If it does not exist,
+// it returns nil.
+func (g *AggGauge) GetChild(labelVals ...string) *Gauge {
+	key := &Gauge{labelValuesSlice: labelValuesSlice(labelVals)}
+	child := g.get(key)
+	if child == nil {
+		return nil
+	}
+	return child.(*Gauge)
+}
+
 // RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
 // does not exist for this set of labelVals.
 func (g *AggGauge) RemoveChild(labelVals ...string) {
