@@ -4140,7 +4140,12 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 	// Verify that the closed timestamp policy is set up.
 	repl := store.LookupReplica(roachpb.RKey(descKey))
-	require.Equal(t, repl.ClosedTimestampPolicy(), roachpb.LEAD_FOR_GLOBAL_READS)
+	testutils.SucceedsSoon(t, func() error {
+		if actual := repl.ClosedTimestampPolicy(); actual != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.Newf("expected LEAD_FOR_GLOBAL_READS, got %s", actual)
+		}
+		return nil
+	})
 
 	// Write to the range, which has the effect of bumping the closed timestamp.
 	pArgs := putArgs(descKey, []byte("foo"))
