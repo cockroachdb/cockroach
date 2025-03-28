@@ -799,7 +799,7 @@ func (fw *fixupWorker) deleteVector(
 		return nil
 	}
 
-	// If removing from a root partition, check that it's level is LeafLevel. It
+	// If removing from a root partition, check that its level is LeafLevel. It
 	// might not be if it was recently split.
 	if partitionKey == RootKey {
 		metadata, err := fw.txn.GetPartitionMetadata(

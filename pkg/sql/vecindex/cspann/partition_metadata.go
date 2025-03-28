@@ -190,6 +190,18 @@ func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
 	}
 }
 
+// MakeAddingLevelDetails constructs state for an AddingLevel partition,
+// including the target partitions which will become the new children of the
+// root partition.
+func MakeAddingLevelDetails(target1, target2 PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     AddingLevelState,
+		Target1:   target1,
+		Target2:   target2,
+		Timestamp: timeutil.Now(),
+	}
+}
+
 // stalledOpTimeout specifies how long a partition can remain in a non-ready
 // state before other fixup workers conclude a fixup has stalled (e.g. because
 // the original worker crashed) and attempt to assist. If this is set too high,

@@ -6,6 +6,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -62,8 +65,14 @@ var sqlStatsActivityMaxPersistedRows = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic)
 
-const numberOfStmtTopColumns = 6
-const numberOfTxnTopColumns = 5
+const (
+	numberOfStmtTopColumns = 6
+	numberOfTxnTopColumns  = 5
+)
+
+const (
+	sqlActivityCacheUpsertLimit = 500
+)
 
 // sqlActivityUpdateJob is responsible for translating the data in the
 // statement/txn statistics tables into the statement/txn _activity_
@@ -263,7 +272,7 @@ func (u *sqlActivityUpdater) upsertStatsForAggregatedTs(
 	return err
 }
 
-// transferAllStats is used to transfer all the stats FROM
+// transferAllStats is used to transfer all the stats from
 // system.statement_statistics and system.transaction_statistics
 // to system.statement_activity and system.transaction_activity
 func (u *sqlActivityUpdater) transferAllStats(
@@ -272,52 +281,22 @@ func (u *sqlActivityUpdater) transferAllStats(
 	totalEstimatedStmtClusterExecSeconds float64,
 	totalEstimatedTxnClusterExecSeconds float64,
 ) error {
-	// Any change should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
-	_, err := u.db.Executor().ExecEx(ctx,
-		"activity-flush-txn-transfer-all",
-		nil, /* txn */
-		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-		`
-			UPSERT INTO system.public.transaction_activity 
-(aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
- statistics, query, execution_count, execution_total_seconds,
- execution_total_cluster_seconds, contention_time_avg_seconds, 
- cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
-    (SELECT max_aggregated_ts,
-            fingerprint_id,
-            app_name,
-            max_agg_interval,
-            metadata,
-            statistics,
-            '' AS query,
-            (statistics->'statistics'->>'cnt')::int,
-            ((statistics->'statistics'->>'cnt')::float)*((statistics->'statistics'->'svcLat'->>'mean')::float),
-            $1 AS execution_total_cluster_seconds,
-            COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float,0),
-            COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float,0),
-            (statistics->'statistics'->'svcLat'->>'mean')::float,
-            0 as service_latency_p99_seconds
-     FROM (SELECT
-                  max(aggregated_ts) AS max_aggregated_ts,
-                  app_name,
-                  fingerprint_id,
-                  max(agg_interval) as max_agg_interval,
-                  max(metadata) as metadata,
-                  merge_transaction_stats(statistics) AS statistics
-           FROM system.public.transaction_statistics
-           WHERE aggregated_ts = $2
-             and app_name not like '$ internal%'
-           GROUP BY app_name,
-                    fingerprint_id));
-`,
-		totalEstimatedTxnClusterExecSeconds,
-		aggTs,
-	)
+	it, err := u.db.Executor().QueryIteratorEx(ctx,
+		"sql-activity-select-all-transactions",
+		nil, // txn
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+		u.buildSelectAllTransactionsQuery(), aggTs)
 
 	if err != nil {
 		return err
 	}
 
+	if err := u.upsertTopTransactions(ctx, "activity-flush-txn-eelect-all", u.db.Executor(),
+		nil /* txn */, it, aggTs, totalEstimatedTxnClusterExecSeconds); err != nil {
+		return err
+	}
+
+	// TODO (xinhaoz): In the next commit we'll also refactor this to use AOST and simplify some things.
 	// Any change should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-flush-stmt-transfer-all",
@@ -371,9 +350,11 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
 	return err
 }
 
-// transferTopStats is used to transfer top N stats FROM
-// system.statement_statistics and system.transaction_statistics
-// to system.statement_activity and system.transaction_activity
+/**
+ * transferTopStats is used to transfer top N (sql.stats.activity.top.max)
+ * stats from system.statement_statistics and system.transaction_statistics
+ * to system.statement_activity and system.transaction_activity.
+ */
 func (u *sqlActivityUpdater) transferTopStats(
 	ctx context.Context,
 	aggTs time.Time,
@@ -382,9 +363,39 @@ func (u *sqlActivityUpdater) transferTopStats(
 	totalEstimatedTxnClusterExecSeconds float64,
 ) (retErr error) {
 
+	// Select the top transactions for each of the following 5 columns in the
+	// provided aggregation time. Up to (sql.stats.activity.top.max * 5)
+	// rows will be added to system.transaction_activity (default is 2500).
+	// - execution count
+	// - total execution time
+	// - service latency
+	// - cpu sql nanos
+	// - contention time
+	//
+	// Note that it's important we use follower reads here to avoid causing
+	// contention // since the rest of the cluster is still writing to the statistics
+	// tables during the execution of this job.
+	//
+	it, err := u.db.Executor().QueryIteratorEx(ctx,
+		"sql-activity-select-top-transactions",
+		nil, // txn
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+		u.buildSelectTopTransactionsQuery(), aggTs, topLimit)
+	if err != nil {
+		return err
+	}
+
+	defer func(it isql.Rows) {
+		err := it.Close()
+		if err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
+	}(it)
+
 	// Deleting and inserting the activity tables needs to be done in the same
 	// transaction. A user could try to access the table during the update. If
 	// delete was done in a separate txn the user would get no results.
+	const transferTopTxnsOpName = "activity-flush-txn-transfer-tops"
 	errTxn := u.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 
 		// Delete all the rows of the old data from the table for the current
@@ -393,100 +404,28 @@ func (u *sqlActivityUpdater) transferTopStats(
 		// instead of updating the existing one. This causes the
 		// transaction_activity to grow too large causing the UI to be slow.
 		_, err := txn.ExecEx(ctx,
-			"activity-flush-txn-transfer-tops",
+			transferTopTxnsOpName,
 			txn.KV(), /* txn */
-			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
 			`DELETE FROM system.public.transaction_activity WHERE aggregated_ts = $1;`,
 			aggTs)
-
 		if err != nil {
 			return err
 		}
 
-		// Select the top 500 (controlled by sql.stats.activity.top.max) for
-		// each of execution_count, total execution time, service_latency, cpu_sql_nanos,
-		// contention_time and insert into transaction_activity table.
-		// Up to 2500 rows (sql.stats.activity.top.max * 5) may be added to
-		// transaction_activity.
-		// Any change should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
-		_, err = txn.ExecEx(ctx,
-			"activity-flush-txn-transfer-tops",
-			txn.KV(), /* txn */
-			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
-			`
-UPSERT INTO system.public.transaction_activity
-(aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
- statistics, query, execution_count, execution_total_seconds,
- execution_total_cluster_seconds, contention_time_avg_seconds,
- cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
-    (SELECT aggregated_ts,
-            fingerprint_id,
-            app_name,
-            agg_interval,
-            metadata,
-            merge_stats,
-            ''  AS query,
-            (merge_stats -> 'statistics' ->> 'cnt')::int,
-            ((merge_stats -> 'statistics' ->> 'cnt')::float) *
-            ((merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float),
-            $1 AS execution_total_cluster_seconds,
-            COALESCE ((merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
-            COALESCE ((merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0),
-            (merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float,
-            0 as service_latency_p99_seconds
-     FROM (SELECT ts.aggregated_ts                                       AS aggregated_ts,
-                  ts.app_name,
-                  ts.fingerprint_id,
-                  max(ts.agg_interval) as agg_interval,
-                  max(ts.metadata) AS metadata,
-                  merge_transaction_stats(statistics) AS merge_stats
-           FROM system.public.transaction_statistics ts
-                    inner join (SELECT fingerprint_id, app_name
-                                FROM (SELECT fingerprint_id, app_name,
-                                           contentionTime, cpuTime,
-                                            row_number() OVER (ORDER BY (merge_stats -> 'statistics' ->> 'cnt')::int desc) AS ePos,
-                                            row_number() OVER (ORDER BY (merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float desc) AS sPos,
-                                            row_number() OVER (ORDER BY ((merge_stats -> 'statistics' ->> 'cnt')::float) *
-                                                ((merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float) desc) AS tPos,
-                                            row_number() OVER (ORDER BY COALESCE((merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0) desc) AS cPos,
-                                            row_number() OVER (ORDER BY COALESCE((merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0) desc) AS uPos
-                                      FROM (SELECT fingerprint_id, app_name, merge_stats,
-                                            (merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float as contentionTime,
-                                            (merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float as cpuTime
-                                            FROM (SELECT fingerprint_id, app_name,
-                                                   merge_transaction_stats(statistics) AS merge_stats
-                                            			FROM system.public.transaction_statistics
-                                            			WHERE aggregated_ts = $2 and
-                                                  	app_name not like '$ internal%'
-                                            			GROUP BY app_name, fingerprint_id
-																						)
-																			)
-																)
-                                WHERE ePos < $3
-                                   or sPos < $3
-                                   or tPos < $3
-                                   or (cPos < $3 AND contentionTime > 0)
-                                   or (uPos < $3 AND cpuTime > 0)) agg
-                               on agg.app_name = ts.app_name and agg.fingerprint_id = ts.fingerprint_id
-           WHERE aggregated_ts = $2
-           GROUP BY ts.aggregated_ts,
-                    ts.app_name,
-                    ts.fingerprint_id));;
-`,
-			totalEstimatedTxnClusterExecSeconds,
-			aggTs,
-			topLimit,
-		)
+		err = u.upsertTopTransactions(ctx, transferTopTxnsOpName, txn, txn.KV(), it, aggTs, totalEstimatedTxnClusterExecSeconds)
+		if err != nil {
+			return err
+		}
 
-		return err
-	}, isql.WithPriority(admissionpb.UserLowPri))
+		return nil
+	})
 
 	if errTxn != nil {
 		return errTxn
 	}
 
 	errTxn = u.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-
 		// Delete all the rows of the old data from the table for the current
 		// aggregated timestamp. This is necessary because if a customer generates
 		// a lot of fingerprints each time the upsert runs it will add all new rows
@@ -761,4 +700,213 @@ func (u *sqlActivityUpdater) getTableRowCount(
 	}
 
 	return int64(tree.MustBeDInt(datums[0])), nil
+}
+
+// buildSelectAllTransactionsQuery is used to build the query to select and
+// aggregate all transactions for the provided aggregated timestamp to upsert
+// into the system.transaction_activity table.
+// The constructd query will expect 1 argument:
+// arg1: the aggregated timestamp to select the transactions.
+func (u *sqlActivityUpdater) buildSelectAllTransactionsQuery() string {
+	aost := u.testingKnobs.GetAOSTClause()
+	return fmt.Sprintf(`
+WITH aggregate_transaction_statistics AS (
+  SELECT 
+    app_name,
+    fingerprint_id,
+    max(aggregated_ts) AS max_aggregated_ts,
+    max(agg_interval) AS max_agg_interval,
+    max(metadata) AS metadata,
+    merge_transaction_stats(statistics) AS statistics
+  FROM system.public.transaction_statistics %[1]s
+  WHERE 
+    aggregated_ts = $1 AND
+    app_name NOT LIKE '$ internal%%'
+  GROUP BY app_name, fingerprint_id
+)
+SELECT 
+  fingerprint_id,
+  app_name,
+  max_agg_interval,
+  metadata,
+  statistics,
+  (statistics->'statistics'->>'cnt')::int AS count,
+  ((statistics->'statistics'->>'cnt')::float) * 
+    ((statistics->'statistics'->'svcLat'->>'mean')::float) AS total_latency,
+  COALESCE((statistics->'execution_statistics'->'contentionTime'->>'mean')::float, 0) AS avg_contention_time,
+  COALESCE((statistics->'execution_statistics'->'cpuSQLNanos'->>'mean')::float, 0) AS avg_cpu_time,
+  (statistics->'statistics'->'svcLat'->>'mean')::float AS avg_service_latency
+FROM aggregate_transaction_statistics %[1]s
+`, aost)
+}
+
+// buildSelectTopTransactionsQuery is used to build the query to select the top
+// transactions for the provided aggregated timestamp by
+// - execution count
+// - total execution time
+// - service latency
+// - cpu sql nanos
+// - contention time
+//
+// The query expects 2 arguments:
+// arg1: aggregated timestamp to select the top transactions
+// arg2: the top limit to select for each of the columns
+func (u *sqlActivityUpdater) buildSelectTopTransactionsQuery() string {
+	aost := u.testingKnobs.GetAOSTClause()
+
+	// The query uses a multi-stage approach:
+	// 1. transaction_aggregates CTE: Groups and aggregates transaction statistics in the
+	//    requested interval..
+	// 2. extracted_metrics CTE: Extracts relevant top-k metrics.
+	// 3. ranked_stats CTE: Calculates rankings for each desired metric.
+	// 4. Finally, we filter to get top transactions based on multiple ranking criteria.
+	return fmt.Sprintf(`
+WITH transaction_aggregates AS (
+    SELECT 
+        fingerprint_id,
+        app_name,
+        max(agg_interval) AS agg_interval,
+        max(metadata) AS metadata,
+        merge_transaction_stats(statistics) AS merge_stats
+    FROM system.public.transaction_statistics %[1]s
+    WHERE aggregated_ts = $1 AND app_name NOT LIKE '$ internal%%'
+    GROUP BY app_name, fingerprint_id
+),
+extracted_metrics AS (
+    SELECT
+        fingerprint_id,
+        app_name,
+        agg_interval,
+        metadata,
+        merge_stats,
+        (merge_stats -> 'statistics' ->> 'cnt')::int AS exec_count,
+        (merge_stats -> 'statistics' -> 'svcLat' ->> 'mean')::float AS svc_lat,
+        COALESCE((merge_stats -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0) AS contention_time,
+        COALESCE((merge_stats -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::float, 0) AS cpu_time
+    FROM transaction_aggregates %[1]s
+),
+ranked_stats AS (
+    SELECT
+        *,
+        row_number() OVER (ORDER BY exec_count DESC) AS exec_cnt_pos,
+        row_number() OVER (ORDER BY svc_lat DESC) AS svc_lat_pos,
+        row_number() OVER (ORDER BY exec_count::float * svc_lat DESC) AS run_time_pos,
+        row_number() OVER (ORDER BY contention_time DESC) AS contention_pos,
+        row_number() OVER (ORDER BY cpu_time DESC) AS cpu_pos
+    FROM extracted_metrics
+)
+SELECT 
+    fingerprint_id,
+    app_name,
+    agg_interval,
+    metadata,
+    merge_stats,
+    exec_count,
+    exec_count::float * svc_lat AS exec_lat_product,
+    contention_time,
+    cpu_time,
+    svc_lat
+FROM ranked_stats %[1]s
+WHERE exec_cnt_pos < $2 
+   OR svc_lat_pos < $2 
+   OR run_time_pos < $2 
+   OR (contention_pos < $2 AND contention_time > 0) 
+   OR (cpu_pos < $2 AND cpu_time > 0)
+`, aost)
+}
+
+// upsertTopTransactions is used to insert the rows in the iterator
+// into the system.transaction_activity table in batches of 500.
+// It is possible for the provided txn to be nil.
+func (u *sqlActivityUpdater) upsertTopTransactions(
+	ctx context.Context,
+	opName string,
+	executor isql.Executor,
+	txn *kv.Txn,
+	it isql.Rows,
+	aggTs time.Time,
+	totalTxnClusterExecSeconds float64,
+) error {
+	const colCount = 14
+	const queryBase = `
+UPSERT INTO system.public.transaction_activity (
+		aggregated_ts,
+		fingerprint_id,
+		app_name,
+		agg_interval,
+		metadata,
+		statistics,
+		query,
+		execution_count,
+		execution_total_seconds,
+		execution_total_cluster_seconds,
+		contention_time_avg_seconds,
+		cpu_sql_avg_nanos,
+		service_latency_avg_seconds,
+		service_latency_p99_seconds
+	) VALUES
+`
+
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return err
+	}
+
+	qArgs := make([]interface{}, 0, sqlActivityCacheUpsertLimit*colCount)
+	for ok {
+		var queryStr bytes.Buffer
+		queryStr.WriteString(queryBase)
+		qArgs = qArgs[:0]
+
+		for ; ok; ok, err = it.Next(ctx) {
+			if err != nil {
+				return err
+			}
+			if len(qArgs) > 0 {
+				queryStr.WriteString(",")
+			}
+
+			queryStr.WriteString("(")
+			for i := 0; i < colCount; i++ {
+				if i > 0 {
+					queryStr.WriteString(",")
+				}
+				queryStr.WriteString(fmt.Sprintf("$%d", len(qArgs)+i+1))
+			}
+			queryStr.WriteString(")")
+
+			it.Types()
+			row := it.Cur()
+			qArgs = append(qArgs,
+				aggTs,                      // aggregated_ts
+				row[0],                     // fingerprint_id
+				row[1],                     // app_name
+				row[2],                     // agg_interval
+				row[3],                     // metadata
+				row[4],                     // stats
+				"",                         // query
+				row[5],                     // execution count
+				row[6],                     // execution_total_seconds
+				totalTxnClusterExecSeconds, // execution_total_cluster_seconds
+				row[7],                     // contention_time_avg_seconds
+				row[8],                     // cpu_sql_avg_nanos
+				row[9],                     // service_latency_avg_seconds
+				0,                          // service_latency_p99_seconds
+			)
+
+			if len(qArgs) == sqlActivityCacheUpsertLimit*colCount {
+				// Batch is full.
+				break
+			}
+		}
+
+		_, err := executor.ExecEx(ctx, redact.Sprint(opName),
+			txn,
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+			queryStr.String(), qArgs...)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
