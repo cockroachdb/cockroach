@@ -121,7 +121,7 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/NetworkConnectivity":
 		return a.capabilitiesAuthorizer.HasProcessDebugCapability(ctx, tenID)
 
-	case "/cockroach.server.serverpb.Status/Gossip":
+	case "/cockroach.server.serverpb.Status/Gossip", "/cockroach.server.serverpb.Status/EngineStats":
 		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
 
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
