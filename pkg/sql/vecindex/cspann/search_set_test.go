@@ -120,7 +120,7 @@ func TestSearchSet(t *testing.T) {
 	result6 := SearchResult{
 		QuerySquaredDistance: 5, ErrorBound: 1, CentroidDistance: 60, ParentPartitionKey: 600, ChildKey: ChildKey{KeyBytes: []byte{60}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
+	require.Equal(t, SearchResults{result3, result1, result4, result6}, searchSet.PopResults())
 
 	// Don't allow extra results.
 	otherSet := SearchSet{MaxResults: 3}
@@ -131,7 +131,7 @@ func TestSearchSet(t *testing.T) {
 	result7 := SearchResult{
 		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{KeyBytes: []byte{70}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result3, result1, result4, result7, result6, result5}, searchSet.PopResults())
+	require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
 
 	result8 := SearchResult{
 		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{KeyBytes: []byte{80}}}
@@ -144,18 +144,22 @@ func TestSearchSet(t *testing.T) {
 	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
 	require.Equal(t, SearchResults{result3, result1, result4, result7}, otherSet.PopResults())
 
+	// Ignore duplicate results.
+	searchSet.AddAll(SearchResults{result1, result2, result1, result3, result4, result1, result5, result6, result7, result1})
+	require.Equal(t, SearchResults{result3, result1, result4, result7, result6}, searchSet.PopResults())
+
 	// Ignore results without a matching primary key.
 	otherSet = SearchSet{MaxResults: 2, MatchKey: []byte{60}}
 	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
 	require.Equal(t, SearchResults{result6}, otherSet.PopResults())
 
-	// Remove results.
+	// RemoveByParent.
 	searchSet = SearchSet{MaxResults: 4, MaxExtraResults: 2}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	searchSet.RemoveResults(100)
+	searchSet.RemoveByParent(100)
 	require.Equal(t, SearchResults{result3, result4, result6, result2, result5}, searchSet.PopResults())
 
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6})
-	searchSet.RemoveResults(200)
+	searchSet.RemoveByParent(200)
 	require.Equal(t, SearchResults{result3, result1, result4, result6, result5}, searchSet.PopResults())
 }

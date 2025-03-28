@@ -150,7 +150,7 @@ func (p *Partition) Search(
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
 	for i := range tempSquaredDistances {
-		searchSet.result = SearchResult{
+		searchSet.tempResult = SearchResult{
 			QuerySquaredDistance: tempSquaredDistances[i],
 			ErrorBound:           tempErrorBounds[i],
 			CentroidDistance:     centroidDistances[i],
@@ -158,7 +158,7 @@ func (p *Partition) Search(
 			ChildKey:             p.childKeys[i],
 			ValueBytes:           p.valueBytes[i],
 		}
-		searchSet.Add(&searchSet.result)
+		searchSet.Add(&searchSet.tempResult)
 	}
 
 	return p.Level(), count

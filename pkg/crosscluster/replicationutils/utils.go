@@ -347,6 +347,10 @@ func AuthorizeTableLevelPriv(
 			return err
 		}
 		lookupFlags := tree.ObjectLookupFlags{
+			// TODO(msbutler): for reasons beyond my paygrade, to grab offline
+			// descriptors, we need to also pass RequireMutable.
+			RequireMutable:       true,
+			IncludeOffline:       true,
 			Required:             true,
 			DesiredObjectKind:    tree.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableDesc,
