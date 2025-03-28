@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -936,4 +938,172 @@ func testNonBlockingReadsWithReaderFn(
 	time.Sleep(testTime)
 	atomic.StoreInt32(&done, 1)
 	require.NoError(t, g.Wait())
+}
+
+// TestClosedTimestampPolicyRefreshOnSetSpanConfig tests that SetSpanConfig
+// correctly triggers the closed timestamp policy refresh.
+func TestClosedTimestampPolicyRefreshOnSetSpanConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(scratchKey))
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl.GetRangeInfo(ctx).ClosedTimestampPolicy)
+
+	spanConfig, err := repl.LoadSpanConfig(ctx)
+	spanConfig.GlobalReads = true
+	require.NoError(t, err)
+	require.NotNil(t, spanConfig)
+	repl.SetSpanConfig(*spanConfig, roachpb.Span{Key: scratchKey})
+
+	// Trigger policy refresh.
+	testutils.SucceedsSoon(t, func() error {
+		if repl.GetRangeInfo(ctx).ClosedTimestampPolicy != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.New("expected LEAD_FOR_GLOBAL_READS")
+		}
+		return nil
+	})
+}
+
+// TestClosedTimestampPolicyRefreshIntervalOnLivenessRanges tests that the
+// closed timestamp policy is correctly applied to the node liveness range. That
+// is, even if we try to set the node liveness range to have global reads, the
+// closed timestamp policy should still be LAG_BY_CLUSTER_SETTING. Read more in
+// replica.closedTimestampPolicyRLocked.
+func TestClosedTimestampPolicyRefreshIntervalOnLivenessRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// Get the node liveness range descriptor.
+	livenessRangeDesc, err := tc.LookupRange(keys.NodeLivenessPrefix)
+	require.NoError(t, err)
+
+	// Check liveness range policy.
+	livenessRepl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(livenessRangeDesc.StartKey)
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, livenessRepl.GetRangeInfo(ctx).ClosedTimestampPolicy)
+
+	spanConfig, err := livenessRepl.LoadSpanConfig(ctx)
+	spanConfig.GlobalReads = true
+	require.NoError(t, err)
+	require.NotNil(t, spanConfig)
+	livenessRepl.SetSpanConfig(*spanConfig, roachpb.Span{Key: keys.NodeLivenessPrefix})
+
+	require.Never(t, func() bool {
+		expectedState := livenessRepl.GetRangeInfo(ctx).ClosedTimestampPolicy == roachpb.LAG_BY_CLUSTER_SETTING
+		return !expectedState
+	}, 3*time.Second, 500*time.Millisecond)
+}
+
+// TestSideTransportLeaseholder verifies that a range's leaseholder is properly
+// tracked by the closed timestamp side transport, even when the range is
+// receiving writes and the side transport interval is disabled.
+func TestSideTransportLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Disable side transport interval to verify tracking works even without
+	// active transport.
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 0)
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Get store and create test range.
+	store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+	tc.AddNonVotersOrFatal(t, scratchKey, tc.Target(2))
+	repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, repl)
+
+	// Start goroutine that continuously writes to the range to create write load.
+	go func() {
+		for {
+			select {
+			case <-time.After(10 * time.Millisecond):
+				pArgs := putArgs(scratchKey, []byte("value"))
+				if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), pArgs); pErr != nil {
+					log.Errorf(ctx, "failed to put value: %s", pErr)
+				}
+			case <-tc.Stopper().ShouldQuiesce():
+				return
+			}
+		}
+	}()
+
+	// Verify that the range appears in the closed timestamp sender's leaseholders
+	// list despite write load and disabled side transport.
+	testutils.SucceedsSoon(t, func() error {
+		closedTsSender := store.GetStoreConfig().ClosedTimestampSender
+		leaseholders := closedTsSender.GetLeaseholders()
+		for _, lh := range leaseholders {
+			if lh.(*kvserver.Replica).RangeID == repl.RangeID {
+				return nil
+			}
+		}
+		return errors.Errorf("range %d not found in leaseholders slice", repl.RangeID)
+	})
+}
+
+// TestClosedTimestampPolicyRefreshIntervalOnLeaseTransfers tests that the
+// closed timestamp policy is correctly refreshed on a range after a lease
+// transfer.
+func TestClosedTimestampPolicyRefreshIntervalOnLeaseTransfers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1), tc.Target(2))
+
+	repl1 := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(scratchKey))
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl1.GetRangeInfo(ctx).ClosedTimestampPolicy)
+
+	repl2 := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(scratchKey))
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl2.GetRangeInfo(ctx).ClosedTimestampPolicy)
+
+	spanConfig, err := repl2.LoadSpanConfig(ctx)
+	spanConfig.GlobalReads = true
+	require.NoError(t, err)
+	require.NotNil(t, spanConfig)
+	repl2.SetSpanConfig(*spanConfig, roachpb.Span{Key: scratchKey})
+	testutils.SucceedsSoon(t, func() error {
+		if repl2.GetRangeInfo(ctx).ClosedTimestampPolicy != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.New("expected LEAD_FOR_GLOBAL_READS")
+		}
+		return nil
+	})
+
+	// Force repl2 policy to be LAG_BY_CLUSTER_SETTING.
+	repl2.TestingSetCachedClosedTimestampPolicy(ctpb.LAG_BY_CLUSTER_SETTING)
+	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl2.GetRangeInfo(ctx).ClosedTimestampPolicy)
+
+	// Ensure that transferring the lease to repl2 does trigger a lease refresh.
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+	testutils.SucceedsSoon(t, func() error {
+		if actual := repl2.GetRangeInfo(ctx).ClosedTimestampPolicy; actual != roachpb.LEAD_FOR_GLOBAL_READS {
+			return errors.Newf("expected LEAD_FOR_GLOBAL_READS but got %v", actual)
+		}
+		return nil
+	})
 }
