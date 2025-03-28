@@ -14,13 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// RangefeedMetricsRecorder is an interface for recording rangefeed metrics.
-type RangefeedMetricsRecorder interface {
-	UpdateMetricsOnRangefeedConnect()
-	UpdateMetricsOnRangefeedDisconnect()
-	UpdateMetricsOnRangefeedDisconnectBy(num int64)
-}
-
 // ServerStreamSender forwards MuxRangefeedEvents from UnbufferedSender to the
 // underlying grpc stream.
 type ServerStreamSender interface {
