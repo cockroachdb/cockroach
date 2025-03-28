@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/settings",
         "//pkg/util/hlc",
     ],
@@ -20,7 +20,7 @@ go_test(
     srcs = ["policy_test.go"],
     embed = [":closedts"],
     deps = [
-        "//pkg/roachpb",
+        "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
