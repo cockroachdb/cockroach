@@ -130,6 +130,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvflowcontrol",

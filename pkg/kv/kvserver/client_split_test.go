@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -4105,7 +4106,10 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	spanConfig.GlobalReads = true
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings:         st,
 		DisableSQLServer: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -4140,7 +4144,12 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 	// Verify that the closed timestamp policy is set up.
 	repl := store.LookupReplica(roachpb.RKey(descKey))
-	require.Equal(t, repl.ClosedTimestampPolicy(), roachpb.LEAD_FOR_GLOBAL_READS)
+	testutils.SucceedsSoon(t, func() error {
+		if repl.ClosedTimestampPolicy() == roachpb.LEAD_FOR_GLOBAL_READS {
+			return nil
+		}
+		return errors.Newf("expected LEAD_FOR_GLOBAL_READS, got %s", repl.ClosedTimestampPolicy())
+	})
 
 	// Write to the range, which has the effect of bumping the closed timestamp.
 	pArgs := putArgs(descKey, []byte("foo"))
