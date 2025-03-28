@@ -32,8 +32,10 @@ vectorized: false
 │
 └── • render
     │
-    └── • index join
+    └── • lookup join
         │ table: t@t_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
         │
         └── • vector search
               table: t@t_v_idx
@@ -60,11 +62,12 @@ vectorized: false
         │ render k: k
         │ render v: v
         │
-        └── • index join
+        └── • lookup join (inner)
             │ columns: (k, v)
             │ estimated row count: 2 (missing stats)
             │ table: t@t_pkey
-            │ key columns: k
+            │ equality: (k) = (k)
+            │ equality cols are key
             │
             └── • vector search
                   columns: (k)
@@ -94,11 +97,12 @@ vectorized: false
         │ render k: k
         │ render v: v
         │
-        └── • index join
+        └── • lookup join (inner)
             │ columns: (k, v)
             │ estimated row count: 10 (missing stats)
             │ table: t@t_pkey
-            │ key columns: k
+            │ equality: (k) = (k)
+            │ equality cols are key
             │
             └── • vector search
                   columns: (k)
