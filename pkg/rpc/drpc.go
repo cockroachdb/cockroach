@@ -11,6 +11,7 @@ import (
 	"math"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
@@ -45,7 +46,7 @@ type DRPCServer struct {
 var _ drpcServerI = (*drpcserver.Server)(nil)
 var _ drpcServerI = (*drpcOffServer)(nil)
 
-func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
+func newDRPCServer(ctx context.Context, rpcCtx *Context) (*DRPCServer, error) {
 	var dmux drpcMuxI = &drpcOffServer{}
 	var dsrv drpcServerI = &drpcOffServer{}
 	var tlsCfg *tls.Config
@@ -54,6 +55,7 @@ func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
 		mux := drpcmux.New()
 		dsrv = drpcserver.NewWithOptions(mux, drpcserver.Options{
 			Log: func(err error) {
+				log.Ops.Infof(context.Background(), "%s", string(debugutil.Stack()))
 				log.Warningf(context.Background(), "drpc server error %v", err)
 			},
 			// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
@@ -90,21 +92,30 @@ func newDRPCServer(_ context.Context, rpcCtx *Context) (*DRPCServer, error) {
 	}, nil
 }
 
+type drpcConnWrapper struct {
+	pm *peerMetrics
+	net.Conn
+}
+
 func dialDRPC(
 	rpcCtx *Context, pm *peerMetrics,
 ) func(ctx context.Context, target string) (drpcpool.Conn, error) {
 	return func(ctx context.Context, target string) (drpcpool.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
-		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{})
+		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
+			Expiration: 0,
+			Capacity:   50,
+		})
 		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
 			_ struct{}) (drpcpool.Conn, error) {
-
-			pm.ConnectionDrpcNew.Inc(1)
 
 			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
 			if err != nil {
 				return nil, err
 			}
+			myConn := &drpcConnWrapper{pm, netConn}
+			pm.ConnectionDrpcOpen.Inc(1)
+			pm.ConnectionsDrpcActive.Inc(1)
 
 			opts := drpcconn.Options{
 				Manager: drpcmanager.Options{
@@ -118,7 +129,7 @@ func dialDRPC(
 			}
 			var conn *drpcconn.Conn
 			if rpcCtx.ContextOptions.Insecure {
-				conn = drpcconn.NewWithOptions(netConn, opts)
+				conn = drpcconn.NewWithOptions(myConn, opts)
 			} else {
 				tlsConfig, err := rpcCtx.GetClientTLSConfig()
 				if err != nil {
@@ -129,7 +140,7 @@ func dialDRPC(
 				// TODO(server): remove this hack which is necessary at least in
 				// testing to get TestDRPCSelectQuery to pass.
 				tlsConfig.InsecureSkipVerify = true
-				tlsConn := tls.Client(netConn, tlsConfig)
+				tlsConn := tls.Client(myConn, tlsConfig)
 				conn = drpcconn.NewWithOptions(tlsConn, opts)
 			}
 
@@ -145,6 +156,12 @@ func dialDRPC(
 			pool: pool,
 		}, nil
 	}
+}
+
+func (c drpcConnWrapper) Close() error {
+	c.pm.ConnectionDrpcClose.Inc(1)
+	c.pm.ConnectionsDrpcActive.Dec(1)
+	return c.Conn.Close()
 }
 
 type closeEntirePoolConn struct {

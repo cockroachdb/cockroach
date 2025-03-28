@@ -54,6 +54,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaDrpcActiveConnections = metric.Metadata{
+		Name:        "rpc.drpc.active_connections",
+		Help:        "Number of active connections with DRPC",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaDrpcDialOpenConnection = metric.Metadata{
 		Name:        "rpc.drpc.open_connections",
 		Help:        "Number of new connections created by DRPC",
@@ -207,6 +214,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionUnhealthyFor:        aggmetric.NewGauge(metaConnectionUnhealthyNanos, childLabels...),
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
 		ConnectionFailures:            aggmetric.NewCounter(metaConnectionFailures, childLabels...),
+		ConnectionsDrpcActive:         aggmetric.NewGauge(metaDrpcActiveConnections, childLabels...),
 		ConnectionDrpcOpen:            aggmetric.NewCounter(metaDrpcDialOpenConnection, childLabels...),
 		ConnectionDrpcClose:           aggmetric.NewCounter(metaDrpcDialCloseConnection, childLabels...),
 		ConnectionConnected:           aggmetric.NewGauge(metaConnectionConnected, localityLabels...),
@@ -253,6 +261,7 @@ type Metrics struct {
 	ConnectionUnhealthyFor        *aggmetric.AggGauge
 	ConnectionHeartbeats          *aggmetric.AggCounter
 	ConnectionFailures            *aggmetric.AggCounter
+	ConnectionsDrpcActive         *aggmetric.AggGauge
 	ConnectionDrpcOpen            *aggmetric.AggCounter
 	ConnectionDrpcClose           *aggmetric.AggCounter
 	ConnectionConnected           *aggmetric.AggGauge
@@ -319,8 +328,9 @@ type peerMetrics struct {
 	// Updated before each loop around in breakerProbe.run.
 	ConnectionFailures *aggmetric.Counter
 
-	ConnectionDrpcOpen  *aggmetric.Counter
-	ConnectionDrpcClose *aggmetric.Counter
+	ConnectionsDrpcActive *aggmetric.Gauge
+	ConnectionDrpcOpen    *aggmetric.Counter
+	ConnectionDrpcClose   *aggmetric.Counter
 }
 
 type localityMetrics struct {
@@ -344,6 +354,7 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 			ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
 			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
+			ConnectionsDrpcActive:  m.ConnectionsDrpcActive.AddChild(labelVals...),
 			ConnectionDrpcOpen:     m.ConnectionDrpcOpen.AddChild(labelVals...),
 			ConnectionDrpcClose:    m.ConnectionDrpcClose.AddChild(labelVals...),
 			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
