@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/crlib/testutils/require"
 	"github.com/prometheus/common/expfmt"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestAggCounter(t *testing.T) {
@@ -72,17 +71,4 @@ func TestAggCounter(t *testing.T) {
 
 	testFile = "aggCounter_post_eviction.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
-}
-
-func TestPanicForAggCounterWithBtreeStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	r := metric.NewRegistry()
-	c := NewCounter(metric.Metadata{
-		Name: "foo_counter",
-	}, "tenant_id", "counter_label")
-	r.AddMetric(c)
-
-	assert.Panics(t, func() {
-		c.Inc(1, "1", "1")
-	}, "expected panic when Inc is invoked on AggCounter with BTreeStorage")
 }
