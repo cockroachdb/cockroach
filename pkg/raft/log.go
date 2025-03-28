@@ -29,12 +29,6 @@ import (
 //
 // To access it safely, the user must not mutate the underlying raft log storage
 // between when the snapshot is obtained and the reads are done.
-//
-// TODO(pav-kv): this should be part of the Ready API. Instead of pre-fetching
-// entries (e.g. the committed entries subject to state machine application),
-// allow the application to read them from LogSnapshot in the Ready handler.
-// This gives the application direct control on resource allocation, and
-// flexibility to do raft log IO without blocking RawNode operation.
 type LogSnapshot struct {
 	// compacted is the compacted log index.
 	compacted uint64
