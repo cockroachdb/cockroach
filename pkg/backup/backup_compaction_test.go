@@ -77,11 +77,13 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/1'").Scan(&backupPath)
 
 		// Run twice to test compaction on top of compaction.
+		var firstCompactionEndTime int64
 		for range 2 {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
 			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
 			db.Exec(t, "UPDATE foo SET b = b + 1 WHERE a = 2")
-			db.Exec(t, fmt.Sprintf(incBackupCmd, 1))
+			mid := getTime(t)
+			db.Exec(t, fmt.Sprintf(incBackupAostCmd, 1, mid))
 			db.Exec(t, "DELETE FROM foo WHERE a = 3")
 			end := getTime(t)
 			db.Exec(
@@ -89,9 +91,19 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 				fmt.Sprintf(incBackupAostCmd, 1, end),
 			)
 			waitForSuccessfulJob(t, tc, startCompaction(1, start, end))
+			// Check we can restore to an intermediate time spanned by a compacted backup
+			db.Exec(t, fmt.Sprintf("RESTORE DATABASE defaultdb FROM LATEST IN 'nodelocal://1/backup/1' AS OF SYSTEM TIME '%d' with new_db_name=defaultdb2", mid))
+			db.Exec(t, "DROP DATABASE defaultdb2 CASCADE")
+
 			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end)
-			start = end
+			if firstCompactionEndTime == 0 {
+				firstCompactionEndTime = end
+			}
 		}
+
+		// Check we can restore from an intermediate time that points to a compacted backup that is also spanned by a compacted backup.
+		db.Exec(t, fmt.Sprintf("RESTORE DATABASE defaultdb FROM LATEST IN 'nodelocal://1/backup/1' AS OF SYSTEM TIME '%d' with new_db_name=defaultdb2", firstCompactionEndTime))
+		db.Exec(t, "DROP DATABASE defaultdb2 CASCADE")
 
 		// Ensure that additional backups were created.
 		var numBackups int
