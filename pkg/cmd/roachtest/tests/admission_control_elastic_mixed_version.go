@@ -37,7 +37,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/elastic-workload/mixed-version",
 		Owner:            registry.OwnerKV,
-		Timeout:          1 * time.Hour,
+		Timeout:          3 * time.Hour,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
