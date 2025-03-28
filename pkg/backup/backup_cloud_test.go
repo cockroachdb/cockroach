@@ -139,7 +139,7 @@ func TestOnlineRestoreS3(t *testing.T) {
 	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, "", InitManualReplication, params)
 	defer cleanupFnRestored()
 
-	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
+	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage, false)
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could

@@ -637,7 +637,9 @@ message RestoreDetails {
 
   bool download_job = 36;
 
-  // NEXT ID: 37.
+  bool experimental_copy = 37;
+
+  // NEXT ID: 38.
 }
 
 

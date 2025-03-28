@@ -4099,6 +4099,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{ExperimentalOnline: true}
   }
+| EXPERIMENTAL COPY
+{
+  $$.val = &tree.RestoreOptions{ExperimentalCopy: true}
+}
 | REMOVE_REGIONS
   {
     $$.val = &tree.RestoreOptions{RemoveRegions: true, SkipLocalitiesCheck: true}
