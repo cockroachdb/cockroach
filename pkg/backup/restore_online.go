@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -566,25 +567,18 @@ func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roa
 	return nil
 }
 
-func (r *restoreResumer) maybeWriteDownloadJob(
-	ctx context.Context,
-	execConfig *sql.ExecutorConfig,
-	preRestoreData *restorationDataBase,
-	mainRestoreData *mainRestorationData,
-) error {
-	details := r.job.Details().(jobspb.RestoreDetails)
-	if !details.ExperimentalOnline {
-		return nil
-	}
+func getDownloadSpans(
+	codec keys.SQLCodec, preRestoreData *restorationDataBase, mainRestoreData *mainRestorationData,
+) (roachpb.Spans, error) {
 	rekey := mainRestoreData.getRekeys()
 	rekey = append(rekey, preRestoreData.getRekeys()...)
 
 	tenantRekey := mainRestoreData.getTenantRekeys()
 	tenantRekey = append(tenantRekey, preRestoreData.getTenantRekeys()...)
-	kr, err := MakeKeyRewriterFromRekeys(execConfig.Codec, rekey, tenantRekey,
+	kr, err := MakeKeyRewriterFromRekeys(codec, rekey, tenantRekey,
 		false /* restoreTenantFromStream */)
 	if err != nil {
-		return errors.Wrap(err, "creating key rewriter from rekeys")
+		return nil, errors.Wrap(err, "creating key rewriter from rekeys")
 	}
 	downloadSpans := mainRestoreData.getSpans()
 
@@ -599,8 +593,26 @@ func (r *restoreResumer) maybeWriteDownloadJob(
 		var err error
 		downloadSpans[i], err = rewriteSpan(kr, downloadSpans[i].Clone(), execinfrapb.ElidePrefix_None)
 		if err != nil {
-			return err
+			return nil, err
 		}
+	}
+	return downloadSpans, nil
+}
+
+func (r *restoreResumer) maybeWriteDownloadJob(
+	ctx context.Context,
+	execConfig *sql.ExecutorConfig,
+	preRestoreData *restorationDataBase,
+	mainRestoreData *mainRestorationData,
+) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if !details.ExperimentalOnline {
+		return nil
+	}
+
+	downloadSpans, err := getDownloadSpans(execConfig.Codec, preRestoreData, mainRestoreData)
+	if err != nil {
+		return errors.Wrap(err, "failed to get download spans")
 	}
 
 	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
@@ -721,13 +733,15 @@ func getRemainingExternalFileBytes(
 	return remaining, nil
 }
 
-func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
+func (r *restoreResumer) doDownloadFiles(
+	ctx context.Context, execCtx sql.JobExecContext, downloadSpans roachpb.Spans,
+) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	grp := ctxgroup.WithContext(ctx)
 	completionPoller := make(chan struct{})
 
-	grp.GoCtx(r.sendDownloadWorker(execCtx, details.DownloadSpans, completionPoller))
+	grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpans, completionPoller))
 	grp.GoCtx(func(ctx context.Context) error {
 		return r.waitForDownloadToComplete(ctx, execCtx, details, completionPoller)
 	})
