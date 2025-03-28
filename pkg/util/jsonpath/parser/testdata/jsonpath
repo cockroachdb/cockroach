@@ -556,6 +556,21 @@ $.a starts with $var
 ----
 ($."a" starts with $"var") -- normalized!
 
+parse
+($.a).b
+----
+$."a"."b" -- normalized!
+
+parse
+(($.a.b).c.d).e.f
+----
+$."a"."b"."c"."d"."e"."f" -- normalized!
+
+parse
+(1 == 1).abc
+----
+(1 == 1)."abc" -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
