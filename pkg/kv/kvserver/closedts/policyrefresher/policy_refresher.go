@@ -20,12 +20,11 @@ import (
 )
 
 // PolicyRefresher periodically refreshes the closed timestamp policies for
-// leaseholder replicas based on network latencies between leaseholders and
-// their furthest follower.
+// ranges that have leaseholders on the node on which it is running.
 //
-// For ranges configured to serve global reads, this determines how far into the
-// future timestamps should be closed based on the latency to the farthest
-// follower (if LeadForGlobalReadsAutoTuneEnabled is enabled).
+// When LeadForGlobalReadsAutoTuneEnabled is enabled, the closed timestamp
+// policy for ranges configured with global reads considers network latencies
+// between the leaseholder and its furthest follower.
 type PolicyRefresher struct {
 	stopper  *stop.Stopper
 	settings *cluster.Settings
@@ -79,11 +78,14 @@ func NewPolicyRefresher(
 	return refresher
 }
 
-// Replica is implemented by kvserver.Replica.
+// Replica defines a thin interface to update closed timestamp policies on
+// replicas.
 type Replica interface {
-	// RefreshPolicy is called to update closed timestamp policy periodically
-	// with observed latency information by PolichRefresher. Note that the
-	// given map here can be nil.
+	// RefreshPolicy informs the replica that it should refresh its closed
+	// timestamp policy. A latency map, which includes observed latency to other
+	// nodes in the system by the PolicyRefresher may be supplied (or may be nil),
+	// in which case it may be used to correctly place a replica in its latency
+	// based global reads bucket.
 	RefreshPolicy(map[roachpb.NodeID]time.Duration)
 }
 

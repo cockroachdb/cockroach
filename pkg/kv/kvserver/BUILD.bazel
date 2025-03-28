@@ -141,6 +141,7 @@ go_library(
         "//pkg/kv/kvserver/benignerror",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/closedts/tracker",
         "//pkg/kv/kvserver/concurrency",
