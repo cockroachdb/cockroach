@@ -1375,3 +1375,34 @@ SELECT jsonb_path_query('{}', '$var', '{}', true);
 
 statement error pgcode 42704 pq: could not find jsonpath variable "var"
 SELECT jsonb_path_query('{}', '$var', '{}', false);
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
+----
+true
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', '((($[*] > (2)))) ? ((@ == true))');
+----
+true
+
+query T
+SELECT jsonb_path_query('{"a": {"b": {"c": 1}}}', '($.a.b).c');
+----
+1
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"b": {"c": 1, "d": 2}}}', '($.a.b).*');
+----
+1
+2
+
+query T
+SELECT jsonb_path_query('{"a": [10, 20, 30]}', '($.a)[1]');
+----
+20
+
+query T
+SELECT jsonb_path_query('{"a": {"b": [{"c": 1}, {"c": 2}]}}', '($.a.b[1]).c');
+----
+2
