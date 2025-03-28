@@ -914,6 +914,16 @@ SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H
 ----
 "He said \"Hello\\World!\""
 
+query T
+SELECT jsonb_path_query('["hello", "a"]', '$ like_regex "he"');
+----
+true
+
+query T
+SELECT jsonb_path_query('["hello", "a"]', 'strict $ like_regex "he"');
+----
+null
+
 query T rowsort
 SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
 ----
