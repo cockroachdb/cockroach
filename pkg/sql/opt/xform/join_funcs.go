@@ -392,7 +392,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	// deriving a `t1.crdb_region = t2.crdb_region` term based on foreign key
 	// constraints.
 	if !lookupIsKey {
-		if scanExpr, _, ok := c.getfilteredCanonicalScan(input); ok {
+		if scanExpr, _, ok := c.GetFilteredCanonicalScan(input); ok {
 			scanPrivate2 = &scanExpr.ScanPrivate
 			// The scan should already exist in the memo. We need to look it up so we
 			// have a `ScanExpr` with properties fully populated.
@@ -1547,12 +1547,12 @@ func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("expected joinRel to be inner, semi, or anti-join"))
 	}
 
-	origLeftScan, _, ok := c.getfilteredCanonicalScan(leftInput)
+	origLeftScan, _, ok := c.GetFilteredCanonicalScan(leftInput)
 	if !ok {
 		return nil, nil, nil, false
 	}
 
-	origRightScan, _, ok := c.getfilteredCanonicalScan(rightInput)
+	origRightScan, _, ok := c.GetFilteredCanonicalScan(rightInput)
 	if !ok {
 		return nil, nil, nil, false
 	}
@@ -1602,12 +1602,12 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("expected joinRel to be inner, semi, or anti-join"))
 	}
 
-	origLeftScan, leftFilters, ok := c.getfilteredCanonicalScan(leftInput)
+	origLeftScan, leftFilters, ok := c.GetFilteredCanonicalScan(leftInput)
 	if !ok {
 		panic(errors.AssertionFailedf("expected join left input to have canonical scan"))
 	}
 	origLeftScanPrivate := &origLeftScan.ScanPrivate
-	origRightScan, rightFilters, ok := c.getfilteredCanonicalScan(rightInput)
+	origRightScan, rightFilters, ok := c.GetFilteredCanonicalScan(rightInput)
 	if !ok {
 		panic(errors.AssertionFailedf("expected join right input to have canonical scan"))
 	}
@@ -1750,30 +1750,6 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 	return firstJoin, secondJoin, newRelationCols, aggCols, groupingCols
 }
 
-// getfilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
-// returns the input *ScanExpr and FiltersExpr, along with ok=true, if the Scan
-// is a canonical scan. If "relation" is a different type, or if it's a
-// *SelectExpr with an Input other than a *ScanExpr, ok=false is returned. Scans
-// or Selects with no filters may return filters as nil.
-func (c *CustomFuncs) getfilteredCanonicalScan(
-	relation memo.RelExpr,
-) (scanExpr *memo.ScanExpr, filters memo.FiltersExpr, ok bool) {
-	var selectExpr *memo.SelectExpr
-	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
-		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
-			return nil, nil, false
-		}
-		filters = selectExpr.Filters
-	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
-		return nil, nil, false
-	}
-	scanPrivate := &scanExpr.ScanPrivate
-	if !c.IsCanonicalScan(scanPrivate) {
-		return nil, nil, false
-	}
-	return scanExpr, filters, true
-}
-
 // CanHoistProjectInput returns true if a projection of an expression on
 // `relation` is allowed to be hoisted above a parent Join. The preconditions
 // for this are if `relation` is a canonical scan or a select from a canonical
@@ -1783,7 +1759,7 @@ func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
 	if c.e.evalCtx.SessionData().DisableHoistProjectionInJoinLimitation {
 		return true
 	}
-	_, _, ok = c.getfilteredCanonicalScan(relation)
+	_, _, ok = c.GetFilteredCanonicalScan(relation)
 	return ok
 }
 
@@ -1896,7 +1872,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 	}
 	// Only rewrite canonical scans or selects from canonical scans, which also
 	// means they are not locality-optimized.
-	inputScan, inputFilters, ok = c.getfilteredCanonicalScan(lookupJoinExpr.Input)
+	inputScan, inputFilters, ok = c.GetFilteredCanonicalScan(lookupJoinExpr.Input)
 	if !ok {
 		return nil, memo.FiltersExpr{}, false
 	}
