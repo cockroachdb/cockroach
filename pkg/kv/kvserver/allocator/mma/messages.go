@@ -12,10 +12,6 @@ import (
 )
 
 // Incoming messages for updating cluster state.
-//
-// This is a stop-gap and we will substitute these with protos.
-//
-// TODO(sumeer): add corresponding protos.
 
 // StoreLoadMsg is periodically sent by each store.
 type StoreLoadMsg struct {
@@ -53,10 +49,6 @@ type StoreLeaseholderMsg struct {
 // (decided by the caller) will not cause a RangeMsg.
 //
 // Also used to tell the allocator about ranges that no longer exist.
-//
-// TODO(sumeeer): these diff semantics are ok for now, but we may decide to
-// incorporate the diffing logic into the allocator after the first code
-// iteration.
 type RangeMsg struct {
 	roachpb.RangeID
 	Replicas  []StoreIDAndReplicaState
