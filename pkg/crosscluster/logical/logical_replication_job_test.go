@@ -498,10 +498,11 @@ func TestCreateTables(t *testing.T) {
 		gURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("g"))
 
 		sqlG.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
+		sqlG.Exec(t, "CREATE TABLE foo (pk int primary key, payload string)")
 
 		var jobID jobspb.JobID
 		// use create logically replicated table syntax
-		sqlG.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab ON $1 WITH UNIDIRECTIONAL", gURL.String()).Scan(&jobID)
+		sqlG.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLES (tab2, foo2) FROM TABLES (tab, foo) ON $1 WITH BIDIRECTIONAL ON $2", gURL.String(), gURL.String()).Scan(&jobID)
 		WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlG, jobID)
 		// check that tab2 is empty
 		sqlG.CheckQueryResults(t, "SELECT * FROM tab2", [][]string{})
@@ -1581,6 +1582,32 @@ func WaitUntilReplicatedTime(
 	})
 }
 
+func GetReverseJobID(
+	ctx context.Context, t *testing.T, db *sqlutils.SQLRunner, parentID jobspb.JobID,
+) jobspb.JobID {
+	// get the created time of the parent job
+	var created time.Time
+	db.QueryRow(t, "SELECT created FROM system.jobs WHERE id = $1", parentID).Scan(&created)
+
+	var jobID jobspb.JobID
+	testutils.SucceedsSoon(t, func() error {
+		err := db.DB.QueryRowContext(ctx, `
+            SELECT id 
+            FROM system.jobs 
+            WHERE job_type = 'LOGICAL REPLICATION' 
+            AND id != $1
+            AND created > $2
+            ORDER BY created DESC 
+            LIMIT 1`,
+			parentID, created).Scan(&jobID)
+		if err != nil {
+			return errors.Wrapf(err, "reverse job not found for parent %d", parentID)
+		}
+		return nil
+	})
+	return jobID
+}
+
 type mockBatchHandler struct {
 	err error
 }
@@ -2028,10 +2055,11 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.ExpectErr(t, "failed privilege check: table or system level REPLICATIONDEST privilege required: user testuser does not have REPLICATIONDEST privilege on relation tab", createStmt, dbBURL.String())
 		dbA.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser))
 		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 		dbA.Exec(t, fmt.Sprintf("REVOKE SYSTEM REPLICATIONDEST FROM %s", username.TestUser))
 	})
 	t.Run("replication-src", func(t *testing.T) {
-		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE system privilege", createStmt, dbBURL2.String())
+		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE privilege on relation tab", createStmt, dbBURL2.String())
 		sourcePriv := "REPLICATIONSOURCE"
 		if rng.Intn(3) == 0 {
 			// Test deprecated privilege name.
@@ -2041,6 +2069,15 @@ func TestUserPrivileges(t *testing.T) {
 		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM %s TO %s", sourcePriv, username.TestUser+"3"))
 		dbA.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
 		dbB.Exec(t, fmt.Sprintf("REVOKE SYSTEM %s FROM %s", sourcePriv, username.TestUser+"3"))
+	})
+	t.Run("table-level-replication-src", func(t *testing.T) {
+		dbA.ExpectErr(t, "user testuser3 does not have REPLICATIONSOURCE privilege on relation tab", createStmt, dbBURL2.String())
+
+		dbB.Exec(t, fmt.Sprintf("GRANT REPLICATIONSOURCE ON TABLE tab TO %s", username.TestUser+"3"))
+		dbA.QueryRow(t, createStmt, dbBURL2.String()).Scan(&jobAID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
+
+		dbB.Exec(t, fmt.Sprintf("REVOKE REPLICATIONSOURCE ON TABLE tab FROM %s", username.TestUser+"3"))
 	})
 	t.Run("table-level-replication-dest", func(t *testing.T) {
 
@@ -2055,7 +2092,9 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.ExpectErr(t, "failed privilege check: table or system level REPLICATIONDEST privilege required: user testuser does not have REPLICATIONDEST privilege on relation tab2", multiTableStmt, dbBURL.String())
 
 		dbA.Exec(t, fmt.Sprintf(`GRANT REPLICATIONDEST ON TABLE tab2 TO %s`, username.TestUser))
-		testuser.Exec(t, multiTableStmt, dbBURL.String())
+		testuser.QueryRow(t, multiTableStmt, dbBURL.String()).Scan(&jobAID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
+
 		dbA.Exec(t, fmt.Sprintf(`REVOKE REPLICATIONDEST ON TABLE tab FROM %s`, username.TestUser))
 		dbA.Exec(t, fmt.Sprintf(`REVOKE REPLICATIONDEST ON TABLE tab2 FROM %s`, username.TestUser))
 	})
@@ -2066,7 +2105,8 @@ func TestUserPrivileges(t *testing.T) {
 
 		// Grant CREATE privilege on destination database - should now succeed
 		dbA.Exec(t, `GRANT CREATE ON DATABASE a TO testuser`)
-		testuser.Exec(t, createStmt, dbBURL.String())
+		testuser.QueryRow(t, createStmt, dbBURL.String()).Scan(&jobAID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
 
 		dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"), serverutils.User(username.TestUser))
 
@@ -2075,8 +2115,14 @@ func TestUserPrivileges(t *testing.T) {
 		testuser.ExpectErr(t, " uri requires REPLICATIONDEST privilege for bidirectional replication: user testuser3 does not have REPLICATIONDEST privilege on relation tab", createStmtBidi, dbBURL2.String(), dbAURL.String())
 
 		dbB.Exec(t, fmt.Sprintf("GRANT SYSTEM REPLICATIONDEST TO %s", username.TestUser+"3"))
-		testuser.QueryRow(t, createStmtBidi, dbBURL2.String(), dbAURL.String()).Scan(&jobAID)
 
+		var jobAID2 jobspb.JobID
+		testuser.QueryRow(t, createStmtBidi, dbBURL2.String(), dbAURL.String()).Scan(&jobAID2)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID2)
+
+		// Ensure the reverse job advances as well
+		reverseJobID := GetReverseJobID(ctx, t, dbA, jobAID2)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
 	})
 }
 

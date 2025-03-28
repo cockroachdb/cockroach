@@ -170,6 +170,7 @@ message LogicalReplicationPlanRequest {
     // PlanAsOf is the time as of which the plan should be produced.
     util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
     bool use_table_span = 3;
+    int64 stream_id = 4 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
 }
 
 // SourcePartition contains per partition information for a replication plan.
