@@ -62,6 +62,9 @@ type BatchEvalTestingKnobs struct {
 	// NOTE: This currently only applies to Migrate requests and only ignores the
 	// cluster version.
 	OverrideDoTimelyApplicationToAllReplicas bool
+
+	// CommitTriggerError is called at commit triggers to simulate errors.
+	CommitTriggerError func() error
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
