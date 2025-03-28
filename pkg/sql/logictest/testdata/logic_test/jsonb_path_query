@@ -1099,3 +1099,58 @@ query T
 SELECT jsonb_path_query('{}', '(null like_regex "^he.*$") is unknown');
 ----
 true
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with "abc"');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with "abc"');
+----
+false
+
+query T
+SELECT jsonb_path_query('"abcdef"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"abc"', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('"ab"', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', '$ starts with $var', '{"var": "abc"}');
+----
+true
+
+query T
+SELECT jsonb_path_query('["ab", "a"]', '$ starts with $var', '{"var": "abc"}');
+----
+false
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", "abc"]', 'strict $ starts with $var', '{"var": 1}');
+----
+null
+
+query T
+SELECT jsonb_path_query('["ab", 1]', 'strict $ starts with $var', '{"var": "abc"}');
+----
+null

@@ -193,6 +193,8 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %token <str> EXISTS
 %token <str> IS
 %token <str> UNKNOWN
+%token <str> STARTS
+%token <str> WITH
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -205,6 +207,7 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %type <jsonpath.Path> index_elem
 %type <jsonpath.Path> predicate
 %type <jsonpath.Path> delimited_predicate
+%type <jsonpath.Path> starts_with_initial
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <jsonpath.OperationType> comp_op
@@ -420,6 +423,10 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpIsUnknown, $2.path())
   }
+| expr STARTS WITH starts_with_initial
+  {
+    $$.val = binaryOp(jsonpath.OpStartsWith, $1.path(), $4.path())
+  }
 | expr LIKE_REGEX STRING
   {
     regex, err := regexBinaryOp($1.path(), $3)
@@ -443,6 +450,17 @@ delimited_predicate:
 | EXISTS '(' expr ')'
   {
     $$.val = unaryOp(jsonpath.OpExists, $3.path())
+  }
+;
+
+starts_with_initial:
+  STRING
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+| VARIABLE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarVariable, Variable: $1}
   }
 ;
 
@@ -531,10 +549,12 @@ unreserved_keyword:
 | LAX
 | LIKE_REGEX
 | NULL
+| STARTS
 | STRICT
 | TO
 | TRUE
 | UNKNOWN
+| WITH
 ;
 
 %%

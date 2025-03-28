@@ -6,6 +6,8 @@
 package eval
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -53,7 +55,8 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot,
 		jsonpath.OpCompEqual, jsonpath.OpCompNotEqual, jsonpath.OpCompLess,
 		jsonpath.OpCompLessEqual, jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual,
-		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown:
+		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown,
+		jsonpath.OpStartsWith:
 		b, err := ctx.evalBoolean(op, jsonValue)
 		if err != nil {
 			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
@@ -89,9 +92,29 @@ func (ctx *jsonpathCtx) evalBoolean(
 		return ctx.evalExists(op, jsonValue)
 	case jsonpath.OpIsUnknown:
 		return ctx.evalIsUnknown(op, jsonValue)
+	case jsonpath.OpStartsWith:
+		return ctx.evalPredicate(op, jsonValue, evalStartsWithFunc, true /* evalRight */, false /* unwrapRight */)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func evalStartsWithFunc(_ jsonpath.Operation, l, r json.JSON) (jsonpathBool, error) {
+	if l.Type() != json.StringJSONType || r.Type() != json.StringJSONType {
+		return jsonpathBoolUnknown, nil
+	}
+	left, err := l.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	right, err := r.AsText()
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if strings.HasPrefix(*left, *right) {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
 }
 
 func (ctx *jsonpathCtx) evalIsUnknown(
