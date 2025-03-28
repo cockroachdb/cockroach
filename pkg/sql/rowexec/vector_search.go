@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -29,12 +28,13 @@ type vectorSearchProcessor struct {
 	execinfra.ProcessorBase
 	fetchSpec   *fetchpb.IndexFetchSpec
 	colOrdMap   catalog.TableColMap
-	prefixKey   roachpb.Key
+	prefixKeys  []roachpb.Key
 	queryVector vector.T
 
 	searcher    vecindex.Searcher
+	searchIdx   int
+	currPrefix  roachpb.Key
 	targetCount uint64
-	searchDone  bool
 
 	row     rowenc.EncDatumRow
 	scratch rowenc.EncDatumRow
@@ -50,13 +50,9 @@ func newVectorSearchProcessor(
 	spec *execinfrapb.VectorSearchSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	if spec.PrefixKey != nil {
-		return nil, unimplemented.New("prefix columns",
-			"searching a vector index with prefix columns is not yet supported")
-	}
 	v := vectorSearchProcessor{
 		fetchSpec:   &spec.FetchSpec,
-		prefixKey:   spec.PrefixKey,
+		prefixKeys:  spec.PrefixKeys,
 		queryVector: spec.QueryVector,
 		targetCount: spec.TargetNeighborCount,
 	}
@@ -92,21 +88,19 @@ func (v *vectorSearchProcessor) Start(ctx context.Context) {
 
 // Next is part of the RowSource interface.
 func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	var err error
-	if !v.searchDone {
-		v.searchDone = true
-		err := v.searcher.Search(v.Ctx(), v.prefixKey, v.queryVector, int(v.targetCount))
-		if err != nil {
-			v.MoveToDraining(err)
-		}
-	}
 	for v.State == execinfra.StateRunning {
 		next := v.searcher.NextResult()
 		if next == nil {
-			v.MoveToDraining(nil /* err */)
-			break
+			// Either we haven't searched yet, or we have exhausted the current
+			// search results.
+			ok, err := v.maybeSearch()
+			if !ok || err != nil {
+				v.MoveToDraining(err)
+				break
+			}
+			continue
 		}
-		if err = v.processSearchResult(next); err != nil {
+		if err := v.processSearchResult(next); err != nil {
 			v.MoveToDraining(err)
 			break
 		}
@@ -115,6 +109,33 @@ func (v *vectorSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		}
 	}
 	return nil, v.DrainHelper()
+}
+
+// maybeSearch performs the next vector search operation. It should be called
+// when there are no further search results to process. It returns ok=false if
+// there are no more searches to perform.
+func (v *vectorSearchProcessor) maybeSearch() (ok bool, err error) {
+	if v.searchIdx > 0 && v.searchIdx >= len(v.prefixKeys) {
+		// We have conducted at least one search. If there are prefix keys, we have
+		// already exhausted all of them. Note that there can be more than one
+		// prefix key; this is useful for hash-sharded indexes and queries like the
+		// following:
+		//
+		//   SELECT * FROM t@id_v_vector_idx
+		//   WHERE id IN (100, 200, 300)
+		//   ORDER BY v <-> '[1,2]' LIMIT 1;
+		//
+		return false, nil
+	}
+	if len(v.prefixKeys) > 0 {
+		v.currPrefix = v.prefixKeys[v.searchIdx]
+	}
+	v.searchIdx++
+	err = v.searcher.Search(v.Ctx(), v.currPrefix, v.queryVector, int(v.targetCount))
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // processSearchResult decodes the primary key columns from the search result
@@ -149,7 +170,7 @@ func (v *vectorSearchProcessor) processSearchResult(res *cspann.SearchResult) (e
 	}
 	// Decode the index prefix columns, if any,
 	keyPrefixCols := v.fetchSpec.KeyColumns()[:len(v.fetchSpec.KeyColumns())-1]
-	if err = decodeFromKey(keyPrefixCols, v.prefixKey); err != nil {
+	if err = decodeFromKey(keyPrefixCols, v.currPrefix); err != nil {
 		return err
 	}
 	// Decode the index suffix columns. This is usually the set of primary key
