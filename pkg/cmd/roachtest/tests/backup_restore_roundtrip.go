@@ -122,7 +122,7 @@ func backupRestoreRoundTrip(
 
 			return conn, err
 		}
-		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), sp.mock, sp.onlineRestore)
+		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), withMock(sp.mock), withOnlineRestore(sp.onlineRestore))
 		if err != nil {
 			return err
 		}
