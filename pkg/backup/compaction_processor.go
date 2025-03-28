@@ -167,6 +167,9 @@ func runCompactBackups(
 	spec execinfrapb.CompactBackupsSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	if len(spec.AssignedSpans) == 0 {
+		return nil
+	}
 	user := spec.User()
 	execCfg, ok := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 	if !ok {
@@ -177,6 +180,9 @@ func runCompactBackups(
 		return errors.Wrapf(err, "export configuration")
 	}
 	defaultStore, err := execCfg.DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	if err != nil {
+		return errors.Wrapf(err, "external storage")
+	}
 
 	compactChain, encryption, err := compactionChainFromSpec(ctx, execCfg, spec, user)
 	if err != nil {
@@ -186,6 +192,7 @@ func runCompactBackups(
 	intersectSpanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	tasks := []func(context.Context) error{
 		func(ctx context.Context) error {
+			defer close(intersectSpanCh)
 			return genIntersectingSpansForCompaction(ctx, execCfg, spec, compactChain, intersectSpanCh)
 		},
 		func(ctx context.Context) error {
@@ -284,9 +291,7 @@ func genIntersectingSpansForCompaction(
 	compactChain compactionChain,
 	intersectSpanCh chan execinfrapb.RestoreSpanEntry,
 ) error {
-	user := spec.User()
-
-	backupLocalityMap, err := makeBackupLocalityMap(compactChain.compactedLocalityInfo, user)
+	backupLocalityMap, err := makeBackupLocalityMap(compactChain.compactedLocalityInfo, spec.User())
 	if err != nil {
 		return err
 	}
@@ -299,7 +304,6 @@ func genIntersectingSpansForCompaction(
 	}
 	defer introducedSpanFrontier.Release()
 
-	entryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	targetSize := targetRestoreSpanSize.Get(&execCfg.Settings.SV)
 	maxFiles := maxFileCount.Get(&execCfg.Settings.SV)
 
@@ -311,12 +315,12 @@ func genIntersectingSpansForCompaction(
 		targetSize,
 		maxFiles,
 	)
+	if err != nil {
+		return err
+	}
 
-	genSpan := func(ctx context.Context) error {
+	genSpan := func(ctx context.Context, entryCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(entryCh)
-		if err != nil {
-			return err
-		}
 		return errors.Wrapf(generateAndSendImportSpans(
 			ctx,
 			spec.Spans,
@@ -329,7 +333,7 @@ func genIntersectingSpansForCompaction(
 		), "generate and send import spans")
 	}
 
-	filterIntersectingSpans := func(ctx context.Context) error {
+	filterIntersectingSpans := func(ctx context.Context, entryCh chan execinfrapb.RestoreSpanEntry) error {
 		for {
 			select {
 			case <-ctx.Done():
@@ -348,12 +352,13 @@ func genIntersectingSpansForCompaction(
 		}
 	}
 
+	entryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	tasks := []func(context.Context) error{
 		func(ctx context.Context) error {
-			return genSpan(ctx)
+			return genSpan(ctx, entryCh)
 		},
 		func(ctx context.Context) error {
-			return filterIntersectingSpans(ctx)
+			return filterIntersectingSpans(ctx, entryCh)
 		},
 	}
 	return ctxgroup.GoAndWait(ctx, tasks...)
@@ -368,7 +373,7 @@ func openSSTs(
 ) (mergedSST, error) {
 	var dirs []cloud.ExternalStorage
 	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
-	for idx := 0; idx < len(entry.Files); idx++ {
+	for idx := range entry.Files {
 		file := entry.Files[idx]
 		dir, err := execCfg.DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {

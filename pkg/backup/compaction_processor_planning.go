@@ -32,27 +32,34 @@ import (
 // in the backup chain that need to be compacted. It sends updates from the
 // BulkProcessor to the provided progress channel. It is the caller's
 // responsibility to close the progress channel.
-func (c *compactionChain) runCompactionPlan(
+func runCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
-	manifest *backuppb.BackupManifest,
 	details jobspb.BackupDetails,
+	compactChain compactionChain,
+	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	defer close(progCh)
 	log.Infof(
 		ctx, "planning compaction of %d backups: %s",
-		len(c.chainToCompact), util.Map(c.chainToCompact, func(m backuppb.BackupManifest) string {
+		len(compactChain.chainToCompact),
+		util.Map(compactChain.chainToCompact, func(m backuppb.BackupManifest) string {
 			return m.ID.String()
 		}),
 	)
-	backupLocalityMap, err := makeBackupLocalityMap(c.compactedLocalityInfo, execCtx.User())
+	backupLocalityMap, err := makeBackupLocalityMap(
+		compactChain.compactedLocalityInfo, execCtx.User(),
+	)
 	if err != nil {
 		return err
 	}
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(c.backupChain, manifest.EndTime)
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(
+		compactChain.backupChain, manifest.EndTime,
+	)
 	if err != nil {
 		return err
 	}
@@ -72,18 +79,17 @@ func (c *compactionChain) runCompactionPlan(
 	}
 
 	spansToCompact, err := getSpansToCompact(
-		ctx, execCtx, manifest, c.chainToCompact, details, defaultStore, kmsEnv,
+		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
 		return err
 	}
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
-		defer close(spanCh)
 		return errors.Wrap(generateAndSendImportSpans(
 			ctx,
 			spansToCompact,
-			c.chainToCompact,
-			c.compactedIterFactory,
+			compactChain.chainToCompact,
+			compactChain.compactedIterFactory,
 			backupLocalityMap,
 			filter,
 			fsc,
@@ -105,9 +111,10 @@ func (c *compactionChain) runCompactionPlan(
 		}
 		return nil
 	}
+	rowResultWriter := sql.NewRowResultWriter(nil)
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
-		sql.NewMetadataCallbackWriter(nil, metaFn),
+		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* txn */
@@ -125,7 +132,7 @@ func (c *compactionChain) runCompactionPlan(
 	return nil
 }
 
-// createCompactionPlan creates an unfinalized physical plan that will
+// createCompactionPlan creates an un-finalized physical plan that will
 // distribute spans from a generator across the cluster for compaction.
 func createCompactionPlan(
 	ctx context.Context,
@@ -184,6 +191,7 @@ func countRestoreSpanEntries(
 			return nil
 		},
 		func(ctx context.Context) error {
+			defer close(countSpansCh)
 			return genSpan(ctx, countSpansCh)
 		},
 	}
@@ -194,7 +202,7 @@ func countRestoreSpanEntries(
 }
 
 // createCompactionCorePlacements takes spans from a generator and evenly
-// distributes them across nodes in the cluster, returning the core core placements
+// distributes them across nodes in the cluster, returning the core placements
 // reflecting that distribution.
 func createCompactionCorePlacements(
 	ctx context.Context,
@@ -209,17 +217,32 @@ func createCompactionCorePlacements(
 ) ([]physicalplan.ProcessorCorePlacement, error) {
 	numNodes := len(sqlInstanceIDs)
 	corePlacements := make([]physicalplan.ProcessorCorePlacement, numNodes)
+	for i := range corePlacements {
+		corePlacements[i].SQLInstanceID = sqlInstanceIDs[i]
+		corePlacements[i].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
+			JobID:       int64(jobID),
+			DefaultURI:  details.URI,
+			Destination: details.Destination,
+			Encryption:  details.EncryptionOptions,
+			StartTime:   details.StartTime,
+			EndTime:     details.EndTime,
+			ElideMode:   elideMode,
+			UserProto:   user.EncodeProto(),
+			Spans:       spansToCompact,
+		}
+	}
 
 	spanEntryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	var tasks []func(ctx context.Context) error
 	tasks = append(tasks, func(ctx context.Context) error {
+		defer close(spanEntryCh)
 		return genSpan(ctx, spanEntryCh)
 	})
 	tasks = append(tasks, func(ctx context.Context) error {
 		numEntriesPerNode := numEntries / numNodes
 		leftoverEntries := numEntries % numNodes
 		getTargetNumEntries := func(nodeIdx int) int {
-			if nodeIdx <= leftoverEntries {
+			if nodeIdx < leftoverEntries {
 				// This more evenly distributes the leftover entries across the nodes
 				// after doing integer division to assign the entries to the nodes.
 				return numEntriesPerNode + 1
@@ -231,21 +254,14 @@ func createCompactionCorePlacements(
 		targetNumEntries := getTargetNumEntries(currNode)
 
 		for entry := range spanEntryCh {
+			currEntries = append(currEntries, entry)
 			if len(currEntries) == targetNumEntries {
 				corePlacements[currNode].SQLInstanceID = sqlInstanceIDs[currNode]
-				corePlacements[currNode].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
-					JobID:       int64(jobID),
-					Destination: details.Destination,
-					Encryption:  details.EncryptionOptions,
-					StartTime:   details.StartTime,
-					EndTime:     details.EndTime,
-					ElideMode:   elideMode,
-					UserProto:   user.EncodeProto(),
-					Spans:       spansToCompact,
-					AssignedSpans: util.Map(currEntries, func(entry execinfrapb.RestoreSpanEntry) roachpb.Span {
+				corePlacements[currNode].Core.CompactBackups.AssignedSpans = util.Map(
+					currEntries,
+					func(entry execinfrapb.RestoreSpanEntry) roachpb.Span {
 						return entry.Span
-					}),
-				}
+					})
 				currNode++
 				targetNumEntries = getTargetNumEntries(currNode)
 				currEntries = currEntries[:0]
@@ -253,7 +269,6 @@ func createCompactionCorePlacements(
 			if currNode == numNodes {
 				return nil
 			}
-			currEntries = append(currEntries, entry)
 		}
 		return nil
 	})

@@ -14,7 +14,7 @@ go_library(
         "backup_processor_planning.go",
         "backup_span_coverage.go",
         "backup_telemetry.go",
-        "compaction.go",
+        "compaction_job.go",
         "compaction_policy.go",
         "compaction_processor.go",
         "compaction_processor_planning.go",
@@ -180,6 +180,7 @@ go_test(
         "bench_covering_test.go",
         "bench_test.go",
         "compaction_policy_test.go",
+        "compaction_processor_planning_test.go",
         "compaction_test.go",
         "create_scheduled_backup_test.go",
         "data_driven_generated_test.go",  # keep

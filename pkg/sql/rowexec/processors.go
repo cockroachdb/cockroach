@@ -412,7 +412,7 @@ func NewProcessor(
 		if NewCompactBackupsProcessor == nil {
 			return nil, errors.New("CompactBackups processor unimplemented")
 		}
-		return NewCompactBackupsProcessor(ctx, flowCtx, processorID, *core.CompactBackups, post, inputs[0])
+		return NewCompactBackupsProcessor(ctx, flowCtx, processorID, *core.CompactBackups, post)
 	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }

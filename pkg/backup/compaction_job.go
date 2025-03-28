@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -82,7 +83,10 @@ func maybeStartCompactionJob(
 		execCfg.InternalDB,
 		user,
 	)
-	chain, _, _, _, err := getBackupChain(ctx, execCfg, user, triggerJob, &kmsEnv)
+	chain, _, _, _, err := getBackupChain(
+		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
+		triggerJob.EndTime, &kmsEnv,
+	)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get backup chain")
 	}
@@ -351,7 +355,9 @@ func (b *backupResumer) ResumeCompaction(
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	// TODO (kev-cao): Add progress tracking to compactions.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if err = compactChain.Compact(ctx, execCtx, updatedDetails, backupManifest, defaultStore, kmsEnv); err == nil {
+		if err = doCompaction(
+			ctx, execCtx, b.job.ID(), updatedDetails, compactChain, backupManifest, defaultStore, kmsEnv,
+		); err == nil {
 			break
 		}
 
@@ -674,11 +680,19 @@ func getBackupChain(
 			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
-	encryption, err := backupencryption.GetEncryptionFromBaseStore(
-		ctx, baseStores[0], encryptionOpts, kmsEnv,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	// If encryption keys have not already been computed, then we will compute
+	// it using the base store.
+	var encryption *jobspb.BackupEncryptionOptions
+	if encryptionOpts != nil && encryptionOpts.Mode != jobspb.EncryptionMode_None &&
+		(encryptionOpts.Key != nil || encryptionOpts.KMSInfo != nil) {
+		encryption = encryptionOpts
+	} else {
+		encryption, err = backupencryption.GetEncryptionFromBaseStore(
+			ctx, baseStores[0], encryptionOpts, kmsEnv,
+		)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
 	}
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
@@ -738,7 +752,7 @@ func concludeBackupCompaction(
 func processProgress(
 	ctx context.Context,
 	manifest *backuppb.BackupManifest,
-	progCh <-chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	// When a processor is done exporting a span, it will send a progress update
 	// to progCh.
@@ -780,6 +794,37 @@ func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
 		fmtCtx.WriteString(")")
 	}
 	return fmtCtx.CloseAndGetString(), nil
+}
+
+func doCompaction(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	details jobspb.BackupDetails,
+	compactChain compactionChain,
+	manifest *backuppb.BackupManifest,
+	defaultStore cloud.ExternalStorage,
+	kmsEnv cloud.KMSEnv,
+) error {
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+	runDistCompaction := func(ctx context.Context) error {
+		return runCompactionPlan(
+			ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv, progCh,
+		)
+	}
+	checkpointLoop := func(ctx context.Context) error {
+		return processProgress(ctx, manifest, progCh)
+	}
+
+	if err := ctxgroup.GoAndWait(
+		ctx, runDistCompaction, checkpointLoop,
+	); err != nil {
+		return err
+	}
+
+	return concludeBackupCompaction(
+		ctx, execCtx, defaultStore, details.EncryptionOptions, kmsEnv, manifest,
+	)
 }
 
 func init() {
