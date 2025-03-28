@@ -1866,9 +1866,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
-		if err := r.maybeWriteDownloadJob(ctx, p.ExecCfg(), preData, mainData); err != nil {
-			return err
-		}
 		emitRestoreJobEvent(ctx, p, jobs.StateSucceeded, r.job)
 		return nil
 	}
