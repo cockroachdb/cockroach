@@ -97,6 +97,11 @@ func newMultiSSTWriter(
 		Format: storage.EngineComparer.FormatKey,
 		Emit:   msstw.emitRangeKey,
 	}
+	msstw.rangeDelFrag = rangedel.Fragmenter{
+		Cmp:    storage.EngineComparer.Compare,
+		Format: storage.EngineComparer.FormatKey,
+		Emit:   msstw.emitRangeDel,
+	}
 
 	if err := msstw.initSST(ctx); err != nil {
 		return msstw, err
@@ -109,6 +114,12 @@ func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
 		if err := msstw.currSST.PutInternalRangeKey(key.Start, key.End, key.Keys[i]); err != nil {
 			panic(fmt.Sprintf("failed to put range key in sst: %s", err))
 		}
+	}
+}
+
+func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
+	if err := msstw.currSST.ClearRawEncodedRange(key.Start, key.End); err != nil {
+		panic(fmt.Sprintf("failed to put range del in sst: %s", err))
 	}
 }
 
@@ -146,17 +157,16 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 		sp := msstw.currentSpan()
 		startKey := storage.EngineKey{Key: sp.Key}
 		endKey := storage.EngineKey{Key: sp.EndKey}
-		trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
-		s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
-		msstw.rangeKeyFrag.Add(s)
-
-		if err := msstw.currSST.ClearEngineRange(
-			startKey, endKey,
-		); err != nil {
-			msstw.currSST.Close()
-			return errors.Wrap(err, "failed to clear range on sst file writer")
+		{
+			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeyDelete)
+			s := rangekey.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangekey.Key{{Trailer: trailer}}}
+			msstw.rangeKeyFrag.Add(s)
 		}
-		msstw.rangeDelFrag.Add(rangedel.Span{Start: startKey.Encode(), End: endKey.Encode()})
+		{
+			trailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeDelete)
+			s := rangedel.Span{Start: startKey.Encode(), End: endKey.Encode(), Keys: []rangedel.Key{{Trailer: trailer}}}
+			msstw.rangeDelFrag.Add(s)
+		}
 	}
 	return nil
 }
@@ -358,9 +368,7 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 		return errors.Wrap(err, "failed to put range delete in sst")
 	}
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
-
-	msstw.rangeDelFrag.Add(FragSpan{Start: start, End: end})
-
+	msstw.rangeDelFrag.Add(rangedel.Span{Start: start, End: end})
 	return nil
 }
 
