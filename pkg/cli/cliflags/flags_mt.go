@@ -21,6 +21,13 @@ not exist, or if the tenant id is incomplete, the tenant server will block, and
 wait for the tenant id to be fully written to the file (with a newline character).`,
 	}
 
+	// TenantNameIdentity is used to treat tenant name as tenant identity,
+	// instead of the default tenant ID.
+	TenantNameIdentity = FlagInfo{
+		Name:        "tenant-name-id",
+		Description: `Treat tenant-id passed to the command as tenant name.`,
+	}
+
 	KVAddrs = FlagInfo{
 		Name:        "kv-addrs",
 		EnvVar:      "COCKROACH_KV_ADDRS",

@@ -452,7 +452,7 @@ func CreateTenantPair(
 	certsDir, caKeyPath string,
 	keySize int,
 	lifetime time.Duration,
-	tenantIdentifier uint64,
+	tenantIdentity roachpb.TenantIdentity,
 	hosts []string,
 ) (*TenantPair, error) {
 	if len(caKeyPath) == 0 {
@@ -488,7 +488,7 @@ func CreateTenantPair(
 	}
 
 	clientCert, err := GenerateTenantCert(
-		caCert, caPrivateKey, clientKey.Public(), lifetime, tenantIdentifier, hosts,
+		caCert, caPrivateKey, clientKey.Public(), lifetime, tenantIdentity, hosts,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating tenant certificate and key")
@@ -527,16 +527,14 @@ func WriteTenantPair(certsDir string, cp *TenantPair, overwrite bool) error {
 // CreateTenantSigningPair creates a tenant signing pair. The private key and
 // public key are both created in certsDir.
 func CreateTenantSigningPair(
-	certsDir string, lifetime time.Duration, overwrite bool, tenantID uint64,
+	certsDir string, lifetime time.Duration, overwrite bool, tenantIdentity roachpb.TenantIdentity,
 ) error {
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
 	}
-	if tenantID == 0 {
-		return errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	if err := tenantIdentity.Validate(); err != nil {
+		return errors.Wrapf(err, "tenant identity %v is invalid", tenantIdentity)
 	}
-
-	tenantIdentifier := fmt.Sprintf("%d", tenantID)
 
 	// Create a certificate manager with "create dir if not exist".
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
@@ -544,8 +542,8 @@ func CreateTenantSigningPair(
 		return err
 	}
 
-	signingKeyPath := cm.TenantSigningKeyPath(tenantIdentifier)
-	signingCertPath := cm.TenantSigningCertPath(tenantIdentifier)
+	signingKeyPath := cm.TenantSigningKeyPath(tenantIdentity.ToString())
+	signingCertPath := cm.TenantSigningCertPath(tenantIdentity.ToString())
 	var pubKey crypto.PublicKey
 	var privKey crypto.PrivateKey
 	pubKey, privKey, err = ed25519.GenerateKey(rand.Reader)
@@ -560,7 +558,7 @@ func CreateTenantSigningPair(
 	log.Infof(context.Background(), "generated tenant signing key %s", signingKeyPath)
 
 	// Generate certificate.
-	certContents, err := GenerateTenantSigningCert(pubKey, privKey, lifetime, tenantID)
+	certContents, err := GenerateTenantSigningCert(pubKey, privKey, lifetime, tenantIdentity)
 	if err != nil {
 		return errors.Wrap(err, "could not generate tenant signing certificate")
 	}

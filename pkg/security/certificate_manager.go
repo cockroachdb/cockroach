@@ -8,7 +8,6 @@ package security
 import (
 	"context"
 	"crypto/tls"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -316,35 +315,22 @@ func (cm *CertificateManager) LoadCertificates() error {
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
-			tenantID, err := strconv.ParseUint(ci.Name, 10, 64)
+			tenantIdentity, err := roachpb.TenantIdentityFromString(ci.Name)
 			if err != nil {
-				return errors.Errorf("invalid tenant id %s", ci.Name)
+				return errors.Wrapf(err, "invalid tenant identity %s", ci.Name)
 			}
-
-			// TODO(chandrat): For now, this can't be anything other than TenantID.
-			// Once we add support for TenantName, we should revisit this.
-			cmTenantID, ok := cm.tenantIdentity.(roachpb.TenantID)
-			if !ok {
-				return errors.Errorf("invalid tenant ID: %v", cm.tenantIdentity)
-			}
-			if tenantID == cmTenantID.InternalValue {
+			if tenantIdentity.IsEqual(cm.tenantIdentity) {
 				tenantCert = ci
 			}
 		case TenantSigningPem:
 			// When there are multiple tenant signing certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
-			tenantID, err := strconv.ParseUint(ci.Name, 10, 64)
+			tenantIdentity, err := roachpb.TenantIdentityFromString(ci.Name)
 			if err != nil {
-				return errors.Errorf("invalid tenant id %s", ci.Name)
+				return errors.Wrapf(err, "invalid tenant identity %s", ci.Name)
 			}
-			// TODO(chandrat): For now, this can't be anything other than TenantID.
-			// Once we add support for TenantName, we should revisit this.
-			cmTenantID, ok := cm.tenantIdentity.(roachpb.TenantID)
-			if !ok {
-				return errors.Errorf("invalid tenant ID: %v", cm.tenantIdentity)
-			}
-			if tenantID == cmTenantID.InternalValue {
+			if tenantIdentity.IsEqual(cm.tenantIdentity) {
 				tenantSigningCert = ci
 			}
 		case TenantCAPem:
@@ -394,7 +380,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	if tenantCert == nil && cm.tenantIdentity.IsSet() {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentity, cm.CertsDir())
+		return makeErrorf(errors.New("tenant client cert not found"), "for %v in %s", cm.tenantIdentity, cm.CertsDir())
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {

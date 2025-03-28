@@ -41,9 +41,10 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 		false,            // overwrite
 	))
 
+	tenantIdentity := roachpb.MustMakeTenantID(tenant)
 	// That dedicated service can make client certs for a tenant as follows:
 	tenantCerts, err := security.CreateTenantPair(
-		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenantIdentity, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily
@@ -60,7 +61,7 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
 
 	// Also check that the tenant signing cert gets created.
-	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenantIdentity))
 	return certsDir
 }
 

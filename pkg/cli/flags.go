@@ -673,6 +673,10 @@ func init() {
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
 			cliflagcfg.BoolFlag(f, &certCtx.disableUsernameValidation, cliflags.DisableUsernameValidation)
 		}
+
+		if cmd == mtCreateTenantCertCmd {
+			cliflagcfg.BoolFlag(f, &certCtx.tenantNameIdentity, cliflags.TenantNameIdentity)
+		}
 	}
 
 	clientCmds := []*cobra.Command{

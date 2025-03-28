@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -61,7 +62,7 @@ If no server addresses are passed, then a default list containing 127.0.0.1, ::1
 	Args: cobra.MinimumNArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(
 		func(cmd *cobra.Command, args []string) error {
-			tenantIDs := args[0]
+			maybeTenantID := args[0]
 
 			var hostAddrs []string
 			if len(args) > 1 {
@@ -83,16 +84,29 @@ If no server addresses are passed, then a default list containing 127.0.0.1, ::1
 				fmt.Fprintf(stderr, "Warning: no server address specified. Using %+v.\n", hostAddrs)
 			}
 
-			tenantID, err := strconv.ParseUint(tenantIDs, 10, 64)
-			if err != nil {
-				return errors.Wrapf(err, "%s is invalid uint64", tenantIDs)
+			var tenantIdentity roachpb.TenantIdentity
+			if !certCtx.tenantNameIdentity {
+				tenantID, err := strconv.ParseUint(maybeTenantID, 10, 64)
+				if err != nil {
+					return errors.Wrapf(err, "%d is invalid uint64", tenantID)
+				}
+				tenantIdentity, err = roachpb.MakeTenantID(tenantID)
+				if err != nil {
+					return errors.Wrapf(err, "%v is invalid tenant ID", tenantIdentity)
+				}
+			} else {
+				tenantIdentity = roachpb.TenantName(maybeTenantID)
+				if err := tenantIdentity.Validate(); err != nil {
+					return errors.Wrapf(err, "%v is invalid tenant name", tenantIdentity)
+				}
 			}
+
 			cp, err := security.CreateTenantPair(
 				certCtx.certsDir,
 				certCtx.caKey,
 				certCtx.keySize,
 				certCtx.certificateLifetime,
-				tenantID,
+				tenantIdentity,
 				hostAddrs,
 			)
 			if err != nil {
@@ -121,17 +135,18 @@ If --overwrite is true, any existing files are overwritten.
 	Args: cobra.ExactArgs(1),
 	RunE: clierrorplus.MaybeDecorateError(
 		func(cmd *cobra.Command, args []string) error {
-			tenantIDs := args[0]
-			tenantID, err := strconv.ParseUint(tenantIDs, 10, 64)
+			tenantID := args[0]
+			tenantIdentity, err := roachpb.TenantIdentityFromString(tenantID)
 			if err != nil {
-				return errors.Wrapf(err, "%s is invalid uint64", tenantIDs)
+				return errors.Wrapf(err, "%s is invalid tenant ID", tenantIdentity)
 			}
+
 			return errors.Wrap(
 				security.CreateTenantSigningPair(
 					certCtx.certsDir,
 					certCtx.certificateLifetime,
 					certCtx.overwriteFiles,
-					tenantID),
+					tenantIdentity),
 				"failed to generate tenant signing cert and key")
 		}),
 }

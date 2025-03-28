@@ -205,16 +205,16 @@ func GenerateTenantCert(
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
-	tenantID uint64,
+	tenantIdentity roachpb.TenantIdentity,
 	hosts []string,
 ) ([]byte, error) {
 
-	if tenantID == 0 {
-		return nil, errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	if !tenantIdentity.IsSet() {
+		return nil, errors.Errorf("tenant identity %d is invalid", tenantIdentity)
 	}
 
 	// Create template for user.
-	template, err := newTemplate(fmt.Sprintf("%d", tenantID), lifetime, TenantsOU)
+	template, err := newTemplate(tenantIdentity.ToString(), lifetime, TenantsOU)
 	if err != nil {
 		return nil, err
 	}
@@ -295,12 +295,15 @@ func GenerateClientCert(
 // GenerateTenantSigningCert generates a signing certificate and returns the
 // cert bytes. Takes in the signing keypair and the certificate lifetime.
 func GenerateTenantSigningCert(
-	publicKey crypto.PublicKey, privateKey crypto.PrivateKey, lifetime time.Duration, tenantID uint64,
+	publicKey crypto.PublicKey,
+	privateKey crypto.PrivateKey,
+	lifetime time.Duration,
+	tenantIdentity roachpb.TenantIdentity,
 ) ([]byte, error) {
 	now := timeutil.Now()
 	template := &x509.Certificate{
 		Subject: pkix.Name{
-			CommonName: fmt.Sprintf("Tenant %d Token Signing Certificate", tenantID),
+			CommonName: fmt.Sprintf("Tenant %d Token Signing Certificate", tenantIdentity),
 		},
 		SerialNumber:          big.NewInt(1), // The serial number does not matter because we are not using a certificate authority.
 		BasicConstraintsValid: true,
