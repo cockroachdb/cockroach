@@ -2844,17 +2844,28 @@ type CommonTestUtils struct {
 	}
 }
 
-// newCommonTestUtils creates a connection to each node (given that the nodes list is not empty)
-// and puts these connections in a cache for reuse. The caller should remember to close all connections
-// once done with them to prevent any goroutine leaks (CloseConnections).
+type commonTestOption func(*CommonTestUtils)
+
+func withMock(mock bool) commonTestOption {
+	return func(c *CommonTestUtils) {
+		c.mock = mock
+	}
+}
+
+func withOnlineRestore(or bool) commonTestOption {
+	return func(c *CommonTestUtils) {
+		c.onlineRestore = or
+	}
+}
+
+// Change the function signature
 func newCommonTestUtils(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	connectFunc func(int) (*gosql.DB, error),
 	nodes option.NodeListOption,
-	mock bool,
-	onlineRestore bool,
+	opts ...commonTestOption,
 ) (*CommonTestUtils, error) {
 	cc := make([]*gosql.DB, len(nodes))
 	for _, node := range nodes {
@@ -2870,13 +2881,16 @@ func newCommonTestUtils(
 	}
 
 	u := &CommonTestUtils{
-		t:             t,
-		cluster:       c,
-		roachNodes:    nodes,
-		mock:          mock,
-		onlineRestore: onlineRestore,
+		t:          t,
+		cluster:    c,
+		roachNodes: nodes,
 	}
 	u.connCache.cache = cc
+
+	// Apply all options
+	for _, opt := range opts {
+		opt(u)
+	}
 	return u, nil
 }
 
@@ -2887,7 +2901,7 @@ func (mvb *mixedVersionBackup) CommonTestUtils(
 	mvb.utilsOnce.Do(func() {
 		connectFunc := func(node int) (*gosql.DB, error) { return h.Connect(node), nil }
 		mvb.commonTestUtils, err = newCommonTestUtils(
-			ctx, mvb.t, mvb.cluster, connectFunc, mvb.roachNodes, false, false,
+			ctx, mvb.t, mvb.cluster, connectFunc, mvb.roachNodes,
 		)
 	})
 	return mvb.commonTestUtils, err
