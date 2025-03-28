@@ -980,12 +980,14 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 		}
 	}
 
+	ti, _ := s.sqlServer.tenantConnect.TenantInfo()
 	if err := structlogging.StartHotRangesLoggingScheduler(
 		ctx,
 		s.stopper,
 		s.sqlServer.tenantConnect,
 		*s.sqlServer.internalExecutor,
 		s.ClusterSettings(),
+		&ti,
 	); err != nil {
 		return err
 	}

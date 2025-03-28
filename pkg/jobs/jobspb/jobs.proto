@@ -1437,6 +1437,10 @@ message StandbyReadTSPollerProgress {
 
 }
 
+message HotRangesLoggerDetails {
+
+}
+
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
   enum Status {
@@ -1472,6 +1476,10 @@ message SqlActivityFlushDetails {
 }
 
 message SqlActivityFlushProgress {
+
+}
+
+message HotRangesLoggerProgress {
 
 }
 
@@ -1546,6 +1554,7 @@ message Payload {
     UpdateTableMetadataCacheDetails update_table_metadata_cache_details = 49;
     StandbyReadTSPollerDetails standby_read_ts_poller_details = 50;
     SqlActivityFlushDetails sql_activity_flush_details = 51;
+    HotRangesLoggerDetails hot_ranges_logger_details = 52;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1627,6 +1636,7 @@ message Progress {
     UpdateTableMetadataCacheProgress table_metadata_cache = 37;
     StandbyReadTSPollerProgress standby_read_ts_poller = 38;
     SqlActivityFlushProgress sql_activity_flush = 39;
+    HotRangesLoggerProgress hot_ranges_logger = 40;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1670,6 +1680,7 @@ enum Type {
   UPDATE_TABLE_METADATA_CACHE = 29 [(gogoproto.enumvalue_customname) = "TypeUpdateTableMetadataCache"];
   STANDBY_READ_TS_POLLER = 30 [(gogoproto.enumvalue_customname) = "TypeStandbyReadTSPoller"];
   SQL_ACTIVITY_FLUSH = 31 [(gogoproto.enumvalue_customname) = "TypeSQLActivityFlush"];
+  HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
 }
 
 message Job {
