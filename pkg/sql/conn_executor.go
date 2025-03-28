@@ -1273,17 +1273,8 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
-	if lm := ex.server.cfg.LeaseManager; executorType == executorTypeExec && lm != nil {
-		if desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID); err != nil {
-			log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
-		} else {
-			defer desc.Release(ctx)
-			// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
-			// which guarantees that all user tenant sql connections to the reader tenant will
-			// correctly set this
-			ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
-		}
-	}
+	// Determine if we are running on a PCR reader catalog.
+	ex.initPCRReaderCatalog(ctx)
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -3850,6 +3841,34 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		statementPreparer:    ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
+}
+
+// maybeInitPCRReaderCatalog leases the system database to determine if
+// we are connecting to a PCR reader catalog, if this has not been attempted
+// before.
+func (ex *connExecutor) initPCRReaderCatalog(ctx context.Context) {
+	// Wait up to 10 seconds attempting to acquire the lease on the system
+	// database. Normally we should already have a lease on this object,
+	// unless there is some availability issue.
+	const initPCRReaderCatalogTimeout = 10 * time.Second
+	err := timeutil.RunWithTimeout(ctx, "detect-pcr-reader-catalog", initPCRReaderCatalogTimeout,
+		func(ctx context.Context) error {
+			if lm := ex.server.cfg.LeaseManager; ex.executorType == executorTypeExec && lm != nil {
+				desc, err := lm.Acquire(ctx, ex.server.cfg.Clock.Now(), keys.SystemDatabaseID)
+				if err != nil {
+					return err
+				}
+				defer desc.Release(ctx)
+				// The system database ReplicatedPCRVersion is set during reader tenant bootstrap,
+				// which guarantees that all user tenant sql connections to the reader tenant will
+				// correctly set this
+				ex.isPCRReaderCatalog = desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() != 0
+			}
+			return nil
+		})
+	if err != nil {
+		log.Infof(ctx, "unable to lease system database to determine if PCR reader is in use: %s", err)
+	}
 }
 
 // GetPCRReaderTimestamp if the system database is setup as PCR
