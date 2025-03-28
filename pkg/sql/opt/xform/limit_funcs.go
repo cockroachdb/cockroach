@@ -8,6 +8,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -452,25 +454,68 @@ func (c *CustomFuncs) OrderingBySingleColAsc(ordering props.OrderingChoice, col 
 
 // TryGenerateVectorSearch attempts to generate a vector search plan for the
 // given query vector, which is assumed to be part of a KNN search against the
-// given vector column.
+// given vector column. The plan consists of:
+//  1. A vector-search operator which produces candidate PKs.
+//  2. A lookup-join to retrieve the vector column and any other needed columns.
+//  3. A projection of the distance between the vector column and query vector.
+//  3. A top-k operator to perform re-ranking.
+//
+// Note that TryGenerateVectorSearch does not handle additional filters beyond
+// those used to constrain index prefix columns.
 func (c *CustomFuncs) TryGenerateVectorSearch(
 	grp memo.RelExpr,
 	_ *physical.Required,
-	sp *memo.ScanPrivate,
+	scanExpr *memo.ScanExpr,
+	filters memo.FiltersExpr,
 	passthrough opt.ColSet,
 	vectorCol, distanceCol opt.ColumnID,
 	distanceExpr, queryVector opt.ScalarExpr,
 	limit tree.Datum,
 ) {
+	sp := &scanExpr.ScanPrivate
+
+	// Generate implicit filters from constraints and computed columns as
+	// optional filters to help constrain an index scan.
+	optionalFilters := c.checkConstraintFilters(sp.Table)
+	computedColFilters := c.ComputedColFilters(sp, filters, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, nil /* filters */, rejectNonVectorIndexes)
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, sp, filters, rejectNonVectorIndexes)
 	iter.ForEach(func(index cat.Index, _ memo.FiltersExpr, _ opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		if sp.Table.ColumnID(index.VectorColumn().Ordinal()) != vectorCol {
 			// This index is for a different vector column.
 			return
 		}
-		if index.PrefixColumnCount() > 0 {
-			// TODO(drewk, mw5h): support multi-column vector indexes.
+		var ok bool
+		var prefixConstraint *constraint.Constraint
+		prefixColumns, notNullCols := idxconstraint.IndexPrefixCols(sp.Table, index)
+		if len(prefixColumns) > 0 {
+			prefixConstraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
+				c.e.ctx, c.e.evalCtx, c.e.f, prefixColumns, notNullCols, filters,
+				optionalFilters, sp.Table, index, c.checkCancellation,
+			)
+			if !ok {
+				return
+			}
+			// Ensure that the constraint consists of single-key spans that each
+			// specify a single value for every prefix column.
+			if prefixConstraint.IsUnconstrained() || prefixConstraint.IsContradiction() {
+				return
+			}
+			for i, n := 0, prefixConstraint.Spans.Count(); i < n; i++ {
+				span := prefixConstraint.Spans.Get(i)
+				if !span.HasSingleKey(c.e.ctx, c.e.evalCtx) {
+					return
+				}
+				if span.StartKey().Length() != len(prefixColumns) {
+					return
+				}
+			}
+		}
+		if len(filters) > 0 {
+			// TODO(drewk): support additional filters once streaming vector search
+			// execution is supported.
 			return
 		}
 
@@ -482,6 +527,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 			&memo.VectorSearchPrivate{
 				Table:               sp.Table,
 				Index:               index.Ordinal(),
+				PrefixConstraint:    prefixConstraint,
 				Cols:                indexCols,
 				TargetNeighborCount: limitInt,
 			},

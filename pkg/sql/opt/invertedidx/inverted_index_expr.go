@@ -90,9 +90,9 @@ func TryFilterInvertedIndex(
 ) {
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
-	columns, notNullCols := prefixCols(tabID, index)
+	columns, notNullCols := idxconstraint.IndexPrefixCols(tabID, index)
 	if len(columns) > 0 {
-		constraint, filters, ok = constrainNonInvertedCols(
+		constraint, filters, ok = idxconstraint.ConstrainIndexPrefixCols(
 			ctx, evalCtx, factory, columns, notNullCols, filters,
 			optionalFilters, tabID, index, checkCancellation,
 		)
@@ -299,7 +299,7 @@ func TryFilterInvertedIndexBySimilarity(
 	// If the index is a multi-column index, then we need to constrain the
 	// prefix columns.
 	var prefixConstraint *constraint.Constraint
-	prefixConstraint, remainingFilters, ok = constrainNonInvertedCols(
+	prefixConstraint, remainingFilters, ok = idxconstraint.ConstrainIndexPrefixCols(
 		ctx, evalCtx, f, cols, notNullCols, filters,
 		optionalFilters, tabID, index, checkCancellation,
 	)
@@ -632,91 +632,6 @@ func evalInvertedExpr(
 	default:
 		return evalInvertedExprLeaf(expr)
 	}
-}
-
-// prefixCols returns a slice of ordering columns for each of the non-inverted
-// prefix of the index. It also returns a set of those columns that are NOT
-// NULL. If the index is a single-column inverted index, the function returns
-// nil ordering columns.
-func prefixCols(
-	tabID opt.TableID, index cat.Index,
-) (_ []opt.OrderingColumn, notNullCols opt.ColSet) {
-	prefixColumnCount := index.PrefixColumnCount()
-
-	// If this is a single-column inverted index, there are no prefix columns.
-	// constrain.
-	if prefixColumnCount == 0 {
-		return nil, opt.ColSet{}
-	}
-
-	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
-	for i := range prefixColumns {
-		col := index.Column(i)
-		colID := tabID.ColumnID(col.Ordinal())
-		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.IsNullable() {
-			notNullCols.Add(colID)
-		}
-	}
-	return prefixColumns, notNullCols
-}
-
-// constrainNonInvertedCols attempts to build a constraint for the non-inverted
-// prefix columns of the given index. If a constraint is successfully built, it
-// is returned along with remaining filters and ok=true. The function is only
-// successful if it can generate a constraint where all spans have the same
-// start and end keys for all non-inverted prefix columns. This is required for
-// building spans for scanning multi-column inverted indexes (see
-// span.Builder.SpansFromInvertedSpans).
-func constrainNonInvertedCols(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	factory *norm.Factory,
-	columns []opt.OrderingColumn,
-	notNullCols opt.ColSet,
-	filters memo.FiltersExpr,
-	optionalFilters memo.FiltersExpr,
-	tabID opt.TableID,
-	index cat.Index,
-	checkCancellation func(),
-) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
-	tabMeta := factory.Metadata().TableMeta(tabID)
-	prefixColumnCount := index.PrefixColumnCount()
-	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
-
-	// Consolidation of a constraint converts contiguous spans into a single
-	// span. By definition, the consolidated span would have different start and
-	// end keys and could not be used for multi-column inverted index scans.
-	// Therefore, we only generate and check the unconsolidated constraint,
-	// allowing the optimizer to plan multi-column inverted index scans in more
-	// cases.
-	//
-	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
-	//
-	//   /x: [/1 - /3]
-	//   Prefix: 0
-	//
-	// The unconsolidated constraint for the same expression is:
-	//
-	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
-	//   Prefix: 1
-	//
-	var ic idxconstraint.Instance
-	ic.Init(
-		ctx, filters, optionalFilters,
-		columns, notNullCols, tabMeta.ComputedCols,
-		tabMeta.ColsInComputedColsExpressions,
-		false, /* consolidate */
-		evalCtx, factory, ps, checkCancellation,
-	)
-	var c constraint.Constraint
-	ic.UnconsolidatedConstraint(&c)
-	if c.Prefix(ctx, evalCtx) != prefixColumnCount {
-		// The prefix columns must be constrained to single values.
-		return nil, nil, false
-	}
-
-	return &c, ic.RemainingFilters(), true
 }
 
 type invertedFilterPlanner interface {
