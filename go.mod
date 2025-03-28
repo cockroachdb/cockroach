@@ -10,17 +10,17 @@ go 1.23.7
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.31.0
-	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
+	golang.org/x/crypto v0.36.0
+	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
-	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.33.0
-	golang.org/x/oauth2 v0.7.0
-	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.28.0
-	golang.org/x/text v0.21.0
-	golang.org/x/time v0.3.0
-	golang.org/x/tools v0.24.0
+	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/net v0.38.0
+	golang.org/x/oauth2 v0.28.0
+	golang.org/x/sync v0.12.0
+	golang.org/x/sys v0.31.0
+	golang.org/x/text v0.23.0
+	golang.org/x/time v0.11.0
+	golang.org/x/tools v0.31.0
 )
 
 // The following dependencies are key infrastructure dependencies and
@@ -252,7 +252,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.27.0
+	golang.org/x/term v0.30.0
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9
@@ -264,8 +264,7 @@ require (
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
-	cloud.google.com/go/compute v1.19.1 // indirect
-	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v0.13.0 // indirect
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	git.sr.ht/~sbinet/gg v0.6.0 // indirect
