@@ -553,6 +553,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	fmt.Fprintf(&buf, "\n")
 
+	c.PrintUser(&buf)
+	fmt.Fprintf(&buf, "\n")
+
 	// Show the values of session variables and cluster settings that have
 	// values different from their defaults.
 	if err := c.PrintSessionSettings(&buf, b.sv, false /* all */); err != nil {
@@ -1008,6 +1011,10 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	}
 	fmt.Fprintf(w, "-- Version: %s\n", version)
 	return err
+}
+
+func (c *stmtEnvCollector) PrintUser(w io.Writer) {
+	fmt.Fprintf(w, "-- User: %s\n", c.p.User())
 }
 
 // makeSingleLine replaces all control characters with a single space. This is
