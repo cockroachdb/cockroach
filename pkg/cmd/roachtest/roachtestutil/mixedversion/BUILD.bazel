@@ -71,6 +71,7 @@ go_test(
         "//pkg/testutils/release",
         "//pkg/util/intsets",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/version",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
