@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,22 +31,22 @@ func TestTargetForPolicy(t *testing.T) {
 		lagTargetNanos             time.Duration
 		leadTargetOverride         time.Duration
 		sideTransportCloseInterval time.Duration
-		rangePolicy                roachpb.RangeClosedTimestampPolicy
+		rangePolicy                ctpb.RangeClosedTimestampPolicy
 		expClosedTSTarget          hlc.Timestamp
 	}{
 		{
 			lagTargetNanos:    secs(3),
-			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
+			rangePolicy:       ctpb.LAG_BY_CLUSTER_SETTING,
 			expClosedTSTarget: now.Add(-secs(3).Nanoseconds(), 0),
 		},
 		{
 			lagTargetNanos:    secs(1),
-			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
+			rangePolicy:       ctpb.LAG_BY_CLUSTER_SETTING,
 			expClosedTSTarget: now.Add(-secs(1).Nanoseconds(), 0),
 		},
 		{
 			sideTransportCloseInterval: millis(200),
-			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			rangePolicy:                ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
 			expClosedTSTarget: now.
 				Add((maxClockOffset +
 					millis(275) /* sideTransportPropTime */ +
@@ -54,7 +54,7 @@ func TestTargetForPolicy(t *testing.T) {
 		},
 		{
 			sideTransportCloseInterval: millis(50),
-			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			rangePolicy:                ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
 			expClosedTSTarget: now.
 				Add((maxClockOffset +
 					millis(245) /* raftTransportPropTime */ +
@@ -63,7 +63,7 @@ func TestTargetForPolicy(t *testing.T) {
 		{
 			leadTargetOverride:         millis(1234),
 			sideTransportCloseInterval: millis(200),
-			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			rangePolicy:                ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
 			expClosedTSTarget:          now.Add(millis(1234).Nanoseconds(), 0),
 		},
 	} {

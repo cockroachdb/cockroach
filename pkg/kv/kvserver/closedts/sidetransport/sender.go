@@ -97,9 +97,12 @@ type Sender struct {
 type streamState struct {
 	// lastSeqNum is the sequence number of the last message published.
 	lastSeqNum ctpb.SeqNum
-	// lastClosed is the closed timestamp published for each policy in the
-	// last message.
-	lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	// lastClosed is the closed timestamp published for each policy in the last
+	// message. During mixed version clusters with nodes running both v25.1 and
+	// v25.2, lastClosed will only be populated for enums with a corresponding
+	// roachpb.RangeClosedTimestampPolicy (LAG_BY_CLUSTER_SETTING and
+	// LEAD_FOR_GLOBAL_READS) until the cluster is fully upgraded to v25.2.
+	lastClosed map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp
 	// tracked maintains the information that was communicated to connections in
 	// the last sent message (implicitly or explicitly). A range enters this
 	// structure as soon as it's included in a message, and exits it when it's
@@ -116,7 +119,7 @@ type connTestingKnobs struct {
 // about a particular range.
 type trackedRange struct {
 	lai    kvpb.LeaseAppliedIndex
-	policy roachpb.RangeClosedTimestampPolicy
+	policy ctpb.RangeClosedTimestampPolicy
 }
 
 // leaseholder represents a leaseholder replicas that has been registered with
@@ -151,7 +154,7 @@ type Replica interface {
 	BumpSideTransportClosed(
 		ctx context.Context,
 		now hlc.ClockTimestamp,
-		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+		targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 	) BumpSideTransportClosedResult
 }
 
@@ -170,7 +173,7 @@ type BumpSideTransportClosedResult struct {
 	// The range's current LAI, to be associated with the closed timestamp.
 	LAI kvpb.LeaseAppliedIndex
 	// The range's current policy.
-	Policy roachpb.RangeClosedTimestampPolicy
+	Policy ctpb.RangeClosedTimestampPolicy
 }
 
 // CantCloseReason enumerates the reasons why BunpSideTransportClosed might fail
@@ -210,6 +213,7 @@ func newSenderWithConnFactory(
 		buf:         newUpdatesBuf(),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
+	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connsMu.conns = make(map[roachpb.NodeID]conn)
 	return s
@@ -305,10 +309,14 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	defer s.trackedMu.Unlock()
 	log.VEventf(ctx, 4, "side-transport generating a new message")
 	s.trackedMu.closingFailures = [MaxReason]int{}
-
+	// TODO(wenyihu6): a cluster version check is needed here once we add new
+	// policies to ctpb.RangeClosedTimestampPolicies that do not have a
+	// corresponding roachpb.RangeClosedTimestampPolicy.
+	numPolicies := int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
+	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, numPolicies)
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
-		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, numPolicies),
 	}
 
 	// Determine the message's sequence number.
@@ -326,8 +334,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
-	for i := range s.trackedMu.lastClosed {
-		pol := roachpb.RangeClosedTimestampPolicy(i)
+	for pol := ctpb.RangeClosedTimestampPolicy(0); pol < ctpb.RangeClosedTimestampPolicy(numPolicies); pol++ {
 		target := closedts.TargetForPolicy(
 			now,
 			maxClockOffset,
@@ -482,14 +489,14 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 		// of incremental messages.
 		SeqNum:           s.trackedMu.lastSeqNum,
 		Snapshot:         true,
-		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, 0, len(s.trackedMu.lastClosed)),
 		AddedOrUpdated:   make([]ctpb.Update_RangeUpdate, 0, len(s.trackedMu.tracked)),
 	}
 	for pol, ts := range s.trackedMu.lastClosed {
-		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
-			Policy:          roachpb.RangeClosedTimestampPolicy(pol),
+		msg.ClosedTimestamps = append(msg.ClosedTimestamps, ctpb.Update_GroupUpdate{
+			Policy:          pol,
 			ClosedTimestamp: ts,
-		}
+		})
 	}
 	for rid, r := range s.trackedMu.tracked {
 		msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
@@ -886,7 +893,7 @@ func (s streamState) String() string {
 		} else {
 			agoMsg = fmt.Sprintf("%s in the future", -ago)
 		}
-		fmt.Fprintf(sb, "%s:%s (%s)", roachpb.RangeClosedTimestampPolicy(policy), closedTS, agoMsg)
+		fmt.Fprintf(sb, "%s:%s (%s)", policy, closedTS, agoMsg)
 	}
 
 	// List the tracked ranges.
@@ -895,7 +902,7 @@ func (s streamState) String() string {
 		id roachpb.RangeID
 		trackedRange
 	}
-	rangesByPolicy := make(map[roachpb.RangeClosedTimestampPolicy][]rangeInfo)
+	rangesByPolicy := make(map[ctpb.RangeClosedTimestampPolicy][]rangeInfo)
 	for rid, info := range s.tracked {
 		rangesByPolicy[info.policy] = append(rangesByPolicy[info.policy], rangeInfo{id: rid, trackedRange: info})
 	}

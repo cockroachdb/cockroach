@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -942,7 +943,7 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
 		return closedts.TargetForPolicy(now, maxClockOffset,
 			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
-			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+			ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO).Add(int64(time.Second), 0)
 	}
 
 	return !txn.mu.deadline.IsEmpty() &&
