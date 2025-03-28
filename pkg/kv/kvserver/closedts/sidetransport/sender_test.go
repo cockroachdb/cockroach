@@ -48,9 +48,9 @@ type mockReplica struct {
 
 var _ Replica = &mockReplica{}
 
-func (m *mockReplica) StoreID() roachpb.StoreID                                    { return m.storeID }
-func (m *mockReplica) GetRangeID() roachpb.RangeID                                 { return m.rangeID }
-func (m *mockReplica) RefreshLatency(latencyInfo map[roachpb.NodeID]time.Duration) {}
+func (m *mockReplica) StoreID() roachpb.StoreID                                   { return m.storeID }
+func (m *mockReplica) GetRangeID() roachpb.RangeID                                { return m.rangeID }
+func (m *mockReplica) RefreshPolicy(latencyInfo map[roachpb.NodeID]time.Duration) {}
 func (m *mockReplica) BumpSideTransportClosed(
 	_ context.Context, _ hlc.ClockTimestamp, _ map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) BumpSideTransportClosedResult {
