@@ -1033,3 +1033,24 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[*] ? (@ > +2)');
 ----
 3
 4
+
+statement error pgcode 42601 pq: LAST is allowed only in array subscripts
+SELECT jsonb_path_query('{}', 'last');
+
+query T
+SELECT jsonb_path_query('[1, 2, 3, 4]', '$[last]');
+----
+4
+
+query T
+SELECT jsonb_path_query('"hello"', '$[last]');
+----
+"hello"
+
+query T rowsort
+SELECT jsonb_path_query('[1, 2, 3, 4]', '$[1 to last, last to last]');
+----
+2
+3
+4
+4
