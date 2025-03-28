@@ -301,7 +301,9 @@
 (Limit
     $project:(Project
             $scan:(Scan
-                $scanPrivate:* & (IsCanonicalScan $scanPrivate)
+                $scanPrivate:* &
+                    (IsCanonicalScan $scanPrivate) &
+                    ^(IsLocking $scanPrivate)
             )
             $projections:[
                 (ProjectionsItem
