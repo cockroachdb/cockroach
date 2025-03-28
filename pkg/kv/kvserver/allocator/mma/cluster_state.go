@@ -311,9 +311,6 @@ func makeRemoveReplicaChange(
 // makeRebalanceReplicaChanges creates to replica changes, adding a replica and
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
-//
-// TODO(kvoli,sumeerbhola): If the leaseholder is being rebalanced, we need to
-// ensure the incoming replica is eligible to take the lease.
 func makeRebalanceReplicaChanges(
 	rangeID roachpb.RangeID,
 	existingReplicas []StoreIDAndReplicaState,
@@ -544,7 +541,8 @@ func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
 //
 // TODO(sumeer): unit test.
 //
-// TODO(sumeer,kvoli): integrate this into the rest of mma.
+// TODO(sumeer,kvoli): integrate this into the rest of mma properly, and without
+// peering into its state.
 
 // enactedReplicaChange is information about a change at a store that was
 // enacted. It is an internal implementation detail of storeEnactedHistory and
