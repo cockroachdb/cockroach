@@ -1394,7 +1394,9 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 		"enterprise.license":   license,
 		// N.B. We now enable `PanicOnAssertions` for all roachprod clusters.
 		// (See https://github.com/cockroachdb/cockroach/issues/136858)
-		"debug.panic_on_failed_assertions.enabled": "true",
+		// Use the internal name instead of the user visible name, which wasn't
+		// added until 23.2, to avoid breaking mixed version tests.
+		"debug.panic_on_failed_assertions": "true",
 	}
 	for name, value := range c.ClusterSettings.ClusterSettings {
 		clusterSettings[name] = value
