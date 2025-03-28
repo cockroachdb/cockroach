@@ -3505,15 +3505,18 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-11)
-      │    └── vector-search index_tab@index_tab_vec1_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 1
-      │         ├── key: (1)
-      │         └── '[3,1,2]'
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 1
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
@@ -3535,15 +3538,18 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-11)
-      │    └── vector-search index_tab@index_tab_vec1_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 5
-      │         ├── key: (1)
-      │         └── '[3,1,2]'
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
@@ -3565,15 +3571,18 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-11)
-      │    └── vector-search index_tab@index_tab_vec2_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 5
-      │         ├── key: (1)
-      │         └── '[3,1,2]'
+      │    ├── vector-search index_tab@index_tab_vec2_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
 
@@ -3595,15 +3604,18 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(9), (9)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null vec1:9
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(9)
-      │    └── vector-search index_tab@index_tab_vec1_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 5
-      │         ├── key: (1)
-      │         └── '[3,1,2]'
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
 
@@ -3625,17 +3637,20 @@ top-k
       ├── immutable, has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── has-placeholder
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-11)
-      │    └── vector-search index_tab@index_tab_vec1_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 5
-      │         ├── has-placeholder
-      │         ├── key: (1)
-      │         └── $1
+      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── has-placeholder
+      │    │    ├── key: (1)
+      │    │    └── $1
+      │    └── filters (true)
       └── projections
            └── vec1:9 <-> $1 [as=column15:15, outer=(9), immutable]
 
@@ -3657,15 +3672,18 @@ top-k
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── index-join index_tab
+      ├── inner-join (lookup index_tab)
       │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-11)
-      │    └── vector-search index_tab@index_tab_vec2_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 500
-      │         ├── key: (1)
-      │         └── '[3,1,2]'
+      │    ├── vector-search index_tab@index_tab_vec2_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 500
+      │    │    ├── key: (1)
+      │    │    └── '[3,1,2]'
+      │    └── filters (true)
       └── projections
            └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
 
@@ -3903,12 +3921,15 @@ top-k
  └── project
       ├── columns: column8:8 photo_id:2!null photo_url:3!null description:4
       ├── immutable
-      ├── index-join image_embeddings
+      ├── inner-join (lookup image_embeddings)
       │    ├── columns: photo_id:2!null photo_url:3!null description:4 embedding:5!null
-      │    └── vector-search image_embeddings@image_embeddings_embedding_idx,vector
-      │         ├── columns: id:1!null
-      │         ├── target nearest neighbors: 5
-      │         ├── key: (1)
-      │         └── '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'
+      │    ├── key columns: [1] = [1]
+      │    ├── lookup columns are key
+      │    ├── vector-search image_embeddings@image_embeddings_embedding_idx,vector
+      │    │    ├── columns: id:1!null
+      │    │    ├── target nearest neighbors: 5
+      │    │    ├── key: (1)
+      │    │    └── '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'
+      │    └── filters (true)
       └── projections
            └── embedding:5 <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]' [as=column8:8, outer=(5), immutable]

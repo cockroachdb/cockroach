@@ -487,11 +487,24 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 				TargetNeighborCount: limitInt,
 			},
 		)
-		// Add an index join to get the rest of the columns. The index join is
-		// always necessary because the vector column is not projected by the
-		// VectorSearch operator.
-		indexJoinPrivate := memo.IndexJoinPrivate{Table: sp.Table, Cols: sp.Cols}
-		vectorSearch = c.e.f.ConstructIndexJoin(vectorSearch, &indexJoinPrivate)
+
+		// Add a lookup-join against the primary index to get the rest of the
+		// columns. The primary-key join is always necessary because the vector
+		// column is not projected by the VectorSearch operator.
+		primaryIndex := c.e.mem.Metadata().Table(sp.Table).Index(cat.PrimaryIndex)
+		lookupCols := make(opt.ColList, primaryIndex.KeyColumnCount())
+		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+			lookupCols[i] = sp.Table.IndexColumnID(primaryIndex, i)
+		}
+		lookupPrivate := &memo.LookupJoinPrivate{
+			JoinType:              opt.InnerJoinOp,
+			Table:                 sp.Table,
+			Index:                 cat.PrimaryIndex,
+			KeyCols:               lookupCols,
+			Cols:                  sp.Cols,
+			LookupColsAreTableKey: true,
+		}
+		vectorSearch = c.e.f.ConstructLookupJoin(vectorSearch, nil /* on */, lookupPrivate)
 
 		// Project the distance column.
 		projections := memo.ProjectionsExpr{c.e.f.ConstructProjectionsItem(distanceExpr, distanceCol)}
