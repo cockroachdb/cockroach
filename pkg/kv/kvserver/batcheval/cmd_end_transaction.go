@@ -555,6 +555,12 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
+			// Commit triggers might fail in a way the doesn't mean that the replica
+			// is corrupted. In this case, we need to change the txn status in the
+			// reply to avoid returning to the client that the txn is committed. If
+			// that happened, the client throws an error due to a sanity check
+			// regarding a failed txn shouldn't be committed.
+			reply.Txn.Status = roachpb.ABORTED
 			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
@@ -842,6 +848,9 @@ func RunCommitTrigger(
 	args *kvpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 ) (result.Result, error) {
+	if rec.EvalKnobs().CommitTriggerError != nil && rec.EvalKnobs().CommitTriggerError() != nil {
+		return result.Result{}, rec.EvalKnobs().CommitTriggerError()
+	}
 	ct := args.InternalCommitTrigger
 	if ct == nil {
 		return result.Result{}, nil
