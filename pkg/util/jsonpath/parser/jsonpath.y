@@ -179,6 +179,8 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %token <str> LAST
 %token <str> EXISTS
+%token <str> IS
+%token <str> UNKNOWN
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -402,6 +404,10 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
   }
+| '(' predicate ')' IS UNKNOWN
+  {
+    $$.val = unaryOp(jsonpath.OpIsUnknown, $2.path())
+  }
 | expr LIKE_REGEX STRING
   {
     regex := jsonpath.Regex{Regex: $3}
@@ -505,6 +511,7 @@ unreserved_keyword:
   EXISTS
 | FALSE
 | FLAG
+| IS
 | LAST
 | LAX
 | LIKE_REGEX
@@ -512,6 +519,7 @@ unreserved_keyword:
 | STRICT
 | TO
 | TRUE
+| UNKNOWN
 ;
 
 %%

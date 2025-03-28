@@ -52,7 +52,7 @@ func (ctx *jsonpathCtx) evalOperation(
 	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot,
 		jsonpath.OpCompEqual, jsonpath.OpCompNotEqual, jsonpath.OpCompLess,
 		jsonpath.OpCompLessEqual, jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual,
-		jsonpath.OpLikeRegex, jsonpath.OpExists:
+		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown:
 		b, err := ctx.evalBoolean(op, jsonValue)
 		if err != nil {
 			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
@@ -86,9 +86,28 @@ func (ctx *jsonpathCtx) evalBoolean(
 		return ctx.evalRegex(op, jsonValue)
 	case jsonpath.OpExists:
 		return ctx.evalExists(op, jsonValue)
+	case jsonpath.OpIsUnknown:
+		return ctx.evalIsUnknown(op, jsonValue)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func (ctx *jsonpathCtx) evalIsUnknown(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	leftOp, ok := op.Left.(jsonpath.Operation)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not an operation")
+	}
+	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
+	if err != nil {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+	}
+	if leftBool == jsonpathBoolUnknown {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
 }
 
 func (ctx *jsonpathCtx) evalExists(
