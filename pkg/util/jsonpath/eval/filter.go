@@ -8,23 +8,29 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/errors"
 )
 
 func (ctx *jsonpathCtx) evalFilter(
-	p jsonpath.Filter, current json.JSON, unwrap bool,
+	filter jsonpath.Filter, jsonValue json.JSON, unwrap bool,
 ) ([]json.JSON, error) {
-	if unwrap && current.Type() == json.ArrayJSONType {
-		return ctx.unwrapCurrentTargetAndEval(p, current, false /* unwrapNext */)
+	if unwrap && jsonValue.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(filter, jsonValue, false /* unwrapNext */)
 	}
-	results, err := ctx.eval(p.Condition, current, !ctx.strict /* unwrap */)
-	if err != nil || len(results) != 1 || !isBool(results[0]) {
+
+	op, ok := filter.Condition.(jsonpath.Operation)
+	if !ok {
+		return nil, errors.AssertionFailedf("filter condition is not an operation")
+	}
+	b, err := ctx.evalBoolean(op, jsonValue)
+	if err != nil {
 		// Postgres doesn't error when there's a structure error within filter
 		// conditions, and will return nothing instead.
 		return []json.JSON{}, nil //nolint:returnerrcheck
 	}
-	condition, _ := results[0].AsBool()
-	if condition {
-		return []json.JSON{current}, nil
+
+	if b == jsonpathBoolTrue {
+		return []json.JSON{jsonValue}, nil
 	}
 	return []json.JSON{}, nil
 }
