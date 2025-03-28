@@ -6,11 +6,13 @@
 package mma
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
@@ -84,23 +86,19 @@ const (
 	UnknownCapacity LoadValue = math.MaxInt64
 )
 
-// Secondary load dimensions should be considered after we are done
-// rebalancing using loadDimensions, since these don't represent "real"
-// resources. Currently, only lease count is considered here. Lease
-// rebalancing will see if there is scope to move some leases between stores
-// that do not have any pending changes and are not overloaded (and will not
-// get overloaded by the movement). Additionally, real resource rebalancing
-// will prefer target nodes (among those with similar real load) that have
-// lower lease counts.
-
-// TODO(sumeer): do we need to move replicas too, in order to do lease
-// rebalancing, or can we assume that constraints and diversity scores have
-// sufficiently achieved enough that we only need to move leases between the
-// existing voter replicas. The example in
-// https://github.com/cockroachdb/cockroach/issues/93258 suggests we only need
-// the latter -- confirmed by kvoli. Also look at
-// https://github.com/cockroachdb/cockroach/pull/98893 regarding load means
-// and lease means.
+// SecondaryLoadDimension represents secondary load dimensions that should be
+// considered after we are done rebalancing using loadDimensions, since these
+// don't represent "real" resources. Currently, only lease count is considered
+// here. Lease rebalancing will see if there is scope to move some leases
+// between stores that do not have any pending changes and are not overloaded
+// (and will not get overloaded by the movement). This will happen in a
+// separate pass (i.e., not in allocatorState.rebalanceStores).
+//
+// Note that lease rebalancing will only move leases and not replicas. Also,
+// the rebalancing will take into account the lease preferences, as discussed
+// in https://github.com/cockroachdb/cockroach/issues/93258, and the lease
+// counts among the current candidates (see
+// https://github.com/cockroachdb/cockroach/pull/98893).
 type SecondaryLoadDimension uint8
 
 const (
@@ -150,18 +148,14 @@ type storeLoad struct {
 
 	// Capacity information for this store.
 	//
-	// capacity[WriteBandwidth] is UnknownCapacity.
+	// Only capacity[WriteBandwidth] is UnknownCapacity. The assumption here is
+	// that mean based rebalancing of WriteBandwidth should be sufficient to
+	// avoid hotspots, and we don't need to synthesize a capacity. This will
+	// need to change when we have heterogeneous stores in terms of capability
+	// (disk bandwidth and IOPS; max concurrent compactions).
 	//
 	// TODO(sumeer): add diskBandwidth, since we will become more aware of
 	// provisioned disk bandwidth in the near future.
-	//
-	// TODO(sumeer): should the LSM getting overloaded result in some capacity
-	// signal? We had earlier considered having the store set the capacity to a
-	// synthesized value that indicates high utilization, in order to shed some
-	// load. However, the code below assumes homogeneity across stores/nodes in
-	// terms of whether they use a real capacity or not for a LoadDimension.
-	//
-	// capacity[ByteSize] is the actual capacity.
 	capacity LoadVector
 
 	reportedSecondaryLoad SecondaryLoadVector
@@ -357,9 +351,9 @@ func (mm *meansMemo) getStoreLoadSummary(
 	return summary
 }
 
-// TODO: Exclude stores which are storeMembershipRemoving,
-// storeMembershipRemoved, fdDrain and fdDead. As these are never eligible
-// candidate stores and should therefore not be considered in the means.
+// computeMeansForStoreSet compuates the mean for the stores in means.stores.
+// It does not do any filtering e.g. the stores can include fdDead stores. It
+// is up to the caller to adjust means.stores if it wants to do filtering.
 func computeMeansForStoreSet(
 	loadProvider loadInfoProvider, means *meansForStoreSet, scratchNodes map[roachpb.NodeID]*NodeLoad,
 ) {
@@ -521,7 +515,7 @@ func loadSummaryForDimension(
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
 	if capacity == UnknownCapacity {
-		// TODO(sumeer): log an error.
+		log.Errorf(context.Background(), "disk capacity is unknown")
 		return false
 	}
 	fractionUsed := float64(load) / float64(capacity)
