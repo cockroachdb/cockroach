@@ -27,6 +27,7 @@ const (
 	OpLikeRegex
 	OpPlus
 	OpMinus
+	OpExists
 )
 
 var OperationTypeStrings = map[OperationType]string{
@@ -47,6 +48,7 @@ var OperationTypeStrings = map[OperationType]string{
 	OpLikeRegex:        "like_regex",
 	OpPlus:             "+",
 	OpMinus:            "-",
+	OpExists:           "exists",
 }
 
 type Operation struct {
@@ -73,6 +75,9 @@ func (o Operation) String() string {
 	// can be done at parse time.
 	if o.Type == OpPlus || o.Type == OpMinus {
 		return fmt.Sprintf("(%s%s)", OperationTypeStrings[o.Type], o.Left)
+	}
+	if o.Type == OpExists {
+		return fmt.Sprintf("%s (%s)", OperationTypeStrings[o.Type], o.Left)
 	}
 	return fmt.Sprintf("(%s %s %s)", o.Left, OperationTypeStrings[o.Type], o.Right)
 }
