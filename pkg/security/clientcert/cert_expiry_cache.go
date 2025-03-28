@@ -112,6 +112,10 @@ func (c *ClientCertExpirationCache) GetTTL(user string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	return c.getTTLLocked(user)
+}
+
+func (c *ClientCertExpirationCache) getTTLLocked(user string) int64 {
 	expiration := c.getExpirationLocked(user)
 	ttl := expiration - c.timeNow()
 
@@ -164,8 +168,8 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 			return
 		}
 		c.mu.cache[user] = map[string]certInfo{}
-		c.mu.expirationMetrics.AddFunctionalChild(func() int64 { return c.GetExpiration(user) }, user)
-		c.mu.ttlMetrics.AddFunctionalChild(func() int64 { return c.GetTTL(user) }, user)
+		c.mu.expirationMetrics.AddFunctionalChild(func() int64 { return c.getExpirationLocked(user) }, user)
+		c.mu.ttlMetrics.AddFunctionalChild(func() int64 { return c.getTTLLocked(user) }, user)
 
 	}
 
