@@ -30,6 +30,19 @@ func (ctx *jsonpathCtx) evalArrayList(
 	if ctx.strict && jsonValue.Type() != json.ArrayJSONType {
 		return nil, pgerror.Newf(pgcode.SQLJSONArrayNotFound, "jsonpath array accessor can only be applied to an array")
 	}
+
+	length := jsonValue.Len()
+	if jsonValue.Type() != json.ArrayJSONType {
+		length = 1
+	}
+	// Store the current length of the innermost array, and restore it after
+	// the evaluation is done.
+	innermostArrayLength := ctx.innermostArrayLength
+	ctx.innermostArrayLength = length
+	defer func() {
+		ctx.innermostArrayLength = innermostArrayLength
+	}()
+
 	var agg []json.JSON
 	for _, idxAccessor := range arrayList {
 		var from, to int
@@ -51,10 +64,6 @@ func (ctx *jsonpathCtx) evalArrayList(
 			to = from
 		}
 
-		length := jsonValue.Len()
-		if jsonValue.Type() != json.ArrayJSONType {
-			length = 1
-		}
 		if ctx.strict && (from < 0 || from > to || to >= length) {
 			return nil, pgerror.Newf(pgcode.InvalidSQLJSONSubscript,
 				"jsonpath array subscript is out of bounds")
@@ -71,6 +80,16 @@ func (ctx *jsonpathCtx) evalArrayList(
 		}
 	}
 	return agg, nil
+}
+
+func (ctx *jsonpathCtx) evalLast() ([]json.JSON, error) {
+	if ctx.innermostArrayLength == -1 {
+		// TODO(normanchenn): this check should be done during jsonpath parsing.
+		return nil, pgerror.Newf(pgcode.Syntax, "LAST is allowed only in array subscripts")
+	}
+
+	lastIndex := ctx.innermostArrayLength - 1
+	return []json.JSON{json.FromInt(lastIndex)}, nil
 }
 
 func (ctx *jsonpathCtx) resolveArrayIndex(
