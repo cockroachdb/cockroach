@@ -20,6 +20,16 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 		// cpuUtil can be zero or close to zero.
 		almostZeroUtil := cpuUtil < 0.01
 		if desc.NodeCapacity.StoresCPURate != 0 && !almostZeroUtil {
+			// cpuUtil is distributed across the stores, by constructing a
+			// nodeCapacity, and then splitting nodeCapacity evenly across all the
+			// stores. If the cpuUtil of a node is higher than the mean across nodes
+			// of the cluster, then cpu util of at least one store on that node will
+			// be higher than the mean across all stores in the cluster (since the
+			// cpu util of a node is simply the mean across all its stores), which
+			// will result in load shedding. Note that this can cause cpu util of a
+			// store to be > 100% e.g. if a node is at 80% cpu util and has 10
+			// stores, and all the cpu usage is due to store s1, then s1 will have
+			// 800% util.
 			nodeCapacity := float64(desc.NodeCapacity.StoresCPURate) / cpuUtil
 			storeCapacity := nodeCapacity / float64(desc.NodeCapacity.NumStores)
 			capacity[mma.CPURate] = mma.LoadValue(storeCapacity)
