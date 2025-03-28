@@ -50,23 +50,30 @@ var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
-// LeadForGlobalReadsAutoTuneInterval controls how frequently the system adjusts
-// closed timestamp policies for ranges based on network latency measurements.
-// When enabled, ranges are assigned policies based on observed latency between
-// their leaseholder and furthest follower. This dynamic adjustment helps
-// optimize closed timestamp lead times. If no latency data is available, falls
-// back to default lead times. Note that the LeadForGlobalReadsOverride setting
-// takes precedence if set.
-var LeadForGlobalReadsAutoTuneInterval = settings.RegisterDurationSetting(
+// RangeClosedTimestampPolicyRefreshInterval controls how frequently the system
+// refreshes policies on leaseholders of nodes. These policies are refreshed
+// regardless of whether auto-tuning is enabled.
+var RangeClosedTimestampPolicyRefreshInterval = settings.RegisterDurationSetting(
 	settings.SystemVisible,
-	"kv.closed_timestamp.lead_for_global_reads_auto_tune_interval",
-	"interval at which the system updates closed timestamp policies for ranges based on observed network latency. "+
-		"If non-zero, global-read ranges are periodically assigned closed timestamp policies based on their "+
-		"leaseholder-to-furthest-follower latencies, affecting their closed timestamp lead times. If "+
-		"kv.closed_timestamp.lead_for_global_reads_override is set, "+
-		"it takes precedence over the auto-tuned value. Set to 0 to disable auto-tuning and use default lead time for "+
-		"global read ranges without using observed network latency.",
+	"kv.closed_timestamp.policy_refresh_interval",
+	"interval at which the system refreshes closed timestamp policies for leaseholders",
 	5*time.Minute,
 	settings.NonNegativeDuration,
+)
+
+// LeadForGlobalReadsAutoTuneEnabled determines whether ranges configured to
+// serve global reads would be assigned policies based on observed latency
+// between their leaseholder and furthest follower. This dynamic adjustment
+// helps optimize closed timestamp lead times. If no latency data is available,
+// falls back to default lead times. Note that the LeadForGlobalReadsOverride
+// setting takes precedence if set.
+var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled",
+	"if enabled, observed network latency between leaseholders and their "+
+		"furthest follower will be used to adjust closed timestamp policies for ranges"+
+		"ranges configured to serve global reads. "+
+		"kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.",
+	false,
 	settings.WithPublic,
 )
