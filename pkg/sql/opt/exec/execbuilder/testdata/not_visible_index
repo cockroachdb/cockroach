@@ -576,8 +576,10 @@ vectorized: false
 │
 └── • render
     │
-    └── • index join
+    └── • lookup join
         │ table: t1@t1_pkey
+        │ equality: (rowid) = (rowid)
+        │ equality cols are key
         │
         └── • vector search
               table: t1@idx_vec_visible
