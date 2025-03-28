@@ -43,9 +43,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
-[node 1] requesting engine stats... received response...
-[node 1] requesting engine stats: last request failed: rpc error: ...
-[node 1] requesting engine stats: creating error output: debug/nodes/1/lsm.txt.err.txt... done
+[node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response... done
 [node ?] ? heap profiles found
 [node 1] requesting goroutine dump list... received response... done
