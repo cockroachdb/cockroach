@@ -37,7 +37,7 @@ type chartData struct {
 // 1634 ┤ ││     ╰╯                        0.40 ┤      ││         ││
 // 1612 ┤ ╰╯                               0.00 ┤      ╰╯         ╰╯
 //
-//	ops/sec (1707.98)                   fixup queue size (1.00)
+//	ops/sec (1707.98)                       pending splits/merges (1.00)
 //
 // 0.68 ┼─╮                                55.10 ┤                ╭╮
 // 0.64 ┤ ╰─╮                              54.40 ┤            ╭╮ ╭╯╰─╮ ╭──╮

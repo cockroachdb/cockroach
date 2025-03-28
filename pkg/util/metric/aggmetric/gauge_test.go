@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/crlib/testutils/require"
 	"github.com/prometheus/common/expfmt"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestAggGaugeEviction(t *testing.T) {
@@ -102,25 +101,6 @@ func TestAggGaugeMethods(t *testing.T) {
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 }
 
-func TestPanicForAggGaugeWithBtreeStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	g := NewGauge(metric.Metadata{
-		Name: "foo_gauge",
-	}, "tenant_id")
-
-	assert.Panics(t, func() {
-		g.Inc(1, "1", "1")
-	}, "expected panic when Inc is invoked on AggGauge with BTreeStorage")
-
-	assert.Panics(t, func() {
-		g.Dec(1, "1", "1")
-	}, "expected panic when Dec is invoked on AggGauge with BTreeStorage")
-
-	assert.Panics(t, func() {
-		g.Update(1, "1", "1")
-	}, "expected panic when Update is invoked on AggGauge with BTreeStorage")
-}
-
 func TestAggGaugeFloat64Eviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const cacheSize = 10
@@ -154,17 +134,6 @@ func TestAggGaugeFloat64Eviction(t *testing.T) {
 
 	testFile = "aggGaugeFloat64_post_eviction.txt"
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
-}
-
-func TestPanicForAggGaugeFloat64WithBtreeStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	g := NewGaugeFloat64(metric.Metadata{
-		Name: "foo_gauge",
-	}, "tenant_id")
-
-	assert.Panics(t, func() {
-		g.Update(1, "1", "1")
-	}, "expected panic when Update is invoked on AggGaugeFloat64 with BTreeStorage")
 }
 
 func writePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {

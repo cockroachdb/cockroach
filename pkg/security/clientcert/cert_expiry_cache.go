@@ -106,8 +106,7 @@ func NewClientCertExpirationCache(
 	return c
 }
 
-// GetTTL retrieves seconds till cert expiration for the given username, if it exists.
-// A TTL of 0 indicates an entry was not found.
+// GetTTL is a deprecated function for retrieving the ttl of a given user.
 func (c *ClientCertExpirationCache) GetTTL(user string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,8 +121,7 @@ func (c *ClientCertExpirationCache) GetTTL(user string) int64 {
 	}
 }
 
-// GetExpiration retrieves the cert expiration for the given username, if it exists.
-// An expiration of 0 indicates an entry was not found.
+// GetExpiration is a deprecated function for retrieving the expiration of a given user.
 func (c *ClientCertExpirationCache) GetExpiration(user string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -164,9 +162,6 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 			return
 		}
 		c.mu.cache[user] = map[string]certInfo{}
-		c.mu.expirationMetrics.AddFunctionalChild(func() int64 { return c.GetExpiration(user) }, user)
-		c.mu.ttlMetrics.AddFunctionalChild(func() int64 { return c.GetTTL(user) }, user)
-
 	}
 
 	err := c.mu.acc.Grow(ctx, CertInfoSize)
@@ -181,6 +176,9 @@ func (c *ClientCertExpirationCache) MaybeUpsert(
 		expiration: newExpiry,
 		last_seen:  timeutil.Unix(c.timeNow(), 0),
 	}
+
+	// update the metrics with the new certificate in mind.
+	c.upsertMetricsLocked(user)
 }
 
 // Clear removes all entries from the cache.
@@ -274,9 +272,36 @@ func (c *ClientCertExpirationCache) evictLocked(ctx context.Context, user, seria
 	if len(c.mu.cache[user]) == 0 {
 		delete(c.mu.cache, user)
 		c.mu.acc.Shrink(ctx, 2*GaugeSize)
-		c.mu.expirationMetrics.RemoveChild(user)
-		c.mu.ttlMetrics.RemoveChild(user)
+		c.removeMetricsLocked(user)
+	} else {
+		c.upsertMetricsLocked(user)
 	}
+}
+
+// ttlFunc returns a function which computes the ttl for a given expiration.
+func ttlFunc(now func() int64, exp int64) func() int64 {
+	return func() int64 {
+		ttl := exp - now()
+		if ttl > 0 {
+			return ttl
+		} else {
+			return 0
+		}
+	}
+}
+
+// upsertMetricsLocked updates the expiration and ttl for a given user in the cache.
+func (c *ClientCertExpirationCache) upsertMetricsLocked(user string) {
+	expiration := c.getExpirationLocked(user)
+	// the update functions on the metrics objects act as upserts.
+	c.mu.expirationMetrics.Update(expiration, user)
+	c.mu.ttlMetrics.UpdateFn(ttlFunc(c.timeNow, expiration), user)
+}
+
+// removeMetricsLocked removes the expiration and ttl for a given user from the cache.
+func (c *ClientCertExpirationCache) removeMetricsLocked(user string) {
+	c.mu.expirationMetrics.RemoveChild(user)
+	c.mu.ttlMetrics.RemoveChild(user)
 }
 
 // jitteredInterval returns a randomly jittered (+/-25%) duration

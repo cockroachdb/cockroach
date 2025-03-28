@@ -146,6 +146,15 @@ func (g *AggGauge) Update(val int64, labelVals ...string) {
 	child.Update(val)
 }
 
+// UpdateFn updates the Gauge value by val for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and updates it. Panics if the number of label values doesn't
+// match the number of labels defined for this Gauge.
+func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
+	child := g.getOrCreateChild(labelVals...)
+	child.UpdateFn(f)
+}
+
 func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
 	if len(g.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
