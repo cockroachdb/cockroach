@@ -30,6 +30,46 @@ Value:
   └────────────────────────┴────────────────────────┘
 */
 
+type VectorIndexKey struct {
+	Prefix       cspann.TreeKey
+	PartitionKey cspann.PartitionKey
+	Level        cspann.Level
+	Suffix       []byte
+}
+
+func ExtractKey(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKey, err error) {
+	prefixLen := 0
+	for i := 0; i < numPrefixColumns; i++ {
+		columnWidth, err := encoding.PeekLength(keyBytes[prefixLen:])
+		if err != nil {
+			return vecIndexKey, err
+		}
+		prefixLen += columnWidth
+	}
+	if prefixLen > 0 {
+		vecIndexKey.Prefix = keyBytes[:prefixLen]
+		keyBytes = keyBytes[prefixLen:]
+	}
+
+	partitionKey, keyBytes, err := DecodePartitionKey(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.PartitionKey = partitionKey
+
+	level, keyBytes, err := DecodePartitionLevel(keyBytes)
+	if err != nil {
+		return vecIndexKey, err
+	}
+	vecIndexKey.Level = level
+
+	if len(keyBytes) > 0 {
+		vecIndexKey.Suffix = keyBytes
+	}
+
+	return vecIndexKey, nil
+}
+
 // EncodePartitionMetadata encodes the metadata for a partition.
 func EncodePartitionMetadata(level cspann.Level, centroid vector.T) ([]byte, error) {
 	// The encoding consists of 8 bytes for the level, and a 4-byte length,
@@ -178,4 +218,21 @@ func DecodeChildKey(encChildKey []byte, level cspann.Level) (cspann.ChildKey, er
 		}
 		return cspann.ChildKey{PartitionKey: cspann.PartitionKey(childPartitionKey)}, nil
 	}
+}
+
+func DecodePartitionKey(encodedPartitionKey []byte) (cspann.PartitionKey, []byte, error) {
+	remainingBytes, partitionKey, err := encoding.DecodeUvarintAscending(encodedPartitionKey)
+	if err != nil {
+		return 0, nil, err
+	}
+	return cspann.PartitionKey(partitionKey), remainingBytes, nil
+}
+
+func DecodePartitionLevel(encodedLevel []byte) (cspann.Level, []byte, error) {
+	remainingBytes, level, err := encoding.DecodeUvarintAscending(encodedLevel)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return cspann.Level(level), remainingBytes, nil
 }
