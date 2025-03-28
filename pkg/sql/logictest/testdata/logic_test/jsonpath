@@ -100,6 +100,56 @@ SELECT bpchar('$.   abc    [*]':::JSONPATH::JSONPATH)::BPCHAR FROM t ORDER BY 1 
 ----
 $."abc"[*]
 
+query T
+SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
+----
+$."a"[*]?(((@."b" == 1) && (@."c" != 1)))
+
+query T
+SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
+----
+$."a"[*]?((@."b" != 1))
+
+query T
+SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
+----
+$."a"[*]?((@."b" < 1))
+
+query T
+SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
+----
+$."a"[*]?((@."b" <= 1))
+
+query T
+SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
+----
+$."a"[*]?((@."b" > 1))
+
+query T
+SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
+----
+$."a"[*]?((@."b" >= 1))
+
+query T
+SELECT '$.a ? ($.b == 1)'::JSONPATH
+----
+$."a"?(($."b" == 1))
+
+query T
+SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
+----
+$."a"?((@."b" == 1))."c"?((@."d" == 2))
+
+query T
+SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
+----
+$."a"?((@."b" == 1))."c"?((@."d" == 2))
+
+query T
+SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
+----
+$."a"?((@."b" == 1))."c"?((@."d" == 2))
+
 ## When we allow table creation
 
 # statement ok
@@ -133,56 +183,6 @@ $."abc"[*]
 # $.*
 
 # query T
-# SELECT '$.a[*] ? (@.b == 1 && @.c != 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b == 1 && @.c != 1)
-
-# query T
-# SELECT '$.a[*] ? (@.b != 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b != 1)
-
-# query T
-# SELECT '$.a[*] ? (@.b < 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b < 1)
-
-# query T
-# SELECT '$.a[*] ? (@.b <= 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b <= 1)
-
-# query T
-# SELECT '$.a[*] ? (@.b > 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b > 1)
-
-# query T
-# SELECT '$.a[*] ? (@.b >= 1)'::JSONPATH
-# ----
-# $.a[*] ? (@.b >= 1)
-
-# query T
-# SELECT '$.a ? (@.b == 1).c ? (@.d == 2)'::JSONPATH
-# ----
-# $.a ? (@.b == 1).c ? (@.d == 2)
-
-# query T
-# SELECT '$.a?(@.b==1).c?(@.d==2)'::JSONPATH
-# ----
-# $.a?(@.b==1).c?(@.d==2)
-
-# query T
-# SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSONPATH
-# ----
-# $  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )
-
-# query T
 # SELECT '$.a.type()'::JSONPATH
 # ----
 # $.a.type()
-
-# query T
-# SELECT '$.a ? ($.b == 1)'::JSONPATH
-# ----
-# $.a ? ($.b == 1)

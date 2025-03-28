@@ -459,6 +459,17 @@ $.a ? (@.b like_regex "^[aeiou]")
 ----
 $."a"?((@."b" like_regex "^[aeiou]")) -- normalized!
 
+parse
+$.*
+----
+$.*
+
+parse
+$.abc.*.def.*
+----
+$."abc".*."def".* -- normalized!
+
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

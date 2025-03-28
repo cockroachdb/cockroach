@@ -91,6 +91,8 @@ func (ctx *jsonpathCtx) eval(
 		return []json.JSON{jsonValue}, nil
 	case jsonpath.Key:
 		return ctx.evalKey(path, jsonValue, unwrap)
+	case jsonpath.AnyKey:
+		return ctx.evalAnyKey(path, jsonValue, unwrap)
 	case jsonpath.Wildcard:
 		return ctx.evalArrayWildcard(jsonValue)
 	case jsonpath.ArrayList:
@@ -149,20 +151,35 @@ func (ctx *jsonpathCtx) executeAnyItem(
 	}
 	var agg []json.JSON
 	for _, item := range childItems {
-		// The case when this will happen is if jsonValue is an empty array,
-		// in which case we just skip the evaluation.
+		// The case when this will happen is if jsonValue is an empty array or empty
+		// object, in which case we just skip the evaluation.
 		if item.Len() == 0 {
 			continue
 		}
 		if item.Len() != 1 {
 			return nil, errors.AssertionFailedf("unexpected path length")
 		}
-		unwrappedItem, err := item.FetchValIdx(0 /* idx */)
-		if err != nil {
-			return nil, err
-		}
-		if unwrappedItem == nil {
-			return nil, errors.AssertionFailedf("unwrapping json element")
+
+		var unwrappedItem json.JSON
+		switch item.Type() {
+		case json.ArrayJSONType:
+			unwrappedItem, err = item.FetchValIdx(0 /* idx */)
+			if err != nil {
+				return nil, err
+			}
+			if unwrappedItem == nil {
+				return nil, errors.AssertionFailedf("unwrapping json element")
+			}
+		case json.ObjectJSONType:
+			iter, _ := item.ObjectIter()
+			// Guaranteed to have one item.
+			ok := iter.Next()
+			if !ok {
+				return nil, errors.AssertionFailedf("unexpected empty json object")
+			}
+			unwrappedItem = iter.Value()
+		default:
+			panic(errors.AssertionFailedf("unexpected json type"))
 		}
 		if jsonPath == nil {
 			agg = append(agg, unwrappedItem)
