@@ -63,19 +63,10 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 
 // TODO(sumeer): lease shedding:
 //
-// - treat CPU as a special load dimension since that is the only dimension
-//   we can shed by moving the leaseholder.
-//
-// - gossip should propagate the aggregate non-raft cpu.
-//
 // - remote store: don't start moving ranges for a cpu overloaded remote store
 //   if it still has leases. Give it the opportunity to shed *all* its leases
 //   first, or have its aggregate non-raft cpu fall to a level where it doesn't
 //   change the fact that it is cpu overloaded.
-//
-// - allocatorState needs to know the difference between local and remote stores.
-//   For local store, the allocator will obviously shed leases first in the case
-//   of cpu overload.
 
 // Called periodically, say every 10s.
 func (a *allocatorState) rebalanceStores(
@@ -110,13 +101,6 @@ func (a *allocatorState) rebalanceStores(
 	log.Infof(ctx, "cluster means (cap): store %s(%s) node-cpu %d(%d)",
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
-	// TODO: change clusterState load stuff so that cpu util is distributed
-	// across the stores. If cpu util of a node is higher than the mean across
-	// nodes of the cluster, then cpu util of at least one store on that node
-	// will be higher than the mean across all stores in the cluster (since the
-	// cpu util of a node is simply the mean across all its stores). The
-	// following code assumes this has already been done.
-	//
 	// NB: We don't attempt to shed replicas or leases from a store which is
 	// fdDrain or fdDead, nor do we attempt to shed replicas from a store which
 	// is storeMembershipRemoving (decommissioning). These are currently handled
@@ -499,9 +483,6 @@ func (a *allocatorState) AdminScatterOne(
 ) ([]pendingReplicaChange, error) {
 	panic("unimplemented")
 }
-
-// TODO(sumeer): look at support methods for allocatorState.tryMovingRange in
-// the allocator kernel draft PR.
 
 type candidateInfo struct {
 	roachpb.StoreID
