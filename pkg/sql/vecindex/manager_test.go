@@ -152,14 +152,15 @@ func TestVectorManager(t *testing.T) {
 	t.Run("test metrics", func(t *testing.T) {
 		idx, err := vectorMgr.Get(ctx, catid.DescID(140), 2)
 		require.NoError(t, err)
+		idx.SuspendFixups()
 		idx.ForceSplit(ctx, nil, 0, cspann.RootKey, false /* singleStep */)
 
 		metrics := vectorMgr.Metrics().(*vecindex.Metrics)
-		require.Equal(t, int64(1), metrics.FixupsAdded.Count())
+		require.Equal(t, int64(1), metrics.PendingSplitsMerges.Value())
+		idx.ProcessFixups()
 		require.Eventually(t, func() bool {
-			return metrics.FixupsProcessed.Count() == 1
+			return metrics.PendingSplitsMerges.Value() == 0
 		}, 10*time.Second, 10*time.Millisecond)
-		require.Equal(t, int64(0), metrics.SuccessSplits.Count())
 	})
 
 	t.Run("test single threaded functionality", func(t *testing.T) {

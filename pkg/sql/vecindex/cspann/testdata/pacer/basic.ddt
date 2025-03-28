@@ -1,5 +1,5 @@
 # ----------
-# Fixup processing keeps up with 1000 ops/sec test load.
+# Split/merge fixup processing keeps up with 1000 ops/sec test load.
 # ----------
 
 # At 50 ops per fixup, 20 fixups/sec must be processed to keep up with 1000
@@ -51,10 +51,10 @@ plot ops-per-fixup=50 fixups-per-sec=20 show-delay-millis
  0.20 ┤         │
  0.00 ┤         ╰───────────────────────────────────────────────────────────────────────────────
 
-# Fixup queue size should stay between 0 and 1.
+# Split/merge queue size should stay between 0 and 1.
 plot ops-per-fixup=50 fixups-per-sec=20 show-queue-size
 ----
- Fixup queue size = 0.08 fixups (avg), 1 fixups (final)
+ Split/merge queue size = 0.08 fixups (avg), 1 fixups (final)
  1.00 ┤     ╭──╮  ╭╮  ╭╮  ╭╮                                                                   ╭
  0.90 ┤     │  │  ││  ││  ││                                                                   │
  0.80 ┤     │  │  ││  ││  ││                                                                   │
@@ -68,7 +68,7 @@ plot ops-per-fixup=50 fixups-per-sec=20 show-queue-size
  0.00 ┼───╯╰╯  ╰──╯╰──╯╰──╯╰──╯╰───────────────────────────────────────────────────────────╯╰──╯
 
 # ----------
-# Fixup processing is 10% below sustainable rate.
+# Split/merge fixup processing is 10% below sustainable rate.
 # ----------
 
 # The test load requires 20 fixups/sec to keep up. At only 18 fixups/sec, the
@@ -121,10 +121,10 @@ plot ops-per-fixup=50 fixups-per-sec=18 show-actual-ops-per-sec
   100 ┤╭─╯
     0 ┼╯
 
-# Fixup queue size should stay <= ~5.
+# Split/merge queue size should stay <= ~5.
 plot ops-per-fixup=50 fixups-per-sec=18 show-queue-size
 ----
- Fixup queue size = 2.06 fixups (avg), 3 fixups (final)
+ Split/merge queue size = 2.06 fixups (avg), 3 fixups (final)
  4.00 ┤                      ╭────╮
  3.60 ┤                      │    ╰╮
  3.20 ┤                  ╭───╯     ╰───────────────╮                                         ╭──
@@ -138,7 +138,7 @@ plot ops-per-fixup=50 fixups-per-sec=18 show-queue-size
  0.00 ┼──────────╯
 
 # ----------
-# Fixup processing is 50% below sustainable rate.
+# Split/merge fixup processing is 50% below sustainable rate.
 # ----------
 
 # Allowed ops/sec should converge to 50 * 10 = ~500.
@@ -189,10 +189,10 @@ plot ops-per-fixup=50 fixups-per-sec=10 show-actual-ops-per-sec
   68 ┤╭╯
    0 ┼╯
 
-# Fixup queue size should stay <= ~5.
+# Split/merge queue size should stay <= ~5.
 plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size
 ----
- Fixup queue size = 3.91 fixups (avg), 5 fixups (final)
+ Split/merge queue size = 3.91 fixups (avg), 5 fixups (final)
  6.00 ┤                      ╭─╮
  5.40 ┤                      │ │
  4.80 ┤             ╭──╮╭────╯ ╰───────╮     ╭─╮              ╭╮                               ╭
@@ -205,11 +205,11 @@ plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size
  0.60 ┤   │
  0.00 ┼───╯
 
-# Rate of change in fixup queue size should initially be positive, then
+# Rate of change in split/merge queue size should initially be positive, then
 # negative, and then stabilize at ~0.
 plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
 ----
- Fixup queue size rate = 0.40 fixups/sec (avg)
+ Split/merge queue size rate = 0.40 fixups/sec (avg)
   2.90 ┤             ╭─╮
   2.56 ┤       ╭╮  ╭─╯ ╰╮
   2.22 ┤       ││╭╮│    │╭╮   ╭╮
@@ -223,7 +223,7 @@ plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
  -0.54 ┤                                ╰──╯
 
 # ----------
-# Fixup processing is 75% below sustainable rate.
+# Split/merge fixup processing is 75% below sustainable rate.
 # ----------
 
 # Allowed ops/sec should converge to 50 * 5 = ~250.
@@ -284,12 +284,12 @@ plot height=15 ops-per-fixup=50 fixups-per-sec=5 show-actual-ops-per-sec
   32 ┤│
    0 ┼╯
 
-# Fixup queue size rises above limit. Because it's not too far from the target
-# queue size, the pacer doesn't push to bring it down further towards the
+# Split/merge queue size rises above limit. Because it's not too far from the
+# target queue size, the pacer doesn't push to bring it down further towards the
 # target.
 plot height=15 seconds=60 ops-per-fixup=50 fixups-per-sec=5 show-queue-size
 ----
- Fixup queue size = 7.88 fixups (avg), 9 fixups (final)
+ Split/merge queue size = 7.88 fixups (avg), 9 fixups (final)
  9.00 ┤       ╭╮      ╭╮              ╭╮      ╭╮         ╭╮         ╭╮      ╭╮                 ╭
  8.40 ┤       ││      ││              ││      ││         ││         ││      ││                 │
  7.80 ┤   ╭───╯╰──────╯╰─────────╮╭─╮╭╯╰────╮╭╯╰─────────╯╰─────────╯╰──────╯╰─────────────────╯

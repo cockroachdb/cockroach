@@ -34,10 +34,10 @@ plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-actual-ops-per-sec
   70 ┤╭╯
    0 ┼╯
 
-# Fixup queue size will fluctuate a bit more with noise.
+# Split/merge queue size will fluctuate a bit more with noise.
 plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-queue-size
 ----
- Fixup queue size = 4.83 fixups (avg), 5 fixups (final)
+ Split/merge queue size = 4.83 fixups (avg), 5 fixups (final)
  7.00 ┤                      ╭───╮
  6.30 ┤                 ╭────╯   ╰──────╮               ╭╮         ╭─╮           ╭╮      ╭──╮
  5.60 ┤                 │               │               ││         │ │           ││      │  │
