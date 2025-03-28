@@ -103,9 +103,15 @@ func (v *VectorSearchSpec) summary() (string, []string) {
 		fmt.Sprintf("Nearest Neighbor Target Count: %d", v.TargetNeighborCount),
 		fmt.Sprintf("Query Vector: %s", vector.T(v.QueryVector).String()),
 	}
-	if len(v.PrefixKey) > 0 {
-		vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, v.PrefixKey)
-		details = append(details, fmt.Sprintf("Prefix Vals: %s", strings.Join(vals, "/")))
+	if len(v.PrefixKeys) > 0 {
+		// Only show the first prefix key.
+		var spanStr strings.Builder
+		vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, v.PrefixKeys[0])
+		spanStr.WriteString(fmt.Sprintf("Prefix Vals: %s", strings.Join(vals, "/")))
+		if len(v.PrefixKeys) > 1 {
+			spanStr.WriteString(fmt.Sprintf(" and %d more", len(v.PrefixKeys)-1))
+		}
+		details = append(details, spanStr.String())
 	}
 	return "VectorSearch", details
 }
