@@ -1153,8 +1153,8 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// statement, and then the following PL/pgSQL statements in the second.
 			doCon := b.makeContinuation("_stmt_do")
 			doCon.def.Volatility = volatility.Volatile
-			body, bodyProps := b.ob.buildPLpgSQLDoBody(t)
-			b.appendBodyStmt(&doCon, body, bodyProps)
+			bodyScope := b.ob.buildPLpgSQLDoBody(t)
+			b.appendBodyStmtFromScope(&doCon, bodyScope)
 			b.appendPlpgSQLStmts(&doCon, stmts[i+1:])
 			return b.callContinuation(&doCon, s)
 
@@ -2102,7 +2102,8 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 	return con
 }
 
-// appendBodyStmt adds the given body statement and its required properties to
+// appendBodyStmt adds the given body statement and its required properties
+// from the given scope to
 // the definition of a continuation function. Only the last body statement will
 // return results; all others will only be executed for their side effects
 // (e.g. RAISE statement).
@@ -2110,23 +2111,16 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 // appendBodyStmt is separate from makeContinuation to allow recursive routine
 // definitions, which need to push the continuation before it is finished. The
 // separation also allows for appending multiple body statements.
-func (b *plpgsqlBuilder) appendBodyStmt(
-	con *continuation, body memo.RelExpr, bodyProps *physical.Required,
-) {
+func (b *plpgsqlBuilder) appendBodyStmtFromScope(con *continuation, bodyScope *scope) {
 	// Set the volatility of the continuation routine to the least restrictive
 	// volatility level in the Relational properties of the body statements.
-	vol := body.Relational().VolatilitySet.ToVolatility()
+	bodyExpr := bodyScope.expr
+	vol := bodyExpr.Relational().VolatilitySet.ToVolatility()
 	if con.def.Volatility < vol {
 		con.def.Volatility = vol
 	}
-	con.def.Body = append(con.def.Body, body)
-	con.def.BodyProps = append(con.def.BodyProps, bodyProps)
-}
-
-// appendBodyStmtFromScope is similar to appendBodyStmt, but retrieves the body
-// statement its required properties from the given scope for convenience.
-func (b *plpgsqlBuilder) appendBodyStmtFromScope(con *continuation, bodyScope *scope) {
-	b.appendBodyStmt(con, bodyScope.expr, bodyScope.makePhysicalProps())
+	con.def.Body = append(con.def.Body, bodyExpr)
+	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())
 }
 
 // appendPlpgSQLStmts builds the given PLpgSQL statements into a relational
