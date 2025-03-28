@@ -363,7 +363,7 @@ func (a *allocatorState) rebalanceStores(
 			} else {
 				rlocalities = rstate.constraints.replicaLocalityTiers
 			}
-			localities := a.diversityScoringMemo.getExistingReplicaLocalities(rlocalities.replicas)
+			localities := a.diversityScoringMemo.getExistingReplicaLocalities(rlocalities)
 			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
 			// Set the diversity score and lease preference index of the candidates.
 			for _, cand := range cands.candidates {
@@ -941,17 +941,14 @@ func newDiversityScoringMemo() *diversityScoringMemo {
 
 // getExistingReplicaLocalities returns the existingReplicaLocalities object
 // for the given replicas. The parameter can be mutated by the callee.
-//
-// TODO(sumeer): change parameter to replicaLocalityTiers.
 func (dsm *diversityScoringMemo) getExistingReplicaLocalities(
-	existingReplicas []localityTiers,
+	existingReplicas replicasLocalityTiers,
 ) *existingReplicaLocalities {
-	lt := makeReplicasLocalityTiers(existingReplicas)
-	erl, ok := dsm.replicasMap.get(lt)
+	erl, ok := dsm.replicasMap.get(existingReplicas)
 	if ok {
 		return erl
 	}
-	erl.replicasLocalityTiers = lt.clone()
+	erl.replicasLocalityTiers = existingReplicas.clone()
 	erl.scoreSums = map[string]float64{}
 	return erl
 }
