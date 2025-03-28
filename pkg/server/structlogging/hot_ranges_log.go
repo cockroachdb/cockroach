@@ -9,6 +9,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -50,9 +53,12 @@ var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
 // hotRangesLoggingScheduler is responsible for logging index usage stats
 // on a scheduled interval.
 type hotRangesLoggingScheduler struct {
-	ie      sql.InternalExecutor
-	sServer serverpb.TenantStatusServer
-	st      *cluster.Settings
+	ie          sql.InternalExecutor
+	sServer     serverpb.TenantStatusServer
+	st          *cluster.Settings
+	stopper     *stop.Stopper
+	job         *jobs.Job
+	multiTenant bool
 }
 
 // StartHotRangesLoggingScheduler starts the capture index usage statistics logging scheduler.
@@ -62,42 +68,66 @@ func StartHotRangesLoggingScheduler(
 	sServer serverpb.TenantStatusServer,
 	ie sql.InternalExecutor,
 	st *cluster.Settings,
+	ti *tenantcapabilities.Entry,
 ) error {
+	multiTenant := ti != nil && !ti.TenantID.IsSystem()
 	scheduler := hotRangesLoggingScheduler{
-		ie:      ie,
-		sServer: sServer,
-		st:      st,
+		ie:          ie,
+		sServer:     sServer,
+		st:          st,
+		stopper:     stopper,
+		multiTenant: multiTenant,
 	}
 
-	return scheduler.start(ctx, stopper)
+	if multiTenant {
+		return scheduler.startJob(ctx, stopper)
+	}
+
+	return scheduler.startTask(ctx, stopper)
+}
+
+func (s *hotRangesLoggingScheduler) startTask(ctx context.Context, stopper *stop.Stopper) error {
+	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
+		err := s.start(ctx, stopper)
+		log.Warningf(ctx, "hot ranges stats logging scheduler stopped: %s", err)
+	})
+}
+
+func (s *hotRangesLoggingScheduler) startJob(ctx context.Context, stopper *stop.Stopper) error {
+	jobs.RegisterConstructor(
+		jobspb.TypeHotRangesLogger,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return &hotRangesLoggingScheduler{job: job}
+		},
+		jobs.DisablesTenantCostControl,
+	)
+	return nil
 }
 
 func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) error {
-	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
-		intervalChangedChan := make(chan struct{})
-		// We have to register this callback first. Otherwise we may run into
-		// an unlikely but possible scenario where we've started the ticker,
-		// and the setting is changed before we register the callback and the
-		// ticker will not be reset to the new value.
-		TelemetryHotRangesStatsInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
-			intervalChangedChan <- struct{}{}
-		})
-
-		ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
-
-		for {
-			select {
-			case <-stopper.ShouldQuiesce():
-				return
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				s.maybeLogHotRanges(ctx, stopper)
-			case <-intervalChangedChan:
-				ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
-			}
-		}
+	intervalChangedChan := make(chan struct{})
+	// We have to register this callback first. Otherwise we may run into
+	// an unlikely but possible scenario where we've started the ticker,
+	// and the setting is changed before we register the callback and the
+	// ticker will not be reset to the new value.
+	TelemetryHotRangesStatsInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
+		intervalChangedChan <- struct{}{}
 	})
+
+	ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
+
+	for {
+		select {
+		case <-stopper.ShouldQuiesce():
+			return nil
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			s.maybeLogHotRanges(ctx, stopper)
+		case <-intervalChangedChan:
+			ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
+		}
+	}
 }
 
 // maybeLogHotRanges is a small helper function which couples the
@@ -117,8 +147,12 @@ func (s *hotRangesLoggingScheduler) shouldLog() bool {
 // logHotRanges collects the hot ranges from this node's status server and
 // sends them to the TELEMETRY log channel.
 func (s *hotRangesLoggingScheduler) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
-	resp, err := s.sServer.HotRangesV2(ctx,
-		&serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges})
+	req := &serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges}
+	// if we are running in single tenant mode, only log the ranges on the status server.
+	if !s.multiTenant {
+		req.NodeID = "local"
+	}
+	resp, err := s.sServer.HotRangesV2(ctx, req)
 	if err != nil {
 		log.Warningf(ctx, "failed to get hot ranges: %s", err)
 		return
