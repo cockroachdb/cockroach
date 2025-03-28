@@ -22,7 +22,7 @@ plot initial-ops-per-sec=1 ops-per-fixup=50 fixups-per-sec=10
 # Queue size should stabilize at ~5 fixups.
 plot initial-ops-per-sec=1 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
 ----
- Fixup queue size = 1.35 fixups (avg), 6 fixups (final)
+ Split/merge queue size = 1.35 fixups (avg), 6 fixups (final)
  6.00 ┤                                                                             ╭──╮      ╭─
  5.40 ┤                                                                             │  │      │
  4.80 ┤                                                                       ╭╮ ╭──╯  ╰──────╯
@@ -73,11 +73,11 @@ plot initial-ops-per-sec=1000 ops-per-fixup=50 fixups-per-sec=10
   487 ┤                 ╰──────╮         ╭─────╯            ╰──────────────╯         ╰──────────
   428 ┤                        ╰─────────╯
 
-# Fixup queue size will rise above allowed level, and ops/sec will be further
-# throttled until queue size drops below threshold.
+# Split/merge queue size will rise above allowed level, and ops/sec will be
+# further throttled until queue size drops below threshold.
 plot initial-ops-per-sec=1000 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
 ----
- Fixup queue size = 7.99 fixups (avg), 8 fixups (final)
+ Split/merge queue size = 7.99 fixups (avg), 8 fixups (final)
  10.00 ┤            ╭───╮╭──────╮
   9.00 ┤          ╭─╯   ╰╯      ╰───────╮              ╭╮    ╭──╮                      ╭╮
   8.00 ┤       ╭──╯                     ╰───────╮ ╭────╯╰────╯  ╰───────╮ ╭─────╮╭─────╯╰────────
@@ -144,10 +144,10 @@ plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40 show-actual-ops
   100 ┤╭╯
     0 ┼╯
 
-# Average fixup queue size should be very low.
+# Average split/merge queue size should be very low.
 plot initial-ops-per-sec=2000 ops-per-fixup=50 fixups-per-sec=40 show-queue-size
 ----
- Fixup queue size = 0.02 fixups (avg), 1 fixups (final)
+ Split/merge queue size = 0.02 fixups (avg), 1 fixups (final)
  1.00 ┤                                                                                        ╭
  0.90 ┤                                                                                        │
  0.80 ┤       ╭╮                                                                               │

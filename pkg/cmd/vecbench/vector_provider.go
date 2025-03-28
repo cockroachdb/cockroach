@@ -39,8 +39,9 @@ type VectorProvider interface {
 	// the next time the provider is created.
 	Save(ctx context.Context) error
 
-	// Clear deletes all vectors in the provider, including any persistent state.
-	Clear(ctx context.Context) error
+	// New initializes the provider for building a fresh vector index. Any
+	// existing vectors and persistent state is deleted.
+	New(ctx context.Context) error
 
 	// InsertVectors inserts a set of vectors into the provider, each uniquely
 	// identified by a key.

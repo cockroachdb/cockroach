@@ -103,9 +103,8 @@ func buildIndex(
 	for int(insertCount.Load()) < vectors.Count {
 		time.Sleep(time.Second)
 		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
-		log.Infof(ctx, "%d successful splits", metrics.SuccessSplits.Count())
-		queued := max(metrics.FixupsAdded.Count()-metrics.FixupsProcessed.Count(), 0)
-		log.Infof(ctx, "%d fixups in queue", queued)
+		log.Infof(ctx, "%d successful splits", metrics.SuccessfulSplits.Count())
+		log.Infof(ctx, "%d pending splits/merges", metrics.PendingSplitsMerges.Value())
 
 		// Fail on foreground goroutine if any background goroutines failed.
 		if t.Failed() {

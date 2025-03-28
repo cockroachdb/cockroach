@@ -147,9 +147,8 @@ func (m *Manager) Get(
 		}
 
 		// Hook up index events to metrics methods.
-		idx.Fixups().OnSuccessfulSplit(m.metrics.IncSuccessSplits)
-		idx.Fixups().OnFixupAdded(m.metrics.IncFixupsAdded)
-		idx.Fixups().OnFixupProcessed(m.metrics.IncFixupsProcessed)
+		idx.Fixups().OnSuccessfulSplit(m.metrics.IncSuccessfulSplits)
+		idx.Fixups().OnPendingSplitsMerges(m.metrics.SetPendingSplitsMerges)
 
 		return idx, nil
 	}()

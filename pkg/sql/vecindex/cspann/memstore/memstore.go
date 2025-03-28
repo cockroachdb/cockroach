@@ -306,11 +306,8 @@ func (s *Store) EstimatePartitionCount(
 ) (int, error) {
 	memPart, ok := s.getPartition(treeKey, partitionKey)
 	if !ok {
-		if partitionKey == cspann.RootKey {
-			// Root partition has not yet been created, so count = 0.
-			return 0, nil
-		}
-		return 0, cspann.ErrPartitionNotFound
+		// Partition does not exist, so return 0.
+		return 0, nil
 	}
 	return int(memPart.count.Load()), nil
 }

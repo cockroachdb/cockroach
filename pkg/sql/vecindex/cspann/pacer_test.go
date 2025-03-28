@@ -22,8 +22,8 @@ import (
 )
 
 // TestPacer runs the pacer with simulated insert and delete operations and
-// fixups. It prints ASCII plots of key metrics over the course of the run in
-// order to evaluate its effectiveness.
+// pending split/merge fixups. It prints ASCII plots of key metrics over the
+// course of the run in order to evaluate its effectiveness.
 func TestPacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -49,7 +49,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 	height := 10
 	width := 90
 	initialOpsPerSec := 500
-	queuedFixups := 0
+	queueSize := 0
 	opsPerFixup := 50
 	fixupsPerSec := 10
 	showActualOpsPerSec := false
@@ -80,9 +80,9 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 			initialOpsPerSec, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(t, err)
 
-		case "initial-fixups":
+		case "initial-queue-size":
 			require.Len(t, arg.Vals, 1)
-			queuedFixups, err = strconv.Atoi(arg.Vals[0])
+			queueSize, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(t, err)
 
 		case "ops-per-fixup":
@@ -120,7 +120,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 
 	var now crtime.Mono
 	var p pacer
-	p.Init(initialOpsPerSec, queuedFixups, func() crtime.Mono { return now })
+	p.Init(initialOpsPerSec, queueSize, func() crtime.Mono { return now })
 
 	var allowedOpsPerSecPoints, actualOpsPerSecPoints []float64
 	var queueSizePoints, delayPoints, queueSizeRatePoints []float64
@@ -147,7 +147,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 	for now < end {
 		if now == nextOp {
 			totalOpCount++
-			delay = p.OnInsertOrDelete(queuedFixups)
+			delay = p.OnInsertOrDelete(queueSize)
 			// Truncate delay to nearest 10 nanoseconds in order to avoid diffs
 			// caused by floating point calculations on x86 vs. ARM. Also, don't
 			// allow simulated arrival rate to exceed 1 op per millisecond.
@@ -155,15 +155,15 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 			nextOp = now + crtime.Mono(addNoise(opInterval))
 
 			if totalOpCount%opsPerFixup == 0 {
-				queuedFixups++
-				p.OnFixup(queuedFixups)
+				queueSize++
+				p.OnQueueSizeChanged(queueSize)
 			}
 		}
 
 		if now == nextFixup {
-			if queuedFixups > 0 {
-				queuedFixups--
-				p.OnFixup(queuedFixups)
+			if queueSize > 0 {
+				queueSize--
+				p.OnQueueSizeChanged(queueSize)
 			}
 
 			fixupsInterval := time.Second / time.Duration(fixupsPerSec)
@@ -184,7 +184,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 
 			delayPoints = append(delayPoints, delay.Seconds()*1000)
 			allowedOpsPerSecPoints = append(allowedOpsPerSecPoints, p.allowedOpsPerSec)
-			queueSizePoints = append(queueSizePoints, float64(queuedFixups))
+			queueSizePoints = append(queueSizePoints, float64(queueSize))
 			queueSizeRatePoints = append(queueSizeRatePoints, p.queueSizeRate)
 
 			nextPoint += crtime.Mono(time.Millisecond)
@@ -195,7 +195,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 
 	finalOffset := len(allowedOpsPerSecPoints) - 1
 	if showQueueSize {
-		caption := fmt.Sprintf(" Fixup queue size = %0.2f fixups (avg), %v fixups (final)\n",
+		caption := fmt.Sprintf(" Split/merge queue size = %0.2f fixups (avg), %v fixups (final)\n",
 			computePointAverage(queueSizePoints), queueSizePoints[finalOffset])
 		return caption + asciigraph.Plot(queueSizePoints,
 			asciigraph.Width(width),
@@ -203,7 +203,7 @@ func plotPacerDecisions(t *testing.T, d *datadriven.TestData) string {
 	}
 
 	if showQueueSizeRate {
-		caption := fmt.Sprintf(" Fixup queue size rate = %0.2f fixups/sec (avg)\n",
+		caption := fmt.Sprintf(" Split/merge queue size rate = %0.2f fixups/sec (avg)\n",
 			computePointAverage(queueSizeRatePoints))
 		return caption + asciigraph.Plot(queueSizeRatePoints,
 			asciigraph.Width(width),

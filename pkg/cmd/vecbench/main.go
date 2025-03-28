@@ -58,7 +58,7 @@ const (
 	ShowCursor = "\033[?25h"
 )
 
-var flagHideCharts = flag.Bool("hide-charts", false, "Hide time series charts during index build.")
+var flagHideProgress = flag.Bool("hide-progress", false, "Hide progress during index build.")
 
 // Search command options.
 var flagMaxResults = flag.Int("k", 10, "Number of search results, used in recall calculation.")
@@ -313,13 +313,13 @@ func (vb *vectorBench) BuildIndex() {
 		panic(err)
 	}
 
-	// Clear any provider state for this dataset so we can start fresh.
-	vb.provider.Clear(vb.ctx)
+	// Start fresh.
+	vb.provider.New(vb.ctx)
 
 	// Create unique primary key for each vector.
 	primaryKeys := make([]cspann.KeyBytes, data.Train.Count)
 	keyBuf := make(cspann.KeyBytes, data.Train.Count*4)
-	for i := 0; i < data.Train.Count; i++ {
+	for i := range data.Train.Count {
 		primaryKeys[i] = keyBuf[i*4 : i*4+4]
 		binary.BigEndian.PutUint32(primaryKeys[i], uint32(i))
 	}
@@ -328,7 +328,7 @@ func (vb *vectorBench) BuildIndex() {
 	estimator := NewPercentileEstimator(1000)
 
 	// Set up time series charts.
-	cp := chartPrinter{Footer: 2, Hide: *flagHideCharts}
+	cp := chartPrinter{Footer: 2, Hide: *flagHideProgress}
 	throughput := cp.AddChart("ops/sec")
 	p50 := cp.AddChart("p50 ms latency")
 	p90 := cp.AddChart("p90 ms latency")
@@ -402,10 +402,13 @@ func (vb *vectorBench) BuildIndex() {
 		}
 		cp.Plot()
 
-		sinceStart := now.Sub(startAt)
-		fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v"+Reset,
-			totalInserted, data.Train.Count, (float64(totalInserted)/float64(data.Train.Count))*100,
-			sinceStart.Truncate(time.Second))
+		if !*flagHideProgress {
+			sinceStart := now.Sub(startAt)
+			fmt.Printf(White+"\rInserted %d / %d vectors (%.2f%%) in %v"+Reset,
+				totalInserted, data.Train.Count,
+				(float64(totalInserted)/float64(data.Train.Count))*100,
+				sinceStart.Truncate(time.Second))
+		}
 
 		if totalInserted >= data.Train.Count {
 			break

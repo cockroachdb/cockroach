@@ -392,6 +392,39 @@ func (suite *StoreTestSuite) TestSearchMultiplePartitions() {
 	}
 }
 
+func (suite *StoreTestSuite) TestEstimatePartitionCount() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		// Partition does not yet exist.
+		count, err := store.EstimatePartitionCount(suite.ctx, treeKey, cspann.PartitionKey(99))
+		suite.NoError(err)
+		suite.Equal(0, count)
+
+		// Create partition with some vectors in it.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+		count, err = store.EstimatePartitionCount(suite.ctx, treeKey, partitionKey)
+		suite.NoError(err)
+		suite.Equal(partition.Count(), count)
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
 func (suite *StoreTestSuite) TestTryCreateEmptyPartition() {
 	store := suite.makeStore(suite.quantizer)
 	if !store.SupportsTry() {
