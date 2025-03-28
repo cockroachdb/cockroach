@@ -59,6 +59,7 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 		UnsafeRestoreIncompatibleVersion: true,
 		ExecutionLocality:                tree.NewDString("test expr"),
 		ExperimentalOnline:               true,
+		ExperimentalCopy:                 true,
 		RemoveRegions:                    true,
 
 		IntoDB:               tree.NewDString("test expr"),
