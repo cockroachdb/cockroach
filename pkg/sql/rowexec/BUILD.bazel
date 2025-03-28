@@ -99,7 +99,6 @@ go_library(
         "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
