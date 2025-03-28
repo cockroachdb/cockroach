@@ -528,9 +528,14 @@ func (s *Store) TryRemoveFromPartition(
 	for i := range childKeys {
 		if partition.Level() > cspann.LeafLevel && partition.Count() == 1 {
 			// Cannot remove the last remaining vector in a non-leaf partition, as
-			// this would create an unbalanced K-means tree.
-			err = cspann.ErrRemoveNotAllowed
-			break
+			// this would create an unbalanced K-means tree. However, this doesn't
+			// apply to the root partition that's draining.
+			state := existing.StateDetails.State
+			if partitionKey != cspann.RootKey || state != cspann.DrainingForSplitState {
+				err = errors.AssertionFailedf(
+					"cannot remove last remaining vector from non-leaf partition %d", partitionKey)
+				break
+			}
 		}
 
 		removed = partition.ReplaceWithLastByKey(childKeys[i]) || removed
