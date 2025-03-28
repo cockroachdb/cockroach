@@ -129,3 +129,9 @@ var _ tree.RegexpCacheKey = Regex{}
 func (r Regex) Pattern() (string, error) {
 	return r.Regex, nil
 }
+
+type AnyKey struct{}
+
+var _ Path = AnyKey{}
+
+func (a AnyKey) String() string { return ".*" }

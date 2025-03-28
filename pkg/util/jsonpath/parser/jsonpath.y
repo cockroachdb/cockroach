@@ -311,6 +311,10 @@ accessor_op:
   {
     $$.val = jsonpath.Filter{Condition: $3.path()}
   }
+| '.' '*'
+  {
+    $$.val = jsonpath.AnyKey{}
+  }
 ;
 
 key:
@@ -430,6 +434,7 @@ comp_op:
   }
 ;
 
+// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {

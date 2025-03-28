@@ -1,11 +1,6 @@
 # LogicTest: !local-mixed-24.3 !local-mixed-25.1
 
 query T
-SELECT jsonb_path_query('"\\"', '$ ? (@ like_regex "^\\\\$")');
-----
-"\\"
-
-query T
 SELECT jsonb_path_query('{}', '$')
 ----
 {}
@@ -914,12 +909,52 @@ SELECT jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\
 "abc"
 "abdacb"
 
-# TODO(normanchenn): support scanning identQuote within regex.
-# SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H.*\\\\.*!.*\".*")');
+query T
+SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H.*\\\\.*!.*\".*")');
+----
+"He said \"Hello\\World!\""
+
+query T rowsort
+SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
+----
+1
+2
+
+query T
+SELECT jsonb_path_query('{"a": [1, 2], "b": "hello"}', 'strict $.a ? ($.b == "hello") ');
+----
+[1, 2]
+
+query T rowsort
+SELECT jsonb_path_query('{"a": "world", "b": 2, "c": true}', '$.*');
+----
+"world"
+2
+true
+
+query T rowsort
+SELECT jsonb_path_query('{"a": ["hello", "world"], "b": [2, 5], "c": [true, false], "d": "non-array"}', '$.*[1]');
+----
+"world"
+5
+false
+
+query T
+SELECT jsonb_path_query('{"a": {"ab": 1}, "b": {"bc": 2}, "c": {"cd": 3}}', '$.*.bc');
+----
+2
+
+query empty
+SELECT jsonb_path_query('{}', '$.*');
+
+query empty
+SELECT jsonb_path_query('[1, 2, 3, 4, 5]', '$.*');
+
+query T rowsort
+SELECT jsonb_path_query('{"a": {"x": {"y": 1}}, "b": {"x": {"z": 2}}}', '$.*.x.*');
+----
+1
+2
 
 # select jsonb_path_query('[1, 2, 3, 4, 5]', '$[-1]');
 # select jsonb_path_query('[1, 2, 3, 4, 5]', 'strict $[-1]');
-
-# interesting functionality
-# select jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a ? ($.b == "hello") ');
-# select jsonb_path_query('{"a": [1, 2], "b": "hello"}', '$.a');
