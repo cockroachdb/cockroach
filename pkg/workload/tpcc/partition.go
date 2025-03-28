@@ -395,10 +395,14 @@ func configureZone(
 	if len(cfg.zones) > 0 {
 		constraint = fmt.Sprintf("[+zone=%s]", cfg.zones[partIdx])
 	} else {
-		// Note that this only specifies 3 replica locations. If the number of
-		// replicas is >3 this will only specify the location for 3 of them.
-		constraint = fmt.Sprintf(`{+rack=%d: 1, +rack=%d: 1, +rack=%d: 1}`, partIdx, (partIdx+totalParts/3)%totalParts, (partIdx+2*totalParts/3)%totalParts)
-		lease = fmt.Sprintf("[[+rack=%d]]", partIdx)
+		if cfg.strategy == partitionedLeases {
+			// Note that this only specifies 3 replica locations. If the number of
+			// replicas is >3 this will only specify the location for 3 of them.
+			constraint = fmt.Sprintf(`{+rack=%d: 1, +rack=%d: 1, +rack=%d: 1}`, partIdx, (partIdx+totalParts/3)%totalParts, (partIdx+2*totalParts/3)%totalParts)
+			lease = fmt.Sprintf("[[+rack=%d]]", partIdx)
+		} else {
+			constraint = fmt.Sprintf("[+rack=%d]", partIdx)
+		}
 	}
 
 	var opts string
