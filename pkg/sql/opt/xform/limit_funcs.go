@@ -503,6 +503,7 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 			KeyCols:               lookupCols,
 			Cols:                  sp.Cols,
 			LookupColsAreTableKey: true,
+			Locking:               sp.Locking,
 		}
 		vectorSearch = c.e.f.ConstructLookupJoin(vectorSearch, nil /* on */, lookupPrivate)
 
