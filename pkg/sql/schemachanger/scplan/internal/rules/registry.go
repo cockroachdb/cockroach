@@ -29,10 +29,7 @@ import (
 func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 	// If expensive logging is enabled, we'll collect stats on the query and
 	// report on how each dep rule performed.
-	var stats *rel.QueryStats
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		stats = &rel.QueryStats{}
-	}
+	stats := &rel.QueryStats{}
 
 	for _, dr := range r.depRules {
 		if err := dr.q.Iterate(g.Database(), stats, func(r rel.Result) error {
@@ -50,24 +47,22 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 		}); err != nil {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
 		}
-		if stats != nil {
-			log.Infof(
-				ctx, "applying dep rule %q, %d results found that took %v",
-				dr.name, stats.ResultsFound, timeutil.Since(stats.StartTime),
-			)
-			if stats.ResultsFound == 0 {
-				cl := dr.q.Clauses()
-				if stats.FirstUnsatisfiedClause >= len(cl) {
-					return errors.AssertionFailedf("no unsatisfied clause found: %d >= %d",
-						stats.FirstUnsatisfiedClause, len(cl))
-				}
-				clauseStr, err := yaml.Marshal(cl[stats.FirstUnsatisfiedClause])
-				if err != nil {
-					return errors.Wrapf(err, "failed to marshal clause %d", stats.FirstUnsatisfiedClause)
-				}
-				log.Infof(ctx, "dep rule %q did not apply. The first unsatisfied clause is: %s",
-					dr.name, clauseStr)
+		log.Infof(
+			ctx, "applying dep rule %q, %d results found that took %v",
+			dr.name, stats.ResultsFound, timeutil.Since(stats.StartTime),
+		)
+		if stats.ResultsFound == 0 {
+			cl := dr.q.Clauses()
+			if stats.FirstUnsatisfiedClause >= len(cl) {
+				return errors.AssertionFailedf("no unsatisfied clause found: %d >= %d",
+					stats.FirstUnsatisfiedClause, len(cl))
 			}
+			clauseStr, err := yaml.Marshal(cl[stats.FirstUnsatisfiedClause])
+			if err != nil {
+				return errors.Wrapf(err, "failed to marshal clause %d", stats.FirstUnsatisfiedClause)
+			}
+			log.Infof(ctx, "dep rule %q did not apply. The first unsatisfied clause is: %s",
+				dr.name, clauseStr)
 		}
 	}
 	return nil
