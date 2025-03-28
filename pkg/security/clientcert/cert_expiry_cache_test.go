@@ -153,7 +153,7 @@ func TestCacheMetricsSync(t *testing.T) {
 	// insert.
 	cache.MaybeUpsert(ctx, fooUser, defaultSerial, laterExpiration)
 	// update.
-	cache.MaybeUpsert(ctx, fooUser, defaultSerial, closerExpiration)
+	cache.MaybeUpsert(ctx, fooUser, secondarySerial, closerExpiration)
 
 	expFloat := *(findChildMetric(expMetric, fooUser).Gauge.Value)
 	expiration := cache.GetExpiration(fooUser)

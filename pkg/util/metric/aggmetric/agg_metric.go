@@ -234,8 +234,12 @@ type BtreeWrapper struct {
 }
 
 func (b BtreeWrapper) Get(labelVals ...string) (ChildMetric, bool) {
-	panic(errors.AssertionFailedf("btree does not support get method. Invocation with label values: %s",
-		labelVals))
+	key := labelValuesSlice(labelVals)
+	cm := b.tree.Get(&key)
+	if cm == nil {
+		return nil, false
+	}
+	return cm.(ChildMetric), true
 }
 
 func (b BtreeWrapper) Add(metric ChildMetric) {
