@@ -107,22 +107,27 @@ func (s *SQLProvider) Save(ctx context.Context) error {
 	return nil
 }
 
-// Clear implements the VectorProvider interface.
-func (s *SQLProvider) Clear(ctx context.Context) error {
+// New implements the VectorProvider interface.
+func (s *SQLProvider) New(ctx context.Context) error {
 	// Drop the table if it exists.
 	_, err := s.pool.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", s.tableName))
-	return errors.Wrap(err, "dropping table")
+	if err != nil {
+		return errors.Wrap(err, "dropping table")
+	}
+
+	_, err = s.pool.Exec(ctx, fmt.Sprintf(`
+		CREATE TABLE %s (
+			id BYTES PRIMARY KEY,
+			embedding VECTOR(%d),
+			VECTOR INDEX (embedding)
+		)`, s.tableName, s.dims))
+	return errors.Wrap(err, "creating table")
 }
 
 // InsertVectors implements the VectorProvider interface.
 func (s *SQLProvider) InsertVectors(
 	ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set,
 ) error {
-	// Create the table if it doesn't exist.
-	if err := s.ensureTableExists(ctx); err != nil {
-		return err
-	}
-
 	// Retry loop.
 	for {
 		err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -219,18 +224,6 @@ func (s *SQLProvider) FormatStats() string {
 	return ""
 }
 
-// ensureTableExists creates the table if it doesn't yet exist.
-func (s *SQLProvider) ensureTableExists(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS %s (
-			id BYTES PRIMARY KEY,
-			embedding VECTOR(%d),
-			VECTOR INDEX (embedding)
-		)`, s.tableName, s.dims))
-
-	return errors.Wrap(err, "creating table")
-}
-
 // sanitizeIdentifier makes a string safe to use as a SQL identifier
 func sanitizeIdentifier(s string) string {
 	// Replace non-alphanumeric characters with underscores.
@@ -245,9 +238,8 @@ func sanitizeIdentifier(s string) string {
 // Fetch metrics from the Prometheus endpoint.
 func (s *SQLProvider) fetchPrometheusMetrics() ([]IndexMetric, error) {
 	var metricsToTrack = map[string]float64{
-		"sql_vecindex_successful_splits": -1,
-		"sql_vecindex_fixups_added":      -1,
-		"sql_vecindex_fixups_processed":  -1,
+		"sql_vecindex_successful_splits":     -1,
+		"sql_vecindex_pending_splits_merges": -1,
 	}
 
 	// Parse connection string to extract host.
@@ -315,11 +307,8 @@ func (s *SQLProvider) fetchPrometheusMetrics() ([]IndexMetric, error) {
 	if splits, ok := metricsToTrack["sql_vecindex_successful_splits"]; ok {
 		metrics = append(metrics, IndexMetric{Name: "successful splits", Value: splits})
 	}
-	if added, ok := metricsToTrack["sql_vecindex_fixups_added"]; ok {
-		if processed, ok := metricsToTrack["sql_vecindex_fixups_processed"]; ok {
-			fixupQueueSize := max(added-processed, 0)
-			metrics = append(metrics, IndexMetric{Name: "fixup queue size", Value: fixupQueueSize})
-		}
+	if pending, ok := metricsToTrack["sql_vecindex_pending_splits_merges"]; ok {
+		metrics = append(metrics, IndexMetric{Name: "pending splits/merges", Value: pending})
 	}
 
 	return metrics, nil

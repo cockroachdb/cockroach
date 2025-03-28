@@ -568,8 +568,22 @@ func (vi *Index) searchForInsertHelper(
 			"SearchForInsert should return exactly one result, got %d", len(results))
 	}
 
-	vi.fixups.AddSplitOrMergeCheck(
-		ctx, idxCtx.treeKey, results[0].ParentPartitionKey, results[0].ChildKey.PartitionKey)
+	// Do an inconsistent scan of the partition to see if it might be ready to
+	// split. This is necessary because the search does not scan leaf partitions.
+	// Unless we do this, we may never realize the partition is oversized.
+	// NOTE: The scan is not performed in the scope of the current transaction,
+	// so it will not reflect the effects of this operation. That's OK, since it's
+	// not necessary to split at exactly the point where the partition becomes
+	// oversized.
+	partitionKey := results[0].ChildKey.PartitionKey
+	count, err := vi.store.EstimatePartitionCount(ctx, idxCtx.treeKey, partitionKey)
+	if err != nil {
+		return nil, errors.Wrapf(err, "counting vectors in partition %d", partitionKey)
+	}
+	if count >= vi.options.MaxPartitionSize {
+		vi.fixups.AddSplit(ctx, idxCtx.treeKey,
+			results[0].ParentPartitionKey, partitionKey, false /* singleStep */)
+	}
 
 	return &results[0], nil
 }

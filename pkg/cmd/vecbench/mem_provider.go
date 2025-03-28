@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/memstore"
@@ -24,12 +25,13 @@ const seed = 42
 
 // MemProvider implements VectorProvider using an in-memory store.
 type MemProvider struct {
-	stopper       *stop.Stopper
-	indexFileName string
-	dims          int
-	options       cspann.IndexOptions
-	store         *memstore.Store
-	index         *cspann.Index
+	stopper          *stop.Stopper
+	indexFileName    string
+	dims             int
+	options          cspann.IndexOptions
+	store            *memstore.Store
+	index            *cspann.Index
+	successfulSplits atomic.Int64
 }
 
 // NewMemProvider creates a new MemProvider that maintains an in-memory, indexed
@@ -53,6 +55,7 @@ func (m *MemProvider) Close() {
 	}
 	m.store = nil
 	m.index = nil
+	m.successfulSplits.Store(0)
 }
 
 // Load implements the VectorProvider interface.
@@ -79,63 +82,52 @@ func (m *MemProvider) Load(ctx context.Context) (bool, error) {
 			"expected index with %d dims, got %d", m.dims, m.store.Dims())
 	}
 
+	if err = m.ensureIndex(ctx); err != nil {
+		return false, err
+	}
+
 	return true, nil
 }
 
-// Clear implements the VectorProvider interface
-func (m *MemProvider) Clear(ctx context.Context) error {
+// New implements the VectorProvider interface
+func (m *MemProvider) New(ctx context.Context) error {
+	// Clear any existing state.
 	m.Close()
+
+	// Remove persisted index, if it exists.
 	err := os.Remove(m.indexFileName)
-	if oserror.IsNotExist(err) {
-		return nil
+	if err != nil {
+		if !oserror.IsNotExist(err) {
+			return err
+		}
 	}
-	return err
+
+	return m.ensureIndex(ctx)
 }
 
 // InsertVector implements the VectorProvider interface.
 func (m *MemProvider) InsertVectors(
 	ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set,
 ) (err error) {
-	if err = m.ensureIndex(ctx); err != nil {
-		return err
-	}
-
-	var txn cspann.Txn
-	txn, err = m.store.BeginTransaction(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = m.store.CommitTransaction(ctx, txn)
+	return m.store.RunTransaction(ctx, func(txn cspann.Txn) error {
+		var idxCtx cspann.Context
+		idxCtx.Init(txn)
+		for i := range vectors.Count {
+			key := keys[i]
+			vec := vectors.At(i)
+			m.store.InsertVector(key, vec)
+			if err = m.index.Insert(ctx, &idxCtx, nil /* treeKey */, vec, key); err != nil {
+				return err
+			}
 		}
-		if err != nil {
-			err = errors.CombineErrors(err, m.store.AbortTransaction(ctx, txn))
-		}
-	}()
-
-	var idxCtx cspann.Context
-	idxCtx.Init(txn)
-	for i := range vectors.Count {
-		key := keys[i]
-		vec := vectors.At(i)
-		m.store.InsertVector(key, vec)
-		if err = m.index.Insert(ctx, &idxCtx, nil /* treeKey */, vec, key); err != nil {
-			return err
-		}
-	}
-
-	return err
+		return nil
+	})
 }
 
 // Search implements the VectorProvider interface.
 func (m *MemProvider) Search(
 	ctx context.Context, vec vector.T, maxResults int, beamSize int, stats *cspann.SearchStats,
 ) (keys []cspann.KeyBytes, err error) {
-	if err = m.ensureIndex(ctx); err != nil {
-		return nil, err
-	}
-
 	var txn cspann.Txn
 	txn, err = m.store.BeginTransaction(ctx)
 	defer func() {
@@ -204,19 +196,24 @@ func (m *MemProvider) Save(ctx context.Context) error {
 
 // GetMetrics implements the VectorProvider interface.
 func (m *MemProvider) GetMetrics() ([]IndexMetric, error) {
-	// queueSize is the size of the background fixup queue for processing splits
-	// and merges.
-	queueSize := IndexMetric{Name: "fixup queue size"}
+	// successfulSplits is the number of splits successfuly completed by the
+	// background fixup processor.
+	successfulSplits := IndexMetric{Name: "successful splits"}
+
+	// pendingSplitsMerges is the number of splits/merges waiting to be processed
+	// by the background fixup processor.
+	pendingSplitsMerges := IndexMetric{Name: "pending splits/merges"}
 
 	// pacerOpsPerSec returnss the ops/sec currently allowed by the pacer.
 	pacerOpsPerSec := IndexMetric{Name: "pacer ops/sec"}
 
 	if m.index != nil {
-		queueSize.Value = float64(m.index.Fixups().QueueSize())
+		successfulSplits.Value = float64(m.successfulSplits.Load())
+		pendingSplitsMerges.Value = float64(m.index.Fixups().PendingSplitsMerges())
 		pacerOpsPerSec.Value = m.index.Fixups().AllowedOpsPerSec()
 	}
 
-	return []IndexMetric{queueSize, pacerOpsPerSec}, nil
+	return []IndexMetric{successfulSplits, pendingSplitsMerges, pacerOpsPerSec}, nil
 }
 
 // FormatStats implements the VectorProvider interface.
@@ -242,6 +239,9 @@ func (m *MemProvider) ensureIndex(ctx context.Context) error {
 
 	var err error
 	m.index, err = cspann.NewIndex(ctx, m.store, quantizer, seed, &m.options, m.stopper)
+	m.index.Fixups().OnSuccessfulSplit(func() {
+		m.successfulSplits.Add(1)
+	})
 	return err
 }
 
