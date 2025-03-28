@@ -190,6 +190,7 @@ func regexBinaryOp(left jsonpath.Path, regex string) (jsonpath.Operation, error)
 %token <str> FLAG
 
 %token <str> LAST
+%token <str> EXISTS
 
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
@@ -433,6 +434,10 @@ delimited_predicate:
   {
     $$.val = $2.path()
   }
+| EXISTS '(' expr ')'
+  {
+    $$.val = unaryOp(jsonpath.OpExists, $3.path())
+  }
 ;
 
 comp_op:
@@ -512,7 +517,8 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  FALSE
+  EXISTS
+| FALSE
 | FLAG
 | LAST
 | LAX

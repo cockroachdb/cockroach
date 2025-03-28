@@ -519,6 +519,16 @@ $[1 to last, last to last]
 ----
 $[1 to last,last to last] -- normalized!
 
+parse
+exists($.a)
+----
+exists ($."a") -- normalized!
+
+parse
+$.a ? (exists(@.b) && !exists(@.c))
+----
+$."a"?((exists (@."b") && !(exists (@."c")))) -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
