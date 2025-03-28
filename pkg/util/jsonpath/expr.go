@@ -93,6 +93,12 @@ func (a ArrayList) String() string {
 	return sb.String()
 }
 
+type Last struct{}
+
+var _ Path = Last{}
+
+func (l Last) String() string { return "last" }
+
 type Filter struct {
 	Condition Path
 }

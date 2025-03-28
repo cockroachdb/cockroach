@@ -494,6 +494,23 @@ parse
 ----
 (1 + (2 * (-4))) -- normalized!
 
+# TODO(normanchenn): This shouldn't be parsed, as the last keyword isn't within
+# array subscripts.
+parse
+last
+----
+last
+
+parse
+$[last]
+----
+$[last]
+
+parse
+$[1 to last, last to last]
+----
+$[1 to last,last to last] -- normalized!
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

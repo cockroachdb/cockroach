@@ -177,6 +177,8 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %token <str> LIKE_REGEX
 %token <str> FLAG
 
+%token <str> LAST
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -303,7 +305,10 @@ path_primary:
   {
     $$.val = $1.path()
   }
-// TODO(normanchenn): support LAST for array ranges.
+| LAST
+  {
+    $$.val = jsonpath.Last{}
+  }
 ;
 
 accessor_op:
@@ -494,6 +499,7 @@ any_identifier:
 unreserved_keyword:
   FALSE
 | FLAG
+| LAST
 | LAX
 | LIKE_REGEX
 | NULL
