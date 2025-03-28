@@ -1,10 +1,10 @@
 # ----------
-# Simulate edge case where fixups have slowed to only 1 per second.
+# Simulate edge case where split/merge fixups have slowed to only 1 per second.
 # ----------
 
-# Query rate starts high, which results in a rapidly increasing fixup queue. The
-# pacer should react by increasing the delay until it has the fixup queue under
-# control and it begins steadily decreasing.
+# Query rate starts high, which results in a rapidly increasing split/merge
+# queue. The pacer should react by increasing the delay until it has the
+# split/merge queue under control and it begins steadily decreasing.
 plot seconds=60 ops-per-fixup=50 fixups-per-sec=1
 ----
  Allowed ops per second = 55.88 ops/sec (avg), 53.19 ops/sec (final)
@@ -20,8 +20,8 @@ plot seconds=60 ops-per-fixup=50 fixups-per-sec=1
   63 ┤        ╰────────╮                    ╭──────────────────────────────────────────────────
   15 ┤                 ╰────────────────────╯
 
-# Delay rises rapidly until fixup queue size starts decreasing and pacer can
-# begin reducing delay. It should stabilize at 1000 / (50 * 1) = ~20 ms.
+# Delay rises rapidly until split/merge queue size starts decreasing and pacer
+# can begin reducing delay. It should stabilize at 1000 / (50 * 1) = ~20 ms.
 plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-delay-millis
 ----
  Delay (ms) = 28.29 ms (avg), 18.80 ms (final)
@@ -37,11 +37,11 @@ plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-delay-millis
   8.53 ┤  ╭──╯
   2.00 ┼──╯
 
-# Fixup queue size grows rapidly and then is slowly reduced at 2 fixups / second
-# until it stabilizes at something closer to 5 fixups.
+# Split/merge queue size grows rapidly and then is slowly reduced at 2 fixups
+# per second until it stabilizes at something closer to 5 fixups.
 plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-queue-size
 ----
- Fixup queue size = 10.17 fixups (avg), 8 fixups (final)
+ Split/merge queue size = 10.17 fixups (avg), 8 fixups (final)
  19.00 ┤         ╭╮ ╭╮
  17.10 ┤     ╭───╯╰─╯╰─────╮
  15.20 ┤   ╭─╯             ╰───╮╭╮
@@ -54,11 +54,11 @@ plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-queue-size
   1.90 ┤│
   0.00 ┼╯
 
-# Fixup queue size increases at high rate and then goes negative once throttling
-# kicks in.
+# Split/merge queue size increases at high rate and then goes negative once
+# throttling kicks in.
 plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-queue-size-rate
 ----
- Fixup queue size rate = 0.10 fixups/sec (avg)
+ Split/merge queue size rate = 0.10 fixups/sec (avg)
   4.79 ┤╭─╮
   4.21 ┤│ │╭╮
   3.63 ┤│ ╰╯│

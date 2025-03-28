@@ -23,15 +23,10 @@ import (
 type fixupType int
 
 const (
-	// splitOrMergeCheckFixup checks whether a partition needs to be split (if
-	// over-sized) or merged (if under-sized). It includes the key of the
-	// partition to check, as well as the key of its parent partition (if one
-	// exists).
-	splitOrMergeCheckFixup fixupType = iota + 1
 	// splitFixup starts or continues the split of an over-sized partition. It
 	// includes the key of the partition to split, as well as the key of its
 	// parent partition (if one exists).
-	splitFixup
+	splitFixup fixupType = iota + 1
 	// mergeFixup starts or continues the merge of an under-sized partition. It
 	// includes the key of the partition to split, as well as the key of its
 	// parent partition (if one exists).
@@ -76,10 +71,18 @@ type fixup struct {
 	SingleStep bool
 }
 
+// IsSplitMerge returns true if this is a split or merge fixup.
+func (f fixup) IsSplitMerge() bool {
+	return f.Type == splitFixup || f.Type == mergeFixup
+}
+
 // fixupKey is used to detect duplicate fixups on the same partition/vector, so
 // that we don't enqueue duplicates. It contains fields from the fixup struct
 // that have been converted to types that can be used in a map key.
 type fixupKey struct {
+	// Type is in the key to ensure that different types of fixups on the same
+	// partition are not treated as duplicates.
+	Type fixupType
 	// TreeKey is the fixup.TreeKey field converted to a string so that it's a
 	// valid map key.
 	// NOTE: This only results in an allocation if TreeKey is not empty.
@@ -95,7 +98,11 @@ type fixupKey struct {
 // into a map.
 func makeFixupKey(f fixup) fixupKey {
 	return fixupKey{
-		TreeKey: string(f.TreeKey), PartitionKey: f.PartitionKey, VectorKey: string(f.VectorKey)}
+		Type:         f.Type,
+		TreeKey:      string(f.TreeKey),
+		PartitionKey: f.PartitionKey,
+		VectorKey:    string(f.VectorKey),
+	}
 }
 
 // FixupProcessor applies index fixups in a background goroutine. Fixups repair
@@ -133,11 +140,9 @@ type FixupProcessor struct {
 
 	// onSuccessfulSplit is called when a partition is split without error.
 	onSuccessfulSplit func()
-	// onFixupAdded is called when a fixup is added to the queue.
-	onFixupAdded func()
-	// onFixupProcessed is called when a fixup is processed and removed from the
-	// queue.
-	onFixupProcessed func()
+	// onPendingSplitsMerges is called when a split or merge fixup is added or
+	// removed to/from the queue.
+	onPendingSplitsMerges func(count int)
 
 	// --------------------------------------------------
 	// These fields can be accessed on any goroutine.
@@ -160,6 +165,9 @@ type FixupProcessor struct {
 
 		// pendingFixups tracks fixups that are waiting to be processed.
 		pendingFixups map[fixupKey]bool
+		// pendingSplitsMerges tracks the number of split or merge fixups that
+		// are waiting to be processed.
+		pendingSplitsMerges int
 		// totalWorkers is the number of background workers available to process
 		// fixups.
 		totalWorkers int
@@ -173,8 +181,8 @@ type FixupProcessor struct {
 		// waitForFixups broadcasts to any waiters when all fixups are processed.
 		// This is used for testing.
 		waitForFixups sync.Cond
-		// pacer limits vector insert/delete throughput if background fixups are
-		// falling behind.
+		// pacer limits vector insert/delete throughput if background split and
+		// merge fixups are falling behind.
 		pacer pacer
 	}
 }
@@ -214,28 +222,21 @@ func (fp *FixupProcessor) OnSuccessfulSplit(fn func()) {
 	fp.onSuccessfulSplit = fn
 }
 
-// OnFixupAdded sets a callback function that's invoked when a fixup is added to
-// the queue.
+// OnPendingSplitsMerges sets a callback function that's invoked when a split or
+// merge fixup is added or removed to/from the queue.
 // NOTE: Callers can only set this immediately after Init is called, before any
 // background operations are possible.
-func (fp *FixupProcessor) OnFixupAdded(fn func()) {
-	fp.onFixupAdded = fn
+func (fp *FixupProcessor) OnPendingSplitsMerges(fn func(int)) {
+	fp.onPendingSplitsMerges = fn
 }
 
-// OnFixupProcessed sets a callback function that's invoked when a fixup is
-// processed and removed from the queue.
-// NOTE: Callers can only set this immediately after Init is called, before any
-// background operations are possible.
-func (fp *FixupProcessor) OnFixupProcessed(fn func()) {
-	fp.onFixupProcessed = fn
-}
-
-// QueueSize returns the current size of the fixup queue.
-func (fp *FixupProcessor) QueueSize() int {
+// PendingSplitsMerges returns the number of split/merge fixups that are
+// currently waiting to be processed.
+func (fp *FixupProcessor) PendingSplitsMerges() int {
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
-	return fp.countFixupsLocked()
+	return fp.mu.pendingSplitsMerges
 }
 
 // AllowedOpsPerSec returns the ops/sec currently allowed by the pacer.
@@ -248,7 +249,8 @@ func (fp *FixupProcessor) AllowedOpsPerSec() float64 {
 
 // DelayInsertOrDelete is called when a vector is about to be inserted into the
 // index or deleted from it. It will block for however long the pacer determines
-// is needed to allow background index maintenance work to keep up.
+// is needed to allow background index maintenance work to keep up. This is
+// based on the number of split/merge fixups waiting in the queue.
 func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 	// Get the amount of time to wait. Do this in a separate function so that
 	// the mutex is not held while waiting.
@@ -256,7 +258,7 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 		fp.mu.Lock()
 		defer fp.mu.Unlock()
 
-		return fp.mu.pacer.OnInsertOrDelete(fp.countFixupsLocked())
+		return fp.mu.pacer.OnInsertOrDelete(fp.mu.pendingSplitsMerges)
 	}()
 
 	// Enforce min delay (used for testing).
@@ -278,19 +280,6 @@ func (fp *FixupProcessor) DelayInsertOrDelete(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// AddSplitOrMergeCheck enqueues a fixup to check whether a split or merge is
-// needed for the given partition.
-func (fp *FixupProcessor) AddSplitOrMergeCheck(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) {
-	fp.addFixup(ctx, fixup{
-		TreeKey:            treeKey,
-		Type:               splitOrMergeCheckFixup,
-		ParentPartitionKey: parentPartitionKey,
-		PartitionKey:       partitionKey,
-	})
 }
 
 // AddDeleteVector enqueues a vector deletion fixup for later processing.
@@ -367,7 +356,7 @@ func (fp *FixupProcessor) Process() {
 	}
 
 	// Wait for all fixups to be processed.
-	for fp.countFixupsLocked() > 0 {
+	for len(fp.mu.pendingFixups) > 0 {
 		fp.mu.waitForFixups.Wait()
 	}
 
@@ -385,7 +374,7 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	defer fp.mu.Unlock()
 
 	// Check whether fixup limit has been reached.
-	if fp.countFixupsLocked() >= maxFixups {
+	if len(fp.mu.pendingFixups) >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
 			log.Warning(ctx, "reached limit of unprocessed fixups")
@@ -404,13 +393,16 @@ func (fp *FixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	// maxFixups capacity.
 	fp.fixups <- fixup
 
-	if fp.onFixupAdded != nil {
-		// Notify listener that a fixup has been added.
-		fp.onFixupAdded()
-	}
+	if fixup.IsSplitMerge() {
+		fp.mu.pendingSplitsMerges++
 
-	// Notify the pacer that a fixup was just added.
-	fp.mu.pacer.OnFixup(fp.countFixupsLocked())
+		// Notify the pacer and any other listener that a split or merge fixup
+		// has been added to the queue.
+		fp.mu.pacer.OnQueueSizeChanged(fp.mu.pendingSplitsMerges)
+		if fp.onPendingSplitsMerges != nil {
+			fp.onPendingSplitsMerges(fp.mu.pendingSplitsMerges)
+		}
+	}
 
 	// If there is an idle worker available, nothing more to do.
 	if fp.mu.runningWorkers < fp.mu.totalWorkers {
@@ -478,23 +470,19 @@ func (fp *FixupProcessor) removeFixup(toRemove fixup) {
 
 	fp.mu.runningWorkers--
 
-	if fp.onFixupProcessed != nil {
-		// Notify listener that a fixup has been processed.
-		fp.onFixupProcessed()
-	}
+	if toRemove.IsSplitMerge() {
+		fp.mu.pendingSplitsMerges--
 
-	// Notify the pacer that a fixup was just removed.
-	fp.mu.pacer.OnFixup(fp.countFixupsLocked())
+		// Notify the pacer and any other listener that a split or merge op has
+		// been processed.
+		fp.mu.pacer.OnQueueSizeChanged(fp.mu.pendingSplitsMerges)
+		if fp.onPendingSplitsMerges != nil {
+			fp.onPendingSplitsMerges(fp.mu.pendingSplitsMerges)
+		}
+	}
 
 	// If there are no more pending fixups, notify any waiters.
-	if fp.countFixupsLocked() == 0 {
+	if len(fp.mu.pendingFixups) == 0 {
 		fp.mu.waitForFixups.Broadcast()
 	}
-}
-
-// countFixupsLocked returns the number of fixups that are pending, including
-// those that are currently being processed as well as those that are waiting to
-// be processed.
-func (fp *FixupProcessor) countFixupsLocked() int {
-	return len(fp.mu.pendingFixups)
 }

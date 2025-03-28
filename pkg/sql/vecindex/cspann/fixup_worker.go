@@ -129,12 +129,6 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 		// processing the fixup.
 		var err error
 		switch next.Type {
-		case splitOrMergeCheckFixup:
-			err = fw.checkSplitOrMergePartition(ctx, next.ParentPartitionKey, next.PartitionKey)
-			if err != nil {
-				err = errors.Wrapf(err, "checking partition %d", next.PartitionKey)
-			}
-
 		case splitFixup:
 			if fw.index.options.UseNewFixups {
 				err = fw.splitPartition(ctx, next.ParentPartitionKey, next.PartitionKey)
@@ -174,30 +168,6 @@ func (fw *fixupWorker) Start(ctx context.Context) {
 		// failed, in order to avoid looping over the same fixup.
 		fw.fp.removeFixup(next)
 	}
-}
-
-// checkSplitOrMergePartition checks whether the partition with the given key
-// needs to be split (if over-sized) or merged (if under-sized).
-func (fw *fixupWorker) checkSplitOrMergePartition(
-	ctx context.Context, parentPartitionKey PartitionKey, partitionKey PartitionKey,
-) error {
-	// Do a quick, inconsistent scan of the partition, in order to see if it may
-	// need to be split or merged.
-	count, err := fw.index.store.EstimatePartitionCount(ctx, fw.treeKey, partitionKey)
-	if err != nil {
-		return errors.Wrapf(err, "counting vectors in partition %d", partitionKey)
-	}
-
-	split := count > fw.index.options.MaxPartitionSize
-	merge := partitionKey != RootKey && count < fw.index.options.MinPartitionSize
-	if fw.index.options.UseNewFixups {
-		if split {
-			err = fw.splitPartition(ctx, parentPartitionKey, partitionKey)
-		}
-	} else if split || merge {
-		err = fw.oldSplitOrMergePartition(ctx, parentPartitionKey, partitionKey)
-	}
-	return err
 }
 
 // oldSplitOrMergePartition splits or merges the partition with the given key

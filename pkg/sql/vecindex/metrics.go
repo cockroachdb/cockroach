@@ -8,33 +8,25 @@ package vecindex
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 var (
-	metaSuccessSplits = metric.Metadata{
+	metaSuccessfulSplits = metric.Metadata{
 		Name:        "sql.vecindex.successful_splits",
 		Help:        "Total number of vector index partitions split without error",
-		Measurement: "Vector Index Splits",
+		Measurement: "Splits",
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaFixupsAdded = metric.Metadata{
-		Name:        "sql.vecindex.fixups_added",
-		Help:        "Total number of vector index fixups that have been added to the processor",
-		Measurement: "Vector Index Fixups Added",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaFixupsProcessed = metric.Metadata{
-		Name:        "sql.vecindex.fixups_processed",
-		Help:        "Total number of vector index fixups that have been processed",
-		Measurement: "Vector Index Fixups Processed",
+	metaPendingSplitsMerges = metric.Metadata{
+		Name:        "sql.vecindex.pending_splits_merges",
+		Help:        "Total number of vector index splits and merges waiting to be processed",
+		Measurement: "Pending Splits/Merges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
 
 // Metrics contain useful metrics for building and mantaining vector indexes.
 type Metrics struct {
-	SuccessSplits   *metric.Counter
-	FixupsAdded     *metric.Counter
-	FixupsProcessed *metric.Counter
+	SuccessfulSplits    *metric.Counter
+	PendingSplitsMerges *metric.Gauge
 }
 
 var _ metric.Struct = (*Metrics)(nil)
@@ -43,19 +35,14 @@ var _ metric.Struct = (*Metrics)(nil)
 func (m *Metrics) MetricStruct() {}
 
 func (m *Metrics) Init() {
-	m.SuccessSplits = metric.NewCounter(metaSuccessSplits)
-	m.FixupsAdded = metric.NewCounter(metaFixupsAdded)
-	m.FixupsProcessed = metric.NewCounter(metaFixupsProcessed)
+	m.SuccessfulSplits = metric.NewCounter(metaSuccessfulSplits)
+	m.PendingSplitsMerges = metric.NewGauge(metaPendingSplitsMerges)
 }
 
-func (m *Metrics) IncSuccessSplits() {
-	m.SuccessSplits.Inc(1)
+func (m *Metrics) IncSuccessfulSplits() {
+	m.SuccessfulSplits.Inc(1)
 }
 
-func (m *Metrics) IncFixupsAdded() {
-	m.FixupsAdded.Inc(1)
-}
-
-func (m *Metrics) IncFixupsProcessed() {
-	m.FixupsProcessed.Inc(1)
+func (m *Metrics) SetPendingSplitsMerges(count int) {
+	m.PendingSplitsMerges.Update(int64(count))
 }

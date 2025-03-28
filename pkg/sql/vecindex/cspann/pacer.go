@@ -12,20 +12,20 @@ import (
 	"github.com/cockroachdb/crlib/crtime"
 )
 
-// targetQueuedFixups is the number of fixups that are allowed in the queue
-// before throttling may begin. Note that even if the current queue size is
-// below this threshold, throttling will still occur if the queue size is
-// increasing at too high of a rate. Also, this is a "soft" target; as long as
-// the size is reasonably close, the pacer won't do much.
-const targetQueuedFixups = 5
+// targetQueueSize is the maximum size of the split/merge queue before
+// throttling may begin. Note that even if the current queue size is below this
+// threshold, throttling will still occur if the queue size is increasing at too
+// high of a rate. Also, this is a "soft" target; as long as the size is
+// reasonably close, the pacer won't do much.
+const targetQueueSize = 5
 
 // maxQueueSizeRate clamps the measured change in queue size over the course of
 // one second, either positive or negative. This avoids pacer overreaction to
 // brief bursts of change in small intervals.
 const maxQueueSizeRate = 5
 
-// gradualQueueSizeMax specifies the max rate of change when the fixup queue
-// size needs to be reduced. For example, if the current fixup queue size is 50,
+// gradualQueueSizeMax specifies the max rate of change when the split/merge
+// queue size needs to be reduced. For example, if the current queue size is 50,
 // this is much bigger than the allowed size of 5. However, rather than attempt
 // to reduce the size from 50 to 5 in one step, this setting tries to reduce it
 // in increments of 2 fixups per second.
@@ -42,13 +42,14 @@ const deltaFactor = 2
 // would otherwise exceed this limit.
 //
 // During normal operation, the pacer sets ops/sec at a level that tries to
-// maintain the fixup queue at its current size (i.e. change rate of zero).
-// However, there are two cases in which it will target a non-zero change rate:
+// maintain the split/merge queue at its current size (i.e. change rate of
+// zero). However, there are two cases in which it will target a non-zero change
+// rate:
 //
-//  1. If the fixup queue is empty (or nearly so) and operations are being
+//  1. If the split/merge queue is empty (or nearly so) and operations are being
 //     delayed, then the pacer will raise allowed ops/sec, since it might be set
 //     too low (as evidenced by a small queue).
-//  2. If the fixup queue size is > targetQueuedFixups, then the pacer will
+//  2. If the split/merge queue size is > targetQueueSize, then the pacer will
 //     reduce allowed ops/sec in an attempt to reduce queue size. It does this
 //     in increments, with the goal of reducing queue size over time rather than
 //     all at once.
@@ -66,14 +67,14 @@ type pacer struct {
 	// lastUpdateAt records the time of the last update to allowed ops/sec.
 	lastUpdateAt crtime.Mono
 
-	// lastQueuedFixups remembers the size of the fixup queue when the last
+	// lastQueueSize remembers the size of the split/merge queue when the last
 	// insert or delete operation was executed. It's used to observe the delta
 	// in queue size since that time.
-	lastQueuedFixups int
+	lastQueueSize int
 
-	// queueSizeRate estimates how much the size of the fixup queue has changed
-	// over the last second. It is computed as an exponential moving average
-	// (EMA) and clamped to +-maxQueueSizeRate.
+	// queueSizeRate estimates how much the size of the split/merge queue has
+	// changed over the last second. It is computed as an exponential moving
+	// average (EMA) and clamped to +-maxQueueSizeRate.
 	queueSizeRate float64
 
 	// allowedOpsPerSec is the maximum rate of insert or delete operations
@@ -94,18 +95,19 @@ type pacer struct {
 // refill rate that governs how many insert or delete operations run per second.
 // This value will automatically change over time, but a more accurate initial
 // value can decrease "ramp up" time for the pacer as it learns the optimal
-// pace. "initialFixups" specifies the initial number of fixups in the queue
+// pace. "initialQueueSize" specifies the initial size of the split/merge queue
 // (used for testing).
-func (p *pacer) Init(initialOpsPerSec int, initialFixups int, monoNow func() crtime.Mono) {
+func (p *pacer) Init(initialOpsPerSec int, initialQueueSize int, monoNow func() crtime.Mono) {
 	p.monoNow = monoNow
 	p.lastUpdateAt = monoNow()
 	p.allowedOpsPerSec = float64(initialOpsPerSec)
-	p.lastQueuedFixups = initialFixups
+	p.lastQueueSize = initialQueueSize
 }
 
-// OnFixup is called when the size of the fixup queue has changed because a
-// fixup has been added or removed to/from the queue by the vector index.
-func (p *pacer) OnFixup(queuedFixups int) {
+// OnQueueSizeChanged is called when the size of the split/merge queue has
+// changed because a fixup has been added or removed to/from the queue by the
+// vector index.
+func (p *pacer) OnQueueSizeChanged(queueSize int) {
 	// Compute elapsed time since the last update to allowed ops/sec.
 	now := p.monoNow()
 	sinceUpdate := now.Sub(p.lastUpdateAt)
@@ -115,15 +117,15 @@ func (p *pacer) OnFixup(queuedFixups int) {
 	}
 	p.lastUpdateAt = now
 
-	p.updateOpsPerSec(sinceUpdate, queuedFixups)
+	p.updateOpsPerSec(sinceUpdate, queueSize)
 }
 
 // OnInsertOrDelete is called when an insert or delete operation is about to be
-// run by the vector index. It takes the current size of the fixup queue and
-// based on that, returns how much time to delay before running the operation.
-// This ensures that background index maintenance operations do not fall too far
-// behind foreground operations.
-func (p *pacer) OnInsertOrDelete(queuedFixups int) time.Duration {
+// run by the vector index. It takes the current size of the split/merge queue
+// and based on that, returns how much time to delay before running the
+// operation. This ensures that background index maintenance operations do not
+// fall too far behind foreground operations.
+func (p *pacer) OnInsertOrDelete(queueSize int) time.Duration {
 	// Fast path: if there are enough tokens in the bucket, no need for delay.
 	p.currentTokens--
 	if p.currentTokens >= 0 {
@@ -132,13 +134,13 @@ func (p *pacer) OnInsertOrDelete(queuedFixups int) time.Duration {
 
 	// If it's been at least a second since allowed ops/sec was updated, do so
 	// now. This handles an edge case where ops/sec is being throttled so heavily
-	// (e.g. 1 op/sec) that fixups are rare, and it takes too long to increase
-	// allowed ops/sec.
+	// (e.g. 1 op/sec) that splits and merges are rare, and it takes too long to
+	// increase allowed ops/sec.
 	now := p.monoNow()
 	sinceUpdate := now.Sub(p.lastUpdateAt)
 	if sinceUpdate >= time.Second {
 		p.lastUpdateAt = now
-		p.updateOpsPerSec(sinceUpdate, queuedFixups)
+		p.updateOpsPerSec(sinceUpdate, queueSize)
 	}
 
 	// Compute elapsed time since the last insert or delete operation that
@@ -179,37 +181,37 @@ func (p *pacer) OnInsertOrDeleteCanceled() {
 	p.currentTokens++
 }
 
-// updateOpsPerSec updates the allowed ops/sec based on the number of fixups in
-// the queue. Updates are scaled by the amount of time that's elapsed since the
-// last call to updateOpsPerSec. Allowing sub-second elapsed increments allows
-// the pacer to be significantly more responsive.
-func (p *pacer) updateOpsPerSec(elapsed time.Duration, queuedFixups int) {
+// updateOpsPerSec updates the allowed ops/sec based on the size of the
+// split/merge queue. Updates are scaled by the amount of time that's elapsed
+// since the last call to updateOpsPerSec. Allowing sub-second elapsed
+// increments allows the pacer to be significantly more responsive.
+func (p *pacer) updateOpsPerSec(elapsed time.Duration, queueSize int) {
 	// Remember if any operation was throttled since the last call to update.
 	delayed := p.delayed
 	p.delayed = false
 
-	// Calculate the desired rate of change in the fixup queue size over the next
-	// second.
+	// Calculate the desired rate of change in the split/merge queue size over
+	// the next second.
 	var desiredQueueSizeRate float64
-	if queuedFixups > targetQueuedFixups {
-		// If the fixup queue is too large, reduce it at a gradual rate that's
-		// proportional to its distance from the target. Never reduce it more
-		// than gradualQueueSizeMax.
+	if queueSize > targetQueueSize {
+		// If the split/mege queue is too large, reduce it at a gradual rate
+		// that's proportional to its distance from the target. Never reduce it
+		// more than gradualQueueSizeMax.
 		const gradualRateFactor = 10
-		desiredQueueSizeRate = float64(targetQueuedFixups-queuedFixups) / gradualRateFactor
+		desiredQueueSizeRate = float64(targetQueueSize-queueSize) / gradualRateFactor
 		desiredQueueSizeRate = max(desiredQueueSizeRate, -gradualQueueSizeMax)
-	} else if queuedFixups <= 1 {
-		// If the fixup queue is empty or has just one fixup, then it could be
-		// that background fixups are happening fast enough. However, it's also
-		// possible that the fixup queue is small because the pacer is heavily
-		// throttling operations. Sharply increase allowed ops/sec, up to the
-		// target, in case that's true.
-		desiredQueueSizeRate = float64(targetQueuedFixups - queuedFixups)
+	} else if queueSize <= 1 {
+		// If the split/merge queue is empty or has just one fixup, then it could
+		// be that background splits/merges are happening fast enough. However,
+		// it's also possible that the split/merge queue is small because the
+		// pacer is heavily throttling operations. Sharply increase allowed
+		// ops/sec, up to the target, in case that's true.
+		desiredQueueSizeRate = float64(targetQueueSize - queueSize)
 	}
 
-	// Calculate the actual rate of change in the fixup queue size over the last
-	// second.
-	actualQueueSizeRate := p.calculateQueueSizeRate(elapsed, queuedFixups)
+	// Calculate the actual rate of change in the split/merge queue size over the
+	// last second.
+	actualQueueSizeRate := p.calculateQueueSizeRate(elapsed, queueSize)
 
 	// Calculate the net rate that's needed to match the desired rate. For
 	// example, if we desire to decrease the queue size by 2 fixups/sec, but the
@@ -226,8 +228,9 @@ func (p *pacer) updateOpsPerSec(elapsed time.Duration, queuedFixups int) {
 	}
 
 	// Determine how much to change allowed ops/sec to achieve the net change in
-	// fixup queue size over the next second. When allowed ops/sec is small,
-	// allow it to ramp quickly by starting with a minimum delta of 10 ops/sec.
+	// the split/merge queue size over the next second. When allowed ops/sec is
+	// small, allow it to ramp quickly by starting with a minimum delta of
+	// 10 ops/sec.
 	const minDeltaOpsPerSec = 10
 	deltaOpsPerSec := max(p.allowedOpsPerSec, minDeltaOpsPerSec)
 	if netQueueSizeRate < 0 {
@@ -248,23 +251,23 @@ func (p *pacer) updateOpsPerSec(elapsed time.Duration, queuedFixups int) {
 
 	// Scale the delta based on the elapsed time. For example, if we want to
 	// decrease ops/sec by 200, but it's been only 0.5 seconds since the last
-	// fixup, then we need to change ops/sec by -200 * 0.5 = -100. This allows
-	// for multiple micro-adjustments over the course of a second that add up to
-	// the full adjustment (if the trend doesn't change).
+	// split or merge, then we need to change ops/sec by -200 * 0.5 = -100. This
+	// allows for multiple micro-adjustments over the course of a second that add
+	// up to the full adjustment (if the trend doesn't change).
 	deltaOpsPerSec = deltaOpsPerSec * min(elapsed.Seconds(), 1)
 
 	// Update allowed ops/sec, but don't let it fall below 1, even in case where,
-	// for example, fixups are somehow blocked.
+	// for example, splits and merges are somehow blocked.
 	p.allowedOpsPerSec = max(p.allowedOpsPerSec+deltaOpsPerSec, 1)
 }
 
 // calculateQueueSizeRate calculates the exponential moving average (EMA) of the
-// rate of change in the fixup queue size, over the last second.
-func (p *pacer) calculateQueueSizeRate(elapsed time.Duration, queuedFixups int) float64 {
-	// Calculate the rate of change in the fixup queue size over the elapsed time
+// rate of change in the split/merge queue size, over the last second.
+func (p *pacer) calculateQueueSizeRate(elapsed time.Duration, queueSize int) float64 {
+	// Calculate the rate of change in the split/merge size over the elapsed time
 	// period.
-	queueSizeRate := float64(queuedFixups-p.lastQueuedFixups) / elapsed.Seconds()
-	p.lastQueuedFixups = queuedFixups
+	queueSizeRate := float64(queueSize-p.lastQueueSize) / elapsed.Seconds()
+	p.lastQueueSize = queueSize
 
 	// Factor that sample into the EMA by weighting it according to the elapsed
 	// time (clamped to 1 second max).
@@ -272,9 +275,9 @@ func (p *pacer) calculateQueueSizeRate(elapsed time.Duration, queuedFixups int) 
 	p.queueSizeRate = alpha*queueSizeRate + (1-alpha)*p.queueSizeRate
 
 	// Clamp the overall rate of change in order to prevent anomalies when a large
-	// number of fixups are generated in a short amount of time (e.g. because of
-	// statistical clustering or a backlog of fixups that is suddenly added to
-	// the queue).
+	// number of splist/merge fixups are generated in a short amount of time (e.g.
+	// because of statistical clustering or a backlog of fixups that is suddenly
+	// added to the queue).
 	p.queueSizeRate = max(min(p.queueSizeRate, maxQueueSizeRate), -maxQueueSizeRate)
 
 	return p.queueSizeRate

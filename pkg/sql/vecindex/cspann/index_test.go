@@ -115,9 +115,8 @@ type testState struct {
 	Features  vector.Set
 
 	// Metrics
-	SuccessfulSplits int
-	FixupsAdded      int
-	FixupsProcessed  int
+	SuccessfulSplits    int
+	PendingSplitsMerges int
 }
 
 func (s *testState) NewIndex(d *datadriven.TestData) string {
@@ -140,8 +139,7 @@ func (s *testState) LoadIndex(d *datadriven.TestData) string {
 func (s *testState) Reset() {
 	// Reset state between tests.
 	s.SuccessfulSplits = 0
-	s.FixupsAdded = 0
-	s.FixupsProcessed = 0
+	s.PendingSplitsMerges = 0
 }
 
 func (s *testState) FormatTree(d *datadriven.TestData) string {
@@ -650,8 +648,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 func (s *testState) ShowMetrics(d *datadriven.TestData) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%d successful splits\n", s.SuccessfulSplits))
-	buf.WriteString(fmt.Sprintf("%d fixups added to queue\n", s.FixupsAdded))
-	buf.WriteString(fmt.Sprintf("%d fixups processed\n", s.FixupsProcessed))
+	buf.WriteString(fmt.Sprintf("%d pending splits/merges\n", s.PendingSplitsMerges))
 	return buf.String()
 }
 
@@ -687,8 +684,7 @@ func (s *testState) makeNewIndex(d *datadriven.TestData) {
 	require.NoError(s.T, err)
 
 	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
-	s.Index.Fixups().OnFixupAdded(func() { s.FixupsAdded++ })
-	s.Index.Fixups().OnFixupProcessed(func() { s.FixupsProcessed++ })
+	s.Index.Fixups().OnPendingSplitsMerges(func(count int) { s.PendingSplitsMerges = count })
 
 	// Suspend background fixups until ProcessFixups is explicitly called, so
 	// that vector index operations can be deterministic.

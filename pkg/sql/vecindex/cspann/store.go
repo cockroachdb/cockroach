@@ -73,7 +73,7 @@ type Store interface {
 
 	// EstimatePartitionCount returns the approximate number of vectors in the
 	// given partition. The estimate can be based on a (bounded) stale copy of
-	// the partition.
+	// the partition. It returns 0 if the partition does not exist.
 	EstimatePartitionCount(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
 	) (int, error)
