@@ -16,9 +16,10 @@ const (
 	defaultMaxNetworkRTT = 150 * time.Millisecond
 )
 
-// computeLeadTimeForGlobalReads calculates how far ahead of the current time a node should
-// publish closed timestamps to ensure that followers can serve global reads. It accounts for
-// network latency, clock offset, and both Raft and side-transport propagation delays.
+// computeLeadTimeForGlobalReads calculates how far ahead of the current time a
+// node should publish closed timestamps to ensure that followers can serve
+// global reads. It accounts for network latency, clock offset, and both Raft
+// and side-transport propagation delays.
 func computeLeadTimeForGlobalReads(
 	networkRTT time.Duration, maxClockOffset time.Duration, sideTransportCloseInterval time.Duration,
 ) time.Duration {
