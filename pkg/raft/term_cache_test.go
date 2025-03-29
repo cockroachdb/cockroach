@@ -238,7 +238,8 @@ func TestTermCacheRandomTruncateAndAppends(t *testing.T) {
 	}
 }
 
-func (tc *termCache) checkInvariants(t *testing.T) {
+func (tc *termCache) checkInvariants(t testing.TB) {
+	t.Helper()
 	// check termCache is non-empty
 	require.NotEmptyf(t, tc.cache, "termCache should never be empty")
 	// check we haven't grown past 2x maxLength
