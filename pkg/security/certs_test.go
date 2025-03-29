@@ -124,18 +124,19 @@ func TestGenerateTenantCerts(t *testing.T) {
 		false, // overwrite
 	))
 
+	tenantID := roachpb.MustMakeTenantID(999)
 	cp, err := security.CreateTenantPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
 		time.Hour,
-		999,
+		tenantID,
 		[]string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
 
-	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, 999))
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, tenantID))
 
 	cl := security.NewCertificateLoader(certsDir)
 	require.NoError(t, cl.Load())
@@ -330,7 +331,7 @@ func generateBaseCerts(certsDir string, clientCertLifetime time.Duration) error 
 	}
 
 	{
-		tenantID := uint64(10)
+		tenantID := roachpb.MustMakeTenantID(10)
 		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
 		if err := security.CreateTenantCAPair(
 			certsDir, caKey,
@@ -785,5 +786,18 @@ func TestAppendCertificateToBlob(t *testing.T) {
 		} else {
 			t.Fatal("appendCertificatesToBlob failed to properly concatenate the test certificates together. Run with the verbose flag set to see the output.")
 		}
+	}
+}
+
+func TestTenantIDString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test the string representation of a TenantID.
+	// The string representation of a TenantID is the string representation of the
+	// uint64 value of the TenantID.
+	tenantID := roachpb.MustMakeTenantID(123)
+	expected := "123"
+	if actual := tenantID.String(); actual != expected {
+		t.Errorf("expected %q, got %q", expected, actual)
 	}
 }
