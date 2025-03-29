@@ -210,9 +210,6 @@ func (rn *RawNode) SendMsgApp(to pb.PeerID, slice LeadSlice) (pb.Message, bool) 
 // includes appending entries to the log, applying committed entries or a
 // snapshot, updating the HardState, and sending messages. See comments in the
 // Ready struct for the specification on how the updates must be handled.
-//
-// The returned Ready struct *must* be handled and subsequently passed back via
-// Advance(), unless async storage writes are enabled.
 func (rn *RawNode) Ready() Ready {
 	r := rn.raft
 	var rd Ready
@@ -225,9 +222,9 @@ func (rn *RawNode) Ready() Ready {
 		rn.prevSoftSt = &escapingSoftSt
 	}
 	// For async storage writes, enqueue messages to local storage threads.
-	if rn.needStorageAppendMsg() {
-		app := rn.newStorageAppendMsg()
-		rd.injectMsgStorageAppend(app)
+	if rn.needStorageAppend() {
+		app := rn.sendStorageAppend()
+		rd.StorageAppend = app
 		rd.Messages = append(rd.Messages, app.ToMessage(r.id))
 	}
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
@@ -235,7 +232,7 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
-func (rn *RawNode) needStorageAppendMsg() bool {
+func (rn *RawNode) needStorageAppend() bool {
 	r := rn.raft
 	// Return true if log entries, HardState, or a snapshot need to be written to
 	// stable storage. Also return true if any messages are contingent on all
@@ -246,11 +243,13 @@ func (rn *RawNode) needStorageAppendMsg() bool {
 		!isHardStateEqual(r.hardState(), rn.prevHardSt)
 }
 
-// newStorageAppendMsg creates the message that should be sent to the local
-// append thread to instruct it to append log entries, write an updated hard
-// state, and apply a snapshot. The message also carries a set of responses
-// that should be delivered after the rest of the message is processed.
-func (rn *RawNode) newStorageAppendMsg() StorageAppend {
+// sendStorageAppend creates the write request that is sent to the local
+// storage. The request also carries a set of messages that should be sent after
+// the writes in the request are durable.
+//
+// The StorageAppend is immediately "accepted" by the caller, so the next
+// StorageAppend will build on top of it.
+func (rn *RawNode) sendStorageAppend() StorageAppend {
 	r := rn.raft
 	app := StorageAppend{Entries: r.raftLog.nextUnstableEnts()}
 	if hs := r.hardState(); !isHardStateEqual(hs, rn.prevHardSt) {
@@ -272,8 +271,8 @@ func (rn *RawNode) newStorageAppendMsg() StorageAppend {
 	}
 	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
-	// the message is processed, along with a self-directed MsgStorageAppendResp
-	// to acknowledge the entry stability.
+	// the write is durable, along with a self-directed MsgStorageAppendResp to
+	// acknowledge the durability.
 	//
 	// NB: it is important for performance that MsgStorageAppendResp message be
 	// handled after self-directed MsgAppResp messages on the leader (which will
@@ -357,12 +356,6 @@ func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
 	}
 }
 
-func (rd *Ready) injectMsgStorageAppend(app StorageAppend) {
-	rd.HardState = app.HardState
-	rd.Snapshot = app.Snapshot
-	rd.Entries = app.Entries
-}
-
 // AckApplying accepts all committed entries <= index as being applied to the
 // state machine. The caller gives a promise to eventually apply these entries
 // and call AckApplied to confirm. They can do so asynchronously, while this
@@ -405,7 +398,7 @@ func (rn *RawNode) HasReady() bool {
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		return true
 	}
-	if rn.needStorageAppendMsg() {
+	if rn.needStorageAppend() {
 		return true
 	}
 	if !r.raftLog.nextCommittedSpan(rn.applyUnstableEntries()).Empty() {
