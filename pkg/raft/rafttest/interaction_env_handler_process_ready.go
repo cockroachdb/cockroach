@@ -53,8 +53,7 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	env.Messages = append(env.Messages, rd.Messages...)
 
 	if !n.asyncWrites {
-		// TODO(pav-kv): use the same code paths as the asynchronous writes.
-		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
+		if err := processAppend(n, rd.StorageAppend); err != nil {
 			return err
 		}
 		env.Messages = append(env.Messages, rd.SendAfterSync(raftpb.PeerID(idx+1))...)
