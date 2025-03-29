@@ -140,13 +140,17 @@ func getCreateTypeParams(
 			return nil, sqlerrors.NewTypeAlreadyExistsError(name.String())
 		}
 	}
+
 	// Get the ID of the schema the type is being created in.
 	dbID := db.GetID()
-	schema, err = p.getNonTemporarySchemaForCreate(ctx, db, name.Schema())
+
+	// Use the smart dispatcher to get the appropriate schema
+	schema, err = p.getSchemaForCreate(ctx, db, name.Schema())
 	if err != nil {
 		return nil, err
 	}
 
+	// The rest of the function remains unchanged
 	// Check permissions on the schema.
 	if err := p.canCreateOnSchema(
 		ctx, schema.GetID(), dbID, p.User(), skipCheckPublicSchema); err != nil {

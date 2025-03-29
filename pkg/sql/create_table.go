@@ -110,6 +110,47 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	}
 }
 
+func (p *planner) getSchemaForCreate(
+	ctx context.Context,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+) (catalog.SchemaDescriptor, error) {
+	// First, try to resolve the schema by name
+	sc, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, db, schemaName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle the schema based on its kind
+	switch sc.SchemaKind() {
+	case catalog.SchemaPublic:
+		return sc, nil
+	case catalog.SchemaUserDefined:
+		sc, err = p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Schema(ctx, sc.GetID())
+		if err != nil {
+			return nil, err
+		}
+		// Exit early with an error if the schema is undergoing any legacy
+		// or declarative schema change.
+		if sc.HasConcurrentSchemaChanges() {
+			return nil, scerrors.ConcurrentSchemaChangeError(sc)
+		}
+		return sc, nil
+	case catalog.SchemaVirtual:
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", schemaName)
+	case catalog.SchemaTemporary:
+		// For temporary schemas, use the temporary schema mechanism
+		tempSchema, err := p.getOrCreateTemporarySchema(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		return tempSchema, nil
+	default:
+		return nil, errors.AssertionFailedf(
+			"invalid schema kind: %d", sc.SchemaKind())
+	}
+}
+
 // getSchemaForCreateTable returns the table key needed for the new table,
 // as well as the schema id. It returns valid data in the case that
 // the desired object exists.
