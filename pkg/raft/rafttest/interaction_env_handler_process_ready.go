@@ -56,7 +56,10 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 		if err := processAppend(n, rd.StorageAppend); err != nil {
 			return err
 		}
-		env.Messages = append(env.Messages, rd.SendAfterSync(raftpb.PeerID(idx+1))...)
+		ack := rd.Ack()
+		for msg := range ack.Send(raftpb.PeerID(idx + 1)) {
+			env.Messages = append(env.Messages, msg)
+		}
 
 		if !rd.Committed.Empty() {
 			ls := n.RawNode.LogSnapshot()
@@ -74,7 +77,7 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 			n.AckApplied(apply)
 		}
 
-		n.AdvanceHack(rd)
+		n.AckAppend(ack)
 		return nil
 	}
 

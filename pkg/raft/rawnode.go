@@ -354,6 +354,22 @@ func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
 	}
 }
 
+// AckAppend notifies the RawNode that the storage write has been persisted.
+func (rn *RawNode) AckAppend(ack StorageAppendAck) {
+	// The snapshot precedes the entries. We acknowledge the snapshot first, then
+	// the entries, as required by the unstable structure.
+	r := rn.raft
+	for msg := range ack.step(r.id) {
+		_ = rn.Step(msg) // TODO(pav-kv): return error
+	}
+	if ack.SnapIndex != 0 {
+		r.appliedSnap(ack.SnapIndex)
+	}
+	if ack.Mark.Index != 0 {
+		r.raftLog.stableTo(ack.Mark)
+	}
+}
+
 // AckApplying accepts all committed entries <= index as being applied to the
 // state machine. The caller gives a promise to eventually apply these entries
 // and call AckApplied to confirm. They can do so asynchronously, while this
@@ -414,9 +430,7 @@ func (rn *RawNode) HasReady() bool {
 //
 // Only for testing. Will be replaced with a more explicit API.
 func (rn *RawNode) AdvanceHack(rd Ready) {
-	for _, msg := range rd.StorageAppend.StepAfterSync(rn.raft.id) {
-		_ = rn.Step(msg)
-	}
+	rn.AckAppend(rd.Ack())
 }
 
 // Term returns the current in-memory term of this RawNode. This term may not
