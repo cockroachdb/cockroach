@@ -233,17 +233,6 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
-// ReadyTODO returns a legacy Ready which includes pb.MsgStorageAppend in the
-// Messages field.
-// TODO(pav-kv): migrate all the users to the new Ready() call.
-func (rn *RawNode) ReadyTODO() Ready {
-	rd := rn.Ready()
-	if app := rd.StorageAppend; !app.Empty() {
-		rd.Messages = append(rd.Messages, app.ToMessage(rn.raft.id))
-	}
-	return rd
-}
-
 func (rn *RawNode) needStorageAppendMsg() bool {
 	r := rn.raft
 	// Return true if log entries, HardState, or a snapshot need to be written to
