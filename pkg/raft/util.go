@@ -198,24 +198,14 @@ type EntryFormatter func([]byte) string
 // DescribeMessage returns a concise human-readable description of a
 // Message for debugging.
 func DescribeMessage(m pb.Message, f EntryFormatter) string {
-	return describeMessageWithIndent("", m, f)
-}
-
-func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s%s->%s %v Term:%d Log:%d/%d", indent,
+	fmt.Fprintf(&buf, "%s->%s %v Term:%d Log:%d/%d",
 		describeTarget(m.From), describeTarget(m.To), m.Type, m.Term, m.LogTerm, m.Index)
 	if m.Reject {
 		fmt.Fprintf(&buf, " Rejected (Hint: %d)", m.RejectHint)
 	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
-	}
-	if m.Vote != 0 {
-		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
-	}
-	if m.Lead != 0 {
-		fmt.Fprintf(&buf, " Lead:%d", m.Lead)
 	}
 	if m.LeadEpoch != 0 {
 		fmt.Fprintf(&buf, " LeadEpoch:%d", m.LeadEpoch)
@@ -225,21 +215,13 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 	} else if ln > 1 {
 		fmt.Fprint(&buf, " Entries:[")
 		for _, e := range m.Entries {
-			fmt.Fprintf(&buf, "\n%s  ", indent)
+			fmt.Fprintf(&buf, "\n  ")
 			buf.WriteString(DescribeEntry(e, f))
 		}
-		fmt.Fprintf(&buf, "\n%s]", indent)
+		fmt.Fprintf(&buf, "\n]")
 	}
 	if s := m.Snapshot; s != nil {
-		fmt.Fprintf(&buf, "\n%s  Snapshot: %s", indent, DescribeSnapshot(*s))
-	}
-	if len(m.Responses) > 0 {
-		fmt.Fprintf(&buf, " Responses:[")
-		for _, m := range m.Responses {
-			buf.WriteString("\n")
-			buf.WriteString(describeMessageWithIndent(indent+"  ", m, f))
-		}
-		fmt.Fprintf(&buf, "\n%s]", indent)
+		fmt.Fprintf(&buf, "\n  Snapshot: %s", DescribeSnapshot(*s))
 	}
 	return buf.String()
 }
