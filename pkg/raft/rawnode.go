@@ -226,8 +226,8 @@ func (rn *RawNode) Ready() Ready {
 	}
 	// For async storage writes, enqueue messages to local storage threads.
 	if rn.needStorageAppendMsg() {
-		app := rn.newStorageAppendMsg()
-		rd.injectMsgStorageAppend(app)
+		app := rn.newStorageAppend()
+		rd.StorageAppend = app
 		rd.Messages = append(rd.Messages, app.ToMessage(r.id))
 	}
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
@@ -246,11 +246,10 @@ func (rn *RawNode) needStorageAppendMsg() bool {
 		!isHardStateEqual(r.hardState(), rn.prevHardSt)
 }
 
-// newStorageAppendMsg creates the message that should be sent to the local
-// append thread to instruct it to append log entries, write an updated hard
-// state, and apply a snapshot. The message also carries a set of responses
-// that should be delivered after the rest of the message is processed.
-func (rn *RawNode) newStorageAppendMsg() StorageAppend {
+// newStorageAppend creates the write request that is sent to the local storage.
+// The request also carries a set of messages that should be sent after the
+// writes in the request are durable.
+func (rn *RawNode) newStorageAppend() StorageAppend {
 	r := rn.raft
 	app := StorageAppend{Entries: r.raftLog.nextUnstableEnts()}
 	if hs := r.hardState(); !isHardStateEqual(hs, rn.prevHardSt) {
@@ -272,8 +271,8 @@ func (rn *RawNode) newStorageAppendMsg() StorageAppend {
 	}
 	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
-	// the message is processed, along with a self-directed MsgStorageAppendResp
-	// to acknowledge the entry stability.
+	// the write is durable, along with a self-directed MsgStorageAppendResp to
+	// acknowledge the durability.
 	//
 	// NB: it is important for performance that MsgStorageAppendResp message be
 	// handled after self-directed MsgAppResp messages on the leader (which will
@@ -355,12 +354,6 @@ func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
 		Index:    app.Mark.Index,
 		Snapshot: app.Snapshot,
 	}
-}
-
-func (rd *Ready) injectMsgStorageAppend(app StorageAppend) {
-	rd.HardState = app.HardState
-	rd.Snapshot = app.Snapshot
-	rd.Entries = app.Entries
 }
 
 // AckApplying accepts all committed entries <= index as being applied to the

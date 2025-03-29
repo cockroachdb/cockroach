@@ -104,30 +104,9 @@ type Ready struct {
 	// It is not required to consume or store SoftState.
 	*SoftState
 
-	// The current state of a Node to be saved to stable storage BEFORE
-	// Messages are sent.
-	//
-	// HardState will be equal to empty state if there is no update.
-	//
-	// If async storage writes are enabled, this field does not need to be acted
-	// on immediately. It will be reflected in a MsgStorageAppend message in the
-	// Messages slice.
-	pb.HardState
-
-	// Entries specifies entries to be saved to stable storage BEFORE
-	// Messages are sent.
-	//
-	// If async storage writes are enabled, this field does not need to be acted
-	// on immediately. It will be reflected in a MsgStorageAppend message in the
-	// Messages slice.
-	Entries []pb.Entry
-
-	// Snapshot specifies the snapshot to be saved to stable storage.
-	//
-	// If async storage writes are enabled, this field does not need to be acted
-	// on immediately. It will be reflected in a MsgStorageAppend message in the
-	// Messages slice.
-	Snapshot *pb.Snapshot
+	// StorageAppend contains a write request that the application must eventually
+	// apply to the storage, and acknowledge to RawNode once it is durable.
+	StorageAppend
 
 	// Committed is the log span that has been committed and can be applied to the
 	// state machine. Two subsequently accepted committed spans are contiguous,
@@ -166,6 +145,9 @@ type Ready struct {
 	//
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
+	//
+	// TODO(pav-kv): remove MsgStorageAppend from this slice, and allow all these
+	// messages to be sent immediately.
 	Messages []pb.Message
 }
 
