@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -65,9 +66,10 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 				LeaseManager: s.LeaseManager(),
 				Settings:     s.ClusterSettings(),
 			}, &eval.Context{
-				Codec:    s.Codec(),
-				Settings: s.ClusterSettings(),
-			}, sd, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
+				Codec:            s.Codec(),
+				Settings:         s.ClusterSettings(),
+				SessionDataStack: sessiondata.NewStack(sd),
+			}, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
 				desc.GetID(): {
 					srcDesc: desc,
 				},

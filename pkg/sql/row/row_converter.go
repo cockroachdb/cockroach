@@ -390,15 +390,12 @@ func NewDatumRowConverter(
 	}
 
 	ri, err := MakeInserter(
-		ctx,
-		nil, /* txn */
 		evalCtx.Codec,
 		tableDesc,
 		nil, /* uniqueWithTombstoneIndexes */
 		cols,
-		&tree.DatumAlloc{},
+		evalCtx.SessionData(),
 		&evalCtx.Settings.SV,
-		evalCtx.SessionData().Internal,
 		metrics,
 	)
 	if err != nil {
