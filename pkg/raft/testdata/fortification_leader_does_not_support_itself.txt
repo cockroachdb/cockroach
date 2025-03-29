@@ -132,11 +132,12 @@ stabilize
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
-  CommittedEntries:
-  1/3 EntryNormal ""
+  Committed: (2,3]
   Messages:
   1->2 MsgApp Term:1 Log:1/3 Commit:3
   1->3 MsgApp Term:1 Log:1/3 Commit:3
+  Applying:
+  1/3 EntryNormal ""
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/3 Commit:3
 > 3 receiving messages
@@ -144,17 +145,19 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
-  CommittedEntries:
-  1/3 EntryNormal ""
+  Committed: (2,3]
   Messages:
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
+  Applying:
+  1/3 EntryNormal ""
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:2
-  CommittedEntries:
-  1/3 EntryNormal ""
+  Committed: (2,3]
   Messages:
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+  Applying:
+  1/3 EntryNormal ""
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3

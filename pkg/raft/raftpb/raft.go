@@ -30,6 +30,56 @@ func (EntryType) SafeValue()            {}
 func (ConfChangeType) SafeValue()       {}
 func (ConfChangeTransition) SafeValue() {}
 
+// Term is a raft term. Depending on context, can be used to signify a term of a
+// log entry, a leader term, a HardState.Term or something else.
+type Term uint64
+
+// SafeValue implements the redact.SafeValue interface.
+func (s Term) SafeValue() {}
+
+// Index is an index into the raft log.
+type Index uint64
+
+// SafeValue implements the redact.SafeValue interface.
+func (s Index) SafeValue() {}
+
+// LogSpan represents a (begin, end] span of indices in a raft log. The choice
+// of excluding the left bound and including the right bound is deliberate and
+// principled. When working with raft logs, it almost always helps to avoid
+// off-by-one errors and risk of integer underflow.
+type LogSpan struct {
+	// After is the left bound of the log indices span. Exclusive.
+	After Index
+	// Last is the right bound of the log indices span. Inclusive.
+	Last Index
+}
+
+// Empty returns whether the given log span is empty.
+func (s LogSpan) Empty() bool {
+	return s.After >= s.Last
+}
+
+// Len returns the number of entries in the given span.
+// Requires the span to be valid, i.e. Last >= After.
+func (s LogSpan) Len() uint64 {
+	return uint64(s.Last - s.After)
+}
+
+// Contains returns true iff the given index is within the span.
+func (s LogSpan) Contains(index Index) bool {
+	return index > s.After && index <= s.Last
+}
+
+// String returns the string representation of the LogSpan.
+func (s LogSpan) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s LogSpan) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(%d,%d]", s.After, s.Last)
+}
+
 // Priority specifies per-entry priorities, that are local to the interaction
 // between a leader-replica pair, i.e., they are not an invariant of a
 // particular entry in the raft log (the replica could be the leader itself or

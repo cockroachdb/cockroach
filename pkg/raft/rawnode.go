@@ -241,21 +241,12 @@ func (rn *RawNode) Ready() Ready {
 	// all updates unconditionally.
 	r.raftLog.acceptUnstable()
 
-	allowUnstable := rn.applyUnstableEntries()
-	if r.raftLog.hasNextCommittedEnts(allowUnstable) {
-		entries := r.raftLog.nextCommittedEnts(allowUnstable)
-		r.raftLog.acceptApplying(entries[len(entries)-1].Index)
-		rd.CommittedEntries = entries
-	}
-
 	// For async storage writes, enqueue messages to local storage threads.
 	if needStorageAppendMsg(r, rd) {
 		rd.Messages = append(rd.Messages, newStorageAppendMsg(r, rd))
 	}
-	if needStorageApplyMsg(rd) {
-		rd.Messages = append(rd.Messages, newStorageApplyMsg(r, rd))
-	}
 	r.msgsAfterAppend = nil
+	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
 
 	return rd
 }
@@ -403,37 +394,32 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 	return m
 }
 
-func needStorageApplyMsg(rd Ready) bool { return len(rd.CommittedEntries) > 0 }
-
-// newStorageApplyMsg creates the message that should be sent to the local
-// apply thread to instruct it to apply committed log entries. The message
-// also carries a response that should be delivered after the rest of the
-// message is processed.
-func newStorageApplyMsg(r *raft, rd Ready) pb.Message {
-	ents := rd.CommittedEntries
-	return pb.Message{
-		Type:    pb.MsgStorageApply,
-		To:      LocalApplyThread,
-		From:    r.id,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
-		Responses: []pb.Message{
-			newStorageApplyRespMsg(r, ents),
-		},
-	}
+// AckApplying accepts all committed entries <= index as being applied to the
+// state machine. The caller gives a promise to eventually apply these entries
+// and call AckApplied to confirm. They can do so asynchronously, while this
+// RawNode keeps making progress.
+//
+// It is allowed to never call AckApplying, and call AckApplied straight away.
+// Technically, AckApplying only prevents committed indices <= index from
+// causing Ready signals.
+//
+// Requires: all AckApplying calls must have increasing indices.
+// Requires: index <= Ready.Committed.Last. That is, the caller can only accept
+// "apply-able" entries that it learns about from Ready().
+func (rn *RawNode) AckApplying(index pb.Index) {
+	rn.raft.raftLog.acceptApplying(uint64(index))
 }
 
-// newStorageApplyRespMsg creates the message that should be returned to node
-// after the committed entries in the current Ready (along with those in all
-// prior Ready structs) have been applied to the local state machine.
-func newStorageApplyRespMsg(r *raft, ents []pb.Entry) pb.Message {
-	return pb.Message{
-		Type:    pb.MsgStorageApplyResp,
-		To:      r.id,
-		From:    LocalApplyThread,
-		Term:    0, // committed entries don't apply under a specific term
-		Entries: ents,
+// AckApplied acknowledges that the given entries have been applied. Must be
+// called for every span of applied entries, in order. If the caller chose to
+// apply entries asynchronously, they should synchronize the order of these
+// calls with applying snapshots.
+func (rn *RawNode) AckApplied(entries []pb.Entry) {
+	if len(entries) == 0 {
+		return
 	}
+	rn.raft.appliedTo(entries[len(entries)-1].Index)
+	rn.raft.reduceUncommittedSize(payloadsSize(entries))
 }
 
 // applyUnstableEntries returns whether entries are allowed to be applied once
@@ -459,7 +445,10 @@ func (rn *RawNode) HasReady() bool {
 	if len(r.msgs) > 0 || len(r.msgsAfterAppend) > 0 {
 		return true
 	}
-	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
+	if r.raftLog.hasNextUnstableEnts() {
+		return true
+	}
+	if !r.raftLog.nextCommittedSpan(rn.applyUnstableEntries()).Empty() {
 		return true
 	}
 	return false

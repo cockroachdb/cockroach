@@ -314,30 +314,33 @@ func TestNextCommittedEnts(t *testing.T) {
 		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
+	stable := LogMark{Term: init.term, Index: 4}
+	span := func(after, last uint64) pb.LogSpan {
+		return pb.LogSpan{After: pb.Index(after), Last: pb.Index(last)}
+	}
 	for _, tt := range []struct {
 		applied       uint64
 		applying      uint64
 		allowUnstable bool
 		snap          bool
-		wents         []pb.Entry
+		want          pb.LogSpan
 	}{
 		// Allow unstable entries (indices > 4).
-		{applied: 3, applying: 3, allowUnstable: true, wents: init.sub(3, 5)},
-		{applied: 3, applying: 4, allowUnstable: true, wents: init.sub(4, 5)},
-		{applied: 3, applying: 5, allowUnstable: true, wents: nil},
-		{applied: 4, applying: 4, allowUnstable: true, wents: init.sub(4, 5)},
-		{applied: 4, applying: 5, allowUnstable: true, wents: nil},
-		{applied: 5, applying: 5, allowUnstable: true, wents: nil},
+		{applied: 3, applying: 3, allowUnstable: true, want: span(3, 5)},
+		{applied: 3, applying: 4, allowUnstable: true, want: span(4, 5)},
+		{applied: 3, applying: 5, allowUnstable: true, want: span(5, 5)},
+		{applied: 4, applying: 4, allowUnstable: true, want: span(4, 5)},
+		{applied: 4, applying: 5, allowUnstable: true, want: span(5, 5)},
+		{applied: 5, applying: 5, allowUnstable: true, want: span(5, 5)},
 		// Don't allow unstable entries (indices > 4).
-		{applied: 3, applying: 3, wents: init.sub(3, 4)},
-		{applied: 3, applying: 4, wents: nil},
-		{applied: 3, applying: 5, wents: nil},
-		{applied: 4, applying: 4, wents: nil},
-		{applied: 4, applying: 5, wents: nil},
-		{applied: 5, applying: 5, wents: nil},
-		// When there is a snapshot, committed entries are not reported.
-		{applied: 3, applying: 3, allowUnstable: true, snap: true, wents: nil},
-		{applied: 3, applying: 3, snap: true, wents: nil},
+		{applied: 3, applying: 3, want: span(3, 4)},
+		{applied: 3, applying: 4, want: span(4, 4)},
+		{applied: 3, applying: 5, want: span(5, 4)}, // TODO(pav-kv): not legit
+		{applied: 4, applying: 4, want: span(4, 4)},
+		{applied: 4, applying: 5, want: span(5, 4)}, // TODO(pav-kv): not legit
+		// When there is a snapshot (index 7), committed entries are held off.
+		{applied: 3, applying: 3, allowUnstable: true, snap: true, want: span(3, 3)},
+		{applied: 3, applying: 3, snap: true, want: span(3, 3)},
 	} {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
@@ -347,7 +350,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			require.NoError(t, storage.Append(init.sub(3, 4)))
 			raftLog.checkInvariants(t)
 
-			raftLog.stableTo(LogMark{Term: init.term, Index: 4})
+			raftLog.stableTo(stable)
 			raftLog.commitTo(LogMark{Term: init.term, Index: 5})
 			raftLog.appliedTo(tt.applied)
 			raftLog.acceptApplying(tt.applying)
@@ -357,8 +360,14 @@ func TestNextCommittedEnts(t *testing.T) {
 				newSnap.snap.Metadata.Index = init.lastIndex() + 1
 				require.True(t, raftLog.restore(newSnap))
 			}
-			require.Equal(t, len(tt.wents) != 0, raftLog.hasNextCommittedEnts(tt.allowUnstable))
-			require.Equal(t, tt.wents, raftLog.nextCommittedEnts(tt.allowUnstable))
+			span := raftLog.nextCommittedSpan(tt.allowUnstable)
+			require.Equal(t, tt.want, span)
+
+			var want []pb.Entry
+			if !span.Empty() {
+				want = init.sub(uint64(span.After), uint64(span.Last))
+			}
+			require.Equal(t, want, raftLog.nextCommittedEnts(tt.allowUnstable))
 		})
 	}
 }
@@ -369,19 +378,22 @@ func TestAcceptApplying(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	init := entryID{term: 1, index: 3}.append(1, 1, 1)
+	span := func(after, last uint64) pb.LogSpan {
+		return pb.LogSpan{After: pb.Index(after), Last: pb.Index(last)}
+	}
 	for _, tt := range []struct {
 		index         uint64
 		allowUnstable bool
-		wantNext      bool
+		wantNext      pb.LogSpan
 	}{
 		// Allow unstable entries.
-		{index: 3, allowUnstable: true, wantNext: true},
-		{index: 4, allowUnstable: true, wantNext: true},
-		{index: 5, allowUnstable: true, wantNext: false},
+		{index: 3, allowUnstable: true, wantNext: span(3, 5)},
+		{index: 4, allowUnstable: true, wantNext: span(4, 5)},
+		{index: 5, allowUnstable: true, wantNext: span(5, 5)},
 		// Don't allow unstable entries.
-		{index: 3, wantNext: true},
-		{index: 4, wantNext: false},
-		{index: 5, wantNext: false},
+		{index: 3, wantNext: span(3, 4)},
+		{index: 4, wantNext: span(4, 4)},
+		{index: 5, wantNext: span(5, 4)}, // TODO(pav-kv): not legit
 	} {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
@@ -397,7 +409,7 @@ func TestAcceptApplying(t *testing.T) {
 
 			raftLog.acceptApplying(tt.index)
 			raftLog.checkInvariants(t)
-			require.Equal(t, tt.wantNext, raftLog.hasNextCommittedEnts(tt.allowUnstable))
+			require.Equal(t, tt.wantNext, raftLog.nextCommittedSpan(tt.allowUnstable))
 		})
 	}
 }

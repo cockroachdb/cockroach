@@ -48,10 +48,6 @@ const (
 	// log entries and snapshots to stable storage. The identifier is used as a
 	// target for MsgStorageAppend messages.
 	LocalAppendThread pb.PeerID = math.MaxUint64
-	// LocalApplyThread is a reference to a local thread that applies committed
-	// log entries to the local state machine. The identifier is used as a
-	// target for MsgStorageApply messages.
-	LocalApplyThread pb.PeerID = math.MaxUint64 - 1
 )
 
 // Possible values for CampaignType
@@ -1728,12 +1724,6 @@ func (r *raft) Step(m pb.Message) error {
 		}
 		if m.Index != 0 {
 			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
-		}
-
-	case pb.MsgStorageApplyResp:
-		if ln := len(m.Entries); ln > 0 {
-			r.appliedTo(m.Entries[ln-1].Index)
-			r.reduceUncommittedSize(payloadsSize(m.Entries))
 		}
 
 	case pb.MsgVote, pb.MsgPreVote:
