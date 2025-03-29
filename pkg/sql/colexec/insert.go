@@ -207,6 +207,10 @@ func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch
 		if !v.checkOrds.Contains(i) {
 			continue
 		}
+		if !checks[i].ShouldEvaluate(catalog.MutationOpInsert, false /* hasConflict */) {
+			colIdx++
+			continue
+		}
 		vec := b.ColVec(colIdx + len(v.insertCols))
 		bools := vec.Bool()
 		nulls := vec.Nulls()
