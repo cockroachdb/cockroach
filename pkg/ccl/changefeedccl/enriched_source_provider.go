@@ -108,6 +108,12 @@ func newEnrichedSourceProvider(
 		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameMVCCTimestamp)
 		nonFixedDataIdx[fieldNameMVCCTimestamp] = len(nonFixedJSONFields) - 1
 	}
+	if opts.UpdatedTimestamps {
+		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameUpdatedTSNS)
+		nonFixedDataIdx[fieldNameUpdatedTSNS] = len(nonFixedJSONFields) - 1
+		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameUpdatedTSHLC)
+		nonFixedDataIdx[fieldNameUpdatedTSHLC] = len(nonFixedJSONFields) - 1
+	}
 	// TODO(#139661): Add other non fixed fields.
 
 	jpo, err := json.NewPartialObject(jsonBase, nonFixedJSONFields)
@@ -137,6 +143,14 @@ func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error
 	if p.opts.mvccTimestamp {
 		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(updated.MvccTimestamp.AsOfSystemTime())
 	}
+	if p.opts.updated {
+		ts := updated.MvccTimestamp
+		if updated.SchemaTS.WallTime > ts.WallTime {
+			ts = updated.SchemaTS
+		}
+		p.jsonNonFixedData[fieldNameUpdatedTSNS] = json.FromString(ts.AsOfSystemTime())
+		p.jsonNonFixedData[fieldNameUpdatedTSHLC] = json.FromString(ts.String())
+	}
 	return p.jsonPartialObject.NewObject(p.jsonNonFixedData)
 }
 
@@ -160,6 +174,14 @@ func (p *enrichedSourceProvider) GetAvro(
 		if p.opts.mvccTimestamp {
 			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, row.MvccTimestamp.AsOfSystemTime())
 		}
+		if p.opts.updated {
+			ts := row.MvccTimestamp
+			if row.SchemaTS.WallTime > ts.WallTime {
+				ts = row.SchemaTS
+			}
+			dest[fieldNameUpdatedTSNS] = goavro.Union(avro.SchemaTypeString, ts.AsOfSystemTime())
+			dest[fieldNameUpdatedTSHLC] = goavro.Union(avro.SchemaTypeString, ts.String())
+		}
 		// TODO(#139661): Add other non fixed fields.
 	}
 	sourceDataSchema, err := avro.NewFunctionalRecord("source", schemaPrefix, avroFields, fromRow)
@@ -179,6 +201,8 @@ const (
 	fieldNameNodeName           = "node_name"
 	fieldNameNodeID             = "node_id"
 	fieldNameMVCCTimestamp      = "mvcc_timestamp"
+	fieldNameUpdatedTSNS        = "ts_ns"
+	fieldNameUpdatedTSHLC       = "ts_hlc"
 )
 
 type fieldInfo struct {
@@ -286,6 +310,28 @@ var allFieldInfo = map[string]fieldInfo{
 		},
 		kafkaConnectSchema: kcjsonschema.Schema{
 			Field:    fieldNameMVCCTimestamp,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
+	fieldNameUpdatedTSNS: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameUpdatedTSNS,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameUpdatedTSNS,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
+	fieldNameUpdatedTSHLC: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameUpdatedTSHLC,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameUpdatedTSHLC,
 			TypeName: kcjsonschema.SchemaTypeString,
 			Optional: true,
 		},
