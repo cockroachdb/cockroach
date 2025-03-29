@@ -12,6 +12,7 @@ import (
 	"hash/fnv"
 	"io"
 	"math"
+	"math/bits"
 	"runtime"
 	"sort"
 	"sync"
@@ -6317,6 +6318,32 @@ func MVCCVerifyLock(
 		return true, nil
 	}
 	return false, nil
+}
+
+var didUpdate bool
+var mvccMetadataSizeBase = (&enginepb.MVCCMetadata{
+	Timestamp: hlc.LegacyTimestamp{
+		WallTime: 1743073495370752000,
+		Logical:  1,
+	},
+	TxnDidNotUpdateMeta: &didUpdate,
+}).Size()
+
+func ApproximateLockTableSize(acq *roachpb.LockAcquisition) int64 {
+	keySize := int64(len(acq.Key)) + engineKeyVersionLockTableLen
+	// TODO(ssd): A more accurate way to get the meta size would be to do
+	// something like the below. We should look at a memory profile to see if this
+	// forces an allocation or if the compiler sees what we are up to:
+	//
+	// metaSize := int64((&enginepb.MVCCMetadata{
+	// 	Txn:                 &acq.Txn,
+	// 	Timestamp:           acq.Txn.WriteTimestamp.ToLegacyTimestamp(),
+	// 	TxnDidNotUpdateMeta: &didUpdate,
+	// }).Size())
+	txnSize := int64(acq.Txn.Size())
+	txnSize = txnSize + 1 + int64((uint32(bits.Len64(uint64(txnSize)|1)+6)*37)>>8)
+	metaSize := txnSize + int64(mvccMetadataSizeBase)
+	return keySize + metaSize
 }
 
 // mvccReleaseLockInternal releases a lock at the specified key and strength and
