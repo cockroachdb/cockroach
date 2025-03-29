@@ -16,7 +16,7 @@ import (
 )
 
 func TestExtractBenchmarkResultsDataDriven(t *testing.T) {
-	ddFilePath := path.Join(datapathutils.TestDataPath(t), "benchmark")
+	ddFilePath := path.Join(datapathutils.TestDataPath(t), "benchmark.txt")
 	datadriven.RunTest(t, ddFilePath, func(t *testing.T, d *datadriven.TestData) string {
 		if d.Cmd != "benchmark" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)

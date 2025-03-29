@@ -39,9 +39,17 @@ type BenchmarkEntry struct {
 
 // Comparison contains the results of comparing two microbenchmarks.
 type Comparison struct {
-	Distribution   benchmath.Comparison
-	Delta          float64
-	FormattedDelta string
+	Distribution       benchmath.Comparison
+	ConfidenceInterval ConfidenceInterval
+	Delta              float64
+	FormattedDelta     string
+}
+
+// ConfidenceInterval holds the low and high bounds of a confidence interval.
+type ConfidenceInterval struct {
+	Low    float64
+	High   float64
+	Center float64
 }
 
 // ComparisonResult holds the comparison results for a specific metric.

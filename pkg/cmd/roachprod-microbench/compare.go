@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -350,159 +349,54 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 	return nil
 }
 
-func (c *compare) createBenchSeries() ([]*benchseries.ComparisonSeries, error) {
-	opts := benchseries.DefaultBuilderOptions()
-	opts.Experiment = "run-time"
-	opts.Compare = "cockroach"
-	builder, err := benchseries.NewBuilder(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	var benchBuf bytes.Buffer
-	readFileFn := func(filePath string, required bool) error {
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			if !required && oserror.IsNotExist(err) {
-				return nil
-			}
-			return errors.Wrapf(err, "failed to read file %s", filePath)
-		}
-		benchBuf.Write(data)
-		benchBuf.WriteString("\n")
-		return nil
-	}
-
-	for k, v := range c.influxConfig.metadata {
-		benchBuf.WriteString(fmt.Sprintf("%s: %s\n", k, v))
-	}
-
-	logPaths := map[string]string{
-		"experiment": c.experimentDir,
-		"baseline":   c.baselineDir,
-	}
-	for logType, dir := range logPaths {
-		benchBuf.WriteString(fmt.Sprintf("cockroach: %s\n", logType))
-		logPath := filepath.Join(dir, "metadata.log")
-		if err = readFileFn(logPath, true); err != nil {
-			return nil, err
-		}
-		for _, pkg := range c.packages {
-			benchBuf.WriteString(fmt.Sprintf("pkg: %s\n", pkg))
-			logPath = filepath.Join(dir, getReportLogName(reportLogName, pkg))
-			if err = readFileFn(logPath, false); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	benchReader := benchfmt.NewReader(bytes.NewReader(benchBuf.Bytes()), "buffer")
-	recordsMap := make(map[string][]*benchfmt.Result)
-	seen := make(map[string]map[string]struct{})
-	for benchReader.Scan() {
-		switch rec := benchReader.Result().(type) {
-		case *benchfmt.SyntaxError:
-			// In case the benchmark log is corrupted or contains a syntax error, we
-			// want to return an error to the caller.
-			return nil, fmt.Errorf("syntax error: %v", rec)
-		case *benchfmt.Result:
-			var cmp, pkg string
-			for _, config := range rec.Config {
-				if config.Key == "pkg" {
-					pkg = string(config.Value)
-				}
-				if config.Key == opts.Compare {
-					cmp = string(config.Value)
-				}
-			}
-			key := pkg + util.PackageSeparator + string(rec.Name)
-			// Update the name to include the package name. This is a workaround for
-			// `benchseries`, that currently does not support package names.
-			rec.Name = benchfmt.Name(key)
-			recordsMap[key] = append(recordsMap[key], rec.Clone())
-			// Determine if we've seen this package/benchmark combination for both
-			// the baseline and experiment run.
-			if _, ok := seen[key]; !ok {
-				seen[key] = make(map[string]struct{})
-			}
-			seen[key][cmp] = struct{}{}
-		}
-	}
-
-	// Add only the benchmarks that have been seen in both the baseline and
-	// experiment run.
-	for key, records := range recordsMap {
-		if len(seen[key]) != 2 {
-			continue
-		}
-		for _, rec := range records {
-			builder.Add(rec)
-		}
-	}
-
-	comparisons, err := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create comparison series")
-	}
-	return comparisons, nil
-}
-
-func (c *compare) pushToInfluxDB() error {
+func (c *compare) pushToInfluxDB(comparisonResultsMap model.ComparisonResultsMap) error {
 	client := influxdb2.NewClient(c.influxConfig.host, c.influxConfig.token)
 	defer client.Close()
 	writeAPI := client.WriteAPI("cockroach", "microbench")
 	errorChan := writeAPI.Errors()
 
-	comparisons, err := c.createBenchSeries()
+	metadata, err := loadMetadata(filepath.Join(c.experimentDir, "metadata.log"))
 	if err != nil {
 		return err
 	}
+	experimentTime := metadata.ExperimentCommitTime
+	normalizedDateString, err := benchseries.NormalizeDateString(experimentTime)
+	if err != nil {
+		return errors.Wrap(err, "error normalizing experiment commit date")
+	}
+	ts, err := benchseries.ParseNormalizedDateString(normalizedDateString)
+	if err != nil {
+		return errors.Wrap(err, "error parsing experiment commit date")
+	}
 
-	for _, cs := range comparisons {
-		cs.AddSummaries(0.95, 1000)
-		residues := make(map[string]string)
-		for _, r := range cs.Residues {
-			residues[r.S] = r.Slice[0]
-		}
-
-		for idx, benchmarkName := range cs.Benchmarks {
-			if len(cs.Summaries) == 0 {
-				log.Printf("WARN: no summaries for %s", benchmarkName)
-				continue
+	for _, group := range comparisonResultsMap {
+		for _, result := range group {
+			for _, detail := range result.Comparisons {
+				ci := detail.Comparison.ConfidenceInterval
+				fields := map[string]interface{}{
+					"low":               ci.Low,
+					"center":            ci.Center,
+					"high":              ci.High,
+					"upload-time":       metadata.RunTime,
+					"baseline-commit":   metadata.BaselineCommit,
+					"experiment-commit": metadata.ExperimentCommit,
+					"benchmarks-commit": metadata.BenchmarksCommit,
+				}
+				pkg := strings.Split(detail.BenchmarkName, util.PackageSeparator)[0]
+				benchmarkName := strings.Split(detail.BenchmarkName, util.PackageSeparator)[1]
+				tags := map[string]string{
+					"name":         benchmarkName,
+					"unit":         result.Metric.Unit,
+					"pkg":          pkg,
+					"repository":   "cockroach",
+					"branch":       "master",
+					"goarch":       metadata.GoArch,
+					"goos":         metadata.GoOS,
+					"machine-type": metadata.Machine,
+				}
+				p := influxdb2.NewPoint("benchmark-result", tags, fields, ts)
+				writeAPI.WritePoint(p)
 			}
-			sum := cs.Summaries[0][idx]
-			if !sum.Defined() {
-				continue
-			}
-
-			experimentTime := cs.Series[0]
-			ts, err := benchseries.ParseNormalizedDateString(experimentTime)
-			if err != nil {
-				return errors.Wrap(err, "error parsing experiment commit date")
-			}
-			fields := map[string]interface{}{
-				"low":               sum.Low,
-				"center":            sum.Center,
-				"high":              sum.High,
-				"upload-time":       residues["upload-time"],
-				"baseline-commit":   cs.HashPairs[experimentTime].DenHash,
-				"experiment-commit": cs.HashPairs[experimentTime].NumHash,
-				"benchmarks-commit": residues["benchmarks-commit"],
-			}
-			pkg := strings.Split(benchmarkName, util.PackageSeparator)[0]
-			benchmarkName = strings.Split(benchmarkName, util.PackageSeparator)[1]
-			tags := map[string]string{
-				"name":         benchmarkName,
-				"unit":         cs.Unit,
-				"pkg":          pkg,
-				"repository":   "cockroach",
-				"branch":       residues["branch"],
-				"goarch":       residues["goarch"],
-				"goos":         residues["goos"],
-				"machine-type": residues["machine-type"],
-			}
-			p := influxdb2.NewPoint("benchmark-result", tags, fields, ts)
-			writeAPI.WritePoint(p)
 		}
 	}
 	done := make(chan struct{})
