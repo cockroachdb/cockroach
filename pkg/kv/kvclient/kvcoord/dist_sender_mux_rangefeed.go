@@ -390,6 +390,9 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 	mux, err := client.MuxRangeFeed(ctx)
 	if err != nil {
+		// Remove the mux client from the cache if it hit an
+		// error.
+		m.muxClients.Delete(nodeID)
 		return future.MustSet(stream, muxStreamOrError{err: err})
 	}
 
