@@ -416,37 +416,6 @@ func (rn *RawNode) HasReady() bool {
 	return len(r.msgs) > 0
 }
 
-// SplitMessages splits the messages in Ready into two buckets:
-//
-//  1. Messages addressed to other peers. Includes both messages that can be
-//     sent immediately, and the messages subject to storage sync such as
-//     MsgVoteResp and MsgAppResp.
-//  2. Local self-addressed messages that are subject to the local storage sync.
-//     Includes MsgStorageAppendResp and MsgStorageApplyResp, as well as the
-//     leader's self-addressed MsgVoteResp and MsgAppResp.
-//
-// This is a helper for transitioning from synchronous storage API to the
-// asynchronous one. Tests are being migrated to the async API, and temporarily
-// use this helper.
-//
-// Only for testing. Will be replaced with a more explicit API.
-func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Message) {
-	for _, msg := range msgs {
-		if !IsLocalMsgTarget(msg.To) {
-			send = append(send, msg)
-			continue
-		}
-		for _, r := range msg.Responses {
-			if r.To != self {
-				send = append(send, r)
-			} else {
-				advance = append(advance, r)
-			}
-		}
-	}
-	return send, advance
-}
-
 // AdvanceHack notifies the RawNode that the application has applied all the
 // updates from the given Ready() call.
 //
@@ -456,11 +425,7 @@ func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Messag
 //
 // Only for testing. Will be replaced with a more explicit API.
 func (rn *RawNode) AdvanceHack(rd Ready) {
-	rn.advance(rd.StorageAppend.StepAfterSync(rn.raft.id))
-}
-
-func (rn *RawNode) advance(msgs []pb.Message) {
-	for _, msg := range msgs {
+	for _, msg := range rd.StorageAppend.StepAfterSync(rn.raft.id) {
 		_ = rn.Step(msg)
 	}
 }
