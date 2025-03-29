@@ -45,47 +45,84 @@ func convertFromBool(b jsonpathBool) json.JSON {
 	}
 }
 
-func convertToBool(j json.JSON) jsonpathBool {
-	b, ok := j.AsBool()
-	if !ok {
-		return jsonpathBoolUnknown
-	}
-	if b {
-		return jsonpathBoolTrue
-	}
-	return jsonpathBoolFalse
-}
-
 func (ctx *jsonpathCtx) evalOperation(
 	op jsonpath.Operation, jsonValue json.JSON,
-) (json.JSON, error) {
+) ([]json.JSON, error) {
 	switch op.Type {
-	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
-		res, err := ctx.evalLogical(op, jsonValue)
+	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot,
+		jsonpath.OpCompEqual, jsonpath.OpCompNotEqual, jsonpath.OpCompLess,
+		jsonpath.OpCompLessEqual, jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual,
+		jsonpath.OpLikeRegex, jsonpath.OpExists, jsonpath.OpIsUnknown:
+		b, err := ctx.evalBoolean(op, jsonValue)
 		if err != nil {
-			return convertFromBool(jsonpathBoolUnknown), err
+			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
 		}
-		return convertFromBool(res), nil
-	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
-		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
-		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
-		res, err := ctx.evalComparison(op, jsonValue)
-		if err != nil {
-			return convertFromBool(jsonpathBoolUnknown), err
-		}
-		return convertFromBool(res), nil
+		return []json.JSON{convertFromBool(b)}, nil
 	case jsonpath.OpAdd, jsonpath.OpSub, jsonpath.OpMult,
 		jsonpath.OpDiv, jsonpath.OpMod:
-		return ctx.evalArithmetic(op, jsonValue)
-	case jsonpath.OpLikeRegex:
-		res, err := ctx.evalRegex(op, jsonValue)
+		results, err := ctx.evalArithmetic(op, jsonValue)
 		if err != nil {
-			return convertFromBool(jsonpathBoolUnknown), err
+			return nil, err
 		}
-		return convertFromBool(res), nil
+		return []json.JSON{results}, nil
+	case jsonpath.OpPlus, jsonpath.OpMinus:
+		return ctx.evalUnaryArithmetic(op, jsonValue)
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func (ctx *jsonpathCtx) evalBoolean(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	switch op.Type {
+	case jsonpath.OpLogicalAnd, jsonpath.OpLogicalOr, jsonpath.OpLogicalNot:
+		return ctx.evalLogical(op, jsonValue)
+	case jsonpath.OpCompEqual, jsonpath.OpCompNotEqual,
+		jsonpath.OpCompLess, jsonpath.OpCompLessEqual,
+		jsonpath.OpCompGreater, jsonpath.OpCompGreaterEqual:
+		return ctx.evalComparison(op, jsonValue)
+	case jsonpath.OpLikeRegex:
+		return ctx.evalRegex(op, jsonValue)
+	case jsonpath.OpExists:
+		return ctx.evalExists(op, jsonValue)
+	case jsonpath.OpIsUnknown:
+		return ctx.evalIsUnknown(op, jsonValue)
+	default:
+		panic(errors.AssertionFailedf("unhandled operation type"))
+	}
+}
+
+func (ctx *jsonpathCtx) evalIsUnknown(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	leftOp, ok := op.Left.(jsonpath.Operation)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not an operation")
+	}
+	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
+	if err != nil {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
+	}
+	if leftBool == jsonpathBoolUnknown {
+		return jsonpathBoolTrue, nil
+	}
+	return jsonpathBoolFalse, nil
+}
+
+func (ctx *jsonpathCtx) evalExists(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	// TODO(normanchenn): Only in strict mode do we need to evaluate all items.
+	// We can optimize this by short-circuiting in lax mode.
+	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if len(l) == 0 {
+		return jsonpathBoolFalse, nil
+	}
+	return jsonpathBoolTrue, nil
 }
 
 func (ctx *jsonpathCtx) evalRegex(
@@ -130,16 +167,16 @@ func (ctx *jsonpathCtx) evalRegex(
 }
 
 func (ctx *jsonpathCtx) evalLogical(
-	op jsonpath.Operation, current json.JSON,
+	op jsonpath.Operation, jsonValue json.JSON,
 ) (jsonpathBool, error) {
-	left, err := ctx.eval(op.Left, current, !ctx.strict /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+	leftOp, ok := op.Left.(jsonpath.Operation)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not an operation")
 	}
-	if len(left) != 1 || !isBool(left[0]) {
+	leftBool, err := ctx.evalBoolean(leftOp, jsonValue)
+	if err != nil {
 		return jsonpathBoolUnknown, errors.AssertionFailedf("left is not a boolean")
 	}
-	leftBool := convertToBool(left[0])
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
 		if leftBool == jsonpathBoolFalse {
@@ -161,14 +198,14 @@ func (ctx *jsonpathCtx) evalLogical(
 		panic(errors.AssertionFailedf("unhandled logical operation type"))
 	}
 
-	right, err := ctx.eval(op.Right, current, !ctx.strict /* unwrap */)
-	if err != nil {
-		return jsonpathBoolUnknown, err
+	rightOp, ok := op.Right.(jsonpath.Operation)
+	if !ok {
+		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not an operation")
 	}
-	if len(right) != 1 || !isBool(right[0]) {
+	rightBool, err := ctx.evalBoolean(rightOp, jsonValue)
+	if err != nil {
 		return jsonpathBoolUnknown, errors.AssertionFailedf("right is not a boolean")
 	}
-	rightBool := convertToBool(right[0])
 	switch op.Type {
 	case jsonpath.OpLogicalAnd:
 		if rightBool == jsonpathBoolTrue {
@@ -284,6 +321,30 @@ func execComparison(l, r json.JSON, op jsonpath.OperationType) (jsonpathBool, er
 		return jsonpathBoolTrue, nil
 	}
 	return jsonpathBoolFalse, nil
+}
+
+func (ctx *jsonpathCtx) evalUnaryArithmetic(
+	op jsonpath.Operation, jsonValue json.JSON,
+) ([]json.JSON, error) {
+	operands, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, true /* unwrap */)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range len(operands) {
+		if operands[i].Type() != json.NumberJSONType {
+			return nil, pgerror.Newf(pgcode.SingletonSQLJSONItemRequired,
+				"operand of unary jsonpath operator %s is not a numeric value",
+				jsonpath.OperationTypeStrings[op.Type])
+		}
+
+		if op.Type == jsonpath.OpMinus {
+			leftNum, _ := operands[i].AsDecimal()
+			leftNum.Neg(leftNum)
+			operands[i] = json.FromDecimal(*leftNum)
+		}
+	}
+	return operands, nil
 }
 
 func (ctx *jsonpathCtx) evalArithmetic(

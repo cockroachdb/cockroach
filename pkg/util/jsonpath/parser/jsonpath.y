@@ -177,6 +177,11 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %token <str> LIKE_REGEX
 %token <str> FLAG
 
+%token <str> LAST
+%token <str> EXISTS
+%token <str> IS
+%token <str> UNKNOWN
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -202,6 +207,7 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %left '+' '-'
 %left '*' '/' '%'
+%left UMINUS
 
 %%
 
@@ -248,6 +254,14 @@ expr:
   {
     $$.val = $2.path()
   }
+| '+' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpPlus, $2.path())
+  }
+| '-' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpMinus, $2.path())
+  }
 | expr '+' expr
   {
     $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
@@ -268,7 +282,6 @@ expr:
   {
     $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
   }
-// TODO(normanchenn): add unary + and -.
 ;
 
 accessor_expr:
@@ -295,7 +308,10 @@ path_primary:
   {
     $$.val = $1.path()
   }
-// TODO(normanchenn): support LAST for array ranges.
+| LAST
+  {
+    $$.val = jsonpath.Last{}
+  }
 ;
 
 accessor_op:
@@ -388,6 +404,10 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
   }
+| '(' predicate ')' IS UNKNOWN
+  {
+    $$.val = unaryOp(jsonpath.OpIsUnknown, $2.path())
+  }
 | expr LIKE_REGEX STRING
   {
     regex := jsonpath.Regex{Regex: $3}
@@ -404,6 +424,10 @@ delimited_predicate:
   '(' predicate ')'
   {
     $$.val = $2.path()
+  }
+| EXISTS '(' expr ')'
+  {
+    $$.val = unaryOp(jsonpath.OpExists, $3.path())
   }
 ;
 
@@ -434,7 +458,6 @@ comp_op:
   }
 ;
 
-// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {
@@ -485,14 +508,18 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  FALSE
+  EXISTS
+| FALSE
 | FLAG
+| IS
+| LAST
 | LAX
 | LIKE_REGEX
 | NULL
 | STRICT
 | TO
 | TRUE
+| UNKNOWN
 ;
 
 %%
