@@ -1630,7 +1630,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 -ERROR:  column "test" is in a primary key
 +ERROR:  column "test" is in a primary index
  alter table atacc1 drop constraint "atacc1_pkey";
-+ERROR:  relation "atacc1" (1956): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "atacc1" (1984): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  alter table atacc1 alter column test drop not null;
@@ -5216,13 +5216,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +ERROR:  index with name "tt9_c_key" already exists
  ALTER TABLE tt9 ADD CONSTRAINT foo UNIQUE(c);  -- fail, dup name
 -ERROR:  constraint "foo" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2051): duplicate constraint name: "foo"
++ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2079): duplicate constraint name: "foo"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key CHECK(c > 5);  -- fail, dup name
 -ERROR:  constraint "tt9_c_key" for relation "tt9" already exists
-+ERROR:  error executing StatementPhase stage 1 of 1 with 2 MutationType ops: relation "tt9" (2051): duplicate constraint name: "tt9_c_key"
++ERROR:  error executing StatementPhase stage 1 of 1 with 2 MutationType ops: relation "tt9" (2079): duplicate constraint name: "tt9_c_key"
  ALTER TABLE tt9 ADD CONSTRAINT tt9_c_key2 CHECK(c > 6);
  ALTER TABLE tt9 ADD UNIQUE(c);  -- picks nonconflicting name
-+ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2051): duplicate constraint name: "tt9_c_key2"
++ERROR:  error executing StatementPhase stage 1 of 1 with 7 MutationType ops: relation "tt9" (2079): duplicate constraint name: "tt9_c_key2"
  \d tt9
 -                Table "public.tt9"
 - Column |  Type   | Collation | Nullable | Default 
@@ -5404,7 +5404,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  DELETE FROM old_system_table WHERE othercol = 'somedata';
  TRUNCATE old_system_table;
  ALTER TABLE old_system_table DROP CONSTRAINT new_system_table_pkey;
-+ERROR:  relation "old_system_table" (2054): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "old_system_table" (2082): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  ALTER TABLE old_system_table DROP COLUMN othercol;

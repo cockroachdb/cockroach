@@ -54,7 +54,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_table_like
  
  CREATE TABLE inhf (LIKE inhx, LIKE inhx); /* Throw error */
 -ERROR:  column "xx" specified more than once
-+ERROR:  relation "inhf" (1332): duplicate column name: "xx"
++ERROR:  relation "inhf" (1360): duplicate column name: "xx"
  CREATE TABLE inhf (LIKE inhx INCLUDING DEFAULTS INCLUDING CONSTRAINTS);
  INSERT INTO inhf DEFAULT VALUES;
  SELECT * FROM inhf; /* Single entry with value 'text' */
