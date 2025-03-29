@@ -317,9 +317,11 @@ func makeSharedProcessTenantServerConfig(
 		useStore := tempStorageCfg.Spec
 		// TODO(knz): Make tempDir configurable.
 		tempDir := useStore.Path
-		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
+		var unlockDirFn func()
+		if tempStorageCfg.Path, unlockDirFn, err = fs.CreateTempDir(tempDir, TempDirPrefix); err != nil {
 			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 		}
+		stopper.AddCloser(stop.CloserFn(unlockDirFn))
 		if useStore.Path != "" {
 			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
 			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
