@@ -1167,3 +1167,10 @@ type MarkRecreatedIndexesAsVisible struct {
 	TableID           descpb.ID
 	IndexVisibilities map[descpb.IndexID]float64
 }
+
+// SetTableSchemaLocked is used to toggle a table schema as locked.
+type SetTableSchemaLocked struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Locked  bool
+}
