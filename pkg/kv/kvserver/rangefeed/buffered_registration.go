@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,6 +89,7 @@ func newBufferedRegistration(
 		baseRegistration: baseRegistration{
 			streamCtx:              streamCtx,
 			span:                   span,
+			startAt:                crtime.NowMono(),
 			catchUpTimestamp:       startTS,
 			withDiff:               withDiff,
 			withFiltering:          withFiltering,
@@ -161,6 +163,7 @@ func (br *bufferedRegistration) IsDisconnected() bool {
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
+	br.metrics.RangefeedLifetimeNanos.Inc(br.startAt.Elapsed().Nanoseconds())
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
