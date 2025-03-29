@@ -242,6 +242,10 @@ type TestingKnobs struct {
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
 
+	// RunBeforeIndexBackfillProgressUpdate is called before updating the
+	// progress for a single index backfill.
+	RunBeforeIndexBackfillProgressUpdate func(completed []roachpb.Span)
+
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the
 	// next batch or returning.

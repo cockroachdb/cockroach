@@ -64,7 +64,7 @@ func (g *SpanGroup) Contains(k Key) bool {
 	})
 }
 
-// Encloses returns whether the provided Span is fully conained within the group
+// Encloses returns whether the provided Span is fully contained within the group
 // of Spans in the SpanGroup
 func (g *SpanGroup) Encloses(spans ...Span) bool {
 	if g.rg == nil {
