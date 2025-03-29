@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -69,8 +70,8 @@ var eventBufferPool = sync.Pool{
 
 type event struct {
 	sessionID   clusterunique.ID
-	transaction *Transaction
-	statement   *Statement
+	transaction *sqlstats.RecordedTxnStats
+	statement   *sqlstats.RecordedStmtStats
 }
 
 type BufferOpt func(i *ConcurrentBufferIngester)
@@ -167,7 +168,7 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 }
 
 func (i *ConcurrentBufferIngester) ObserveStatement(
-	sessionID clusterunique.ID, statement *Statement,
+	sessionID clusterunique.ID, statement *sqlstats.RecordedStmtStats,
 ) {
 	if !i.registry.enabled() {
 		return
@@ -187,7 +188,7 @@ func (i *ConcurrentBufferIngester) ObserveStatement(
 }
 
 func (i *ConcurrentBufferIngester) ObserveTransaction(
-	sessionID clusterunique.ID, transaction *Transaction,
+	sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats,
 ) {
 	if !i.registry.enabled() {
 		return
