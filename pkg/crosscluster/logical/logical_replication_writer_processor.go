@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -738,6 +739,8 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 				// avoid creating a new copy on each executor usage.
 				flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
 				sd, lrw.spec,
+				flowCtx.Codec(),
+				flowCtx.Cfg.LeaseManager.(*lease.Manager),
 			)
 			if err != nil {
 				return err
