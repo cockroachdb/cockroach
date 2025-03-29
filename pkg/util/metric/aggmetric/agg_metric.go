@@ -129,6 +129,16 @@ func (cs *childSet) remove(metric childMetric) {
 	}
 }
 
+func (cs *childSet) get(metric childMetric) childMetric {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cm := cs.mu.tree.Get(metric)
+	if cm == nil {
+		return nil
+	}
+	return cm.(childMetric)
+}
+
 type childMetric interface {
 	btree.Item
 	labelValuer
