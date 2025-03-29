@@ -80,7 +80,7 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	}
 
 	if app := rd.StorageAppend; !app.Empty() {
-		n.AppendWork = append(n.AppendWork, app.ToMessage(raftpb.PeerID(idx+1)))
+		n.AppendWork = append(n.AppendWork, app)
 	}
 	if span := rd.Committed; !span.Empty() {
 		if was := n.ApplyWork; span.After > was.Last {
