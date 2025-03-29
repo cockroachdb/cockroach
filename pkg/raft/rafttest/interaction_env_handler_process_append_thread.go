@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
@@ -58,8 +57,7 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	resps := m.Responses
 	m.Responses = nil
 	env.Output.WriteString("Processing:\n")
-	// TODO(pav-kv): print MsgStorageAppend directly, without converting.
-	env.Output.WriteString(raft.DescribeMessage(m.ToMessage(raftpb.PeerID(idx+1)), defaultEntryFormatter) + "\n")
+	env.Output.WriteString(m.Describe(defaultEntryFormatter))
 	if err := processAppend(n, m); err != nil {
 		return err
 	}
