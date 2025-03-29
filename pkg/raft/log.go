@@ -81,6 +81,9 @@ type raftLog struct {
 	// Invariant: applied <= committed.
 	// Invariant: applied does not regress.
 	applied uint64
+	// compacted is the highest index that has been compacted out from the log.
+	// Invariant (unused): compacted <= applied.
+	compacted uint64
 
 	logger raftlogger.Logger
 
@@ -110,6 +113,7 @@ func newLogWithSize(
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
 		storage:             storage,
+		compacted:           compacted,
 		unstable:            newUnstable(last, logger),
 		termCache:           newTermCache(termCacheSize, last),
 		maxApplyingEntsSize: maxApplyingEntsSize,
@@ -198,6 +202,10 @@ func (l *raftLog) append(a LeadSlice) bool {
 		return true
 	}
 	return false
+}
+
+func (l *raftLog) compact() {
+	l.compacted = l.storage.Compacted()
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
@@ -363,13 +371,6 @@ func (l *raftLog) snapshot() (pb.Snapshot, error) {
 	return l.storage.Snapshot()
 }
 
-func (l *raftLog) compacted() uint64 {
-	if index, ok := l.unstable.maybeCompacted(); ok {
-		return index
-	}
-	return l.storage.Compacted()
-}
-
 func (l *raftLog) lastIndex() uint64 {
 	return l.unstable.lastIndex()
 }
@@ -472,7 +473,7 @@ func (l *raftLog) entries(after uint64, maxSize entryEncodingSize) ([]pb.Entry, 
 
 // allEntries returns all entries in the log. For testing only.
 func (l *raftLog) allEntries() []pb.Entry {
-	ents, err := l.entries(l.compacted(), noLimit)
+	ents, err := l.entries(l.compacted, noLimit)
 	if err == nil {
 		return ents
 	}
@@ -511,6 +512,7 @@ func (l *raftLog) restore(s snapshot) bool {
 	}
 	l.termCache.reset(id)
 	l.committed = id.index
+	l.compacted = id.index
 	return true
 }
 
@@ -672,7 +674,7 @@ func (l *raftLog) snap(storage LogStorage) LogSnapshot {
 	// NB: termCache and unstable slice are safe to copy, and make sure to not
 	// corrupt their shallow copies.
 	return LogSnapshot{
-		compacted: l.compacted(),
+		compacted: l.compacted,
 		storage:   storage,
 		unstable:  l.unstable.LeadSlice,
 		termCache: l.termCache,
