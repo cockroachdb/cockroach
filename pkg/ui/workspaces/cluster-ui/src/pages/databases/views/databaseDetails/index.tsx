@@ -13,8 +13,7 @@ import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageLayout } from "src/layouts";
 import { PageHeader } from "src/sharedFromCloud/pageHeader";
 import { queryByName, tabAttr } from "src/util";
-
-import { DB_PAGE_PATH } from "../util/routes";
+import { DB_PAGE_PATH } from "src/util/routes";
 
 import { DbGrantsView } from "./dbGrantsView";
 import { TablesPageV2 } from "./tablesView";
@@ -23,6 +22,7 @@ enum TabKeys {
   TABLES = "tables",
   GRANTS = "grants",
 }
+
 export const DatabaseDetailsPageV2 = () => {
   const { dbID: dbIdRouteParam } = useRouteParams();
   const dbId = parseInt(dbIdRouteParam, 10);

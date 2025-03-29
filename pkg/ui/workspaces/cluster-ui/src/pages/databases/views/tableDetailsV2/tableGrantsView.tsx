@@ -6,10 +6,10 @@
 import React, { useMemo } from "react";
 
 import { useTableGrantsImmutable } from "src/api/databases/grantsApi";
-import { GrantsByUser, GrantsTable } from "src/components/grantsTable";
-import { groupGrantsByGrantee } from "src/components/grantsTable/util";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
+import { GrantsByUser, GrantsTable } from "src/pages/databases/components";
+import { groupGrantsByGrantee } from "src/pages/databases/utils";
 
 export const TableGrantsView: React.FC = () => {
   const { tableID } = useRouteParams();

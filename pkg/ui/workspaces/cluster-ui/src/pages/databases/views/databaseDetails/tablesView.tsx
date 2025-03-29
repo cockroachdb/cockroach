@@ -15,15 +15,17 @@ import {
 } from "src/api/databases/getTableMetadataApi";
 import { Badge } from "src/badge";
 import { LiveDataPercent } from "src/components/liveDataPercent/liveDataPercent";
-import { NodeRegionsSelector } from "src/components/nodeRegionsSelector/nodeRegionsSelector";
-import { RegionNodesLabel } from "src/components/regionNodesLabel";
-import { TableMetadataJobControl } from "src/components/tableMetadataLastUpdated/tableMetadataJobControl";
 import { Tooltip } from "src/components/tooltip";
-import { AUTO_STATS_COLLECTION_HELP } from "src/components/tooltipMessages";
 import { ClusterDetailsContext } from "src/contexts";
 import { useRouteParams } from "src/hooks/useRouteParams";
 import { PageSection } from "src/layouts";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
+import {
+  AUTO_STATS_COLLECTION_HELP,
+  NodeRegionsSelector,
+  RegionNodesLabel,
+  TableMetadataJobControl,
+} from "src/pages/databases/components";
 import PageCount from "src/sharedFromCloud/pageCount";
 import { Search } from "src/sharedFromCloud/search";
 import {
