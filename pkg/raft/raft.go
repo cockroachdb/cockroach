@@ -637,6 +637,9 @@ func (r *raft) send(m pb.Message) {
 		// because the safety of such behavior has not been formally verified,
 		// we err on the side of safety and omit a `&& !m.Reject` condition
 		// above.
+		//
+		// TODO(pav-kv): MsgPreVoteResp does not require sync. Consider sending it
+		// immediately.
 		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
 	default:
 		if m.To == r.id {
