@@ -122,8 +122,10 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:18 Lead:1 LeadEpoch:1
   Snapshot Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-  Messages:
+  OnSync:
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/0
+    Snapshot: Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=18 next=19 sentCommit=18 matchCommit=18 paused pendingSnap=18]
