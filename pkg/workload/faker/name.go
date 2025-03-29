@@ -7,8 +7,7 @@ package faker
 
 import (
 	"fmt"
-
-	"golang.org/x/exp/rand"
+	"math/rand/v2"
 )
 
 type nameFaker struct {
@@ -21,7 +20,7 @@ type nameFaker struct {
 
 // Name returns a random en_US person name.
 func (f *nameFaker) Name(rng *rand.Rand) string {
-	if rng.Intn(2) == 0 {
+	if rng.IntN(2) == 0 {
 		return f.formatsFemale.Rand(rng).(func(rng *rand.Rand) string)(rng)
 	}
 	return f.formatsMale.Rand(rng).(func(rng *rand.Rand) string)(rng)

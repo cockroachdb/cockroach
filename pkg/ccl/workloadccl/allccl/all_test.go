@@ -270,21 +270,21 @@ func TestDeterministicInitialData(t *testing.T) {
 	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
 	// is another. Consider moving them to be properties on the workload.Meta.
 	fingerprintGoldens := map[string]uint64{
-		`bank`:       0xb9065bb21c3594a2,
+		`bank`:       0xb443139c2fc1a1a3,
 		`bulkingest`: 0xcf3e4028ac084aea,
 		`indexes`:    0xcbf29ce484222325,
 		`intro`:      0x81c6a8cfd9c3452a,
 		`json`:       0xcbf29ce484222325,
 		`ledger`:     0xebe27d872d980271,
-		`movr`:       0x79940f4ba5d5e6a3,
+		`movr`:       0x05e20fbb5586c9b0,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
-		`tpcc`:       0xf25e71062ca28dca,
-		`tpch`:       0xe4fd28db230b9149,
-		`ycsb`:       0xcfd3f148a01a2c47,
+		`tpcc`:       0x3f37ea71beae16fb,
+		`tpch`:       0xcd2abbd021ed895d,
+		`ycsb`:       0x0e6012ee6491a0fb,
 	}
 
 	var a bufalloc.ByteAllocator

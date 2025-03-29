@@ -6,16 +6,15 @@
 package workloadimpl_test
 
 import (
+	"math/rand/v2"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
-	"golang.org/x/exp/rand"
 )
 
 func BenchmarkRandStringFast(b *testing.B) {
 	const strLen = 26
-	rng := rand.NewSource(uint64(timeutil.Now().UnixNano()))
+	rng := rand.NewPCG(rand.Uint64(), rand.Uint64())
 	buf := make([]byte, strLen)
 
 	for i := 0; i < b.N; i++ {

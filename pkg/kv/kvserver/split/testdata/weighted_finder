@@ -20,23 +20,23 @@ requests key_dist=zipfian key_max=10000000000 span_dist=uniform span_max=1000 we
 eval seed=2022 iterations=100 all=true mix=sequential mix_count=5
 ----
 description                                               no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
-mixed_requests(5)                                         1.00       10.55        28.44        0.01                 0.05
-w=uni(10)/k=zip(1000)/s=uni(100)/s(%)=95/10000                                                                      
+mixed_requests(5)                                         0.00       9.00         36.54        0.01                 0.06
 w=uni(10)/k=zip(1000)/s=uni(1000)/s(%)=0/10000                                                                      
+w=uni(10)/k=zip(1000)/s=uni(100)/s(%)=95/10000                                                                      
+w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000                                                            
 w=uni(10)/k=zip(10000000000)/s=uni(1000)/s(%)=95/10000                                                              
 w=uni(10)/k=zip(100000)/s=uni(1000)/s(%)=95/10000                                                                   
-w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000                                                            
 
 eval seed=42 iterations=100 all=true mix=sequential mix_count=2
 ----
 description                                               no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
-mixed_requests(2)                                         1.00       33.75        56.57        0.00                 0.01
+mixed_requests(2)                                         0.00       31.77        55.47        0.00                 0.01
 w=uni(10)/k=zip(1000)/s=uni(100)/s(%)=95/10000                                                                      
-w=uni(10)/k=zip(10000000000)/s=uni(1000)/s(%)=95/10000                                                              
-mixed_requests(2)                                         1.00       6.42         23.03        0.01                 0.06
 w=uni(10)/k=zip(100000)/s=uni(1000)/s(%)=95/10000                                                                   
-w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000                                                            
-w=uni(10)/k=zip(1000)/s=uni(1000)/s(%)=0/10000            2.00       4.90         23.89        0.01                 0.02
+mixed_requests(2)                                         1.00       32.26        60.14        0.00                 0.01
+w=uni(10)/k=zip(1000)/s=uni(1000)/s(%)=0/10000                                                                      
+w=uni(10)/k=zip(10000000000)/s=uni(1000)/s(%)=95/10000                                                              
+w=zip(1000)/k=zip(10000000000)/s=uni(1000)/s(%)=50/10000  1.00       4.53         24.96        0.01                 0.07
 
 # Next test out a config with only one key. There shouldn't be any splits
 # possible.

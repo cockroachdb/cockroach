@@ -8,6 +8,7 @@ package tpcc
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -16,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/exp/rand"
 )
 
 // Section 2.5:
@@ -205,10 +205,10 @@ func (p *payment) startResetValueWorker() {
 func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	p.config.auditor.paymentTransactions.Add(1)
 
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(uint64(timeutil.Now().UnixNano()), 1))
 
 	d := paymentData{
-		dID: rng.Intn(10) + 1,
+		dID: rng.IntN(10) + 1,
 		// hAmount is randomly selected within [1.00..5000.00]
 		hAmount: float64(randInt(rng, 100, 500000)) / float64(100.0),
 		hDate:   timeutil.Now(),
@@ -219,7 +219,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration,
 	// warehouse and district updates.
 	// NOTE: If localWarehouses is set, keep all transactions local. This is for
 	// testing only, as it violates the spec.
-	if p.config.localWarehouses || rng.Intn(100) < 85 {
+	if p.config.localWarehouses || rng.IntN(100) < 85 {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
@@ -231,12 +231,12 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration,
 		p.config.auditor.Lock()
 		p.config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
 		p.config.auditor.Unlock()
-		d.cDID = rng.Intn(10) + 1
+		d.cDID = rng.IntN(10) + 1
 	}
 
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
-	if rng.Intn(100) < 60 {
+	if rng.IntN(100) < 60 {
 		d.cLast = string(p.config.randCLast(rng, &p.a))
 		p.config.auditor.paymentsByLastName.Add(1)
 	} else {
