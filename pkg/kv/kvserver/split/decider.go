@@ -9,7 +9,7 @@ package split
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -76,9 +76,9 @@ type RandSource interface {
 	// interval [0.0,1.0) from the RandSource.
 	Float64() float64
 
-	// Intn returns, as an int, a non-negative pseudo-random number in the
+	// IntN returns, as an int, a non-negative pseudo-random number in the
 	// half-open interval [0,n).
-	Intn(n int) int
+	IntN(n int) int
 }
 
 // globalRandSource implements the RandSource interface.
@@ -90,10 +90,10 @@ func (g globalRandSource) Float64() float64 {
 	return rand.Float64()
 }
 
-// Intn returns, as an int, a non-negative pseudo-random number in the
+// IntN returns, as an int, a non-negative pseudo-random number in the
 // half-open interval [0,n).
-func (g globalRandSource) Intn(n int) int {
-	return rand.Intn(n)
+func (g globalRandSource) IntN(n int) int {
+	return rand.IntN(n)
 }
 
 // GlobalRandSource returns an implementation of the RandSource interface that

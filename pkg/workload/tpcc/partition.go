@@ -9,10 +9,10 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/rand"
 )
 
 type partitionStrategy int
@@ -380,7 +380,7 @@ func makePartitioner(total, active, parts int) (*partitioner, error) {
 
 // randActive returns a random active element.
 func (p *partitioner) randActive(rng *rand.Rand) int {
-	return p.totalElems[rng.Intn(len(p.totalElems))]
+	return p.totalElems[rng.IntN(len(p.totalElems))]
 }
 
 // configureZone sets up zone configs for previously created partitions. By

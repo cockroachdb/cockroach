@@ -26,7 +26,6 @@ go_library(
         "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_spf13_pflag//:pflag",
-        "@org_golang_x_exp//rand",
     ],
 )
 
@@ -42,7 +41,5 @@ go_test(
     deps = [
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
-        "//pkg/util/timeutil",
-        "@org_golang_x_exp//rand",
     ],
 )

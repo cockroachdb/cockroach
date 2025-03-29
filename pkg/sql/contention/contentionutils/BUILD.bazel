@@ -18,6 +18,5 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
-        "@org_golang_x_exp//rand",
     ],
 )

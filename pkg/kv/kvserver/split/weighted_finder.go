@@ -126,7 +126,7 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		}
 		return
 	} else {
-		idx = f.randSource.Intn(splitKeySampleSize)
+		idx = f.randSource.IntN(splitKeySampleSize)
 	}
 
 	// Note we always use the start key of the span. We could
