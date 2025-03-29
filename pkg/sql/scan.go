@@ -13,10 +13,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -121,7 +126,8 @@ func (cfg scanColumnsConfig) assertValidReqOrdering(reqOrdering exec.OutputOrder
 	return nil
 }
 
-func (p *planner) Scan() *scanNode {
+// NewScanNode returns an empty scanNode.
+func NewScanNode() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
 	return n
 }
@@ -234,4 +240,86 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// Set up the rest of the scanNode.
 	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
+}
+
+type pkLookup struct {
+	zeroInputPlanNode
+	// Immutable data.
+	params   exec.PlaceholderScanParams
+	sb       *span.Builder
+	splitter span.Splitter
+	columns  colinfo.ResultColumns
+	spec     fetchpb.IndexFetchSpec
+
+	// Mutable working data.
+	row     tree.Datums
+	fetcher row.Fetcher
+}
+
+var _ planNode = &pkLookup{}
+
+func (n *pkLookup) startExec(params runParams) error {
+	if err := n.fetcher.Init(params.ctx, row.FetcherInitArgs{
+		WillUseKVProvider: false,
+		Txn:               params.EvalContext().Txn,
+		Reverse:           false,
+		// LockStrength:               0,
+		// LockWaitPolicy:             0,
+		// LockDurability:             0,
+		// LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+		// DeadlockTimeout:            flowCtx.EvalCtx.SessionData().DeadlockTimeout,
+		Alloc: nil,
+		// TODO: MemMonitor?
+		// MemMonitor:                 nil,
+		Spec:    &n.spec,
+		TraceKV: false,
+		// TraceKVEvery:               nil,
+		// ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		SpansCanOverlap: false,
+	}); err != nil {
+		return err
+	}
+
+	// Generate the lookup span.
+	var c constraint.Constraint
+	if err := n.params.InitConstraint(params.ctx, params.EvalContext(), &c); err != nil {
+		return err
+	}
+	spans, err := n.sb.SpansFromConstraint(&c, n.splitter)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Record index usage?
+
+	var spanIDs []int
+	return n.fetcher.StartScan(
+		// params.ctx, spans, spanIDs, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		params.ctx, spans, spanIDs, rowinfra.BytesLimit(10000), rowinfra.RowLimit(1),
+	)
+}
+
+func (n *pkLookup) Next(params runParams) (bool, error) {
+	if n.row != nil {
+		// We found the one row.
+		return false, nil
+	}
+	var err error
+	n.row, err = n.fetcher.NextRowDecoded(params.ctx)
+	if err != nil {
+		return false, err
+	}
+	if n.row == nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (n *pkLookup) Values() tree.Datums {
+	return n.row
+}
+
+func (n *pkLookup) Close(ctx context.Context) {
+	n.row = nil
+	n.fetcher.Close(ctx)
 }
