@@ -548,8 +548,10 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	want := Ready{
 		SoftState: &SoftState{RaftState: pb.StateLeader},
-		HardState: pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
-		Entries:   nil, // emitted & checked in intermediate Ready cycle
+		StorageAppend: StorageAppend{
+			HardState: pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
+			Entries:   nil, // emitted & checked in intermediate Ready cycle
+		},
 		Committed: pb.LogSpan{After: 1, Last: 3},
 	}
 
@@ -620,6 +622,7 @@ func TestRawNodeStart(t *testing.T) {
 	rawNode.AckApplied(committedEntries(t, rawNode, rd))
 
 	rd.SoftState, want.SoftState = nil, nil
+	rd.Responses = nil
 	rd.Messages, _ = SplitMessages(1, rd.Messages)
 
 	require.Equal(t, want, rd)
@@ -634,7 +637,8 @@ func TestRawNodeRestart(t *testing.T) {
 	st := pb.HardState{Term: 1, Commit: 1, Lead: 1, LeadEpoch: 1}
 
 	want := Ready{
-		HardState: emptyState, // no HardState is emitted because there was no change
+		// No storage append emitted because there was no change.
+		StorageAppend: StorageAppend{},
 		// commit up to commit index in st
 		Committed: pb.LogSpan{After: 0, Last: pb.Index(st.Commit)},
 	}
@@ -697,7 +701,8 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	st := pb.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
-		HardState: emptyState,
+		// No storage append emitted because there was no change.
+		StorageAppend: StorageAppend{},
 		// commit up to commit index in st
 		Committed: pb.LogSpan{After: 2, Last: 3},
 	}

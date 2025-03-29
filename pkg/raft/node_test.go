@@ -269,25 +269,28 @@ func TestNodeStart(t *testing.T) {
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
 	require.NoError(t, err)
-	wants := []Ready{
-		{
+	wants := []Ready{{
+		StorageAppend: StorageAppend{
 			HardState: raftpb.HardState{Term: 1, Commit: 1, Vote: 0, Lead: 0},
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
-			Committed: raftpb.LogSpan{After: 0, Last: 1},
+			Mark: LogMark{Term: 1, Index: 1},
 		},
-		{
+		Committed: raftpb.LogSpan{After: 0, Last: 1},
+	}, {
+		StorageAppend: StorageAppend{
 			HardState: raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
 			Entries:   []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			Committed: raftpb.LogSpan{After: 1, Last: 2},
+			Mark:      LogMark{Term: 2, Index: 3},
 		},
-		{
+		Committed: raftpb.LogSpan{After: 1, Last: 2},
+	}, {
+		StorageAppend: StorageAppend{
 			HardState: raftpb.HardState{Term: 2, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
-			Entries:   nil,
-			Committed: raftpb.LogSpan{After: 2, Last: 3},
 		},
-	}
+		Committed: raftpb.LogSpan{After: 2, Last: 3},
+	}}
 	storage := NewMemoryStorage()
 	c := &Config{
 		ID:                 1,
@@ -310,6 +313,7 @@ func TestNodeStart(t *testing.T) {
 	rd := rn.Ready()
 	var advance []raftpb.Message
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
+	rd.Responses = nil
 	require.Equal(t, wants[0], rd)
 	require.NoError(t, storage.Append(rd.Entries))
 	rn.advance(advance)
@@ -331,6 +335,7 @@ func TestNodeStart(t *testing.T) {
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
+	rd.Responses = nil
 	assert.Equal(t, wants[1], rd)
 	require.NoError(t, storage.Append(rd.Entries))
 	rn.advance(advance)
@@ -338,6 +343,7 @@ func TestNodeStart(t *testing.T) {
 
 	rd = rn.Ready()
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
+	rd.Responses = nil
 	assert.Equal(t, wants[2], rd)
 	require.NoError(t, storage.Append(rd.Entries))
 	rn.advance(advance)
@@ -354,8 +360,8 @@ func TestNodeRestart(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 1}
 
 	want := Ready{
-		// No HardState is emitted because there was no change.
-		HardState: raftpb.HardState{},
+		// No storage append is emitted because there was no change.
+		StorageAppend: StorageAppend{},
 		// commit up to index commit index in st
 		Committed: raftpb.LogSpan{After: 0, Last: raftpb.Index(st.Commit)},
 	}
@@ -402,9 +408,9 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
-		// No HardState is emitted because nothing changed relative to what is
+		// No storage append is emitted because nothing changed relative to what is
 		// already persisted.
-		HardState: raftpb.HardState{},
+		StorageAppend: StorageAppend{},
 		// commit up to index commit index in st
 		Committed: raftpb.LogSpan{After: 2, Last: 3},
 	}
