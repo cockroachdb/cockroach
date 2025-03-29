@@ -59,6 +59,19 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(
 	b BuildCtx, _ tree.ZoneSpecifier,
 ) error {
+	// Only block privileges for non-root users if this is the default range
+	// for a secondary tenant with sql.zone.allow_modify_ranges set to false;
+	// other ranges just need the REPAIRCLUSTER privilege.
+	// N.B. The default range has a rangeID of catid.InvalidDescID.
+	if rzo.rangeID == catid.InvalidDescID && !b.Codec().ForSystemTenant() &&
+		!zonepb.AllowModifyDefaultRange.Get(&b.ClusterSettings().SV) {
+		if !b.CurrentUser().IsRootUser() {
+			return pgerror.New(
+				pgcode.InsufficientPrivilege,
+				"only root users are allowed to modify the default range",
+			)
+		}
+	}
 	return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
 }
 
