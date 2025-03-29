@@ -56,6 +56,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -73,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -245,6 +248,9 @@ func backup(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	checkpointLoop := func(ctx context.Context) error {
+		var prevDelays map[string]time.Duration
+		acLoggingEvery, acReportingEvery := log.Every(time.Minute), log.Every(time.Minute*5)
+
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		defer close(requestFinishedCh)
@@ -312,6 +318,45 @@ func backup(
 					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint != nil {
 					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint()
 				}
+
+				// Check if we should report on the accumulated trace stats, namely any
+				// delays due to AC.
+				acDelayReportingThreshold := 1.0
+				perNodeAggregatorStatsCopy := func() bulkutil.ComponentAggregatorStats {
+					resumer.mu.Lock()
+					defer resumer.mu.Unlock()
+					return resumer.mu.perNodeAggregatorStats.DeepCopy()
+				}()
+
+				newDelays, err := acDelays(perNodeAggregatorStatsCopy)
+				if err != nil {
+					log.Warningf(ctx, "failed to decode aggregated trace stats:	%v", err)
+				}
+				if acDelayReportingThreshold > 0 {
+					for queue, delay := range newDelays {
+						delta := delay - prevDelays[queue]
+						if delta > 0 && acLoggingEvery.ShouldLog() {
+							log.Infof(ctx, "job requests delayed by %ds over last %ds (%d min total since resumed) due to %s",
+								int(delta.Seconds()), int(interval.Seconds()), int(delay.Minutes()), redact.SafeString(queue))
+						}
+						if settings.Version.IsActive(ctx, clusterversion.V25_2) {
+							if delta > time.Duration(float64(interval)*acDelayReportingThreshold) && acReportingEvery.ShouldLog() {
+								if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+									return jobs.MessageStorage(job.ID()).Record(
+										ctx, txn, "overload",
+										fmt.Sprintf("job requests delayed by %ds due to %s over last %ds",
+											int(delay.Seconds()), queue, int(interval.Seconds()),
+										),
+									)
+								}); err != nil {
+									log.Warningf(ctx, "failed to record ac delay message: %v", err)
+								}
+							}
+						}
+					}
+
+				}
+				prevDelays = newDelays
 			}
 		}
 		return nil
@@ -457,6 +502,24 @@ func releaseProtectedTimestamp(
 		err = nil
 	}
 	return err
+}
+
+func acDelays(raw bulk.ComponentAggregatorStats) (map[string]time.Duration, error) {
+	delays := make(map[string]time.Duration)
+	var ac admissionpb.AdmissionWorkQueueStats
+	acMsgName := ac.ProtoName()
+	for _, s := range raw {
+		for typ, encoded := range s {
+			if typ == acMsgName {
+				ac.Reset()
+				if err := proto.Unmarshal(encoded, &ac); err != nil {
+					return nil, err
+				}
+				delays[ac.QueueKind] += ac.WaitDurationNanos
+			}
+		}
+	}
+	return delays, nil
 }
 
 // getTableStatsForBackup collects all stats for tables found in descs.
