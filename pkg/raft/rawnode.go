@@ -396,15 +396,24 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 
 // AckApplying accepts all committed entries <= index as being applied to the
 // state machine. The caller gives a promise to eventually apply these entries
-// and call AckApplied to confirm. They can do so asynchronously.
+// and call AckApplied to confirm. They can do so asynchronously, while this
+// RawNode keeps making progress.
 //
-// AckApplying prevents committed indices <= index from causing Ready.
+// It is allowed to never call AckApplying, and call AckApplied straight away.
+// Technically, AckApplying only prevents committed indices <= index from
+// causing Ready signals.
+//
+// Requires: all AckApplying calls must have increasing indices.
+// Requires: index <= Ready.Committed.Last. That is, the caller can only accept
+// "apply-able" entries that it learns about from Ready().
 func (rn *RawNode) AckApplying(index pb.Index) {
 	rn.raft.raftLog.acceptApplying(uint64(index))
 }
 
 // AckApplied acknowledges that the given entries have been applied. Must be
-// called for a prefix of Ready.Committed span, during the ready handling.
+// called for every span of applied entries, in order. If the caller chose to
+// apply entries asynchronously, they should synchronize the order of these
+// calls with applying snapshots.
 func (rn *RawNode) AckApplied(entries []pb.Entry) {
 	if len(entries) == 0 {
 		return
