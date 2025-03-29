@@ -116,7 +116,7 @@ func jsonArrayValueAtIndex(ctx *jsonpathCtx, jsonValue json.JSON, index int) (js
 		return nil, pgerror.Newf(pgcode.InvalidSQLJSONSubscript, "jsonpath array subscript is out of bounds")
 	}
 	if index < 0 {
-		// Shouldn't happen, not supported in parser.
+		// Shouldn't happen, would have been caught above.
 		return nil, errors.AssertionFailedf("negative array index")
 	}
 	return jsonValue.FetchValIdx(index)

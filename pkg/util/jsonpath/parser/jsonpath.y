@@ -202,6 +202,7 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %left '+' '-'
 %left '*' '/' '%'
+%left UMINUS
 
 %%
 
@@ -248,6 +249,14 @@ expr:
   {
     $$.val = $2.path()
   }
+| '+' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpPlus, $2.path())
+  }
+| '-' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpMinus, $2.path())
+  }
 | expr '+' expr
   {
     $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
@@ -268,7 +277,6 @@ expr:
   {
     $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
   }
-// TODO(normanchenn): add unary + and -.
 ;
 
 accessor_expr:
@@ -434,7 +442,6 @@ comp_op:
   }
 ;
 
-// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {
