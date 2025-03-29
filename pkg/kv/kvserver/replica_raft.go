@@ -979,7 +979,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		logSnapshot = raftGroup.LogSnapshot()
 		if hasReady = raftGroup.HasReady(); hasReady {
-			ready = raftGroup.ReadyTODO()
+			ready = raftGroup.Ready()
 		}
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
@@ -1012,17 +1012,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, errors.Wrap(err, "checking raft group for Ready")
 	}
 
-	var outboundMsgs []raftpb.Message
-	var msgStorageAppend raftpb.Message
 	if hasReady {
 		logRaftReady(ctx, ready)
-		outboundMsgs, msgStorageAppend = splitLocalStorageMsgs(ready.Messages)
 	}
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
-		rac2ModeForReady, r.ReplicaID(), msgStorageAppend, outboundMsgs, logSnapshot,
-		r.raftMu.msgAppScratchForFlowControl, replicaStateInfoMap)
+		rac2ModeForReady, r.ReplicaID(), ready.StorageAppend, ready.Messages,
+		logSnapshot, r.raftMu.msgAppScratchForFlowControl, replicaStateInfoMap)
 	// The scratch map is used only while in this Ready handling call. Stop
 	// referencing the entry data from the content of this map, after the call is
 	// done. Not doing so could result in holding entry data for extended periods
@@ -1052,8 +1049,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, nil
 	}
 
-	r.traceMessageSends(outboundMsgs, "sending messages")
-	r.sendRaftMessages(ctx, outboundMsgs, pausedFollowers, true /* willDeliverLocal */)
+	r.traceMessageSends(ready.Messages, "sending messages")
+	r.sendRaftMessages(ctx, ready.Messages, pausedFollowers, true /* willDeliverLocal */)
 
 	// Load the committed entries to be applied after releasing Replica.mu, to
 	// ensure that we don't have IO under this narrow/lightweight mutex. The
@@ -1130,13 +1127,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	refreshReason := noReason
 
 	state := r.asLogStorage().stateRaftMuLocked()
-	if hasMsg(msgStorageAppend) {
-		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
+	if app := ready.StorageAppend; !app.Empty() {
 		cb := (*replicaSyncCallback)(r)
 
-		// Leadership changes, if any, are communicated through MsgStorageAppends.
-		// Check if that's the case here.
-		if hs := app.HardState(); !raft.IsEmptyHardState(hs) && leaderID != roachpb.ReplicaID(hs.Lead) {
+		// Leadership changes, if any, are communicated through StorageAppend. Check
+		// if that's the case here.
+		if hs := app.HardState; !raft.IsEmptyHardState(hs) && leaderID != roachpb.ReplicaID(hs.Lead) {
 			// Refresh pending commands if the Raft leader has changed. This is
 			// usually the first indication we have of a new leader on a restarted
 			// node.
@@ -1190,7 +1186,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			defer releaseMergeLock()
 
 			stats.tSnapBegin = crtime.NowMono()
-			if err := r.applySnapshot(ctx, inSnap, snap, app.HardState(), subsumedRepls); err != nil {
+			if err := r.applySnapshot(ctx, inSnap, snap, app.HardState, subsumedRepls); err != nil {
 				return stats, errors.Wrap(err, "while applying snapshot")
 			}
 			for _, msg := range app.Responses {
@@ -1225,7 +1221,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				refreshReason = reasonSnapshotApplied
 			}
 
-			cb.OnSnapSync(ctx, app.OnDone())
+			cb.OnSnapSync(ctx, app.Responses)
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if app.Commit != 0 && !r.IsInitialized() {
@@ -1250,7 +1246,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
-			r.mu.raftTracer.MaybeTraceAppend(ready.StorageAppend)
+			r.mu.raftTracer.MaybeTraceAppend(app)
 			if state, err = r.asLogStorage().appendRaftMuLocked(ctx, app, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1390,35 +1386,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 	return stats, nil
-}
-
-// hasMsg returns whether the provided raftpb.Message is present.
-// It serves as a poor man's Optional[raftpb.Message].
-func hasMsg(m raftpb.Message) bool { return m.Type != 0 }
-
-// splitLocalStorageMsgs filters out local storage messages from the provided
-// message slice and returns them separately.
-func splitLocalStorageMsgs(
-	msgs []raftpb.Message,
-) (otherMsgs []raftpb.Message, msgStorageAppend raftpb.Message) {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		switch msgs[i].Type {
-		case raftpb.MsgStorageAppend:
-			if hasMsg(msgStorageAppend) {
-				panic("two MsgStorageAppend")
-			}
-			msgStorageAppend = msgs[i]
-		default:
-			// Local storage messages will always be at the end of the messages slice,
-			// so we can terminate iteration as soon as we reach any other message
-			// type. This is leaking an implementation detail from pkg/raft which may
-			// not always hold, but while it does, we use it for convenience and
-			// assert against it changing in sendRaftMessages.
-			return msgs[:i+1], msgStorageAppend
-		}
-	}
-	// Only local storage messages.
-	return nil, msgStorageAppend
 }
 
 // maybeFatalOnRaftReadyErr will fatal if err is neither nil nor

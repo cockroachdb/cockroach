@@ -75,6 +75,11 @@ func (m *StorageAppend) Empty() bool {
 		len(m.Entries) == 0 && m.Snapshot == nil && len(m.Responses) == 0
 }
 
+// MustSync returns true if this storage write must be synced.
+func (m *StorageAppend) MustSync() bool {
+	return len(m.Responses) != 0
+}
+
 // NeedAck returns true if the RawNode wants to be notified after the writes are
 // durable on the log storage.
 func (m *StorageAppend) NeedAck() bool {
