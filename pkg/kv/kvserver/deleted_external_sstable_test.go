@@ -317,6 +317,12 @@ func (etc *externalSSTTestCluster) mergeHelper(ctx context.Context, key roachpb.
 	return etc.db.Run(ctx, &b)
 }
 
+// adminSplitArgs issues an AdminSplitRequest for the provided key.
+func (etc *externalSSTTestCluster) splitHelper(ctx context.Context, key roachpb.Key) error {
+	_, _, err := etc.tc.SplitRange(key)
+	return err
+}
+
 // exciseHelper excises the provided key range from the store.
 func (etc *externalSSTTestCluster) exciseHelper(
 	ctx context.Context, start roachpb.Key, end roachpb.Key,
@@ -363,8 +369,7 @@ func (etc *externalSSTTestCluster) requireNotFoundError(t *testing.T, err error)
 // TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST tests that general
 // operations (put, get, scan, delete, merge) work as expected on a range
 // that has an external SSTable linked to a deleted file.
-// TODO(ibrahim): Add split tests once we allow the EndTxn to abort during the
-// splitTrigger.
+// TODO(ibrahim): condense the test into fewer subtests.
 //
 // Test setup can be visualized in the following diagram:
 /*
@@ -393,7 +398,6 @@ Keyspace:    |----------------|----------------|----------------|
  |           |  b-00000...    |  e-00000...    |  h-00000...    |
 Time         |  c-00000...    |  f-00000...    |  ...           |
 */
-
 func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -750,6 +754,77 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 				// Make sure that the ranges have been merged correctly.
 				require.NoError(t, etc.checkKeysPointToSameRangeDesc(t, "a", "d", "g"))
+			},
+		},
+		{
+			name: "split with deleted span at range boundaries",
+			// Original ranges: [a, d), [d, g), [g, z).
+			// The deleted span is:     [d, g).
+			deletedExternalSpanStart: roachpb.Key("d"),
+			deletedExternalSpanEnd:   roachpb.Key("g"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Splits that operate on the deleted SSTable should fail.
+				etc.requireNotFoundError(t, etc.splitHelper(ctx, roachpb.Key("e-15000")))
+
+				// Splits that don't operate on the deleted SSTable should
+				// succeed.
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("b")))
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("h")))
+
+				// If we excise the problematic key range, operations should
+				// work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("d"), roachpb.Key("g")))
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("e-15000")))
+			},
+		},
+		{
+			name: "split with deleted span more than range boundaries",
+			// Original ranges: [a, d), [d, g), [g, z).
+			// The deleted span is [c,            h).
+			deletedExternalSpanStart: roachpb.Key("c"),
+			deletedExternalSpanEnd:   roachpb.Key("h"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Splits that operate on the deleted SSTable should fail.
+				etc.requireNotFoundError(t, etc.splitHelper(ctx, roachpb.Key("d-15000")))
+
+				// If we excise the problematic key range, operations should
+				//work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("c"), roachpb.Key("h")))
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("d-15000")))
+			},
+		},
+		{
+			name: "split with deleted span less than range boundaries",
+			// Original ranges: [a,   d), [d,     g), [g,   z).
+			// The deleted span is:         [e,f).
+			deletedExternalSpanStart: roachpb.Key("e"),
+			deletedExternalSpanEnd:   roachpb.Key("f"),
+			testFunc: func(
+				t *testing.T,
+				ctx context.Context,
+				etc *externalSSTTestCluster,
+			) {
+				// Splits that operate on the deleted SSTable should fail.
+				etc.requireNotFoundError(t, etc.splitHelper(ctx, roachpb.Key("d-15000")))
+				etc.requireNotFoundError(t, etc.splitHelper(ctx, roachpb.Key("e-15000")))
+				etc.requireNotFoundError(t, etc.splitHelper(ctx, roachpb.Key("f-15000")))
+
+				// Splits that don't operate on the deleted SSTable should
+				// succeed.
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("b")))
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("h")))
+
+				// If we excise the problematic key range, operations should work again.
+				require.NoError(t, etc.exciseHelper(ctx, roachpb.Key("e"), roachpb.Key("f")))
+				require.NoError(t, etc.splitHelper(ctx, roachpb.Key("e-15000")))
 			},
 		},
 	}
