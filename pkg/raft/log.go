@@ -356,11 +356,15 @@ func (l *raftLog) hasNextOrInProgressSnapshot() bool {
 	return l.unstable.snapshot != nil
 }
 
-func (l *raftLog) snapshot() (pb.Snapshot, error) {
-	if l.unstable.snapshot != nil {
-		return *l.unstable.snapshot, nil
+func (l *raftLog) snapshot() (*pb.Snapshot, error) {
+	if snap := l.unstable.snapshot; snap != nil {
+		return snap, nil
 	}
-	return l.storage.Snapshot()
+	snap, err := l.storage.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+	return &snap, nil
 }
 
 func (l *raftLog) compacted() uint64 {
