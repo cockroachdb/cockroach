@@ -1546,3 +1546,122 @@ func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 
 	return metrics
 }
+
+// GaugeHybrid is a collector for gauges that supports both labeled and unlabeled values for a given metric.
+// The unlabeled values are persisted in TSDB and labeled values are not persisted in TSDB.
+// The prometheus export will contain either the unlabeled value or the labeled value, but not both.
+// This uses prometheus.GaugeVec and Gauge under the hood. The contained gauges are not aggregated;
+// see aggmetric for a metric that allows keeping labeled submetrics while recording their
+// aggregation in the tsdb.
+type GaugeHybrid struct {
+	Metadata
+	vector
+	labeledPromVec  *prometheus.GaugeVec
+	gauge           *Gauge
+	isLabeledMetric bool
+	// ReInitialiseMetric function is used to re-initialize the metric when the metric definition is toggled
+	// between labeled and unlabeled values during runtime.
+	ReInitialiseMetric func(labelSchema []string) error
+}
+
+// NewGaugeHybrid creates a new Gauge and GaugeVec containing labeled gauges to be
+// exported to an external collector based on isLabeledMetrics. The labeled values are not persisted
+// by the internal TSDB, nor are the metrics in the vector aggregated in any way.
+// The unlabeled values are persisted in the internal TSDB.
+func NewGaugeHybrid(metadata Metadata, labelSchema []string) *GaugeHybrid {
+	vec := newVector(labelSchema)
+	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, vec.orderedLabelNames)
+
+	gauge := NewGauge(metadata)
+
+	return &GaugeHybrid{
+		Metadata:        metadata,
+		vector:          vec,
+		labeledPromVec:  promVec,
+		gauge:           gauge,
+		isLabeledMetric: len(labelSchema) > 0,
+	}
+}
+
+// CounterHybrid is a collector for counters that supports both labeled and unlabeled values for a given metric.
+// The unlabeled values are persisted in TSDB and labeled values are not persisted in TSDB.
+// The prometheus export will contain either the unlabeled value or the labeled value, but not both.
+// This uses prometheus.CounterVec and Counter under the hood. The contained counters are not aggregated;
+// see aggmetric for a metric that allows keeping labeled submetrics while recording their
+// aggregation in the tsdb.
+type CounterHybrid struct {
+	Metadata
+	vector
+	labeledPromVec  *prometheus.CounterVec
+	counter         *Counter
+	isLabeledMetric bool
+	// ReInitialiseMetric function is used to re-initialize the metric when the metric definition is toggled
+	// between labeled and unlabeled values during runtime.
+	ReInitialiseMetric func(labelSchema []string) error
+}
+
+// NewCounterHybrid creates a new Counter and CounterVec containing labeled counters to be
+// exported to an external collector based on isLabeledMetrics. The labeled values are not persisted
+// by the internal TSDB, nor are the metrics in the vector aggregated in any way.
+// The unlabeled values are persisted in the internal TSDB.
+func NewCounterHybrid(metadata Metadata, labelSchema []string) *CounterHybrid {
+	vec := newVector(labelSchema)
+	promVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, vec.orderedLabelNames)
+
+	counter := NewCounter(metadata)
+
+	return &CounterHybrid{
+		Metadata:        metadata,
+		vector:          vec,
+		labeledPromVec:  promVec,
+		counter:         counter,
+		isLabeledMetric: len(labelSchema) > 0,
+	}
+}
+
+// HistogramHybrid is a collector for histograms that supports both labeled and unlabeled values for a given metric.
+// The unlabeled values are persisted in TSDB and labeled values are not persisted in TSDB.
+// The prometheus export will contain either the unlabeled value or the labeled value, but not both.
+// This uses prometheus.HistogramVec and IHistogram under the hood. The contained histograms are not aggregated;
+// see aggmetric for a metric that allows keeping labeled submetrics while recording their
+// aggregation in the tsdb.
+type HistogramHybrid struct {
+	Metadata
+	vector
+	labeledPromVec  *prometheus.HistogramVec
+	histogram       IHistogram
+	isLabeledMetric bool
+	// ReInitialiseMetric function is used to re-initialize the metric when the metric definition is toggled
+	// between labeled and unlabeled values during runtime.
+	ReInitialiseMetric func(labelSchema []string) error
+}
+
+// NewHistogramHybrid creates a new Histogram and HistogramVec containing labeled histograms to be
+// exported to an external collector based on isLabeledMetrics. The labeled values are not persisted
+// by the internal TSDB, nor are the metrics in the vector aggregated in any way.
+// The unlabeled values are persisted in the internal TSDB.
+func NewHistogramHybrid(options HistogramOptions, metadata Metadata, labelSchema []string) *HistogramHybrid {
+	vec := newVector(labelSchema)
+	opts := prometheus.HistogramOpts{
+		Buckets: options.BucketConfig.GetBucketsFromBucketConfig(),
+		Name:    options.Metadata.Name,
+		Help:    options.Metadata.Help,
+	}
+	promVec := prometheus.NewHistogramVec(opts, vec.orderedLabelNames)
+
+	histogram := NewHistogram(options)
+
+	return &HistogramHybrid{
+		Metadata:        metadata,
+		vector:          vec,
+		labeledPromVec:  promVec,
+		histogram:       histogram,
+		isLabeledMetric: len(labelSchema) > 0,
+	}
+}
