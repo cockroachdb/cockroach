@@ -114,7 +114,7 @@ func (c MembershipStatus) String() string {
 // This returns an error if the transition is invalid, and false if the
 // transition is unnecessary (since it would be a no-op).
 func ValidateTransition(old Liveness, newStatus MembershipStatus) (bool, error) {
-	if (old == Liveness{}) {
+	if (old.Equal(Liveness{})) {
 		return false, errors.AssertionFailedf("invalid old liveness record; found to be empty")
 	}
 
