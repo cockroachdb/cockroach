@@ -34,6 +34,17 @@ func (f *Factory) Ctx() context.Context {
 	return f.wrappedFactory.Ctx()
 }
 
+// EnableCompilation implements the Factory interface.
+func (f *Factory) EnableCompilation() {}
+
+// DisableCompilation implements the Factory interface.
+func (f *Factory) DisableCompilation() {}
+
+// Compiled implements the Factory interface.
+func (f *Factory) Compiled() exec.CompiledPlan {
+	return nil
+}
+
 // Node in a plan tree; records the operation and arguments passed to the
 // factory method and provides access to the corresponding exec.Node (produced
 // by the wrapped factory).

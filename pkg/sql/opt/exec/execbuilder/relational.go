@@ -964,7 +964,7 @@ func (b *Builder) buildPlaceholderScan(
 	scan *memo.PlaceholderScanExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
 	if scan.Constraint != nil || scan.InvertedConstraint != nil {
-		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("placeholder scan cannot have constraints")
 	}
 
 	md := b.mem.Metadata()
@@ -981,48 +981,34 @@ func (b *Builder) buildPlaceholderScan(
 	}
 	var columns constraint.Columns
 	columns.Init(spanColumns)
-	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
 
-	values := make([]tree.Datum, len(scan.Span))
+	values := make([]tree.TypedExpr, len(scan.Span))
 	for i, expr := range scan.Span {
 		// The expression is either a placeholder or a constant.
 		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
-			if err != nil {
-				return execPlan{}, colOrdMap{}, err
-			}
-			values[i] = val
+			values[i] = p.Value
 		} else {
 			values[i] = memo.ExtractConstDatum(expr)
 		}
 	}
 
-	key := constraint.MakeCompositeKey(values...)
-	var span constraint.Span
-	span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-	var spans constraint.Spans
-	spans.InitSingleSpan(&span)
-
-	var c constraint.Constraint
-	c.Init(&keyCtx, &spans)
-
-	private := scan.ScanPrivate
-	private.SetConstraint(b.ctx, b.evalCtx, &c)
-
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	reqOrdering, err := reqOrdering(scan, outputCols)
-	if err != nil {
-		return execPlan{}, colOrdMap{}, err
+	if !scan.ProvidedPhysical().Ordering.Empty() {
+		return execPlan{}, colOrdMap{},
+			errors.AssertionFailedf("placeholder scan does not support required orderings")
 	}
-	root, err := b.factory.ConstructScan(
+	root, err := b.factory.ConstructPlaceholderScan(
 		tab,
 		tab.Index(scan.Index),
-		params,
-		reqOrdering,
+		exec.PlaceholderScanParams{
+			NeededCols:  params.NeededCols,
+			SpanValues:  values,
+			SpanColumns: columns,
+		},
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
