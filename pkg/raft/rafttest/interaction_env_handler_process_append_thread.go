@@ -60,7 +60,7 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	env.Output.WriteString("Processing:\n")
 	// TODO(pav-kv): print MsgStorageAppend directly, without converting.
 	env.Output.WriteString(raft.DescribeMessage(m.ToMessage(raftpb.PeerID(idx+1)), defaultEntryFormatter) + "\n")
-	if err := processAppend(n, m.HardState, m.Entries, m.Snapshot); err != nil {
+	if err := processAppend(n, m); err != nil {
 		return err
 	}
 
@@ -72,20 +72,20 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	return nil
 }
 
-func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap *raftpb.Snapshot) error {
+func processAppend(n *Node, app raft.StorageAppend) error {
 	// TODO(tbg): the order of operations here is not necessarily safe. See:
 	// https://github.com/etcd-io/etcd/pull/10861
 	s := n.Storage
-	if !raft.IsEmptyHardState(st) {
-		if err := s.SetHardState(st); err != nil {
+	if hs := app.HardState; !raft.IsEmptyHardState(hs) {
+		if err := s.SetHardState(hs); err != nil {
 			return err
 		}
 	}
-	if snap != nil {
-		if len(ents) > 0 {
+	if snap := app.Snapshot; snap != nil {
+		if len(app.Entries) > 0 {
 			return errors.New("can't apply snapshot and entries at the same time")
 		}
 		return s.ApplySnapshot(*snap)
 	}
-	return s.Append(ents)
+	return s.Append(app.Entries)
 }
