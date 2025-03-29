@@ -273,13 +273,20 @@ $input
 =>
 (Exists $input $existsPrivate)
 
-# EliminateConstValuesSubquery replaces a subquery with a constant value if the
+# EliminateConstValueSubquery replaces a subquery with a constant value if the
 # subquery's input is a single-row, single-column Values expression with a
 # constant value.
 [EliminateConstValueSubquery, Normalize]
 (Subquery (Values [ (Tuple [ $value:(Const) ]) ]))
 =>
 $value
+
+# EliminateUDFCallSubquery replaces a subquery with a udf call if the subquery's
+# input is a single-row, single-column Values expression with a udf call.
+[EliminateUDFCallSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $udf:(UDFCall) ]) ]))
+=>
+$udf
 
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions

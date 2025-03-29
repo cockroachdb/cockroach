@@ -584,29 +584,21 @@ values
                                │    ├── gt
                                │    │    ├── function: random
                                │    │    └── const: 0.5
-                               │    └── subquery
+                               │    └── udf: nested
                                │         ├── tail-call
-                               │         └── values
-                               │              └── tuple
-                               │                   └── udf: nested
-                               │                        ├── tail-call
-                               │                        └── body
-                               │                             └── values
-                               │                                  └── tuple
-                               │                                       └── const: 1
-                               └── subquery
+                               │         └── body
+                               │              └── values
+                               │                   └── tuple
+                               │                        └── const: 1
+                               └── udf: nested_arg
                                     ├── tail-call
-                                    └── values
-                                         └── tuple
-                                              └── udf: nested_arg
-                                                   ├── tail-call
-                                                   ├── args
-                                                   │    └── variable: x
-                                                   ├── params: x
-                                                   └── body
-                                                        └── values
-                                                             └── tuple
-                                                                  └── variable: x
+                                    ├── args
+                                    │    └── variable: x
+                                    ├── params: x
+                                    └── body
+                                         └── values
+                                              └── tuple
+                                                   └── variable: x
 
 # Tail-call reachable from both branches of an IF statement.
 exec-ddl
@@ -747,16 +739,12 @@ values
                                                    │                        │    ├── eq
                                                    │                        │    │    ├── variable: i
                                                    │                        │    │    └── const: 5
-                                                   │                        │    └── subquery
+                                                   │                        │    └── udf: nested
                                                    │                        │         ├── tail-call
-                                                   │                        │         └── values
-                                                   │                        │              └── tuple
-                                                   │                        │                   └── udf: nested
-                                                   │                        │                        ├── tail-call
-                                                   │                        │                        └── body
-                                                   │                        │                             └── values
-                                                   │                        │                                  └── tuple
-                                                   │                        │                                       └── const: 1
+                                                   │                        │         └── body
+                                                   │                        │              └── values
+                                                   │                        │                   └── tuple
+                                                   │                        │                        └── const: 1
                                                    │                        └── subquery
                                                    │                             ├── tail-call
                                                    │                             └── values
@@ -770,44 +758,36 @@ values
                                                    │                                                 │              ├── variable: i
                                                    │                                                 │              └── const: 1
                                                    │                                                 └── projections
-                                                   │                                                      └── subquery
+                                                   │                                                      └── udf: stmt_loop_5
                                                    │                                                           ├── tail-call
-                                                   │                                                           └── values
-                                                   │                                                                └── tuple
-                                                   │                                                                     └── udf: stmt_loop_5
-                                                   │                                                                          ├── tail-call
-                                                   │                                                                          ├── args
-                                                   │                                                                          │    └── variable: i
-                                                   │                                                                          └── recursive-call
-                                                   └── subquery
+                                                   │                                                           ├── args
+                                                   │                                                           │    └── variable: i
+                                                   │                                                           └── recursive-call
+                                                   └── udf: loop_exit_1
                                                         ├── tail-call
-                                                        └── values
-                                                             └── tuple
-                                                                  └── udf: loop_exit_1
-                                                                       ├── tail-call
-                                                                       ├── args
-                                                                       │    └── variable: i
-                                                                       ├── params: i
-                                                                       └── body
-                                                                            └── values
-                                                                                 └── tuple
-                                                                                      └── udf: _end_of_function_2
-                                                                                           ├── tail-call
-                                                                                           ├── args
-                                                                                           │    └── variable: i
-                                                                                           ├── params: i
-                                                                                           └── body
-                                                                                                ├── values
-                                                                                                │    └── tuple
-                                                                                                │         └── function: crdb_internal.plpgsql_raise
-                                                                                                │              ├── const: 'ERROR'
-                                                                                                │              ├── const: 'control reached end of function without RETURN'
-                                                                                                │              ├── const: ''
-                                                                                                │              ├── const: ''
-                                                                                                │              └── const: '2F005'
-                                                                                                └── values
-                                                                                                     └── tuple
-                                                                                                          └── null
+                                                        ├── args
+                                                        │    └── variable: i
+                                                        ├── params: i
+                                                        └── body
+                                                             └── values
+                                                                  └── tuple
+                                                                       └── udf: _end_of_function_2
+                                                                            ├── tail-call
+                                                                            ├── args
+                                                                            │    └── variable: i
+                                                                            ├── params: i
+                                                                            └── body
+                                                                                 ├── values
+                                                                                 │    └── tuple
+                                                                                 │         └── function: crdb_internal.plpgsql_raise
+                                                                                 │              ├── const: 'ERROR'
+                                                                                 │              ├── const: 'control reached end of function without RETURN'
+                                                                                 │              ├── const: ''
+                                                                                 │              ├── const: ''
+                                                                                 │              └── const: '2F005'
+                                                                                 └── values
+                                                                                      └── tuple
+                                                                                           └── null
 
 # Tail-call within nested PL/pgSQL blocks.
 exec-ddl
@@ -855,47 +835,39 @@ values
                                                    │    ├── lt
                                                    │    │    ├── function: random
                                                    │    │    └── const: 0.5
-                                                   │    └── subquery
+                                                   │    └── udf: nested
                                                    │         ├── tail-call
-                                                   │         └── values
-                                                   │              └── tuple
-                                                   │                   └── udf: nested
-                                                   │                        ├── tail-call
-                                                   │                        └── body
-                                                   │                             └── values
-                                                   │                                  └── tuple
-                                                   │                                       └── const: 1
-                                                   └── subquery
+                                                   │         └── body
+                                                   │              └── values
+                                                   │                   └── tuple
+                                                   │                        └── const: 1
+                                                   └── udf: stmt_if_7
                                                         ├── tail-call
-                                                        └── values
-                                                             └── tuple
-                                                                  └── udf: stmt_if_7
-                                                                       ├── tail-call
-                                                                       └── body
-                                                                            └── values
-                                                                                 └── tuple
-                                                                                      └── udf: _stmt_raise_9
-                                                                                           ├── tail-call
-                                                                                           └── body
-                                                                                                ├── values
-                                                                                                │    └── tuple
-                                                                                                │         └── function: crdb_internal.plpgsql_raise
-                                                                                                │              ├── const: 'NOTICE'
-                                                                                                │              ├── const: 'bar'
-                                                                                                │              ├── const: ''
-                                                                                                │              ├── const: ''
-                                                                                                │              └── const: '00000'
-                                                                                                └── values
-                                                                                                     └── tuple
-                                                                                                          └── udf: nested_arg
-                                                                                                               ├── tail-call
-                                                                                                               ├── args
-                                                                                                               │    └── const: 100
-                                                                                                               ├── params: x
-                                                                                                               └── body
-                                                                                                                    └── values
-                                                                                                                         └── tuple
-                                                                                                                              └── variable: x
+                                                        └── body
+                                                             └── values
+                                                                  └── tuple
+                                                                       └── udf: _stmt_raise_9
+                                                                            ├── tail-call
+                                                                            └── body
+                                                                                 ├── values
+                                                                                 │    └── tuple
+                                                                                 │         └── function: crdb_internal.plpgsql_raise
+                                                                                 │              ├── const: 'NOTICE'
+                                                                                 │              ├── const: 'bar'
+                                                                                 │              ├── const: ''
+                                                                                 │              ├── const: ''
+                                                                                 │              └── const: '00000'
+                                                                                 └── values
+                                                                                      └── tuple
+                                                                                           └── udf: nested_arg
+                                                                                                ├── tail-call
+                                                                                                ├── args
+                                                                                                │    └── const: 100
+                                                                                                ├── params: x
+                                                                                                └── body
+                                                                                                     └── values
+                                                                                                          └── tuple
+                                                                                                               └── variable: x
 
 # Tail-call within an exception handler.
 exec-ddl
