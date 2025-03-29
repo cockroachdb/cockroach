@@ -32,9 +32,8 @@ stabilize
   Messages:
   1->2 MsgVote Term:1 Log:1/10
   1->3 MsgVote Term:1 Log:1/10
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Responses:[
-    1->1 MsgVoteResp Term:1 Log:0/0
-  ]
+  OnSync:
+  1->1 MsgVoteResp Term:1 Log:0/0
 > 2 receiving messages
   1->2 MsgVote Term:1 Log:1/10
   INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
@@ -55,17 +54,13 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Responses:[
-    2->1 MsgVoteResp Term:1 Log:0/0
-  ]
+  OnSync:
+  2->1 MsgVoteResp Term:1 Log:0/0
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:10 Vote:1 Responses:[
-    3->1 MsgVoteResp Term:1 Log:0/0
-  ]
+  OnSync:
+  3->1 MsgVoteResp Term:1 Log:0/0
 > 1 receiving messages
   1->1 MsgVoteResp Term:1 Log:0/0
   INFO 1 received MsgVoteResp from 1 at term 1
@@ -97,11 +92,10 @@ stabilize
   1->3 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
   1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
-  1->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
-    1->1 MsgAppResp Term:1 Log:0/11 Commit:10
-    1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
-  ]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
@@ -120,23 +114,19 @@ stabilize
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
-    2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-    2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
-  ]
+  OnSync:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
   Entries:
   1/11 EntryNormal ""
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:1/11 Commit:10 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/11 EntryNormal ""] Responses:[
-    3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-    3->1 MsgAppResp Term:1 Log:0/11 Commit:10
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
-  ]
+  OnSync:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 receiving messages
   1->1 MsgAppResp Term:1 Log:0/11 Commit:10
   1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
@@ -171,7 +161,6 @@ stabilize
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11
   1->3 MsgApp Term:1 Log:1/11 Commit:11
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/11 Commit:11
 > 3 receiving messages
@@ -187,18 +176,14 @@ stabilize
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Committed: (10,11]
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    2->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Committed: (10,11]
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
 > 2 processing append thread
   Processing:
   2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:11 Vote:1 Lead:1 LeadEpoch:1
@@ -232,10 +217,9 @@ process-ready 1 2 3
   Messages:
   1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "prop_1"]
   1->3 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "prop_1"]
-  1->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "prop_1"] Responses:[
-    1->1 MsgAppResp Term:1 Log:0/12 Commit:11
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
-  ]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/12 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -260,20 +244,16 @@ process-ready 1 2 3
   Ready:
   Entries:
   1/12 EntryNormal "prop_1"
-  Messages:
-  2->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "prop_1"] Responses:[
-    2->1 MsgAppResp Term:1 Log:0/12 Commit:11
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/12
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/12 Commit:11
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/12
 > 3 handling Ready
   Ready:
   Entries:
   1/12 EntryNormal "prop_1"
-  Messages:
-  3->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "prop_1"] Responses:[
-    3->1 MsgAppResp Term:1 Log:0/12 Commit:11
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:1/12
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/12 Commit:11
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/12
 
 propose 1 prop_2
 ----
@@ -288,10 +268,9 @@ process-ready 1 2 3
   Messages:
   1->2 MsgApp Term:1 Log:1/12 Commit:11 Entries:[1/13 EntryNormal "prop_2"]
   1->3 MsgApp Term:1 Log:1/12 Commit:11 Entries:[1/13 EntryNormal "prop_2"]
-  1->AppendThread MsgStorageAppend Term:0 Log:1/13 Entries:[1/13 EntryNormal "prop_2"] Responses:[
-    1->1 MsgAppResp Term:1 Log:0/13 Commit:11
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:1/13
-  ]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/13 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/13
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -310,20 +289,16 @@ process-ready 1 2 3
   Ready:
   Entries:
   1/13 EntryNormal "prop_2"
-  Messages:
-  2->AppendThread MsgStorageAppend Term:0 Log:1/13 Entries:[1/13 EntryNormal "prop_2"] Responses:[
-    2->1 MsgAppResp Term:1 Log:0/13 Commit:11
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/13
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:11
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/13
 > 3 handling Ready
   Ready:
   Entries:
   1/13 EntryNormal "prop_2"
-  Messages:
-  3->AppendThread MsgStorageAppend Term:0 Log:1/13 Entries:[1/13 EntryNormal "prop_2"] Responses:[
-    3->1 MsgAppResp Term:1 Log:0/13 Commit:11
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:1/13
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/13 Commit:11
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/13
 
 process-append-thread 1 2 3
 ----
@@ -378,10 +353,9 @@ process-ready 1 2 3
   1->3 MsgApp Term:1 Log:1/13 Commit:12
   1->2 MsgApp Term:1 Log:1/13 Commit:12 Entries:[1/14 EntryNormal "prop_3"]
   1->3 MsgApp Term:1 Log:1/13 Commit:12 Entries:[1/14 EntryNormal "prop_3"]
-  1->AppendThread MsgStorageAppend Term:1 Log:1/14 Commit:12 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/14 EntryNormal "prop_3"] Responses:[
-    1->1 MsgAppResp Term:1 Log:0/14 Commit:12
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:1/14
-  ]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/14 Commit:12
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/14
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -404,24 +378,20 @@ process-ready 1 2 3
   Entries:
   1/14 EntryNormal "prop_3"
   Committed: (11,12]
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/14 Commit:12 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/14 EntryNormal "prop_3"] Responses:[
-    2->1 MsgAppResp Term:1 Log:0/13 Commit:12
-    2->1 MsgAppResp Term:1 Log:0/14 Commit:12
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/14
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/13 Commit:12
+  2->1 MsgAppResp Term:1 Log:0/14 Commit:12
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/14
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   Entries:
   1/14 EntryNormal "prop_3"
   Committed: (11,12]
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:1/14 Commit:12 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/14 EntryNormal "prop_3"] Responses:[
-    3->1 MsgAppResp Term:1 Log:0/13 Commit:12
-    3->1 MsgAppResp Term:1 Log:0/14 Commit:12
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:1/14
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/13 Commit:12
+  3->1 MsgAppResp Term:1 Log:0/14 Commit:12
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/14
 
 process-append-thread 1 2 3
 ----
@@ -470,10 +440,9 @@ process-ready 1 2 3
   1->3 MsgApp Term:1 Log:1/14 Commit:13
   1->2 MsgApp Term:1 Log:1/14 Commit:13 Entries:[1/15 EntryNormal "prop_4"]
   1->3 MsgApp Term:1 Log:1/14 Commit:13 Entries:[1/15 EntryNormal "prop_4"]
-  1->AppendThread MsgStorageAppend Term:1 Log:1/15 Commit:13 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/15 EntryNormal "prop_4"] Responses:[
-    1->1 MsgAppResp Term:1 Log:0/15 Commit:13
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:1/15
-  ]
+  OnSync:
+  1->1 MsgAppResp Term:1 Log:0/15 Commit:13
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/15
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -496,24 +465,20 @@ process-ready 1 2 3
   Entries:
   1/15 EntryNormal "prop_4"
   Committed: (12,13]
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/15 Commit:13 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/15 EntryNormal "prop_4"] Responses:[
-    2->1 MsgAppResp Term:1 Log:0/14 Commit:13
-    2->1 MsgAppResp Term:1 Log:0/15 Commit:13
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:1/15
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/14 Commit:13
+  2->1 MsgAppResp Term:1 Log:0/15 Commit:13
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/15
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:13 Lead:1 LeadEpoch:1
   Entries:
   1/15 EntryNormal "prop_4"
   Committed: (12,13]
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:1/15 Commit:13 Vote:1 Lead:1 LeadEpoch:1 Entries:[1/15 EntryNormal "prop_4"] Responses:[
-    3->1 MsgAppResp Term:1 Log:0/14 Commit:13
-    3->1 MsgAppResp Term:1 Log:0/15 Commit:13
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:1/15
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/14 Commit:13
+  3->1 MsgAppResp Term:1 Log:0/15 Commit:13
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/15
 
 process-append-thread 1 2 3
 ----
@@ -570,7 +535,6 @@ process-ready 1 2 3
   Messages:
   1->2 MsgApp Term:1 Log:1/15 Commit:14
   1->3 MsgApp Term:1 Log:1/15 Commit:14
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:14 Vote:1 Lead:1 LeadEpoch:1
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -589,18 +553,14 @@ process-ready 1 2 3
   Ready:
   HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:1
   Committed: (13,14]
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:14 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    2->1 MsgAppResp Term:1 Log:0/15 Commit:14
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/15 Commit:14
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:14 Lead:1 LeadEpoch:1
   Committed: (13,14]
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:14 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    3->1 MsgAppResp Term:1 Log:0/15 Commit:14
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/15 Commit:14
 
 process-append-thread 1 2 3
 ----
@@ -657,7 +617,6 @@ process-ready 1 2 3
   Messages:
   1->2 MsgApp Term:1 Log:1/15 Commit:15
   1->3 MsgApp Term:1 Log:1/15 Commit:15
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:15 Vote:1 Lead:1 LeadEpoch:1
 > 2 handling Ready
   <empty Ready>
 > 3 handling Ready
@@ -676,18 +635,14 @@ process-ready 1 2 3
   Ready:
   HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:1
   Committed: (14,15]
-  Messages:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:15 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    2->1 MsgAppResp Term:1 Log:0/15 Commit:15
-  ]
+  OnSync:
+  2->1 MsgAppResp Term:1 Log:0/15 Commit:15
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:15 Lead:1 LeadEpoch:1
   Committed: (14,15]
-  Messages:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:15 Vote:1 Lead:1 LeadEpoch:1 Responses:[
-    3->1 MsgAppResp Term:1 Log:0/15 Commit:15
-  ]
+  OnSync:
+  3->1 MsgAppResp Term:1 Log:0/15 Commit:15
 
 process-append-thread 2 3
 ----

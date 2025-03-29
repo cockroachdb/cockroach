@@ -178,6 +178,13 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 			buf.WriteByte('\n')
 		}
 	}
+	if len(rd.Responses) > 0 {
+		buf.WriteString("OnSync:\n")
+		for _, msg := range rd.Responses {
+			fmt.Fprint(&buf, DescribeMessage(msg, f))
+			buf.WriteByte('\n')
+		}
+	}
 	if buf.Len() > 0 {
 		return fmt.Sprintf("Ready:\n%s", buf.String())
 	}

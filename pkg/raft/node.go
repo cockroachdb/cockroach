@@ -101,6 +101,30 @@ func (m *StorageAppend) ToMessage(self pb.PeerID) pb.Message {
 	}
 }
 
+// SendAfterSync returns the messages to send after the write is synced. This
+// excludes self-addressed messages of this RawNode.
+func (m *StorageAppend) SendAfterSync(self pb.PeerID) []pb.Message {
+	var send []pb.Message
+	for _, msg := range m.Responses {
+		if msg.To != self {
+			send = append(send, msg)
+		}
+	}
+	return send
+}
+
+// StepAfterSync returns the messages to step in this RawNode after the write is
+// synced. This only includes self-addressed messages.
+func (m *StorageAppend) StepAfterSync(self pb.PeerID) []pb.Message {
+	var step []pb.Message
+	for _, msg := range m.Responses {
+		if msg.To == self {
+			step = append(step, msg)
+		}
+	}
+	return step
+}
+
 // Ready encapsulates the entries and messages that are ready to read,
 // be saved to stable storage, committed or sent to other peers.
 // All fields in Ready are read-only.

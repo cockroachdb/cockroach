@@ -456,8 +456,7 @@ func SplitMessages(self pb.PeerID, msgs []pb.Message) (send, advance []pb.Messag
 //
 // Only for testing. Will be replaced with a more explicit API.
 func (rn *RawNode) AdvanceHack(rd Ready) {
-	_, advance := SplitMessages(rn.raft.id, rd.Messages)
-	rn.advance(advance)
+	rn.advance(rd.StorageAppend.StepAfterSync(rn.raft.id))
 }
 
 func (rn *RawNode) advance(msgs []pb.Message) {
