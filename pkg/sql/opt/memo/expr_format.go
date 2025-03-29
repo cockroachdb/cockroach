@@ -747,6 +747,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *VectorSearchExpr:
 		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
+		if t.PrefixConstraint != nil {
+			n := tp.Childf("prefix constraint: %s", t.PrefixConstraint.Columns.String())
+			for i := 0; i < t.PrefixConstraint.Spans.Count(); i++ {
+				spanString := t.PrefixConstraint.Spans.Get(i).String()
+				n.Child(cat.MaybeMarkRedactable(spanString, f.RedactableValues))
+			}
+		}
 
 	case *VectorMutationSearchExpr:
 		if t.IsIndexPut {

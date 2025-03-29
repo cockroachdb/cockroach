@@ -1102,9 +1102,9 @@ message InsertSpec {
 message VectorSearchSpec {
   optional sqlbase.IndexFetchSpec fetch_spec = 1 [(gogoproto.nullable) = false];
 
-  // PrefixKey constrains the prefix index columns to a single value. It is
-  // empty for an index without prefix columns.
-  optional bytes prefix_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  // PrefixKeys, if set, contains keys that each constrain every index prefix
+  // column to a single value. It is set IFF the index has prefix columns.
+  repeated bytes prefix_keys = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 
   // QueryVector is the vector to search for.
   repeated float query_vector = 3;

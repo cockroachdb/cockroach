@@ -75,7 +75,7 @@ func TestBuilder_EncodeConstraintKey(t *testing.T) {
 					valDirs[i] = encoding.Descending
 				}
 			}
-			outKey, _, err := b.EncodeConstraintKey(tc.in)
+			outKey, _, err := b.encodeConstraintKey(tc.in)
 			require.NoError(t, err)
 			vals, _ := encoding.PrettyPrintValuesWithTypes(valDirs, outKey)
 			require.Equal(t, tc.out, "/"+strings.Join(vals, "/"))
