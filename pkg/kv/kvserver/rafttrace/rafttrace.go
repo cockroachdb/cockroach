@@ -339,12 +339,27 @@ func (r *RaftTracer) MaybeTrace(m raftpb.Message) []kvserverpb.TracedEntry {
 		return nil
 	}
 	switch m.Type {
-	case raftpb.MsgProp, raftpb.MsgApp, raftpb.MsgStorageAppend:
+	case raftpb.MsgProp, raftpb.MsgApp:
 		return r.traceIfCovered(m)
 	case raftpb.MsgAppResp, raftpb.MsgStorageAppendResp:
 		r.traceIfPast(m)
 	}
 	return nil
+}
+
+// MaybeTraceAppend traces the completion of a raft log append, to all the
+// relevant traced indices.
+// TODO(pav-kv): handle snapshots.
+func (r *RaftTracer) MaybeTraceAppend(app raft.StorageAppend) {
+	// Optimize the common case when there are no traces or entries.
+	if len(app.Entries) == 0 || r.numRegisteredReplica.Load() == 0 {
+		return
+	}
+	from := kvpb.RaftIndex(app.Entries[0].Index)
+	to := kvpb.RaftIndex(app.Entries[len(app.Entries)-1].Index)
+	r.iterCovered(from, to, func(t *traceValue) {
+		t.logf(5, "appended entries [%d-%d] at leader term %d", from, to, app.Mark.Term)
+	})
 }
 
 // MaybeTraceApplying traces the beginning of applying a batch of entries, to
