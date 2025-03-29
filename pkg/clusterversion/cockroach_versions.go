@@ -227,6 +227,10 @@ const (
 
 	V25_2_AddSqlActivityFlushJob
 
+	// V25_2_SQLInstancesAddLocalityAddressList is the migration to add the `locality_address_list`
+	// column to the system.sql_instances table.
+	V25_2_SQLInstancesAddLocalityAddressList
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -278,8 +282,9 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 
 	// v25.2 versions. Internal versions must be even.
-	V25_2_Start:                  {Major: 25, Minor: 1, Internal: 2},
-	V25_2_AddSqlActivityFlushJob: {Major: 25, Minor: 1, Internal: 4},
+	V25_2_Start:                              {Major: 25, Minor: 1, Internal: 2},
+	V25_2_AddSqlActivityFlushJob:             {Major: 25, Minor: 1, Internal: 4},
+	V25_2_SQLInstancesAddLocalityAddressList: {Major: 25, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
