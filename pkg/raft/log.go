@@ -66,20 +66,26 @@ type raftLog struct {
 
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
+	//
+	// Invariant: committed does not regress.
 	committed uint64
 	// applying is the highest log position that the application has
 	// been instructed to apply to its state machine. Some of these
 	// entries may be in the process of applying and have not yet
 	// reached applied.
 	// Use: The field is incremented when accepting a Ready struct.
-	// Invariant: applied <= applying && applying <= committed
+	//
+	// Invariant: applied <= applying <= committed.
+	// Invariant: applying does not regress.
 	applying uint64
 	// applied is the highest log position that the application has
 	// successfully applied to its state machine.
 	// Use: The field is incremented when advancing after the committed
 	// entries in a Ready struct have been applied (either synchronously
 	// or asynchronously).
-	// Invariant: applied <= committed
+	//
+	// Invariant: applied <= committed.
+	// Invariant: applied does not regress.
 	applied uint64
 
 	logger raftlogger.Logger
@@ -286,10 +292,6 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 // entries from the unstable log may be returned; otherwise, only entries known
 // to reside locally on stable storage will be returned.
 func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
-	if l.hasNextOrInProgressSnapshot() {
-		// See comment in hasNextCommittedEnts.
-		return nil
-	}
 	lo, hi := l.applying, l.maxAppliableIndex(allowUnstable) // (lo, hi]
 	if lo >= hi {
 		// Nothing to apply.
@@ -305,26 +307,37 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 // hasNextCommittedEnts returns if there is any available entries for execution.
 // This is a fast check without heavy raftLog.slice() in nextCommittedEnts().
 func (l *raftLog) hasNextCommittedEnts(allowUnstable bool) bool {
-	if l.hasNextOrInProgressSnapshot() {
-		// If we have a snapshot to apply, don't also return any committed
-		// entries. Doing so raises questions about what should be applied
-		// first.
-		return false
-	}
-	lo, hi := l.applying+1, l.maxAppliableIndex(allowUnstable)+1 // [lo, hi)
-	return lo < hi
+	return l.applying < l.maxAppliableIndex(allowUnstable)
 }
 
 // maxAppliableIndex returns the maximum committed index that can be applied.
 // If allowUnstable is true, committed entries from the unstable log can be
 // applied; otherwise, only entries known to reside locally on stable storage
 // can be applied.
+//
+// The maxAppliableIndex never regresses, and is always >= l.applying, assuming
+// allowUnstable does not change from true to false. As of today, this flag is
+// configured statically.
+//
+// If there is a pending snapshot, maxAppliableIndex returns l.applying, i.e.
+// the application of committed entries is paused until the snapshot is applied.
 func (l *raftLog) maxAppliableIndex(allowUnstable bool) uint64 {
-	hi := l.committed
-	if !allowUnstable {
-		hi = min(hi, l.unstable.prev.index)
+	if l.hasNextOrInProgressSnapshot() {
+		// If we have a snapshot to apply, don't return any committed entries. Doing
+		// so raises questions about what should be applied first.
+		//
+		// TODO(pav-kv): the answer to the questions is - the snapshot should be
+		// applied first, and then the entries. The code must make sure that the
+		// overall sequence of "apply" batches is in the increasing order of the
+		// commit index.
+		return l.applying
 	}
-	return hi
+	if allowUnstable {
+		return l.committed
+	}
+	// NB: this returns >= l.applying because l.applying <= prev.index, assuming
+	// that allowUnstable hasn't flipped from true to false.
+	return min(l.committed, l.unstable.prev.index)
 }
 
 // nextUnstableSnapshot returns the snapshot, if present, that is available to
