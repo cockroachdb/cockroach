@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	converter "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -217,10 +218,50 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
 
+	var numWorkers int
+	var omConverterCmd = &cobra.Command{
+		SilenceUsage: true,
+		Use:          "om-converter [yaml file]",
+		Short:        "run one metrics converter that converts stats.json metrics to openmetrics",
+		Long: `Run one metrics converter that converts stats.json metrics to openmetrics
+`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				fmt.Println("Error: File path is required")
+				os.Exit(1)
+			}
+
+			filePath := args[0]
+			yamlContent, err := os.ReadFile(filePath)
+			if err != nil {
+				fmt.Printf("Error reading file: %v\n", err)
+				os.Exit(1)
+			}
+
+			r := makeTestRegistry()
+
+			// actual registering of tests
+			tests.RegisterTests(&r)
+			specs := r.AllTests()
+
+			err = converter.StartProcess(yamlContent, numWorkers, specs)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Printf("Error in process: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Println("Process exited.")
+			return nil
+		},
+	}
+	omConverterCmd.Flags().IntVar(&numWorkers, "workers", 1, "Number of workers")
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(runOperationCmd)
+	rootCmd.AddCommand(omConverterCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
