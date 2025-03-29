@@ -3411,6 +3411,7 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+// TODO update this test
 func TestChangefeedEachColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

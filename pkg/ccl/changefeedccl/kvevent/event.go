@@ -57,6 +57,7 @@ type Writer interface {
 	// Add adds event to this writer.
 	Add(ctx context.Context, event Event) error
 	// Drain waits until all events buffered by this writer has been consumed.
+	// It then closes the writer with reason ErrNormalRestartReason.
 	Drain(ctx context.Context) error
 	// CloseWithReason closes this writer. reason may be added as a detail to ErrBufferClosed.
 	CloseWithReason(ctx context.Context, reason error) error

@@ -7,6 +7,7 @@ package kvevent
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -36,10 +37,10 @@ type blockingBuffer struct {
 
 	mu struct {
 		syncutil.Mutex
-		closed     bool          // True when buffer closed.
-		reason     error         // Reason buffer is closed.
-		drainCh    chan struct{} // Set when Drain request issued.
-		numBlocked int           // Number of waitors blocked to acquire quota.
+		closed     bool       // True when buffer closed.
+		reason     error      // Reason buffer is closed.
+		drainCond  *sync.Cond // Set when Drain is requested and signaled when queue is empty.
+		numBlocked int        // Number of waiters blocked waiting to acquire quota.
 		canFlush   bool
 		queue      *bufferEventChunkQueue // Queue of added events.
 	}
@@ -139,9 +140,8 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		b.mu.canFlush = false
 	}
 
-	if b.mu.drainCh != nil && b.mu.queue.empty() {
-		close(b.mu.drainCh)
-		b.mu.drainCh = nil
+	if b.mu.drainCond != nil && b.mu.queue.empty() {
+		b.mu.drainCond.Signal()
 	}
 	return e, ok, nil
 }
@@ -276,35 +276,58 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	return b.enqueue(ctx, e)
 }
 
-// tryDrain attempts to see if the buffer already empty.
-// If so, returns nil.  If not, returns a channel that will be closed once the buffer is empty.
-func (b *blockingBuffer) tryDrain() chan struct{} {
+// tryDrainLocked attempts to see if the buffer already empty.
+// If so, returns nil. If not, it unlocks the mutex and returns
+// a channel that will be closed once the buffer is empty and
+// the lock is reacquired.
+func (b *blockingBuffer) tryDrainLocked() chan struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.queue.empty() {
 		return nil
 	}
 
-	b.mu.drainCh = make(chan struct{})
-	return b.mu.drainCh
+	drainCh := make(chan struct{})
+	go func() {
+		b.mu.drainCond = sync.NewCond(&b.mu)
+		for !b.mu.queue.empty() {
+			log.Infof(context.Background(), "blockingBuffer.tryDrainLocked queue isn't empty yet")
+			b.mu.drainCond.Wait()
+		}
+		log.Infof(context.Background(), "blockingBuffer.tryDrainLocked queue is empty")
+		close(drainCh)
+	}()
+
+	return drainCh
 }
 
 // Drain implements Writer interface.
 func (b *blockingBuffer) Drain(ctx context.Context) error {
-	if drained := b.tryDrain(); drained != nil {
+	b.mu.Lock()
+	if drained := b.tryDrainLocked(); drained != nil {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-drained:
-			return nil
 		}
 	}
 
-	return nil
+	defer b.mu.Unlock()
+	defer func() {
+		log.Infof(ctx, "Drain completed")
+	}()
+	return b.closeWithReasonLocked(ctx, ErrNormalRestartReason)
 }
 
 // CloseWithReason implements Writer interface.
 func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.closeWithReasonLocked(ctx, reason)
+}
+
+func (b *blockingBuffer) closeWithReasonLocked(ctx context.Context, reason error) error {
 	// Close quota pool -- any requests waiting to acquire will receive an error.
 	b.qp.Close("blocking buffer closing")
 
@@ -330,9 +353,6 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) erro
 		b.metrics.AllocatedMem.Dec(quota.allocated)
 		return false
 	})
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
 
 	if b.mu.closed {
 		logcrash.ReportOrPanic(ctx, b.sv, "close called multiple times")
