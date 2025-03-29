@@ -766,8 +766,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	snapshot, err := r.raftLog.snapshot()
 	if err != nil {
 		panic(err) // TODO(pav-kv): handle storage errors uniformly.
-	}
-	if IsEmptySnap(snapshot) {
+	} else if snapshot == nil {
 		panic("need non-empty snapshot")
 	}
 	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
@@ -776,7 +775,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	r.becomeSnapshot(pr, sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
-	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
+	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: snapshot})
 	return true
 }
 

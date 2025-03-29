@@ -70,7 +70,7 @@ type Ready struct {
 	// If async storage writes are enabled, this field does not need to be acted
 	// on immediately. It will be reflected in a MsgStorageAppend message in the
 	// Messages slice.
-	Snapshot pb.Snapshot
+	Snapshot *pb.Snapshot
 
 	// Committed is the log span that has been committed and can be applied to the
 	// state machine. Two subsequently accepted committed spans are contiguous,
@@ -119,11 +119,6 @@ func isHardStateEqual(a, b pb.HardState) bool {
 // IsEmptyHardState returns true if the given HardState is empty.
 func IsEmptyHardState(st pb.HardState) bool {
 	return isHardStateEqual(st, emptyState)
-}
-
-// IsEmptySnap returns true if the given Snapshot is empty.
-func IsEmptySnap(sp pb.Snapshot) bool {
-	return sp.Metadata.Index == 0
 }
 
 type Peer struct {
