@@ -66,11 +66,7 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 		Lead:      m.Lead,
 		LeadEpoch: m.LeadEpoch,
 	}
-	var snap raftpb.Snapshot
-	if m.Snapshot != nil {
-		snap = *m.Snapshot
-	}
-	if err := processAppend(n, st, m.Entries, snap); err != nil {
+	if err := processAppend(n, st, m.Entries, m.Snapshot); err != nil {
 		return err
 	}
 
@@ -82,7 +78,7 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	return nil
 }
 
-func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap raftpb.Snapshot) error {
+func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap *raftpb.Snapshot) error {
 	// TODO(tbg): the order of operations here is not necessarily safe. See:
 	// https://github.com/etcd-io/etcd/pull/10861
 	s := n.Storage
@@ -91,11 +87,11 @@ func processAppend(n *Node, st raftpb.HardState, ents []raftpb.Entry, snap raftp
 			return err
 		}
 	}
-	if !raft.IsEmptySnap(snap) {
+	if snap != nil {
 		if len(ents) > 0 {
 			return errors.New("can't apply snapshot and entries at the same time")
 		}
-		return s.ApplySnapshot(snap)
+		return s.ApplySnapshot(*snap)
 	}
 	return s.Append(ents)
 }

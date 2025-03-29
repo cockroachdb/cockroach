@@ -232,7 +232,7 @@ func (rn *RawNode) Ready() Ready {
 	}
 
 	if r.raftLog.hasNextUnstableSnapshot() {
-		rd.Snapshot = *r.raftLog.nextUnstableSnapshot()
+		rd.Snapshot = r.raftLog.nextUnstableSnapshot()
 	}
 	if r.raftLog.hasNextUnstableEnts() {
 		rd.Entries = r.raftLog.nextUnstableEnts()
@@ -257,14 +257,14 @@ func needStorageAppendMsg(r *raft, rd Ready) bool {
 	// prior MsgStorageAppend being processed.
 	return len(rd.Entries) > 0 ||
 		!IsEmptyHardState(rd.HardState) ||
-		!IsEmptySnap(rd.Snapshot) ||
+		rd.Snapshot != nil ||
 		len(r.msgsAfterAppend) > 0
 }
 
 func needStorageAppendRespMsg(rd Ready) bool {
 	// Return true if raft needs to hear about stabilized entries or an applied
 	// snapshot.
-	return !IsEmptySnap(rd.Snapshot) || len(rd.Entries) != 0
+	return len(rd.Entries) != 0 || rd.Snapshot != nil
 }
 
 // newStorageAppendMsg creates the message that should be sent to the local
@@ -297,9 +297,8 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		m.Lead = rd.Lead
 		m.LeadEpoch = rd.LeadEpoch
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		snap := rd.Snapshot
-		m.Snapshot = &snap
+	if snap := rd.Snapshot; snap != nil {
+		m.Snapshot = snap
 		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
 		m.LogTerm = r.raftLog.accTerm()
 	}
@@ -386,9 +385,8 @@ func newStorageAppendRespMsg(r *raft, rd Ready) pb.Message {
 		m.LogTerm = r.raftLog.accTerm()
 		m.Index = rd.Entries[ln-1].Index
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		snap := rd.Snapshot
-		m.Snapshot = &snap
+	if snap := rd.Snapshot; snap != nil {
+		m.Snapshot = snap
 		m.LogTerm = r.raftLog.accTerm()
 	}
 	return m

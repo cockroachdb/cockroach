@@ -165,8 +165,8 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 		buf.WriteString("Entries:\n")
 		fmt.Fprint(&buf, DescribeEntries(rd.Entries, f))
 	}
-	if !IsEmptySnap(rd.Snapshot) {
-		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(rd.Snapshot))
+	if rd.Snapshot != nil {
+		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(*rd.Snapshot))
 	}
 	if !rd.Committed.Empty() {
 		fmt.Fprintf(&buf, "Committed: %s\n", rd.Committed)
@@ -223,7 +223,7 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 		}
 		fmt.Fprintf(&buf, "\n%s]", indent)
 	}
-	if s := m.Snapshot; s != nil && !IsEmptySnap(*s) {
+	if s := m.Snapshot; s != nil {
 		fmt.Fprintf(&buf, "\n%s  Snapshot: %s", indent, DescribeSnapshot(*s))
 	}
 	if len(m.Responses) > 0 {
