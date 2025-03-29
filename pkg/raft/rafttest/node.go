@@ -112,23 +112,9 @@ func (n *node) start() {
 		if !n.mu.rn.HasReady() {
 			return raft.Ready{}, false
 		}
-		return n.mu.rn.ReadyTODO(), true
+		return n.mu.rn.Ready(), true
 	}
 	handleReady := func(rd raft.Ready) {
-		if !raft.IsEmptyHardState(rd.HardState) {
-			_ = n.storage.SetHardState(rd.HardState)
-		}
-		// Simulate disk latency.
-		time.Sleep(time.Millisecond)
-		_ = n.storage.Append(rd.Entries)
-		if !rd.Committed.Empty() {
-			n.mu.Lock()
-			ls := n.mu.rn.LogSnapshot()
-			entries, _ := ls.Slice(rd.Committed, math.MaxUint64)
-			n.mu.rn.AckApplied(entries)
-			n.mu.Unlock()
-		}
-
 		// Send messages, with a simulated latency.
 		send := func(m raftpb.Message) {
 			go func() {
@@ -136,13 +122,32 @@ func (n *node) start() {
 				n.iface.send(m)
 			}()
 		}
-		toSend, _ := raft.SplitMessages(n.id, rd.Messages)
-		for _, m := range toSend {
+		for _, m := range rd.Messages {
 			send(m)
 		}
-		n.mu.Lock()
-		defer n.mu.Unlock()
-		n.mu.rn.AdvanceHack(rd)
+
+		if !rd.StorageAppend.Empty() {
+			if hs := rd.HardState; !raft.IsEmptyHardState(hs) {
+				_ = n.storage.SetHardState(hs)
+			}
+			_ = n.storage.Append(rd.Entries)
+			n.mu.Lock()
+			n.mu.rn.AdvanceHack(rd)
+			n.mu.Unlock()
+		}
+		// Simulate disk latency.
+		time.Sleep(time.Millisecond)
+		for _, m := range rd.SendAfterSync(n.id) {
+			send(m)
+		}
+
+		if !rd.Committed.Empty() {
+			n.mu.Lock()
+			ls := n.mu.rn.LogSnapshot()
+			entries, _ := ls.Slice(rd.Committed, math.MaxUint64)
+			n.mu.rn.AckApplied(entries)
+			n.mu.Unlock()
+		}
 	}
 
 	// An independently running Ready handling loop.
