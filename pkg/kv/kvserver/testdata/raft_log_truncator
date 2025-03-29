@@ -91,8 +91,8 @@ acquireReplica(1)
 r1.getTruncatedState
 r1.getPendingTruncs
 r1.getStateLoader
-r1.setTruncatedStateAndSideEffects(..., expectedFirstIndex:16) => trusted:false
-r1.setTruncationDeltaAndTrusted(delta:-30, trusted:false)
+r1.stagePendingTruncation(..., expFirstIndex:16, delta:-30, trusted:true) => trusted:false
+r1.finalizeTruncation
 releaseReplica(1)
 acquireReplica(2)
 r2.getTruncatedState
@@ -167,8 +167,8 @@ acquireReplica(2)
 r2.getTruncatedState
 r2.getPendingTruncs
 r2.getStateLoader
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+r2.stagePendingTruncation(..., expFirstIndex:21, delta:-30, trusted:true) => trusted:true
+r2.finalizeTruncation
 releaseReplica(2)
 truncator ranges:
 
@@ -205,8 +205,8 @@ acquireReplica(2)
 r2.getTruncatedState
 r2.getPendingTruncs
 r2.getStateLoader
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:false
-r2.setTruncationDeltaAndTrusted(delta:-30, trusted:false)
+r2.stagePendingTruncation(..., expFirstIndex:21, delta:-30, trusted:true) => trusted:false
+r2.finalizeTruncation
 releaseReplica(2)
 truncator ranges:
 
@@ -269,8 +269,8 @@ acquireReplica(2)
 r2.getTruncatedState
 r2.getPendingTruncs
 r2.getStateLoader
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:25) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+r2.stagePendingTruncation(..., expFirstIndex:25, delta:-30, trusted:true) => trusted:true
+r2.finalizeTruncation
 releaseReplica(2)
 truncator ranges: 2
 
@@ -316,10 +316,9 @@ acquireReplica(2)
 r2.getTruncatedState
 r2.getPendingTruncs
 r2.getStateLoader
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:27) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-60, trusted:false)
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:30) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+r2.stagePendingTruncation(..., expFirstIndex:27, delta:-60, trusted:false) => trusted:false
+r2.stagePendingTruncation(..., expFirstIndex:30, delta:-30, trusted:true) => trusted:true
+r2.finalizeTruncation
 releaseReplica(2)
 truncator ranges:
 
@@ -382,10 +381,9 @@ acquireReplica(2)
 r2.getTruncatedState
 r2.getPendingTruncs
 r2.getStateLoader
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:32) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
-r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:33) => trusted:true
-r2.setTruncationDeltaAndTrusted(delta:-50, trusted:false)
+r2.stagePendingTruncation(..., expFirstIndex:32, delta:-30, trusted:true) => trusted:true
+r2.stagePendingTruncation(..., expFirstIndex:33, delta:-50, trusted:false) => trusted:false
+r2.finalizeTruncation
 releaseReplica(2)
 truncator ranges:
 
@@ -472,8 +470,8 @@ acquireReplica(3)
 r3.getTruncatedState
 r3.getPendingTruncs
 r3.getStateLoader
-r3.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:true
-r3.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+r3.stagePendingTruncation(..., expFirstIndex:21, delta:-30, trusted:true) => trusted:true
+r3.finalizeTruncation
 releaseReplica(3)
 truncator ranges: 3
 

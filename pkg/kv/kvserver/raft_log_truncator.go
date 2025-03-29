@@ -248,8 +248,10 @@ type replicaForTruncator interface {
 	getRangeID() roachpb.RangeID
 	// Returns the current truncated state.
 	getTruncatedState() kvserverpb.RaftTruncatedState
-	// Updates the replica state after the truncation is enacted.
-	handleTruncationResult(_ context.Context, _ pendingTruncation)
+	// Updates the replica state before the truncation is enacted.
+	stagePendingTruncation(_ context.Context, _ pendingTruncation)
+	// Updates the replica state after truncations are enacted.
+	finalizeTruncation(_ context.Context)
 	// Returns the pending truncations queue. The caller is allowed to mutate
 	// the return value by additionally acquiring pendingLogTruncations.mu.
 	getPendingTruncs() *pendingLogTruncations
@@ -553,6 +555,13 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		pendingTruncs.reset()
 		return
 	}
+	// Need to update the Replica state first. This requires iterating over all
+	// the enacted truncations.
+	pendingTruncs.iterateLocked(func(index int, trunc pendingTruncation) {
+		if index <= enactIndex {
+			r.stagePendingTruncation(ctx, trunc)
+		}
+	})
 	// Most of the time, sync=false since we don't need a guarantee that the
 	// truncation is durable. Loss of a truncation means we have more of the
 	// suffix of the raft log, which does not affect correctness.
@@ -561,18 +570,10 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	// so that the subsequent removals from the sideloaded storage are safe.
 	sync := pendingTruncs.mu.truncs[enactIndex].hasSideloaded
 	if err := batch.Commit(sync); err != nil {
-		log.Errorf(ctx, "while committing batch to truncate raft log: %+v", err)
-		pendingTruncs.reset()
+		log.Fatalf(ctx, "while committing batch to truncate raft log: %+v", err)
 		return
 	}
-	// Truncation done. Need to update the Replica state. This requires iterating
-	// over all the enacted entries.
-	pendingTruncs.iterateLocked(func(index int, trunc pendingTruncation) {
-		if index > enactIndex {
-			return
-		}
-		r.handleTruncationResult(ctx, trunc)
-	})
+	r.finalizeTruncation(ctx)
 	// Now remove the enacted truncations. It is the same iteration as the
 	// previous one, but we do it while holding pendingTruncs.mu. Note that
 	// since we have updated the raft log size but not yet removed the pending
