@@ -66,6 +66,8 @@ var (
 // maybeStartCompactionJob will initiate a compaction job off of a triggering
 // incremental job if the backup chain length exceeds the threshold.
 // backupStmt should be the original backup statement that triggered the job.
+// It is the responsibility of the caller to ensure that the backup details'
+// destination contains a resolved subdir.
 func maybeStartCompactionJob(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -82,6 +84,19 @@ func maybeStartCompactionJob(
 	if knobs != nil && knobs.JobSchedulerEnv != nil {
 		env = knobs.JobSchedulerEnv
 	}
+	kmsEnv := backupencryption.MakeBackupKMSEnv(
+		execCfg.Settings,
+		&execCfg.ExternalIODirConfig,
+		execCfg.InternalDB,
+		user,
+	)
+	chain, _, _, _, err := getBackupChain(ctx, execCfg, user, triggerJob, &kmsEnv)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get backup chain")
+	}
+	if int64(len(chain)) < threshold {
+		return 0, nil
+	}
 	var backupStmt string
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
@@ -97,19 +112,6 @@ func maybeStartCompactionJob(
 	}); err != nil {
 		return 0, err
 	}
-	kmsEnv := backupencryption.MakeBackupKMSEnv(
-		execCfg.Settings,
-		&execCfg.ExternalIODirConfig,
-		execCfg.InternalDB,
-		user,
-	)
-	chain, _, _, _, err := getBackupChain(ctx, execCfg, user, triggerJob, &kmsEnv)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to get backup chain")
-	}
-	if int64(len(chain)) < threshold {
-		return 0, nil
-	}
 	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
 	if err != nil {
 		return 0, err
@@ -124,8 +126,9 @@ func maybeStartCompactionJob(
 			"start-compaction-job",
 			txn.KV(),
 			sessiondata.NoSessionDataOverride,
-			`SELECT crdb_internal.backup_compaction($1, $2::DECIMAL, $3::DECIMAL)`,
+			`SELECT crdb_internal.backup_compaction($1, $2, $3::DECIMAL, $4::DECIMAL)`,
 			backupStmt,
+			triggerJob.Destination.Subdir,
 			startTS.AsOfSystemTime(),
 			endTS.AsOfSystemTime(),
 		)
@@ -219,6 +222,12 @@ func (b *backupResumer) ResumeCompaction(
 	var backupManifest *backuppb.BackupManifest
 	updatedDetails := initialDetails
 	if initialDetails.URI == "" {
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		if testingKnobs != nil && testingKnobs.RunBeforeResolvingCompactionDest != nil {
+			if err := testingKnobs.RunBeforeResolvingCompactionDest(); err != nil {
+				return err
+			}
+		}
 		// Resolve the backup destination. If we have already resolved and persisted
 		// the destination during a previous resumption of this job, we can re-use
 		// the previous resolution.

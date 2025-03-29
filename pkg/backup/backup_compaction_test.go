@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -50,11 +52,11 @@ func TestBackupCompaction(t *testing.T) {
 	defer cleanupDB()
 
 	// Expects start/end to be nanosecond epoch.
-	startCompaction := func(bucket int, start, end int64) jobspb.JobID {
+	startCompaction := func(bucket int, subdir string, start, end int64) jobspb.JobID {
 		compactionBuiltin := `SELECT crdb_internal.backup_compaction(
-ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
+ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 )`
-		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, bucket, start, end))
+		row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, bucket, subdir, start, end))
 		var jobID jobspb.JobID
 		row.Scan(&jobID)
 		return jobID
@@ -88,7 +90,7 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 				t,
 				fmt.Sprintf(incBackupAostCmd, 1, end),
 			)
-			waitForSuccessfulJob(t, tc, startCompaction(1, start, end))
+			waitForSuccessfulJob(t, tc, startCompaction(1, backupPath, start, end))
 			validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/1'", start, end)
 			start = end
 		}
@@ -127,7 +129,9 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(incBackupAostCmd, 2, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(2, start, end))
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/2'").Scan(&backupPath)
+		waitForSuccessfulJob(t, tc, startCompaction(2, backupPath, start, end))
 		validateCompactedBackupForTables(
 			t, db,
 			[]string{"foo", "bar", "baz"},
@@ -141,7 +145,7 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(incBackupAostCmd, 2, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(2, start, end))
+		waitForSuccessfulJob(t, tc, startCompaction(2, backupPath, start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup/2'")
@@ -169,7 +173,9 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(incBackupAostCmd, 3, end),
 		)
-		waitForSuccessfulJob(t, tc, startCompaction(3, start, end))
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/3'").Scan(&backupPath)
+		waitForSuccessfulJob(t, tc, startCompaction(3, backupPath, start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -210,7 +216,9 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
 		db.Exec(t, fmt.Sprintf(incBackupCmd, 4))
 
-		waitForSuccessfulJob(t, tc, startCompaction(4, start, end))
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/4'").Scan(&backupPath)
+		waitForSuccessfulJob(t, tc, startCompaction(4, backupPath, start, end))
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/4'", start, end)
 	})
 
@@ -237,7 +245,9 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			),
 		)
 
-		waitForSuccessfulJob(t, tc, startCompaction(5, start, end))
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/5'").Scan(&backupPath)
+		waitForSuccessfulJob(t, tc, startCompaction(5, backupPath, start, end))
 		validateCompactedBackupForTables(t, db, []string{"foo"}, "'nodelocal://1/backup/5'", start, end)
 	})
 
@@ -263,18 +273,20 @@ ARRAY['nodelocal://1/backup/%d'], 'LATEST', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 			t,
 			fmt.Sprintf(incBackupAostCmd+" WITH %s", 6, end, opts),
 		)
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/6'").Scan(&backupPath)
 		var jobID jobspb.JobID
 		db.QueryRow(
 			t,
 			fmt.Sprintf(
 				`SELECT crdb_internal.backup_compaction(
 ARRAY['nodelocal://1/backup/6'], 
-'LATEST',
+'%s',
 crdb_internal.json_to_pb(
 'cockroach.sql.jobs.jobspb.BackupEncryptionOptions',
 '{"mode": 0, "raw_passphrase": "correct-horse-battery-staple"}'
 ), '%d', '%d')`,
-				start, end,
+				backupPath, start, end,
 			),
 		).Scan(&jobID)
 		waitForSuccessfulJob(t, tc, jobID)
@@ -299,7 +311,9 @@ crdb_internal.json_to_pb(
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
 
-		jobID := startCompaction(7, start, end)
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/7'").Scan(&backupPath)
+		jobID := startCompaction(7, backupPath, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		waitForSuccessfulJob(t, tc, jobID)
@@ -310,7 +324,7 @@ crdb_internal.json_to_pb(
 		end = getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
-		jobID = startCompaction(7, start, end)
+		jobID = startCompaction(7, backupPath, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
@@ -330,12 +344,14 @@ crdb_internal.json_to_pb(
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
 		end := getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd+" WITH %s", 9, end, opts))
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/9'").Scan(&backupPath)
 		var jobID jobspb.JobID
 		db.QueryRow(t, fmt.Sprintf(
 			`SELECT crdb_internal.backup_compaction(
         'BACKUP INTO LATEST IN ''nodelocal://1/backup/9'' WITH encryption_passphrase = ''correct-horse-battery-staple''', 
-        %d::DECIMAL, %d::DECIMAL
-      )`, start, end,
+        '%s', %d::DECIMAL, %d::DECIMAL
+      )`, backupPath, start, end,
 		)).Scan(&jobID)
 		waitForSuccessfulJob(t, tc, jobID)
 		validateCompactedBackupForTablesWithOpts(
@@ -368,10 +384,12 @@ crdb_internal.json_to_pb(
 		end := getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 11, end))
 
-		c1JobID := startCompaction(11, mid, end)
+		var backupPath string
+		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/11'").Scan(&backupPath)
+		c1JobID := startCompaction(11, backupPath, mid, end)
 		waitForSuccessfulJob(t, tc, c1JobID)
 
-		c2JobID := startCompaction(11, start, end)
+		c2JobID := startCompaction(11, backupPath, start, end)
 		waitForSuccessfulJob(t, tc, c2JobID)
 		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", mid, end, "")
 		ensureBackupExists(t, db, "'nodelocal://1/backup/11'", start, end, "")
@@ -450,8 +468,11 @@ func TestBackupCompactionLocalityAware(t *testing.T) {
 		t,
 		fmt.Sprintf("BACKUP INTO LATEST IN (%s) AS OF SYSTEM TIME '%d'", collectionURIs, end),
 	)
-	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], 'LATEST', '', %d::DECIMAL, %d::DECIMAL)"
-	row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, collectionURIs, start, end))
+	compactionBuiltin := "SELECT crdb_internal.backup_compaction(ARRAY[%s], '%s', '', %d::DECIMAL, %d::DECIMAL)"
+
+	var backupPath string
+	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+	row := db.QueryRow(t, fmt.Sprintf(compactionBuiltin, collectionURIs, backupPath, start, end))
 	var jobID jobspb.JobID
 	row.Scan(&jobID)
 	waitForSuccessfulJob(t, tc, jobID)
@@ -462,13 +483,34 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 143543, "flaky test")
-
 	ctx := context.Background()
-	th, cleanup := newTestHelper(t)
+	var blockCompaction chan struct{}
+	var testKnobs []func(*base.TestingKnobs)
+	if rand.Intn(2) == 0 {
+		// Artificially force a scheduled full backup to also execute before the
+		// compaction job resolves its destination, which will cause the LATEST
+		// file to be updated. This is to ensure that the compaction job correctly
+		// identifies the full backup it belongs to and does not attempt to chain
+		// off of the second full backup.
+		blockCompaction = make(chan struct{})
+		defer close(blockCompaction)
+		testKnobs = append(testKnobs, func(testKnobs *base.TestingKnobs) {
+			testKnobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
+				RunBeforeResolvingCompactionDest: func() error {
+					<-blockCompaction
+					return nil
+				},
+			}
+		})
+	}
+	th, cleanup := newTestHelper(t, testKnobs...)
 	defer cleanup()
 
 	th.setOverrideAsOfClauseKnob(t)
+	// Time is set to a time such that no full backup will unexpectedly run as we
+	// artificially time travel. This ensures deterministic behavior that is not
+	// impacted by when the test runs.
+	th.env.SetTime(time.Date(2025, 3, 27, 1, 0, 0, 0, time.UTC))
 
 	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 3")
 	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 2")
@@ -486,6 +528,8 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	th.env.SetTime(full.NextRun().Add(time.Second))
 	require.NoError(t, th.executeSchedules())
 	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+	var backupPath string
+	th.sqlDB.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
 
 	inc, err = jobs.ScheduledJobDB(th.internalDB()).
 		Load(context.Background(), th.env, inc.ScheduleID())
@@ -502,6 +546,21 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	th.env.SetTime(inc.NextRun().Add(time.Second))
 	require.NoError(t, th.executeSchedules())
 	th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+
+	if blockCompaction != nil {
+		t.Log("executing second full backup before compaction job resolves destination")
+		// Instead of fast forwarding to the full backup's next run, which can result in additional
+		// incrementeals being triggered by `executeSchedules`, we update the full's next run to the
+		// current time.
+		th.sqlDB.QueryStr(t, fmt.Sprintf("ALTER BACKUP SCHEDULE %d EXECUTE FULL IMMEDIATELY", full.ScheduleID()))
+		full, err = jobs.ScheduledJobDB(th.internalDB()).
+			Load(context.Background(), th.env, full.ScheduleID())
+		require.NoError(t, err)
+		th.env.SetTime(full.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+		blockCompaction <- struct{}{}
+	}
 
 	var jobID jobspb.JobID
 	// The scheduler is notified of the backup job completion and then the
@@ -527,8 +586,8 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	var numBackups int
 	th.sqlDB.QueryRow(
 		t,
-		"SELECT count(DISTINCT (start_time, end_time)) FROM "+
-			"[SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']",
+		fmt.Sprintf("SELECT count(DISTINCT (start_time, end_time)) FROM "+
+			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup']", backupPath),
 	).Scan(&numBackups)
 	require.Equal(t, 4, numBackups)
 }

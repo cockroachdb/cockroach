@@ -1910,6 +1910,8 @@ type BackupRestoreTestingKnobs struct {
 	RunAfterRetryIteration func(err error) error
 
 	RunAfterRestoreProcDrains func()
+
+	RunBeforeResolvingCompactionDest func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
