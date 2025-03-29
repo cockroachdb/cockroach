@@ -228,7 +228,7 @@ func (rn *RawNode) Ready() Ready {
 	if rn.needStorageAppendMsg() {
 		app := rn.newStorageAppendMsg()
 		rd.injectMsgStorageAppend(app)
-		rd.Messages = append(rd.Messages, app)
+		rd.Messages = append(rd.Messages, app.ToMessage(r.id))
 	}
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
 
@@ -246,49 +246,29 @@ func (rn *RawNode) needStorageAppendMsg() bool {
 		!isHardStateEqual(r.hardState(), rn.prevHardSt)
 }
 
-func needStorageAppendRespMsg(app pb.Message) bool {
-	// Return true if raft needs to hear about stabilized entries or an applied
-	// snapshot.
-	return len(app.Entries) > 0 || app.Snapshot != nil
-}
-
 // newStorageAppendMsg creates the message that should be sent to the local
 // append thread to instruct it to append log entries, write an updated hard
 // state, and apply a snapshot. The message also carries a set of responses
 // that should be delivered after the rest of the message is processed.
-func (rn *RawNode) newStorageAppendMsg() pb.Message {
+func (rn *RawNode) newStorageAppendMsg() StorageAppend {
 	r := rn.raft
-	m := pb.Message{
-		Type:    pb.MsgStorageAppend,
-		To:      LocalAppendThread,
-		From:    r.id,
-		Entries: r.raftLog.nextUnstableEnts(),
-	}
-	if ln := len(m.Entries); ln > 0 {
-		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		m.LogTerm = r.raftLog.accTerm()
-		m.Index = m.Entries[ln-1].Index
-	}
+	app := StorageAppend{Entries: r.raftLog.nextUnstableEnts()}
 	if hs := r.hardState(); !isHardStateEqual(hs, rn.prevHardSt) {
-		// If there is a HardState update, assign each of its fields to the
-		// corresponding fields in the Message. This allows clients to reconstruct
-		// the HardState and save it to stable storage.
-		//
-		// If the Ready does not include a HardState update, make sure to not assign
-		// a value to any of the fields so that a HardState reconstructed from them
-		// is empty (returns true from raft.IsEmptyHardState).
-		m.Term = hs.Term
-		m.Vote = hs.Vote
-		m.Commit = hs.Commit
-		m.Lead = hs.Lead
-		m.LeadEpoch = hs.LeadEpoch
-		// Accept the updated HardState.
+		app.HardState = hs
 		rn.prevHardSt = hs
 	}
-	if snap := r.raftLog.nextUnstableSnapshot(); snap != nil {
-		m.Snapshot = snap
+	if ln := len(app.Entries); ln > 0 {
 		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		m.LogTerm = r.raftLog.accTerm()
+		app.Mark = LogMark{
+			Term:  r.raftLog.accTerm(),
+			Index: app.Entries[ln-1].Index,
+		}
+	}
+	if snap := r.raftLog.nextUnstableSnapshot(); snap != nil {
+		app.Snapshot = snap
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
+		// TODO(pav-kv): this is not a valid LogMark. Better attach unstable.mark().
+		app.Mark.Term = r.raftLog.accTerm()
 	}
 	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
@@ -300,27 +280,27 @@ func (rn *RawNode) newStorageAppendMsg() pb.Message {
 	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
 	// handling to use a fast-path in r.raftLog.term() before the newly appended
 	// entries are removed from the unstable log.
-	m.Responses, r.msgsAfterAppend = r.msgsAfterAppend, nil
+	app.Responses, r.msgsAfterAppend = r.msgsAfterAppend, nil
 	// Warning: there is code outside raft package depending on the order of
 	// Responses, particularly MsgStorageAppendResp being last in this list.
 	// Change this with caution.
-	if needStorageAppendRespMsg(m) {
-		m.Responses = append(m.Responses, newStorageAppendRespMsg(m))
+	if app.NeedAck() {
+		app.Responses = append(app.Responses, newStorageAppendRespMsg(r.id, app))
 	}
-	return m
+	return app
 }
 
 // newStorageAppendRespMsg creates the message that should be returned to node
 // after the unstable log entries, hard state, and snapshot in the current Ready
 // (along with those in all prior Ready structs) have been saved to stable
 // storage.
-func newStorageAppendRespMsg(app pb.Message) pb.Message {
-	m := pb.Message{
+// TODO(pav-kv): make a type for storage append acknowledgements.
+func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
+	return pb.Message{
 		Type: pb.MsgStorageAppendResp,
-		To:   app.From,
+		To:   self,
 		From: LocalAppendThread,
-	}
-	if ln := len(app.Entries); ln > 0 {
+
 		// If sending unstable entries to storage, attach the last index and last
 		// accepted term to the response message. This (index, term) tuple will be
 		// handed back and consulted when the stability of those log entries is
@@ -371,26 +351,16 @@ func newStorageAppendRespMsg(app pb.Message) pb.Message {
 		// log was truncated.
 		//
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		m.LogTerm = app.LogTerm
-		m.Index = app.Index
+		LogTerm:  app.Mark.Term,
+		Index:    app.Mark.Index,
+		Snapshot: app.Snapshot,
 	}
-	if snap := app.Snapshot; snap != nil {
-		m.Snapshot = snap
-		m.LogTerm = app.LogTerm
-	}
-	return m
 }
 
-func (rd *Ready) injectMsgStorageAppend(m pb.Message) {
-	rd.HardState = pb.HardState{
-		Term:      m.Term,
-		Vote:      m.Vote,
-		Commit:    m.Commit,
-		Lead:      m.Lead,
-		LeadEpoch: m.LeadEpoch,
-	}
-	rd.Snapshot = m.Snapshot
-	rd.Entries = m.Entries
+func (rd *Ready) injectMsgStorageAppend(app StorageAppend) {
+	rd.HardState = app.HardState
+	rd.Snapshot = app.Snapshot
+	rd.Entries = app.Entries
 }
 
 // AckApplying accepts all committed entries <= index as being applied to the
