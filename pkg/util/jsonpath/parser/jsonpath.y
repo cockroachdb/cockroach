@@ -177,6 +177,13 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %token <str> LIKE_REGEX
 %token <str> FLAG
 
+%token <str> LAST
+%token <str> EXISTS
+%token <str> IS
+%token <str> UNKNOWN
+%token <str> STARTS
+%token <str> WITH
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -188,6 +195,7 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %type <jsonpath.Path> index_elem
 %type <jsonpath.Path> predicate
 %type <jsonpath.Path> delimited_predicate
+%type <jsonpath.Path> starts_with_initial
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
 %type <jsonpath.OperationType> comp_op
@@ -202,6 +210,7 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %left '+' '-'
 %left '*' '/' '%'
+%left UMINUS
 
 %%
 
@@ -248,6 +257,14 @@ expr:
   {
     $$.val = $2.path()
   }
+| '+' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpPlus, $2.path())
+  }
+| '-' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpMinus, $2.path())
+  }
 | expr '+' expr
   {
     $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
@@ -268,7 +285,6 @@ expr:
   {
     $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
   }
-// TODO(normanchenn): add unary + and -.
 ;
 
 accessor_expr:
@@ -295,7 +311,10 @@ path_primary:
   {
     $$.val = $1.path()
   }
-// TODO(normanchenn): support LAST for array ranges.
+| LAST
+  {
+    $$.val = jsonpath.Last{}
+  }
 ;
 
 accessor_op:
@@ -388,6 +407,14 @@ predicate:
   {
     $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
   }
+| '(' predicate ')' IS UNKNOWN
+  {
+    $$.val = unaryOp(jsonpath.OpIsUnknown, $2.path())
+  }
+| expr STARTS WITH starts_with_initial
+  {
+    $$.val = binaryOp(jsonpath.OpStartsWith, $1.path(), $4.path())
+  }
 | expr LIKE_REGEX STRING
   {
     regex := jsonpath.Regex{Regex: $3}
@@ -404,6 +431,21 @@ delimited_predicate:
   '(' predicate ')'
   {
     $$.val = $2.path()
+  }
+| EXISTS '(' expr ')'
+  {
+    $$.val = unaryOp(jsonpath.OpExists, $3.path())
+  }
+;
+
+starts_with_initial:
+  STRING
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+| VARIABLE
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarVariable, Variable: $1}
   }
 ;
 
@@ -434,7 +476,6 @@ comp_op:
   }
 ;
 
-// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {
@@ -485,14 +526,20 @@ any_identifier:
 ;
 
 unreserved_keyword:
-  FALSE
+  EXISTS
+| FALSE
 | FLAG
+| IS
+| LAST
 | LAX
 | LIKE_REGEX
 | NULL
+| STARTS
 | STRICT
 | TO
 | TRUE
+| UNKNOWN
+| WITH
 ;
 
 %%
