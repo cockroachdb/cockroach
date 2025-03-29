@@ -1008,8 +1008,7 @@ func (r *raft) appliedTo(index uint64) {
 	}
 }
 
-func (r *raft) appliedSnap(snap *pb.Snapshot) {
-	index := snap.Metadata.Index
+func (r *raft) appliedSnap(index uint64) {
 	r.raftLog.stableSnapTo(index)
 	r.appliedTo(index)
 }
@@ -1722,7 +1721,7 @@ func (r *raft) Step(m pb.Message) error {
 		// The snapshot precedes the entries. We acknowledge the snapshot first,
 		// then the entries, as required by the unstable structure.
 		if m.Snapshot != nil {
-			r.appliedSnap(m.Snapshot)
+			r.appliedSnap(m.Snapshot.Metadata.Index)
 		}
 		if m.Index != 0 {
 			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
