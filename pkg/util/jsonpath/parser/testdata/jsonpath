@@ -469,6 +469,56 @@ $.abc.*.def.*
 ----
 $."abc".*."def".* -- normalized!
 
+parse
+-1
+----
+-1
+
+parse
+- "hello"
+----
+-"hello" -- normalized!
+
+parse
++ "hello"
+----
++"hello" -- normalized!
+
+parse
+- - $.a[2]
+----
+--$."a"[2] -- normalized!
+
+parse
+1 + 2 * -4
+----
+(1 + (2 * -4)) -- normalized!
+
+# This shouldn't be parsed.
+parse
+last
+----
+last
+
+parse
+$[last]
+----
+$[last]
+
+parse
+$[1 to last, last to last]
+----
+$[1 to last,last to last] -- normalized!
+
+parse
+exists($.a)
+----
+exists ($."a") -- normalized!
+
+parse
+$.a ? (exists(@.b) && !exists(@.c))
+----
+$."a"?((exists (@."b") && !(exists (@."c")))) -- normalized!
 
 # postgres allows floats as array indexes
 # parse
