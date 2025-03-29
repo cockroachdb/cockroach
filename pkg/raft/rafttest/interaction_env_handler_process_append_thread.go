@@ -58,15 +58,9 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	resps := m.Responses
 	m.Responses = nil
 	env.Output.WriteString("Processing:\n")
-	env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
-	st := raftpb.HardState{
-		Term:      m.Term,
-		Vote:      m.Vote,
-		Commit:    m.Commit,
-		Lead:      m.Lead,
-		LeadEpoch: m.LeadEpoch,
-	}
-	if err := processAppend(n, st, m.Entries, m.Snapshot); err != nil {
+	// TODO(pav-kv): print MsgStorageAppend directly, without converting.
+	env.Output.WriteString(raft.DescribeMessage(m.ToMessage(raftpb.PeerID(idx+1)), defaultEntryFormatter) + "\n")
+	if err := processAppend(n, m.HardState, m.Entries, m.Snapshot); err != nil {
 		return err
 	}
 
