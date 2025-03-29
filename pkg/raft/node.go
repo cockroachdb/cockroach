@@ -69,6 +69,9 @@ type StorageAppend struct {
 	// Responses contains messages that should be sent AFTER the updates above
 	// have been *durably* persisted in log storage. Messages addressed to the
 	// local RawNode can be stepped into it directly.
+	//
+	// TODO(pav-kv): try to make it private. Currently, there is one use in
+	// handleRaftReady that filters through these messages directly.
 	Responses []pb.Message
 }
 
@@ -76,6 +79,16 @@ type StorageAppend struct {
 func (m *StorageAppend) Empty() bool {
 	return IsEmptyHardState(m.HardState) &&
 		len(m.Entries) == 0 && m.Snapshot == nil && len(m.Responses) == 0
+}
+
+// MustSync returns true if this storage write must be synced.
+//
+// A storage write must be synced if there are durability-conditioned messages
+// to be sent to the proposer (candidate or leader) after this write. Typically,
+// a MsgVoteResp or MsgAppResp. The recipient of these messages can be the local
+// RawNode, or a remote one.
+func (m *StorageAppend) MustSync() bool {
+	return len(m.Responses) != 0
 }
 
 // NeedAck returns true if the RawNode wants to be notified after the writes are

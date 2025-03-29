@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 )
 
 // Raft log storage writes are carried out under raftMu which blocks all other
@@ -53,7 +54,7 @@ func (r *replicaLogStorage) stateRaftMuLocked() logstore.RaftState {
 // appendRaftMuLocked carries out a raft log append, and returns the new raft
 // log storage state.
 func (r *replicaLogStorage) appendRaftMuLocked(
-	ctx context.Context, app logstore.MsgStorageAppend, stats *logstore.AppendStats,
+	ctx context.Context, app raft.StorageAppend, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
 	state := r.stateRaftMuLocked()
 	cb := (*replicaSyncCallback)(r)
