@@ -226,6 +226,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/roachprod-microbench/util",
+        "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/grafana",
