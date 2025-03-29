@@ -194,6 +194,8 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 // of entry data. Nil is a valid EntryFormatter and will use a default format.
 type EntryFormatter func([]byte) string
 
+var emptyEntryFormatter EntryFormatter = func([]byte) string { return "" }
+
 // DescribeMessage returns a concise human-readable description of a
 // Message for debugging.
 func DescribeMessage(m pb.Message, f EntryFormatter) string {

@@ -126,18 +126,19 @@ func (n *node) start() {
 			send(m)
 		}
 
+		ack := rd.Ack()
 		if !rd.StorageAppend.Empty() {
 			if hs := rd.HardState; !raft.IsEmptyHardState(hs) {
 				_ = n.storage.SetHardState(hs)
 			}
 			_ = n.storage.Append(rd.Entries)
 			n.mu.Lock()
-			n.mu.rn.AdvanceHack(rd)
+			n.mu.rn.AckAppend(ack)
 			n.mu.Unlock()
 		}
 		// Simulate disk latency.
 		time.Sleep(time.Millisecond)
-		for _, m := range rd.SendAfterSync(n.id) {
+		for m := range ack.Send(n.id) {
 			send(m)
 		}
 
