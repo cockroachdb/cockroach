@@ -177,6 +177,8 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 %token <str> LIKE_REGEX
 %token <str> FLAG
 
+%token <str> LAST
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -202,6 +204,7 @@ func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
 
 %left '+' '-'
 %left '*' '/' '%'
+%left UMINUS
 
 %%
 
@@ -248,6 +251,14 @@ expr:
   {
     $$.val = $2.path()
   }
+| '+' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpPlus, $2.path())
+  }
+| '-' expr %prec UMINUS
+  {
+    $$.val = unaryOp(jsonpath.OpMinus, $2.path())
+  }
 | expr '+' expr
   {
     $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
@@ -268,7 +279,6 @@ expr:
   {
     $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
   }
-// TODO(normanchenn): add unary + and -.
 ;
 
 accessor_expr:
@@ -295,7 +305,10 @@ path_primary:
   {
     $$.val = $1.path()
   }
-// TODO(normanchenn): support LAST for array ranges.
+| LAST
+  {
+    $$.val = jsonpath.Last{}
+  }
 ;
 
 accessor_op:
@@ -434,7 +447,6 @@ comp_op:
   }
 ;
 
-// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {
@@ -487,6 +499,7 @@ any_identifier:
 unreserved_keyword:
   FALSE
 | FLAG
+| LAST
 | LAX
 | LIKE_REGEX
 | NULL
