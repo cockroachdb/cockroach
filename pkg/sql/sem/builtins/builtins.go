@@ -9115,7 +9115,15 @@ WHERE object_id = table_descriptor_id
 				} else if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(args[2])), &encryption); err != nil {
 					return nil, err
 				}
+				// We use an explicit full path instead of extracting it from the backup
+				// statement in the event that the backup statement specifies LATEST
+				// as its subdir. This can lead to race conditions where an incremental
+				// backup triggers the compaction, but before the compaction job resolves
+				// its destination, a full backup completes and overwrites the LATEST.
 				fullPath := string(tree.MustBeDString(args[1]))
+				if fullPath == "LATEST" {
+					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
+				}
 				start := tree.MustBeDDecimal(args[3])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
@@ -9135,6 +9143,7 @@ WHERE object_id = table_descriptor_id
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "backup_stmt", Typ: types.String},
+				{Name: "full_backup_path", Typ: types.String},
 				{Name: "start_time", Typ: types.Decimal},
 				{Name: "end_time", Typ: types.Decimal},
 			},
@@ -9175,26 +9184,22 @@ WHERE object_id = table_descriptor_id
 					}
 					encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
 				}
-				var fullPath string
-				if backupAST.Subdir != nil {
-					fullPath = tree.AsStringWithFlags(backupAST.Subdir, tree.FmtBareStrings)
-				} else {
-					if !backupAST.AppendToLatest {
-						return nil, errors.Newf("full backup path must be specified")
-					}
-					fullPath = "LATEST"
-				}
 				collectionURI := exprSliceToStrSlice(backupAST.To)
 				incrLoc := exprSliceToStrSlice(backupAST.Options.IncrementalStorage)
-				start := tree.MustBeDDecimal(args[1])
+				start := tree.MustBeDDecimal(args[2])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
 					return nil, err
 				}
-				end := tree.MustBeDDecimal(args[2])
+				end := tree.MustBeDDecimal(args[3])
 				endTs, err := hlc.DecimalToHLC(&end.Decimal)
 				if err != nil {
 					return nil, err
+				}
+				fullPath := string(tree.MustBeDString(args[1]))
+				// See comment above override about why full path cannot be LATEST.
+				if fullPath == "LATEST" {
+					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
 				jobID, err := StartCompactionJob(
 					ctx, evalCtx.Planner, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
