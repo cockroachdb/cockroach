@@ -602,6 +602,7 @@
 /pkg/util/admission/         @cockroachdb/admission-control
 /pkg/util/goschedstats       @cockroachdb/admission-control
 /pkg/util/grunning/          @cockroachdb/admission-control
+/pkg/util/jsonpath/          @cockroachdb/sql-queries-prs
 /pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/mon                @cockroachdb/sql-queries-prs
