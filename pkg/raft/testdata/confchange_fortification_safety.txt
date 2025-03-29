@@ -79,11 +79,12 @@ stabilize 1 2 3
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/4 EntryConfChangeV2 v4
+  Committed: (3,4]
   Messages:
   1->2 MsgApp Term:1 Log:1/4 Commit:4
   1->3 MsgApp Term:1 Log:1/4 Commit:4
+  Applying:
+  1/4 EntryConfChangeV2 v4
   INFO 1 switched to configuration voters=(1 2 3 4)
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/4 Commit:4
@@ -97,18 +98,20 @@ stabilize 1 2 3
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/4 EntryConfChangeV2 v4
+  Committed: (3,4]
   Messages:
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
+  Applying:
+  1/4 EntryConfChangeV2 v4
   INFO 2 switched to configuration voters=(1 2 3 4)
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/4 EntryConfChangeV2 v4
+  Committed: (3,4]
   Messages:
   3->1 MsgAppResp Term:1 Log:0/4 Commit:4
+  Applying:
+  1/4 EntryConfChangeV2 v4
   INFO 3 switched to configuration voters=(1 2 3 4)
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
@@ -184,11 +187,12 @@ stabilize 1 4
   1/3 EntryNormal ""
   1/4 EntryConfChangeV2 v4
   1/5 EntryNormal ""
-  CommittedEntries:
-  1/3 EntryNormal ""
-  1/4 EntryConfChangeV2 v4
+  Committed: (2,4]
   Messages:
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
+  Applying:
+  1/3 EntryNormal ""
+  1/4 EntryConfChangeV2 v4
   INFO 4 switched to configuration voters=(1 2 3 4)
 > 1 receiving messages
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
@@ -263,9 +267,7 @@ stabilize
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/5 EntryNormal ""
-  1/6 EntryConfChangeV2 r2 l2
+  Committed: (4,6]
   Messages:
   1->2 MsgApp Term:1 Log:1/6 Commit:5
   1->3 MsgApp Term:1 Log:1/6 Commit:5
@@ -273,6 +275,9 @@ stabilize
   1->2 MsgApp Term:1 Log:1/6 Commit:6
   1->3 MsgApp Term:1 Log:1/6 Commit:6
   1->4 MsgApp Term:1 Log:1/6 Commit:6
+  Applying:
+  1/5 EntryNormal ""
+  1/6 EntryConfChangeV2 r2 l2
   INFO 1 switched to configuration voters=(1 3 4)&&(1 2 3 4) learners_next=(2) autoleave
   INFO initiating automatic transition out of joint configuration voters=(1 3 4)&&(1 2 3 4) learners_next=(2) autoleave
 > 2 receiving messages
@@ -295,32 +300,35 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/5 EntryNormal ""
-  1/6 EntryConfChangeV2 r2 l2
+  Committed: (4,6]
   Messages:
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
   2->1 MsgAppResp Term:1 Log:0/6 Commit:6
+  Applying:
+  1/5 EntryNormal ""
+  1/6 EntryConfChangeV2 r2 l2
   INFO 2 switched to configuration voters=(1 3 4)&&(1 2 3 4) learners_next=(2) autoleave
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:6 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/5 EntryNormal ""
-  1/6 EntryConfChangeV2 r2 l2
+  Committed: (4,6]
   Messages:
   3->1 MsgAppResp Term:1 Log:0/6 Commit:5
   3->1 MsgAppResp Term:1 Log:0/6 Commit:6
+  Applying:
+  1/5 EntryNormal ""
+  1/6 EntryConfChangeV2 r2 l2
   INFO 3 switched to configuration voters=(1 3 4)&&(1 2 3 4) learners_next=(2) autoleave
 > 4 handling Ready
   Ready:
   HardState Term:1 Commit:6 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/5 EntryNormal ""
-  1/6 EntryConfChangeV2 r2 l2
+  Committed: (4,6]
   Messages:
   4->1 MsgAppResp Term:1 Log:0/6 Commit:5
   4->1 MsgAppResp Term:1 Log:0/6 Commit:6
+  Applying:
+  1/5 EntryNormal ""
+  1/6 EntryConfChangeV2 r2 l2
   INFO 4 switched to configuration voters=(1 3 4)&&(1 2 3 4) learners_next=(2) autoleave
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/6 Commit:5
@@ -360,12 +368,13 @@ stabilize
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/7 EntryConfChangeV2
+  Committed: (6,7]
   Messages:
   1->2 MsgApp Term:1 Log:1/7 Commit:7
   1->3 MsgApp Term:1 Log:1/7 Commit:7
   1->4 MsgApp Term:1 Log:1/7 Commit:7
+  Applying:
+  1/7 EntryConfChangeV2
   INFO 1 switched to configuration voters=(1 3 4) learners=(2)
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/7 Commit:7
@@ -376,26 +385,29 @@ stabilize
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/7 EntryConfChangeV2
+  Committed: (6,7]
   Messages:
   2->1 MsgAppResp Term:1 Log:0/7 Commit:7
+  Applying:
+  1/7 EntryConfChangeV2
   INFO 2 switched to configuration voters=(1 3 4) learners=(2)
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:7 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/7 EntryConfChangeV2
+  Committed: (6,7]
   Messages:
   3->1 MsgAppResp Term:1 Log:0/7 Commit:7
+  Applying:
+  1/7 EntryConfChangeV2
   INFO 3 switched to configuration voters=(1 3 4) learners=(2)
 > 4 handling Ready
   Ready:
   HardState Term:1 Commit:7 Lead:1 LeadEpoch:1
-  CommittedEntries:
-  1/7 EntryConfChangeV2
+  Committed: (6,7]
   Messages:
   4->1 MsgAppResp Term:1 Log:0/7 Commit:7
+  Applying:
+  1/7 EntryConfChangeV2
   INFO 4 switched to configuration voters=(1 3 4) learners=(2)
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/7 Commit:7

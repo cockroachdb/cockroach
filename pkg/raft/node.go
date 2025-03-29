@@ -72,14 +72,30 @@ type Ready struct {
 	// Messages slice.
 	Snapshot pb.Snapshot
 
-	// CommittedEntries specifies entries to be committed to a
-	// store/state-machine. These have previously been appended to stable
-	// storage.
+	// Committed is the log span that has been committed and can be applied to the
+	// state machine. Two subsequently accepted committed spans are contiguous,
+	// except after a snapshot which can create a "gap" in this sequence.
 	//
-	// If async storage writes are enabled, this field does not need to be acted
-	// on immediately. It will be reflected in a MsgStorageApply message in the
-	// Messages slice.
-	CommittedEntries []pb.Entry
+	// The caller should use RawNode.LogSnapshot() to fetch the committed entries
+	// from the log and apply them to the state machine. When a batch of entries
+	// has been applied, the caller should call RawNode.AckApplied, to prevent
+	// these entries from showing up in subsequent Ready signals.
+	//
+	// The caller can also only confirm obligation to apply entries, using the
+	// RawNode.AckApplying(index) call, which stops committed indices <= index
+	// from causing other Ready events, but the entries are still not considered
+	// applied by raft.
+	//
+	// Invariants:
+	//	- Committed.After <= Committed.Last
+	//	- Committed.After == last index previously accepted for application
+	//	- Committed.After == snapshot.Index after a snapshot
+	//	- Committed.Last <= committed index known to the RawNode
+	//
+	// Committed.Last < committed index if the latest committed entries are not
+	// yet durable in the log.
+	// TODO(pav-kv): reconsider if we can relax this to always == committed index.
+	Committed pb.LogSpan
 
 	// Messages specifies outbound messages.
 	//

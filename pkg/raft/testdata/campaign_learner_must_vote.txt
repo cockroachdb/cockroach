@@ -143,28 +143,31 @@ stabilize 2 3
   Entries:
   1/4 EntryConfChangeV2 v3
   2/5 EntryNormal ""
-  CommittedEntries:
-  1/4 EntryConfChangeV2 v3
+  Committed: (3,4]
   Messages:
   3->2 MsgAppResp Term:2 Log:0/5 Commit:4
+  Applying:
+  1/4 EntryConfChangeV2 v3
   INFO 3 switched to configuration voters=(1 2 3)
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:0/5 Commit:4
 > 2 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:5 Lead:2 LeadEpoch:1
-  CommittedEntries:
-  2/5 EntryNormal ""
+  Committed: (4,5]
   Messages:
   2->3 MsgApp Term:2 Log:2/5 Commit:5
+  Applying:
+  2/5 EntryNormal ""
 > 3 receiving messages
   2->3 MsgApp Term:2 Log:2/5 Commit:5
 > 3 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:5 Lead:2 LeadEpoch:1
-  CommittedEntries:
-  2/5 EntryNormal ""
+  Committed: (4,5]
   Messages:
   3->2 MsgAppResp Term:2 Log:0/5 Commit:5
+  Applying:
+  2/5 EntryNormal ""
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:0/5 Commit:5

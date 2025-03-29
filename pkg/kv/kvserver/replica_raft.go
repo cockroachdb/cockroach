@@ -947,7 +947,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	var hasReady bool
 	var outboundMsgs []raftpb.Message
-	var msgStorageAppend, msgStorageApply raftpb.Message
+	var msgStorageAppend raftpb.Message
+	var toApply []raftpb.Entry
 	rac2ModeToUse := r.replicationAdmissionControlModeToUse(ctx)
 	// Replication AC v2 state that is initialized while holding Replica.mu.
 	replicaStateInfoMap := r.raftMu.replicaStateScratchForFlowControl
@@ -977,30 +978,36 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			r.mu.currentRACv2Mode = rac2ModeToUse
 		}
+		logSnapshot = raftGroup.LogSnapshot()
 		if hasReady = raftGroup.HasReady(); hasReady {
-			// Since we are holding raftMu, only this Ready() call will use
+			// Since we are holding raftMu, only the Slice() call below will use
 			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
 			r.attachRaftEntriesMonitorRaftMuLocked()
-			// TODO(pav-kv): currently, Ready() only accounts for entry bytes loaded
+			// TODO(pav-kv): currently, Slice() only accounts for entry bytes loaded
 			// from log storage, and ignores the in-memory unstable entries. Pass a
 			// flow control struct down the stack, and do a more complete accounting
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
-			syncRd := raftGroup.Ready()
+			rd := raftGroup.Ready()
+			if !rd.Committed.Empty() {
+				// TODO(pav-kv): do this loading when Replica.mu is released. We don't
+				// want IO under Replica.mu.
+				if toApply, err = logSnapshot.Slice(
+					rd.Committed, r.store.cfg.RaftMaxCommittedSizePerReady,
+				); err != nil {
+					return false, err
+				}
+			}
 			// We apply committed entries during this handleRaftReady, so it is ok to
 			// release the corresponding memory tokens at the end of this func. Next
 			// time we enter this function, the account will be empty again.
 			defer r.detachRaftEntriesMonitorRaftMuLocked()
 
-			logRaftReady(ctx, syncRd)
-			asyncRd := makeAsyncReady(syncRd)
-			outboundMsgs, msgStorageAppend, msgStorageApply = splitLocalStorageMsgs(asyncRd.Messages)
+			logRaftReady(ctx, rd)
+			outboundMsgs, msgStorageAppend = splitLocalStorageMsgs(rd.Messages)
 		}
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
-		}
-		if rac2ModeForReady == rac2.MsgAppPull {
-			logSnapshot = raftGroup.LogSnapshot()
 		}
 		raftNodeBasicState = replica_rac2.MakeRaftNodeBasicStateLocked(
 			raftGroup, r.shMu.state.Lease.Replica.ReplicaID)
@@ -1020,7 +1027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
 		return unquiesceAndWakeLeader, nil
 	})
-	r.mu.applyingEntries = hasMsg(msgStorageApply)
+	r.mu.applyingEntries = len(toApply) != 0
 	pausedFollowers := r.mu.pausedFollowers
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
@@ -1077,9 +1084,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// entries and acknowledge as many as we can trivially prove will not be
 	// rejected beneath raft.
 	//
-	// Note that the Entries slice in the MsgStorageApply cannot refer to entries
-	// that are also in the Entries slice in the MsgStorageAppend. Raft will not
-	// allow unstable entries to be applied.
+	// Note that the Ready.Committed span cannot refer to entries that are also in
+	// the Entries slice in the MsgStorageAppend. Raft will not allow unstable
+	// entries to be applied.
 	// TODO(pav-kv): Reconsider if this can be relaxed.
 	//
 	// If we disable async storage writes in the future, this property will no
@@ -1097,12 +1104,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	sm := r.getStateMachine()
 	dec := r.getDecoder()
 	var appTask apply.Task
-	if hasMsg(msgStorageApply) {
-		r.mu.raftTracer.MaybeTraceApplying(msgStorageApply.Entries)
+	if len(toApply) != 0 {
+		r.mu.raftTracer.MaybeTraceApplying(toApply)
 		appTask = apply.MakeTask(sm, dec)
 		appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 		defer appTask.Close()
-		if err := appTask.Decode(ctx, msgStorageApply.Entries); err != nil {
+		if err := appTask.Decode(ctx, toApply); err != nil {
 			return stats, err
 		}
 		if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
@@ -1265,8 +1272,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	stats.tApplicationBegin = crtime.NowMono()
-	if hasMsg(msgStorageApply) {
-		r.traceEntries(msgStorageApply.Entries, "committed, before applying any entries")
+	if len(toApply) != 0 {
+		r.traceEntries(toApply, "committed, before applying any entries")
 
 		err := appTask.ApplyCommittedEntries(ctx)
 		stats.apply = sm.moveStats()
@@ -1302,15 +1309,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				refreshReason = reasonNewLeaderOrConfigChange
 			}
 		}
-
-		r.mu.raftTracer.MaybeTraceApplied(msgStorageApply.Entries)
-		// Send MsgStorageApply's responses.
-		r.sendRaftMessages(ctx, msgStorageApply.Responses, nil /* blocked */, true /* willDeliverLocal */)
+		r.mu.raftTracer.MaybeTraceApplied(toApply)
 	}
 	stats.tApplicationEnd = crtime.NowMono()
 	applicationElapsed := stats.tApplicationEnd.Sub(stats.tApplicationBegin).Nanoseconds()
 	r.store.metrics.RaftApplyCommittedLatency.RecordValue(applicationElapsed)
-	r.store.metrics.RaftCommandsApplied.Inc(int64(len(msgStorageApply.Entries)))
+	r.store.metrics.RaftCommandsApplied.Inc(int64(len(toApply)))
 	if r.store.TestingKnobs().EnableUnconditionalRefreshesInRaftReady {
 		refreshReason = reasonNewLeaderOrConfigChange
 	}
@@ -1328,6 +1332,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
+		raftGroup.AckApplied(toApply)
 
 		if stats.apply.numConfChangeEntries > 0 {
 			// If the raft leader got removed, campaign on the leaseholder. Uses
@@ -1381,26 +1386,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	return stats, nil
 }
 
-// asyncReady encapsulates the messages that are ready to be sent to other peers
-// or to be sent to local storage routines when async storage writes are enabled.
-// All fields in asyncReady are read-only.
-// TODO(nvanbenschoten): move this into go.etcd.io/raft.
-type asyncReady struct {
-	// Messages specifies outbound messages to other peers and to local storage
-	// threads. These messages can be sent in any order.
-	//
-	// If it contains a MsgSnap message, the application MUST report back to raft
-	// when the snapshot has been received or has failed by calling ReportSnapshot.
-	Messages []raftpb.Message
-}
-
-// makeAsyncReady constructs an asyncReady from the provided Ready.
-func makeAsyncReady(rd raft.Ready) asyncReady {
-	return asyncReady{
-		Messages: rd.Messages,
-	}
-}
-
 // hasMsg returns whether the provided raftpb.Message is present.
 // It serves as a poor man's Optional[raftpb.Message].
 func hasMsg(m raftpb.Message) bool { return m.Type != 0 }
@@ -1409,7 +1394,7 @@ func hasMsg(m raftpb.Message) bool { return m.Type != 0 }
 // message slice and returns them separately.
 func splitLocalStorageMsgs(
 	msgs []raftpb.Message,
-) (otherMsgs []raftpb.Message, msgStorageAppend, msgStorageApply raftpb.Message) {
+) (otherMsgs []raftpb.Message, msgStorageAppend raftpb.Message) {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		switch msgs[i].Type {
 		case raftpb.MsgStorageAppend:
@@ -1417,22 +1402,17 @@ func splitLocalStorageMsgs(
 				panic("two MsgStorageAppend")
 			}
 			msgStorageAppend = msgs[i]
-		case raftpb.MsgStorageApply:
-			if hasMsg(msgStorageApply) {
-				panic("two MsgStorageApply")
-			}
-			msgStorageApply = msgs[i]
 		default:
 			// Local storage messages will always be at the end of the messages slice,
 			// so we can terminate iteration as soon as we reach any other message
-			// type. This is leaking an implementation detail from etcd/raft which may
+			// type. This is leaking an implementation detail from pkg/raft which may
 			// not always hold, but while it does, we use it for convenience and
 			// assert against it changing in sendRaftMessages.
-			return msgs[:i+1], msgStorageAppend, msgStorageApply
+			return msgs[:i+1], msgStorageAppend
 		}
 	}
 	// Only local storage messages.
-	return nil, msgStorageAppend, msgStorageApply
+	return nil, msgStorageAppend
 }
 
 // maybeFatalOnRaftReadyErr will fatal if err is neither nil nor
@@ -1896,12 +1876,6 @@ func (r *Replica) sendRaftMessages(
 		case raft.LocalAppendThread:
 			// To local append thread.
 			// NOTE: we don't currently split append work off into an async goroutine.
-			// Instead, we handle messages to LocalAppendThread inline on the raft
-			// scheduler goroutine, so this code path is unused.
-			panic("unsupported, currently processed inline on raft scheduler goroutine")
-		case raft.LocalApplyThread:
-			// To local apply thread.
-			// NOTE: we don't currently split apply work off into an async goroutine.
 			// Instead, we handle messages to LocalAppendThread inline on the raft
 			// scheduler goroutine, so this code path is unused.
 			panic("unsupported, currently processed inline on raft scheduler goroutine")
