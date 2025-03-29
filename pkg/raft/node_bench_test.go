@@ -29,7 +29,7 @@ func BenchmarkOneNode(b *testing.B) {
 	s := newTestMemoryStorage(withPeers(1))
 	rn := newTestRawNode(1, 10, 1, s)
 	require.NoError(b, rn.Campaign())
-	rd := rn.ReadyTODO()
+	rd := rn.Ready()
 	require.NoError(b, s.Append(rd.Entries))
 	rn.AdvanceHack(rd)
 
@@ -44,7 +44,7 @@ func BenchmarkOneNode(b *testing.B) {
 		func() {
 			mu.Lock()
 			defer mu.Unlock()
-			rd = rn.ReadyTODO()
+			rd = rn.Ready()
 		}()
 		_ = s.Append(rd.Entries)
 		// a reasonable disk sync latency
