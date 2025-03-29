@@ -217,7 +217,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			// ConfState.
 			var cs *pb.ConfState
 			for cs == nil {
-				rd := rawNode.Ready()
+				rd := rawNode.ReadyTODO()
 				s.Append(rd.Entries)
 				apply := committedEntries(t, rawNode, rd)
 				for _, ent := range apply {
@@ -294,7 +294,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 			// should happen. Otherwise, we're in a joint state, which is either
 			// left automatically or not. If not, we add the proposal that leaves
 			// it manually.
-			rd := rawNode.Ready()
+			rd := rawNode.ReadyTODO()
 			var context []byte
 			if !tc.exp.AutoLeave {
 				require.Empty(t, rd.Entries)
@@ -306,7 +306,7 @@ func testRawNodeProposeAndConfChange(t *testing.T, storeLivenessEnabled bool) {
 				context = []byte("manual")
 				t.Log("leaving joint state manually")
 				require.NoError(t, rawNode.ProposeConfChange(pb.ConfChangeV2{Context: context}))
-				rd = rawNode.Ready()
+				rd = rawNode.ReadyTODO()
 			}
 
 			// Check that the right ConfChange comes out.
@@ -374,7 +374,7 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	// ConfState.
 	var cs *pb.ConfState
 	for cs == nil {
-		rd := rawNode.Ready()
+		rd := rawNode.ReadyTODO()
 		s.Append(rd.Entries)
 		apply := committedEntries(t, rawNode, rd)
 		for _, ent := range apply {
@@ -438,7 +438,7 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	require.Zero(t, rawNode.raft.pendingConfIndex)
 
 	// Move the RawNode along. It should not leave joint because it's follower.
-	rd := rawNode.Ready()
+	rd := rawNode.ReadyTODO()
 	t.Log(DescribeReady(rd, nil))
 	require.Empty(t, rd.Entries)
 	rawNode.AdvanceHack(rd)
@@ -447,13 +447,13 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	// Make it leader again. It should leave joint automatically after moving apply index.
 	rawNode.Campaign()
 	for i := 0; i < 3; i++ {
-		rd = rawNode.Ready()
+		rd = rawNode.ReadyTODO()
 		t.Log(DescribeReady(rd, nil))
 		s.Append(rd.Entries)
 		rawNode.AdvanceHack(rd)
 		rawNode.AckApplied(committedEntries(t, rawNode, rd))
 	}
-	rd = rawNode.Ready()
+	rd = rawNode.ReadyTODO()
 	t.Log(DescribeReady(rd, nil))
 	s.Append(rd.Entries)
 	// Check that the right ConfChange comes out.
@@ -475,13 +475,13 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 	require.NoError(t, err)
 
-	rd := rawNode.Ready()
+	rd := rawNode.ReadyTODO()
 	s.Append(rd.Entries)
 	rawNode.AdvanceHack(rd)
 
 	rawNode.Campaign()
 	for {
-		rd = rawNode.Ready()
+		rd = rawNode.ReadyTODO()
 		s.Append(rd.Entries)
 		rawNode.AdvanceHack(rd)
 		rawNode.AckApplied(committedEntries(t, rawNode, rd))
@@ -492,7 +492,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 
 	proposeConfChangeAndApply := func(cc pb.ConfChange) {
 		rawNode.ProposeConfChange(cc)
-		rd = rawNode.Ready()
+		rd = rawNode.ReadyTODO()
 		s.Append(rd.Entries)
 		committed := committedEntries(t, rawNode, rd)
 		for _, entry := range committed {
@@ -604,19 +604,19 @@ func TestRawNodeStart(t *testing.T) {
 	require.False(t, rawNode.HasReady())
 
 	rawNode.Campaign()
-	rd := rawNode.Ready()
+	rd := rawNode.ReadyTODO()
 	storage.Append(rd.Entries)
 	rawNode.AdvanceHack(rd)
 	rawNode.Propose([]byte("foo"))
 	require.True(t, rawNode.HasReady())
 
-	rd = rawNode.Ready()
+	rd = rawNode.ReadyTODO()
 	require.Equal(t, entries, rd.Entries)
 	storage.Append(rd.Entries)
 	rawNode.AdvanceHack(rd)
 
 	require.True(t, rawNode.HasReady())
-	rd = rawNode.Ready()
+	rd = rawNode.ReadyTODO()
 	require.Empty(t, rd.Entries)
 	rawNode.AdvanceHack(rd)
 	rawNode.AckApplied(committedEntries(t, rawNode, rd))
@@ -650,7 +650,7 @@ func TestRawNodeRestart(t *testing.T) {
 	require.NoError(t, err)
 	rawNode2, err := NewRawNode(newTestConfig(2, 10, 1, storage))
 	require.NoError(t, err)
-	rd := rawNode1.Ready()
+	rd := rawNode1.ReadyTODO()
 	var advance []pb.Message
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	assert.Equal(t, want, rd)
@@ -713,7 +713,7 @@ func TestRawNodeRestartFromSnapshot(t *testing.T) {
 	s.Append(entries)
 	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 	require.NoError(t, err)
-	rd := rawNode.Ready()
+	rd := rawNode.ReadyTODO()
 	var advance []pb.Message
 	rd.Messages, advance = SplitMessages(1, rd.Messages)
 	if assert.Equal(t, want, rd) {
@@ -732,7 +732,7 @@ func TestRawNodeStatus(t *testing.T) {
 	require.Nil(t, rn.Status().Progress)
 	require.NoError(t, rn.Campaign())
 
-	rd := rn.Ready()
+	rd := rn.ReadyTODO()
 	s.Append(rd.Entries)
 	rn.AdvanceHack(rd)
 	status := rn.Status()
@@ -802,7 +802,7 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 
 	for highestApplied := uint64(0); highestApplied != 11; {
-		rd := rawNode.Ready()
+		rd := rawNode.ReadyTODO()
 		committed := committedEntries(t, rawNode, rd)
 		n := len(committed)
 		require.NotZero(t, n, "stopped applying entries at index %d", highestApplied)
@@ -897,7 +897,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	// Become the leader and apply empty entry.
 	rawNode.Campaign()
 	for {
-		rd := rawNode.Ready()
+		rd := rawNode.ReadyTODO()
 		s.Append(rd.Entries)
 		rawNode.AdvanceHack(rd)
 		if !rd.Committed.Empty() {
@@ -923,7 +923,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 
 	// Recover from the partition. The uncommitted tail of the Raft log should
 	// disappear as entries are committed.
-	rd := rawNode.Ready()
+	rd := rawNode.ReadyTODO()
 	require.Len(t, rd.Entries, maxEntries)
 	require.True(t, rd.Committed.Empty())
 	s.Append(rd.Entries)
@@ -932,7 +932,7 @@ func TestRawNodeBoundedLogGrowthWithPartition(t *testing.T) {
 	// Entries are appended, but not applied.
 	checkUncommitted(maxEntrySize)
 
-	rd = rawNode.Ready()
+	rd = rawNode.ReadyTODO()
 	require.Empty(t, rd.Entries)
 	require.Equal(t, uint64(maxEntries), rd.Committed.Len())
 	rawNode.AdvanceHack(rd)
@@ -1020,7 +1020,7 @@ func TestRawNodeConsumeReady(t *testing.T) {
 
 	// Inject first message, and make sure it moves from RawNode to Ready.
 	rn.raft.msgs = append(rn.raft.msgs, m1)
-	rd := rn.Ready()
+	rd := rn.ReadyTODO()
 	require.Empty(t, rn.raft.msgs)
 	require.Len(t, rd.Messages, 1)
 	require.Equal(t, m1, rd.Messages[0])
@@ -1075,7 +1075,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 	stabilize := func() (applied uint64) {
 		for rn.HasReady() {
 			numReady++
-			rd := rn.Ready()
+			rd := rn.ReadyTODO()
 			if debug {
 				b.Log(DescribeReady(rd, nil))
 			}

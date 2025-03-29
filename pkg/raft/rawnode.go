@@ -226,12 +226,21 @@ func (rn *RawNode) Ready() Ready {
 	}
 	// For async storage writes, enqueue messages to local storage threads.
 	if rn.needStorageAppendMsg() {
-		app := rn.newStorageAppend()
-		rd.StorageAppend = app
-		rd.Messages = append(rd.Messages, app.ToMessage(r.id))
+		rd.StorageAppend = rn.newStorageAppend()
 	}
 	rd.Committed = r.raftLog.nextCommittedSpan(rn.applyUnstableEntries())
 
+	return rd
+}
+
+// ReadyTODO returns a legacy Ready which includes pb.MsgStorageAppend in the
+// Messages field.
+// TODO(pav-kv): migrate all the users to the new Ready() call.
+func (rn *RawNode) ReadyTODO() Ready {
+	rd := rn.Ready()
+	if app := rd.StorageAppend; !app.Empty() {
+		rd.Messages = append(rd.Messages, app.ToMessage(rn.raft.id))
+	}
 	return rd
 }
 

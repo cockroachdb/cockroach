@@ -69,6 +69,12 @@ type StorageAppend struct {
 	Responses []pb.Message
 }
 
+// Empty returns true iff the storage append is empty.
+func (m *StorageAppend) Empty() bool {
+	return IsEmptyHardState(m.HardState) &&
+		len(m.Entries) == 0 && m.Snapshot == nil && len(m.Responses) == 0
+}
+
 // NeedAck returns true if the RawNode wants to be notified after the writes are
 // durable on the log storage.
 func (m *StorageAppend) NeedAck() bool {
