@@ -112,7 +112,7 @@ func (n *node) start() {
 		if !n.mu.rn.HasReady() {
 			return raft.Ready{}, false
 		}
-		return n.mu.rn.Ready(), true
+		return n.mu.rn.ReadyTODO(), true
 	}
 	handleReady := func(rd raft.Ready) {
 		if !raft.IsEmptyHardState(rd.HardState) {
