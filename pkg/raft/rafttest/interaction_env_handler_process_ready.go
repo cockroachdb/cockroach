@@ -47,7 +47,7 @@ func (env *InteractionEnv) handleProcessReady(t *testing.T, d datadriven.TestDat
 func (env *InteractionEnv) ProcessReady(idx int) error {
 	// TODO(tbg): Allow simulating crashes here.
 	n := &env.Nodes[idx]
-	rd := n.Ready()
+	rd := n.ReadyTODO()
 
 	if !n.asyncWrites {
 		send, _ := raft.SplitMessages(raftpb.PeerID(idx+1), rd.Messages)

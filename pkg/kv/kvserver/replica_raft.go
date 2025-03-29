@@ -980,7 +980,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		logSnapshot = raftGroup.LogSnapshot()
 		if hasReady = raftGroup.HasReady(); hasReady {
-			ready = raftGroup.Ready()
+			ready = raftGroup.ReadyTODO()
 		}
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
