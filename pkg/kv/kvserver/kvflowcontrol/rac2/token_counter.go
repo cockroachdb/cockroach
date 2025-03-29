@@ -181,6 +181,27 @@ func (f TokenType) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
+// Wrapper type to give mutex contention events in mutex profiles a leaf frame
+// that references tokenCounterMu. This makes it easier to look at contention
+// on this mutex specifically.
+type tokenCounterMu syncutil.RWMutex
+
+func (mu *tokenCounterMu) Lock() {
+	(*syncutil.RWMutex)(mu).Lock()
+}
+
+func (mu *tokenCounterMu) Unlock() {
+	(*syncutil.RWMutex)(mu).Unlock()
+}
+
+func (mu *tokenCounterMu) RLock() {
+	(*syncutil.RWMutex)(mu).RLock()
+}
+
+func (mu *tokenCounterMu) RUnlock() {
+	(*syncutil.RWMutex)(mu).RUnlock()
+}
+
 // tokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
@@ -194,7 +215,7 @@ type tokenCounter struct {
 	tokenType TokenType
 
 	mu struct {
-		syncutil.RWMutex
+		tokenCounterMu
 
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
