@@ -38,6 +38,63 @@ func (a *SoftState) equal(b *SoftState) bool {
 	return a.RaftState == b.RaftState
 }
 
+// StorageAppend describes a storage append request. It contains the updates
+// that must be written to storage atomically, such as new HardState, snapshot,
+// and/or log entries. When the updates are durable on the log storage, the
+// attached messages can be sent.
+type StorageAppend struct {
+	// The current HardState to be saved to stable storage. Empty if there is no
+	// update to the HardState.
+	pb.HardState
+	// Entries contains the log entries to be appended to the log in storage.
+	// Empty if there are no new entries.
+	//
+	// Invariant: Entries[0].Index <= LogStorage.LastIndex() + 1.
+	//
+	// All entries >= Entry[0].Index, if any, must be truncated from the log, and
+	// Entries are written to replace them.
+	Entries []pb.Entry
+	// Snapshot is the snapshot to be saved to stable storage. Empty if there is
+	// no snapshot.
+	//
+	// When installing a snapshot, the raft log must be cleared and initialized to
+	// a state according to the Snapshot.Metadata.{Index,Term}.
+	Snapshot *pb.Snapshot
+	// Mark is the log mark that identifies this storage write. Populated if
+	// Entries or Snapshot is not empty. A non-empty Mark never regresses.
+	Mark LogMark
+	// Responses contains messages that should be sent AFTER the updates above
+	// have been *durably* persisted in log storage. Messages addressed to the
+	// local RawNode can be stepped into it directly.
+	Responses []pb.Message
+}
+
+// NeedAck returns true if the RawNode wants to be notified after the writes are
+// durable on the log storage.
+func (m *StorageAppend) NeedAck() bool {
+	return len(m.Entries) != 0 || m.Snapshot != nil
+}
+
+// ToMessage converts the StorageAppend to a legacy pb.MsgStorageAppend.
+// TODO(pav-kv): remove this.
+func (m *StorageAppend) ToMessage(self pb.PeerID) pb.Message {
+	return pb.Message{
+		Type:      pb.MsgStorageAppend,
+		From:      self,
+		To:        LocalAppendThread,
+		Term:      m.Term,
+		Vote:      m.Vote,
+		Commit:    m.Commit,
+		Lead:      m.Lead,
+		LeadEpoch: m.LeadEpoch,
+		Entries:   m.Entries,
+		LogTerm:   m.Mark.Term,
+		Index:     m.Mark.Index,
+		Snapshot:  m.Snapshot,
+		Responses: m.Responses,
+	}
+}
+
 // Ready encapsulates the entries and messages that are ready to read,
 // be saved to stable storage, committed or sent to other peers.
 // All fields in Ready are read-only.
