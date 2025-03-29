@@ -576,7 +576,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/merge.out --label
  
  -- remove constraints
  alter table target drop CONSTRAINT target_pkey;
-+ERROR:  relation "target" (1299): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "target" (1327): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  alter table target alter column tid drop not null;
