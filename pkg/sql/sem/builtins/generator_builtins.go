@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
@@ -56,7 +57,6 @@ import (
 
 // See the comments at the start of generators.go for details about
 // this functionality.
-
 var _ eval.ValueGenerator = &seriesValueGenerator{}
 var _ eval.ValueGenerator = &arrayValueGenerator{}
 
@@ -299,16 +299,16 @@ var generators = map[string]builtinDefinition{
 	"workload_index_recs": makeBuiltin(genProps(),
 		makeGeneratorOverload(
 			tree.ParamTypes{},
-			types.String,
+			WorkloadIndexRecsGeneratorType,
 			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimestamp */),
-			"Returns set of index recommendations",
+			"Returns index recommendations and the fingerprint ids that the indexes will impact",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
-			types.String,
+			WorkloadIndexRecsGeneratorType,
 			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimestamp */),
-			"Returns set of index recommendations",
+			"Returns index recommendations and the fingerprint ids that the indexes will impact",
 			volatility.Immutable,
 		),
 	),
@@ -1244,9 +1244,9 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 	return s.datums, nil
 }
 
-// makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to return
-// all the index recommendations as an array of strings. The hasTimestamp
-// represents whether there is a timestamp filter.
+// makeWorkloadIndexRecsGeneratorFactory uses the WorkloadIndexRecsGenerator to return
+// all the index recommendations with the associated fingerprints they impact. The
+// hasTimestamp represents whether there is a timestamp filter.
 func makeWorkloadIndexRecsGeneratorFactory(hasTimestamp bool) eval.GeneratorOverload {
 	return func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 		var ts tree.DTimestampTZ
@@ -1258,20 +1258,78 @@ func makeWorkloadIndexRecsGeneratorFactory(hasTimestamp bool) eval.GeneratorOver
 			ts = tree.DTimestampTZ{Time: tree.MinSupportedTime}
 		}
 
-		var indexRecs []string
-		indexRecs, err = workloadindexrec.FindWorkloadRecs(ctx, evalCtx, &ts)
+		indexRecs, err := workloadindexrec.FindWorkloadRecs(ctx, evalCtx, &ts)
 		if err != nil {
-			return &arrayValueGenerator{}, err
+			return &WorkloadIndexRecsGenerator{}, err
 		}
 
-		arr := tree.NewDArray(types.String)
+		arr := tree.NewDArray(WorkloadIndexRecsGeneratorType)
 		for _, indexRec := range indexRecs {
-			if err = arr.Append(tree.NewDString(indexRec)); err != nil {
+			fingerprints := tree.NewDArray(types.Bytes)
+			for _, fingerprint := range indexRec.FingerprintIds {
+				fp := encoding.EncodeUint64Ascending(nil, fingerprint)
+				if err = fingerprints.Append(tree.NewDBytes(tree.DBytes(fp))); err != nil {
+					return nil, err
+				}
+			}
+			if err = arr.Append(
+				tree.NewDTuple(
+					WorkloadIndexRecsGeneratorType,
+					tree.NewDString(indexRec.Index),
+					fingerprints),
+			); err != nil {
 				return nil, err
 			}
 		}
-		return &arrayValueGenerator{array: arr}, nil
+		return &WorkloadIndexRecsGenerator{arr: arr}, nil
 	}
+}
+
+var WorkloadIndexRecsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.BytesArray},
+	[]string{"index_rec", "fingerprint_ids"},
+)
+
+var _ eval.ValueGenerator = &WorkloadIndexRecsGenerator{}
+
+type WorkloadIndexRecsGenerator struct {
+	arr *tree.DArray
+	idx int
+}
+
+func (w *WorkloadIndexRecsGenerator) ResolvedType() *types.T {
+	return WorkloadIndexRecsGeneratorType
+}
+
+func (w *WorkloadIndexRecsGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	w.idx = -1
+	return nil
+}
+
+func (w *WorkloadIndexRecsGenerator) Next(ctx context.Context) (bool, error) {
+	w.idx++
+	if w.idx >= w.arr.Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (w *WorkloadIndexRecsGenerator) Values() (tree.Datums, error) {
+	elem := w.arr.Array[w.idx]
+
+	if elem == tree.DNull {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"null array element not allowed in this context",
+		)
+	}
+
+	ret := make(tree.Datums, 0, 2)
+	ret = append(ret, tree.MustBeDTuple(elem).D...)
+	return ret, nil
+}
+
+func (w *WorkloadIndexRecsGenerator) Close(ctx context.Context) {
 }
 
 func makeArrayGenerator(
