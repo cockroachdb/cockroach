@@ -1,0 +1,6 @@
+echo
+----
+bar_counter 2
+bar_counter{tenant_id="3"} 2
+foo_counter 2
+foo_counter{tenant_id="2"} 2

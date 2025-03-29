@@ -149,6 +149,16 @@ func (cs *childSet) get(labelVals ...string) (ChildMetric, bool) {
 	return cs.mu.children.Get(labelVals...)
 }
 
+// clear method removes all children from the childSet. It does not reset parent metric values.
+// Method should cautiously be used when childSet is reinitialised/updated. Today, it is
+// only used when cluster settings are updated to support app and db label values. For normal
+// operations, please use add, remove and get method to update the childSet.
+func (cs *childSet) clear() {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.mu.children.Clear()
+}
+
 type MetricItem interface {
 	labelValuer
 }
@@ -185,6 +195,7 @@ type ChildrenStorage interface {
 	Del(key ChildMetric)
 	Do(f func(e interface{}))
 	GetChildMetric(e interface{}) ChildMetric
+	Clear()
 }
 
 var _ ChildrenStorage = &UnorderedCacheWrapper{}
@@ -229,6 +240,10 @@ func (ucw *UnorderedCacheWrapper) Do(f func(e interface{})) {
 	})
 }
 
+func (ucw *UnorderedCacheWrapper) Clear() {
+	ucw.cache.Clear()
+}
+
 type BtreeWrapper struct {
 	tree *btree.BTree
 }
@@ -265,6 +280,10 @@ func (b BtreeWrapper) Do(f func(e interface{})) {
 
 func (b BtreeWrapper) GetChildMetric(e interface{}) ChildMetric {
 	return e.(ChildMetric)
+}
+
+func (b BtreeWrapper) Clear() {
+	b.tree.Clear(false)
 }
 
 func (lv *labelValuesSlice) Less(o btree.Item) bool {
