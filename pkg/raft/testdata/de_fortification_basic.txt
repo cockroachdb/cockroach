@@ -93,7 +93,7 @@ stabilize
   INFO 3 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:2 Vote:1
+  HardState {Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0}
   Responses:
   1->1 MsgVoteResp Term:1 Log:0/0
 > 2 handling Ready
@@ -112,12 +112,12 @@ stabilize
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:2 Vote:1
+  HardState {Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0}
   Responses:
   2->1 MsgVoteResp Term:1 Log:0/0
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:2 Vote:1
+  HardState {Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0}
   Responses:
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 receiving messages
@@ -147,7 +147,8 @@ stabilize
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:1 Log:1/3 Commit:2 Vote:1 Lead:1 LeadEpoch:3 Entries:[1/3 EntryNormal ""]
+  HardState {Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:3}
+  Entry: 1/3 EntryNormal ""
   Responses:
   1->1 MsgAppResp Term:1 Log:0/3 Commit:2
   1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
@@ -175,14 +176,16 @@ stabilize
   AppendThread->1 MsgStorageAppendResp Term:0 Log:1/3
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:1/3 Commit:2 Vote:1 Lead:1 LeadEpoch:3 Entries:[1/3 EntryNormal ""]
+  HardState {Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:3}
+  Entry: 1/3 EntryNormal ""
   Responses:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
   2->1 MsgAppResp Term:1 Log:0/3 Commit:2
   AppendThread->2 MsgStorageAppendResp Term:0 Log:1/3
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:1 Log:1/3 Commit:2 Vote:1 Lead:1 Entries:[1/3 EntryNormal ""]
+  HardState {Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0}
+  Entry: 1/3 EntryNormal ""
   Responses:
   3->1 MsgAppResp Term:1 Log:0/3 Commit:2
   AppendThread->3 MsgStorageAppendResp Term:0 Log:1/3
@@ -207,7 +210,7 @@ stabilize
   1->3 MsgApp Term:1 Log:1/3 Commit:3
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1 LeadEpoch:3
+  HardState {Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3}
   Responses:
 > 1 processing apply thread
   Applying:
@@ -226,12 +229,12 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1 LeadEpoch:3
+  HardState {Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3}
   Responses:
   2->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1
+  HardState {Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0}
   Responses:
   3->1 MsgAppResp Term:1 Log:0/3 Commit:3
 > 2 processing apply thread
@@ -286,14 +289,14 @@ stabilize
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1
+  HardState {Term:1 Vote:1 Commit:3 Lead:0 LeadEpoch:0}
   Responses:
 > 2 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1
+  HardState {Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0}
   Responses:
 
 print-fortification-state 1
@@ -377,7 +380,7 @@ stabilize
   INFO 3 [logterm: 1, index: 3, vote: 0] cast MsgVote for 2 [logterm: 1, index: 3] at term 2
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:3 Vote:2
+  HardState {Term:2 Vote:2 Commit:3 Lead:0 LeadEpoch:0}
   Responses:
   2->2 MsgVoteResp Term:2 Log:0/0
 > 1 handling Ready
@@ -396,12 +399,12 @@ stabilize
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:3 Vote:2
+  HardState {Term:2 Vote:2 Commit:3 Lead:0 LeadEpoch:0}
   Responses:
   1->2 MsgVoteResp Term:2 Log:0/0
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:3 Vote:2
+  HardState {Term:2 Vote:2 Commit:3 Lead:0 LeadEpoch:0}
   Responses:
   3->2 MsgVoteResp Term:2 Log:0/0
 > 2 receiving messages
@@ -433,7 +436,8 @@ stabilize
   2->3 MsgApp Term:2 Log:1/3 Commit:3 Entries:[2/4 EntryNormal ""]
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:2 Log:2/4 Commit:3 Vote:2 Lead:2 LeadEpoch:1 Entries:[2/4 EntryNormal ""]
+  HardState {Term:2 Vote:2 Commit:3 Lead:2 LeadEpoch:1}
+  Entry: 2/4 EntryNormal ""
   Responses:
   2->2 MsgAppResp Term:2 Log:0/4 Commit:3
   2->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
@@ -462,14 +466,16 @@ stabilize
   AppendThread->2 MsgStorageAppendResp Term:0 Log:2/4
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:2 Log:2/4 Commit:3 Vote:2 Lead:2 LeadEpoch:1 Entries:[2/4 EntryNormal ""]
+  HardState {Term:2 Vote:2 Commit:3 Lead:2 LeadEpoch:1}
+  Entry: 2/4 EntryNormal ""
   Responses:
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/4 Commit:3
   AppendThread->1 MsgStorageAppendResp Term:0 Log:2/4
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:2 Log:2/4 Commit:3 Vote:2 Lead:2 LeadEpoch:1 Entries:[2/4 EntryNormal ""]
+  HardState {Term:2 Vote:2 Commit:3 Lead:2 LeadEpoch:1}
+  Entry: 2/4 EntryNormal ""
   Responses:
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:2 Log:0/4 Commit:3
@@ -496,7 +502,7 @@ stabilize
   2->3 MsgApp Term:2 Log:2/4 Commit:4
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:1}
   Responses:
 > 2 processing apply thread
   Applying:
@@ -515,12 +521,12 @@ stabilize
   3->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:1}
   Responses:
   1->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:1}
   Responses:
   3->2 MsgAppResp Term:2 Log:0/4 Commit:4
 > 1 processing apply thread
@@ -570,14 +576,14 @@ stabilize
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2
+  HardState {Term:2 Vote:2 Commit:4 Lead:0 LeadEpoch:0}
   Responses:
 > 3 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2
+  HardState {Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0}
   Responses:
 
 raft-state
@@ -618,7 +624,7 @@ stabilize
   INFO 2 [logterm: 2, index: 4, vote: 0] cast MsgVote for 3 [logterm: 2, index: 4] at term 3
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:4 Vote:3
+  HardState {Term:3 Vote:3 Commit:4 Lead:0 LeadEpoch:0}
   Responses:
   3->3 MsgVoteResp Term:3 Log:0/0
 > 2 handling Ready
@@ -632,7 +638,7 @@ stabilize
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:4 Vote:3
+  HardState {Term:3 Vote:3 Commit:4 Lead:0 LeadEpoch:0}
   Responses:
   2->3 MsgVoteResp Term:3 Log:0/0
 > 3 receiving messages
@@ -667,7 +673,8 @@ stabilize
   3->2 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
+  HardState {Term:3 Vote:3 Commit:4 Lead:3 LeadEpoch:1}
+  Entry: 3/5 EntryNormal ""
   Responses:
   3->3 MsgAppResp Term:3 Log:0/5 Commit:4
   3->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
@@ -696,14 +703,16 @@ stabilize
   AppendThread->3 MsgStorageAppendResp Term:0 Log:3/5
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
+  HardState {Term:3 Commit:4 Lead:3 LeadEpoch:1}
+  Entry: 3/5 EntryNormal ""
   Responses:
   1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:3 Log:0/5 Commit:4
   AppendThread->1 MsgStorageAppendResp Term:0 Log:3/5
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
+  HardState {Term:3 Vote:3 Commit:4 Lead:3 LeadEpoch:1}
+  Entry: 3/5 EntryNormal ""
   Responses:
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   2->3 MsgAppResp Term:3 Log:0/5 Commit:4
@@ -730,7 +739,7 @@ stabilize
   3->2 MsgApp Term:3 Log:3/5 Commit:5
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
+  HardState {Term:3 Vote:3 Commit:5 Lead:3 LeadEpoch:1}
   Responses:
 > 3 processing apply thread
   Applying:
@@ -749,12 +758,12 @@ stabilize
   2->3 MsgAppResp Term:3 Log:0/5 Commit:5
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Lead:3 LeadEpoch:1
+  HardState {Term:3 Commit:5 Lead:3 LeadEpoch:1}
   Responses:
   1->3 MsgAppResp Term:3 Log:0/5 Commit:5
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
+  HardState {Term:3 Vote:3 Commit:5 Lead:3 LeadEpoch:1}
   Responses:
   2->3 MsgAppResp Term:3 Log:0/5 Commit:5
 > 1 processing apply thread
@@ -849,7 +858,7 @@ stabilize
   INFO 3 [logterm: 3, index: 5, vote: 0] cast MsgVote for 2 [logterm: 3, index: 5] at term 4
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
+  HardState {Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0}
   Responses:
   2->2 MsgVoteResp Term:4 Log:0/0
 > 1 handling Ready
@@ -869,12 +878,12 @@ stabilize
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
+  HardState {Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0}
   Responses:
   1->2 MsgVoteResp Term:4 Log:0/0
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
+  HardState {Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0}
   Responses:
   3->2 MsgVoteResp Term:4 Log:0/0
 > 2 receiving messages
@@ -906,7 +915,8 @@ stabilize
   2->3 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
+  HardState {Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1}
+  Entry: 4/6 EntryNormal ""
   Responses:
   2->2 MsgAppResp Term:4 Log:0/6 Commit:5
   2->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
@@ -935,14 +945,16 @@ stabilize
   AppendThread->2 MsgStorageAppendResp Term:0 Log:4/6
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
+  HardState {Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1}
+  Entry: 4/6 EntryNormal ""
   Responses:
   1->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:4 Log:0/6 Commit:5
   AppendThread->1 MsgStorageAppendResp Term:0 Log:4/6
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
+  HardState {Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1}
+  Entry: 4/6 EntryNormal ""
   Responses:
   3->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:4 Log:0/6 Commit:5
@@ -969,7 +981,7 @@ stabilize
   2->3 MsgApp Term:4 Log:4/6 Commit:6
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1}
   Responses:
 > 2 processing apply thread
   Applying:
@@ -988,12 +1000,12 @@ stabilize
   3->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1}
   Responses:
   1->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  HardState {Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1}
   Responses:
   3->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 1 processing apply thread
@@ -1043,14 +1055,14 @@ stabilize
   DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2
+  HardState {Term:4 Vote:2 Commit:6 Lead:0 LeadEpoch:0}
   Responses:
 > 1 handling Ready
   Ready:
   HardState Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:0
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2
+  HardState {Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:0}
   Responses:
 
 raft-state
@@ -1088,7 +1100,7 @@ stabilize
   INFO 3 [logterm: 4, index: 6, vote: 2] ignored MsgVote from 1 [logterm: 4, index: 6] at term 4: supporting fortified leader 2 at epoch 1
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1
+  HardState {Term:5 Vote:1 Commit:6 Lead:0 LeadEpoch:0}
   Responses:
   1->1 MsgVoteResp Term:5 Log:0/0
 > 2 handling Ready
@@ -1102,7 +1114,7 @@ stabilize
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1
+  HardState {Term:5 Vote:1 Commit:6 Lead:0 LeadEpoch:0}
   Responses:
   2->1 MsgVoteResp Term:5 Log:0/0
 > 1 receiving messages
@@ -1135,7 +1147,8 @@ stabilize
   DEBUG 3 reset election elapsed to 0
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""]
+  HardState {Term:5 Vote:1 Commit:6 Lead:1 LeadEpoch:3}
+  Entry: 5/7 EntryNormal ""
   Responses:
   1->1 MsgAppResp Term:5 Log:0/7 Commit:6
   1->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
@@ -1163,14 +1176,16 @@ stabilize
   AppendThread->1 MsgStorageAppendResp Term:0 Log:5/7
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""]
+  HardState {Term:5 Vote:1 Commit:6 Lead:1 LeadEpoch:3}
+  Entry: 5/7 EntryNormal ""
   Responses:
   2->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
   2->1 MsgAppResp Term:5 Log:0/7 Commit:6
   AppendThread->2 MsgStorageAppendResp Term:0 Log:5/7
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Lead:1 Entries:[5/7 EntryNormal ""]
+  HardState {Term:5 Commit:6 Lead:1 LeadEpoch:0}
+  Entry: 5/7 EntryNormal ""
   Responses:
   3->1 MsgAppResp Term:5 Log:0/7 Commit:6
   AppendThread->3 MsgStorageAppendResp Term:0 Log:5/7
@@ -1195,7 +1210,7 @@ stabilize
   1->3 MsgApp Term:5 Log:5/7 Commit:7
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
+  HardState {Term:5 Vote:1 Commit:7 Lead:1 LeadEpoch:3}
   Responses:
 > 1 processing apply thread
   Applying:
@@ -1214,12 +1229,12 @@ stabilize
   3->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
+  HardState {Term:5 Vote:1 Commit:7 Lead:1 LeadEpoch:3}
   Responses:
   2->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Lead:1
+  HardState {Term:5 Commit:7 Lead:1 LeadEpoch:0}
   Responses:
   3->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 2 processing apply thread

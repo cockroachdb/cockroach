@@ -17,7 +17,12 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"fmt"
+	"strings"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 type SnapshotStatus int
 
@@ -86,26 +91,6 @@ func (m *StorageAppend) NeedAck() bool {
 	return len(m.Entries) != 0 || m.Snapshot != nil
 }
 
-// ToMessage converts the StorageAppend to a legacy pb.MsgStorageAppend.
-// TODO(pav-kv): remove this.
-func (m *StorageAppend) ToMessage(self pb.PeerID) pb.Message {
-	return pb.Message{
-		Type:      pb.MsgStorageAppend,
-		From:      self,
-		To:        LocalAppendThread,
-		Term:      m.Term,
-		Vote:      m.Vote,
-		Commit:    m.Commit,
-		Lead:      m.Lead,
-		LeadEpoch: m.LeadEpoch,
-		Entries:   m.Entries,
-		LogTerm:   m.Mark.Term,
-		Index:     m.Mark.Index,
-		Snapshot:  m.Snapshot,
-		Responses: m.Responses,
-	}
-}
-
 // SendAfterSync returns the messages to send after the write is synced. This
 // excludes self-addressed messages of this RawNode.
 func (m *StorageAppend) SendAfterSync(self pb.PeerID) []pb.Message {
@@ -128,6 +113,29 @@ func (m *StorageAppend) StepAfterSync(self pb.PeerID) []pb.Message {
 		}
 	}
 	return step
+}
+
+// Describe returns a string representation of this storage append.
+func (m *StorageAppend) Describe(f EntryFormatter) string {
+	var buf strings.Builder
+	if hs := m.HardState; !IsEmptyHardState(hs) {
+		_, _ = fmt.Fprintf(&buf, "HardState {%s}\n", DescribeHardState(hs))
+	}
+	if ln := len(m.Entries); ln == 1 {
+		_, _ = fmt.Fprintf(&buf, "Entry: %s\n", DescribeEntry(m.Entries[0], f))
+	} else if ln > 1 {
+		_, _ = fmt.Fprintf(&buf, "Entries:\n%s", DescribeEntries(m.Entries, f))
+	}
+	if snap := m.Snapshot; snap != nil {
+		_, _ = fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(*snap))
+	}
+	if responses := m.Responses; len(responses) != 0 {
+		buf.WriteString("OnSync:\n")
+		for _, msg := range responses {
+			_, _ = fmt.Fprintf(&buf, "%s\n", DescribeMessage(msg, f))
+		}
+	}
+	return buf.String()
 }
 
 // Ready encapsulates the entries and messages that are ready to read,
