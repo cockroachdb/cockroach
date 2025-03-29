@@ -1250,7 +1250,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				}
 			}
 
-			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
+			r.mu.raftTracer.MaybeTraceAppend(ready.StorageAppend)
 			if state, err = r.asLogStorage().appendRaftMuLocked(ctx, app, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
