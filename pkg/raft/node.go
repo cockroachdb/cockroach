@@ -19,6 +19,7 @@ package raft
 
 import (
 	"fmt"
+	"iter"
 	"strings"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -102,28 +103,14 @@ func (m *StorageAppend) NeedAck() bool {
 	return len(m.Entries) != 0 || m.Snapshot != nil
 }
 
-// SendAfterSync returns the messages to send after the write is synced. This
-// excludes self-addressed messages of this RawNode.
-func (m *StorageAppend) SendAfterSync(self pb.PeerID) []pb.Message {
-	var send []pb.Message
-	for _, msg := range m.Responses {
-		if msg.To != self {
-			send = append(send, msg)
-		}
+// Ack returns the acknowledgement that should be used to notify
+// RawNode.AckAppend after the write is durable on the log storage.
+func (m *StorageAppend) Ack() StorageAppendAck {
+	ack := StorageAppendAck{Mark: m.Mark, responses: m.Responses}
+	if snap := m.Snapshot; snap != nil {
+		ack.SnapIndex = snap.Metadata.Index
 	}
-	return send
-}
-
-// StepAfterSync returns the messages to step in this RawNode after the write is
-// synced. This only includes self-addressed messages.
-func (m *StorageAppend) StepAfterSync(self pb.PeerID) []pb.Message {
-	var step []pb.Message
-	for _, msg := range m.Responses {
-		if msg.To == self {
-			step = append(step, msg)
-		}
-	}
-	return step
+	return ack
 }
 
 // Describe returns a string representation of this storage append.
@@ -147,6 +134,56 @@ func (m *StorageAppend) Describe(f EntryFormatter) string {
 		}
 	}
 	return buf.String()
+}
+
+// StorageAppendAck acknowledges that the corresponding StorageAppend is durable
+// on the log storage.
+//
+// Acknowledgements can be delivered to the RawNode out of order, which allows
+// for some concurrency in the way they are processed.
+type StorageAppendAck struct {
+	// Mark is the durable log mark. By the time this acknowledgement is handled,
+	// the log storage can already be at a higher mark.
+	Mark LogMark
+	// SnapIndex is the index of the snapshot that has been applied. If there was
+	// no snapshot, SnapIndex == 0.
+	SnapIndex uint64
+	// responses contains messages that should be sent now that the StorageAppend
+	// is durable. Messages directed to the local RawNode are stepped locally.
+	responses []pb.Message
+}
+
+// Send iterates through the messages that should be sent to remote peers, i.e.
+// peers with ID != self.
+//
+// TODO(pav-kv): in a typical case, all the Responses are addressed to the
+// proposer of the current Term (candidate or leader), and there is no point in
+// sending responses to stale proposers. We can double-down on this, and make an
+// invariant that all the Responses are addressed to the same proposer. Then it
+// is either the local RawNode, or a remote one. So we can avoid scanning the
+// Responses twice (in Send and step).
+func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
+	return func(yield func(pb.Message) bool) {
+		for _, msg := range m.responses {
+			if msg.To != self && !yield(msg) {
+				return
+			}
+		}
+	}
+}
+
+// step iterates through the messages that should be stepped to the local
+// RawNode when applying this acknowledgement.
+func (m *StorageAppendAck) step(self pb.PeerID) iter.Seq[pb.Message] {
+	return func(yield func(pb.Message) bool) {
+		for _, msg := range m.responses {
+			// TODO(pav-kv): remove msg.From == self after Responses no longer
+			// contains the MsgStorageAppendResp.
+			if msg.To == self && msg.From == self && !yield(msg) {
+				return
+			}
+		}
+	}
 }
 
 // Ready encapsulates the entries and messages that are ready to read,
