@@ -11,8 +11,10 @@ benchmarks:
     compare_alpha: 0.05
     retries: 3
     metrics:
-      - "sec/op"
-      - "allocs/op"
+      - name: "sec/op"
+        threshold: 0.001
+      - name: "allocs/op"
+        threshold: 0.001
 
 ----
 

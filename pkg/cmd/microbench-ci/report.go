@@ -59,7 +59,8 @@ func (c *CompareResult) generateSummaryData(
 	statusTemplateFunc func(status Status) string,
 ) []SummaryData {
 	summaryData := make([]SummaryData, 0, len(c.MetricMap))
-	for _, metricName := range c.Benchmark.Metrics {
+	for _, metric := range c.Benchmark.Metrics {
+		metricName := metric.Name
 		entry := c.MetricMap[metricName]
 		if entry == nil {
 			log.Printf("WARN: no metric found for benchmark metric %q", metricName)
