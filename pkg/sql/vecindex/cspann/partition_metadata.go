@@ -180,6 +180,16 @@ func MakeDrainingForSplitDetails(target1, target2 PartitionKey) PartitionStateDe
 	}
 }
 
+// MakeDrainingForMergeDetails constructs state for a Merging partition,
+// including the target sub-partition to which vectors can be copied.
+func MakeDrainingForMergeDetails(target PartitionKey) PartitionStateDetails {
+	return PartitionStateDetails{
+		State:     DrainingForMergeState,
+		Target1:   target,
+		Timestamp: timeutil.Now(),
+	}
+}
+
 // MakeUpdatingDetails constructs state for an Updating partition, including the
 // source partition from which vectors are being copied.
 func MakeUpdatingDetails(source PartitionKey) PartitionStateDetails {
