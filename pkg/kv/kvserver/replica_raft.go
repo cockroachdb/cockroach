@@ -946,14 +946,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	var hasReady bool
+	var ready raft.Ready
+	var logSnapshot raft.LogSnapshot
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend raftpb.Message
-	var toApply []raftpb.Entry
+
 	rac2ModeToUse := r.replicationAdmissionControlModeToUse(ctx)
 	// Replication AC v2 state that is initialized while holding Replica.mu.
 	replicaStateInfoMap := r.raftMu.replicaStateScratchForFlowControl
 	var raftNodeBasicState replica_rac2.RaftNodeBasicState
-	var logSnapshot raft.LogSnapshot
 
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
@@ -980,31 +981,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 		logSnapshot = raftGroup.LogSnapshot()
 		if hasReady = raftGroup.HasReady(); hasReady {
-			// Since we are holding raftMu, only the Slice() call below will use
-			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
-			r.attachRaftEntriesMonitorRaftMuLocked()
-			// TODO(pav-kv): currently, Slice() only accounts for entry bytes loaded
-			// from log storage, and ignores the in-memory unstable entries. Pass a
-			// flow control struct down the stack, and do a more complete accounting
-			// in raft. This will also eliminate the "side channel" plumbing hack with
-			// this bytesAccount.
-			rd := raftGroup.Ready()
-			if !rd.Committed.Empty() {
-				// TODO(pav-kv): do this loading when Replica.mu is released. We don't
-				// want IO under Replica.mu.
-				if toApply, err = logSnapshot.Slice(
-					rd.Committed, r.store.cfg.RaftMaxCommittedSizePerReady,
-				); err != nil {
-					return false, err
-				}
-			}
-			// We apply committed entries during this handleRaftReady, so it is ok to
-			// release the corresponding memory tokens at the end of this func. Next
-			// time we enter this function, the account will be empty again.
-			defer r.detachRaftEntriesMonitorRaftMuLocked()
-
-			logRaftReady(ctx, rd)
-			outboundMsgs, msgStorageAppend = splitLocalStorageMsgs(rd.Messages)
+			ready = raftGroup.Ready()
+			logRaftReady(ctx, ready)
+			outboundMsgs, msgStorageAppend = splitLocalStorageMsgs(ready.Messages)
 		}
 		if switchToPullModeAfterReady {
 			raftGroup.SetLazyReplication(true)
@@ -1027,7 +1006,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
 		return unquiesceAndWakeLeader, nil
 	})
-	r.mu.applyingEntries = len(toApply) != 0
+	r.mu.applyingEntries = !ready.Committed.Empty()
 	pausedFollowers := r.mu.pausedFollowers
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
@@ -1036,6 +1015,29 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	} else if err != nil {
 		return stats, errors.Wrap(err, "checking raft group for Ready")
 	}
+
+	// Load the committed entries to be applied after releasing Replica.mu, to
+	// ensure that we don't have IO under this narrow/lightweight mutex. The
+	// RawNode can be making progress in the meantime, but it will never overwrite
+	// the committed entries it has been observing during the Ready() call.
+	var toApply []raftpb.Entry
+	if hasReady && !ready.Committed.Empty() {
+		// TODO(pav-kv): currently, Slice() only accounts for entry bytes loaded
+		// from log storage, and ignores the in-memory unstable entries. Consider a
+		// more complete flow control mechanism here, and eliminating the plumbing
+		// hack with the bytesAccount.
+		r.attachRaftEntriesMonitorRaftMuLocked()
+		// We apply committed entries during this handleRaftReady, so it is ok to
+		// release the corresponding memory tokens at the end of this func. Next
+		// time we enter this function, the account will be empty again.
+		defer r.detachRaftEntriesMonitorRaftMuLocked()
+		if toApply, err = logSnapshot.Slice(
+			ready.Committed, r.store.cfg.RaftMaxCommittedSizePerReady,
+		); err != nil {
+			return stats, errors.Wrap(err, "loading committed entries")
+		}
+	}
+
 	// Even if we don't have a Ready, or entries in Ready,
 	// replica_rac2.Processor may need to do some work.
 	raftEvent := rac2.RaftEventFromMsgStorageAppendAndMsgApps(
