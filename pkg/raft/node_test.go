@@ -52,10 +52,10 @@ func TestNodePropose(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.AdvanceHack(rd)
+			rn.AckAppend(rd.Ack())
 			break
 		}
-		rn.AdvanceHack(rd)
+		rn.AckAppend(rd.Ack())
 	}
 	require.NoError(t, rn.Propose([]byte("somedata")))
 
@@ -115,10 +115,10 @@ func TestNodeProposeConfig(t *testing.T) {
 		// change the step function to appendStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = appendStep
-			rn.AdvanceHack(rd)
+			rn.AckAppend(rd.Ack())
 			break
 		}
-		rn.AdvanceHack(rd)
+		rn.AckAppend(rd.Ack())
 	}
 	cc := raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 1}
 	ccdata, err := cc.Marshal()
@@ -144,7 +144,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	require.True(t, rd.Committed.Empty())
 
 	ready := func() (appliedConfChange bool) {
@@ -164,7 +164,7 @@ func TestNodeProposeAddDuplicateNode(t *testing.T) {
 				applied = true
 			}
 		}
-		rn.AdvanceHack(rd)
+		rn.AckAppend(rd.Ack())
 		rn.AckApplied(apply)
 		return applied
 	}
@@ -209,7 +209,7 @@ func TestBlockProposal(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	require.NoError(t, rn.Propose([]byte("somedata")))
 }
@@ -240,10 +240,10 @@ func TestNodeProposeWaitDropped(t *testing.T) {
 		// change the step function to dropStep until this raft becomes leader
 		if rd.HardState.Lead == r.id {
 			r.step = dropStep
-			rn.AdvanceHack(rd)
+			rn.AckAppend(rd.Ack())
 			break
 		}
-		rn.AdvanceHack(rd)
+		rn.AckAppend(rd.Ack())
 	}
 	assert.Equal(t, ErrProposalDropped, rn.Propose(droppingMsg))
 
@@ -312,7 +312,7 @@ func TestNodeStart(t *testing.T) {
 
 	rd := rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 	rd.Responses = nil // TODO(pav-kv): assert on the responses too
 	require.Equal(t, wants[0], rd)
@@ -322,25 +322,25 @@ func TestNodeStart(t *testing.T) {
 	// Persist vote.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 	rd.Responses = nil // TODO(pav-kv): assert on the responses too
 	require.Equal(t, wants[1], rd)
 
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 	rd.Responses = nil // TODO(pav-kv): assert on the responses too
 	require.Equal(t, wants[2], rd)
@@ -382,7 +382,7 @@ func TestNodeRestart(t *testing.T) {
 
 	rd := rn.Ready()
 	require.Equal(t, want, rd)
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 
 	require.False(t, rn.HasReady())
@@ -430,7 +430,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 
 	rd := rn.Ready()
 	require.Equal(t, want, rd)
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 
 	require.False(t, rn.HasReady())
@@ -457,16 +457,16 @@ func TestNodeAdvance(t *testing.T) {
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	require.NoError(t, rn.Propose([]byte("foo")))
 	rd = rn.Ready()
 	require.NoError(t, storage.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	require.True(t, rn.HasReady())
 }
@@ -507,7 +507,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 	require.NoError(t, rn.Campaign())
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	ready := func() (appliedConfChange bool) {
 		rd := rn.Ready()
@@ -528,7 +528,7 @@ func TestNodeProposeAddLearnerNode(t *testing.T) {
 			t.Logf("apply raft conf %v changed to: %v", cc, state.String())
 			appliedConfChange = true
 		}
-		rn.AdvanceHack(rd)
+		rn.AckAppend(rd.Ack())
 		return appliedConfChange
 	}
 	waitAppliedConfChange := func() bool {
@@ -600,17 +600,17 @@ func TestCommitPagination(t *testing.T) {
 	// Persist vote.
 	rd := rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	// Append empty entry.
 	rd = rn.Ready()
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	// Apply empty entry.
 	rd = rn.Ready()
 	require.Equal(t, uint64(1), rd.Committed.Len())
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committedEntries(t, rn, rd))
 
 	blob := []byte(strings.Repeat("a", 1000))
@@ -622,7 +622,7 @@ func TestCommitPagination(t *testing.T) {
 	rd = rn.Ready()
 	require.Len(t, rd.Entries, 3)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 
 	// The 3 proposals will commit in two batches.
 	rd = rn.Ready()
@@ -633,7 +633,7 @@ func TestCommitPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, committed, 2)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committed)
 
 	rd = rn.Ready()
@@ -642,7 +642,7 @@ func TestCommitPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, committed, 1)
 	require.NoError(t, s.Append(rd.Entries))
-	rn.AdvanceHack(rd)
+	rn.AckAppend(rd.Ack())
 	rn.AckApplied(committed)
 }
 

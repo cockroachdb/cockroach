@@ -419,18 +419,6 @@ func (rn *RawNode) HasReady() bool {
 	return len(r.msgs) > 0
 }
 
-// AdvanceHack notifies the RawNode that the application has applied all the
-// updates from the given Ready() call.
-//
-// This is a helper for transitioning from synchronous storage API to the
-// asynchronous one. Tests are being migrated to the async API, and temporarily
-// use this helper.
-//
-// Only for testing. Will be replaced with a more explicit API.
-func (rn *RawNode) AdvanceHack(rd Ready) {
-	rn.AckAppend(rd.Ack())
-}
-
 // Term returns the current in-memory term of this RawNode. This term may not
 // yet have been persisted in storage.
 func (rn *RawNode) Term() uint64 {
