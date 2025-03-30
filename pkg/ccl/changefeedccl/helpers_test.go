@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -1628,4 +1630,69 @@ func checkSchema(actual []cdctest.TestFeedMessage) error {
 		}
 	}
 	return nil
+}
+
+// runWithAndWithoutRegression141453 runs the test both with and without testing
+// knobs that simulate the scenario where a change aggregator encounters a schema
+// change restart but draining the buffer fails so the resolved spans message
+// signaling the restart doesn't get sent to the change frontier.
+func runWithAndWithoutRegression141453(
+	t *testing.T, testFn cdcTestFn, runTestFn func(t *testing.T, testFn cdcTestFn),
+) {
+	testutils.RunTrueAndFalse(t, "regression 141453",
+		func(t *testing.T, regression141453 bool) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				if !regression141453 {
+					testFn(t, s, f)
+					return
+				}
+
+				knobs := s.TestingKnobs.
+					DistSQL.(*execinfra.TestingKnobs).
+					Changefeed.(*TestingKnobs)
+
+				// We only want to make drain fail once, otherwise the test will never
+				// be able to proceed.
+				var drainFailedOnce atomic.Bool
+				knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+					if drainFailedOnce.Load() {
+						return kvevent.BlockingBufferTestingKnobs{}
+					}
+					var blockPop atomic.Bool
+					popCh := make(chan struct{})
+					return kvevent.BlockingBufferTestingKnobs{
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+							if e.Type() == kvevent.TypeResolved &&
+								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
+								blockPop.Store(true)
+							}
+							return ctx, e
+						},
+						BeforePop: func() {
+							if blockPop.Load() {
+								<-popCh
+							}
+						},
+						BeforeDrain: func(ctx context.Context) context.Context {
+							ctx, cancel := context.WithCancel(ctx)
+							cancel()
+							return ctx
+						},
+						AfterDrain: func(err error) {
+							require.Error(t, err)
+							drainFailedOnce.Store(true)
+						},
+						AfterCloseWithReason: func(err error) {
+							require.NoError(t, err)
+							close(popCh)
+							blockPop.Store(false)
+						},
+					}
+				}
+				testFn(t, s, f)
+				require.True(t, drainFailedOnce.Load())
+			}
+
+			runTestFn(t, testFn)
+		})
 }
