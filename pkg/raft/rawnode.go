@@ -254,18 +254,15 @@ func (rn *RawNode) newStorageAppend() StorageAppend {
 		app.HardState = hs
 		rn.prevHardSt = hs
 	}
-	if ln := len(app.Entries); ln > 0 {
-		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		app.Mark = LogMark{
-			Term:  r.raftLog.accTerm(),
-			Index: app.Entries[ln-1].Index,
-		}
-	}
 	if snap := r.raftLog.nextUnstableSnapshot(); snap != nil {
 		app.Snapshot = snap
 		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
-		// TODO(pav-kv): this is not a valid LogMark. Better attach unstable.mark().
-		app.Mark.Term = r.raftLog.accTerm()
+		app.LeadTerm = r.raftLog.accTerm()
+	}
+	// TODO(pav-kv): no harm in attaching accTerm() unconditionally.
+	if ln := len(app.Entries); ln > 0 {
+		// See comment in newStorageAppendRespMsg for why the accTerm is attached.
+		app.LeadTerm = r.raftLog.accTerm()
 	}
 	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
@@ -293,6 +290,7 @@ func (rn *RawNode) newStorageAppend() StorageAppend {
 // storage.
 // TODO(pav-kv): make a type for storage append acknowledgements.
 func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
+	mark := app.Mark()
 	return pb.Message{
 		Type: pb.MsgStorageAppendResp,
 		To:   self,
@@ -348,8 +346,8 @@ func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
 		// log was truncated.
 		//
 		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		LogTerm:  app.Mark.Term,
-		Index:    app.Mark.Index,
+		LogTerm:  mark.Term,
+		Index:    mark.Index,
 		Snapshot: app.Snapshot,
 	}
 }
@@ -365,7 +363,7 @@ func (rn *RawNode) AckAppend(ack StorageAppendAck) {
 	if ack.SnapIndex != 0 {
 		r.appliedSnap(ack.SnapIndex)
 	}
-	if ack.Mark.Index != 0 {
+	if ack.Mark.Index > ack.SnapIndex {
 		r.raftLog.stableTo(ack.Mark)
 	}
 }

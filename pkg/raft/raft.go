@@ -1720,10 +1720,12 @@ func (r *raft) Step(m pb.Message) error {
 	case pb.MsgStorageAppendResp:
 		// The snapshot precedes the entries. We acknowledge the snapshot first,
 		// then the entries, as required by the unstable structure.
+		var snapIndex uint64
 		if m.Snapshot != nil {
-			r.appliedSnap(m.Snapshot.Metadata.Index)
+			snapIndex = m.Snapshot.Metadata.Index
+			r.appliedSnap(snapIndex)
 		}
-		if m.Index != 0 {
+		if m.Index > snapIndex {
 			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
 		}
 

@@ -66,9 +66,10 @@ type StorageAppend struct {
 	// When installing a snapshot, the raft log must be cleared and initialized to
 	// a state according to the Snapshot.Metadata.{Index,Term}.
 	Snapshot *pb.Snapshot
-	// Mark is the log mark that identifies this storage write. Populated if
-	// Entries or Snapshot is not empty. A non-empty Mark never regresses.
-	Mark LogMark
+	// LeadTerm is the term of the leader on whose behalf the storage write is
+	// being made. Populated if Entries or Snapshot is not empty. A non-empty
+	// LeadTerm never regresses, as well as the StorageAppend.Mark().
+	LeadTerm uint64
 	// Responses contains messages that should be sent AFTER the updates above
 	// have been *durably* persisted in log storage. Messages addressed to the
 	// local RawNode can be stepped into it directly.
@@ -79,6 +80,17 @@ type StorageAppend struct {
 func (m *StorageAppend) Empty() bool {
 	return IsEmptyHardState(m.HardState) &&
 		len(m.Entries) == 0 && m.Snapshot == nil && len(m.Responses) == 0
+}
+
+// Mark returns a non-empty log mark if the storage write has a snapshot or
+// entries. Not-empty marks do not regress across consecutive storage writes.
+func (m *StorageAppend) Mark() LogMark {
+	if ln := len(m.Entries); ln > 0 {
+		return LogMark{Term: m.LeadTerm, Index: m.Entries[ln-1].Index}
+	} else if snap := m.Snapshot; snap != nil {
+		return LogMark{Term: m.LeadTerm, Index: snap.Metadata.Index}
+	}
+	return LogMark{}
 }
 
 // MustSync returns true if this storage write must be synced.
@@ -95,7 +107,7 @@ func (m *StorageAppend) NeedAck() bool {
 // Ack returns the acknowledgement that should be used to notify
 // RawNode.AckAppend after the write is durable on the log storage.
 func (m *StorageAppend) Ack() StorageAppendAck {
-	ack := StorageAppendAck{Mark: m.Mark, responses: m.Responses}
+	ack := StorageAppendAck{Mark: m.Mark(), responses: m.Responses}
 	if snap := m.Snapshot; snap != nil {
 		ack.SnapIndex = snap.Metadata.Index
 	}

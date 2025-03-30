@@ -124,7 +124,7 @@ stabilize 3
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   OnSync:
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/0
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
     Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # The MsgAppResp lets the leader move the follower back to replicating state.
