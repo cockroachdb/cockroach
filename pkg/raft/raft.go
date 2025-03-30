@@ -39,16 +39,9 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-const (
-	// None is a placeholder node ID used when there is no leader.
-	//
-	// TODO(arul): consider pulling these into raftpb as well.
-	None pb.PeerID = 0
-	// LocalAppendThread is a reference to a local thread that saves unstable
-	// log entries and snapshots to stable storage. The identifier is used as a
-	// target for MsgStorageAppend messages.
-	LocalAppendThread pb.PeerID = math.MaxUint64
-)
+// None is a placeholder node ID used when there is no leader.
+// TODO(arul): consider pulling these into raftpb as well.
+const None pb.PeerID = 0
 
 // Possible values for CampaignType
 const (
@@ -265,9 +258,6 @@ type Config struct {
 func (c *Config) validate() error {
 	if c.ID == None {
 		return errors.New("cannot use none as id")
-	}
-	if IsLocalMsgTarget(c.ID) {
-		return errors.New("cannot use local target as id")
 	}
 
 	if c.HeartbeatTick <= 0 {
