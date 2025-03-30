@@ -1717,18 +1717,6 @@ func (r *raft) Step(m pb.Message) error {
 			r.hup(campaignElection)
 		}
 
-	case pb.MsgStorageAppendResp:
-		// The snapshot precedes the entries. We acknowledge the snapshot first,
-		// then the entries, as required by the unstable structure.
-		var snapIndex uint64
-		if m.Snapshot != nil {
-			snapIndex = m.Snapshot.Metadata.Index
-			r.appliedSnap(snapIndex)
-		}
-		if m.Index > snapIndex {
-			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
-		}
-
 	case pb.MsgVote, pb.MsgPreVote:
 		// We can vote if this is a repeat of a vote we've already cast...
 		canVote := r.Vote == m.From ||
