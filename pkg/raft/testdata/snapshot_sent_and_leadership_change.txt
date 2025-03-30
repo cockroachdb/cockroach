@@ -138,7 +138,7 @@ stabilize 3
   3->2 MsgAppResp Term:2 Log:1/15 Rejected (Hint: 11) Commit:11
   3->1 MsgAppResp Term:2 Log:0/15 Commit:15
   3->2 MsgAppResp Term:2 Log:0/15 Commit:15
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/0
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/15
     Snapshot: Index:15 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 3 receiving messages
   2->3 MsgVote Term:2 Log:1/15

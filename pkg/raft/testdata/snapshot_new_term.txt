@@ -162,7 +162,7 @@ stabilize
   Snapshot Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   OnSync:
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/0
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
     Snapshot: Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 2 receiving messages
   3->2 MsgAppResp Term:2 Log:0/12 Commit:12

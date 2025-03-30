@@ -275,14 +275,14 @@ func TestNodeStart(t *testing.T) {
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 			},
-			Mark: LogMark{Term: 1, Index: 1},
+			LeadTerm: 1,
 		},
 		Committed: raftpb.LogSpan{After: 0, Last: 1},
 	}, {
 		StorageAppend: StorageAppend{
 			HardState: raftpb.HardState{Term: 2, Commit: 2, Vote: 1, Lead: 1, LeadEpoch: 1},
 			Entries:   []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
-			Mark:      LogMark{Term: 2, Index: 3},
+			LeadTerm:  2,
 		},
 		Committed: raftpb.LogSpan{After: 1, Last: 2},
 	}, {
