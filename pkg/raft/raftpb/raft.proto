@@ -56,7 +56,6 @@ enum MessageType {
   MsgTimeoutNow        = 14;
   MsgPreVote           = 17;
   MsgPreVoteResp       = 18;
-  MsgStorageAppendResp = 20;
   MsgForgetLeader      = 23;
   MsgFortifyLeader     = 24;
   MsgFortifyLeaderResp = 25;
@@ -65,7 +64,7 @@ enum MessageType {
   // isResponseMsg arrays in raft/util.go and update the corresponding tests in
   // raft/util_test.go.
 
-  reserved 12, 15, 16, 19, 21, 22;
+  reserved 12, 15, 16, 19, 20, 21, 22;
 }
 
 message Message {
