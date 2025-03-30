@@ -4786,4 +4786,5 @@ func init() {
 	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
 		return planGistFromCtx(ctx)
 	})
+	tree.PlanGistFromCtx = planGistFromCtx
 }
