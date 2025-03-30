@@ -1227,6 +1227,11 @@ func (s *Server) newConnExecutor(
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
+		if strings.HasPrefix(newName, catconstants.InternalAppNamePrefix) {
+			ex.metrics = &ex.server.InternalMetrics
+		} else {
+			ex.metrics = &ex.server.Metrics
+		}
 	}
 
 	ex.extraTxnState.underOuterTxn = underOuterTxn
