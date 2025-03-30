@@ -27,11 +27,10 @@ import (
 )
 
 var isLocalMsg = [...]bool{
-	pb.MsgHup:               true,
-	pb.MsgBeat:              true,
-	pb.MsgUnreachable:       true,
-	pb.MsgSnapStatus:        true,
-	pb.MsgStorageAppendResp: true,
+	pb.MsgHup:         true,
+	pb.MsgBeat:        true,
+	pb.MsgUnreachable: true,
+	pb.MsgSnapStatus:  true,
 }
 
 var isResponseMsg = [...]bool{
@@ -40,7 +39,6 @@ var isResponseMsg = [...]bool{
 	pb.MsgHeartbeatResp:     true,
 	pb.MsgUnreachable:       true,
 	pb.MsgPreVoteResp:       true,
-	pb.MsgStorageAppendResp: true,
 	pb.MsgFortifyLeaderResp: true,
 }
 
