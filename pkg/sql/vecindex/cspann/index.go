@@ -134,7 +134,7 @@ type Context struct {
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
-	tempResults         [1]SearchResult
+	tempResults         [2]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
 	tempToSearch        []PartitionToSearch
 	tempVectorsWithKeys []VectorWithKey
@@ -227,8 +227,8 @@ func NewIndex(
 		vi.options.QualitySamples = 16
 	}
 	if vi.options.StalledOpTimeout == nil {
- 		vi.options.StalledOpTimeout = func() time.Duration { return DefaultStalledOpTimeout }
- 	}
+		vi.options.StalledOpTimeout = func() time.Duration { return DefaultStalledOpTimeout }
+	}
 
 	if vi.options.MaxPartitionSize < 2 {
 		return nil, errors.AssertionFailedf("MaxPartitionSize cannot be less than 2")
@@ -661,9 +661,8 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 		searchSet.MaxResults, vi.options.QualitySamples, idxCtx.options.BaseBeamSize*4)
 	subSearchSet := &idxCtx.tempSubSearchSet
 	*subSearchSet = SearchSet{MaxResults: maxResults}
-	idxCtx.tempResults[0] = SearchResult{
-		ChildKey: ChildKey{PartitionKey: RootKey}}
-	searchLevel, err := vi.searchChildPartitions(ctx, idxCtx, subSearchSet, idxCtx.tempResults[:])
+	idxCtx.tempResults[0] = SearchResult{ChildKey: ChildKey{PartitionKey: RootKey}}
+	searchLevel, err := vi.searchChildPartitions(ctx, idxCtx, subSearchSet, idxCtx.tempResults[:1])
 	if err != nil {
 		return err
 	}
@@ -840,6 +839,52 @@ func (vi *Index) searchChildPartitions(
 		} else if needMerge {
 			vi.fixups.AddMerge(ctx, idxCtx.treeKey,
 				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+		}
+
+		// If the root partition is in a non-ready state, then we need to check
+		// whether its target partitions also need to be searched. Newly inserted
+		// vectors can get forwarded to target partitions during a split, and we
+		// need to make sure we can find them.
+		if partitionKey != RootKey || state.State == ReadyState {
+			continue
+		}
+
+		if len(parentResults) != 1 {
+			return InvalidLevel, errors.AssertionFailedf(
+				"expected exactly one root partition to search")
+		}
+
+		idxCtx.tempResults[0] = SearchResult{
+			ParentPartitionKey: RootKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target1},
+		}
+		idxCtx.tempResults[1] = SearchResult{
+			ParentPartitionKey: RootKey,
+			ChildKey:           ChildKey{PartitionKey: state.Target2},
+		}
+
+		if state.State == DrainingForSplitState {
+			// In the DrainingForSplit state, the target partitions are still at
+			// the same level as the root partition, so merge their contents into
+			// the search set (which will remove any duplicates).
+			targetLevel, err := vi.searchChildPartitions(ctx, idxCtx, searchSet, idxCtx.tempResults[:2])
+			if err != nil {
+				return 0, err
+			}
+			if targetLevel != level {
+				return 0, errors.AssertionFailedf(
+					"root partition has level %d, but target partitions have level %d", level, targetLevel)
+			}
+		} else if state.State == AddingLevelState {
+			// In the AddingLevel state, the target partitions should be treated as
+			// children of the root partition. Add their partition keys to the search
+			// set.
+			// NOTE: QuerySquaredDistance is zero for both partitions. This should
+			// only impact accuracy if beam size is < 4. If we decide to handle
+			// this edge case, we can use GetFullVectors to fetch the sub-partition
+			// centroids in order to compute distances.
+			searchSet.Add(&idxCtx.tempResults[0])
+			searchSet.Add(&idxCtx.tempResults[0])
 		}
 	}
 

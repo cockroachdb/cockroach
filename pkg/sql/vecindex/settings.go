@@ -19,7 +19,7 @@ import (
 // livenesspb.NodeVitalityInterface.
 var StalledOpTimeoutSetting = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
-	"sql.vecindex.stalled_op_timeout",
+	"sql.vecindex.stalled_op.timeout",
 	"amount of time before other vector index workers will assist with a stalled background fixup",
 	cspann.DefaultStalledOpTimeout,
 	settings.WithPublic,
