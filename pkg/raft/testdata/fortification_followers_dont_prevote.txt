@@ -114,7 +114,6 @@ stabilize
   OnSync:
   1->1 MsgAppResp Term:1 Log:0/11 Commit:10
   1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/11
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
@@ -129,7 +128,6 @@ stabilize
   OnSync:
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/11 Commit:10
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/11
 > 3 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
@@ -138,7 +136,6 @@ stabilize
   OnSync:
   3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   3->1 MsgAppResp Term:1 Log:0/11 Commit:10
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/11
 > 1 receiving messages
   2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:1 Log:0/11 Commit:10
@@ -309,7 +306,6 @@ stabilize
   OnSync:
   2->2 MsgAppResp Term:2 Log:0/12 Commit:11
   2->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:2/12
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 2 [term: 2], new leader indicated, advancing term
@@ -329,7 +325,6 @@ stabilize
   OnSync:
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
 > 3 handling Ready
   Ready:
   HardState Term:2 Vote:2 Commit:11 Lead:2 LeadEpoch:1
@@ -338,7 +333,6 @@ stabilize
   OnSync:
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   3->2 MsgAppResp Term:2 Log:0/12 Commit:11
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
 > 2 receiving messages
   1->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->2 MsgAppResp Term:2 Log:0/12 Commit:11
@@ -593,7 +587,6 @@ stabilize
   OnSync:
   2->2 MsgAppResp Term:3 Log:0/13 Commit:12
   2->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:3
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:3/13
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:3 Log:0/0
   2->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
@@ -608,7 +601,6 @@ stabilize
   OnSync:
   1->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:2
   1->2 MsgAppResp Term:3 Log:0/13 Commit:12
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/13
 > 3 handling Ready
   Ready:
   HardState Term:3 Vote:2 Commit:12 Lead:2 LeadEpoch:2
@@ -617,7 +609,6 @@ stabilize
   OnSync:
   3->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:2
   3->2 MsgAppResp Term:3 Log:0/13 Commit:12
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:3/13
 > 2 receiving messages
   1->2 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:2
   1->2 MsgAppResp Term:3 Log:0/13 Commit:12
