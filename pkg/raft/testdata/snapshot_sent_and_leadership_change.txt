@@ -146,7 +146,7 @@ stabilize 3
   Ready:
   HardState Term:2 Commit:15 Lead:2 LeadEpoch:1
   Messages:
-  3->2 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  3->2 MsgVoteResp Term:2 Log:1/0 Rejected (Hint: 15)
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 
 # 3 has applied the snapshot
@@ -179,7 +179,7 @@ stabilize 2
   DEBUG 2 paused sending replication messages to 3 [StateSnapshot match=0 next=17 sentCommit=16 matchCommit=11 paused pendingSnap=16]
   3->2 MsgAppResp Term:2 Log:0/15 Commit:15
   DEBUG 2 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=15 next=17 sentCommit=16 matchCommit=15 paused pendingSnap=16]
-  3->2 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  3->2 MsgVoteResp Term:2 Log:1/0 Rejected (Hint: 15)
   3->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 > 2 handling Ready
   Ready:

@@ -71,9 +71,9 @@ stabilize 1 2
   Ready:
   HardState Term:2 Vote:2 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0
 > 2 receiving messages
-  1->2 MsgVoteResp Term:2 Log:0/0
+  1->2 MsgVoteResp Term:2 Log:1/0
   INFO 2 received MsgVoteResp from 1 at term 2
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 2
