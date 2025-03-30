@@ -77,37 +77,6 @@ var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(
 var raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(metamorphic.ConstantWithTestRange(
 	"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
 
-// MsgStorageAppendDone encapsulates the actions to do after MsgStorageAppend is
-// done, such as sending messages back to raft node and its peers.
-// TODO(pav-kv): move this to pkg/raft and clean up.
-type MsgStorageAppendDone []raftpb.Message
-
-// Responses returns the messages to send after the write/sync is completed.
-func (m MsgStorageAppendDone) Responses() []raftpb.Message { return m }
-
-// Mark returns the LogMark of the raft log in storage after the write/sync is
-// completed. Returns zero value if the write does not update the log mark.
-func (m MsgStorageAppendDone) Mark() raft.LogMark {
-	if len(m) == 0 {
-		return raft.LogMark{}
-	}
-	// Optimization: the MsgStorageAppendResp message, if any, is always the last
-	// one in the list.
-	// TODO(pav-kv): this is an undocumented API quirk. Refactor the raft write
-	// API to be more digestible outside the package.
-	if buildutil.CrdbTestBuild {
-		for _, msg := range m[:len(m)-1] {
-			if msg.Type == raftpb.MsgStorageAppendResp {
-				panic("unexpected MsgStorageAppendResp not in last position")
-			}
-		}
-	}
-	if msg := m[len(m)-1]; msg.Type == raftpb.MsgStorageAppendResp {
-		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
-	}
-	return raft.LogMark{}
-}
-
 // RaftState stores information about the last entry and the size of the log.
 type RaftState struct {
 	LastIndex kvpb.RaftIndex
@@ -164,7 +133,7 @@ type LogStore struct {
 //
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, MsgStorageAppendDone, storage.BatchCommitStats)
+	OnLogSync(context.Context, raft.StorageAppendAck, storage.BatchCommitStats)
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -302,7 +271,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		*waiterCallback = nonBlockingSyncWaiterCallback{
 			ctx:            ctx,
 			cb:             cb,
-			onDone:         m.Responses,
+			onDone:         m.Ack(),
 			batch:          batch,
 			metrics:        s.Metrics,
 			logCommitBegin: stats.PebbleBegin,
@@ -320,7 +289,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{})
+			cb.OnLogSync(ctx, m.Ack(), storage.BatchCommitStats{})
 		}
 	}
 	stats.Sync = wantsSync
@@ -372,7 +341,7 @@ type nonBlockingSyncWaiterCallback struct {
 	// Used to run SyncCallback.
 	ctx    context.Context
 	cb     SyncCallback
-	onDone MsgStorageAppendDone
+	onDone raft.StorageAppendAck
 	// Used to extract stats. This is the batch that has been synced.
 	batch storage.WriteBatch
 	// Used to record Metrics.

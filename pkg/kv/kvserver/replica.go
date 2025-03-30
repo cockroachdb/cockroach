@@ -412,18 +412,19 @@ type Replica struct {
 		rangefeedCTLagObserver *rangeFeedCTLagObserver
 	}
 
-	// localMsgs contains a collection of raftpb.Message that target the local
-	// RawNode. They are to be delivered on the next iteration of handleRaftReady.
+	// localMsgs contains StorageAppend acknowledgements to be delivered to the
+	// local RawNode. The delivery happens on the next handleRaftReady.
 	//
 	// Locking notes:
 	// - Replica.localMsgs must be held to append messages to active.
 	// - Replica.raftMu and Replica.localMsgs must both be held to switch slices.
 	// - Replica.raftMu < Replica.localMsgs
 	//
-	// TODO(pav-kv): replace these with log marks for the latest completed write.
+	// TODO(pav-kv): the acknowledgements can be merged into one. We are only
+	// interested in the latest LogMark. The Responses can be concatenated.
 	localMsgs struct {
 		syncutil.Mutex
-		active, recycled []raftpb.Message
+		active, recycled []raft.StorageAppendAck
 	}
 
 	// The last seen replica descriptors from incoming Raft messages. These are

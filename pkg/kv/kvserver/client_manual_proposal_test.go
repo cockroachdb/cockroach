@@ -258,7 +258,7 @@ LIMIT
 type wgSyncCallback sync.WaitGroup
 
 func (w *wgSyncCallback) OnLogSync(
-	context.Context, logstore.MsgStorageAppendDone, storage.BatchCommitStats,
+	context.Context, raft.StorageAppendAck, storage.BatchCommitStats,
 ) {
 	(*sync.WaitGroup)(w).Done()
 }
