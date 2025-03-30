@@ -61,6 +61,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
+        "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

@@ -1050,7 +1050,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	r.traceMessageSends(ready.Messages, "sending messages")
-	r.sendRaftMessages(ctx, ready.Messages, pausedFollowers, true /* willDeliverLocal */)
+	r.sendRaftMessages(ctx, ready.Messages, pausedFollowers)
 
 	// Load the committed entries to be applied after releasing Replica.mu, to
 	// ensure that we don't have IO under this narrow/lightweight mutex. The
@@ -1221,7 +1221,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				refreshReason = reasonSnapshotApplied
 			}
 
-			cb.OnSnapSync(ctx, app.Responses)
+			cb.OnSnapSync(ctx, app.Ack())
 		} else {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if app.Commit != 0 && !r.IsInitialized() {
@@ -1800,12 +1800,12 @@ func (r *Replica) maybeCoalesceHeartbeat(
 type replicaSyncCallback Replica
 
 func (r *replicaSyncCallback) OnLogSync(
-	ctx context.Context, done logstore.MsgStorageAppendDone, commitStats storage.BatchCommitStats,
+	ctx context.Context, ack raft.StorageAppendAck, commitStats storage.BatchCommitStats,
 ) {
 	repl := (*Replica)(r)
 	// The log mark is non-empty only if this was a non-empty log append that
 	// updated the stable log mark.
-	if mark := done.Mark(); mark.Term != 0 {
+	if mark := ack.Mark; mark.After(raft.LogMark{}) {
 		repl.flowControlV2.SyncedLogStorage(ctx, mark)
 	}
 	// Block sending the responses back to raft, if a test needs to.
@@ -1813,17 +1813,17 @@ func (r *replicaSyncCallback) OnLogSync(
 		fn(repl.ID())
 	}
 	// Send MsgStorageAppend's responses.
-	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, false /* willDeliverLocal */)
+	repl.sendStorageAck(ctx, ack, false /* willDeliver */)
 	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
 		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
 	}
 }
 
-func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgStorageAppendDone) {
+func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, ack raft.StorageAppendAck) {
 	repl := (*Replica)(r)
-	// NB: when storing snapshot, done always contains a non-zero log mark.
-	repl.flowControlV2.SyncedLogStorage(ctx, done.Mark())
-	repl.sendRaftMessages(ctx, done.Responses(), nil /* blocked */, true /* willDeliverLocal */)
+	// NB: when storing snapshot, ack always contains a non-zero log mark.
+	repl.flowControlV2.SyncedLogStorage(ctx, ack.Mark)
+	repl.sendStorageAck(ctx, ack, true /* willDeliverLocal */)
 }
 
 // sendRaftMessages sends a slice of Raft messages.
@@ -1838,98 +1838,79 @@ func (r *replicaSyncCallback) OnSnapSync(ctx context.Context, done logstore.MsgS
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
 func (r *Replica) sendRaftMessages(
-	ctx context.Context,
-	messages []raftpb.Message,
-	blocked map[roachpb.ReplicaID]struct{},
-	willDeliverLocal bool,
+	ctx context.Context, messages []raftpb.Message, blocked map[roachpb.ReplicaID]struct{},
 ) {
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
-		switch message.To {
-		case raft.LocalAppendThread:
-			// To local append thread.
-			// NOTE: we don't currently split append work off into an async goroutine.
-			// Instead, we handle messages to LocalAppendThread inline on the raft
-			// scheduler goroutine, so this code path is unused.
-			panic("unsupported, currently processed inline on raft scheduler goroutine")
-		case raftpb.PeerID(r.ReplicaID()):
-			// To local raft state machine, from local storage append and apply work.
-			// NOTE: For async Raft log appends, these messages come from calls to
-			// replicaSyncCallback.OnLogSync. For other local storage work (log
-			// application and snapshot application), these messages come from
-			// Replica.handleRaftReadyRaftMuLocked.
-			r.sendLocalRaftMsg(message, willDeliverLocal)
-		default:
-			_, drop := blocked[roachpb.ReplicaID(message.To)]
-			if drop {
-				r.store.Metrics().RaftPausedFollowerDroppedMsgs.Inc(1)
-			}
-			switch message.Type {
-			case raftpb.MsgApp:
-				if util.RaceEnabled {
-					// Iterate over the entries to assert that all sideloaded commands
-					// are already inlined. replicaRaftStorage.Entries already performs
-					// the sideload inlining for stable entries and raft.unstable always
-					// contain fat entries. Since these are the only two sources that
-					// raft.sendAppend gathers entries from to populate MsgApps, we
-					// should never see thin entries here.
-					//
-					// Also assert that the log term only ever increases (most of the
-					// time it stays constant, as term changes are rare), and that
-					// the index increases by exactly one with each entry.
-					//
-					// This assertion came out of #61990.
-					prevTerm := message.LogTerm // term of entry preceding the append
-					prevIndex := message.Index  // index of entry preceding the append
-					for j := range message.Entries {
-						ent := &message.Entries[j]
-						logstore.AssertSideloadedRaftCommandInlined(ctx, ent)
+		_, drop := blocked[roachpb.ReplicaID(message.To)]
+		if drop {
+			r.store.Metrics().RaftPausedFollowerDroppedMsgs.Inc(1)
+		}
+		switch message.Type {
+		case raftpb.MsgApp:
+			if util.RaceEnabled {
+				// Iterate over the entries to assert that all sideloaded commands
+				// are already inlined. replicaRaftStorage.Entries already performs
+				// the sideload inlining for stable entries and raft.unstable always
+				// contain fat entries. Since these are the only two sources that
+				// raft.sendAppend gathers entries from to populate MsgApps, we
+				// should never see thin entries here.
+				//
+				// Also assert that the log term only ever increases (most of the
+				// time it stays constant, as term changes are rare), and that
+				// the index increases by exactly one with each entry.
+				//
+				// This assertion came out of #61990.
+				prevTerm := message.LogTerm // term of entry preceding the append
+				prevIndex := message.Index  // index of entry preceding the append
+				for j := range message.Entries {
+					ent := &message.Entries[j]
+					logstore.AssertSideloadedRaftCommandInlined(ctx, ent)
 
-						if prevIndex+1 != ent.Index {
-							log.Fatalf(ctx,
-								"index gap in outgoing MsgApp: idx %d followed by %d",
-								prevIndex, ent.Index,
-							)
-						}
-						prevIndex = ent.Index
-						if prevTerm > ent.Term {
-							log.Fatalf(ctx,
-								"term regression in outgoing MsgApp: idx %d at term=%d "+
-									"appended with logterm=%d",
-								ent.Index, ent.Term, message.LogTerm,
-							)
-						}
-						prevTerm = ent.Term
+					if prevIndex+1 != ent.Index {
+						log.Fatalf(ctx,
+							"index gap in outgoing MsgApp: idx %d followed by %d",
+							prevIndex, ent.Index,
+						)
 					}
-				}
-
-			case raftpb.MsgAppResp:
-				// A successful (non-reject) MsgAppResp contains two pieces of
-				// information: the highest log index and the commit index. Raft
-				// currently queues up one MsgAppResp per incoming MsgApp, and we may
-				// process multiple messages in one handleRaftReady call (because
-				// multiple messages may arrive while we're blocked syncing to
-				// disk). If we get redundant MsgAppResps, drop all but the
-				// last (we've seen that too many MsgAppResps can overflow
-				// message queues on the receiving side).
-				//
-				// Note that this reorders the chosen MsgAppResp relative to
-				// other messages (including any MsgAppResps with the Reject flag),
-				// but raft is fine with this reordering.
-				//
-				// TODO(bdarnell): Consider pushing this optimization into etcd/raft.
-				// Similar optimizations may be possible for other message types,
-				// although MsgAppResp is the only one that has been seen as a
-				// problem in practice.
-				if !message.Reject && message.Index > lastAppResp.Index {
-					lastAppResp = message
-					drop = true
+					prevIndex = ent.Index
+					if prevTerm > ent.Term {
+						log.Fatalf(ctx,
+							"term regression in outgoing MsgApp: idx %d at term=%d "+
+								"appended with logterm=%d",
+							ent.Index, ent.Term, message.LogTerm,
+						)
+					}
+					prevTerm = ent.Term
 				}
 			}
 
-			if !drop {
-				r.sendRaftMessage(ctx, message, false)
+		case raftpb.MsgAppResp:
+			// A successful (non-reject) MsgAppResp contains two pieces of
+			// information: the highest log index and the commit index. Raft
+			// currently queues up one MsgAppResp per incoming MsgApp, and we may
+			// process multiple messages in one handleRaftReady call (because
+			// multiple messages may arrive while we're blocked syncing to
+			// disk). If we get redundant MsgAppResps, drop all but the
+			// last (we've seen that too many MsgAppResps can overflow
+			// message queues on the receiving side).
+			//
+			// Note that this reorders the chosen MsgAppResp relative to
+			// other messages (including any MsgAppResps with the Reject flag),
+			// but raft is fine with this reordering.
+			//
+			// TODO(bdarnell): Consider pushing this optimization into etcd/raft.
+			// Similar optimizations may be possible for other message types,
+			// although MsgAppResp is the only one that has been seen as a
+			// problem in practice.
+			if !message.Reject && message.Index > lastAppResp.Index {
+				lastAppResp = message
+				drop = true
 			}
+		}
+
+		if !drop {
+			r.sendRaftMessage(ctx, message, false)
 		}
 	}
 	if lastAppResp.Index > 0 {
@@ -1937,20 +1918,20 @@ func (r *Replica) sendRaftMessages(
 	}
 }
 
-// sendLocalRaftMsg sends a message to the local raft state machine.
-func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
-	if msg.To != raftpb.PeerID(r.ReplicaID()) {
-		panic("incorrect message target")
+// sendStorageAck sends a storage append ack to the local raft.RawNode.
+func (r *Replica) sendStorageAck(ctx context.Context, ack raft.StorageAppendAck, willDeliver bool) {
+	for msg := range ack.Send(raftpb.PeerID(r.replicaID)) {
+		r.sendRaftMessage(ctx, msg, false)
 	}
 	r.localMsgs.Lock()
 	wasEmpty := len(r.localMsgs.active) == 0
-	r.localMsgs.active = append(r.localMsgs.active, msg)
+	r.localMsgs.active = append(r.localMsgs.active, ack)
 	r.localMsgs.Unlock()
-	// If this is the first local message and the caller will not deliver local
-	// messages itself, schedule a Raft update check to inform Raft processing
-	// about the new local message. Everyone else can rely on the call that added
-	// the first message having already scheduled a Raft update check.
-	if wasEmpty && !willDeliverLocal {
+	// If this is the first ack and the caller will not deliver acknowledgements
+	// itself, schedule a Raft update check to inform Raft processing about the
+	// new local message. Everyone else can rely on the call that added the first
+	// message having already scheduled a Raft update check.
+	if wasEmpty && !willDeliver {
 		r.store.enqueueRaftUpdateCheck(r.RangeID)
 	}
 }
@@ -1981,16 +1962,13 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 	}
 
 	for i, m := range localMsgs {
-		r.mu.raftTracer.MaybeTrace(m)
-		if err := raftGroup.Step(m); err != nil {
-			log.Fatalf(ctx, "unexpected error stepping local raft message [%s]: %v",
-				raft.DescribeMessage(m, raftEntryFormatter), err)
-		}
+		r.mu.raftTracer.MaybeTraceAppendAck(m)
+		raftGroup.AckAppend(m)
 		// NB: we can reset messages in the localMsgs.recycled slice without holding
 		// the localMsgs mutex because no-one ever writes to localMsgs.recycled and
 		// we are holding raftMu, which must be held to switch localMsgs.active and
 		// localMsgs.recycled.
-		localMsgs[i].Reset() // for GC
+		localMsgs[i] = raft.StorageAppendAck{} // for GC
 	}
 }
 
