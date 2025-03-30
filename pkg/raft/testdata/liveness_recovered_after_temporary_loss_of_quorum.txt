@@ -112,9 +112,9 @@ stabilize
 > 1 handling Ready
   Ready:
   Messages:
-  1->2 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
+  1->2 MsgPreVoteResp Term:1 Log:1/0 Rejected (Hint: 12)
 > 2 receiving messages
-  1->2 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
+  1->2 MsgPreVoteResp Term:1 Log:1/0 Rejected (Hint: 12)
   INFO 2 received MsgPreVoteResp rejection from 1 at term 1
   INFO 2 has received 1 MsgPreVoteResp votes and 1 vote rejections
   INFO 2 became follower at term 1
@@ -169,9 +169,9 @@ stabilize
 > 2 handling Ready
   Ready:
   Messages:
-  2->1 MsgPreVoteResp Term:2 Log:0/0
+  2->1 MsgPreVoteResp Term:2 Log:1/0
 > 1 receiving messages
-  2->1 MsgPreVoteResp Term:2 Log:0/0
+  2->1 MsgPreVoteResp Term:2 Log:1/0
   INFO 1 received MsgPreVoteResp from 2 at term 1
   INFO 1 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 1 became candidate at term 2
@@ -193,9 +193,9 @@ stabilize
   Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
-  2->1 MsgVoteResp Term:2 Log:0/0
+  2->1 MsgVoteResp Term:2 Log:1/0
 > 1 receiving messages
-  2->1 MsgVoteResp Term:2 Log:0/0
+  2->1 MsgVoteResp Term:2 Log:1/0
   INFO 1 received MsgVoteResp from 2 at term 2
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 2
@@ -207,39 +207,27 @@ stabilize
   2/13 EntryNormal ""
   Messages:
   1->2 MsgFortifyLeader Term:2 Log:0/0
-  1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
+  1->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[
+    1/12 EntryNormal "data1"
+    2/13 EntryNormal ""
+  ]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:2 Log:0/0
-  1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
+  1->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[
+    1/12 EntryNormal "data1"
+    2/13 EntryNormal ""
+  ]
 > 2 handling Ready
   Ready:
   HardState Term:2 Vote:1 Commit:11 Lead:1 LeadEpoch:1
-  Messages:
-  2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
-> 1 receiving messages
-  2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  2->1 MsgAppResp Term:2 Log:1/12 Rejected (Hint: 11) Commit:11
-> 1 handling Ready
-  Ready:
-  Messages:
-  1->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[
-    1/12 EntryNormal "data1"
-    2/13 EntryNormal ""
-  ]
-> 2 receiving messages
-  1->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[
-    1/12 EntryNormal "data1"
-    2/13 EntryNormal ""
-  ]
-> 2 handling Ready
-  Ready:
   Entries:
   1/12 EntryNormal "data1"
   2/13 EntryNormal ""
   Messages:
+  2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
 > 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
 > 1 handling Ready
   Ready:
