@@ -440,7 +440,7 @@ func RaftEventFromMsgStorageAppendAndMsgApps(
 ) RaftEvent {
 	event := RaftEvent{
 		MsgAppMode:        mode,
-		Term:              appendMsg.Mark.Term,
+		Term:              appendMsg.LeadTerm,
 		Snap:              appendMsg.Snapshot,
 		Entries:           appendMsg.Entries,
 		LogSnapshot:       logSnapshot,

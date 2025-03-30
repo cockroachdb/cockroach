@@ -1767,7 +1767,7 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 	// raftpb.Entry and raftpb.Message are only partially populated below, which
 	// could be improved in the future.
 	appendMsg := raft.StorageAppend{
-		Mark:     raft.LogMark{Term: 10, Index: 100},
+		LeadTerm: 10,
 		Snapshot: &raftpb.Snapshot{},
 		Entries: []raftpb.Entry{
 			{Term: 9},

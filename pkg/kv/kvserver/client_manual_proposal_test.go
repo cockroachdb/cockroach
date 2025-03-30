@@ -211,7 +211,7 @@ LIMIT
 				Commit: uint64(lastIndex) + uint64(len(ents)),
 			},
 			Entries:   ents,
-			Mark:      raft.LogMark{Term: lastTerm, Index: uint64(lastIndex)},
+			LeadTerm:  lastTerm,
 			Responses: []raftpb.Message{{}}, // need >0 responses so StoreEntries will sync
 		}
 

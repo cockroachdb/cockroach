@@ -102,12 +102,8 @@ func (m MsgStorageAppendDone) Mark() raft.LogMark {
 			}
 		}
 	}
-	if msg := m[len(m)-1]; msg.Type != raftpb.MsgStorageAppendResp {
-		return raft.LogMark{}
-	} else if msg.Index != 0 {
+	if msg := m[len(m)-1]; msg.Type == raftpb.MsgStorageAppendResp {
 		return raft.LogMark{Term: msg.LogTerm, Index: msg.Index}
-	} else if msg.Snapshot != nil {
-		return raft.LogMark{Term: msg.LogTerm, Index: msg.Snapshot.Metadata.Index}
 	}
 	return raft.LogMark{}
 }

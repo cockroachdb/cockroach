@@ -124,7 +124,7 @@ stabilize
   Snapshot Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   OnSync:
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/0
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/18
     Snapshot: Index:18 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/18 Commit:18

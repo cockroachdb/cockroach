@@ -358,7 +358,7 @@ func (r *RaftTracer) MaybeTraceAppend(app raft.StorageAppend) {
 	from := kvpb.RaftIndex(app.Entries[0].Index)
 	to := kvpb.RaftIndex(app.Entries[len(app.Entries)-1].Index)
 	r.iterCovered(from, to, func(t *traceValue) {
-		t.logf(5, "appended entries [%d-%d] at leader term %d", from, to, app.Mark.Term)
+		t.logf(5, "appended entries [%d-%d] at leader term %d", from, to, app.Mark().Term)
 	})
 }
 
