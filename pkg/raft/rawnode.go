@@ -279,73 +279,58 @@ func (rn *RawNode) newStorageAppend() StorageAppend {
 	return app
 }
 
-// newStorageAppendRespMsg creates the message that should be returned to node
-// after the unstable log entries, hard state, and snapshot in the current Ready
-// (along with those in all prior Ready structs) have been saved to stable
-// storage.
-// TODO(pav-kv): make a type for storage append acknowledgements.
-func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
-	mark := app.Mark()
-	return pb.Message{
-		Type: pb.MsgStorageAppendResp,
-		To:   self,
-		From: LocalAppendThread,
-
-		// If sending unstable entries to storage, attach the last index and last
-		// accepted term to the response message. This (index, term) tuple will be
-		// handed back and consulted when the stability of those log entries is
-		// signaled to the unstable. If the term matches the last accepted term by
-		// the time the response is received (unstable.stableTo), the unstable log
-		// can be truncated up to the given index.
-		//
-		// The last accepted term logic prevents an ABA problem[^1] that could lead
-		// to the unstable log and the stable log getting out of sync temporarily
-		// and leading to an inconsistent view. Consider the following example with
-		// 5 nodes, A B C D E:
-		//
-		//  1. A is the leader.
-		//  2. A proposes some log entries but only B receives these entries.
-		//  3. B gets the Ready and the entries are appended asynchronously.
-		//  4. A crashes and C becomes leader after getting a vote from D and E.
-		//  5. C proposes some log entries and B receives these entries, overwriting the
-		//     previous unstable log entries that are in the process of being appended.
-		//     The entries have a larger term than the previous entries but the same
-		//     indexes. It begins appending these new entries asynchronously.
-		//  6. C crashes and A restarts and becomes leader again after getting the vote
-		//     from D and E.
-		//  7. B receives the entries from A which are the same as the ones from step 2,
-		//     overwriting the previous unstable log entries that are in the process of
-		//     being appended from step 5. The entries have the original terms and
-		//     indexes from step 2. Recall that log entries retain their original term
-		//     numbers when a leader replicates entries from previous terms. It begins
-		//     appending these new entries asynchronously.
-		//  8. The asynchronous log appends from the first Ready complete and stableTo
-		//     is called.
-		//  9. However, the log entries from the second Ready are still in the
-		//     asynchronous append pipeline and will overwrite (in stable storage) the
-		//     entries from the first Ready at some future point. We can't truncate the
-		//     unstable log yet or a future read from Storage might see the entries from
-		//     step 5 before they have been replaced by the entries from step 7.
-		//     Instead, we must wait until we are sure that the entries are stable and
-		//     that no in-progress appends might overwrite them before removing entries
-		//     from the unstable log.
-		//
-		// If accTerm has changed by the time the MsgStorageAppendResp is returned,
-		// the response is ignored and the unstable log is not truncated. The
-		// unstable log is only truncated when the term has remained unchanged from
-		// the time that the MsgStorageAppend was sent to the time that the response
-		// is received, indicating that no new leader has overwritten the log.
-		//
-		// TODO(pav-kv): unstable entries can be partially released even if the last
-		// accepted term changed, if we track the (term, index) points at which the
-		// log was truncated.
-		//
-		// [^1]: https://en.wikipedia.org/wiki/ABA_problem
-		LogTerm:  mark.Term,
-		Index:    mark.Index,
-		Snapshot: app.Snapshot,
-	}
-}
+// TODO(pav-kv): find a new home for this comment.
+//
+// If sending unstable entries to storage, attach the last index and last
+// accepted term to the response message. This (index, term) tuple will be
+// handed back and consulted when the stability of those log entries is
+// signaled to the unstable. If the term matches the last accepted term by
+// the time the response is received (unstable.stableTo), the unstable log
+// can be truncated up to the given index.
+//
+// The last accepted term logic prevents an ABA problem[^1] that could lead
+// to the unstable log and the stable log getting out of sync temporarily
+// and leading to an inconsistent view. Consider the following example with
+// 5 nodes, A B C D E:
+//
+//  1. A is the leader.
+//  2. A proposes some log entries but only B receives these entries.
+//  3. B gets the Ready and the entries are appended asynchronously.
+//  4. A crashes and C becomes leader after getting a vote from D and E.
+//  5. C proposes some log entries and B receives these entries, overwriting the
+//     previous unstable log entries that are in the process of being appended.
+//     The entries have a larger term than the previous entries but the same
+//     indexes. It begins appending these new entries asynchronously.
+//  6. C crashes and A restarts and becomes leader again after getting the vote
+//     from D and E.
+//  7. B receives the entries from A which are the same as the ones from step 2,
+//     overwriting the previous unstable log entries that are in the process of
+//     being appended from step 5. The entries have the original terms and
+//     indexes from step 2. Recall that log entries retain their original term
+//     numbers when a leader replicates entries from previous terms. It begins
+//     appending these new entries asynchronously.
+//  8. The asynchronous log appends from the first Ready complete and stableTo
+//     is called.
+//  9. However, the log entries from the second Ready are still in the
+//     asynchronous append pipeline and will overwrite (in stable storage) the
+//     entries from the first Ready at some future point. We can't truncate the
+//     unstable log yet or a future read from Storage might see the entries from
+//     step 5 before they have been replaced by the entries from step 7.
+//     Instead, we must wait until we are sure that the entries are stable and
+//     that no in-progress appends might overwrite them before removing entries
+//     from the unstable log.
+//
+// If accTerm has changed by the time the MsgStorageAppendResp is returned,
+// the response is ignored and the unstable log is not truncated. The
+// unstable log is only truncated when the term has remained unchanged from
+// the time that the MsgStorageAppend was sent to the time that the response
+// is received, indicating that no new leader has overwritten the log.
+//
+// TODO(pav-kv): unstable entries can be partially released even if the last
+// accepted term changed, if we track the (term, index) points at which the
+// log was truncated.
+//
+// [^1]: https://en.wikipedia.org/wiki/ABA_problem
 
 // AckAppend notifies the RawNode that the storage write has been persisted.
 func (rn *RawNode) AckAppend(ack StorageAppendAck) {
