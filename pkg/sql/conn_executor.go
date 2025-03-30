@@ -879,6 +879,14 @@ func (s *Server) SetupConn(
 		return ConnectionHandler{}, err
 	}
 
+	// Usage of the InternalAppNamePrefix is usually done using an InternalExecutor which already is set up
+	// to use the InternalMetrics. However, some external connections use the prefix as well, for example
+	// the debug zip cli tool.
+	metrics := &s.Metrics
+	if strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+		metrics = &s.InternalMetrics
+	}
+
 	ex := s.newConnExecutor(
 		ctx,
 		executorTypeExec,
@@ -886,7 +894,7 @@ func (s *Server) SetupConn(
 		stmtBuf,
 		clientComm,
 		memMetrics,
-		&s.Metrics,
+		metrics,
 		s.localSqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
 		false, /* underOuterTxn */
@@ -1227,6 +1235,11 @@ func (s *Server) newConnExecutor(
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
+		if strings.HasPrefix(newName, catconstants.InternalAppNamePrefix) {
+			ex.metrics = &ex.server.InternalMetrics
+		} else {
+			ex.metrics = &ex.server.Metrics
+		}
 	}
 
 	ex.extraTxnState.underOuterTxn = underOuterTxn
