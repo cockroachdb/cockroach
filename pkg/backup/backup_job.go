@@ -1663,8 +1663,11 @@ func updateBackupDetails(
 		startTime = prevBackups[len(prevBackups)-1].EndTime
 	}
 
-	// If we didn't load any prior backups from which get encryption info, we
-	// need to generate encryption specific data.
+	// If we didn't load any prior backups with EncryptionInfo, we need to
+	// generate encryption specific data.
+	//
+	// TODO(msbutler): consider using prev backups instead of nil encryptiuon
+	// info, if possible.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
 		encryptionOptions, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(ctx, details.EncryptionOptions, kmsEnv)
