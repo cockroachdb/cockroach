@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -2419,4 +2420,86 @@ SELECT id
 `,
 	).Scan(&id)
 	return id
+}
+
+func TestInternalAppNamePrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	params.Insecure = true
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Create a test table.
+	_, err := sqlDB.Exec("CREATE TABLE test (k INT PRIMARY KEY, v INT)")
+	require.NoError(t, err)
+
+	t.Run("app name set at conn init", func(t *testing.T) {
+		// Create a connection.
+		connURL := url.URL{
+			Scheme: "postgres",
+			User:   url.User(username.RootUser),
+			Host:   s.AdvSQLAddr(),
+		}
+		q := connURL.Query()
+		q.Add("sslmode", "disable")
+		q.Add("application_name", catconstants.InternalAppNamePrefix+"mytest")
+		connURL.RawQuery = q.Encode()
+		db, err := gosql.Open("postgres", connURL.String())
+		require.NoError(t, err)
+		defer db.Close()
+		runner := sqlutils.MakeSQLRunner(db)
+
+		// Get initial metric values
+		sqlServer := s.SQLServer().(*sql.Server)
+		initialInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		initialUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
+		runner.Exec(t, "INSERT into test values (1, 1)")
+		// Confirm only internal metrics increased.
+		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
+		require.Equal(t, initialUserMetrics, finalUserMetrics)
+		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+	})
+
+	t.Run("app name set in session", func(t *testing.T) {
+		// Create a connection.
+		connURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(username.RootUser),
+			Host:     s.AdvSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		db, err := gosql.Open("postgres", connURL.String())
+		require.NoError(t, err)
+		defer db.Close()
+		runner := sqlutils.MakeSQLRunner(db)
+
+		// Get initial metric values
+		sqlServer := s.SQLServer().(*sql.Server)
+		initialInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		initialUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
+
+		// Set app name to attribute query towards internal metrics.
+		runner.Exec(t, fmt.Sprintf("set application_name='%v'", catconstants.InternalAppNamePrefix+"mytest"))
+		runner.Exec(t, "INSERT into test values (2, 1)")
+
+		// Confirm only internal metrics increased.
+		finalInternalMetrics := sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		finalUserMetrics := sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
+		require.Equal(t, initialUserMetrics, finalUserMetrics)
+		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+
+		// Reset app name.
+		runner.Exec(t, "set application_name='mytest'")
+		runner.Exec(t, "INSERT into test values (3, 1)")
+
+		// Confirm only user metrics increased.
+		finalInternalMetrics = sqlServer.InternalMetrics.ExecutedStatementCounters.InsertCount.Count()
+		finalUserMetrics = sqlServer.Metrics.ExecutedStatementCounters.InsertCount.Count()
+		require.Equal(t, initialUserMetrics+1, finalUserMetrics)
+		require.Equal(t, initialInternalMetrics+1, finalInternalMetrics)
+	})
 }
