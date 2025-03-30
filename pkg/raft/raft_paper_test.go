@@ -662,15 +662,15 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
-	term := uint64(8)
+	ents := index(1).terms(4, 5, 5, 5, 7, 7, 8, 8, 9, 9, 9)
+	term := uint64(9)
 	for i, tt := range [][]pb.Entry{
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
-		index(0).terms(0, 1, 1, 1, 4, 4, 4, 4),
-		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+		index(1).terms(4, 5, 5, 5, 7, 7, 8, 8, 9, 9),
+		index(1).terms(4, 5, 5, 5, 7, 7),
+		index(1).terms(4, 5, 5, 5, 7, 7, 8, 8, 9, 9, 9, 9),
+		index(1).terms(4, 5, 5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10),
+		index(1).terms(4, 5, 5, 5, 7, 7, 7, 7),
+		index(1).terms(4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7, 7),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
 		leadStorage.Append(ents)
@@ -679,7 +679,7 @@ func TestLeaderSyncFollowerLog(t *testing.T) {
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
 		followerStorage.Append(tt)
 		follower := newTestRaft(2, 10, 1, followerStorage)
-		follower.loadState(pb.HardState{Term: term - 1})
+		follower.loadState(pb.HardState{Term: tt[len(tt)-1].Term})
 		// It is necessary to have a three-node cluster.
 		// The second may have more up-to-date log than the first one, so the
 		// first node needs the vote from the third node to become the leader.
