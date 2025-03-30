@@ -53,7 +53,6 @@ Entries:
 OnSync:
 3->1 MsgAppResp Term:1 Log:0/12 Commit:11
 3->1 MsgAppResp Term:1 Log:0/13 Commit:11
-AppendThread->3 MsgStorageAppendResp Term:0 Log:1/13
 
 # In the meantime, the entries are committed, and the leader sends the commit
 # index to all the followers.
@@ -67,7 +66,6 @@ stabilize 1 2
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/13
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/12 Commit:11
   3->1 MsgAppResp Term:1 Log:0/13 Commit:11

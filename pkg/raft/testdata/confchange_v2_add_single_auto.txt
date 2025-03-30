@@ -55,7 +55,6 @@ stabilize
   1->1 MsgAppResp Term:1 Log:0/3 Commit:2
   1->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
   1->1 MsgAppResp Term:1 Log:0/4 Commit:2
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/4
 > 1 handling Ready
   Ready:
   HardState Term:1 Vote:1 Commit:4 Lead:1 LeadEpoch:1
@@ -107,8 +106,6 @@ stabilize
   Snapshot Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/4
-    Snapshot: Index:4 Term:1 ConfState:Voters:[1 2] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/4 Commit:4
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 2 [StateSnapshot match=4 next=5 sentCommit=4 matchCommit=4 paused pendingSnap=4]

@@ -115,7 +115,6 @@ stabilize 2 3
   OnSync:
   2->2 MsgAppResp Term:2 Log:0/5 Commit:4
   2->2 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:2/5
 > 3 receiving messages
   2->3 MsgFortifyLeader Term:2 Log:0/0
   2->3 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
@@ -152,7 +151,6 @@ stabilize 2 3
   Committed: (3,4]
   OnSync:
   3->2 MsgAppResp Term:2 Log:0/5 Commit:4
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/5
   Applying:
   1/4 EntryConfChangeV2 v3
   INFO 3 switched to configuration voters=(1 2 3)

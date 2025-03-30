@@ -660,9 +660,7 @@ func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	require.Empty(t, rd.Messages)
 	storageAppend := func(m StorageAppend) {
 		require.NoError(t, s.Append(m.Entries))
-		for _, resp := range m.Responses {
-			require.NoError(t, rn.Step(resp))
-		}
+		rn.AckAppend(m.Ack())
 	}
 	storageAppend(rd.StorageAppend)
 

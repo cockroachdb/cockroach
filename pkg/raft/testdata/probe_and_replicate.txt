@@ -568,7 +568,6 @@ stabilize 1
   OnSync:
   1->1 MsgAppResp Term:8 Log:0/21 Commit:18
   1->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:8/21
 
 ## Recover each follower, one by one.
 stabilize 1 2
@@ -604,7 +603,6 @@ stabilize 1 2
   8/21 EntryNormal ""
   OnSync:
   2->1 MsgAppResp Term:8 Log:0/21 Commit:18
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:8/21
 > 1 receiving messages
   2->1 MsgAppResp Term:8 Log:0/21 Commit:18
 
@@ -658,7 +656,6 @@ stabilize 1 3
   Committed: (14,18]
   OnSync:
   3->1 MsgAppResp Term:8 Log:0/21 Commit:18
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:8/21
   Applying:
   4/15 EntryNormal "prop_4_15"
   5/16 EntryNormal ""
@@ -682,7 +679,6 @@ stabilize 1 4
   OnSync:
   4->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   4->1 MsgAppResp Term:8 Log:0/21 Commit:18
-  AppendThread->4 MsgStorageAppendResp Term:0 Log:8/21
 > 1 receiving messages
   4->1 MsgFortifyLeaderResp Term:8 Log:0/0 LeadEpoch:2
   4->1 MsgAppResp Term:8 Log:0/21 Commit:18
@@ -753,7 +749,6 @@ stabilize 1 5
   Committed: (18,21]
   OnSync:
   5->1 MsgAppResp Term:8 Log:0/21 Commit:21
-  AppendThread->5 MsgStorageAppendResp Term:0 Log:8/21
   Applying:
   6/19 EntryNormal "prop_6_19"
   6/20 EntryNormal "prop_6_20"
@@ -810,7 +805,6 @@ stabilize 1 6
   Committed: (15,21]
   OnSync:
   6->1 MsgAppResp Term:8 Log:0/21 Commit:21
-  AppendThread->6 MsgStorageAppendResp Term:0 Log:8/21
   Applying:
   5/16 EntryNormal ""
   5/17 EntryNormal "prop_5_17"

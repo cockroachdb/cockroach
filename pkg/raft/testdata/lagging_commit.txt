@@ -53,7 +53,6 @@ Entries:
 OnSync:
 3->1 MsgAppResp Term:1 Log:0/12 Commit:11
 3->1 MsgAppResp Term:1 Log:0/13 Commit:11
-AppendThread->3 MsgStorageAppendResp Term:0 Log:1/13
 
 # Suppose there is a network blip which prevents the leader learning that the
 # follower 3 has appended the proposed entries to the log.
@@ -74,7 +73,6 @@ stabilize 1 2
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/13
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/12 Commit:11
   2->1 MsgAppResp Term:1 Log:0/13 Commit:11
