@@ -662,22 +662,22 @@ func TestFollowerAppendEntries(t *testing.T) {
 // into consistency with its own.
 // Reference: section 5.3, figure 7
 func TestLeaderSyncFollowerLog(t *testing.T) {
-	ents := index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
-	term := uint64(8)
+	ents := index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6)
+	term := uint64(9)
 	for i, tt := range [][]pb.Entry{
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
-		index(0).terms(0, 1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
-		index(0).terms(0, 1, 1, 1, 4, 4, 4, 4),
-		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6),
+		index(1).terms(1, 1, 1, 4, 4),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 6),
+		index(1).terms(1, 1, 1, 4, 4, 5, 5, 6, 6, 6, 7, 7),
+		index(1).terms(1, 1, 1, 4, 4, 4, 4),
+		index(1).terms(1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		leadStorage.Append(ents)
+		require.NoError(t, leadStorage.Append(ents))
 		lead := newTestRaft(1, 10, 1, leadStorage)
 		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
-		followerStorage.Append(tt)
+		require.NoError(t, followerStorage.Append(tt))
 		follower := newTestRaft(2, 10, 1, followerStorage)
 		follower.loadState(pb.HardState{Term: term - 1})
 		// It is necessary to have a three-node cluster.
