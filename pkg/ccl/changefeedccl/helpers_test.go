@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -69,7 +71,7 @@ func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.S
 	if disable {
 		t.Log("using legacy schema changer")
 		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	}
 	return disable
 }
@@ -1628,4 +1630,111 @@ func checkSchema(actual []cdctest.TestFeedMessage) error {
 		}
 	}
 	return nil
+}
+
+type regression141453Options struct {
+	maybeUseLegacySchemaChanger bool
+}
+
+type regression141453Option func(*regression141453Options)
+
+func withMaybeUseLegacySchemaChanger() regression141453Option {
+	return func(opts *regression141453Options) {
+		opts.maybeUseLegacySchemaChanger = true
+	}
+}
+
+// runWithAndWithoutRegression141453 runs the test both with and without testing
+// knobs that simulate the scenario where a change aggregator encounters a schema
+// change restart but draining the buffer fails so the resolved spans message
+// signaling the restart doesn't get sent to the change frontier.
+func runWithAndWithoutRegression141453(
+	t *testing.T,
+	testFn cdcTestFn,
+	runTestFn func(t *testing.T, testFn cdcTestFn),
+	opts ...regression141453Option,
+) {
+	testutils.RunTrueAndFalse(t, "regression 141453",
+		func(t *testing.T, regression141453 bool) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				var options regression141453Options
+				for _, opt := range opts {
+					opt(&options)
+				}
+
+				var useLegacySchemaChanger bool
+				if options.maybeUseLegacySchemaChanger {
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+					useLegacySchemaChanger = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+				}
+
+				// This regression scenario doesn't always happen with the legacy schema changer
+				// because altering the table sometimes results in backfills instead of restarts.
+				if useLegacySchemaChanger || !regression141453 {
+					testFn(t, s, f)
+					return
+				}
+
+				knobs := s.TestingKnobs.
+					DistSQL.(*execinfra.TestingKnobs).
+					Changefeed.(*TestingKnobs)
+
+				// We force the regression scenario to happen by:
+				// 1. Blocking popping from the kv feed to change aggregator buffer
+				//    before we add the restart resolved span boundary message.
+				// 2. Canceling the context that Drain uses so that it fails.
+				// 3. Re-allowing popping after the buffer is closed.
+				//
+				// This will ensure that the change aggregator will not be able
+				// to pop (and send) the restart resolved span boundary message
+				// and thus the changefeed should restart due to transient error
+				// (before the expected restart for the schema change).
+				//
+				// Previously, this scenario would incorrectly cause the changefeed
+				// to shut down as if it had completed successfully.
+				//
+				// Note that we only want to make Drain fail once, otherwise the test
+				// will never be able to proceed.
+				var drainFailedOnce atomic.Bool
+				knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+					if drainFailedOnce.Load() {
+						return kvevent.BlockingBufferTestingKnobs{}
+					}
+					var blockPop atomic.Bool
+					popCh := make(chan struct{})
+					return kvevent.BlockingBufferTestingKnobs{
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+							if e.Type() == kvevent.TypeResolved &&
+								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
+								blockPop.Store(true)
+							}
+							return ctx, e
+						},
+						BeforePop: func() {
+							if blockPop.Load() {
+								<-popCh
+							}
+						},
+						BeforeDrain: func(ctx context.Context) context.Context {
+							ctx, cancel := context.WithCancel(ctx)
+							cancel()
+							return ctx
+						},
+						AfterDrain: func(err error) {
+							require.Error(t, err)
+							drainFailedOnce.Store(true)
+						},
+						AfterCloseWithReason: func(err error) {
+							require.NoError(t, err)
+							close(popCh)
+							blockPop.Store(false)
+						},
+					}
+				}
+				testFn(t, s, f)
+				require.True(t, drainFailedOnce.Load())
+			}
+
+			runTestFn(t, testFn)
+		})
 }

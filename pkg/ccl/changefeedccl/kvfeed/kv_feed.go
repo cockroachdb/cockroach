@@ -172,18 +172,18 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	err = errors.CombineErrors(
-		f.writer.Drain(ctx),
-		f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason),
-	)
-
-	if err == nil {
-		// This context is canceled by the change aggregator when it receives
-		// an error reading from the Writer that was closed above.
-		<-ctx.Done()
+	if err := f.writer.Drain(ctx); err != nil {
+		err := errors.Wrap(err, "failed to drain kv feed writer")
+		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
+	}
+	if err := f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason); err != nil {
+		return err
 	}
 
-	return err
+	// This context is canceled by the change aggregator when it receives
+	// an error reading from the Writer that was closed above.
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func startLaggingRangesObserver(

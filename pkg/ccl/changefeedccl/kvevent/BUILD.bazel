@@ -8,6 +8,7 @@ go_library(
         "chunked_event_queue.go",
         "event.go",
         "metrics.go",
+        "testing_knobs.go",
         "throttling_buffer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
