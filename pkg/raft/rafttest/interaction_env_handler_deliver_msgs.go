@@ -106,7 +106,7 @@ func (env *InteractionEnv) deliverMsgs(typ raftpb.MessageType, r Recipient) int 
 	}
 	// Deliver all other messages.
 	var msgs []raftpb.Message
-	msgs, env.Messages = splitMsgs(env.Messages, r.ID, typ, r.Drop)
+	msgs, env.Messages = splitMsgs(env.Messages, r.ID, typ)
 	n += len(msgs)
 	for _, msg := range msgs {
 		if r.Drop {

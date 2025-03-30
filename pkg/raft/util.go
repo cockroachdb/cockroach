@@ -90,10 +90,6 @@ func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isMsgIndicatingLeader[:])
 }
 
-func IsLocalMsgTarget(id pb.PeerID) bool {
-	return id == LocalAppendThread
-}
-
 // senderHasMsgTerm returns true if the message type is one that should have
 // the sender's term.
 func senderHasMsgTerm(m pb.Message) bool {
@@ -228,14 +224,10 @@ func DescribeTarget(id pb.PeerID) string {
 }
 
 func describeTarget(id pb.PeerID) string {
-	switch id {
-	case None:
+	if id == None {
 		return "None"
-	case LocalAppendThread:
-		return "AppendThread"
-	default:
-		return fmt.Sprintf("%x", id)
 	}
+	return fmt.Sprintf("%x", id)
 }
 
 // DescribeEntry returns a concise human-readable description of an
