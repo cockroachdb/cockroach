@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -34,6 +35,7 @@ type Manager struct {
 	}
 	ctx          context.Context
 	stopper      *stop.Stopper
+	sv           *settings.Values
 	codec        keys.SQLCodec
 	db           descs.DB
 	testingKnobs *VecIndexTestingKnobs
@@ -44,11 +46,12 @@ type Manager struct {
 // index instances. We store a context for creating new vector index objects,
 // since those outlive the context of Get calls.
 func NewManager(
-	ctx context.Context, stopper *stop.Stopper, codec keys.SQLCodec, db descs.DB,
+	ctx context.Context, stopper *stop.Stopper, sv *settings.Values, codec keys.SQLCodec, db descs.DB,
 ) *Manager {
 	mgr := &Manager{
 		ctx:     ctx,
 		stopper: stopper,
+		sv:      sv,
 		codec:   codec,
 		db:      db,
 	}

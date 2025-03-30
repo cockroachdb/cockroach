@@ -69,7 +69,7 @@ partition 5, centroid=(0.3333, 2), sqdist=1.4444
 # ----------------------------------------------------------------------
 # Search tree with one over-sized partition.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2 no-fixups
+new-index min-partition-size=1 max-partition-size=4 beam-size=2 discard-fixups
 vec1: (1, 2)
 vec2: (7, 4)
 vec3: (4, 3)

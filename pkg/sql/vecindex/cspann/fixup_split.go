@@ -110,7 +110,7 @@ func (fw *fixupWorker) splitPartition(
 
 	metadata := *partition.Metadata()
 	if metadata.StateDetails.State != ReadyState && !fw.singleStep {
-		if !metadata.StateDetails.MaybeSplitStalled() {
+		if !metadata.StateDetails.MaybeSplitStalled(fw.index.options.StalledOpTimeout()) {
 			// There's evidence that another worker has been recently processing
 			// the partition, so don't process the fixup. This minimizes the
 			// possibility of multiple workers on different nodes doing duplicate

@@ -372,7 +372,8 @@ vec5: (2, 2)
     ├───• vec4 (4, 3)
     └───• vec5 (2, 2)
 
-force-split partition-key=3
+# Partition #3 is not a child of partition #2, so no-op.
+force-split partition-key=3 parent-partition-key=2
 ----
 • 1 (1.25, 4.75)
 │
@@ -387,8 +388,24 @@ force-split partition-key=3
     ├───• vec4 (4, 3)
     └───• vec5 (2, 2)
 
-# Suppress fixups to enable partition to grow larger than max-partition-size.
-insert no-fixups
+# Partition #2 is too small to split.
+force-split partition-key=2 parent-partition-key=1
+----
+• 1 (1.25, 4.75)
+│
+├───• 2 (0.5, 8.5)
+│   │
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
+│
+└───• 3 (2, 1)
+    │
+    ├───• vec1 (0, -1)
+    ├───• vec4 (4, 3)
+    └───• vec5 (2, 2)
+
+# Discard fixups to enable partition to grow larger than max-partition-size.
+insert discard-fixups
 vec6: (3, 2)
 vec7: (-1, 0)
 vec8: (-2, 2)
@@ -411,8 +428,8 @@ vec9: (1, 1)
     ├───• vec8 (-2, 2)
     └───• vec9 (1, 1)
 
-# Even split partition is greater than max-partition-size.
-force-split partition-key=3 parent-partition-key=2
+# After split, partition #4 is still greater than max-partition-size.
+force-split partition-key=3 parent-partition-key=1
 ----
 • 1 (1.25, 4.75)
 │

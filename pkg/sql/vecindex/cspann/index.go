@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
@@ -70,6 +71,10 @@ type IndexOptions struct {
 	// split and merge fixup implementations that avoid the use of transactions.
 	// TODO(andyk): Remove this once we've fully converted to the new fixups.
 	UseNewFixups bool
+	// StalledOpTimeout can be called to determine how long a split/merge
+	// operation can stay in the same state before another worker may attempt to
+	// assist. If this is nil, then a default value is used.
+	StalledOpTimeout func() time.Duration
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -221,6 +226,9 @@ func NewIndex(
 	if vi.options.QualitySamples == 0 {
 		vi.options.QualitySamples = 16
 	}
+	if vi.options.StalledOpTimeout == nil {
+ 		vi.options.StalledOpTimeout = func() time.Duration { return DefaultStalledOpTimeout }
+ 	}
 
 	if vi.options.MaxPartitionSize < 2 {
 		return nil, errors.AssertionFailedf("MaxPartitionSize cannot be less than 2")
@@ -472,10 +480,15 @@ func (vi *Index) SuspendFixups() {
 	vi.fixups.Suspend()
 }
 
+// DiscardFixups drops all pending fixups. It is used for testing.
+func (vi *Index) DiscardFixups() {
+	vi.fixups.Process(true /* discard */)
+}
+
 // ProcessFixups waits until all pending fixups have been processed by
 // background workers. It is used for testing.
 func (vi *Index) ProcessFixups() {
-	vi.fixups.Process()
+	vi.fixups.Process(false /* discard */)
 }
 
 // ForceSplit enqueues a split fixup. It is used for testing.
@@ -817,9 +830,10 @@ func (vi *Index) searchChildPartitions(
 		// started or continued after stalling.
 		partitionKey := parentResults[i].ChildKey.PartitionKey
 		state := idxCtx.tempToSearch[i].StateDetails
-		needSplit := count > vi.options.MaxPartitionSize || state.MaybeSplitStalled()
+		needSplit := count > vi.options.MaxPartitionSize
+		needSplit = needSplit || state.MaybeSplitStalled(vi.options.StalledOpTimeout())
 		needMerge := count < vi.options.MinPartitionSize && partitionKey != RootKey
-		needMerge = needMerge || state.MaybeMergeStalled()
+		needMerge = needMerge || state.MaybeMergeStalled(vi.options.StalledOpTimeout())
 		if needSplit {
 			vi.fixups.AddSplit(ctx, idxCtx.treeKey,
 				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
