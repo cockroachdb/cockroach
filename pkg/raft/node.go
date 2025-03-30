@@ -98,12 +98,6 @@ func (m *StorageAppend) MustSync() bool {
 	return len(m.Responses) != 0
 }
 
-// NeedAck returns true if the RawNode wants to be notified after the writes are
-// durable on the log storage.
-func (m *StorageAppend) NeedAck() bool {
-	return len(m.Entries) != 0 || m.Snapshot != nil
-}
-
 // Ack returns the acknowledgement that should be used to notify
 // RawNode.AckAppend after the write is durable on the log storage.
 func (m *StorageAppend) Ack() StorageAppendAck {
@@ -177,9 +171,7 @@ func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
 func (m *StorageAppendAck) Step(self pb.PeerID) iter.Seq[pb.Message] {
 	return func(yield func(pb.Message) bool) {
 		for _, msg := range m.responses {
-			// TODO(pav-kv): remove msg.From != self after Responses no longer
-			// contains the MsgStorageAppendResp.
-			if msg.To != self || msg.From != self {
+			if msg.To != self {
 				continue
 			} else if !yield(msg) {
 				return
@@ -226,21 +218,10 @@ type Ready struct {
 	// TODO(pav-kv): reconsider if we can relax this to always == committed index.
 	Committed pb.LogSpan
 
-	// Messages specifies outbound messages.
-	//
-	// If async storage writes are not enabled, these messages must be sent
-	// AFTER Entries are appended to stable storage.
-	//
-	// If async storage writes are enabled, these messages can be sent
-	// immediately as the messages that have the completion of the async writes
-	// as a precondition are attached to the individual MsgStorage{Append,Apply}
-	// messages instead.
+	// Messages contains outbound messages that can be sent immediately.
 	//
 	// If it contains a MsgSnap message, the application MUST report back to raft
 	// when the snapshot has been received or has failed by calling ReportSnapshot.
-	//
-	// TODO(pav-kv): remove MsgStorageAppend from this slice, and allow all these
-	// messages to be sent immediately.
 	Messages []pb.Message
 }
 

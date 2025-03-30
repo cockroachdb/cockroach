@@ -213,7 +213,6 @@ stabilize 3
   3->2 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
   OnSync:
   3->3 MsgAppResp Term:2 Log:0/13 Commit:12
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/13
 
 stabilize 2
 ----
@@ -225,7 +224,6 @@ stabilize 2
   2/13 EntryNormal "prop_1"
   OnSync:
   2->3 MsgAppResp Term:2 Log:0/13 Commit:12
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:2/13
 
 withdraw-support 2 3
 ----

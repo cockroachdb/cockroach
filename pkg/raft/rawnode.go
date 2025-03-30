@@ -266,21 +266,16 @@ func (rn *RawNode) newStorageAppend() StorageAppend {
 	}
 	r.raftLog.acceptUnstable()
 	// Attach all messages in msgsAfterAppend as responses to be delivered after
-	// the write is durable, along with a self-directed MsgStorageAppendResp to
-	// acknowledge the durability.
+	// the write is durable. The messages are stepped into RawNode right
+	// before it handles StorageAppendAck.
 	//
-	// NB: it is important for performance that MsgStorageAppendResp message be
-	// handled after self-directed MsgAppResp messages on the leader (which will
-	// be contained in msgsAfterAppend). This ordering allows the MsgAppResp
-	// handling to use a fast-path in r.raftLog.term() before the newly appended
-	// entries are removed from the unstable log.
+	// NB: it is important for performance that MsgStorageAppendAck is handled
+	// after self-directed MsgAppResp messages on the leader (which will be
+	// contained in msgsAfterAppend). This ordering allows the MsgAppResp handling
+	// to use a fast-path in r.raftLog.term() before the newly appended entries
+	// are removed from the unstable log.
+	// TODO(pav-kv): this is no longer critical, after the termCache introduction.
 	app.Responses, r.msgsAfterAppend = r.msgsAfterAppend, nil
-	// Warning: there is code outside raft package depending on the order of
-	// Responses, particularly MsgStorageAppendResp being last in this list.
-	// Change this with caution.
-	if app.NeedAck() {
-		app.Responses = append(app.Responses, newStorageAppendRespMsg(r.id, app))
-	}
 	return app
 }
 

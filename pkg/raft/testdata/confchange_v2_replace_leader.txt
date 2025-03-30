@@ -84,7 +84,6 @@ stabilize
   1->4 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryConfChangeV2]
   OnSync:
   1->1 MsgAppResp Term:1 Log:0/5 Commit:4
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/5
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryConfChangeV2]
 > 3 receiving messages
@@ -97,21 +96,18 @@ stabilize
   1/5 EntryConfChangeV2
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/5
 > 3 handling Ready
   Ready:
   Entries:
   1/5 EntryConfChangeV2
   OnSync:
   3->1 MsgAppResp Term:1 Log:0/5 Commit:4
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:1/5
 > 4 handling Ready
   Ready:
   Entries:
   1/5 EntryConfChangeV2
   OnSync:
   4->1 MsgAppResp Term:1 Log:0/5 Commit:4
-  AppendThread->4 MsgStorageAppendResp Term:0 Log:1/5
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
   3->1 MsgAppResp Term:1 Log:0/5 Commit:4

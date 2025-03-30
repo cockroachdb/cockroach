@@ -45,7 +45,6 @@ stabilize 1
   1->2 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "data1"]
   OnSync:
   1->1 MsgAppResp Term:1 Log:0/12 Commit:11
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
 
 # Peer 2 has a temporary blip.
 deliver-msgs drop=(2)
@@ -220,7 +219,6 @@ stabilize
   OnSync:
   1->1 MsgAppResp Term:2 Log:0/13 Commit:11
   1->1 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/13
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:2 Log:0/0
   1->2 MsgApp Term:2 Log:1/12 Commit:11 Entries:[2/13 EntryNormal ""]
@@ -252,7 +250,6 @@ stabilize
   2/13 EntryNormal ""
   OnSync:
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:2/13
 > 1 receiving messages
   2->1 MsgAppResp Term:2 Log:0/13 Commit:11
 > 1 handling Ready
