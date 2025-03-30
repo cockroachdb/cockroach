@@ -211,7 +211,7 @@ func (b *backupResumer) ResumeCompaction(
 	// We interleave the computation of the compaction chain between the destination
 	// resolution and writing of backup lock due to the need to verify that the
 	// compaction chain is a valid chain.
-	prevManifests, localityInfo, encryption, allIters, err := getBackupChain(
+	prevManifests, localityInfo, baseEncryptionOpts, allIters, err := getBackupChain(
 		ctx, execCtx.ExecCfg(), execCtx.User(), initialDetails.Destination,
 		initialDetails.EncryptionOptions, initialDetails.EndTime, kmsEnv,
 	)
@@ -253,7 +253,7 @@ func (b *backupResumer) ResumeCompaction(
 			return err
 		}
 		updatedDetails, err = updateCompactionBackupDetails(
-			ctx, compactChain, initialDetails, backupDest, encryption, kmsEnv,
+			ctx, compactChain, initialDetails, backupDest, baseEncryptionOpts, kmsEnv,
 		)
 		if err != nil {
 			return err
@@ -492,21 +492,11 @@ func updateCompactionBackupDetails(
 	compactionChain compactionChain,
 	initialDetails jobspb.BackupDetails,
 	resolvedDest backupdest.ResolvedDestination,
-	encryption *jobspb.BackupEncryptionOptions,
+	baseEncryptOpts *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (jobspb.BackupDetails, error) {
 	if len(compactionChain.chainToCompact) == 0 {
 		return jobspb.BackupDetails{}, errors.New("no backup manifests to compact")
-	}
-	var encryptionInfo *jobspb.EncryptionInfo
-	if encryption != nil {
-		var err error
-		_, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(
-			ctx, encryption, kmsEnv,
-		)
-		if err != nil {
-			return jobspb.BackupDetails{}, err
-		}
 	}
 	lastBackup := compactionChain.lastBackup()
 	allDescs, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(
@@ -524,13 +514,16 @@ func updateCompactionBackupDetails(
 	destination := initialDetails.Destination
 	destination.Subdir = resolvedDest.ChosenSubdir
 	compactedDetails := jobspb.BackupDetails{
-		Destination:         destination,
-		StartTime:           compactionChain.start,
-		EndTime:             compactionChain.end,
-		URI:                 resolvedDest.DefaultURI,
-		URIsByLocalityKV:    resolvedDest.URIsByLocalityKV,
-		EncryptionOptions:   encryption,
-		EncryptionInfo:      encryptionInfo,
+		Destination:      destination,
+		StartTime:        compactionChain.start,
+		EndTime:          compactionChain.end,
+		URI:              resolvedDest.DefaultURI,
+		URIsByLocalityKV: resolvedDest.URIsByLocalityKV,
+		// Because we cannot have nice things, we persist a semi hydrated version of
+		// EncryptionOptions at planning, and then add the key at the beginning of
+		// resume using the same data structure in details. NB: EncryptionInfo is
+		// left blank and only added on the full backup (i think).
+		EncryptionOptions:   baseEncryptOpts,
 		CollectionURI:       resolvedDest.CollectionURI,
 		ResolvedTargets:     allDescsPb,
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
@@ -692,28 +685,22 @@ func getBackupChain(
 			log.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
 		}
 	}()
-	// If encryption keys have not already been computed, then we will compute
-	// it using the base store.
-	// TODO (kev-cao): Once we resolve #143725, we can remove this check and
-	// expect `GetEncryptionFromBaseStore` to be idempotent.
-	var encryption *jobspb.BackupEncryptionOptions
-	if encryptionOpts != nil && encryptionOpts.Mode != jobspb.EncryptionMode_None &&
-		(encryptionOpts.Key != nil || encryptionOpts.KMSInfo != nil) {
-		encryption = encryptionOpts
-	} else {
-		encryption, err = backupencryption.GetEncryptionFromBaseStore(
+	baseEncryptionInfo := encryptionOpts
+	if encryptionOpts != nil && !encryptionOpts.HasKey() {
+		baseEncryptionInfo, err = backupencryption.GetEncryptionFromBaseStore(
 			ctx, baseStores[0], encryptionOpts, kmsEnv,
 		)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}
+
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, encryption, kmsEnv,
+		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
 		user, false,
 	)
 	if err != nil {
@@ -723,12 +710,12 @@ func getBackupChain(
 		mem.Shrink(ctx, memReserved)
 	}()
 	allIters, err := backupinfo.GetBackupManifestIterFactories(
-		ctx, execCfg.DistSQLSrv.ExternalStorage, manifests, encryption, kmsEnv,
+		ctx, execCfg.DistSQLSrv.ExternalStorage, manifests, baseEncryptionInfo, kmsEnv,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	return manifests, localityInfo, encryption, allIters, nil
+	return manifests, localityInfo, baseEncryptionInfo, allIters, nil
 }
 
 // concludeBackupCompaction completes the backup compaction process after the backup has been

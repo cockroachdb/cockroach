@@ -256,6 +256,7 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		db.Exec(t, "CREATE TABLE foo (a INT, b INT)")
 		defer func() {
 			db.Exec(t, "DROP TABLE foo")
+			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		}()
 		db.Exec(t, "INSERT INTO foo VALUES (1, 1)")
 		opts := "encryption_passphrase = 'correct-horse-battery-staple'"
@@ -277,6 +278,10 @@ ARRAY['nodelocal://1/backup/%d'], '%s', ''::BYTES, %d::DECIMAL, %d::DECIMAL
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/6'").Scan(&backupPath)
 		var jobID jobspb.JobID
+		pause := rand.Intn(2) == 0
+		if pause {
+			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		}
 		db.QueryRow(
 			t,
 			fmt.Sprintf(
@@ -290,6 +295,10 @@ crdb_internal.json_to_pb(
 				backupPath, start, end,
 			),
 		).Scan(&jobID)
+		if pause {
+			jobutils.WaitForJobToPause(t, db, jobID)
+			db.Exec(t, "RESUME JOB $1", jobID)
+		}
 		waitForSuccessfulJob(t, tc, jobID)
 		validateCompactedBackupForTablesWithOpts(
 			t, db, []string{"foo"}, "'nodelocal://1/backup/6'", start, end, opts,
