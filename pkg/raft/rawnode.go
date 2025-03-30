@@ -127,10 +127,10 @@ func (rn *RawNode) ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState {
 // Step advances the state machine using the given message.
 func (rn *RawNode) Step(m pb.Message) error {
 	// Ignore unexpected local messages receiving over network.
-	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
+	if IsLocalMsg(m.Type) {
 		return ErrStepLocalMsg
 	}
-	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.trk.Progress(m.From) == nil {
+	if IsResponseMsg(m.Type) && rn.raft.trk.Progress(m.From) == nil {
 		return ErrStepPeerNotFound
 	}
 	return rn.raft.Step(m)
