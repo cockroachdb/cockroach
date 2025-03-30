@@ -1353,10 +1353,10 @@ Put /Table/118/3/2/1/0 -> /BYTES/
 
 subtest locking_behavior
 
-# Enable the lock eliding optimization so that we could put 'w' into a separate
+# Enable the lock elision optimization so that we could put 'w' into a separate
 # column family which allows us to verify the behavior when 'w' is NULL.
 statement ok
-SET lock_eliding_optimization_always_enabled = true;
+SET optimizer_use_lock_elision_multiple_families = true;
 
 statement ok
 CREATE TABLE t139160 (
@@ -1669,7 +1669,7 @@ Del (locking) /Table/119/4/4/0
 CPut /Table/119/4/5/0 -> /BYTES/0x89
 
 statement ok
-RESET lock_eliding_optimization_always_enabled;
+RESET optimizer_use_lock_elision_multiple_families;
 
 subtest end
 
@@ -1792,7 +1792,7 @@ CPut /Table/120/4/5/0 -> /BYTES/0x89
 # Sanity check a couple of session variables.
 statement ok
 SET use_cputs_on_non_unique_indexes = true;
-SET lock_eliding_optimization_always_enabled = true;
+SET optimizer_use_lock_elision_multiple_families = true;
 
 statement ok
 DELETE FROM t139160_families WHERE true;
@@ -1818,7 +1818,32 @@ Del (locking) /Table/120/4/4/0
 CPut /Table/120/4/5/0 -> /BYTES/0x89
 
 statement ok
-RESET lock_eliding_optimization_always_enabled;
+DELETE FROM t139160_families WHERE true;
+INSERT INTO t139160_families VALUES (1, 2, 3, 4, 5);
+SET optimizer_disable_lock_elision = true;
+
+query T kvtrace
+UPDATE t139160_families SET i = i + 1, u = u + 1, v = v + 1, w = w + 1 WHERE k = 1
+----
+Scan /Table/120/1/1/{1/1-4/2} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/120/1/1/1/1 -> /INT/3
+Put (locking) /Table/120/1/1/2/1 -> /INT/4
+Put (locking) /Table/120/1/1/3/1 -> /INT/5
+Put (locking) /Table/120/1/1/4/1 -> /INT/6
+Del /Table/120/2/2/1/0
+CPut /Table/120/2/3/1/0 -> /BYTES/
+Del /Table/120/2/2/1/2/1
+CPut /Table/120/2/3/1/2/1 -> /TUPLE/3:3:Int/4
+Del (locking) /Table/120/3/3/0
+CPut /Table/120/3/4/0 -> /BYTES/0x89
+Del (locking) /Table/120/3/3/1/1
+CPut /Table/120/3/4/1/1 -> /TUPLE/2:2:Int/3
+Del (locking) /Table/120/4/4/0
+CPut /Table/120/4/5/0 -> /BYTES/0x89
+
+statement ok
+RESET optimizer_disable_lock_elision;
+RESET optimizer_use_lock_elision_multiple_families;
 RESET use_cputs_on_non_unique_indexes;
 
 subtest end

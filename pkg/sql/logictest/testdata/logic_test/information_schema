@@ -3998,7 +3998,6 @@ lc_time                                                    C.UTF-8
 legacy_varchar_typing                                      off
 locality                                                   region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on
-lock_eliding_optimization_always_enabled                   off
 lock_timeout                                               0
 log_timezone                                               UTC
 max_connections                                            -1
@@ -4013,6 +4012,7 @@ opt_split_scan_limit                                       2048
 optimizer                                                  on
 optimizer_always_use_histograms                            on
 optimizer_check_input_min_row_count                        1
+optimizer_disable_lock_elision                             off
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_min_row_count                                    0
@@ -4033,6 +4033,7 @@ optimizer_use_improved_split_disjunction_for_joins         on
 optimizer_use_improved_trigram_similarity_selectivity      on
 optimizer_use_improved_zigzag_join_costing                 on
 optimizer_use_limit_ordering_for_streaming_group_by        on
+optimizer_use_lock_elision_multiple_families               off
 optimizer_use_lock_op_for_serializable                     off
 optimizer_use_merged_partial_statistics                    on
 optimizer_use_multicol_stats                               on

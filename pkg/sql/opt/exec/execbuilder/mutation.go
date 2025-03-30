@@ -47,12 +47,12 @@ func (b *Builder) buildMutationInput(
 		defer func() {
 			b.forceForUpdateLocking = 0
 		}()
-		if b.mem.Metadata().Table(toLock).FamilyCount() >= 2 &&
-			!b.evalCtx.SessionData().LockElidingOptimizationAlwaysEnabled {
+		if sd := b.evalCtx.SessionData(); sd.OptimizerDisableLockElision ||
+			(b.mem.Metadata().Table(toLock).FamilyCount() >= 2 && !sd.OptimizerUseLockElisionMultipleFamilies) {
 			// When the table has multiple column families, it is possible that
 			// we'll use Gets with family-specific keys during the initial scan,
-			// which means that we won't truly lock the indexes. As such, we say
-			// that we didn't lock any.
+			// which means that we won't truly lock the indexes. As such, we
+			// might want to say that we didn't lock any.
 			toLockIndexes = nil
 		}
 	}

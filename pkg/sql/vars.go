@@ -3893,18 +3893,35 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`lock_eliding_optimization_always_enabled`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`lock_eliding_optimization_always_enabled`),
+	`optimizer_use_lock_elision_multiple_families`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_lock_elision_multiple_families`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("lock_eliding_optimization_always_enabled", s)
+			b, err := paramparse.ParseBoolVar("optimizer_use_lock_elision_multiple_families", s)
 			if err != nil {
 				return err
 			}
-			m.SetLockElidingOptimizationAlwaysEnabled(b)
+			m.SetOptimizerUseLockElisionMultipleFamilies(b)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().LockElidingOptimizationAlwaysEnabled), nil
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseLockElisionMultipleFamilies), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`optimizer_disable_lock_elision`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_disable_lock_elision`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_disable_lock_elision", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerDisableLockElision(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerDisableLockElision), nil
 		},
 		GlobalDefault: globalFalse,
 	},

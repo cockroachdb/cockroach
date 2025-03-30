@@ -4109,8 +4109,12 @@ func (m *sessionDataMutator) SetBufferedWritesUseLockingOnNonUniqueIndexes(val b
 	m.data.BufferedWritesUseLockingOnNonUniqueIndexes = val
 }
 
-func (m *sessionDataMutator) SetLockElidingOptimizationAlwaysEnabled(val bool) {
-	m.data.LockElidingOptimizationAlwaysEnabled = val
+func (m *sessionDataMutator) SetOptimizerUseLockElisionMultipleFamilies(val bool) {
+	m.data.OptimizerUseLockElisionMultipleFamilies = val
+}
+
+func (m *sessionDataMutator) SetOptimizerDisableLockElision(val bool) {
+	m.data.OptimizerDisableLockElision = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
