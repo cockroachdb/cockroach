@@ -6,7 +6,6 @@
 package eval
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -21,8 +20,6 @@ var (
 )
 
 type jsonpathCtx struct {
-	evalCtx *eval.Context
-
 	// Root of the given JSON object ($). We store this because we will need to
 	// support queries with multiple root elements (ex. $.a ? ($.b == "hello").
 	root   json.JSON
@@ -31,7 +28,7 @@ type jsonpathCtx struct {
 }
 
 func JsonpathQuery(
-	evalCtx *eval.Context, target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) ([]tree.DJSON, error) {
 	parsedPath, err := parser.Parse(string(path))
 	if err != nil {
@@ -40,10 +37,9 @@ func JsonpathQuery(
 	expr := parsedPath.AST
 
 	ctx := &jsonpathCtx{
-		evalCtx: evalCtx,
-		root:    target.JSON,
-		vars:    vars.JSON,
-		strict:  expr.Strict,
+		root:   target.JSON,
+		vars:   vars.JSON,
+		strict: expr.Strict,
 	}
 	// When silent is true, overwrite the strict mode.
 	if bool(silent) {
@@ -62,9 +58,9 @@ func JsonpathQuery(
 }
 
 func JsonpathExists(
-	evalCtx *eval.Context, target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
+	target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool,
 ) (tree.DBool, error) {
-	j, err := JsonpathQuery(evalCtx, target, path, vars, silent)
+	j, err := JsonpathQuery(target, path, vars, silent)
 	if err != nil {
 		return false, err
 	}

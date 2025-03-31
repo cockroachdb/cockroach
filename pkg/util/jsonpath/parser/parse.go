@@ -22,6 +22,15 @@ func init() {
 	}
 }
 
+var (
+	// We don't use evalCtx.ReCache because jsonpath parsing can occur
+	// within tree/datum.go during type checking and datum operations where
+	// evalCtx is not available.
+	ReCache = tree.NewRegexpCache(16)
+)
+
+var p Parser
+
 type Parser struct {
 	scanner    scanner.JSONPathScanner
 	lexer      lexer
@@ -96,6 +105,5 @@ func (p *Parser) Parse(jsonpath string) (statements.JsonpathStatement, error) {
 
 // Parse parses a jsonpath string and returns a jsonpath.Jsonpath object.
 func Parse(jsonpath string) (statements.JsonpathStatement, error) {
-	var p Parser
 	return p.Parse(jsonpath)
 }
