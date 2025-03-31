@@ -11,9 +11,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/errors"
 )
 
 type LLBatch interface {
@@ -159,60 +157,4 @@ func (e *mockEngine) Dump(w io.Writer) error {
 		_, _ = fmt.Fprintln(w)
 	}
 	return nil
-}
-
-type llLogEngine struct {
-	c rscodec.Codec
-	e LLEngine
-
-	buf []byte // scratch buf
-}
-
-func (llle *llLogEngine) Append(ctx context.Context, id rscodec.FullLogID, entry LogEntry) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (llle *llLogEngine) Create(
-	ctx context.Context, req CreateRequest,
-) (rscodec.FullLogID, WAGIndex, error) {
-	b := llle.e.NewBatch()
-	defer b.Close()
-
-	lid := rscodec.LogID(1) // TODO(tbg): allocate
-	// wix := WAGIndex(123)  // TODO(tbg): allocate
-
-	op := CreateOp{
-		ID: rscodec.FullLogID{
-			RangeID:   req.RangeID,
-			ReplicaID: req.ReplicaID,
-			LogID:     lid,
-		},
-	}
-	_ = op
-
-	// llle.c.Encode(llle.buf[:0], op)
-	err := errors.New("fixme")
-	// err := b.Put(ctx, MakeKey(req.RangeID, req.ReplicaID), []byte("hi"))
-	return rscodec.FullLogID{}, 0, err
-}
-
-//func (llle *llLogEngine) get(ctx context.Context, k Key) ([]byte, error) {
-//	r := llle.e.eng.NewReader(storage.StandardDurability)
-//	defer r.Close()
-//	res, err := storage.MVCCGet(ctx, r, k.Encode(), hlc.Timestamp{}, storage.MVCCGetOptions{})
-//	if err != nil {
-//		return nil, err
-//	}
-//	if !res.Value.IsPresent() {
-//		return nil, nil
-//	}
-//	return res.Value.GetBytes()
-//}
-
-func (llle *llLogEngine) Destroy(
-	ctx context.Context, id rscodec.FullLogID, req Destroy,
-) (WAGIndex, error) {
-	//TODO implement me
-	panic("implement me")
 }

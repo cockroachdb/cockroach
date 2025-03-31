@@ -1565,7 +1565,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/raftlog:raftlog_test",
     "//pkg/kv/kvserver/raftstorebench:raftstorebench",
     "//pkg/kv/kvserver/raftstorebench:raftstorebench_test",
-    "//pkg/kv/kvserver/raftstoretoy/rscodec:rscodec",
+    "//pkg/kv/kvserver/raftstoretoy/rspb:rspb",
     "//pkg/kv/kvserver/raftstoretoy:raftstoretoy",
     "//pkg/kv/kvserver/raftstoretoy:raftstoretoy_test",
     "//pkg/kv/kvserver/rafttrace:rafttrace",

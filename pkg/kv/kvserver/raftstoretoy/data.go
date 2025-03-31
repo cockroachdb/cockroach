@@ -5,13 +5,13 @@
 
 package raftstoretoy
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
 
 type RaftIndex uint64 // simplification: RaftIndex == LeaseAppliedIndex
 
 type Replica struct {
 	// ID is the FullLogID under which the Replica operates.
-	ID rscodec.FullLogID
+	ID rspb.FullLogID
 	// WAGIndex tracks the set of WAG operations already applied to the replica.
 	WAGIndex WAGIndex
 	// RaftIndex is the log position which is materialized in the Replica state.

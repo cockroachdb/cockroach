@@ -6,7 +6,7 @@
 package raftstoretoy
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -43,17 +43,7 @@ func (Merge) Apply() {}
 
 // CreateRequest represents a request to initialize a replica via snapshot.
 type CreateRequest struct {
-	RangeID   rscodec.RangeID
-	ReplicaID rscodec.ReplicaID
-	// Additional snapshot metadata would go here
+	RangeID   rspb.RangeID
+	ReplicaID rspb.ReplicaID
+	// Additional snapshot metadata would go here.
 }
-
-type CreateOp struct {
-	ID rscodec.FullLogID
-	// TODO(tbg): snap metadata, or at least HardState
-}
-
-// Destroy represents a range destruction operation.
-type Destroy struct{}
-
-func (Destroy) Apply() {}

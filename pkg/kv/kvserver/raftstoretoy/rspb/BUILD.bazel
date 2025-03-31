@@ -1,0 +1,46 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "rspb",
+    srcs = [
+        "codec.go",
+        "codec_v2.go",
+        "log.go",
+        ":keykind-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+stringer(
+    name = "keykind-stringer",
+    src = "codec.go",
+    additional_args = ["--linecomment"],
+    typ = "KeyKind",
+)
+
+proto_library(
+    name = "wagpb_proto",
+    srcs = ["wag.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "wagpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/wagpb",
+    proto = ":wagpb_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
+)

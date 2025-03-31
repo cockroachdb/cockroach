@@ -8,7 +8,7 @@ package raftstoretoy
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
 )
 
 type WAGIndex uint64
@@ -19,6 +19,6 @@ func (i WAGIndex) String() string { return fmt.Sprintf("op%d", i) }
 // engine. The aim of WAG recovery is to replay operations from the WAG to
 // this end state.
 type ReplicaPos struct {
-	ID       rscodec.FullLogID
+	ID       rspb.FullLogID
 	WAGIndex WAGIndex // WAG operation to replay to
 }

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -22,11 +22,11 @@ import (
 // simple, educational examples.
 func TestRaftStoreToy(t *testing.T) {
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		c := &rscodec.CodecV2{}
+		c := &rspb.CodecV2{}
 		llEng := &mockEngine{}
 		env := Env{
 			llEng:  llEng,
-			logEng: &llLogEngine{c: c, e: llEng},
+			logEng: &logEng{c: c, e: llEng},
 			smEng:  nil,
 		}
 
@@ -38,7 +38,7 @@ func TestRaftStoreToy(t *testing.T) {
 }
 
 type Env struct {
-	c      rscodec.CodecV2
+	c      rspb.CodecV2
 	llEng  *mockEngine
 	logEng LogEngine
 	smEng  SMEngine
@@ -73,15 +73,15 @@ func (e *Env) Handle(t *testing.T, d *datadriven.TestData) {
 		d.ScanArgs(t, "rid", &rangeID)
 		d.ScanArgs(t, "lid", &logID)
 		d.MaybeScanArgs(t, "ridx", &raftIdx)
-		sl := e.c.Encode(nil, rscodec.KeyKindByString[kind], rscodec.RangeID(rangeID), rscodec.LogID(logID),
-			rscodec.RaftIndex(raftIdx))
+		sl := e.c.Encode(nil, rspb.KeyKindByString[kind], rspb.RangeID(rangeID), rspb.LogID(logID),
+			rspb.RaftIndex(raftIdx))
 		e.logf("%x", sl)
 		sl, kk, rid, lid, ridx, err := e.c.Decode(sl)
 		if err != nil {
 			e.logf("%s", err)
 			break
 		}
-		require.EqualValues(t, rscodec.KeyKindByString[kind], kk)
+		require.EqualValues(t, rspb.KeyKindByString[kind], kk)
 		require.EqualValues(t, rangeID, rid)
 		require.EqualValues(t, logID, lid)
 		require.EqualValues(t, logID, lid)
@@ -125,8 +125,8 @@ func (e *Env) Handle(t *testing.T, d *datadriven.TestData) {
 		d.ScanArgs(t, "range", &rangeID)
 		d.ScanArgs(t, "repl", &replID)
 		id, wix, err := e.Create(CreateRequest{
-			RangeID:   rscodec.RangeID(rangeID),
-			ReplicaID: rscodec.ReplicaID(replID),
+			RangeID:   rspb.RangeID(rangeID),
+			ReplicaID: rspb.ReplicaID(replID),
 		})
 		if err != nil {
 			e.logf("%s", err)
@@ -138,6 +138,6 @@ func (e *Env) Handle(t *testing.T, d *datadriven.TestData) {
 	}
 }
 
-func (e *Env) Create(op CreateRequest) (rscodec.FullLogID, WAGIndex, error) {
+func (e *Env) Create(op CreateRequest) (rspb.FullLogID, WAGIndex, error) {
 	return e.logEng.Create(context.Background(), op)
 }

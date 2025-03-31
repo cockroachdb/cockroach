@@ -4,11 +4,8 @@ go_library(
     name = "raftstoretoy",
     srcs = [
         "data.go",
-        "data_log.go",
-        "keys.go",
         "log.go",
         "log_engine.go",
-        "low_level_encoding.go",
         "low_level_engine.go",
         "sm_engine.go",
         "wag.go",
@@ -17,14 +14,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/raftstoretoy/rscodec",
+        "//pkg/kv/kvserver/raftstoretoy/rspb:wagpb_go_proto",
         "//pkg/roachpb",
-        "//pkg/storage",
-        "//pkg/storage/enginepb",
-        "//pkg/storage/fs",
-        "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
@@ -37,7 +28,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":raftstoretoy"],
     deps = [
-        "//pkg/kv/kvserver/raftstoretoy/rscodec",
         "//pkg/roachpb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
