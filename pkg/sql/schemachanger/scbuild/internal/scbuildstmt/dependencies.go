@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
@@ -312,7 +313,7 @@ type TableHelpers interface {
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
-	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
+	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef, exprContext tree.SchemaExprContext) (tree.Expr, *types.T)
 
 	// PartialIndexPredicateExpression returns a validated partial predicate
 	// wrapped expression
