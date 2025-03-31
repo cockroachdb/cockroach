@@ -175,3 +175,7 @@ func (s *StatsCollector) RecordTransaction(
 	s.statsIngester.IngestTransaction(value)
 	return nil
 }
+
+func (s *StatsCollector) Enabled() bool {
+	return s.sendStats
+}

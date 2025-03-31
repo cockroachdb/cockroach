@@ -4327,6 +4327,13 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	isInternaleExec := ex.executorType == executorTypeInternal
 
+	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
+
+	if !ex.statsCollector.Enabled() && !ex.extraTxnState.shouldLogToTelemetry {
+		// No need to create a RecordedTxnStats.
+		return nil
+	}
+
 	recordedTxnStats := &sqlstats.RecordedTxnStats{
 		FingerprintID:           transactionFingerprintID,
 		SessionID:               ex.planner.extendedEvalCtx.SessionID,
@@ -4365,8 +4372,6 @@ func (ex *connExecutor) recordTransactionFinish(
 			isInternaleExec, ex.phaseTimes, ex.planner.stmt.SQL, recordedTxnStats,
 		)
 	}
-
-	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
 
 	if ex.extraTxnState.shouldLogToTelemetry {
 		ex.planner.logTransaction(ctx,
