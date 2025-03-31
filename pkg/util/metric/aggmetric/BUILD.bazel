@@ -4,6 +4,7 @@ go_library(
     name = "aggmetric",
     srcs = [
         "agg_metric.go",
+        "aggmetric_tracker.go",
         "counter.go",
         "gauge.go",
         "histogram.go",
@@ -11,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings",
         "//pkg/util/cache",
         "//pkg/util/metric",
         "//pkg/util/metric/tick",
@@ -28,6 +30,7 @@ go_test(
     size = "small",
     srcs = [
         "agg_metric_test.go",
+        "aggmetric_tracker_test.go",
         "counter_test.go",
         "gauge_test.go",
         "histogram_test.go",
@@ -37,6 +40,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
@@ -44,6 +48,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "@com_github_cockroachdb_crlib//testutils/require",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_stretchr_testify//assert",
