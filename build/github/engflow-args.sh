@@ -10,6 +10,11 @@
 
 ARGS='--config engflowpublic --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key --experimental_build_event_upload_retry_minimum_delay 3s --experimental_build_event_upload_max_retries 8'
 
+if [ "$GITHUB_ACTIONS_BRANCH" == "staging" ]
+then
+    ARGS="$ARGS --remote_execution_priority=6"
+fi
+
 if [ ! -z "$GITHUB_ACTIONS_BRANCH" ]
 then
     ARGS="$ARGS --bes_keywords branch=$GITHUB_ACTIONS_BRANCH"
