@@ -1,0 +1,18 @@
+/* setup */
+CREATE TABLE t (k INT PRIMARY KEY, v VARCHAR(256));
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE INDEX idx1 ON t (lower(v));
+----
+Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›));
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint t.[constraint 2] in relation t
+ ├── execute 1 system table mutations transaction
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into idx1+ (crdb_internal_idx_expr+: k)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into idx1+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index idx1+ in relation t
+ └── execute 1 system table mutations transaction
