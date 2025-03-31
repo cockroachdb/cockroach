@@ -1069,28 +1069,36 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaSelectExecuted = metric.Metadata{
-		Name:        "sql.select.count",
-		Help:        "Number of SQL SELECT statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:         "sql.select.count",
+		Help:         "Number of SQL SELECT statements successfully executed",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
 	}
 	MetaUpdateExecuted = metric.Metadata{
-		Name:        "sql.update.count",
-		Help:        "Number of SQL UPDATE statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:         "sql.update.count",
+		Help:         "Number of SQL UPDATE statements successfully executed",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
 	}
 	MetaInsertExecuted = metric.Metadata{
-		Name:        "sql.insert.count",
-		Help:        "Number of SQL INSERT statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:         "sql.insert.count",
+		Help:         "Number of SQL INSERT statements successfully executed",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
 	}
 	MetaDeleteExecuted = metric.Metadata{
-		Name:        "sql.delete.count",
-		Help:        "Number of SQL DELETE statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
+		Name:         "sql.delete.count",
+		Help:         "Number of SQL DELETE statements successfully executed",
+		Measurement:  "SQL Statements",
+		Unit:         metric.Unit_COUNT,
+		LabeledName:  "sql.count",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete"),
 	}
 	MetaCRUDExecuted = metric.Metadata{
 		Name:        "sql.crud_query.count",
@@ -1275,6 +1283,9 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 		meta.Name += ".internal"
 		meta.Help += " (internal queries)"
 		meta.Measurement = "SQL Internal Statements"
+		if meta.LabeledName != "" {
+			meta.StaticLabels = append(meta.StaticLabels, metric.MakeLabelPairs(metric.LabelQueryInternal, "true")...)
+		}
 	}
 	return meta
 }
