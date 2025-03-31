@@ -193,10 +193,31 @@ type BasicCluster struct {
 	StoresPerNode       int
 	StoreByteCapacity   int64
 	NodeCPURateCapacity int64
+	Region              []string
+	NodesPerRegion      []int64
 }
 
 func (bc BasicCluster) String() string {
-	return fmt.Sprintf("basic cluster with nodes=%d, stores_per_node=%d", bc.Nodes, bc.StoresPerNode)
+	return fmt.Sprintf("basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity=%d, region=%v, nodes_per_region=%v",
+		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity, bc.Region, bc.NodesPerRegion)
+}
+
+func (bc BasicCluster) info() state.ClusterInfo {
+	if len(bc.Region) == 0 {
+		return state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	}
+
+	regionNodeWeights := make([]float64, len(bc.NodesPerRegion))
+	totalNodes := int64(0)
+	for i, nodes := range bc.NodesPerRegion {
+		fmt.Printf("nodes: %d, totalNodes: %d\n", nodes, totalNodes)
+		regionNodeWeights[i] = float64(nodes) / float64(bc.Nodes)
+		totalNodes += nodes
+	}
+	if totalNodes != int64(bc.Nodes) {
+		panic(fmt.Sprintf("total nodes %d does not match expected nodes %d", totalNodes, bc.Nodes))
+	}
+	return state.ClusterInfoWithRegions(bc.Nodes, bc.StoresPerNode, bc.Region, regionNodeWeights)
 }
 
 // Generate returns a new simulator state, where the cluster is created with all
@@ -204,15 +225,15 @@ func (bc BasicCluster) String() string {
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
-	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	// regions []string, regionNodeWeights []float64,
+	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
 	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
 	return state.LoadClusterInfo(info, settings)
 }
 
 func (bc BasicCluster) Regions() []state.Region {
-	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
-	return info.Regions
+	return bc.info().Regions
 }
 
 // LoadedRanges implements the RangeGen interface.

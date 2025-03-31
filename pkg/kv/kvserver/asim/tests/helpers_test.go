@@ -41,7 +41,7 @@ func getNodeLivenessStatus(s string) livenesspb.NodeLivenessStatus {
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
 	var tmp string
 	switch dest := dest.(type) {
-	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64:
+	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64, *[]string:
 		d.ScanArgs(t, key, dest)
 	case *OutputFlags:
 		var flagsTmp []string

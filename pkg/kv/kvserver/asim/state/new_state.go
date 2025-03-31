@@ -253,6 +253,15 @@ func ClusterInfoWithDistribution(
 	return ret
 }
 
+func ClusterInfoWithRegions(nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64) ClusterInfo {
+	return ClusterInfoWithDistribution(
+		nodeCount,
+		storesPerNode,
+		regions,
+		regionNodeWeights,
+	)
+}
+
 // ClusterInfoWithStoreCount returns a new ClusterInfo with the specified number of
 // stores. There will be storesPerNode stores per node and a single region and zone.
 func ClusterInfoWithStoreCount(nodeCount int, storesPerNode int) ClusterInfo {

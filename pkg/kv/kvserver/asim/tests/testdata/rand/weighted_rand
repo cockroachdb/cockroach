@@ -68,7 +68,7 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=2
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=0, node_cpu_rate_capacity=0, region=[], nodes_per_region=[]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=563, min_key=0, max_key=160411, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -78,7 +78,7 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 4299969443970870044
-	basic cluster with nodes=3, stores_per_node=2
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=0, node_cpu_rate_capacity=0, region=[], nodes_per_region=[]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=299, min_key=0, max_key=9542, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
@@ -88,7 +88,7 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 4157513341729910236
-	basic cluster with nodes=3, stores_per_node=2
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=0, node_cpu_rate_capacity=0, region=[], nodes_per_region=[]
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=521, min_key=0, max_key=82660, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0

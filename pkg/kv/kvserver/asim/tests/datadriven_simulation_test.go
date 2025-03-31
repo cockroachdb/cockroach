@@ -264,15 +264,22 @@ func TestDataDriven(t *testing.T) {
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
 				var nodeCPURateCapacity int64
+				var locality []string
+				var nodesPerRegion []int64
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+				scanIfExists(t, d, "locality", &locality)
+				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
+				fmt.Println("nodes_per_region", nodesPerRegion)
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
 					StoreByteCapacity:   storeByteCapacity,
 					NodeCPURateCapacity: nodeCPURateCapacity,
+					Region:              locality,
+					NodesPerRegion:      nodesPerRegion,
 				}
 				return ""
 			case "load_cluster":
