@@ -111,7 +111,7 @@ func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration,
 }
 
 func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
-	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
+	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet() || r.enableReaderTenant)
 }
 
 func (r *resolvedTenantReplicationOptions) ReaderTenantEnabled() bool {
@@ -248,7 +248,7 @@ func alterReplicationJobHook(
 		if !alterTenantStmt.Options.IsDefault() {
 			// If the statement contains options, then the user provided the ALTER
 			// TENANT ... SET REPLICATION [options] form of the command.
-			return alterTenantSetReplication(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
+			return alterTenantSetReplication(ctx, p, p.InternalSQLTxn(), jobRegistry, options, tenInfo)
 		}
 		if err := checkForActiveIngestionJob(tenInfo); err != nil {
 			return err
@@ -286,6 +286,7 @@ func alterReplicationJobHook(
 
 func alterTenantSetReplication(
 	ctx context.Context,
+	p sql.PlanHookState,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
@@ -301,7 +302,7 @@ func alterTenantSetReplication(
 		if err := checkForActiveIngestionJob(tenInfo); err != nil {
 			return err
 		}
-		if err := alterTenantConsumerOptions(ctx, txn, jobRegistry, options, tenInfo); err != nil {
+		if err := alterTenantConsumerOptions(ctx, p, txn, jobRegistry, options, tenInfo); err != nil {
 			return err
 		}
 	}
@@ -406,7 +407,7 @@ func alterTenantRestartReplication(
 		revertTo = tenInfo.PreviousSourceTenant.CutoverAsOf
 	}
 
-	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options)
+	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options, false)
 	if err != nil {
 		return err
 	}
@@ -652,16 +653,38 @@ func alterTenantExpirationWindow(
 
 func alterTenantConsumerOptions(
 	ctx context.Context,
+	p sql.PlanHookState,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
 	tenInfo *mtinfopb.TenantInfo,
 ) error {
+
 	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.PhysicalReplicationConsumerJobID, txn,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			var readerID roachpb.TenantID
+			if options.enableReaderTenant {
+				// If the replicating tenant already has a resolved tiemstamp, we can
+				// create the reader tenant directly to its ready state rather than in
+				// the add state that replies on the replication job to activate it when
+				// its frontier advances for the first time. If we don't have a resolved
+				// timestamp, we'll fallback to creating it inactive and just let the
+				// job do it later, which it does since we record the reader's ID below.
+				ready := md.Progress.GetStreamIngest().ReplicatedTime.IsSet()
+				var err error
+				if readerID, err = createReaderTenant(ctx, p, tenInfo.Name, roachpb.MustMakeTenantID(tenInfo.ID), options, ready); err != nil {
+					return err
+				}
+			}
+
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if ret, ok := options.GetRetention(); ok {
 				streamIngestionDetails.ReplicationTTLSeconds = ret
+			}
+			// Record the reader ID; this is used in the job to start the reader if
+			// needed when the first frontier advance is recorded.
+			if readerID != (roachpb.TenantID{}) {
+				streamIngestionDetails.ReadTenantID = readerID
 			}
 			ju.UpdatePayload(md.Payload)
 			return nil
