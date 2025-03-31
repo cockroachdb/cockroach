@@ -8,8 +8,8 @@ import React from "react";
 
 import { NodeID } from "src/types/clusterTypes";
 
-import { NodesList } from "./components/nodesList";
-import { RegionLabel } from "./components/regionLabel";
+import { NodesList } from "./nodesList";
+import { RegionLabel } from "./regionLabel";
 
 type RegionNodesLabelProps = {
   nodesByRegion: Record<string, NodeID[]>;

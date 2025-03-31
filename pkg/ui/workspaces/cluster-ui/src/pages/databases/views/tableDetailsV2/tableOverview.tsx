@@ -12,13 +12,12 @@ import { LiveDataPercent } from "src/components/liveDataPercent/liveDataPercent"
 import { TableMetadataLastUpdatedTooltip } from "src/components/tooltipMessages/tableMetadataLastUpdatedTooltip";
 import { ClusterDetailsContext } from "src/contexts";
 import { PageSection } from "src/layouts";
+import { RegionNodesLabel } from "src/pages/databases/components";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { Timestamp } from "src/timestamp";
 import { Bytes, DATE_WITH_SECONDS_FORMAT_24_TZ } from "src/util";
 import { mapStoreIDsToNodeRegions } from "src/util/nodeUtils";
-
-import { RegionNodesLabel } from "../components/regionNodesLabel";
 
 type TableOverviewProps = {
   tableDetails: TableDetails;

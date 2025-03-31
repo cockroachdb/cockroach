@@ -12,11 +12,10 @@ import {
   triggerUpdateTableMetaJobApi,
   useTableMetaUpdateJob,
 } from "src/api/databases/tableMetaUpdateJobApi";
+import { Tooltip } from "src/components/tooltip";
+import { TableMetadataLastUpdatedTooltip } from "src/components/tooltipMessages";
 import Button from "src/sharedFromCloud/button";
 import { usePrevious } from "src/util/hooks";
-
-import { Tooltip } from "../tooltip";
-import { TableMetadataLastUpdatedTooltip } from "../tooltipMessages";
 
 import styles from "./tableMetadataJobControl.module.scss";
 import { TableMetadataJobProgress } from "./tableMetadataJobProgress";
@@ -99,7 +98,7 @@ export const TableMetadataJobControl: React.FC<
         loading={isLoading}
         timestamp={jobStatus?.lastCompletedTime}
       >
-        {durationText => <>Last refreshed: {durationText}</>}
+        {(durationText: React.ReactNode) => <>Last refreshed: {durationText}</>}
       </TableMetadataLastUpdatedTooltip>
       <Tooltip noUnderline placement="top" title={refreshButtonTooltip}>
         <>
