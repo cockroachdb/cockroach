@@ -232,7 +232,8 @@ func (a *allocatorState) rebalanceStores(
 					continue
 				}
 				// Have candidates.
-				targetStoreID := sortTargetCandidateSetAndPick(ctx, candsSet, sls.sls, a.rand)
+				targetStoreID := sortTargetCandidateSetAndPick(
+					ctx, candsSet, sls.sls, false, a.rand)
 				if targetStoreID == 0 {
 					continue
 				}
@@ -358,7 +359,18 @@ func (a *allocatorState) rebalanceStores(
 						cand.StoreID, rstate.constraints.spanConfig.leasePreferences, a.cs.constraintMatcher)
 				}
 			}
-			targetStoreID := sortTargetCandidateSetAndPick(ctx, cands, ssSLS.sls, a.rand)
+			// TODO(sumeer): remove this override. Consider a cluster where s1 is
+			// overloadSlow, s2 is loadNoChange, and s3, s4 are loadNormal. Now s4 is
+			// considering rebalancing load away from s1, but the candidate top-k range
+			// has replicas {s1, s3, s4}. So the only way to shed load from s1 is a s1
+			// => s2 move. But there may be other ranges at other leaseholder stores
+			// which can be moved from s1 => {s3, s4}. So we should not be doing this
+			// sub-optimal transfer of load from s1 => s2 unless s1 is not seeing any
+			// load shedding for some interval of time. We need a way to capture this
+			// information in a simple but effective manner.
+			const tempOverrideToIgnoreLoadNoChangeAndHigher = true
+			targetStoreID := sortTargetCandidateSetAndPick(
+				ctx, cands, ssSLS.sls, tempOverrideToIgnoreLoadNoChangeAndHigher, a.rand)
 			if targetStoreID == 0 {
 				continue
 			}
@@ -523,7 +535,11 @@ type candidateSet struct {
 // maxFractionPending. That filtering must happen here. Only candidates <
 // loadThreshold will be considered.
 func sortTargetCandidateSetAndPick(
-	ctx context.Context, cands candidateSet, loadThreshold loadSummary, rng *rand.Rand,
+	ctx context.Context,
+	cands candidateSet,
+	loadThreshold loadSummary,
+	overrideToIgnoreLoadNoChangeAndHigher bool,
+	rng *rand.Rand,
 ) roachpb.StoreID {
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
@@ -603,16 +619,6 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
-	// TODO(sumeer): remove this override. Consider a cluster where s1 is
-	// overloadSlow, s2 is loadNoChange, and s3, s4 are loadNormal. Now s4 is
-	// considering rebalancing load away from s1, but the candidate top-k range
-	// has replicas {s1, s3, s4}. So the only way to shed load from s1 is a s1
-	// => s2 move. But there may be other ranges at other leaseholder stores
-	// which can be moved from s1 => {s3, s4}. So we should not be doing this
-	// sub-optimal transfer of load from s1 => s2 unless s1 is not seeing any
-	// load shedding for some interval of time. We need a way to capture this
-	// information in a simple but effective manner.
-	const tempOverrideToIgnoreLoadNoChangeAndHigher = true
 	// The set of candidates we will consider all have lowestLoad.
 	//
 	// If this set has load >= loadNoChange, we have a set that we would not
@@ -631,7 +637,7 @@ func sortTargetCandidateSetAndPick(
 	// potential candidates before we start using the ones with load >=
 	// loadNoChange.
 	if lowestLoad >= loadNoChange &&
-		(discardedCandsAtOrBeforeLowestLoadHadPendingChanges || tempOverrideToIgnoreLoadNoChangeAndHigher) {
+		(discardedCandsAtOrBeforeLowestLoadHadPendingChanges || overrideToIgnoreLoadNoChangeAndHigher) {
 		return 0
 	}
 	// Candidates have equal load value and sorted by non-decreasing
@@ -658,7 +664,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	j = rng.Intn(j)
 	log.Infof(ctx, "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
-	if cands.candidates[j].sls >= loadNoChange && tempOverrideToIgnoreLoadNoChangeAndHigher {
+	if cands.candidates[j].sls >= loadNoChange && overrideToIgnoreLoadNoChangeAndHigher {
 		panic("saw higher load candidate than expected")
 	}
 	return cands.candidates[j].StoreID
