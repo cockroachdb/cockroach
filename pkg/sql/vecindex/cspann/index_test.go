@@ -328,7 +328,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		s.Features = testutils.LoadFeatures(s.T, 10000)
 		vectors = s.Features
 		vectors.SplitAt(count)
-		for i := 0; i < count; i++ {
+		for i := range count {
 			key := cspann.KeyBytes(fmt.Sprintf("vec%d", i))
 			childKeys = append(childKeys, cspann.ChildKey{KeyBytes: key})
 		}
@@ -509,7 +509,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	calcTruth := func(queryVector vector.T, data []cspann.VectorWithKey) []cspann.KeyBytes {
 		distances := make([]float32, len(data))
 		offsets := make([]int, len(data))
-		for i := 0; i < len(data); i++ {
+		for i := range len(data) {
 			distances[i] = num32.L2SquaredDistance(queryVector, data[i].Vector)
 			offsets[i] = i
 		}
@@ -522,7 +522,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		})
 
 		truth := make([]cspann.KeyBytes, searchSet.MaxResults)
-		for i := 0; i < len(truth); i++ {
+		for i := range len(truth) {
 			truth[i] = data[offsets[i]].Key.KeyBytes
 		}
 		return truth
