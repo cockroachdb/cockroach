@@ -1,0 +1,47 @@
+metric_tracker dbNameMetricsEnabled=true appNameMetricsEnabled=true
+----
+counter_1 1
+counter_1{db_name="test_db",app_name="test_app"} 1
+counter_2 1
+counter_2{db_name="test_db",app_name="test_app",tenant_id="test_tenant"} 1
+counter_3 1.5
+counter_3{db_name="test_db",app_name="test_app"} 1.5
+gauge_1 1
+gauge_1{db_name="test_db",app_name="test_app"} 1
+gauge_2 1.5
+gauge_2{db_name="test_db",app_name="test_app"} 1.5
+
+metric_tracker dbNameMetricsEnabled=false appNameMetricsEnabled=false
+----
+counter_1 2
+counter_2 2
+counter_2{tenant_id="test_tenant"} 1
+counter_3 3
+gauge_1 2
+gauge_2 3
+
+metric_tracker dbNameMetricsEnabled=true appNameMetricsEnabled=false
+----
+counter_1 3
+counter_1{db_name="test_db"} 1
+counter_2 3
+counter_2{db_name="test_db",tenant_id="test_tenant"} 1
+counter_3 4.5
+counter_3{db_name="test_db"} 1.5
+gauge_1 3
+gauge_1{db_name="test_db"} 1
+gauge_2 4.5
+gauge_2{db_name="test_db"} 1.5
+
+metric_tracker dbNameMetricsEnabled=false appNameMetricsEnabled=true
+----
+counter_1 4
+counter_1{app_name="test_app"} 1
+counter_2 4
+counter_2{app_name="test_app",tenant_id="test_tenant"} 1
+counter_3 6
+counter_3{app_name="test_app"} 1.5
+gauge_1 4
+gauge_1{app_name="test_app"} 1
+gauge_2 6
+gauge_2{app_name="test_app"} 1.5

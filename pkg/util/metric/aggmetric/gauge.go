@@ -30,8 +30,16 @@ var _ metric.PrometheusExportable = (*AggGauge)(nil)
 
 // NewGauge constructs a new AggGauge.
 func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
+	return initGauge(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewGaugeWithCacheStorageType(metadata metric.Metadata, childLabels ...string) *AggGauge {
+	return initGauge(metadata, StorageTypeCache, childLabels)
+}
+
+func initGauge(metadata metric.Metadata, storageType storageType, childLabels []string) *AggGauge {
 	g := &AggGauge{g: *metric.NewGauge(metadata)}
-	g.initWithBTreeStorageType(childLabels)
+	g.initChildSet(metadata.Name, childLabels, storageType)
 	return g
 }
 
@@ -156,10 +164,10 @@ func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
 }
 
 func (g *AggGauge) getOrCreateChild(labelVals ...string) *Gauge {
-	if len(g.labels) != len(labelVals) {
+	if len(g.mu.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
 			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(g.labels), g.labels))
+			len(labelVals), labelVals, len(g.mu.labels), g.mu.labels))
 	}
 
 	// If the child already exists then return it.
@@ -254,8 +262,20 @@ var _ metric.PrometheusExportable = (*AggGaugeFloat64)(nil)
 
 // NewGaugeFloat64 constructs a new AggGaugeFloat64.
 func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeFloat64 {
+	return initGaugeFloat64(metadata, StorageTypeBTree, childLabels)
+}
+
+func NewGaugeFloat64WithCacheStorageType(
+	metadata metric.Metadata, childLabels ...string,
+) *AggGaugeFloat64 {
+	return initGaugeFloat64(metadata, StorageTypeCache, childLabels)
+}
+
+func initGaugeFloat64(
+	metadata metric.Metadata, storageType storageType, childLabels []string,
+) *AggGaugeFloat64 {
 	g := &AggGaugeFloat64{g: *metric.NewGaugeFloat64(metadata)}
-	g.initWithBTreeStorageType(childLabels)
+	g.initChildSet(metadata.Name, childLabels, storageType)
 	return g
 }
 
@@ -318,10 +338,10 @@ func (g *AggGaugeFloat64) Update(val float64, labelVals ...string) {
 }
 
 func (g *AggGaugeFloat64) GetOrCreateChild(labelVals ...string) *GaugeFloat64 {
-	if len(g.labels) != len(labelVals) {
+	if len(g.mu.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
 			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(g.labels), g.labels))
+			len(labelVals), labelVals, len(g.mu.labels), g.mu.labels))
 	}
 
 	// If the child already exists then return it.

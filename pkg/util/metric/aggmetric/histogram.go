@@ -63,6 +63,19 @@ var _ metric.CumulativeHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
+	return initHistogram(opts, StorageTypeBTree, childLabels)
+}
+
+// NewHistogramWithCacheStorage constructs a new AggHistogram with Cache as child storage.
+func NewHistogramWithCacheStorage(
+	opts metric.HistogramOptions, childLabels ...string,
+) *AggHistogram {
+	return initHistogram(opts, StorageTypeCache, childLabels)
+}
+
+func initHistogram(
+	opts metric.HistogramOptions, storageType storageType, childLabels []string,
+) *AggHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
@@ -87,7 +100,8 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 				childHist.h.Tick()
 			})
 		})
-	a.initWithBTreeStorageType(childLabels)
+
+	a.initChildSet(opts.Metadata.Name, childLabels, storageType)
 	return a
 }
 
@@ -160,10 +174,10 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 // Recording a value in excess of the configured maximum value for that histogram
 // results in recording the maximum value instead.
 func (a *AggHistogram) RecordValue(v int64, labelVals ...string) {
-	if len(a.labels) != len(labelVals) {
+	if len(a.mu.labels) != len(labelVals) {
 		panic(errors.AssertionFailedf(
 			"cannot increment child with %d label values %v to a metric with %d labels %v",
-			len(labelVals), labelVals, len(a.labels), a.labels))
+			len(labelVals), labelVals, len(a.mu.labels), a.mu.labels))
 	}
 
 	// If the child already exists, update it.
