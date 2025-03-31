@@ -374,6 +374,27 @@ type openmetricsValues struct {
 	Time  int64
 }
 
+// Define units for sysbench metrics
+var units = map[string]string{
+	// Transaction rates - operations per second
+	"transactions": "unit=\"ops/sec\",is_higher_better=\"true\"",
+
+	// Query rates - queries per second
+	"qps":       "unit=\"qps\",is_higher_better=\"true\"",
+	"read_qps":  "unit=\"qps\",is_higher_better=\"true\"",
+	"write_qps": "unit=\"qps\",is_higher_better=\"true\"",
+	"other_qps": "unit=\"qps\",is_higher_better=\"true\"",
+
+	// Latency - milliseconds
+	"p95_latency": "unit=\"ms\",is_higher_better=\"false\"",
+
+	// Error rates - errors per second
+	"errors": "unit=\"errors/sec\",is_higher_better=\"false\"",
+
+	// Reconnection rates - reconnects per second
+	"reconnects": "unit=\"reconnects/sec\",is_higher_better=\"false\"",
+}
+
 // exportSysbenchResults parses the output of `sysbench` into a stats
 // file and writes it to the perf directory that roachperf expects. The
 // format of the stats file is dependent on t.ExportOpenmetrics().
@@ -495,7 +516,6 @@ func addCurrentSnapshotToOpenmetrics(
 	metrics sysbenchMetrics, openmetricsMap map[string][]openmetricsValues,
 ) {
 	time := metrics.Time
-	openmetricsMap["threads"] = append(openmetricsMap["threads"], openmetricsValues{Value: metrics.Threads, Time: time})
 	openmetricsMap["transactions"] = append(openmetricsMap["transactions"], openmetricsValues{Value: metrics.Transactions, Time: time})
 	openmetricsMap["qps"] = append(openmetricsMap["qps"], openmetricsValues{Value: metrics.Qps, Time: time})
 	openmetricsMap["read_qps"] = append(openmetricsMap["read_qps"], openmetricsValues{Value: metrics.ReadQps, Time: time})
@@ -513,7 +533,12 @@ func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelStr
 		metricName := util.SanitizeMetricName(key)
 		metricsBuf.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
 		for _, value := range values {
-			metricsBuf.WriteString(fmt.Sprintf("%s{%s} %s %d\n", metricName, labelString, value.Value, value.Time))
+			metricsBuf.WriteString(fmt.Sprintf("%s{%s,%s} %s %d\n",
+				metricName,
+				labelString,
+				units[key],
+				value.Value,
+				value.Time))
 		}
 	}
 
