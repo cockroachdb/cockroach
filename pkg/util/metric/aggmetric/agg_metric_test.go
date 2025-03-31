@@ -318,6 +318,38 @@ func TestAggMetricClear(t *testing.T) {
 	})
 }
 
+func TestMetricKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name              string
+		labelValues       []string
+		expectedHashValue uint64
+	}{
+		{
+			name:              "empty label values",
+			labelValues:       []string{},
+			expectedHashValue: 0xcbf29ce484222325,
+		},
+		{
+			name:              "single label value",
+			labelValues:       []string{"test_db"},
+			expectedHashValue: 0x7b629443ea81c091,
+		},
+		{
+			name:              "multiple label values",
+			labelValues:       []string{"test_db", "test_app", "test_tenant"},
+			expectedHashValue: 0xa1aaab8437836050,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues...))
+		})
+	}
+}
+
 func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 	writePrometheusMetrics := func(t *testing.T) string {
 		var in bytes.Buffer

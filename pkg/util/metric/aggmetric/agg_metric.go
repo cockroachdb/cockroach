@@ -9,6 +9,7 @@
 package aggmetric
 
 import (
+	"hash/fnv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -18,6 +19,8 @@ import (
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+var delimiter = []byte{'_'}
 
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
@@ -185,8 +188,13 @@ type labelValuesSlice []string
 
 func (lv *labelValuesSlice) labelValues() []string { return []string(*lv) }
 
-func metricKey(labels ...string) string {
-	return strings.Join(labels, ",")
+func metricKey(labels ...string) uint64 {
+	hash := fnv.New64a()
+	for _, label := range labels {
+		_, _ = hash.Write([]byte(label))
+		_, _ = hash.Write(delimiter)
+	}
+	return hash.Sum64()
 }
 
 type ChildrenStorage interface {
@@ -210,8 +218,8 @@ func (ucw *UnorderedCacheWrapper) GetChildMetric(e interface{}) ChildMetric {
 }
 
 func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
-	cacheKey := metricKey(labelVals...)
-	value, ok := ucw.cache.Get(cacheKey)
+	hashKey := metricKey(labelVals...)
+	value, ok := ucw.cache.Get(hashKey)
 	if !ok {
 		return nil, false
 	}
@@ -219,18 +227,18 @@ func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
 }
 
 func (ucw *UnorderedCacheWrapper) Add(metric ChildMetric) {
-	lvs := metric.labelValues()
-	key := metricKey(lvs...)
-	if _, ok := ucw.cache.Get(key); ok {
+	labelValues := metric.labelValues()
+	hashKey := metricKey(labelValues...)
+	if _, ok := ucw.cache.Get(hashKey); ok {
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
-	ucw.cache.Add(key, metric)
+	ucw.cache.Add(hashKey, metric)
 }
 
 func (ucw *UnorderedCacheWrapper) Del(metric ChildMetric) {
-	cacheKey := metricKey(metric.labelValues()...)
-	if _, ok := ucw.Get(cacheKey); ok {
-		ucw.cache.Del(cacheKey)
+	hashKey := metricKey(metric.labelValues()...)
+	if _, ok := ucw.cache.Get(hashKey); ok {
+		ucw.cache.Del(hashKey)
 	}
 }
 
