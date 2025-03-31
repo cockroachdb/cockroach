@@ -360,22 +360,25 @@ func TestRetryFields(t *testing.T) {
 	sqlDB.Exec(t, "CREATE SEQUENCE s")
 
 	retryCountRE := regexp.MustCompile(`number of transaction retries: (\d+)`)
-	retryTimeRE := regexp.MustCompile(`time spent retrying the transaction: (\d+)[µsm]+`)
-	queryMatchRE := func(query string) bool {
-		rows, err := conn.QueryContext(ctx, query)
-		assert.NoError(t, err)
-		var foundCount, foundTime bool
-		for rows.Next() {
-			var res string
-			assert.NoError(t, rows.Scan(&res))
-			if matches := retryCountRE.FindStringSubmatch(res); len(matches) > 0 {
-				foundCount = true
-			}
-			if matches := retryTimeRE.FindStringSubmatch(res); len(matches) > 0 {
-				foundTime = true
-			}
+	retryTimeRE := regexp.MustCompile(`time spent retrying the transaction: ([\d\.]+)[µsm]+`)
+
+	const query = "EXPLAIN ANALYZE SELECT IF(nextval('s')<=3, crdb_internal.force_retry('1h'::INTERVAL), 0)"
+	rows, err := conn.QueryContext(ctx, query)
+	assert.NoError(t, err)
+	var output strings.Builder
+	var foundCount, foundTime bool
+	for rows.Next() {
+		var res string
+		assert.NoError(t, rows.Scan(&res))
+		output.WriteString(res)
+		output.WriteString("\n")
+		if matches := retryCountRE.FindStringSubmatch(res); len(matches) > 0 {
+			foundCount = true
 		}
-		return foundCount && foundTime
+		if matches := retryTimeRE.FindStringSubmatch(res); len(matches) > 0 {
+			foundTime = true
+		}
 	}
-	assert.True(t, queryMatchRE("EXPLAIN ANALYZE SELECT IF(nextval('s')<=3, crdb_internal.force_retry('1h'::INTERVAL), 0)"))
+	assert.Truef(t, foundCount, "expected to find transaction retries, full output:\n\n%s", output.String())
+	assert.Truef(t, foundTime, "expected to find time spent retrying, full output:\n\n%s", output.String())
 }
