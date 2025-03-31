@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvcceval"
@@ -27,6 +28,15 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
 	false,
+	settings.WithPublic,
+)
+
+var bufferedWritesMaxBufferSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.write_buffering.max_buffer_size",
+	"if non-zero, defines that maximum size of the buffer that will be used to buffer transactional writes",
+	1<<22, // 4MB
+	settings.NonNegativeInt,
 	settings.WithPublic,
 )
 
@@ -111,11 +121,32 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 // TODO(arul): In various places below, there's potential to optimize things by
 // batch allocating misc objects and pre-allocating some slices.
 type txnWriteBuffer struct {
+	st      *cluster.Settings
 	enabled bool
 
+	// hasEverFlushed tracks whether the buffer has ever been flushed or not.
+	// Typically, for an on-going transaction (one that hasn't tried to commit
+	// or abort using an EndTxn request), we flush the buffer when:
+	// 1. The buffer has exceeded its configured budget.
+	// 2. The transaction has issued a DeleteRange request. (TODO:arul)
+	//
+	// In either case, we're dealing with a large writing transaction, and there
+	// isn't much benefit from continuing to buffer subsequent writes. As such,
+	// we track this state, and disable buffering going forward.
+	//
+	// In the future, we'll want to consult whether we've flushed any writes
+	// from the buffer or not when deciding if the AbortSpan check can be
+	// omitted or not. In particular, we can omit the AbortSpan check for all transactions
+	// that have buffered all of their writes, as we don't risk violating read-your-own-write
+	// semantics even if the transaction has been aborted by a conflicting transaction.
+	hasEverFlushed bool
+
 	buffer        btree
-	bufferSeek    bufferedWrite // re-use while seeking
 	bufferIDAlloc uint64
+	bufferSize    int64
+
+	bufferSeek bufferedWrite // re-use while seeking
+	emptyVal   roachpb.Value // re-use when estimating sizes
 
 	wrapped lockedSender
 
@@ -127,15 +158,23 @@ type txnWriteBuffer struct {
 func (twb *txnWriteBuffer) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
-	if !twb.enabled {
+	if !twb.enabled || twb.hasEverFlushed {
 		return twb.wrapped.SendLocked(ctx, ba)
 	}
 
 	if _, ok := ba.GetArg(kvpb.EndTxn); ok {
-		// TODO(arul): should we only flush if the transaction is being committed?
-		// If the transaction is being rolled back, we shouldn't needlessly flush
-		// writes.
-		return twb.flushWithEndTxn(ctx, ba)
+		// TODO(arul): should we only flush if the transaction is being
+		// committed? If the transaction is being rolled back, we shouldn't
+		// needlessly flush writes.
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
+	// Check if buffering writes from the supplied batch will run us over
+	// budget. If it will, we shouldn't buffer writes from the current batch,
+	// and flush the buffer.
+	if twb.estimateSize(ba)+twb.bufferSize > bufferedWritesMaxBufferSize.Get(&twb.st.SV) {
+		// TODO(arul): add some metrics for this case.
+		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
 	transformedBa, ts := twb.applyTransformations(ctx, ba)
@@ -161,6 +200,36 @@ func (twb *txnWriteBuffer) SendLocked(
 	}
 
 	return twb.mergeResponseWithTransformations(ctx, ts, br)
+}
+
+// estimateSize returns a conservative estimate by which the buffer will grow in
+// size if the writes from the supplied batch request are buffered.
+func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
+	estimate := int64(0)
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch t := req.(type) {
+		case *kvpb.ConditionalPutRequest:
+			// At this point, we don't know whether the condition will evaluate
+			// successfully or not, and by extension, whether the KV will be
+			// added to the buffer. We therefore assume the worst case scenario
+			// (where the KV is added to the buffer) in our estimate.
+			estimate += keySize(t.Key) + int64(t.Value.Size()) +
+				bufferedWriteStructOverhead + bufferedValueStructOverhead
+		case *kvpb.PutRequest:
+			// NB: when estimating, we're being conservative by assuming the Put
+			// isn't to a key that's not already present in the buffer. If it
+			// were, we could omit the keySize from the estimate.
+			estimate += keySize(t.Key) + int64(t.Value.Size()) +
+				bufferedWriteStructOverhead + bufferedValueStructOverhead
+		case *kvpb.DeleteRequest:
+			// NB: Similar to Put, we're assuming we're not deleting a key that
+			// was already present in the buffer.
+			estimate += keySize(t.Key) + int64(twb.emptyVal.Size()) + bufferedWriteStructOverhead
+		}
+		// No other request is buffered.
+	}
+	return estimate
 }
 
 // adjustError adjusts the provided error based on the transformations made by
@@ -922,36 +991,55 @@ func (twb *txnWriteBuffer) addToBuffer(key roachpb.Key, val roachpb.Value, seq e
 	if it.Valid() {
 		// We've already seen a write for this key.
 		bw := it.Cur()
-		bw.vals = append(bw.vals, bufferedValue{val: val, seq: seq})
+		val := bufferedValue{val: val, seq: seq}
+		bw.vals = append(bw.vals, val)
+		twb.bufferSize += val.size()
 	} else {
 		twb.bufferIDAlloc++
-		twb.buffer.Set(&bufferedWrite{
+		bw := &bufferedWrite{
 			id:   twb.bufferIDAlloc,
 			key:  key,
 			vals: []bufferedValue{{val: val, seq: seq}},
-		})
+		}
+		twb.buffer.Set(bw)
+		twb.bufferSize += bw.size()
 	}
 }
 
-// flushWithEndTxn flushes all buffered writes to the KV layer along with the
-// EndTxn request. Responses from the flushing are stripped before returning.
-func (twb *txnWriteBuffer) flushWithEndTxn(
+// flushBufferAndSendBatch flushes all buffered writes when sending the supplied
+// batch request to the KV layer. This is done by pre-pending the buffered
+// writes to the requests in the batch.
+//
+// The response is transformed to hide the fact that requests were added to the
+// batch to flush the buffer. Upper layers remain oblivious to the flush and any
+// buffering in general.
+func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	numBuffered := twb.buffer.Len()
 	if numBuffered == 0 {
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
-	// Iterate over the buffered writes and flush all buffered writes to the KV
-	// layer by adding them to the batch.
-	//
-	// TODO(arul): If the batch request with the EndTxn request also contains an
-	// overlapping write to a key that's already in the buffer, we could exclude
-	// that write from the buffer.
-	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
+
+	twb.hasEverFlushed = true
+
+	// Flush all buffered writes by pre-pending them to the requests being sent
+	// in the batch.
+	// First, collect the requests we'll need to flush.
+	toFlushBufferedWrites := make([]bufferedWrite, 0, twb.buffer.Len())
+
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		reqs = append(reqs, it.Cur().toRequest())
+		toFlushBufferedWrites = append(toFlushBufferedWrites, *it.Cur())
+	}
+
+	reqs := make([]kvpb.RequestUnion, 0, numBuffered+len(ba.Requests))
+
+	// Next, remove the buffered writes from the buffer and collect them into requests.
+	for _, bw := range toFlushBufferedWrites {
+		reqs = append(reqs, bw.toRequest())
+		twb.buffer.Delete(&bw)
+		twb.bufferSize -= bw.size()
 	}
 
 	// Layers below us expect that writes inside a batch are in sequence number
@@ -970,13 +1058,12 @@ func (twb *txnWriteBuffer) flushWithEndTxn(
 	})
 
 	ba = ba.ShallowCopy()
-	reqs = append(reqs, ba.Requests...)
-	ba.Requests = reqs
-
+	ba.Requests = append(reqs, ba.Requests...)
 	br, pErr := twb.wrapped.SendLocked(ctx, ba)
 	if pErr != nil {
 		return nil, twb.adjustErrorUponFlush(ctx, numBuffered, pErr)
 	}
+
 	// Strip out responses for all the flushed buffered writes.
 	br.Responses = br.Responses[numBuffered:]
 	return br, nil
@@ -1003,6 +1090,8 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 	return writes
 }
 
+const bufferedWriteStructOverhead = 8 // +8 for the id
+
 // bufferedWrite is a buffered write operation to a given key. It maps a key to
 // possibly multiple values[1], each with an associated sequence number.
 //
@@ -1022,6 +1111,16 @@ type bufferedWrite struct {
 	vals []bufferedValue // sorted in increasing sequence number order
 }
 
+func (bw *bufferedWrite) size() int64 {
+	size := keySize(bw.endKey) + bufferedWriteStructOverhead
+	for _, v := range bw.vals {
+		size += v.size()
+	}
+	return size
+}
+
+const bufferedValueStructOverhead = 4 // +4 for the sequence number
+
 // bufferedValue is a value written to a key at a given sequence number.
 type bufferedValue struct {
 	val roachpb.Value
@@ -1035,6 +1134,10 @@ func (bv *bufferedValue) valPtr() *roachpb.Value {
 	// be fine; just have them opt into it.
 	valCpy := bv.val
 	return &valCpy
+}
+
+func (bv *bufferedValue) size() int64 {
+	return int64(bv.val.Size()) + bufferedValueStructOverhead
 }
 
 //go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
