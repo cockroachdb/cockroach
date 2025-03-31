@@ -3925,6 +3925,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_delete_range_fast_path`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_delete_range_fast_path`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_delete_range_fast_path", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseDeleteRangeFastPath(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseDeleteRangeFastPath), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

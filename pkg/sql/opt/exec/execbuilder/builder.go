@@ -103,7 +103,8 @@ type Builder struct {
 	// for EXPLAIN.
 	initialAllowAutoCommit bool
 
-	allowInsertFastPath bool
+	allowInsertFastPath      bool
+	allowDeleteRangeFastPath bool
 
 	// forceForUpdateLocking, if set, is the table ID of the table being mutated
 	// that should be locked using forUpdateLocking in mutation's input
@@ -277,6 +278,7 @@ func New(
 		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
 		b.initialAllowAutoCommit = b.allowAutoCommit
 		b.allowInsertFastPath = sd.InsertFastPath
+		b.allowDeleteRangeFastPath = sd.OptimizerUseDeleteRangeFastPath
 	}
 	return b
 }

@@ -646,6 +646,9 @@ message LocalOnlySessionData {
   //
   // This will only have impact when BufferedWritesEnabled is set.
   bool optimizer_disable_lock_elision = 163;
+  // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
+  // should try to use the delete range fast-path when possible.
+  bool optimizer_use_delete_range_fast_path = 164;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

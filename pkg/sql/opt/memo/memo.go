@@ -143,8 +143,6 @@ type Memo struct {
 
 	// The following are selected fields from SessionData which can affect
 	// planning. We need to cross-check these before reusing a cached memo.
-	// NOTE: If you add new fields here, be sure to add them to the relevant
-	//       fields in explain_bundle.go.
 	reorderJoinsLimit                          int
 	zigzagJoinEnabled                          bool
 	useForecasts                               bool
@@ -205,6 +203,8 @@ type Memo struct {
 	minRowCount                                float64
 	checkInputMinRowCount                      float64
 	planLookupJoinsWithReverseScans            bool
+	useInsertFastPath                          bool
+	useDeleteRangeFastPath                     bool
 	internal                                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -302,6 +302,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		planLookupJoinsWithReverseScans:            evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans,
+		useInsertFastPath:                          evalCtx.SessionData().InsertFastPath,
+		useDeleteRangeFastPath:                     evalCtx.SessionData().OptimizerUseDeleteRangeFastPath,
 		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -476,6 +478,8 @@ func (m *Memo) IsStale(
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
 		m.planLookupJoinsWithReverseScans != evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans ||
+		m.useInsertFastPath != evalCtx.SessionData().InsertFastPath ||
+		m.useDeleteRangeFastPath != evalCtx.SessionData().OptimizerUseDeleteRangeFastPath ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil

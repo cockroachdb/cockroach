@@ -694,6 +694,9 @@ func (b *Builder) canUseDeleteRange(del *memo.DeleteExpr) bool {
 // logical Delete operator, checking all required conditions. See
 // exec.Factory.ConstructDeleteRange.
 func (b *Builder) tryBuildDeleteRange(del *memo.DeleteExpr) (_ execPlan, ok bool, _ error) {
+	if !b.allowDeleteRangeFastPath {
+		return execPlan{}, false, nil
+	}
 	if !b.canUseDeleteRange(del) {
 		return execPlan{}, false, nil
 	}

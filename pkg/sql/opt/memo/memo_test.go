@@ -559,6 +559,16 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = false
 	notStale()
 
+	evalCtx.SessionData().InsertFastPath = true
+	stale()
+	evalCtx.SessionData().InsertFastPath = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerUseDeleteRangeFastPath = true
+	stale()
+	evalCtx.SessionData().OptimizerUseDeleteRangeFastPath = false
+	notStale()
+
 	evalCtx.SessionData().Internal = true
 	stale()
 	evalCtx.SessionData().Internal = false

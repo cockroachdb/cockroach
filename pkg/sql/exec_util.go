@@ -4117,6 +4117,10 @@ func (m *sessionDataMutator) SetOptimizerDisableLockElision(val bool) {
 	m.data.OptimizerDisableLockElision = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
+	m.data.OptimizerUseDeleteRangeFastPath = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
