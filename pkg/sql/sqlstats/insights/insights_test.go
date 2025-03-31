@@ -55,8 +55,10 @@ func BenchmarkInsights(b *testing.B) {
 			statements := make([]sqlstats.RecordedStmtStats, b.N)
 			transactions := make([]sqlstats.RecordedTxnStats, b.N)
 			for i := 0; i < numSessions; i++ {
+				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				for j := 0; j < numTransactionsPerSession; j++ {
 					statements[numTransactionsPerSession*i+j] = sqlstats.RecordedStmtStats{
+						SessionID: sessionID,
 						// Spread across 6 different statement fingerprints.
 						FingerprintID: appstatspb.StmtFingerprintID(j % 6),
 						// Choose latencies in 20ms, 40ms, 60ms, 80ms, 100ms, 120ms, 140ms.
@@ -65,17 +67,19 @@ func BenchmarkInsights(b *testing.B) {
 						ServiceLatencySec: float64(j%7+1) * 0.02,
 					}
 				}
+				transactions[i] = sqlstats.RecordedTxnStats{
+					SessionID: sessionID,
+				}
 			}
 
 			b.ResetTimer()
 			for i := 0; i < numSessions; i++ {
-				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				go func(i int) {
 					defer sessions.Done()
 					for j := 0; j < numTransactionsPerSession; j++ {
 						idx := numTransactionsPerSession*i + j
-						writer.ObserveStatement(sessionID, &statements[idx])
-						writer.ObserveTransaction(sessionID, &transactions[idx])
+						writer.ObserveStatement(&statements[idx])
+						writer.ObserveTransaction(&transactions[idx])
 					}
 				}(i)
 			}
