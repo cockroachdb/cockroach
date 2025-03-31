@@ -511,7 +511,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
 					return nil, err
 				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
+				if req.StreamID != 0 {
+					if err := mgr.AuthorizeViaJob(ctx, req.StreamID); err != nil {
+						return nil, err
+					}
+					// Auth via replication priv exists to ensure a user that planned their
+					// job pre 25.2, which will not send a stream id, can still plan their
+					// distsql flow.
+				} else if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
 					return nil, err
 				}
 
@@ -546,13 +553,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				if err := mgr.AuthorizeViaReplicationPriv(ctx); err != nil {
-					return nil, err
-				}
 				reqBytes := []byte(tree.MustBeDBytes(args[0]))
 				req := streampb.ReplicationProducerRequest{}
 				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
 					return nil, err
+				}
+				if err := mgr.AuthorizeViaReplicationPriv(ctx, req.TableNames...); err != nil {
+					return nil, errors.Wrapf(err, "failed to auth")
 				}
 
 				spec, err := mgr.StartReplicationStreamForTables(ctx, req)

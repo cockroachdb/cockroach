@@ -5,7 +5,9 @@ go_library(
     srcs = [
         "array.go",
         "eval.go",
+        "filter.go",
         "key.go",
+        "operation.go",
         "scalar.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval",
@@ -13,11 +15,13 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/json",
         "//pkg/util/jsonpath",
         "//pkg/util/jsonpath/parser",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

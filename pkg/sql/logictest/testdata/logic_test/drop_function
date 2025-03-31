@@ -397,3 +397,11 @@ CREATE FUNCTION f_bit(c BIT(0)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
 statement ok
 DROP FUNCTION f_bit(BIT(2))
+
+# Regression test for #142886 - we should be able to drop a function by
+# specifying the input type but without type width.
+statement ok
+CREATE FUNCTION f142886(p VARCHAR(10)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP FUNCTION f142886(VARCHAR);

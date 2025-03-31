@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -28,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1825,23 +1822,6 @@ func mustRetrievePartitioningFromIndexPartitioning(
 		partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
 	}
 	return partition
-}
-
-// enableRLSEnvVar is true if row-level security is enabled. This override is a
-// convenience for dev as it allows you to set an environment variable and not
-// have to worry about changing a local setting each time. This should be removed
-// once RLS is enabled by default.
-var enableRLSEnvVar = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_ROW_LEVEL_SECURITY", false)
-
-// failIfRLSIsNotEnabled will fail if row-level security is not active
-func failIfRLSIsNotEnabled(b BuildCtx) {
-	if enableRLSEnvVar {
-		return
-	}
-	if !b.SessionData().RowLevelSecurityEnabled ||
-		!b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(unimplemented.NewWithIssue(73596, "row-level security is not yet implemented"))
-	}
 }
 
 // failIfSafeUpdates checks if the sql_safe_updates is present, and if so, it

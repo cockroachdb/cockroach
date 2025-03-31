@@ -1,0 +1,4 @@
+echo
+----
+bar_counter 2
+foo_counter 2

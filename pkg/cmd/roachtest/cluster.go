@@ -685,6 +685,11 @@ type clusterImpl struct {
 	// debugging service.
 	sideEyeClient *sideeyeclient.SideEyeClient
 
+	// preStartHooks contains registered preStartHook(s).
+	preStartHooks []install.PreStartHook
+	// preStartVirtualClusterHooks contains registered preStartVirtualClusterHook(s).
+	preStartVirtualClusterHooks []install.PreStartHook
+
 	// State that can be accessed concurrently (in particular, read from the UI
 	// HTML generator).
 	mu struct {
@@ -1063,31 +1068,30 @@ func (f *clusterFactory) newCluster(
 }
 
 type attachOpt struct {
-	skipValidation bool
-	// Implies skipWipe.
-	skipStop bool
 	skipWipe bool
 }
 
 // attachToExistingCluster creates a cluster object based on machines that have
-// already been already allocated by roachprod.
-//
-// NOTE: setTest() needs to be called before a test can use this cluster.
+// already been allocated by roachprod.
 func attachToExistingCluster(
 	ctx context.Context,
 	name string,
 	l *logger.Logger,
-	spec spec.ClusterSpec,
+	clusterSpec spec.ClusterSpec,
 	opt attachOpt,
 	r *clusterRegistry,
 ) (*clusterImpl, error) {
-	exp := spec.Expiration()
+	exp := clusterSpec.Expiration()
+	// Set by `validate` below, unless it errors out.
+	var attachedCloud spec.Cloud
+
 	if name == "local" {
 		exp = timeutil.Now().Add(100000 * time.Hour)
 	}
 	c := &clusterImpl{
 		name:       name,
-		spec:       spec,
+		cloud:      attachedCloud,
+		spec:       clusterSpec,
 		l:          l,
 		expiration: exp,
 		destroyState: destroyState{
@@ -1097,29 +1101,26 @@ func attachToExistingCluster(
 		r: r,
 	}
 
-	if !opt.skipValidation {
-		if err := c.validate(ctx, spec, l); err != nil {
-			return nil, err
-		}
+	if err := c.validate(clusterSpec, l); err != nil {
+		return nil, err
+	}
+	fmt.Printf("cloud: %s\n", c.cloud)
+	// Assert cloud was set.
+	if c.cloud == spec.AnyCloud {
+		return nil, errors.New("unable to validate cloud provider")
 	}
 
 	if err := r.registerCluster(c); err != nil {
 		return nil, err
 	}
 
-	if !opt.skipStop {
-		c.status("stopping cluster")
-		if err := c.StopE(ctx, l, option.DefaultStopOpts(), c.All()); err != nil {
-			return nil, err
-		}
-		if !opt.skipWipe {
-			if roachtestflags.ClusterWipe {
-				if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
-					return nil, err
-				}
-			} else {
-				l.Printf("skipping cluster wipe\n")
+	if !opt.skipWipe {
+		if roachtestflags.ClusterWipe {
+			if err := roachprod.Wipe(ctx, l, c.MakeNodes(c.All()), false /* preserveCerts */); err != nil {
+				return nil, err
 			}
+		} else {
+			l.Printf("skipping cluster wipe\n")
 		}
 	}
 
@@ -1152,9 +1153,7 @@ var errClusterNotFound = errors.New("cluster not found")
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
-func (c *clusterImpl) validate(
-	ctx context.Context, nodes spec.ClusterSpec, l *logger.Logger,
-) error {
+func (c *clusterImpl) validate(nodes spec.ClusterSpec, l *logger.Logger) error {
 	// Perform validation on the existing cluster.
 	c.status("checking that existing cluster matches spec")
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$"
@@ -1188,6 +1187,16 @@ func (c *clusterImpl) validate(
 			if vmCPUs > 1 && vmCPUs&1 == 1 {
 				return fmt.Errorf("node %d has an _odd_ number of CPUs (%d)", nodeID, vmCPUs)
 			}
+		}
+	}
+	// Find cloud providers from the list of VMs.
+	for _, vm := range cDetails.VMs {
+		// N.B. At this time roachtest clusters use a single provider, so we grab the first one.
+		if provider, ok := spec.TryCloudFromString(vm.Provider); ok {
+			c.cloud = provider
+			break
+		} else {
+			return fmt.Errorf("unknown cloud provider %q", vm.Provider)
 		}
 	}
 	return nil
@@ -1390,9 +1399,16 @@ func (c *clusterImpl) FetchDebugZip(
 	c.status("fetching debug zip")
 
 	nodes := selectedNodesOrDefault(opts, c.All())
+	// Shuffle the nodes to avoid always trying the same node first.
+	rand.Shuffle(len(nodes), func(i, j int) { nodes[i], nodes[j] = nodes[j], nodes[i] })
+	defaultTimeout := 10 * time.Minute
+	if c.spec.NodeCount >= 30 {
+		// For "large" clusters, double the timeout.
+		defaultTimeout *= 2
+	}
 
 	// Don't hang forever if we can't fetch the debug zip.
-	return timeutil.RunWithTimeout(ctx, "debug zip", 10*time.Minute, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "debug zip", defaultTimeout, func(ctx context.Context) error {
 		const zipName = "debug.zip"
 		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -2179,6 +2195,7 @@ func (c *clusterImpl) StartE(
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
+	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartHooks...)
 	nodes := selectedNodesOrDefault(opts, c.CRDBNodes())
 	if err := roachprod.Start(ctx, l, c.MakeNodes(nodes), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
@@ -2255,6 +2272,7 @@ func (c *clusterImpl) StartServiceForVirtualClusterE(
 	if len(startOpts.SeparateProcessNodes) > 0 {
 		startOpts.RoachprodOpts.VirtualClusterLocation = c.MakeNodes(startOpts.SeparateProcessNodes)
 	}
+	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartVirtualClusterHooks...)
 	if err := roachprod.StartServiceForVirtualCluster(
 		ctx, l, c.MakeNodes(storageCluster), startOpts.RoachprodOpts, clusterSettingsOpts...,
 	); err != nil {
@@ -2500,7 +2518,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 		return errors.New("No command passed")
 	}
 	nodes := option.FromInstallNodes(options.Nodes)
-	l, logFile, err := c.loggerForCmd(nodes, args...)
+	l, logFile, err := roachtestutil.LoggerForCmd(c.l, nodes, args...)
 	if err != nil {
 		return err
 	}
@@ -2568,7 +2586,7 @@ func (c *clusterImpl) RunWithDetails(
 		return nil, errors.New("No command passed")
 	}
 	nodes := option.FromInstallNodes(options.Nodes)
-	l, logFile, err := c.loggerForCmd(nodes, args...)
+	l, logFile, err := roachtestutil.LoggerForCmd(c.l, nodes, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -2650,30 +2668,6 @@ func (c *clusterImpl) Install(
 		return errors.New("Error running cluster.Install: no software passed")
 	}
 	return errors.Wrap(roachprod.Install(ctx, l, c.MakeNodes(nodes), software), "cluster.Install")
-}
-
-// cmdLogFileName comes up with a log file to use for the given argument string.
-func cmdLogFileName(t time.Time, nodes option.NodeListOption, args ...string) string {
-	logFile := fmt.Sprintf(
-		"run_%s_n%s_%s",
-		t.Format(`150405.000000000`),
-		nodes.String()[1:],
-		install.GenFilenameFromArgs(20, args...),
-	)
-	return logFile
-}
-
-func (c *clusterImpl) loggerForCmd(
-	node option.NodeListOption, args ...string,
-) (*logger.Logger, string, error) {
-	logFile := cmdLogFileName(timeutil.Now(), node, args...)
-
-	// NB: we set no prefix because it's only going to a file anyway.
-	l, err := c.l.ChildLogger(logFile, logger.QuietStderr, logger.QuietStdout)
-	if err != nil {
-		return nil, "", err
-	}
-	return l, logFile, nil
 }
 
 // pgURLErr returns the Postgres endpoint for the specified nodes. It accepts a
@@ -3356,4 +3350,24 @@ func (c *clusterImpl) GetHostErrorVMs(ctx context.Context, l *logger.Logger) ([]
 		allHostErrorVMs = append(allHostErrorVMs, hostErrorVMS...)
 	}
 	return allHostErrorVMs, nil
+}
+
+// RegisterClusterHook registers a hook to be run at a certain point as defined
+// by option.ClusterHookType. This exposes a way for test writers to run code
+// in between certain steps normally orchestrated by the framework, e.g. running
+// some workload during cluster init that depends on knowing connection info.
+func (c *clusterImpl) RegisterClusterHook(
+	hookName string,
+	hookType option.ClusterHookType,
+	timeout time.Duration,
+	fn func(context.Context) error,
+) {
+	switch hookType {
+	case option.PreStartHook:
+		c.preStartHooks = append(c.preStartHooks, install.PreStartHook{Name: hookName, Fn: fn, Timeout: timeout})
+	case option.PreStartVirtualClusterHook:
+		c.preStartVirtualClusterHooks = append(c.preStartVirtualClusterHooks, install.PreStartHook{Name: hookName, Fn: fn, Timeout: timeout})
+	default:
+		panic(fmt.Sprintf("unknown test hook type %v", hookType))
+	}
 }

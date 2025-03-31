@@ -168,6 +168,10 @@ jobs:
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinux
       - uses: actions/upload-artifact@v4
+        with:
+          name: local_roachtest_test_summary.tsv
+          path: artifacts/test_summary.tsv
+      - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
           name: local roachtest artifacts
@@ -188,6 +192,10 @@ jobs:
       - run: ./build/github/get-engflow-keys.sh
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinuxfips
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local_roachtest_fips_test_summary.tsv
+          path: artifacts/test_summary.tsv
       - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:

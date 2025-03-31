@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -95,7 +96,7 @@ func TestSearcher(t *testing.T) {
 		keyBytes := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, key), 0 /* famID */)
 		randomizedVec := make(vector.T, len(vec))
 		idx.RandomizeVector(vec, randomizedVec)
-		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey,
+		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey, cspann.LeafLevel,
 			randomizedVec, cspann.ChildKey{KeyBytes: keyBytes}, val)
 		require.NoError(t, err)
 		return randomizedVec
@@ -107,7 +108,7 @@ func TestSearcher(t *testing.T) {
 	// Validate that search vector was correctly encoded and quantized.
 	encodedVec := mutator.EncodedVector()
 	vecSet := quantize.UnQuantizedVectorSet{Vectors: vector.MakeSet(2)}
-	remainder, err := vecstore.DecodeUnquantizedVectorToSet(
+	remainder, err := vecencoding.DecodeUnquantizedVectorToSet(
 		[]byte(*encodedVec.(*tree.DBytes)), &vecSet)
 	require.NoError(t, err)
 	require.Empty(t, remainder)
@@ -118,9 +119,9 @@ func TestSearcher(t *testing.T) {
 	searcher.Init(idx, tx)
 	require.NoError(t, searcher.Search(ctx, prefix, vector.T{1, 1}, 2))
 	res := searcher.NextResult()
-	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
-	res = searcher.NextResult()
 	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
+	res = searcher.NextResult()
+	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search for a vector to delete.

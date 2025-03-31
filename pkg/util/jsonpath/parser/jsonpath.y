@@ -100,6 +100,30 @@ func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
   return u.val.(jsonpath.ArrayList)
 }
 
+func (u *jsonpathSymUnion) operationType() jsonpath.OperationType {
+  return u.val.(jsonpath.OperationType)
+}
+
+%}
+
+%{
+
+func binaryOp(op jsonpath.OperationType, left jsonpath.Path, right jsonpath.Path) jsonpath.Operation {
+  return jsonpath.Operation{
+    Type:  op,
+    Left:  left,
+    Right: right,
+  }
+}
+
+func unaryOp(op jsonpath.OperationType, left jsonpath.Path) jsonpath.Operation {
+  return jsonpath.Operation{
+    Type:  op,
+    Left:  left,
+    Right: nil,
+  }
+}
+
 %}
 
 %union{
@@ -132,6 +156,27 @@ func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
 %token <str> TRUE
 %token <str> FALSE
 
+%token <str> EQUAL
+%token <str> NOT_EQUAL
+%token <str> LESS
+%token <str> LESS_EQUAL
+%token <str> GREATER
+%token <str> GREATER_EQUAL
+
+%token <str> ROOT
+
+%token <str> AND
+%token <str> OR
+%token <str> NOT
+
+%token <str> CURRENT
+
+%token <str> STRING
+%token <str> NULL
+
+%token <str> LIKE_REGEX
+%token <str> FLAG
+
 %type <jsonpath.Jsonpath> jsonpath
 %type <jsonpath.Path> expr_or_predicate
 %type <jsonpath.Path> expr
@@ -141,12 +186,22 @@ func (u *jsonpathSymUnion) arrayList() jsonpath.ArrayList {
 %type <jsonpath.Path> array_accessor
 %type <jsonpath.Path> scalar_value
 %type <jsonpath.Path> index_elem
+%type <jsonpath.Path> predicate
+%type <jsonpath.Path> delimited_predicate
 %type <[]jsonpath.Path> accessor_expr
 %type <[]jsonpath.Path> index_list
+%type <jsonpath.OperationType> comp_op
 %type <str> key_name
 %type <str> any_identifier
 %type <str> unreserved_keyword
 %type <bool> mode
+
+%left OR
+%left AND
+%right NOT
+
+%left '+' '-'
+%left '*' '/' '%'
 
 %%
 
@@ -178,6 +233,10 @@ expr_or_predicate:
   {
     $$.val = $1.path()
   }
+| predicate
+  {
+    $$.val = $1.path()
+  }
 ;
 
 expr:
@@ -185,6 +244,31 @@ expr:
   {
     $$.val = jsonpath.Paths($1.pathArr())
   }
+| '(' expr ')'
+  {
+    $$.val = $2.path()
+  }
+| expr '+' expr
+  {
+    $$.val = binaryOp(jsonpath.OpAdd, $1.path(), $3.path())
+  }
+| expr '-' expr
+  {
+    $$.val = binaryOp(jsonpath.OpSub, $1.path(), $3.path())
+  }
+| expr '*' expr
+  {
+    $$.val = binaryOp(jsonpath.OpMult, $1.path(), $3.path())
+  }
+| expr '/' expr
+  {
+    $$.val = binaryOp(jsonpath.OpDiv, $1.path(), $3.path())
+  }
+| expr '%' expr
+  {
+    $$.val = binaryOp(jsonpath.OpMod, $1.path(), $3.path())
+  }
+// TODO(normanchenn): add unary + and -.
 ;
 
 accessor_expr:
@@ -199,9 +283,13 @@ accessor_expr:
 ;
 
 path_primary:
-  '$'
+  ROOT
   {
     $$.val = jsonpath.Root{}
+  }
+| CURRENT
+  {
+    $$.val = jsonpath.Current{}
   }
 | scalar_value
   {
@@ -218,6 +306,14 @@ accessor_op:
 | array_accessor
   {
     $$.val = $1.path()
+  }
+| '?' '(' predicate ')'
+  {
+    $$.val = jsonpath.Filter{Condition: $3.path()}
+  }
+| '.' '*'
+  {
+    $$.val = jsonpath.AnyKey{}
   }
 ;
 
@@ -271,6 +367,74 @@ index_elem:
   }
 ;
 
+predicate:
+  delimited_predicate
+  {
+    $$.val = $1.path()
+  }
+| expr comp_op expr
+  {
+    $$.val = binaryOp($2.operationType(), $1.path(), $3.path())
+  }
+| predicate AND predicate
+  {
+    $$.val = binaryOp(jsonpath.OpLogicalAnd, $1.path(), $3.path())
+  }
+| predicate OR predicate
+  {
+    $$.val = binaryOp(jsonpath.OpLogicalOr, $1.path(), $3.path())
+  }
+| NOT delimited_predicate
+  {
+    $$.val = unaryOp(jsonpath.OpLogicalNot, $2.path())
+  }
+| expr LIKE_REGEX STRING
+  {
+    regex := jsonpath.Regex{Regex: $3}
+    $$.val = binaryOp(jsonpath.OpLikeRegex, $1.path(), regex)
+  }
+| expr LIKE_REGEX STRING FLAG STRING
+  {
+    // TODO(normanchenn): implement regex flags.
+    return unimplemented(jsonpathlex, "regex with flags")
+  }
+;
+
+delimited_predicate:
+  '(' predicate ')'
+  {
+    $$.val = $2.path()
+  }
+;
+
+comp_op:
+  EQUAL
+  {
+    $$.val = jsonpath.OpCompEqual
+  }
+| NOT_EQUAL
+  {
+    $$.val = jsonpath.OpCompNotEqual
+  }
+| LESS
+  {
+    $$.val = jsonpath.OpCompLess
+  }
+| LESS_EQUAL
+  {
+    $$.val = jsonpath.OpCompLessEqual
+  }
+| GREATER
+  {
+    $$.val = jsonpath.OpCompGreater
+  }
+| GREATER_EQUAL
+  {
+    $$.val = jsonpath.OpCompGreaterEqual
+  }
+;
+
+// TODO(normanchenn): support negative numbers.
 scalar_value:
   VARIABLE
   {
@@ -304,17 +468,28 @@ scalar_value:
   {
     $$.val = jsonpath.Scalar{Type: jsonpath.ScalarBool, Value: json.FromBool(false)}
   }
-// TODO(normanchenn): support strings, null.
+| STRING
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarString, Value: json.FromString($1)}
+  }
+| NULL
+  {
+    $$.val = jsonpath.Scalar{Type: jsonpath.ScalarNull, Value: json.NullJSONValue}
+  }
 ;
 
 any_identifier:
   IDENT
+| STRING
 | unreserved_keyword
 ;
 
 unreserved_keyword:
   FALSE
+| FLAG
 | LAX
+| LIKE_REGEX
+| NULL
 | STRICT
 | TO
 | TRUE

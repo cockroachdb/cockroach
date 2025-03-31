@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
 )
@@ -104,9 +104,9 @@ func awsdmsVerString(v *version.Version) string {
 		ciBuildID = strings.ReplaceAll(ciBuildID, ".", "-")
 		return fmt.Sprintf("ci-build-%s", ciBuildID)
 	}
-	ret := fmt.Sprintf("local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
-	if v.PreRelease() != "" {
-		ret += "-" + v.PreRelease()
+	ret := v.Format("local-%X-%Y-%Z")
+	if v.IsPrerelease() {
+		ret += v.Format("-%P")
 	}
 	ret = strings.ReplaceAll(ret, ".", "-")
 	const maxSize = 24

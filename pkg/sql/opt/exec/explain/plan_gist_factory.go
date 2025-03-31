@@ -309,10 +309,12 @@ func (d *planGistDecoder) decodeID() cat.StableID {
 }
 
 func (d *planGistDecoder) decodeTable() cat.Table {
+	// We need to consume the ID even if we don't have the catalog to actually
+	// decode the table.
+	id := d.decodeID()
 	if d.catalog == nil {
 		return &unknownTable{}
 	}
-	id := d.decodeID()
 	// TODO(mgartner): Do not use the background context.
 	ds, _, err := d.catalog.ResolveDataSourceByID(context.Background(), cat.Flags{}, id)
 	if err == nil {

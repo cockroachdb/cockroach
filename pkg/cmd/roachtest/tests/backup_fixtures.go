@@ -243,7 +243,7 @@ func fixtureDirectory() string {
 		return "roachtest/master"
 	}
 	version := clusterupgrade.CurrentVersion()
-	return fmt.Sprintf("roachtest/v%d.%d", version.Major(), version.Minor())
+	return version.Format("roachtest/v%X.%Y")
 }
 
 func newFixtureRegistry(ctx context.Context, t test.Test, c cluster.Cluster) *blobfixture.Registry {

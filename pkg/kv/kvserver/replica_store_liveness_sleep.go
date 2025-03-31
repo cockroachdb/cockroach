@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // RaftStoreLivenessQuiescenceEnabled controls whether store liveness quiescence
@@ -18,9 +17,7 @@ var RaftStoreLivenessQuiescenceEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft.store_liveness.quiescence.enabled",
 	"controls whether store liveness quiescence is enabled",
-	metamorphic.ConstantWithTestChoice("kv.raft.store_liveness.quiescence.enabled",
-		false, /* defaultValue */
-		true /* otherValues */),
+	true,
 )
 
 // goToSleepAfterTicks is the number of Raft ticks after which a follower can
@@ -50,19 +47,13 @@ func (r *Replica) maybeFallAsleepRMuLocked(leaseStatus kvserverpb.LeaseStatus) b
 	if ticks := r.ticksSinceLastMessageRLocked(); ticks < goToSleepAfterTicks {
 		return false
 	}
-	// Grab the unquiescedOrAwakeReplicas lock here to prevent races between
-	// support withdrawal and falling asleep.
-	r.store.unquiescedOrAwakeReplicas.Lock()
-	defer r.store.unquiescedOrAwakeReplicas.Unlock()
 	// If not supporting a fortified leader, do not fall asleep.
 	if !r.raftSupportingFortifiedLeaderRLocked() {
 		return false
 	}
-	// It's safe to fall asleep here: after locking unquiescedOrAwakeReplicas
-	// above, this follower supports the leader. If it withdrew support since
-	// then, the call to maybeWakeUpRMuLocked will wait for the unlock and wake up
-	// the replica.
 	r.mu.asleep = true
+	r.store.unquiescedOrAwakeReplicas.Lock()
+	defer r.store.unquiescedOrAwakeReplicas.Unlock()
 	delete(r.store.unquiescedOrAwakeReplicas.m, r.RangeID)
 	return true
 }

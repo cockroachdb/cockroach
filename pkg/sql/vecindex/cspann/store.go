@@ -9,20 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
-	"github.com/cockroachdb/errors"
 )
-
-// ErrPartitionNotFound is returned by the store when the requested partition
-// cannot be found because it has been deleted by another agent.
-var ErrPartitionNotFound = errors.New("partition not found")
-
-// ErrRestartOperation is returned by the store when it needs the last index
-// operation (e.g. search or insert) to be restarted. This should only be
-// returned in situations where restarting the operation is guaranteed to make
-// progress, in order to avoid an infinite loop. An example is a stale root
-// partition, where a restarted operation can make progress after the cache has
-// been refreshed.
-var ErrRestartOperation = errors.New("conflict detected, restart operation")
 
 // VectorWithKey contains an original, full-size vector and its referencing key.
 type VectorWithKey struct {
@@ -35,19 +22,28 @@ type VectorWithKey struct {
 	Vector vector.T
 }
 
-// PartitionMetadata includes the size of the partition, as well as information
-// from the metadata record.
-type PartitionMetadata struct {
-	// Level is the level of the partition in the K-means tree.
-	Level Level
-	// Centroid is the centroid for vectors in the partition. It is calculated
-	// once when the partition is created and never changes, even if additional
-	// vectors are added later.
-	Centroid vector.T
+// PartitionToSearch contains information about a partition to be searched by
+// the SearchPartitions method.
+type PartitionToSearch struct {
+	// Key is the key of the partition to search.
+	Key PartitionKey
+	// ExcludeLeafVectors indicates that the search should not return vectors if
+	// this turns out to be a leaf partition. When inserting a new vector into
+	// the index, it is never necessary to scan leaf vectors. However, until the
+	// partition metadata is scanned, it is not known whether a root partition is
+	// a leaf partition.
+	ExcludeLeafVectors bool
+	// StateDetails returns the latest state information from the partition
+	// metadata. This is used by fixup workers to detect interference from other
+	// agents that are updating the partition.
+	StateDetails PartitionStateDetails
+	// Count is set to the number of vectors in the searched partition. This is
+	// an output value (i.e. it's set by SearchPartitions).
+	Count int
 }
 
-// Store encapsulates the component that’s actually storing the vectors, whether
-// that’s in a CRDB cluster for production or in memory for testing and
+// Store encapsulates the component that's actually storing the vectors, whether
+// that's in a CRDB cluster for production or in memory for testing and
 // benchmarking. Callers can use Store to start and commit transactions against
 // the store that update its structure and contents.
 //
@@ -66,9 +62,18 @@ type Store interface {
 	// Begin.
 	AbortTransaction(ctx context.Context, txn Txn) error
 
+	// RunTransaction invokes the given function in the scope of a new
+	// transaction. If the function returns an error, the transaction is aborted,
+	// else it is committed.
+	RunTransaction(ctx context.Context, fn func(txn Txn) error) error
+
+	// MakePartitionKey allocates a new partition key that is guaranteed to be
+	// globally unique.
+	MakePartitionKey() PartitionKey
+
 	// EstimatePartitionCount returns the approximate number of vectors in the
 	// given partition. The estimate can be based on a (bounded) stale copy of
-	// the partition.
+	// the partition. It returns 0 if the partition does not exist.
 	EstimatePartitionCount(
 		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
 	) (int, error)
@@ -77,6 +82,87 @@ type Store interface {
 	// stats if "skipMerge" is false. "stats" is updated with the latest global
 	// stats.
 	MergeStats(ctx context.Context, stats *IndexStats, skipMerge bool) error
+
+	// TryCreateEmptyPartition constructs a new partition containing no vectors,
+	// having the specified key and metadata. It returns a ConditionFailedError
+	// if the partition already exists.
+	TryCreateEmptyPartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, metadata PartitionMetadata,
+	) error
+
+	// TryDeletePartition deletes the specified partition. It returns
+	// ErrPartitionNotFound if the partition does not exist.
+	TryDeletePartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) error
+
+	// TryGetPartition returns the requested partition, if it exists, else it
+	// returns ErrPartitionNotFound.
+	TryGetPartition(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (*Partition, error)
+
+	// TryGetPartitionMetadata returns just the metadata of the requested
+	// partition, if it exists, else it returns ErrPartitionNotFound. This is
+	// more efficient than loading the entire partition when only metadata is
+	// needed.
+	TryGetPartitionMetadata(
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey,
+	) (PartitionMetadata, error)
+
+	// TryUpdatePartitionMetadata updates the partition's metadata only if it's
+	// equal to the expected value, else it returns a ConditionFailedError. If
+	// the partition does not exist, it returns ErrPartitionNotFound.
+	TryUpdatePartitionMetadata(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		metadata PartitionMetadata,
+		expected PartitionMetadata,
+	) error
+
+	// TryAddToPartition adds the given vectors (and associated keys/values) to
+	// the specified partition. If a vector's key already exists in
+	// the partition, the vector is not added.
+	//
+	// Before performing any action, TryAddToPartition checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If the partition does not exist, it returns
+	// ErrPartitionNotFound.
+	//
+	// NOTE: Individual adds do not need to share a transaction. If an error
+	// occurs in the middle of the operation, vectors that have already been added
+	// are not guaranteed to roll back.
+	TryAddToPartition(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		vectors vector.Set,
+		childKeys []ChildKey,
+		valueBytes []ValueBytes,
+		expected PartitionMetadata,
+	) (added bool, err error)
+
+	// TryRemoveFromPartition removes vectors from the given partition by their
+	// child keys. If a key is not present in the partition, it is a no-op. If
+	// an attempt is made to remove all vectors in a non-leaf partition, then
+	// ErrRemoveNotAllowed is returned.
+	//
+	// Before performing any action, TryRemoveFromPartition checks the partition's
+	// metadata and returns a ConditionFailedError if it is not the same as the
+	// expected metadata. If the partition does not exist, it returns
+	// ErrPartitionNotFound.
+	//
+	// NOTE: Individual removes do not need to share a transaction. If an error
+	// occurs in the middle of the operation, vectors that have already been
+	// removed are not guaranteed to roll back.
+	TryRemoveFromPartition(
+		ctx context.Context,
+		treeKey TreeKey,
+		partitionKey PartitionKey,
+		childKeys []ChildKey,
+		expected PartitionMetadata,
+	) (removed bool, err error)
 }
 
 // Txn enables callers to make changes to the stored index in a transactional
@@ -91,9 +177,8 @@ type Store interface {
 // Txn implementations are not thread-safe.
 type Txn interface {
 	// GetPartition returns the partition identified by the given key, or
-	// ErrPartitionNotFound if the key cannot be found. The returned partition
-	// can be modified by the caller in the scope of the transaction with a
-	// guarantee it won't be changed by other agents.
+	// ErrPartitionNotFound if the key cannot be found. The returned partition's
+	// memory is owned by the caller - it can be modified as needed.
 	GetPartition(ctx context.Context, treeKey TreeKey, partitionKey PartitionKey) (*Partition, error)
 
 	// SetRootPartition makes the given partition the root partition in the store.
@@ -130,6 +215,7 @@ type Txn interface {
 		ctx context.Context,
 		treeKey TreeKey,
 		partitionKey PartitionKey,
+		level Level,
 		vec vector.T,
 		childKey ChildKey,
 		valueBytes ValueBytes,
@@ -141,19 +227,16 @@ type Txn interface {
 	// if the partition cannot be found, or ErrRestartOperation if the caller
 	// should retry the delete operation that triggered this call.
 	RemoveFromPartition(
-		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
+		ctx context.Context, treeKey TreeKey, partitionKey PartitionKey, level Level, childKey ChildKey,
 	) error
 
 	// SearchPartitions finds vectors that are closest to the given query vector.
-	// Only partitions with the given keys are searched, and all of them must be
-	// at the same level of the tree. SearchPartitions returns found vectors in
-	// the search set, along with the level of the K-means tree that was searched.
-	//
-	// The caller is responsible for allocating the "partitionCounts" slice with
-	// length equal to the number of partitions to search. SearchPartitions will
-	// update the slice with the number of quantized vectors in the searched
-	// partitions. This is used to determine if a partition needs to be split
-	// or merged.
+	// Only partitions referenced by the "toSearch" list will be returned, and all
+	// of them must be at the same level of the tree. SearchPartitions returns
+	// found vectors in the search set, along with the level of the K-means tree
+	// that was searched. It will also update the "Count" field of each "toSearch"
+	// partition with the number of quantized vectors in that searched partition.
+	// This is used to determine if a partition needs to be split or merged.
 	//
 	// If one or more partitions cannot be found, SearchPartitions returns
 	// ErrPartitionNotFound, or ErrRestartOperation if the caller should retry
@@ -161,16 +244,18 @@ type Txn interface {
 	SearchPartitions(
 		ctx context.Context,
 		treeKey TreeKey,
-		partitionKey []PartitionKey,
+		toSearch []PartitionToSearch,
 		queryVector vector.T,
 		searchSet *SearchSet,
-		partitionCounts []int,
 	) (level Level, err error)
 
 	// GetFullVectors fetches the original full-size vectors that are referenced
 	// by the given child keys and stores them in "refs". If a vector has been
 	// deleted, then its corresponding reference will be set to nil. If a
 	// partition cannot be found, GetFullVectors returns ErrPartitionNotFound.
+	//
+	// NOTE: The caller takes ownership of any vector memory returned in "refs".
+	// The Store implementation should not try to use it after returning it.
 	//
 	// TODO(andyk): what if the row exists but the vector column is NULL? Right
 	// now, this whole library expects vectors passed to it to be non-nil and have

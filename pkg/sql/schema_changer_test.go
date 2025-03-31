@@ -2803,7 +2803,7 @@ CREATE TABLE t.test (
 	UPDATE t.test SET y = 3 WHERE y = 2;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put %[1]s/%%' OR
+		message LIKE 'Put %%%[1]s/%%' OR
 		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/%%';`, tablePrefixStr))
 	if err != nil {
@@ -2811,12 +2811,16 @@ CREATE TABLE t.test (
 	}
 
 	expected = []string{
-		// The primary index should see the update
-		fmt.Sprintf("Put %s/1/1/1/1 -> /INT/3", tablePrefixStr),
-		// The temporary index for the newly added index sees
-		// a Put in all families.
+		// The primary index should see the update.
+		fmt.Sprintf("Put (locking) %s/1/1/1/1 -> /INT/3", tablePrefixStr),
+		// The temporary index for the newly added index sees a Put in all
+		// families (except for the 1st family only consisting of the PK and the
+		// 3rd family KV for which is elided due to NULL).
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/0", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/0 -> /BYTES/0x0a030a1302", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/2/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/2/1 -> /BYTES/0x0a030a3306", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/2/4/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/4/1 -> /BYTES/0x0a02010c", tablePrefixStr),
 	}
 	require.Equal(t, expected, scanToArray(rows))
@@ -2827,7 +2831,7 @@ CREATE TABLE t.test (
 	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put %[1]s/%%' OR
+		message LIKE 'Put %%%[1]s/%%' OR
 		message LIKE 'Del %%%[1]s/%%' OR
 		message LIKE 'CPut %[1]s/2%%';`, tablePrefixStr))
 	if err != nil {
@@ -2837,12 +2841,14 @@ CREATE TABLE t.test (
 	expected = []string{
 
 		fmt.Sprintf("Del (locking) %s/1/1/2/1", tablePrefixStr),
-		fmt.Sprintf("Put %s/1/1/3/1 -> /INT/5", tablePrefixStr),
+		fmt.Sprintf("Put (locking) %s/1/1/3/1 -> /INT/5", tablePrefixStr),
 		fmt.Sprintf("Del (locking) %s/1/1/4/1", tablePrefixStr),
 		// The temporary index sees a Put in all families even though
 		// only some are changing. This is expected.
 		fmt.Sprintf("Put %s/5/3/0 -> /BYTES/0x0a030a1302", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/3/2/1", tablePrefixStr),
 		fmt.Sprintf("Put %s/5/3/3/1 -> /BYTES/0x0a02010a", tablePrefixStr),
+		fmt.Sprintf("Put (delete) (locking) %s/5/3/4/1", tablePrefixStr),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -4088,6 +4094,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
 	var gcAt hlc.Timestamp
+	shouldRunGC := atomic.Bool{}
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
@@ -4108,9 +4115,8 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				if fn := runGC; fn != nil {
-					runGC = nil
-					return fn(sp)
+				if shouldRunGC.Swap(false) {
+					return runGC(sp)
 				}
 				return nil
 			},
@@ -4124,29 +4130,45 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
 	codec := tc.Server(0).ApplicationLayer().Codec()
+	db.SetMaxOpenConns(1)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 	sqlDB.Exec(t, `CREATE DATABASE t`)
-	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
-	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
-		t.Fatal(err)
-	}
 
-	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, codec, 2, 0); err != nil {
-		t.Fatal(err)
-	}
+	testutils.RunTrueAndFalse(t, "useDeclarative", func(t *testing.T, useDeclarative bool) {
+		writeTSFromJob := "p->'schemaChange'->'writeTimestamp'->>'wallTime'"
+		indexName := "index_created_in_test_legacy"
+		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
+		if useDeclarative {
+			writeTSFromJob = "p->'newSchemaChange'->'backfillProgress'->0->'writeTimestamp'->>'wallTime'"
+			indexName = "index_created_in_test_declarative"
+			sqlDB.Exec(t, "SET use_declarative_schema_changer='on'")
+		}
+		sqlDB.Exec(t, "DROP TABLE IF EXISTS t.test")
+		sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
+		sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
 
-	got := sqlDB.QueryStr(t, `
-		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		shouldRunGC.Store(true)
+		if _, err := db.Exec(
+			fmt.Sprintf(`CREATE UNIQUE INDEX %s ON t.test (v)`, indexName),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, codec, 2, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		got := sqlDB.QueryStr(t, fmt.Sprintf(`
+		SELECT %s < $1, jsonb_pretty(p)
 		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM crdb_internal.system_jobs)
-		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
-		gcAt.WallTime,
-	)[0]
-	if got[0] != "true" {
-		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
-	}
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX %s%%'`, writeTSFromJob, indexName),
+			gcAt.WallTime,
+		)[0]
+		if got[0] != "true" {
+			t.Fatalf("expected write-ts < gc time (%d). details: %s", gcAt.WallTime, got[1])
+		}
+
+	})
 }
 
 // TestAddComputedColumn verifies that while a column backfill is happening

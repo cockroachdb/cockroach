@@ -3031,7 +3031,7 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 						resp := br.Responses[i]
 						if err := kvpb.ResponseKeyIterate(req.GetInner(), resp.GetInner(), func(k roachpb.Key) {
 							respKeys = append(respKeys, k)
-						}); err != nil {
+						}, false /* includeLockedNonExisting */); err != nil {
 							return kvpb.NewError(err)
 						}
 					}
@@ -7498,7 +7498,7 @@ func TestEntries(t *testing.T) {
 			// Case 19: lo and hi are available, but entry cache evicted.
 			{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 0, setup: func() {
 				// Manually evict cache for the first 10 log entries.
-				repl.store.raftEntryCache.Clear(rangeID, indexes[9]+1)
+				repl.store.raftEntryCache.Clear(rangeID, indexes[9])
 				indexes = append(indexes, populateLogs(10, 40)...)
 			}},
 			// Case 20: lo and hi are available, entry cache evicted and hi available in cache.
@@ -15423,7 +15423,7 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 	defer repl.LeaderlessWatcher.mu.RUnlock()
 
 	// Initially, the leaderWatcher doesn't consider the replica as unavailable.
-	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
+	require.False(t, repl.LeaderlessWatcher.mu.unavailable)
 
 	// The leaderless timestamp is not set.
 	require.Equal(t, time.Time{}, repl.LeaderlessWatcher.mu.leaderlessTimestamp)

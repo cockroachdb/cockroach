@@ -311,7 +311,11 @@ message Index {
   // TODO(postamar): try to get rid of these altogether
   //  Perhaps move these to the target metadata instead?
   bool is_concurrently = 20;
+  // SourceIndexID refers back to the primary index for which a secondary index
+  // was created.
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // TemporaryIndexID refers to the temporary index that was created while this
+  // index is being backfilled.
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
@@ -342,6 +346,10 @@ message SecondaryIndex {
   // secondary index that we are trying to replace (this
   // is done for primary key changes).
   uint32 recreate_source_id = 4 [(gogoproto.customname) = "RecreateSourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // If an index is being recreated, this is the final primary
+  // index that will make it usable (i.e. the columns required
+  // to back this index will be public in this index)
+  uint32 recreate_target_id = 5 [(gogoproto.customname) = "RecreateTargetIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message TemporaryIndex {

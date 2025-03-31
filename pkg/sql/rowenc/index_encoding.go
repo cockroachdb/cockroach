@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -1126,6 +1128,9 @@ func encodeTrigramInvertedIndexTableKeys(
 	return outKeys, nil
 }
 
+// encodeVectorIndexKey creates the key for a vector index leaf partition, minus
+// any suffix primary key columns. See comment at top of
+// sql/vecindex/vecencoding.go for a description of the format.
 func encodeVectorIndexKey(
 	index catalog.Index,
 	colMap catalog.TableColMap,
@@ -1141,14 +1146,14 @@ func encodeVectorIndexKey(
 		// This index is not being updated.
 		return nil, nil
 	}
-	partitionKey := uint64(tree.MustBeDInt(partitionKeyDatum))
-	keyPrefix, err = encodeIndexPrefixKeys(index, colMap, values, keyPrefix)
+	partitionKey := cspann.PartitionKey(tree.MustBeDInt(partitionKeyDatum))
+	key, err = encodeIndexPrefixKeys(index, colMap, values, keyPrefix)
 	if err != nil {
 		return nil, err
 	}
-	// TODO(drewk): use the vector index encoding functions (right now, doing so
-	// would cause a dependency cycle).
-	return encoding.EncodeUvarintAscending(keyPrefix, partitionKey), nil
+	key = vecencoding.EncodePartitionKey(key, partitionKey)
+	key = vecencoding.EncodePartitionLevel(key, cspann.LeafLevel)
+	return key, err
 }
 
 // EncodePrimaryIndex constructs the key prefix for the primary index and

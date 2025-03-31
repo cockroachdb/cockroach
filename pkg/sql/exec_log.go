@@ -471,8 +471,8 @@ func (p *planner) logTransaction(
 
 	*sampledTxn = eventpb.SampledTransaction{
 		SkippedTransactions:      int64(skippedTransactions),
-		User:                     txnStats.SessionData.SessionUser().Normalized(),
-		ApplicationName:          txnStats.SessionData.ApplicationName,
+		User:                     txnStats.UserNormalized,
+		ApplicationName:          txnStats.Application,
 		TxnCounter:               uint32(txnCounter),
 		SessionID:                txnStats.SessionID.String(),
 		TransactionID:            txnStats.TransactionID.String(),

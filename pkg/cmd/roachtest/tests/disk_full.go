@@ -35,7 +35,8 @@ func registerDiskFull(r registry.Registry) {
 				t.Skip("you probably don't want to fill your local disk")
 			}
 
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+			startOpts := option.NewStartOpts(option.NoBackupSchedule)
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
 			// ensure that the ranges containing system tables are available on other
@@ -100,7 +101,7 @@ func registerDiskFull(r registry.Registry) {
 					// monitor detects the death, expect it.
 					m.ExpectDeath()
 
-					err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
+					err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
 					if err == nil {
 						t.Fatal("node successfully started unexpectedly")
@@ -134,7 +135,7 @@ func registerDiskFull(r registry.Registry) {
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ExpectDeath()
 				c.Run(ctx, option.WithNodes(c.Node(n)), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
-				if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
+				if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
 				m.ResetDeaths()

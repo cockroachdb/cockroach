@@ -8,42 +8,42 @@ package eval
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
-	"github.com/cockroachdb/errors"
 )
 
-func (ctx *jsonpathCtx) evalKey(k jsonpath.Key, current []tree.DJSON) ([]tree.DJSON, error) {
-	var agg []tree.DJSON
-	for _, res := range current {
-		if res.JSON.Type() == json.ObjectJSONType {
-			val, err := res.JSON.FetchValKey(string(k))
-			if err != nil {
-				return nil, err
-			}
-			if val == nil {
-				if ctx.strict {
-					return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(k))
-				}
-				continue
-			}
-			agg = append(agg, *ctx.a.NewDJSON(tree.DJSON{JSON: val}))
-		} else if !ctx.strict && res.JSON.Type() == json.ArrayJSONType {
-			arr, ok := res.JSON.AsArray()
-			if !ok {
-				return nil, errors.AssertionFailedf("array expected")
-			}
-			for _, elem := range arr {
-				results, err := ctx.eval(k, []tree.DJSON{*ctx.a.NewDJSON(tree.DJSON{JSON: elem})})
-				if err != nil {
-					return nil, err
-				}
-				agg = append(agg, results...)
-			}
-		} else if ctx.strict {
-			return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "jsonpath member accessor can only be applied to an object")
+func (ctx *jsonpathCtx) evalKey(
+	key jsonpath.Key, jsonValue json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	if jsonValue.Type() == json.ObjectJSONType {
+		val, err := jsonValue.FetchValKey(string(key))
+		if err != nil {
+			return nil, err
 		}
+		if val == nil && ctx.strict {
+			return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "JSON object does not contain key %q", string(key))
+		} else if val != nil {
+			return []json.JSON{val}, nil
+		}
+		return []json.JSON{}, nil
+	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(key, jsonValue, false /* unwrapNext */)
+	} else if ctx.strict {
+		return nil, pgerror.Newf(pgcode.SQLJSONMemberNotFound, "jsonpath member accessor can only be applied to an object")
 	}
-	return agg, nil
+	return []json.JSON{}, nil
+}
+
+func (ctx *jsonpathCtx) evalAnyKey(
+	anyKey jsonpath.AnyKey, jsonValue json.JSON, unwrap bool,
+) ([]json.JSON, error) {
+	if jsonValue.Type() == json.ObjectJSONType {
+		return ctx.executeAnyItem(nil /* jsonPath */, jsonValue, !ctx.strict /* unwrapNext */)
+	} else if unwrap && jsonValue.Type() == json.ArrayJSONType {
+		return ctx.unwrapCurrentTargetAndEval(anyKey, jsonValue, false /* unwrapNext */)
+	} else if ctx.strict {
+		return nil, pgerror.Newf(pgcode.SQLJSONObjectNotFound,
+			"jsonpath wildcard member accessor can only be applied to an object")
+	}
+	return []json.JSON{}, nil
 }

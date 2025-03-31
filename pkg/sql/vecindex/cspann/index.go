@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/rand"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -67,6 +66,10 @@ type IndexOptions struct {
 	// MaxWorkers specifies the maximum number of background workers that can be
 	// created to process fixups for this vector index instance.
 	MaxWorkers int
+	// UseNewFixups specifies that the background fixup processor should use new
+	// split and merge fixup implementations that avoid the use of transactions.
+	// TODO(andyk): Remove this once we've fully converted to the new fixups.
+	UseNewFixups bool
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -120,13 +123,15 @@ type Context struct {
 	// the last remaining vector to another partition, thereby creating an empty
 	// non-leaf partition, which is not allowed in a balanced K-means tree.
 	ignoreLonelyVector bool
+	// forInsert indicates that this is an insert operation (or a search for
+	// insert operation).
+	forInsert bool
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
 	tempResults         [1]SearchResult
 	tempQualitySamples  [MaxQualitySamples]float64
-	tempKeys            []PartitionKey
-	tempCounts          []int
+	tempToSearch        []PartitionToSearch
 	tempVectorsWithKeys []VectorWithKey
 }
 
@@ -330,9 +335,8 @@ func (vi *Index) Close() {
 // NOTE: This can result in two vectors with the same primary key being inserted
 // into the index. To minimize this possibility, callers should call Delete
 // before Insert when a vector is updated. Even then, it's not guaranteed that
-// Delete will find the old vector. Vector index methods handle this rare case
-// by checking for duplicates when returning search results. For details, see
-// Index.pruneDuplicates.
+// Delete will find the old vector. The search set handles this rare case by
+// filtering out results with duplicate key bytes.
 func (vi *Index) Insert(
 	ctx context.Context, idxCtx *Context, treeKey TreeKey, vec vector.T, key KeyBytes,
 ) error {
@@ -370,7 +374,7 @@ func (vi *Index) Delete(
 
 	// Remove the vector from its partition in the store.
 	return vi.removeFromPartition(
-		ctx, idxCtx.txn, treeKey, result.ParentPartitionKey, result.ChildKey)
+		ctx, idxCtx.txn, treeKey, result.ParentPartitionKey, LeafLevel, result.ChildKey)
 }
 
 // Search finds vectors in the index that are closest to the given query vector
@@ -450,7 +454,7 @@ func (vi *Index) SearchForDelete(
 		if err != nil {
 			return nil, err
 		}
-		results := idxCtx.tempSearchSet.PopUnsortedResults()
+		results := idxCtx.tempSearchSet.PopResults()
 		if len(results) == 0 {
 			// Retry search with significantly higher beam size.
 			baseBeamSize *= 8
@@ -474,11 +478,26 @@ func (vi *Index) ProcessFixups() {
 	vi.fixups.Process()
 }
 
-// ForceSplitOrMerge enqueues a split or merge fixup. It is used for testing.
-func (vi *Index) ForceSplitOrMerge(
-	ctx context.Context, treeKey TreeKey, parentPartitionKey PartitionKey, partitionKey PartitionKey,
+// ForceSplit enqueues a split fixup. It is used for testing.
+func (vi *Index) ForceSplit(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
 ) {
-	vi.fixups.AddSplitOrMergeCheck(ctx, treeKey, parentPartitionKey, partitionKey)
+	vi.fixups.AddSplit(ctx, treeKey, parentPartitionKey, partitionKey, singleStep)
+}
+
+// ForceMerge enqueues a merge fixup. It is used for testing.
+func (vi *Index) ForceMerge(
+	ctx context.Context,
+	treeKey TreeKey,
+	parentPartitionKey PartitionKey,
+	partitionKey PartitionKey,
+	singleStep bool,
+) {
+	vi.fixups.AddMerge(ctx, treeKey, parentPartitionKey, partitionKey, singleStep)
 }
 
 // setupInsertContext sets up the given context for an insert operation. Before
@@ -493,6 +512,7 @@ func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector
 		SkipRerank:   vi.options.DisableErrorBounds,
 		UpdateStats:  true,
 	}, SecondLevel)
+	idxCtx.forInsert = true
 }
 
 // setupContext sets up the given context as an operation is beginning.
@@ -503,6 +523,7 @@ func (vi *Index) setupContext(
 	idxCtx.options = options
 	idxCtx.level = level
 	idxCtx.original = vec
+	idxCtx.forInsert = false
 
 	// Randomize the original vector.
 	idxCtx.randomized = ensureSliceLen(idxCtx.randomized, len(vec))
@@ -519,9 +540,12 @@ func (vi *Index) insertHelper(
 	if err != nil {
 		return err
 	}
+
+	// Add a vector to the found partition, which is a child of the partition that
+	// was searched.
 	partitionKey := result.ChildKey.PartitionKey
-	err = vi.addToPartition(
-		ctx, idxCtx.txn, idxCtx.treeKey, partitionKey, idxCtx.randomized, childKey, valueBytes)
+	err = vi.addToPartition(ctx, idxCtx.txn, idxCtx.treeKey,
+		partitionKey, idxCtx.level-1, idxCtx.randomized, childKey, valueBytes)
 	if errors.Is(err, ErrRestartOperation) {
 		return vi.insertHelper(ctx, idxCtx, childKey, valueBytes)
 	}
@@ -538,14 +562,28 @@ func (vi *Index) searchForInsertHelper(
 	if err != nil {
 		return nil, err
 	}
-	results := idxCtx.tempSearchSet.PopUnsortedResults()
+	results := idxCtx.tempSearchSet.PopResults()
 	if len(results) != 1 {
 		return nil, errors.AssertionFailedf(
 			"SearchForInsert should return exactly one result, got %d", len(results))
 	}
 
-	vi.fixups.AddSplitOrMergeCheck(
-		ctx, idxCtx.treeKey, results[0].ParentPartitionKey, results[0].ChildKey.PartitionKey)
+	// Do an inconsistent scan of the partition to see if it might be ready to
+	// split. This is necessary because the search does not scan leaf partitions.
+	// Unless we do this, we may never realize the partition is oversized.
+	// NOTE: The scan is not performed in the scope of the current transaction,
+	// so it will not reflect the effects of this operation. That's OK, since it's
+	// not necessary to split at exactly the point where the partition becomes
+	// oversized.
+	partitionKey := results[0].ChildKey.PartitionKey
+	count, err := vi.store.EstimatePartitionCount(ctx, idxCtx.treeKey, partitionKey)
+	if err != nil {
+		return nil, errors.Wrapf(err, "counting vectors in partition %d", partitionKey)
+	}
+	if count >= vi.options.MaxPartitionSize {
+		vi.fixups.AddSplit(ctx, idxCtx.treeKey,
+			results[0].ParentPartitionKey, partitionKey, false /* singleStep */)
+	}
 
 	return &results[0], nil
 }
@@ -558,11 +596,12 @@ func (vi *Index) addToPartition(
 	txn Txn,
 	treeKey TreeKey,
 	partitionKey PartitionKey,
+	level Level,
 	vec vector.T,
 	childKey ChildKey,
 	valueBytes ValueBytes,
 ) error {
-	err := txn.AddToPartition(ctx, treeKey, partitionKey, vec, childKey, valueBytes)
+	err := txn.AddToPartition(ctx, treeKey, partitionKey, level, vec, childKey, valueBytes)
 	if err != nil {
 		return errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
@@ -572,9 +611,14 @@ func (vi *Index) addToPartition(
 // removeFromPartition calls the store to remove a vector, by its key, from an
 // existing partition.
 func (vi *Index) removeFromPartition(
-	ctx context.Context, txn Txn, treeKey TreeKey, partitionKey PartitionKey, childKey ChildKey,
+	ctx context.Context,
+	txn Txn,
+	treeKey TreeKey,
+	partitionKey PartitionKey,
+	level Level,
+	childKey ChildKey,
 ) error {
-	err := txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey)
+	err := txn.RemoveFromPartition(ctx, treeKey, partitionKey, level, childKey)
 	if err != nil {
 		return errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
@@ -626,7 +670,7 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 	}
 
 	for {
-		results := subSearchSet.PopUnsortedResults()
+		results := subSearchSet.PopResults()
 		if len(results) == 0 && searchLevel > LeafLevel {
 			// This should never happen, as it means that interior partition(s)
 			// have no children. The vector deletion logic should prevent that.
@@ -636,10 +680,6 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 
 		var zscore float64
 		if searchLevel > LeafLevel {
-			// Results need to be sorted in order to calculate their "spread". This
-			// also sorts them for determining which partitions to search next.
-			results.Sort()
-
 			// Compute the Z-score of the candidate list if there are enough
 			// samples. Otherwise, use the default Z-score of 0.
 			if len(results) >= vi.options.QualitySamples {
@@ -663,7 +703,6 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 			// Aggregate all stats from searching lower levels of the tree.
 			searchSet.Stats.Add(&subSearchSet.Stats)
 
-			results = vi.pruneDuplicates(results)
 			if !idxCtx.options.SkipRerank || idxCtx.options.ReturnVectors {
 				// Re-rank search results with full vectors.
 				searchSet.Stats.FullVectorCount += len(results)
@@ -743,71 +782,54 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 func (vi *Index) searchChildPartitions(
 	ctx context.Context, idxCtx *Context, searchSet *SearchSet, parentResults SearchResults,
 ) (level Level, err error) {
-	idxCtx.tempKeys = ensureSliceLen(idxCtx.tempKeys, len(parentResults))
+	idxCtx.tempToSearch = ensureSliceLen(idxCtx.tempToSearch, len(parentResults))
 	for i := range parentResults {
-		idxCtx.tempKeys[i] = parentResults[i].ChildKey.PartitionKey
+		// If this is an Insert or SearchForInsert operation, then do not scan
+		// leaf vectors. Insert operations never need leaf vectors and scanning
+		// them only increases the contention footprint. This is only needed when
+		// we're searching the root partition, as we do not know its level until
+		// we read its metadata record. By contrast, we know whether a non-root
+		// partition is a leaf partition because we know the level of its parent.
+		partitionKey := parentResults[i].ChildKey.PartitionKey
+		idxCtx.tempToSearch[i] = PartitionToSearch{
+			Key:                partitionKey,
+			ExcludeLeafVectors: idxCtx.forInsert && partitionKey == RootKey,
+		}
 	}
 
-	idxCtx.tempCounts = ensureSliceLen(idxCtx.tempCounts, len(parentResults))
 	level, err = idxCtx.txn.SearchPartitions(
-		ctx, idxCtx.treeKey, idxCtx.tempKeys, idxCtx.randomized, searchSet, idxCtx.tempCounts)
+		ctx, idxCtx.treeKey, idxCtx.tempToSearch, idxCtx.randomized, searchSet)
 	if err != nil {
 		return 0, err
 	}
 
 	for i := range parentResults {
-		count := idxCtx.tempCounts[i]
+		count := idxCtx.tempToSearch[i].Count
 		searchSet.Stats.SearchedPartition(level, count)
 
 		// If one of the searched partitions has only 1 vector remaining, do not
 		// return that vector when "ignoreLonelyVector" is true.
 		if idxCtx.ignoreLonelyVector && idxCtx.level == level && count == 1 {
-			searchSet.RemoveResults(parentResults[i].ChildKey.PartitionKey)
+			searchSet.RemoveByParent(parentResults[i].ChildKey.PartitionKey)
 		}
 
+		// Enqueue background fixup if a split or merge operation needs to be
+		// started or continued after stalling.
 		partitionKey := parentResults[i].ChildKey.PartitionKey
-		if count < vi.options.MinPartitionSize && partitionKey != RootKey {
-			vi.fixups.AddSplitOrMergeCheck(
-				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
-		} else if count > vi.options.MaxPartitionSize {
-			vi.fixups.AddSplitOrMergeCheck(
-				ctx, idxCtx.treeKey, parentResults[i].ParentPartitionKey, partitionKey)
+		state := idxCtx.tempToSearch[i].StateDetails
+		needSplit := count > vi.options.MaxPartitionSize || state.MaybeSplitStalled()
+		needMerge := count < vi.options.MinPartitionSize && partitionKey != RootKey
+		needMerge = needMerge || state.MaybeMergeStalled()
+		if needSplit {
+			vi.fixups.AddSplit(ctx, idxCtx.treeKey,
+				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+		} else if needMerge {
+			vi.fixups.AddMerge(ctx, idxCtx.treeKey,
+				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
 		}
 	}
 
 	return level, nil
-}
-
-// pruneDuplicates removes candidates with duplicate child keys. This is rare,
-// but it can happen when a vector updated in the primary index cannot be
-// located in the secondary index.
-// NOTE: This logic will reorder the candidates slice.
-// NOTE: This logic can remove the "wrong" duplicate, with a quantized distance
-// that doesn't correspond to the true distance. However, this has no impact as
-// long as we rerank candidates using the original full-size vectors. Even if
-// we're not reranking, the impact of this should be minimal, since duplicates
-// are so rare and there's already quite a bit of inaccuracy when not reranking.
-func (vi *Index) pruneDuplicates(candidates []SearchResult) []SearchResult {
-	if len(candidates) <= 1 {
-		// No possibility of duplicates.
-		return candidates
-	}
-
-	if candidates[0].ChildKey.KeyBytes == nil {
-		// Only leaf partitions can have duplicates.
-		return candidates
-	}
-
-	// TODO DURING REVIEW: this is O(n * log(n)) instead of O(n) like the previous
-	// code, but is probably faster in practice for small values of n because it
-	// is allocation free. It is also cleaner and easier to understand. Choose an
-	// approach.
-	slices.SortFunc(candidates, func(a, b SearchResult) int {
-		return bytes.Compare(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
-	return slices.CompactFunc(candidates, func(a, b SearchResult) bool {
-		return bytes.Equal(a.ChildKey.KeyBytes, b.ChildKey.KeyBytes)
-	})
 }
 
 // rerankSearchResults updates the given set of candidates with their exact
@@ -896,6 +918,10 @@ type FormatOptions struct {
 	// PrimaryKeyStrings, if true, indicates that primary key bytes should be
 	// interpreted as strings. This is used for testing scenarios.
 	PrimaryKeyStrings bool
+	// RootPartitionKey is the key of the partition that is used as the root of
+	// the formatted output. If this is InvalidKey, then RootKey is used by
+	// default.
+	RootPartitionKey PartitionKey
 }
 
 // Format formats the vector index as a tree-formatted string similar to this,
@@ -911,7 +937,7 @@ type FormatOptions struct {
 // values are rounded to 4 decimal places. Centroids are printed next to
 // partition keys.
 func (vi *Index) Format(
-	ctx context.Context, idxCtx *Context, treeKey TreeKey, options FormatOptions,
+	ctx context.Context, treeKey TreeKey, options FormatOptions,
 ) (str string, err error) {
 	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
@@ -931,8 +957,26 @@ func (vi *Index) Format(
 
 	var helper func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error
 	helper = func(partitionKey PartitionKey, parentPrefix string, childPrefix string) error {
-		partition, err := idxCtx.txn.GetPartition(ctx, treeKey, partitionKey)
+		partition, err := vi.store.TryGetPartition(ctx, treeKey, partitionKey)
 		if err != nil {
+			if errors.Is(err, ErrPartitionNotFound) {
+				// Something else might be modifying the tree as we're trying to
+				// print it. Fallback to showing MISSING.
+				buf.WriteString(parentPrefix)
+				buf.WriteString("• ")
+				buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
+
+				// If this is the root partition, then show synthesized empty
+				// partition.
+				if partitionKey == RootKey {
+					centroid := make(vector.T, vi.quantizer.GetDims())
+					buf.WriteByte(' ')
+					utils.WriteVector(&buf, centroid, 4)
+				} else {
+					buf.WriteString(" (MISSING)\n")
+				}
+				return nil
+			}
 			return err
 		}
 		// Get centroid for the partition and un-randomize it so that it displays
@@ -945,6 +989,12 @@ func (vi *Index) Format(
 		buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
 		buf.WriteByte(' ')
 		utils.WriteVector(&buf, original, 4)
+		details := partition.Metadata().StateDetails
+		if details.State != ReadyState {
+			buf.WriteString(" [")
+			buf.WriteString(details.String())
+			buf.WriteByte(']')
+		}
 		buf.WriteByte('\n')
 
 		if partition.Count() == 0 {
@@ -964,7 +1014,10 @@ func (vi *Index) Format(
 
 			if partition.Level() == LeafLevel {
 				refs := []VectorWithKey{{Key: childKey}}
-				if err = idxCtx.txn.GetFullVectors(ctx, treeKey, refs); err != nil {
+				err = vi.store.RunTransaction(ctx, func(tx Txn) error {
+					return tx.GetFullVectors(ctx, treeKey, refs)
+				})
+				if err != nil {
 					return err
 				}
 				buf.WriteString(parentPrefix)
@@ -998,7 +1051,11 @@ func (vi *Index) Format(
 		return nil
 	}
 
-	if err = helper(RootKey, "", ""); err != nil {
+	rootKey := options.RootPartitionKey
+	if rootKey == InvalidKey {
+		rootKey = RootKey
+	}
+	if err = helper(rootKey, "", ""); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

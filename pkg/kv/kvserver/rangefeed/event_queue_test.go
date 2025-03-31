@@ -135,7 +135,7 @@ func TestEventQueue(t *testing.T) {
 		ctx := context.Background()
 		s := cluster.MakeTestingClusterSettings()
 		m := mon.NewMonitor(mon.Options{
-			Name:      mon.MakeMonitorName("rangefeed"),
+			Name:      mon.MakeName("rangefeed"),
 			Increment: 1,
 			Settings:  s,
 		})

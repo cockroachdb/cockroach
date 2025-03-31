@@ -45,7 +45,7 @@ enum Strength {
   // transactions are forced to restart. See the comment on txnSpanRefresher
   // for more.
   None = 0;
-  
+
   // Shared (S) locks are used by read-only operations and allow concurrent
   // transactions to read under pessimistic concurrency control. Shared locks
   // are compatible with each other but are not compatible with Update or

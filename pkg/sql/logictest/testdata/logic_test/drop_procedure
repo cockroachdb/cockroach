@@ -193,3 +193,11 @@ statement ok
 DROP PROCEDURE p114677(t114677);
 
 subtest end
+
+# Regression test for #142886 - we should be able to drop a procedure by
+# specifying the input type but without type width.
+statement ok
+CREATE PROCEDURE p142886(p VARCHAR(10)) LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP PROCEDURE p142886(VARCHAR);

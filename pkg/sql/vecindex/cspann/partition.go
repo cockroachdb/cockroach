@@ -40,46 +40,32 @@ type KeyBytes []byte
 // columns.
 type ValueBytes []byte
 
-// Level specifies a level in the K-means tree. Levels are numbered from leaf to
-// root, in ascending order, with the leaf level always equal to one.
-type Level uint32
-
-const (
-	// InvalidLevel is the default (invalid) value for a K-means tree level.
-	InvalidLevel Level = 0
-	// LeafLevel is the well-known identifier for the K-means leaf level.
-	LeafLevel Level = 1
-	// SecondLevel is the well-known identifier for the level above the leaf
-	// level.
-	SecondLevel Level = 2
-)
-
 // Partition contains a set of quantized vectors that are clustered around a
 // centroid in some level of the K-means tree. Each vector is associated with a
 // primary key if this is a leaf partition, or a child partition key if this is
 // a branch/root partition.
 type Partition struct {
+	metadata     PartitionMetadata
 	quantizer    quantize.Quantizer
 	quantizedSet quantize.QuantizedVectorSet
 	childKeys    []ChildKey
 	valueBytes   []ValueBytes
-	level        Level
 }
 
 // NewPartition constructs a new partition.
 func NewPartition(
+	metadata PartitionMetadata,
 	quantizer quantize.Quantizer,
 	quantizedSet quantize.QuantizedVectorSet,
 	childKeys []ChildKey,
 	valueBytes []ValueBytes,
-	level Level,
 ) *Partition {
 	return &Partition{
+		metadata:     metadata,
 		quantizer:    quantizer,
 		quantizedSet: quantizedSet,
 		childKeys:    childKeys,
 		valueBytes:   valueBytes,
-		level:        level,
 	}
 }
 
@@ -87,20 +73,17 @@ func NewPartition(
 // do not affect the other.
 func (p *Partition) Clone() *Partition {
 	return &Partition{
+		metadata:     p.metadata,
 		quantizer:    p.quantizer,
 		quantizedSet: p.quantizedSet.Clone(),
 		childKeys:    slices.Clone(p.childKeys),
 		valueBytes:   slices.Clone(p.valueBytes),
-		level:        p.level,
 	}
 }
 
 // Metadata returns metadata for the partition.
-func (p *Partition) Metadata() PartitionMetadata {
-	return PartitionMetadata{
-		Level:    p.Level(),
-		Centroid: p.quantizedSet.GetCentroid(),
-	}
+func (p *Partition) Metadata() *PartitionMetadata {
+	return &p.metadata
 }
 
 // Count is the number of quantized vectors in the partition.
@@ -111,7 +94,7 @@ func (p *Partition) Count() int {
 // Level is the level of this partition in the K-means tree. The leaf level
 // always has the well-known value of one.
 func (p *Partition) Level() Level {
-	return p.level
+	return p.metadata.Level
 }
 
 // Quantizer is the quantizer used to quantize vectors in this partition.
@@ -167,7 +150,7 @@ func (p *Partition) Search(
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
 	for i := range tempSquaredDistances {
-		searchSet.result = SearchResult{
+		searchSet.tempResult = SearchResult{
 			QuerySquaredDistance: tempSquaredDistances[i],
 			ErrorBound:           tempErrorBounds[i],
 			CentroidDistance:     centroidDistances[i],
@@ -175,21 +158,28 @@ func (p *Partition) Search(
 			ChildKey:             p.childKeys[i],
 			ValueBytes:           p.valueBytes[i],
 		}
-		searchSet.Add(&searchSet.result)
+		searchSet.Add(&searchSet.tempResult)
 	}
 
-	return p.level, count
+	return p.Level(), count
 }
 
 // Add quantizes the given vector as part of this partition. If a vector with
-// the same key is already in the partition, update its value and return false.
+// the same key is already in the partition, update its value if "overwrite" is
+// true, else no-op. Return true if no duplicate was found and a new vector was
+// added to the partition.
 func (p *Partition) Add(
-	w *workspace.T, vec vector.T, childKey ChildKey, valueBytes ValueBytes,
+	w *workspace.T, vec vector.T, childKey ChildKey, valueBytes ValueBytes, overwrite bool,
 ) bool {
 	offset := p.Find(childKey)
 	if offset != -1 {
-		// Remove the vector from the partition and re-add it below.
-		p.ReplaceWithLast(offset)
+		if overwrite {
+			// Remove the vector from the partition and re-add it below.
+			p.ReplaceWithLast(offset)
+		} else {
+			// Skip the add.
+			return false
+		}
 	}
 
 	vectorSet := vec.AsSet()
@@ -198,6 +188,31 @@ func (p *Partition) Add(
 	p.valueBytes = append(p.valueBytes, valueBytes)
 
 	return offset == -1
+}
+
+// AddSet quantizes the given set of vectors as part of this partition. If a
+// vector with the same key is already in the partition, its value is
+// overwritten if "overwrite" is true, else it is not added. If at least one
+// vector was added to the set, then AddSet returns true.
+//
+// NOTE: AddSet assumes that there are no duplicate keys in the input set.
+func (p *Partition) AddSet(
+	w *workspace.T, vectors vector.Set, childKeys []ChildKey, valueBytes []ValueBytes, overwrite bool,
+) bool {
+	if p.Count() > 0 {
+		// Check for duplicates.
+		added := false
+		for i := range vectors.Count {
+			added = p.Add(w, vectors.At(i), childKeys[i], valueBytes[i], overwrite) || added
+		}
+		return added
+	}
+
+	// No duplicates possible here, so add all vectors to the partition.
+	p.quantizer.QuantizeInSet(w, p.quantizedSet, vectors)
+	p.childKeys = append(p.childKeys, childKeys...)
+	p.valueBytes = append(p.valueBytes, valueBytes...)
+	return len(childKeys) > 0
 }
 
 // ReplaceWithLast removes the quantized vector at the given offset from the
@@ -240,9 +255,7 @@ func (p *Partition) Find(childKey ChildKey) int {
 
 // CreateEmptyPartition returns an empty partition for the given quantizer and
 // level.
-func CreateEmptyPartition(quantizer quantize.Quantizer, level Level) *Partition {
-	var workspace workspace.T
-	var empty vector.Set
-	quantizedSet := quantizer.Quantize(&workspace, empty)
-	return NewPartition(quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil), level)
+func CreateEmptyPartition(quantizer quantize.Quantizer, metadata PartitionMetadata) *Partition {
+	quantizedSet := quantizer.NewQuantizedVectorSet(0, metadata.Centroid)
+	return NewPartition(metadata, quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil))
 }

@@ -49,8 +49,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/petermattis/goid"
 )
 
@@ -128,12 +128,7 @@ type testRunner struct {
 	stopper *stop.Stopper
 
 	config struct {
-		// skipClusterValidationOnAttach skips validation on existing clusters that
-		// the registry uses for running tests.
-		skipClusterValidationOnAttach bool
-		// skipClusterStopOnAttach skips stopping existing clusters that
-		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
-		skipClusterStopOnAttach bool
+		// Skips wiping the cluster unless roachtestflags.ClusterWipe is set.
 		skipClusterWipeOnAttach bool
 		// disableIssue disables posting GitHub issues for test failures.
 		disableIssue bool
@@ -145,10 +140,11 @@ type testRunner struct {
 
 	status struct {
 		syncutil.Mutex
-		running map[*testImpl]struct{}
-		pass    map[*testImpl]struct{}
-		fail    map[*testImpl]struct{}
-		skip    map[*testImpl]struct{}
+		running     map[*testImpl]struct{}
+		pass        map[*testImpl]struct{}
+		fail        map[*testImpl]struct{}
+		skip        map[*testImpl]struct{}
+		skipDetails map[*testImpl]string
 	}
 
 	// cr keeps track of all live clusters.
@@ -378,6 +374,7 @@ func (r *testRunner) Run(
 	r.status.pass = make(map[*testImpl]struct{})
 	r.status.fail = make(map[*testImpl]struct{})
 	r.status.skip = make(map[*testImpl]struct{})
+	r.status.skipDetails = make(map[*testImpl]string)
 
 	r.work = newWorkPool(tests, count)
 	errs := &workerErrors{}
@@ -495,7 +492,9 @@ func generateRunID(cOpts clustersOpt) string {
 	return fmt.Sprintf("%s-%s", cOpts.user, cOpts.clusterID)
 }
 
-func (r *testRunner) allocateCluster(
+// If clustersOpt.clusterName is empty, create a fresh cluster; otherwise, attempt to attach to the existing cluster.
+// If the existing cluster isn't found, we fall back to creating a new cluster. Otherwise, we bail out with an error.
+func (r *testRunner) allocateOrAttachToCluster(
 	ctx context.Context,
 	clusterFactory *clusterFactory,
 	clustersOpt clustersOpt,
@@ -523,22 +522,23 @@ func (r *testRunner) allocateCluster(
 		}
 		defer clusterL.Close()
 		opt := attachOpt{
-			skipValidation: r.config.skipClusterValidationOnAttach,
-			skipStop:       r.config.skipClusterStopOnAttach,
-			skipWipe:       r.config.skipClusterWipeOnAttach,
+			skipWipe: r.config.skipClusterWipeOnAttach,
 		}
 		// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
 		// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
 		// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
 		lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
-		c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
-		if err == nil {
+		if c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr); err != nil {
+			// If the cluster is not found, we fall through to create a new cluster. Otherwise, we bail out.
+			if errors.Is(err, errClusterNotFound) {
+				lopt.l.PrintfCtx(ctx, "Error attaching to existing cluster %s: %s", existingClusterName, err)
+			} else {
+				return nil, nil, err
+			}
+		} else {
 			// Pretend pre-existing's cluster architecture matches the desired one; see the above TODO wrt validation.
 			c.arch = arch
 			return c, nil, nil
-		}
-		if !errors.Is(err, errClusterNotFound) {
-			return nil, nil, err
 		}
 		// Fall through to create new cluster with name override.
 		lopt.l.PrintfCtx(
@@ -763,7 +763,7 @@ func (r *testRunner) runWorker(
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
-			c, vmCreateOpts, clusterCreateErr = r.allocateCluster(
+			c, vmCreateOpts, clusterCreateErr = r.allocateOrAttachToCluster(
 				ctx, clusterFactory, clustersOpt, lopt,
 				testToRun.spec, arch, wStatus)
 
@@ -843,7 +843,7 @@ func (r *testRunner) runWorker(
 			cockroach:              cockroach[arch],
 			cockroachEA:            cockroachEA[arch],
 			deprecatedWorkload:     workload[arch],
-			buildVersion:           binaryVersion,
+			buildVersion:           &binaryVersion,
 			artifactsDir:           testArtifactsDir,
 			artifactsSpec:          artifactsSpec,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
@@ -1188,9 +1188,9 @@ func (r *testRunner) runTest(
 			// service messages else the test will be reported as having run twice.
 			if roachtestflags.TeamCity {
 				shout(ctx, l, stdout, "##teamcity[testIgnored name='%s' message='%s' duration='%d']\n",
-					s.Name, TeamCityEscape(s.Skip), t.duration().Milliseconds())
+					s.Name, TeamCityEscape(skipDetails(s)), t.duration().Milliseconds())
 			}
-			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", s.Skip)
+			shout(ctx, l, stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "N/A", skipDetails(s))
 		} else {
 			// Delaying the ##teamcity[testStarted...] service message until the test is finished allows us to branch
 			// separately for skipped tests. The duration of the test is passed to ##teamcity[testFinished...] for
@@ -1287,8 +1287,9 @@ func (r *testRunner) runTest(
 			run:     runNum,
 			start:   t.start,
 			end:     t.end,
-			pass:    !t.Failed(),
+			pass:    !t.Failed() && s.Skip == "",
 			failure: t.failureMsg(),
+			skip:    skipDetails(s),
 		})
 		r.status.Lock()
 		delete(r.status.running, t)
@@ -1304,6 +1305,7 @@ func (r *testRunner) runTest(
 				}
 			} else if s.Skip != "" {
 				r.status.skip[t] = struct{}{}
+				r.status.skipDetails[t] = skipDetails(s)
 			} else {
 				r.status.pass[t] = struct{}{}
 			}
@@ -1753,8 +1755,11 @@ func (r *testRunner) collectArtifacts(
 		if err := c.FetchPebbleCheckpoints(ctx, t.L()); err != nil {
 			t.L().Printf("failed to fetch Pebble checkpoints: %s", err)
 		}
-		if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
-			t.L().Printf("failed to fetch timeseries data: %s", err)
+		// Bypass the collection of timeseries data for "large" clusters.
+		if c.spec.NodeCount < 30 {
+			if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
+				t.L().Printf("failed to fetch timeseries data: %s", err)
+			}
 		}
 		if err := c.FetchDebugZip(ctx, t.L(), "debug.zip"); err != nil {
 			t.L().Printf("failed to collect zip: %s", err)
@@ -2124,6 +2129,7 @@ type completedTestInfo struct {
 	end     time.Time
 	pass    bool
 	failure string
+	skip    string
 }
 
 type workerErrors struct {

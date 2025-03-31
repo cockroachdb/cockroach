@@ -3093,7 +3093,8 @@ func populateQueryLevelStats(
 	trace := ih.sp.GetRecording(tracingpb.RecordingStructured)
 	var err error
 	queryLevelStats, err := execstats.GetQueryLevelStats(
-		trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
+		trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata,
+	)
 	queryLevelStatsWithErr := execstats.MakeQueryLevelStatsWithErr(queryLevelStats, err)
 	ih.queryLevelStatsWithErr = &queryLevelStatsWithErr
 	if err != nil {
@@ -4180,11 +4181,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		discardedStats := ex.statsCollector.EndTransaction(
-			ctx,
-			transactionFingerprintID,
-			implicit,
-		)
+		discardedStats := ex.statsCollector.EndTransaction(ctx, transactionFingerprintID)
 		if discardedStats > 0 {
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
 		}
@@ -4334,6 +4331,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
+		FingerprintID:           transactionFingerprintID,
 		SessionID:               ex.planner.extendedEvalCtx.SessionID,
 		TransactionID:           ev.txnID,
 		TransactionTimeSec:      elapsedTime.Seconds(),
@@ -4359,8 +4357,9 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add qos
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
-		SessionData: ex.sessionData(),
-		TxnErr:      txnErr,
+		TxnErr:         txnErr,
+		Application:    ex.applicationName.Load().(string),
+		UserNormalized: ex.sessionData().User().Normalized(),
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
@@ -4380,13 +4379,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		)
 	}
 
-	ex.statsCollector.ObserveTransaction(ctx, transactionFingerprintID, recordedTxnStats)
-
-	return ex.statsCollector.RecordTransaction(
-		ctx,
-		transactionFingerprintID,
-		recordedTxnStats,
-	)
+	return ex.statsCollector.RecordTransaction(ctx, recordedTxnStats)
 }
 
 // Records a SERIALIZATION_CONFLICT contention event to the contention registry event

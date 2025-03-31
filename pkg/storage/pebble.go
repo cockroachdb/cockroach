@@ -1160,9 +1160,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				p.writePreventStartupFile(ctx, info.Details)
 				log.Fatalf(ctx, "local corruption detected: %+v", info.Details)
 			} else {
-				// TODO: schedule an excise the corrupted table and change this to Errorf.
-				p.writePreventStartupFile(ctx, info.Details)
-				log.Fatalf(ctx, "remote corruption detected: %+v", info.Details)
+				log.Errorf(ctx, "remote corruption detected: %+v", info.Details)
 			}
 		},
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {

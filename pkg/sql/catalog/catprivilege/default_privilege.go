@@ -118,6 +118,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 			return err
 		}
 	}
+	d.removeRoleIfEmptyPrivileges(role, defaultPrivilegesForRole)
 	return nil
 }
 
@@ -135,14 +136,20 @@ func (d *Mutable) RevokeDefaultPrivileges(
 			return err
 		}
 	}
+	d.removeRoleIfEmptyPrivileges(role, defaultPrivilegesForRole)
+	return nil
+}
 
+// removeRoleIfEmptyPrivilegesc checks if there are any default privileges for
+// the given role remaining on the descriptor. If there are no privileges left
+// remaining and the descriptor is in the default state, the role is removed.
+func (d *Mutable) removeRoleIfEmptyPrivileges(
+	role catpb.DefaultPrivilegesRole, defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
+) {
 	defaultPrivilegesPerObject := defaultPrivilegesForRole.DefaultPrivilegesPerObject
-	// Check if there are any default privileges remaining on the descriptor.
-	// If there are no privileges left remaining and the descriptor is in the
-	// default state, we can remove it.
 	for _, defaultPrivs := range defaultPrivilegesPerObject {
 		if len(defaultPrivs.Users) != 0 {
-			return nil
+			return
 		}
 	}
 
@@ -155,12 +162,11 @@ func (d *Mutable) RevokeDefaultPrivileges(
 			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Schemas) ||
 			!GetPublicHasUsageOnTypes(defaultPrivilegesForRole) ||
 			!GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole)) {
-		return nil
+		return
 	}
 
 	// There no entries remaining, remove the entry for the role.
 	d.defaultPrivilegeDescriptor.RemoveUser(role)
-	return nil
 }
 
 // CreatePrivilegesFromDefaultPrivileges creates privileges for a

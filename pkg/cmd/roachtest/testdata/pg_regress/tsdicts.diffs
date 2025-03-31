@@ -1,0 +1,1077 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tsdicts.out --label=/mnt/data1/postgres/src/test/regress/results/tsdicts.out /mnt/data1/postgres/src/test/regress/expected/tsdicts.out /mnt/data1/postgres/src/test/regress/results/tsdicts.out
+--- /mnt/data1/postgres/src/test/regress/expected/tsdicts.out
++++ /mnt/data1/postgres/src/test/regress/results/tsdicts.out
+@@ -5,505 +5,439 @@
+                         DictFile=ispell_sample,
+                         AffFile=ispell_sample
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY ispell (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'skies');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'bookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'booking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'foot');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'foots');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'rebookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'rebooking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'rebook');
+- ts_lexize 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'unbookings');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'unbooking');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'unbook');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'footklubber');
+-   ts_lexize    
+-----------------
+- {foot,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'footballklubber');
+-                      ts_lexize                       
+-------------------------------------------------------
+- {footballklubber,foot,ball,klubber,football,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'ballyklubber');
+-   ts_lexize    
+-----------------
+- {ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('ispell', 'footballyklubber');
+-      ts_lexize      
+----------------------
+- {foot,ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Test ISpell dictionary with hunspell affix file
+ CREATE TEXT SEARCH DICTIONARY hunspell (
+                         Template=ispell,
+                         DictFile=ispell_sample,
+                         AffFile=hunspell_sample
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'skies');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'bookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'booking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'foot');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'foots');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'rebookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'rebooking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'rebook');
+- ts_lexize 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'unbookings');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'unbooking');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'unbook');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'footklubber');
+-   ts_lexize    
+-----------------
+- {foot,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'footballklubber');
+-                      ts_lexize                       
+-------------------------------------------------------
+- {footballklubber,foot,ball,klubber,football,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'ballyklubber');
+-   ts_lexize    
+-----------------
+- {ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell', 'footballyklubber');
+-      ts_lexize      
+----------------------
+- {foot,ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Test ISpell dictionary with hunspell affix file with FLAG long parameter
+ CREATE TEXT SEARCH DICTIONARY hunspell_long (
+                         Template=ispell,
+                         DictFile=hunspell_sample_long,
+                         AffFile=hunspell_sample_long
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_long (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'skies');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'bookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'booking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'foot');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'foots');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'rebookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'rebooking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'rebook');
+- ts_lexize 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'unbookings');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'unbooking');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'unbook');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'booked');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'footklubber');
+-   ts_lexize    
+-----------------
+- {foot,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'footballklubber');
+-                      ts_lexize                       
+-------------------------------------------------------
+- {footballklubber,foot,ball,klubber,football,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'ballyklubber');
+-   ts_lexize    
+-----------------
+- {ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'ballsklubber');
+-   ts_lexize    
+-----------------
+- {ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'footballyklubber');
+-      ts_lexize      
+----------------------
+- {foot,ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_long', 'ex-machina');
+-   ts_lexize   
+----------------
+- {ex-,machina}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Test ISpell dictionary with hunspell affix file with FLAG num parameter
+ CREATE TEXT SEARCH DICTIONARY hunspell_num (
+                         Template=ispell,
+                         DictFile=hunspell_sample_num,
+                         AffFile=hunspell_sample_num
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_num (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'skies');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'sk');
+- ts_lexize 
+------------
+- {sky}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'bookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'booking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'foot');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'foots');
+- ts_lexize 
+------------
+- {foot}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'rebookings');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'rebooking');
+-   ts_lexize    
+-----------------
+- {booking,book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'rebook');
+- ts_lexize 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'unbookings');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'unbooking');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'unbook');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'booked');
+- ts_lexize 
+------------
+- {book}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'footklubber');
+-   ts_lexize    
+-----------------
+- {foot,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'footballklubber');
+-                      ts_lexize                       
+-------------------------------------------------------
+- {footballklubber,foot,ball,klubber,football,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'ballyklubber');
+-   ts_lexize    
+-----------------
+- {ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('hunspell_num', 'footballyklubber');
+-      ts_lexize      
+----------------------
+- {foot,ball,klubber}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Test suitability of affix and dict files
+ CREATE TEXT SEARCH DICTIONARY hunspell_err (
+ 						Template=ispell,
+ 						DictFile=ispell_sample,
+ 						AffFile=hunspell_sample_long
+ );
+-ERROR:  invalid affix alias "GJUS"
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_err (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE TEXT SEARCH DICTIONARY hunspell_err (
+ 						Template=ispell,
+ 						DictFile=ispell_sample,
+ 						AffFile=hunspell_sample_num
+ );
+-ERROR:  invalid affix flag "SZ\"
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_err (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE TEXT SEARCH DICTIONARY hunspell_invalid_1 (
+ 						Template=ispell,
+ 						DictFile=hunspell_sample_long,
+ 						AffFile=ispell_sample
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_invalid_1 (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE TEXT SEARCH DICTIONARY hunspell_invalid_2 (
+ 						Template=ispell,
+ 						DictFile=hunspell_sample_long,
+ 						AffFile=hunspell_sample_num
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_invalid_2 (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE TEXT SEARCH DICTIONARY hunspell_invalid_3 (
+ 						Template=ispell,
+ 						DictFile=hunspell_sample_num,
+ 						AffFile=ispell_sample
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_invalid_3 (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ CREATE TEXT SEARCH DICTIONARY hunspell_err (
+ 						Template=ispell,
+ 						DictFile=hunspell_sample_num,
+ 						AffFile=hunspell_sample_long
+ );
+-ERROR:  invalid affix alias "302,301,202,303"
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY hunspell_err (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Synonym dictionary
+ CREATE TEXT SEARCH DICTIONARY synonym (
+ 						Template=synonym,
+ 						Synonyms=synonym_sample
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY synonym (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('synonym', 'PoStGrEs');
+- ts_lexize 
+------------
+- {pgsql}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('synonym', 'Gogle');
+- ts_lexize 
+------------
+- {googl}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('synonym', 'indices');
+- ts_lexize 
+------------
+- {index}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- test altering boolean parameters
+ SELECT dictinitoption FROM pg_ts_dict WHERE dictname = 'synonym';
+-       dictinitoption        
+------------------------------
+- synonyms = 'synonym_sample'
+-(1 row)
++ dictinitoption 
++----------------
++(0 rows)
+ 
+ ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = 1);
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = 1)
++      ^
++HINT:  try \h ALTER
+ SELECT ts_lexize('synonym', 'PoStGrEs');
+- ts_lexize 
+------------
+- 
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT dictinitoption FROM pg_ts_dict WHERE dictname = 'synonym';
+-                 dictinitoption                 
+-------------------------------------------------
+- synonyms = 'synonym_sample', casesensitive = 1
+-(1 row)
++ dictinitoption 
++----------------
++(0 rows)
+ 
+ ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = 2);  -- fail
+-ERROR:  casesensitive requires a Boolean value
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = 2)
++      ^
++HINT:  try \h ALTER
+ ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = off);
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH DICTIONARY synonym (CaseSensitive = off)
++      ^
++HINT:  try \h ALTER
+ SELECT ts_lexize('synonym', 'PoStGrEs');
+- ts_lexize 
+------------
+- {pgsql}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT dictinitoption FROM pg_ts_dict WHERE dictname = 'synonym';
+-                   dictinitoption                   
+-----------------------------------------------------
+- synonyms = 'synonym_sample', casesensitive = 'off'
+-(1 row)
++ dictinitoption 
++----------------
++(0 rows)
+ 
+ -- Create and simple test thesaurus dictionary
+ -- More tests in configuration checks because ts_lexize()
+@@ -513,172 +447,146 @@
+ 						DictFile=thesaurus_sample,
+ 						Dictionary=english_stem
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY thesaurus (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ SELECT ts_lexize('thesaurus', 'one');
+- ts_lexize 
+------------
+- {1}
+-(1 row)
+-
++ERROR:  ts_lexize(): unimplemented: this function is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ -- Test ispell dictionary in configuration
+ CREATE TEXT SEARCH CONFIGURATION ispell_tst (
+ 						COPY=english
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH CONFIGURATION ispell_tst (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ ALTER TEXT SEARCH CONFIGURATION ispell_tst ALTER MAPPING FOR
+ 	word, numword, asciiword, hword, numhword, asciihword, hword_part, hword_numpart, hword_asciipart
+ 	WITH ispell, english_stem;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION ispell_tst ALTER MAPPING FOR
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('ispell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "ispell_tst" does not exist
+ SELECT to_tsquery('ispell_tst', 'footballklubber');
+-                                to_tsquery                                
+---------------------------------------------------------------------------
+- 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "ispell_tst" does not exist
+ SELECT to_tsquery('ispell_tst', 'footballyklubber:b & rebookings:A & sky');
+-                               to_tsquery                               
+-------------------------------------------------------------------------
+- 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "ispell_tst" does not exist
+ -- Test ispell dictionary with hunspell affix in configuration
+ CREATE TEXT SEARCH CONFIGURATION hunspell_tst (
+ 						COPY=ispell_tst
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH CONFIGURATION hunspell_tst (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE ispell WITH hunspell;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+-                                to_tsquery                                
+---------------------------------------------------------------------------
+- 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
+-                               to_tsquery                               
+-------------------------------------------------------------------------
+- 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballyklubber:b <-> sky');
+-                   to_tsquery                    
+--------------------------------------------------
+- ( 'foot':B & 'ball':B & 'klubber':B ) <-> 'sky'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ SELECT phraseto_tsquery('hunspell_tst', 'footballyklubber sky');
+-             phraseto_tsquery              
+--------------------------------------------
+- ( 'foot' & 'ball' & 'klubber' ) <-> 'sky'
+-(1 row)
+-
++ERROR:  phraseto_tsquery(): text search configuration "hunspell_tst" does not exist
+ -- Test ispell dictionary with hunspell affix with FLAG long in configuration
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE hunspell WITH hunspell_long;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+-                                to_tsquery                                
+---------------------------------------------------------------------------
+- 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
+-                               to_tsquery                               
+-------------------------------------------------------------------------
+- 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ -- Test ispell dictionary with hunspell affix with FLAG num in configuration
+ ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
+ 	REPLACE hunspell_long WITH hunspell_num;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION hunspell_tst ALTER MAPPING
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('hunspell_tst', 'Booking the skies after rebookings for footballklubber from a foot');
+-                                            to_tsvector                                             
+-----------------------------------------------------------------------------------------------------
+- 'ball':7 'book':1,5 'booking':1,5 'foot':7,10 'football':7 'footballklubber':7 'klubber':7 'sky':3
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballklubber');
+-                                to_tsquery                                
+---------------------------------------------------------------------------
+- 'footballklubber' | 'foot' & 'ball' & 'klubber' | 'football' & 'klubber'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ SELECT to_tsquery('hunspell_tst', 'footballyklubber:b & rebookings:A & sky');
+-                               to_tsquery                               
+-------------------------------------------------------------------------
+- 'foot':B & 'ball':B & 'klubber':B & ( 'booking':A | 'book':A ) & 'sky'
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "hunspell_tst" does not exist
+ -- Test synonym dictionary in configuration
+ CREATE TEXT SEARCH CONFIGURATION synonym_tst (
+ 						COPY=english
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH CONFIGURATION synonym_tst (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ ALTER TEXT SEARCH CONFIGURATION synonym_tst ALTER MAPPING FOR
+ 	asciiword, hword_asciipart, asciihword
+ 	WITH synonym, english_stem;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION synonym_tst ALTER MAPPING FOR
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('synonym_tst', 'Postgresql is often called as postgres or pgsql and pronounced as postgre');
+-                    to_tsvector                    
+----------------------------------------------------
+- 'call':4 'often':3 'pgsql':1,6,8,12 'pronounc':10
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
+ SELECT to_tsvector('synonym_tst', 'Most common mistake is to write Gogle instead of Google');
+-                       to_tsvector                        
+-----------------------------------------------------------
+- 'common':2 'googl':7,10 'instead':8 'mistak':3 'write':6
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
+ SELECT to_tsvector('synonym_tst', 'Indexes or indices - Which is right plural form of index?');
+-                 to_tsvector                  
+-----------------------------------------------
+- 'form':8 'index':1,3,10 'plural':7 'right':6
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "synonym_tst" does not exist
+ SELECT to_tsquery('synonym_tst', 'Index & indices');
+-     to_tsquery      
+----------------------
+- 'index' & 'index':*
+-(1 row)
+-
++ERROR:  to_tsquery(): text search configuration "synonym_tst" does not exist
+ -- test thesaurus in configuration
+ -- see thesaurus_sample.ths to understand 'odd' resulting tsvector
+ CREATE TEXT SEARCH CONFIGURATION thesaurus_tst (
+ 						COPY=synonym_tst
+ );
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH CONFIGURATION thesaurus_tst (
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_
+ ALTER TEXT SEARCH CONFIGURATION thesaurus_tst ALTER MAPPING FOR
+ 	asciiword, hword_asciipart, asciihword
+ 	WITH synonym, thesaurus, english_stem;
++ERROR:  at or near "text": syntax error
++DETAIL:  source SQL:
++ALTER TEXT SEARCH CONFIGURATION thesaurus_tst ALTER MAPPING FOR
++      ^
++HINT:  try \h ALTER
+ SELECT to_tsvector('thesaurus_tst', 'one postgres one two one two three one');
+-           to_tsvector            
+-----------------------------------
+- '1':1,5 '12':3 '123':4 'pgsql':2
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
+ SELECT to_tsvector('thesaurus_tst', 'Supernovae star is very new star and usually called supernovae (abbreviation SN)');
+-                         to_tsvector                          
+---------------------------------------------------------------
+- 'abbrevi':10 'call':8 'new':4 'sn':1,9,11 'star':5 'usual':7
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
+ SELECT to_tsvector('thesaurus_tst', 'Booking tickets is looking like a booking a tickets');
+-                      to_tsvector                      
+--------------------------------------------------------
+- 'card':3,10 'invit':2,9 'like':6 'look':5 'order':1,8
+-(1 row)
+-
++ERROR:  to_tsvector(): text search configuration "thesaurus_tst" does not exist
+ -- invalid: non-lowercase quoted identifiers
+ CREATE TEXT SEARCH DICTIONARY tsdict_case
+ (
+@@ -686,4 +594,9 @@
+ 	"DictFile" = ispell_sample,
+ 	"AffFile" = ispell_sample
+ );
+-ERROR:  unrecognized Ispell parameter: "DictFile"
++ERROR:  at or near "search": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TEXT SEARCH DICTIONARY tsdict_case
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/7821/_version_

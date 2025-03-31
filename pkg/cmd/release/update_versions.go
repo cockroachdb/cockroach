@@ -102,6 +102,10 @@ type prRepo struct {
 	workOnRepoError error
 }
 
+type metadata struct {
+	PRs []string `json:"prs"`
+}
+
 func (r prRepo) String() string {
 	return r.owner + "/" + r.repo + "@" + r.branch
 }
@@ -335,8 +339,28 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		workOnRepoErrors = append(workOnRepoErrors, err)
 		log.Printf("%s", err)
 	}
+	if artifactsDir != "" {
+		if err := saveMetadata(artifactsDir, metadata{PRs: prs}); err != nil {
+			err = fmt.Errorf("error saving metadata: %w", err)
+			workOnRepoErrors = append(workOnRepoErrors, err)
+			log.Printf("%s", err)
+		}
+	}
 	if len(workOnRepoErrors) > 0 {
 		return errors.Join(workOnRepoErrors...)
+	}
+	return nil
+}
+
+func saveMetadata(dir string, meta metadata) error {
+	dest := path.Join(dir, "prs.json")
+	log.Printf("saving metadata to %s", dest)
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling PR metadata: %w", err)
+	}
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
+		return fmt.Errorf("error writing PR metadata file: %w", err)
 	}
 	return nil
 }
@@ -436,12 +460,8 @@ func generateRepoList(
 			log.Printf("not bumping version on staging branch %s", branch)
 			continue
 		}
-		ok, err := fileExistsInGit(branch, versionFile)
-		if err != nil {
-			return []prRepo{}, fmt.Errorf("checking version file: %w", err)
-		}
-		if !ok {
-			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", branch, versionFile)
+		if branch == fmt.Sprintf("release-%s-rc", releasedVersion.String()) {
+			log.Printf("not bumping version on the same branch %s", branch)
 			continue
 		}
 		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFile)
@@ -522,7 +542,7 @@ func generateRepoList(
 	// 5. Merge baking branch back to the release branch.
 	maybeBakingbranches := []string{
 		fmt.Sprintf("release-%s-rc", releasedVersion.String()), // e.g. release-23.1.17-rc
-		fmt.Sprintf("staging-%s", releasedVersion.Original()),  // e.g. staging-v23.1.17
+		fmt.Sprintf("staging-v%s", releasedVersion.String()),   // e.g. staging-v23.1.17
 	}
 	var bakingBranches []string
 	for _, branch := range maybeBakingbranches {
@@ -535,8 +555,23 @@ func generateRepoList(
 	if len(bakingBranches) > 1 {
 		return []prRepo{}, fmt.Errorf("too many baking branches: %s", strings.Join(maybeBakingbranches, ", "))
 	}
+	// 6. Merge baking branch to the main release branch (e.g. release-25.1).
+	// For pre-releases we may have no baking branches, thus we use `for` loop
+	// to simplify the code.
 	for _, mergeBranch := range bakingBranches {
 		baseBranch := fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())
+		// Sometimes there are no changes on the baking/staging branches and a merge is not needed.
+		alreadyOnBaseBranch, err := isAncestor(mergeBranch, baseBranch)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("checking if %s is ancestor of %s: %w", baseBranch, mergeBranch, err)
+		}
+		if alreadyOnBaseBranch {
+			log.Printf("skipping merge of %s to %s, because %s is already an ancestor of %s", mergeBranch, baseBranch, mergeBranch, baseBranch)
+			continue
+		}
+		// TODO: add a check to make sure the merge generates no unexpected
+		// changes (we can ignore version.txt changes). The "ours" strategy
+		// doesn't account for changes in the merge branch.
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
@@ -545,13 +580,75 @@ func generateRepoList(
 			githubUsername: "cockroach-teamcity",
 			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, baseBranch), releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
-				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", "origin/"+mergeBranch)
+				cmd := exec.Command("git", "merge", "-s", "ours", "--no-commit", remoteOrigin+"/"+mergeBranch)
 				cmd.Dir = gitDir
 				out, err := cmd.CombinedOutput()
 				if err != nil {
 					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
 				}
 				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
+				return nil
+			},
+		}
+		reposToWorkOn = append(reposToWorkOn, repo)
+	}
+	// 7. Merge staging branch to the next release RC branch if it is present.
+	for _, mergeBranch := range bakingBranches {
+		// When we have extraordinary releases, we may have next release RC
+		// branches created. Make sure we merge this branch to the RC branch
+		// only if there are changes.
+		if !strings.HasPrefix(mergeBranch, "staging-") {
+			log.Printf("skipping merge of %s, because it's not a staging branch", mergeBranch)
+			continue
+		}
+		nextRCBranch := fmt.Sprintf("release-%s-rc", nextVersion.String())
+		maybeNextReleaseRCBranches, err := listRemoteBranches(nextRCBranch)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("listing rc branch %s: %w", nextRCBranch, err)
+		}
+		if len(maybeNextReleaseRCBranches) < 1 {
+			log.Printf("no next release RC branches found, skipping merge to %s", nextRCBranch)
+			continue
+		}
+		alreadyOnRCBranch, err := isAncestor(mergeBranch, nextRCBranch)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("checking if %s is ancestor of %s: %w", mergeBranch, nextRCBranch, err)
+		}
+		if alreadyOnRCBranch {
+			log.Printf("skipping merge of %s to %s, because %s is already an ancestor of %s", mergeBranch, nextRCBranch, mergeBranch, nextRCBranch)
+			continue
+		}
+		// try to merge and see if anything is changed, ignore version.txt changes.
+		createsMergeCommit, err := mergeCreatesContentChanges(mergeBranch, nextRCBranch, []string{versionFile})
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("checking if merge creates content changes: %w", err)
+		}
+		if !createsMergeCommit {
+			log.Printf("skipping merge of %s to %s, because the merge does not create content changes", mergeBranch, nextRCBranch)
+			continue
+		}
+		repo := prRepo{
+			owner:          owner,
+			repo:           prefix + "cockroach",
+			branch:         nextRCBranch,
+			prBranch:       fmt.Sprintf("merge-%s-to-%s-%s", mergeBranch, nextRCBranch, randomString(4)),
+			githubUsername: "cockroach-teamcity",
+			commitMessage:  generateCommitMessage(fmt.Sprintf("merge %s to %s", mergeBranch, nextRCBranch), releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				cmd := exec.Command("git", "merge", "-X", "ours", "--strategy=recursive", "--no-commit", "--no-ff", remoteOrigin+"/"+mergeBranch)
+				cmd.Dir = gitDir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
+				}
+				log.Printf("ran '%s': %s\n", cmd.String(), string(out))
+				coCmd := exec.Command("git", "checkout", remoteOrigin+"/"+nextRCBranch, "--", versionFile)
+				coCmd.Dir = gitDir
+				out, err = coCmd.CombinedOutput()
+				if err != nil {
+					return fmt.Errorf("failed running '%s' with message '%s': %w", coCmd.String(), string(out), err)
+				}
+				log.Printf("ran '%s': %s\n", coCmd.String(), string(out))
 				return nil
 			},
 		}

@@ -20,7 +20,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
@@ -32,7 +31,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -65,7 +63,6 @@ go_test(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",

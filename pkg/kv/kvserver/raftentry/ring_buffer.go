@@ -33,7 +33,7 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 	if it := last(b); it.valid(b) && kvpb.RaftIndex(ents[0].Index) > it.index(b)+1 {
 		// If ents is non-contiguous and later than the currently cached range then
 		// remove the current entries and add ents in their place.
-		removedBytes, removedEntries := b.clearTo(it.index(b) + 1)
+		removedBytes, removedEntries := b.clearTo(it.index(b))
 		addedBytes, addedEntries = -1*removedBytes, -1*removedEntries
 	}
 	before, after, ok := computeExtension(b, kvpb.RaftIndex(ents[0].Index), kvpb.RaftIndex(ents[len(ents)-1].Index))
@@ -97,7 +97,7 @@ func (b *ringBuf) truncateFrom(lo kvpb.RaftIndex) (removedBytes, removedEntries 
 	return removedBytes, removedEntries
 }
 
-// clearTo clears all entries from the ringBuf with index less than hi. The
+// clearTo clears all entries from the ringBuf with index <= hi. The
 // method returns the aggregate size and count of entries removed.
 func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32) {
 	if b.len == 0 || hi < first(b).index(b) {
@@ -105,18 +105,14 @@ func (b *ringBuf) clearTo(hi kvpb.RaftIndex) (removedBytes, removedEntries int32
 	}
 	it := first(b)
 	ok := it.valid(b) // true
-	firstIndex := it.index(b)
-	for ok && it.index(b) < hi {
+	for ok && it.index(b) <= hi {
 		removedBytes += int32(it.entry(b).Size())
 		removedEntries++
 		it.clear(b)
 		it, ok = it.next(b)
 	}
-	offset := int(hi - firstIndex)
-	if offset > b.len {
-		offset = b.len
-	}
-	b.len = b.len - offset
+	offset := int(removedEntries)
+	b.len -= offset
 	b.head = (b.head + offset) % len(b.buf)
 	if b.len < (len(b.buf) / shrinkThreshold) {
 		realloc(b, 0, b.len)

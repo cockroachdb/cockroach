@@ -4,6 +4,7 @@ go_library(
     name = "storeliveness",
     srcs = [
         "config.go",
+        "doc.go",
         "fabric.go",
         "metrics.go",
         "node_manager.go",

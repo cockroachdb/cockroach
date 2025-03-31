@@ -655,6 +655,14 @@ func (n *createTableNode) Input(i int) (planNode, error) {
 	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }
 
+func (n *createTableNode) SetInput(i int, p planNode) error {
+	if i == 0 && n.n.As() {
+		n.input = p
+		return nil
+	}
+	return errors.AssertionFailedf("input index %d is out of range", i)
+}
+
 func qualifyFKColErrorWithDB(
 	ctx context.Context,
 	db catalog.DatabaseDescriptor,

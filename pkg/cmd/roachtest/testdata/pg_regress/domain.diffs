@@ -1,0 +1,2897 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/domain.out --label=/mnt/data1/postgres/src/test/regress/results/domain.out /mnt/data1/postgres/src/test/regress/expected/domain.out /mnt/data1/postgres/src/test/regress/results/domain.out
+--- /mnt/data1/postgres/src/test/regress/expected/domain.out
++++ /mnt/data1/postgres/src/test/regress/results/domain.out
+@@ -3,38 +3,83 @@
+ --
+ -- Test Comment / Drop
+ create domain domaindroptest int4;
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domaindroptest int4
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ comment on domain domaindroptest is 'About to drop this..';
++ERROR:  at or near "domain": syntax error
++DETAIL:  source SQL:
++comment on domain domaindroptest is 'About to drop this..'
++           ^
+ create domain dependenttypetest domaindroptest;
++ERROR:  at or near "domaindroptest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dependenttypetest domaindroptest
++                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- fail because of dependent type
+ drop domain domaindroptest;
+-ERROR:  cannot drop type domaindroptest because other objects depend on it
+-DETAIL:  type dependenttypetest depends on type domaindroptest
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  at or near "domaindroptest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domaindroptest
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain domaindroptest cascade;
+-NOTICE:  drop cascades to type dependenttypetest
++ERROR:  at or near "domaindroptest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domaindroptest cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- this should fail because already gone
+ drop domain domaindroptest cascade;
+-ERROR:  type "domaindroptest" does not exist
++ERROR:  at or near "domaindroptest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domaindroptest cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test domain input.
+ -- Note: the point of checking both INSERT and COPY FROM is that INSERT
+ -- exercises CoerceToDomain while COPY exercises domain_in.
+ create domain domainvarchar varchar(5);
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domainvarchar varchar(5)
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain domainnumeric numeric(8,2);
++ERROR:  at or near "numeric": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domainnumeric numeric(8,2)
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain domainint4 int4;
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domainint4 int4
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain domaintext text;
++ERROR:  at or near "text": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domaintext text
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test explicit coercions --- these should succeed (and truncate)
+ SELECT cast('123456' as domainvarchar);
+- domainvarchar 
+----------------
+- 12345
+-(1 row)
+-
++ERROR:  type "domainvarchar" does not exist
+ SELECT cast('12345' as domainvarchar);
+- domainvarchar 
+----------------
+- 12345
+-(1 row)
+-
++ERROR:  type "domainvarchar" does not exist
+ -- Test tables using domains
+ create table basictest
+            ( testint4 domainint4
+@@ -42,586 +87,829 @@
+            , testvarchar domainvarchar
+            , testnumeric domainnumeric
+            );
++ERROR:  type "domainint4" does not exist
+ INSERT INTO basictest values ('88', 'haha', 'short', '123.12');      -- Good
++ERROR:  relation "basictest" does not exist
+ INSERT INTO basictest values ('88', 'haha', 'short text', '123.12'); -- Bad varchar
+-ERROR:  value too long for type character varying(5)
++ERROR:  relation "basictest" does not exist
+ INSERT INTO basictest values ('88', 'haha', 'short', '123.1212');    -- Truncate numeric
++ERROR:  relation "basictest" does not exist
+ -- Test copy
+ COPY basictest (testvarchar) FROM stdin; -- fail
+-ERROR:  value too long for type character varying(5)
+-CONTEXT:  COPY basictest, line 1, column testvarchar: "notsoshorttext"
++ERROR:  relation "basictest" does not exist
++notsoshorttext
++\.
++invalid command \.
+ COPY basictest (testvarchar) FROM stdin;
++ERROR:  at or near "notsoshorttext": syntax error
++DETAIL:  source SQL:
++notsoshorttext
++^
++short
++\.
++invalid command \.
+ select * from basictest;
+- testint4 | testtext | testvarchar | testnumeric 
+-----------+----------+-------------+-------------
+-       88 | haha     | short       |      123.12
+-       88 | haha     | short       |      123.12
+-          |          | short       |            
+-(3 rows)
+-
++ERROR:  at or near "short": syntax error
++DETAIL:  source SQL:
++short
++^
+ -- check that domains inherit operations from base types
+ select testtext || testvarchar as concat, testnumeric + 42 as sum
+ from basictest;
+-  concat   |  sum   
+------------+--------
+- hahashort | 165.12
+- hahashort | 165.12
+-           |       
+-(3 rows)
+-
++ERROR:  relation "basictest" does not exist
+ -- check that union/case/coalesce type resolution handles domains properly
+ select pg_typeof(coalesce(4::domainint4, 7));
+- pg_typeof 
+------------
+- integer
+-(1 row)
+-
++ERROR:  pg_typeof(): incompatible COALESCE expressions: type "domainint4" does not exist
+ select pg_typeof(coalesce(4::domainint4, 7::domainint4));
+- pg_typeof  
+-------------
+- domainint4
+-(1 row)
+-
++ERROR:  pg_typeof(): incompatible COALESCE expressions: type "domainint4" does not exist
+ drop table basictest;
++ERROR:  relation "basictest" does not exist
+ drop domain domainvarchar restrict;
++ERROR:  at or near "domainvarchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domainvarchar restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain domainnumeric restrict;
++ERROR:  at or near "domainnumeric": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domainnumeric restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain domainint4 restrict;
++ERROR:  at or near "domainint4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domainint4 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain domaintext;
++ERROR:  at or near "domaintext": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domaintext
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test non-error-throwing input
+ create domain positiveint int4 check(value > 0);
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain positiveint int4 check(value > 0)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain weirdfloat float8 check((1 / value) < 10);
++ERROR:  at or near "float8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain weirdfloat float8 check((1 / value) < 10)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select pg_input_is_valid('1', 'positiveint');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select pg_input_is_valid('junk', 'positiveint');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select pg_input_is_valid('-1', 'positiveint');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('junk', 'positiveint');
+-                    message                    | detail | hint | sql_error_code 
+------------------------------------------------+--------+------+----------------
+- invalid input syntax for type integer: "junk" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select * from pg_input_error_info('-1', 'positiveint');
+-                                  message                                   | detail | hint | sql_error_code 
+-----------------------------------------------------------------------------+--------+------+----------------
+- value for domain positiveint violates check constraint "positiveint_check" |        |      | 23514
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select * from pg_input_error_info('junk', 'weirdfloat');
+-                        message                         | detail | hint | sql_error_code 
+---------------------------------------------------------+--------+------+----------------
+- invalid input syntax for type double precision: "junk" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select * from pg_input_error_info('0.01', 'weirdfloat');
+-                                 message                                  | detail | hint | sql_error_code 
+---------------------------------------------------------------------------+--------+------+----------------
+- value for domain weirdfloat violates check constraint "weirdfloat_check" |        |      | 23514
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ -- We currently can't trap errors raised in the CHECK expression itself
+ select * from pg_input_error_info('0', 'weirdfloat');
+-ERROR:  division by zero
++ERROR:  unknown function: pg_input_error_info()
+ drop domain positiveint;
++ERROR:  at or near "positiveint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain positiveint
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain weirdfloat;
++ERROR:  at or near "weirdfloat": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain weirdfloat
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test domains over array types
+ create domain domainint4arr int4[1];
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domainint4arr int4[1]
++                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain domainchar4arr varchar(4)[2][3];
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain domainchar4arr varchar(4)[2][3]
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table domarrtest
+            ( testint4arr domainint4arr
+            , testchar4arr domainchar4arr
+             );
++ERROR:  type "domainint4arr" does not exist
+ INSERT INTO domarrtest values ('{2,2}', '{{"a","b"},{"c","d"}}');
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest values ('{{2,2},{2,2}}', '{{"a","b"}}');
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest values ('{2,2}', '{{"a","b"},{"c","d"},{"e","f"}}');
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest values ('{2,2}', '{{"a"},{"c"}}');
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest values (NULL, '{{"a","b","c"},{"d","e","f"}}');
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest values (NULL, '{{"toolong","b","c"},{"d","e","f"}}');
+-ERROR:  value too long for type character varying(4)
++ERROR:  relation "domarrtest" does not exist
+ INSERT INTO domarrtest (testint4arr[1], testint4arr[3]) values (11,22);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++INSERT INTO domarrtest (testint4arr[1], testint4arr[3]) values (11,22)
++                                   ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from domarrtest;
+-  testint4arr  |    testchar4arr     
+----------------+---------------------
+- {2,2}         | {{a,b},{c,d}}
+- {{2,2},{2,2}} | {{a,b}}
+- {2,2}         | {{a,b},{c,d},{e,f}}
+- {2,2}         | {{a},{c}}
+-               | {{a,b,c},{d,e,f}}
+- {11,NULL,22}  | 
+-(6 rows)
+-
++ERROR:  relation "domarrtest" does not exist
+ select testint4arr[1], testchar4arr[2:2] from domarrtest;
+- testint4arr | testchar4arr 
+--------------+--------------
+-           2 | {{c,d}}
+-             | {}
+-           2 | {{c,d}}
+-           2 | {{c}}
+-             | {{d,e,f}}
+-          11 | 
+-(6 rows)
+-
++ERROR:  relation "domarrtest" does not exist
+ select array_dims(testint4arr), array_dims(testchar4arr) from domarrtest;
+- array_dims | array_dims 
+-------------+------------
+- [1:2]      | [1:2][1:2]
+- [1:2][1:2] | [1:1][1:2]
+- [1:2]      | [1:3][1:2]
+- [1:2]      | [1:2][1:1]
+-            | [1:2][1:3]
+- [1:3]      | 
+-(6 rows)
+-
++ERROR:  relation "domarrtest" does not exist
+ COPY domarrtest FROM stdin;
++ERROR:  relation "domarrtest" does not exist
++{3,4}	{q,w,e}
++\N	\N
++invalid command \N
++\.
++invalid command \.
+ COPY domarrtest FROM stdin;	-- fail
+-ERROR:  value too long for type character varying(4)
+-CONTEXT:  COPY domarrtest, line 1, column testchar4arr: "{qwerty,w,e}"
++ERROR:  at or near "{": syntax error
++DETAIL:  source SQL:
++{3,4}	{q,w,e}
++^
++{3,4}	{qwerty,w,e}
++\.
++invalid command \.
+ select * from domarrtest;
+-  testint4arr  |    testchar4arr     
+----------------+---------------------
+- {2,2}         | {{a,b},{c,d}}
+- {{2,2},{2,2}} | {{a,b}}
+- {2,2}         | {{a,b},{c,d},{e,f}}
+- {2,2}         | {{a},{c}}
+-               | {{a,b,c},{d,e,f}}
+- {11,NULL,22}  | 
+- {3,4}         | {q,w,e}
+-               | 
+-(8 rows)
+-
++ERROR:  at or near "{": syntax error
++DETAIL:  source SQL:
++{3,4}	{qwerty,w,e}
++^
+ update domarrtest set
+   testint4arr[1] = testint4arr[1] + 1,
+   testint4arr[3] = testint4arr[3] - 1
+ where testchar4arr is null;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update domarrtest set
++  testint4arr[1] = testint4arr[1] + 1,
++             ^
++HINT:  try \h UPDATE
+ select * from domarrtest where testchar4arr is null;
+-   testint4arr    | testchar4arr 
+-------------------+--------------
+- {12,NULL,21}     | 
+- {NULL,NULL,NULL} | 
+-(2 rows)
+-
++ERROR:  relation "domarrtest" does not exist
+ drop table domarrtest;
++ERROR:  relation "domarrtest" does not exist
+ drop domain domainint4arr restrict;
++ERROR:  at or near "domainint4arr": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domainint4arr restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain domainchar4arr restrict;
++ERROR:  at or near "domainchar4arr": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain domainchar4arr restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain dia as int[];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dia as int[]
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select '{1,2,3}'::dia;
+-   dia   
+----------
+- {1,2,3}
+-(1 row)
+-
++ERROR:  type "dia" does not exist
+ select array_dims('{1,2,3}'::dia);
+- array_dims 
+-------------
+- [1:3]
+-(1 row)
+-
++ERROR:  unknown function: array_dims()
+ select pg_typeof('{1,2,3}'::dia);
+- pg_typeof 
+------------
+- dia
+-(1 row)
+-
++ERROR:  pg_typeof(): type "dia" does not exist
+ select pg_typeof('{1,2,3}'::dia || 42); -- should be int[] not dia
+- pg_typeof 
+------------
+- integer[]
+-(1 row)
+-
++ERROR:  pg_typeof(): type "dia" does not exist
+ drop domain dia;
++ERROR:  at or near "dia": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain dia
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test domains over composites
+ create type comptype as (r float8, i float8);
+ create domain dcomptype as comptype;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dcomptype as comptype
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table dcomptable (d1 dcomptype unique);
++ERROR:  type "dcomptype" does not exist
+ insert into dcomptable values (row(1,2)::dcomptype);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (row(3,4)::comptype);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (row(1,2)::dcomptype);  -- fail on uniqueness
+-ERROR:  duplicate key value violates unique constraint "dcomptable_d1_key"
+-DETAIL:  Key (d1)=((1,2)) already exists.
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable (d1.r) values(11);
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++insert into dcomptable (d1.r) values(11)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select * from dcomptable;
+-  d1   
+--------
+- (1,2)
+- (3,4)
+- (11,)
+-(3 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ select (d1).r, (d1).i, (d1).* from dcomptable;
+- r  | i | r  | i 
+-----+---+----+---
+-  1 | 2 |  1 | 2
+-  3 | 4 |  3 | 4
+- 11 |   | 11 |  
+-(3 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ update dcomptable set d1.r = (d1).r + 1 where (d1).i > 0;
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update dcomptable set d1.r = (d1).r + 1 where (d1).i > 0
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select * from dcomptable;
+-  d1   
+--------
+- (11,)
+- (2,2)
+- (4,4)
+-(3 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ alter domain dcomptype add constraint c1 check ((value).r <= (value).i);
++ERROR:  at or near "dcomptype": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptype add constraint c1 check ((value).r <= (value).i)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain dcomptype add constraint c2 check ((value).r > (value).i);  -- fail
+-ERROR:  column "d1" of table "dcomptable" contains values that violate the new constraint
++ERROR:  at or near "dcomptype": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptype add constraint c2 check ((value).r > (value).i)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select row(2,1)::dcomptype;  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  type "dcomptype" does not exist
+ insert into dcomptable values (row(1,2)::comptype);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (row(2,1)::comptype);  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable (d1.r) values(99);
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++insert into dcomptable (d1.r) values(99)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ insert into dcomptable (d1.r, d1.i) values(99, 100);
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++insert into dcomptable (d1.r, d1.i) values(99, 100)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ insert into dcomptable (d1.r, d1.i) values(100, 99);  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++insert into dcomptable (d1.r, d1.i) values(100, 99)
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ update dcomptable set d1.r = (d1).r + 1 where (d1).i > 0;  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update dcomptable set d1.r = (d1).r + 1 where (d1).i > 0
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ update dcomptable set d1.r = (d1).r - 1, d1.i = (d1).i + 1 where (d1).i > 0;
++ERROR:  at or near "r": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++update dcomptable set d1.r = (d1).r - 1, d1.i = (d1).i + 1 where (d1).i > 0
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27792/_version_
+ select * from dcomptable;
+-    d1    
+-----------
+- (11,)
+- (99,)
+- (1,3)
+- (3,5)
+- (0,3)
+- (98,101)
+-(6 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ explain (verbose, costs off)
+   update dcomptable set d1.r = (d1).r - 1, d1.i = (d1).i + 1 where (d1).i > 0;
+-                                          QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+- Update on public.dcomptable
+-   ->  Seq Scan on public.dcomptable
+-         Output: ROW(((d1).r - '1'::double precision), ((d1).i + '1'::double precision)), ctid
+-         Filter: ((dcomptable.d1).i > '0'::double precision)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ create rule silly as on delete to dcomptable do instead
+   update dcomptable set d1.r = (d1).r - 1, d1.i = (d1).i + 1 where (d1).i > 0;
+-\d+ dcomptable
+-                                  Table "public.dcomptable"
+- Column |   Type    | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+-----------+-----------+----------+---------+----------+--------------+-------------
+- d1     | dcomptype |           |          |         | extended |              | 
+-Indexes:
+-    "dcomptable_d1_key" UNIQUE CONSTRAINT, btree (d1)
+-Rules:
+-    silly AS
+-    ON DELETE TO dcomptable DO INSTEAD  UPDATE dcomptable SET d1.r = (dcomptable.d1).r - 1::double precision, d1.i = (dcomptable.d1).i + 1::double precision
+-  WHERE (dcomptable.d1).i > 0::double precision
++ERROR:  at or near "silly": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule silly as on delete to dcomptable do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++\d+ dcomptable
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(dcomptable)$' COLLATE pg_catalog.default
++                                                                          ^
+ create function makedcomp(r float8, i float8) returns dcomptype
+ as 'select row(r, i)' language sql;
++ERROR:  type "dcomptype" does not exist
+ select makedcomp(1,2);
+- makedcomp 
+------------
+- (1,2)
+-(1 row)
+-
++ERROR:  unknown function: makedcomp()
+ select makedcomp(2,1);  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  unknown function: makedcomp()
+ select * from makedcomp(1,2) m;
+- r | i 
+----+---
+- 1 | 2
+-(1 row)
+-
++ERROR:  unknown function: makedcomp()
+ select m, m is not null from makedcomp(1,2) m;
+-   m   | ?column? 
+--------+----------
+- (1,2) | t
+-(1 row)
+-
++ERROR:  unknown function: makedcomp()
+ drop function makedcomp(float8, float8);
++ERROR:  unknown function: makedcomp()
+ drop table dcomptable;
++ERROR:  relation "dcomptable" does not exist
+ drop type comptype cascade;
+-NOTICE:  drop cascades to type dcomptype
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ -- check altering and dropping columns used by domain constraints
+ create type comptype as (r float8, i float8);
++ERROR:  type "root.public.comptype" already exists
+ create domain dcomptype as comptype;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dcomptype as comptype
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ alter domain dcomptype add constraint c1 check ((value).r > 0);
++ERROR:  at or near "dcomptype": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptype add constraint c1 check ((value).r > 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ comment on constraint c1 on domain dcomptype is 'random commentary';
++ERROR:  at or near "dcomptype": syntax error
++DETAIL:  source SQL:
++comment on constraint c1 on domain dcomptype is 'random commentary'
++                                   ^
+ select row(0,1)::dcomptype;  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "c1"
++ERROR:  type "dcomptype" does not exist
+ alter type comptype alter attribute r type varchar;  -- fail
+-ERROR:  operator does not exist: character varying > double precision
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type comptype alter attribute r type varchar
++                                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ alter type comptype alter attribute r type bigint;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type comptype alter attribute r type bigint
++                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ alter type comptype drop attribute r;  -- fail
+-ERROR:  cannot drop column r of composite type comptype because other objects depend on it
+-DETAIL:  constraint c1 depends on column r of composite type comptype
+-HINT:  Use DROP ... CASCADE to drop the dependent objects too.
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type comptype drop attribute r
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ alter type comptype drop attribute i;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter type comptype drop attribute i
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/48701/_version_
+ select conname, obj_description(oid, 'pg_constraint') from pg_constraint
+   where contypid = 'dcomptype'::regtype;  -- check comment is still there
+- conname |  obj_description  
+----------+-------------------
+- c1      | random commentary
+-(1 row)
+-
++ERROR:  type 'dcomptype' does not exist
+ drop type comptype cascade;
+-NOTICE:  drop cascades to type dcomptype
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ -- Test domains over arrays of composite
+ create type comptype as (r float8, i float8);
++ERROR:  type "root.public.comptype" already exists
+ create domain dcomptypea as comptype[];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dcomptypea as comptype[]
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table dcomptable (d1 dcomptypea unique);
++ERROR:  type "dcomptypea" does not exist
+ insert into dcomptable values (array[row(1,2)]::dcomptypea);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (array[row(3,4), row(5,6)]::comptype[]);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (array[row(7,8)::comptype, row(9,10)::comptype]);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (array[row(1,2)]::dcomptypea);  -- fail on uniqueness
+-ERROR:  duplicate key value violates unique constraint "dcomptable_d1_key"
+-DETAIL:  Key (d1)=({"(1,2)"}) already exists.
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable (d1[1]) values(row(9,10));
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into dcomptable (d1[1]) values(row(9,10))
++                          ^
++HINT:  try \h <SELECTCLAUSE>
+ insert into dcomptable (d1[1].r) values(11);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into dcomptable (d1[1].r) values(11)
++                          ^
++HINT:  try \h <SELECTCLAUSE>
+ select * from dcomptable;
+-         d1         
+---------------------
+- {"(1,2)"}
+- {"(3,4)","(5,6)"}
+- {"(7,8)","(9,10)"}
+- {"(9,10)"}
+- {"(11,)"}
+-(5 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ select d1[2], d1[1].r, d1[1].i from dcomptable;
+-   d1   | r  | i  
+---------+----+----
+-        |  1 |  2
+- (5,6)  |  3 |  4
+- (9,10) |  7 |  8
+-        |  9 | 10
+-        | 11 |   
+-(5 rows)
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++select d1[2], d1[1].r, d1[1].i from dcomptable
++                   ^
+ update dcomptable set d1[2] = row(d1[2].i, d1[2].r);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set d1[2] = row(d1[2].i, d1[2].r)
++                        ^
++HINT:  try \h UPDATE
+ select * from dcomptable;
+-         d1         
+---------------------
+- {"(1,2)","(,)"}
+- {"(3,4)","(6,5)"}
+- {"(7,8)","(10,9)"}
+- {"(9,10)","(,)"}
+- {"(11,)","(,)"}
+-(5 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ update dcomptable set d1[1].r = d1[1].r + 1 where d1[1].i > 0;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set d1[1].r = d1[1].r + 1 where d1[1].i > 0
++                        ^
++HINT:  try \h UPDATE
+ select * from dcomptable;
+-         d1         
+---------------------
+- {"(11,)","(,)"}
+- {"(2,2)","(,)"}
+- {"(4,4)","(6,5)"}
+- {"(8,8)","(10,9)"}
+- {"(10,10)","(,)"}
+-(5 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ alter domain dcomptypea add constraint c1 check (value[1].r <= value[1].i);
++ERROR:  at or near "dcomptypea": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptypea add constraint c1 check (value[1].r <= value[1].i)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain dcomptypea add constraint c2 check (value[1].r > value[1].i);  -- fail
+-ERROR:  column "d1" of table "dcomptable" contains values that violate the new constraint
++ERROR:  at or near "dcomptypea": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptypea add constraint c2 check (value[1].r > value[1].i)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select array[row(2,1)]::dcomptypea;  -- fail
+-ERROR:  value for domain dcomptypea violates check constraint "c1"
++ERROR:  type "dcomptypea" does not exist
+ insert into dcomptable values (array[row(1,2)]::comptype[]);
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable values (array[row(2,1)]::comptype[]);  -- fail
+-ERROR:  value for domain dcomptypea violates check constraint "c1"
++ERROR:  relation "dcomptable" does not exist
+ insert into dcomptable (d1[1].r) values(99);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into dcomptable (d1[1].r) values(99)
++                          ^
++HINT:  try \h <SELECTCLAUSE>
+ insert into dcomptable (d1[1].r, d1[1].i) values(99, 100);
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into dcomptable (d1[1].r, d1[1].i) values(99, 100)
++                          ^
++HINT:  try \h <SELECTCLAUSE>
+ insert into dcomptable (d1[1].r, d1[1].i) values(100, 99);  -- fail
+-ERROR:  value for domain dcomptypea violates check constraint "c1"
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++insert into dcomptable (d1[1].r, d1[1].i) values(100, 99)
++                          ^
++HINT:  try \h <SELECTCLAUSE>
+ update dcomptable set d1[1].r = d1[1].r + 1 where d1[1].i > 0;  -- fail
+-ERROR:  value for domain dcomptypea violates check constraint "c1"
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set d1[1].r = d1[1].r + 1 where d1[1].i > 0
++                        ^
++HINT:  try \h UPDATE
+ update dcomptable set d1[1].r = d1[1].r - 1, d1[1].i = d1[1].i + 1
+   where d1[1].i > 0;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set d1[1].r = d1[1].r - 1, d1[1].i = d1[1].i + 1
++                        ^
++HINT:  try \h UPDATE
+ select * from dcomptable;
+-         d1         
+---------------------
+- {"(11,)","(,)"}
+- {"(99,)"}
+- {"(1,3)","(,)"}
+- {"(3,5)","(6,5)"}
+- {"(7,9)","(10,9)"}
+- {"(9,11)","(,)"}
+- {"(0,3)"}
+- {"(98,101)"}
+-(8 rows)
+-
++ERROR:  relation "dcomptable" does not exist
+ explain (verbose, costs off)
+   update dcomptable set d1[1].r = d1[1].r - 1, d1[1].i = d1[1].i + 1
+     where d1[1].i > 0;
+-                                                   QUERY PLAN                                                   
+-----------------------------------------------------------------------------------------------------------------
+- Update on public.dcomptable
+-   ->  Seq Scan on public.dcomptable
+-         Output: (d1[1].r := (d1[1].r - '1'::double precision))[1].i := (d1[1].i + '1'::double precision), ctid
+-         Filter: (dcomptable.d1[1].i > '0'::double precision)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ create rule silly as on delete to dcomptable do instead
+   update dcomptable set d1[1].r = d1[1].r - 1, d1[1].i = d1[1].i + 1
+     where d1[1].i > 0;
+-\d+ dcomptable
+-                                  Table "public.dcomptable"
+- Column |    Type    | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------+------------+-----------+----------+---------+----------+--------------+-------------
+- d1     | dcomptypea |           |          |         | extended |              | 
+-Indexes:
+-    "dcomptable_d1_key" UNIQUE CONSTRAINT, btree (d1)
+-Rules:
+-    silly AS
+-    ON DELETE TO dcomptable DO INSTEAD  UPDATE dcomptable SET d1[1].r = dcomptable.d1[1].r - 1::double precision, d1[1].i = dcomptable.d1[1].i + 1::double precision
+-  WHERE dcomptable.d1[1].i > 0::double precision
++ERROR:  at or near "silly": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create rule silly as on delete to dcomptable do instead
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++\d+ dcomptable
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(dcomptable)$' COLLATE pg_catalog.default
++                                                                          ^
+ drop table dcomptable;
++ERROR:  relation "dcomptable" does not exist
+ drop type comptype cascade;
+-NOTICE:  drop cascades to type dcomptypea
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ -- Test arrays over domains
+ create domain posint as int check (value > 0);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain posint as int check (value > 0)
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table pitable (f1 posint[]);
++ERROR:  type "posint" does not exist
+ insert into pitable values(array[42]);
++ERROR:  relation "pitable" does not exist
+ insert into pitable values(array[-1]);  -- fail
+-ERROR:  value for domain posint violates check constraint "posint_check"
++ERROR:  relation "pitable" does not exist
+ insert into pitable values('{0}');  -- fail
+-ERROR:  value for domain posint violates check constraint "posint_check"
+-LINE 1: insert into pitable values('{0}');
+-                                   ^
++ERROR:  relation "pitable" does not exist
+ update pitable set f1[1] = f1[1] + 1;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update pitable set f1[1] = f1[1] + 1
++                     ^
++HINT:  try \h UPDATE
+ update pitable set f1[1] = 0;  -- fail
+-ERROR:  value for domain posint violates check constraint "posint_check"
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update pitable set f1[1] = 0
++                     ^
++HINT:  try \h UPDATE
+ select * from pitable;
+-  f1  
+-------
+- {43}
+-(1 row)
+-
++ERROR:  relation "pitable" does not exist
+ drop table pitable;
++ERROR:  relation "pitable" does not exist
+ create domain vc4 as varchar(4);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain vc4 as varchar(4)
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table vc4table (f1 vc4[]);
++ERROR:  type "vc4" does not exist
+ insert into vc4table values(array['too long']);  -- fail
+-ERROR:  value too long for type character varying(4)
++ERROR:  relation "vc4table" does not exist
+ insert into vc4table values(array['too long']::vc4[]);  -- cast truncates
++ERROR:  relation "vc4table" does not exist
+ select * from vc4table;
+-    f1    
+-----------
+- {"too "}
+-(1 row)
+-
++ERROR:  relation "vc4table" does not exist
+ drop table vc4table;
++ERROR:  relation "vc4table" does not exist
+ drop type vc4;
++ERROR:  type "vc4" does not exist
+ -- You can sort of fake arrays-of-arrays by putting a domain in between
+ create domain dposinta as posint[];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dposinta as posint[]
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table dposintatable (f1 dposinta[]);
++ERROR:  type "dposinta" does not exist
+ insert into dposintatable values(array[array[42]]);  -- fail
+-ERROR:  column "f1" is of type dposinta[] but expression is of type integer[]
+-LINE 1: insert into dposintatable values(array[array[42]]);
+-                                         ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  relation "dposintatable" does not exist
+ insert into dposintatable values(array[array[42]::posint[]]); -- still fail
+-ERROR:  column "f1" is of type dposinta[] but expression is of type posint[]
+-LINE 1: insert into dposintatable values(array[array[42]::posint[]])...
+-                                         ^
+-HINT:  You will need to rewrite or cast the expression.
++ERROR:  relation "dposintatable" does not exist
+ insert into dposintatable values(array[array[42]::dposinta]); -- but this works
++ERROR:  relation "dposintatable" does not exist
+ select f1, f1[1], (f1[1])[1] from dposintatable;
+-    f1    |  f1  | f1 
+-----------+------+----
+- {"{42}"} | {42} | 42
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ select pg_typeof(f1) from dposintatable;
+- pg_typeof  
+-------------
+- dposinta[]
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ select pg_typeof(f1[1]) from dposintatable;
+- pg_typeof 
+------------
+- dposinta
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ select pg_typeof(f1[1][1]) from dposintatable;
+- pg_typeof 
+------------
+- dposinta
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ select pg_typeof((f1[1])[1]) from dposintatable;
+- pg_typeof 
+------------
+- posint
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ update dposintatable set f1[2] = array[99];
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dposintatable set f1[2] = array[99]
++                           ^
++HINT:  try \h UPDATE
+ select f1, f1[1], (f1[2])[1] from dposintatable;
+-       f1        |  f1  | f1 
+------------------+------+----
+- {"{42}","{99}"} | {42} | 99
+-(1 row)
+-
++ERROR:  relation "dposintatable" does not exist
+ -- it'd be nice if you could do something like this, but for now you can't:
+ update dposintatable set f1[2][1] = array[97];
+-ERROR:  wrong number of array subscripts
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dposintatable set f1[2][1] = array[97]
++                           ^
++HINT:  try \h UPDATE
+ -- maybe someday we can make this syntax work:
+ update dposintatable set (f1[2])[1] = array[98];
+-ERROR:  syntax error at or near "["
+-LINE 1: update dposintatable set (f1[2])[1] = array[98];
+-                                        ^
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dposintatable set (f1[2])[1] = array[98]
++                            ^
++HINT:  try \h UPDATE
+ drop table dposintatable;
++ERROR:  relation "dposintatable" does not exist
+ drop domain posint cascade;
+-NOTICE:  drop cascades to type dposinta
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain posint cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test arrays over domains of composite
+ create type comptype as (cf1 int, cf2 int);
++ERROR:  type "root.public.comptype" already exists
+ create domain dcomptype as comptype check ((value).cf1 > 0);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dcomptype as comptype check ((value).cf1 > 0)
++                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table dcomptable (f1 dcomptype[]);
++ERROR:  type "dcomptype" does not exist
+ insert into dcomptable values (null);
++ERROR:  relation "dcomptable" does not exist
+ update dcomptable set f1[1].cf2 = 5;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set f1[1].cf2 = 5
++                        ^
++HINT:  try \h UPDATE
+ table dcomptable;
+-    f1    
+-----------
+- {"(,5)"}
+-(1 row)
+-
++ERROR:  relation "dcomptable" does not exist
+ update dcomptable set f1[1].cf1 = -1;  -- fail
+-ERROR:  value for domain dcomptype violates check constraint "dcomptype_check"
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set f1[1].cf1 = -1
++                        ^
++HINT:  try \h UPDATE
+ update dcomptable set f1[1].cf1 = 1;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set f1[1].cf1 = 1
++                        ^
++HINT:  try \h UPDATE
+ table dcomptable;
+-    f1     
+------------
+- {"(1,5)"}
+-(1 row)
+-
++ERROR:  relation "dcomptable" does not exist
+ -- if there's no constraints, a different code path is taken:
+ alter domain dcomptype drop constraint dcomptype_check;
++ERROR:  at or near "dcomptype": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dcomptype drop constraint dcomptype_check
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update dcomptable set f1[1].cf1 = -1;  -- now ok
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update dcomptable set f1[1].cf1 = -1
++                        ^
++HINT:  try \h UPDATE
+ table dcomptable;
+-     f1     
+-------------
+- {"(-1,5)"}
+-(1 row)
+-
++ERROR:  relation "dcomptable" does not exist
+ drop table dcomptable;
++ERROR:  relation "dcomptable" does not exist
+ drop type comptype cascade;
+-NOTICE:  drop cascades to type dcomptype
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ -- Test not-null restrictions
+ create domain dnotnull varchar(15) NOT NULL;
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dnotnull varchar(15) NOT NULL
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain dnull    varchar(15);
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dnull    varchar(15)
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain dcheck   varchar(15) NOT NULL CHECK (VALUE = 'a' OR VALUE = 'c' OR VALUE = 'd');
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dcheck   varchar(15) NOT NULL CHECK (VALUE = 'a' OR VALUE = 'c' OR VALUE = 'd')
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table nulltest
+            ( col1 dnotnull
+            , col2 dnotnull NULL  -- NOT NULL in the domain cannot be overridden
+@@ -629,67 +917,128 @@
+            , col4 dnull
+            , col5 dcheck CHECK (col5 IN ('c', 'd'))
+            );
++ERROR:  type "dnotnull" does not exist
+ INSERT INTO nulltest DEFAULT VALUES;
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  relation "nulltest" does not exist
+ INSERT INTO nulltest values ('a', 'b', 'c', 'd', 'c');  -- Good
++ERROR:  relation "nulltest" does not exist
+ insert into nulltest values ('a', 'b', 'c', 'd', NULL);
+-ERROR:  domain dcheck does not allow null values
++ERROR:  relation "nulltest" does not exist
+ insert into nulltest values ('a', 'b', 'c', 'd', 'a');
+-ERROR:  new row for relation "nulltest" violates check constraint "nulltest_col5_check"
+-DETAIL:  Failing row contains (a, b, c, d, a).
++ERROR:  relation "nulltest" does not exist
+ INSERT INTO nulltest values (NULL, 'b', 'c', 'd', 'd');
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  relation "nulltest" does not exist
+ INSERT INTO nulltest values ('a', NULL, 'c', 'd', 'c');
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  relation "nulltest" does not exist
+ INSERT INTO nulltest values ('a', 'b', NULL, 'd', 'c');
+-ERROR:  null value in column "col3" of relation "nulltest" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, null, d, c).
++ERROR:  relation "nulltest" does not exist
+ INSERT INTO nulltest values ('a', 'b', 'c', NULL, 'd'); -- Good
++ERROR:  relation "nulltest" does not exist
+ -- Test copy
+ COPY nulltest FROM stdin; --fail
+-ERROR:  null value in column "col3" of relation "nulltest" violates not-null constraint
+-DETAIL:  Failing row contains (a, b, null, d, d).
+-CONTEXT:  COPY nulltest, line 1: "a	b	\N	d	d"
++ERROR:  relation "nulltest" does not exist
++a	b	\N	d	d
++invalid command \N
++\.
++invalid command \.
+ COPY nulltest FROM stdin; --fail
+-ERROR:  domain dcheck does not allow null values
+-CONTEXT:  COPY nulltest, line 1, column col5: null input
++ERROR:  at or near "a": syntax error
++DETAIL:  source SQL:
++a	b	
++^
++a	b	c	d	\N
++invalid command \N
++\.
++invalid command \.
+ -- Last row is bad
+ COPY nulltest FROM stdin;
+-ERROR:  new row for relation "nulltest" violates check constraint "nulltest_col5_check"
+-DETAIL:  Failing row contains (a, b, c, null, a).
+-CONTEXT:  COPY nulltest, line 3: "a	b	c	\N	a"
++ERROR:  at or near "a": syntax error
++DETAIL:  source SQL:
++a	b	c	d	
++^
++a	b	c	\N	c
++invalid command \N
++a	b	c	\N	d
++invalid command \N
++a	b	c	\N	a
++invalid command \N
++\.
++invalid command \.
+ select * from nulltest;
+- col1 | col2 | col3 | col4 | col5 
+-------+------+------+------+------
+- a    | b    | c    | d    | c
+- a    | b    | c    |      | d
+-(2 rows)
+-
++ERROR:  at or near "a": syntax error
++DETAIL:  source SQL:
++a	b	c	
++^
+ -- Test out coerced (casted) constraints
+ SELECT cast('1' as dnotnull);
+- dnotnull 
+-----------
+- 1
+-(1 row)
+-
++ERROR:  type "dnotnull" does not exist
+ SELECT cast(NULL as dnotnull); -- fail
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  type "dnotnull" does not exist
+ SELECT cast(cast(NULL as dnull) as dnotnull); -- fail
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  type "dnotnull" does not exist
+ SELECT cast(col4 as dnotnull) from nulltest; -- fail
+-ERROR:  domain dnotnull does not allow null values
++ERROR:  relation "nulltest" does not exist
+ -- cleanup
+ drop table nulltest;
++ERROR:  relation "nulltest" does not exist
+ drop domain dnotnull restrict;
++ERROR:  at or near "dnotnull": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain dnotnull restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain dnull restrict;
++ERROR:  at or near "dnull": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain dnull restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain dcheck restrict;
++ERROR:  at or near "dcheck": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain dcheck restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain ddef1 int4 DEFAULT 3;
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddef1 int4 DEFAULT 3
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain ddef2 oid DEFAULT '12';
++ERROR:  at or near "oid": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddef2 oid DEFAULT '12'
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Type mixing, function returns int8
+ create domain ddef3 text DEFAULT 5;
++ERROR:  at or near "text": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddef3 text DEFAULT 5
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create sequence ddef4_seq;
+ create domain ddef4 int4 DEFAULT nextval('ddef4_seq');
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddef4 int4 DEFAULT nextval('ddef4_seq')
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain ddef5 numeric(8,2) NOT NULL DEFAULT '12.12';
++ERROR:  at or near "numeric": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddef5 numeric(8,2) NOT NULL DEFAULT '12.12'
++                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table defaulttest
+             ( col1 ddef1
+             , col2 ddef2
+@@ -700,226 +1049,602 @@
+             , col7 ddef4 DEFAULT 8000
+             , col8 ddef5
+             );
++ERROR:  type "ddef1" does not exist
+ insert into defaulttest(col4) values(0); -- fails, col5 defaults to null
+-ERROR:  null value in column "col5" of relation "defaulttest" violates not-null constraint
+-DETAIL:  Failing row contains (3, 12, 5, 0, null, 88, 8000, 12.12).
++ERROR:  relation "defaulttest" does not exist
+ alter table defaulttest alter column col5 drop default;
++ERROR:  relation "defaulttest" does not exist
+ insert into defaulttest default values; -- succeeds, inserts domain default
++ERROR:  relation "defaulttest" does not exist
+ -- We used to treat SET DEFAULT NULL as equivalent to DROP DEFAULT; wrong
+ alter table defaulttest alter column col5 set default null;
++ERROR:  relation "defaulttest" does not exist
+ insert into defaulttest(col4) values(0); -- fails
+-ERROR:  null value in column "col5" of relation "defaulttest" violates not-null constraint
+-DETAIL:  Failing row contains (3, 12, 5, 0, null, 88, 8000, 12.12).
++ERROR:  relation "defaulttest" does not exist
+ alter table defaulttest alter column col5 drop default;
++ERROR:  relation "defaulttest" does not exist
+ insert into defaulttest default values;
++ERROR:  relation "defaulttest" does not exist
+ insert into defaulttest default values;
++ERROR:  relation "defaulttest" does not exist
+ -- Test defaults with copy
+ COPY defaulttest(col5) FROM stdin;
++ERROR:  relation "defaulttest" does not exist
++42
++\.
++invalid command \.
+ select * from defaulttest;
+- col1 | col2 | col3 | col4 | col5 | col6 | col7 | col8  
+-------+------+------+------+------+------+------+-------
+-    3 |   12 | 5    |    1 |    3 |   88 | 8000 | 12.12
+-    3 |   12 | 5    |    2 |    3 |   88 | 8000 | 12.12
+-    3 |   12 | 5    |    3 |    3 |   88 | 8000 | 12.12
+-    3 |   12 | 5    |    4 |   42 |   88 | 8000 | 12.12
+-(4 rows)
+-
++ERROR:  at or near "42": syntax error
++DETAIL:  source SQL:
++42
++^
+ drop table defaulttest cascade;
++ERROR:  relation "defaulttest" does not exist
+ -- Test ALTER DOMAIN .. NOT NULL
+ create domain dnotnulltest integer;
++ERROR:  at or near "integer": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dnotnulltest integer
++                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table domnotnull
+ ( col1 dnotnulltest
+ , col2 dnotnulltest
+ );
++ERROR:  type "dnotnulltest" does not exist
+ insert into domnotnull default values;
++ERROR:  relation "domnotnull" does not exist
+ alter domain dnotnulltest set not null; -- fails
+-ERROR:  column "col1" of table "domnotnull" contains null values
++ERROR:  at or near "dnotnulltest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dnotnulltest set not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update domnotnull set col1 = 5;
++ERROR:  relation "domnotnull" does not exist
+ alter domain dnotnulltest set not null; -- fails
+-ERROR:  column "col2" of table "domnotnull" contains null values
++ERROR:  at or near "dnotnulltest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dnotnulltest set not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update domnotnull set col2 = 6;
++ERROR:  relation "domnotnull" does not exist
+ alter domain dnotnulltest set not null;
++ERROR:  at or near "dnotnulltest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dnotnulltest set not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update domnotnull set col1 = null; -- fails
+-ERROR:  domain dnotnulltest does not allow null values
++ERROR:  relation "domnotnull" does not exist
+ alter domain dnotnulltest drop not null;
++ERROR:  at or near "dnotnulltest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dnotnulltest drop not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ update domnotnull set col1 = null;
++ERROR:  relation "domnotnull" does not exist
+ drop domain dnotnulltest cascade;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to column col2 of table domnotnull
+-drop cascades to column col1 of table domnotnull
++ERROR:  at or near "dnotnulltest": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain dnotnulltest cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Test ALTER DOMAIN .. DEFAULT ..
+ create table domdeftest (col1 ddef1);
++ERROR:  type "ddef1" does not exist
+ insert into domdeftest default values;
++ERROR:  relation "domdeftest" does not exist
+ select * from domdeftest;
+- col1 
+-------
+-    3
+-(1 row)
+-
++ERROR:  relation "domdeftest" does not exist
+ alter domain ddef1 set default '42';
++ERROR:  at or near "ddef1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain ddef1 set default '42'
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into domdeftest default values;
++ERROR:  relation "domdeftest" does not exist
+ select * from domdeftest;
+- col1 
+-------
+-    3
+-   42
+-(2 rows)
+-
++ERROR:  relation "domdeftest" does not exist
+ alter domain ddef1 drop default;
++ERROR:  at or near "ddef1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain ddef1 drop default
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into domdeftest default values;
++ERROR:  relation "domdeftest" does not exist
+ select * from domdeftest;
+- col1 
+-------
+-    3
+-   42
+-     
+-(3 rows)
+-
++ERROR:  relation "domdeftest" does not exist
+ drop table domdeftest;
++ERROR:  relation "domdeftest" does not exist
+ -- Test ALTER DOMAIN .. CONSTRAINT ..
+ create domain con as integer;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain con as integer
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table domcontest (col1 con);
++ERROR:  type "con" does not exist
+ insert into domcontest values (1);
++ERROR:  relation "domcontest" does not exist
+ insert into domcontest values (2);
++ERROR:  relation "domcontest" does not exist
+ alter domain con add constraint t check (VALUE < 1); -- fails
+-ERROR:  column "col1" of table "domcontest" contains values that violate the new constraint
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con add constraint t check (VALUE < 1)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain con add constraint t check (VALUE < 34);
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con add constraint t check (VALUE < 34)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain con add check (VALUE > 0);
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con add check (VALUE > 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into domcontest values (-5); -- fails
+-ERROR:  value for domain con violates check constraint "con_check"
++ERROR:  relation "domcontest" does not exist
+ insert into domcontest values (42); -- fails
+-ERROR:  value for domain con violates check constraint "t"
++ERROR:  relation "domcontest" does not exist
+ insert into domcontest values (5);
++ERROR:  relation "domcontest" does not exist
+ alter domain con drop constraint t;
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con drop constraint t
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ insert into domcontest values (-5); --fails
+-ERROR:  value for domain con violates check constraint "con_check"
++ERROR:  relation "domcontest" does not exist
+ insert into domcontest values (42);
++ERROR:  relation "domcontest" does not exist
+ alter domain con drop constraint nonexistent;
+-ERROR:  constraint "nonexistent" of domain "con" does not exist
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con drop constraint nonexistent
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain con drop constraint if exists nonexistent;
+-NOTICE:  constraint "nonexistent" of domain "con" does not exist, skipping
++ERROR:  at or near "con": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain con drop constraint if exists nonexistent
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Test ALTER DOMAIN .. CONSTRAINT .. NOT VALID
+ create domain things AS INT;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain things AS INT
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ CREATE TABLE thethings (stuff things);
++ERROR:  type "things" does not exist
+ INSERT INTO thethings (stuff) VALUES (55);
++ERROR:  relation "thethings" does not exist
+ ALTER DOMAIN things ADD CONSTRAINT meow CHECK (VALUE < 11);
+-ERROR:  column "stuff" of table "thethings" contains values that violate the new constraint
++ERROR:  at or near "things": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER DOMAIN things ADD CONSTRAINT meow CHECK (VALUE < 11)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ALTER DOMAIN things ADD CONSTRAINT meow CHECK (VALUE < 11) NOT VALID;
++ERROR:  at or near "things": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER DOMAIN things ADD CONSTRAINT meow CHECK (VALUE < 11) NOT VALID
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ ALTER DOMAIN things VALIDATE CONSTRAINT meow;
+-ERROR:  column "stuff" of table "thethings" contains values that violate the new constraint
++ERROR:  at or near "things": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER DOMAIN things VALIDATE CONSTRAINT meow
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ UPDATE thethings SET stuff = 10;
++ERROR:  relation "thethings" does not exist
+ ALTER DOMAIN things VALIDATE CONSTRAINT meow;
++ERROR:  at or near "things": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++ALTER DOMAIN things VALIDATE CONSTRAINT meow
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Confirm ALTER DOMAIN with RULES.
+ create table domtab (col1 integer);
+ create domain dom as integer;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dom as integer
++                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create view domview as select cast(col1 as dom) from domtab;
++ERROR:  type "dom" does not exist
+ insert into domtab (col1) values (null);
+ insert into domtab (col1) values (5);
+ select * from domview;
+- col1 
+-------
+-     
+-    5
+-(2 rows)
+-
++ERROR:  relation "domview" does not exist
+ alter domain dom set not null;
++ERROR:  at or near "dom": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dom set not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from domview; -- fail
+-ERROR:  domain dom does not allow null values
++ERROR:  relation "domview" does not exist
+ alter domain dom drop not null;
+-select * from domview;
+- col1 
+-------
+-     
+-    5
+-(2 rows)
++ERROR:  at or near "dom": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dom drop not null
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select * from domview;
++ERROR:  relation "domview" does not exist
+ alter domain dom add constraint domchkgt6 check(value > 6);
++ERROR:  at or near "dom": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dom add constraint domchkgt6 check(value > 6)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select * from domview; --fail
+-ERROR:  value for domain dom violates check constraint "domchkgt6"
++ERROR:  relation "domview" does not exist
+ alter domain dom drop constraint domchkgt6 restrict;
+-select * from domview;
+- col1 
+-------
+-     
+-    5
+-(2 rows)
++ERROR:  at or near "dom": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain dom drop constraint domchkgt6 restrict
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select * from domview;
++ERROR:  relation "domview" does not exist
+ -- cleanup
+ drop domain ddef1 restrict;
++ERROR:  at or near "ddef1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddef1 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain ddef2 restrict;
++ERROR:  at or near "ddef2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddef2 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain ddef3 restrict;
++ERROR:  at or near "ddef3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddef3 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain ddef4 restrict;
++ERROR:  at or near "ddef4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddef4 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop domain ddef5 restrict;
++ERROR:  at or near "ddef5": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddef5 restrict
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop sequence ddef4_seq;
+ -- Test domains over domains
+ create domain vchar4 varchar(4);
++ERROR:  at or near "varchar": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain vchar4 varchar(4)
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain dinter vchar4 check (substring(VALUE, 1, 1) = 'x');
++ERROR:  at or near "vchar4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dinter vchar4 check (substring(VALUE, 1, 1) = 'x')
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create domain dtop dinter check (substring(VALUE, 2, 1) = '1');
++ERROR:  at or near "dinter": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain dtop dinter check (substring(VALUE, 2, 1) = '1')
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select 'x123'::dtop;
+- dtop 
+-------
+- x123
+-(1 row)
+-
++ERROR:  type "dtop" does not exist
+ select 'x1234'::dtop; -- explicit coercion should truncate
+- dtop 
+-------
+- x123
+-(1 row)
+-
++ERROR:  type "dtop" does not exist
+ select 'y1234'::dtop; -- fail
+-ERROR:  value for domain dtop violates check constraint "dinter_check"
++ERROR:  type "dtop" does not exist
+ select 'y123'::dtop; -- fail
+-ERROR:  value for domain dtop violates check constraint "dinter_check"
++ERROR:  type "dtop" does not exist
+ select 'yz23'::dtop; -- fail
+-ERROR:  value for domain dtop violates check constraint "dinter_check"
++ERROR:  type "dtop" does not exist
+ select 'xz23'::dtop; -- fail
+-ERROR:  value for domain dtop violates check constraint "dtop_check"
++ERROR:  type "dtop" does not exist
+ create temp table dtest(f1 dtop);
++ERROR:  type "dtop" does not exist
+ insert into dtest values('x123');
++ERROR:  relation "dtest" does not exist
+ insert into dtest values('x1234'); -- fail, implicit coercion
+-ERROR:  value too long for type character varying(4)
++ERROR:  relation "dtest" does not exist
+ insert into dtest values('y1234'); -- fail, implicit coercion
+-ERROR:  value too long for type character varying(4)
++ERROR:  relation "dtest" does not exist
+ insert into dtest values('y123'); -- fail
+-ERROR:  value for domain dtop violates check constraint "dinter_check"
++ERROR:  relation "dtest" does not exist
+ insert into dtest values('yz23'); -- fail
+-ERROR:  value for domain dtop violates check constraint "dinter_check"
++ERROR:  relation "dtest" does not exist
+ insert into dtest values('xz23'); -- fail
+-ERROR:  value for domain dtop violates check constraint "dtop_check"
++ERROR:  relation "dtest" does not exist
+ drop table dtest;
++ERROR:  relation "dtest" does not exist
+ drop domain vchar4 cascade;
+-NOTICE:  drop cascades to 2 other objects
+-DETAIL:  drop cascades to type dinter
+-drop cascades to type dtop
++ERROR:  at or near "vchar4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain vchar4 cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Make sure that constraints of newly-added domain columns are
+ -- enforced correctly, even if there's no default value for the new
+ -- column. Per bug #1433
+ create domain str_domain as text not null;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain str_domain as text not null
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table domain_test (a int, b int);
+ insert into domain_test values (1, 2);
+ insert into domain_test values (1, 2);
+ -- should fail
+ alter table domain_test add column c str_domain;
+-ERROR:  domain str_domain does not allow null values
++ERROR:  type "str_domain" does not exist
+ create domain str_domain2 as text check (value <> 'foo') default 'foo';
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain str_domain2 as text check (value <> 'foo') default 'foo'
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- should fail
+ alter table domain_test add column d str_domain2;
+-ERROR:  value for domain str_domain2 violates check constraint "str_domain2_check"
++ERROR:  type "str_domain2" does not exist
+ -- Check that domain constraints on prepared statement parameters of
+ -- unknown type are enforced correctly.
+ create domain pos_int as int4 check (value > 0) not null;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain pos_int as int4 check (value > 0) not null
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ prepare s1 as select $1::pos_int = 10 as "is_ten";
++ERROR:  type "pos_int" does not exist
+ execute s1(10);
+- is_ten 
+---------
+- t
+-(1 row)
+-
++ERROR:  prepared statement "s1" does not exist
+ execute s1(0); -- should fail
+-ERROR:  value for domain pos_int violates check constraint "pos_int_check"
++ERROR:  prepared statement "s1" does not exist
+ execute s1(NULL); -- should fail
+-ERROR:  domain pos_int does not allow null values
++ERROR:  prepared statement "s1" does not exist
+ -- Check that domain constraints on plpgsql function parameters, results,
+ -- and local variables are enforced correctly.
+ create function doubledecrement(p1 pos_int) returns pos_int as $$
+@@ -927,93 +1652,270 @@
+ begin
+     return p1;
+ end$$ language plpgsql;
++ERROR:  type "pos_int" does not exist
+ select doubledecrement(3); -- fail because of implicit null assignment
+-ERROR:  domain pos_int does not allow null values
+-CONTEXT:  PL/pgSQL function doubledecrement(pos_int) line 2 during statement block local variable initialization
++ERROR:  unknown function: doubledecrement()
+ create or replace function doubledecrement(p1 pos_int) returns pos_int as $$
+ declare v pos_int := 0;
+ begin
+     return p1;
+ end$$ language plpgsql;
++ERROR:  type "pos_int" does not exist
+ select doubledecrement(3); -- fail at initialization assignment
+-ERROR:  value for domain pos_int violates check constraint "pos_int_check"
+-CONTEXT:  PL/pgSQL function doubledecrement(pos_int) line 2 during statement block local variable initialization
++ERROR:  unknown function: doubledecrement()
+ create or replace function doubledecrement(p1 pos_int) returns pos_int as $$
+ declare v pos_int := 1;
+ begin
+     v := p1 - 1;
+     return v - 1;
+ end$$ language plpgsql;
++ERROR:  type "pos_int" does not exist
+ select doubledecrement(null); -- fail before call
+-ERROR:  domain pos_int does not allow null values
++ERROR:  unknown function: doubledecrement()
+ select doubledecrement(0); -- fail before call
+-ERROR:  value for domain pos_int violates check constraint "pos_int_check"
++ERROR:  unknown function: doubledecrement()
+ select doubledecrement(1); -- fail at assignment to v
+-ERROR:  value for domain pos_int violates check constraint "pos_int_check"
+-CONTEXT:  PL/pgSQL function doubledecrement(pos_int) line 4 at assignment
++ERROR:  unknown function: doubledecrement()
+ select doubledecrement(2); -- fail at return
+-ERROR:  value for domain pos_int violates check constraint "pos_int_check"
+-CONTEXT:  PL/pgSQL function doubledecrement(pos_int) while casting return value to function's return type
++ERROR:  unknown function: doubledecrement()
+ select doubledecrement(3); -- good
+- doubledecrement 
+------------------
+-               1
+-(1 row)
+-
++ERROR:  unknown function: doubledecrement()
+ -- Check that ALTER DOMAIN tests columns of derived types
+ create domain posint as int4;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain posint as int4
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Currently, this doesn't work for composite types, but verify it complains
+ create type ddtest1 as (f1 posint);
++ERROR:  type "posint" does not exist
+ create table ddtest2(f1 ddtest1);
++ERROR:  type "ddtest1" does not exist
+ insert into ddtest2 values(row(-1));
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
+-ERROR:  cannot alter type "posint" because column "ddtest2.f1" uses it
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ -- Likewise for domains within arrays of composite
+ create table ddtest2(f1 ddtest1[]);
++ERROR:  type "ddtest1" does not exist
+ insert into ddtest2 values('{(-1)}');
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
+-ERROR:  cannot alter type "posint" because column "ddtest2.f1" uses it
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ -- Likewise for domains within domains over composite
+ create domain ddtest1d as ddtest1;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddtest1d as ddtest1
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table ddtest2(f1 ddtest1d);
++ERROR:  type "ddtest1d" does not exist
+ insert into ddtest2 values('(-1)');
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
+-ERROR:  cannot alter type "posint" because column "ddtest2.f1" uses it
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ drop domain ddtest1d;
++ERROR:  at or near "ddtest1d": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddtest1d
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Likewise for domains within domains over array of composite
+ create domain ddtest1d as ddtest1[];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain ddtest1d as ddtest1[]
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table ddtest2(f1 ddtest1d);
++ERROR:  type "ddtest1d" does not exist
+ insert into ddtest2 values('{(-1)}');
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
+-ERROR:  cannot alter type "posint" because column "ddtest2.f1" uses it
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ drop domain ddtest1d;
++ERROR:  at or near "ddtest1d": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain ddtest1d
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ -- Doesn't work for ranges, either
+ create type rposint as range (subtype = posint);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type rposint as range (subtype = posint)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ create table ddtest2(f1 rposint);
++ERROR:  type "rposint" does not exist
+ insert into ddtest2 values('(-1,3]');
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
+-ERROR:  cannot alter type "posint" because column "ddtest2.f1" uses it
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ drop type rposint;
++ERROR:  type "rposint" does not exist
+ alter domain posint add constraint c1 check(value >= 0);
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c1 check(value >= 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create domain posint2 as posint check (value % 2 = 0);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain posint2 as posint check (value % 2 = 0)
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create table ddtest2(f1 posint2);
++ERROR:  type "posint2" does not exist
+ insert into ddtest2 values(11); -- fail
+-ERROR:  value for domain posint2 violates check constraint "posint2_check"
++ERROR:  relation "ddtest2" does not exist
+ insert into ddtest2 values(-2); -- fail
+-ERROR:  value for domain posint2 violates check constraint "c1"
++ERROR:  relation "ddtest2" does not exist
+ insert into ddtest2 values(2);
++ERROR:  relation "ddtest2" does not exist
+ alter domain posint add constraint c2 check(value >= 10); -- fail
+-ERROR:  column "f1" of table "ddtest2" contains values that violate the new constraint
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c2 check(value >= 10)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain posint add constraint c2 check(value > 0); -- OK
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain posint add constraint c2 check(value > 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop table ddtest2;
++ERROR:  relation "ddtest2" does not exist
+ drop type ddtest1;
++ERROR:  type "ddtest1" does not exist
+ drop domain posint cascade;
+-NOTICE:  drop cascades to type posint2
++ERROR:  at or near "posint": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain posint cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Check enforcement of domain-related typmod in plpgsql (bug #5717)
+ --
+@@ -1024,17 +1926,28 @@
+   x[1] := $1;
+   return x[1];
+ end$$ language plpgsql;
++ERROR:  at or near ";": at or near "x": syntax error
++DETAIL:  source SQL:
++x[1] := $1
++^
++--
++source SQL:
++declare
++  x numeric(4,2)[1];
++begin
++  x[1] := $1;
++            ^
+ select array_elem_check(121.00);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 2 must round to an absolute value less than 10^2.
+-CONTEXT:  PL/pgSQL function array_elem_check(numeric) line 5 at assignment
++ERROR:  unknown function: array_elem_check()
+ select array_elem_check(1.23456);
+- array_elem_check 
+-------------------
+-             1.23
+-(1 row)
+-
++ERROR:  unknown function: array_elem_check()
+ create domain mynums as numeric(4,2)[1];
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain mynums as numeric(4,2)[1]
++                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create or replace function array_elem_check(numeric) returns numeric as $$
+ declare
+   x mynums;
+@@ -1042,17 +1955,28 @@
+   x[1] := $1;
+   return x[1];
+ end$$ language plpgsql;
++ERROR:  at or near ";": at or near "x": syntax error
++DETAIL:  source SQL:
++x[1] := $1
++^
++--
++source SQL:
++declare
++  x mynums;
++begin
++  x[1] := $1;
++            ^
+ select array_elem_check(121.00);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 2 must round to an absolute value less than 10^2.
+-CONTEXT:  PL/pgSQL function array_elem_check(numeric) line 5 at assignment
++ERROR:  unknown function: array_elem_check()
+ select array_elem_check(1.23456);
+- array_elem_check 
+-------------------
+-             1.23
+-(1 row)
+-
++ERROR:  unknown function: array_elem_check()
+ create domain mynums2 as mynums;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain mynums2 as mynums
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create or replace function array_elem_check(numeric) returns numeric as $$
+ declare
+   x mynums2;
+@@ -1060,42 +1984,57 @@
+   x[1] := $1;
+   return x[1];
+ end$$ language plpgsql;
++ERROR:  at or near ";": at or near "x": syntax error
++DETAIL:  source SQL:
++x[1] := $1
++^
++--
++source SQL:
++declare
++  x mynums2;
++begin
++  x[1] := $1;
++            ^
+ select array_elem_check(121.00);
+-ERROR:  numeric field overflow
+-DETAIL:  A field with precision 4, scale 2 must round to an absolute value less than 10^2.
+-CONTEXT:  PL/pgSQL function array_elem_check(numeric) line 5 at assignment
++ERROR:  unknown function: array_elem_check()
+ select array_elem_check(1.23456);
+- array_elem_check 
+-------------------
+-             1.23
+-(1 row)
+-
++ERROR:  unknown function: array_elem_check()
+ drop function array_elem_check(numeric);
++ERROR:  unknown function: array_elem_check()
+ --
+ -- Check enforcement of array-level domain constraints
+ --
+ create domain orderedpair as int[2] check (value[1] < value[2]);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain orderedpair as int[2] check (value[1] < value[2])
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select array[1,2]::orderedpair;
+- array 
+--------
+- {1,2}
+-(1 row)
+-
++ERROR:  type "orderedpair" does not exist
+ select array[2,1]::orderedpair;  -- fail
+-ERROR:  value for domain orderedpair violates check constraint "orderedpair_check"
++ERROR:  type "orderedpair" does not exist
+ create temp table op (f1 orderedpair);
++ERROR:  type "orderedpair" does not exist
+ insert into op values (array[1,2]);
++ERROR:  relation "op" does not exist
+ insert into op values (array[2,1]);  -- fail
+-ERROR:  value for domain orderedpair violates check constraint "orderedpair_check"
++ERROR:  relation "op" does not exist
+ update op set f1[2] = 3;
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update op set f1[2] = 3
++                ^
++HINT:  try \h UPDATE
+ update op set f1[2] = 0;  -- fail
+-ERROR:  value for domain orderedpair violates check constraint "orderedpair_check"
++ERROR:  at or near "[": syntax error
++DETAIL:  source SQL:
++update op set f1[2] = 0
++                ^
++HINT:  try \h UPDATE
+ select * from op;
+-  f1   
+--------
+- {1,3}
+-(1 row)
+-
++ERROR:  relation "op" does not exist
+ create or replace function array_elem_check(int) returns int as $$
+ declare
+   x orderedpair := '{1,2}';
+@@ -1103,20 +2042,33 @@
+   x[2] := $1;
+   return x[2];
+ end$$ language plpgsql;
++ERROR:  at or near ";": at or near "x": syntax error
++DETAIL:  source SQL:
++x[2] := $1
++^
++--
++source SQL:
++declare
++  x orderedpair := '{1,2}';
++begin
++  x[2] := $1;
++            ^
+ select array_elem_check(3);
+- array_elem_check 
+-------------------
+-                3
+-(1 row)
+-
++ERROR:  unknown function: array_elem_check()
+ select array_elem_check(-1);
+-ERROR:  value for domain orderedpair violates check constraint "orderedpair_check"
+-CONTEXT:  PL/pgSQL function array_elem_check(integer) line 5 at assignment
++ERROR:  unknown function: array_elem_check()
+ drop function array_elem_check(int);
++ERROR:  unknown function: array_elem_check()
+ --
+ -- Check enforcement of changing constraints in plpgsql
+ --
+ create domain di as int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain di as int
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create function dom_check(int) returns di as $$
+ declare d di;
+ begin
+@@ -1124,23 +2076,45 @@
+   return d;
+ end
+ $$ language plpgsql immutable;
++ERROR:  type "di" does not exist
+ select dom_check(0);
+- dom_check 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: dom_check()
+ alter domain di add constraint pos check (value > 0);
++ERROR:  at or near "di": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain di add constraint pos check (value > 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select dom_check(0); -- fail
+-ERROR:  value for domain di violates check constraint "pos"
+-CONTEXT:  PL/pgSQL function dom_check(integer) line 4 at assignment
++ERROR:  unknown function: dom_check()
+ alter domain di drop constraint pos;
+-select dom_check(0);
+- dom_check 
+------------
+-         0
+-(1 row)
++ERROR:  at or near "di": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain di drop constraint pos
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++select dom_check(0);
++ERROR:  unknown function: dom_check()
+ -- implicit cast during assignment is a separate code path, test that too
+ create or replace function dom_check(int) returns di as $$
+ declare d di;
+@@ -1149,25 +2123,54 @@
+   return d;
+ end
+ $$ language plpgsql immutable;
++ERROR:  type "di" does not exist
+ select dom_check(0);
+- dom_check 
+------------
+-         0
+-(1 row)
+-
++ERROR:  unknown function: dom_check()
+ alter domain di add constraint pos check (value > 0);
++ERROR:  at or near "di": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain di add constraint pos check (value > 0)
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ select dom_check(0); -- fail
+-ERROR:  value for domain di violates check constraint "pos"
+-CONTEXT:  PL/pgSQL function dom_check(integer) line 4 at assignment
++ERROR:  unknown function: dom_check()
+ alter domain di drop constraint pos;
+-select dom_check(0);
+- dom_check 
+------------
+-         0
+-(1 row)
++ERROR:  at or near "di": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain di drop constraint pos
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select dom_check(0);
++ERROR:  unknown function: dom_check()
+ drop function dom_check(int);
++ERROR:  unknown function: dom_check()
+ drop domain di;
++ERROR:  at or near "di": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain di
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Check use of a (non-inline-able) SQL function in a domain constraint;
+ -- this has caused issues in the past
+@@ -1177,33 +2180,115 @@
+ as 'select $1 is distinct from $2 limit 1';
+ create domain inotnull int
+   check (sql_is_distinct_from(value, null));
++ERROR:  at or near "int": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain inotnull int
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select 1::inotnull;
+- inotnull 
+-----------
+-        1
+-(1 row)
+-
++ERROR:  type "inotnull" does not exist
+ select null::inotnull;
+-ERROR:  value for domain inotnull violates check constraint "inotnull_check"
++ERROR:  type "inotnull" does not exist
+ create table dom_table (x inotnull);
++ERROR:  type "inotnull" does not exist
+ insert into dom_table values ('1');
++ERROR:  relation "dom_table" does not exist
+ insert into dom_table values (1);
++ERROR:  relation "dom_table" does not exist
+ insert into dom_table values (null);
+-ERROR:  value for domain inotnull violates check constraint "inotnull_check"
++ERROR:  relation "dom_table" does not exist
+ drop table dom_table;
++ERROR:  relation "dom_table" does not exist
+ drop domain inotnull;
++ERROR:  at or near "inotnull": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain inotnull
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ drop function sql_is_distinct_from(anyelement, anyelement);
+ --
+ -- Renaming
+ --
+ create domain testdomain1 as int;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain testdomain1 as int
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ alter domain testdomain1 rename to testdomain2;
++ERROR:  at or near "testdomain1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain testdomain1 rename to testdomain2
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter type testdomain2 rename to testdomain3;  -- alter type also works
++ERROR:  type "testdomain2" does not exist
+ drop domain testdomain3;
++ERROR:  at or near "testdomain3": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain testdomain3
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Renaming domain constraints
+ --
+ create domain testdomain1 as int constraint unsigned check (value > 0);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain testdomain1 as int constraint unsigned check (value > 0)
++                          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ alter domain testdomain1 rename constraint unsigned to unsigned_foo;
++ERROR:  at or near "testdomain1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain testdomain1 rename constraint unsigned to unsigned_foo
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ alter domain testdomain1 drop constraint unsigned_foo;
++ERROR:  at or near "testdomain1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++alter domain testdomain1 drop constraint unsigned_foo
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ drop domain testdomain1;
++ERROR:  at or near "testdomain1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain testdomain1
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_

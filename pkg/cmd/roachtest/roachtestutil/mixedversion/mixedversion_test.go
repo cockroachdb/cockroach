@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -206,6 +206,33 @@ func Test_assertValidTest(t *testing.T) {
 	mvt = newTest(MinimumSupportedVersion("v22.2.0"))
 	assertValidTest(mvt, fatalFunc())
 	require.NoError(t, fatalErr)
+
+	// Test that if there are fewer upgrades possible between the minimum
+	// bootstrap version and the current version than MaxUpgrades, maxUpgrades
+	// is overridden to the former.
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MaxUpgrades(10))
+	assertValidTest(mvt, fatalFunc())
+	require.NoError(t, fatalErr)
+	require.Equal(t, 3, mvt.options.maxUpgrades)
+
+	// Test that if there are fewer upgrades possible between the minimum
+	// bootstrap version and the current version than MinUpgrades, the test
+	// is invalid.
+	mvt = newTest(MinimumBootstrapVersion("v21.2.0"), MinUpgrades(10))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v21.2.0) does not allow for min 10 upgrades`,
+		fatalErr.Error(),
+	)
+
+	mvt = newTest(MinimumBootstrapVersion("v24.2.0"))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Equal(t,
+		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v24.2.0) should be from an older release series than current version (v23.1.2)`,
+		fatalErr.Error(),
+	)
 }
 
 func Test_choosePreviousReleases(t *testing.T) {
@@ -268,13 +295,14 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 			mvt._arch = &tc.arch
 
-			releases, err := mvt.choosePreviousReleases()
+			releases, err := mvt.chooseUpgradePath()
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				var expectedVersions []*clusterupgrade.Version
 				for _, er := range tc.expectedReleases {
 					expectedVersions = append(expectedVersions, clusterupgrade.MustParseVersion(er))
 				}
+				expectedVersions = append(expectedVersions, clusterupgrade.CurrentVersion())
 				require.Equal(t, expectedVersions, releases)
 			} else {
 				require.Error(t, err)
@@ -371,15 +399,17 @@ func Test_randomPredecessor(t *testing.T) {
 // "current version". Returns a function that resets that variable.
 func withTestBuildVersion(v string) func() {
 	testBuildVersion := version.MustParse(v)
-	clusterupgrade.TestBuildVersion = testBuildVersion
-	return func() { clusterupgrade.TestBuildVersion = nil }
+	clusterupgrade.TestBuildVersion = &testBuildVersion
+	return func() { clusterupgrade.TestBuildVersion = &buildVersion }
 }
 
 func TestSupportsSkipUpgradeTo(t *testing.T) {
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
-		if r := clusterversion.Latest.ReleaseSeries(); int(r.Major) == v.Major() && int(r.Minor) == v.Minor() {
+		r := clusterversion.Latest.ReleaseSeries()
+		currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+		if currentMajor.Equals(v.Version.Major()) {
 			// We have to special case the current series, to allow for bumping the
 			// min supported version separately from the current version.
 			expected = len(clusterversion.SupportedPreviousReleases()) > 1

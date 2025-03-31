@@ -1,0 +1,407 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/brin_bloom.out --label=/mnt/data1/postgres/src/test/regress/results/brin_bloom.out /mnt/data1/postgres/src/test/regress/expected/brin_bloom.out /mnt/data1/postgres/src/test/regress/results/brin_bloom.out
+--- /mnt/data1/postgres/src/test/regress/expected/brin_bloom.out
++++ /mnt/data1/postgres/src/test/regress/results/brin_bloom.out
+@@ -22,6 +22,22 @@
+ 	uuidcol uuid,
+ 	lsncol pg_lsn
+ ) WITH (fillfactor=10);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE brintest_bloom (byteacol bytea,
++	charcol "char",
++	namecol name,
++	int8col bigint,
++	int2col smallint,
++	int4col integer,
++	textcol text,
++	oidcol oid,
++	float4col real,
++	float8col double precision,
++	macaddrcol macaddr,
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ INSERT INTO brintest_bloom SELECT
+ 	repeat(stringu1, 8)::bytea,
+ 	substr(stringu1, 1, 1)::"char",
+@@ -46,29 +62,92 @@
+ 	format('%s%s-%s-%s-%s-%s%s%s', to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'))::uuid,
+ 	format('%s/%s%s', odd, even, tenthous)::pg_lsn
+ FROM tenk1 ORDER BY unique2 LIMIT 100;
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest_bloom SELECT
++	repeat(stringu1, 8)::bytea,
++	substr(stringu1, 1, 1)::"char",
++	stringu1::name, 142857 * tenthous,
++	thousand,
++	twothousand,
++	repeat(stringu1, 8),
++	unique1::oid,
++	(four + 1.0)/(hundred+1),
++	odd::float8 / (tenthous + 1),
++	format('%s:00:%s:00:%s:00', to_hex(odd), to_hex(even), to_hex(hundred))::macaddr,
++                                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ -- throw in some NULL's and different values
+ INSERT INTO brintest_bloom (inetcol, cidrcol) SELECT
+ 	inet 'fe80::6e40:8ff:fea9:8c46' + tenthous,
+ 	cidr 'fe80::6e40:8ff:fea9:8c46' + tenthous
+ FROM tenk1 ORDER BY thousand, tenthous LIMIT 25;
++ERROR:  at or near "fe80::6e40:8ff:fea9:8c46": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest_bloom (inetcol, cidrcol) SELECT
++	inet 'fe80::6e40:8ff:fea9:8c46' + tenthous,
++	cidr 'fe80::6e40:8ff:fea9:8c46' + tenthous
++      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ -- test bloom specific index options
+ -- ndistinct must be >= -1.0
+ CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
+ 	byteacol bytea_bloom_ops(n_distinct_per_range = -1.1)
+ );
+-ERROR:  value -1.1 out of bounds for option "n_distinct_per_range"
+-DETAIL:  Valid values are between "-1.000000" and "2147483647.000000".
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- false_positive_rate must be between 0.0001 and 0.25
+ CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
+ 	byteacol bytea_bloom_ops(false_positive_rate = 0.00009)
+ );
+-ERROR:  value 0.00009 out of bounds for option "false_positive_rate"
+-DETAIL:  Valid values are between "0.000100" and "0.250000".
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
+ 	byteacol bytea_bloom_ops(false_positive_rate = 0.26)
+ );
+-ERROR:  value 0.26 out of bounds for option "false_positive_rate"
+-DETAIL:  Valid values are between "0.000100" and "0.250000".
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
+ 	byteacol bytea_bloom_ops,
+ 	charcol char_bloom_ops,
+@@ -94,6 +173,21 @@
+ 	uuidcol uuid_bloom_ops,
+ 	lsncol pg_lsn_bloom_ops
+ ) with (pages_per_range = 1);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_bloom ON brintest_bloom USING brin (
++                                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE brinopers_bloom (colname name, typ text,
+ 	op text[], value text[], matches int[],
+ 	check (cardinality(op) = cardinality(value)),
+@@ -287,8 +381,46 @@
+ 	END LOOP;
+ END;
+ $x$;
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DECLARE
++	r record;
++	r2 record;
++	cond text;
++	idx_ctids tid[];
++	ss_ctids tid[];
++	count int;
++	plan_ok bool;
++	plan_line text;
++BEGIN
++	FOR r IN SELECT colname, oper, typ, value[ordinality], matches[ordinality] FROM brinopers_bloom, unnest(op) WITH ORDINALITY AS oper LOOP
++       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO brintest_bloom SELECT
+ 	repeat(stringu1, 42)::bytea,
+ 	substr(stringu1, 1, 1)::"char",
+@@ -313,52 +445,71 @@
+ 	format('%s%s-%s-%s-%s-%s%s%s', to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'), to_char(tenthous, 'FM0000'))::uuid,
+ 	format('%s/%s%s', odd, even, tenthous)::pg_lsn
+ FROM tenk1 ORDER BY unique2 LIMIT 5 OFFSET 5;
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest_bloom SELECT
++	repeat(stringu1, 42)::bytea,
++	substr(stringu1, 1, 1)::"char",
++	stringu1::name, 142857 * tenthous,
++	thousand,
++	twothousand,
++	repeat(stringu1, 42),
++	unique1::oid,
++	(four + 1.0)/(hundred+1),
++	odd::float8 / (tenthous + 1),
++	format('%s:00:%s:00:%s:00', to_hex(odd), to_hex(even), to_hex(hundred))::macaddr,
++                                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ SELECT brin_desummarize_range('brinidx_bloom', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ VACUUM brintest_bloom;  -- force a summarization cycle in brinidx
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM brintest_bloom
++^
+ UPDATE brintest_bloom SET int8col = int8col * int4col;
++ERROR:  relation "brintest_bloom" does not exist
+ UPDATE brintest_bloom SET textcol = '' WHERE textcol IS NOT NULL;
++ERROR:  relation "brintest_bloom" does not exist
+ -- Tests for brin_summarize_new_values
+ SELECT brin_summarize_new_values('brintest_bloom'); -- error, not an index
+-ERROR:  "brintest_bloom" is not an index
++ERROR:  unknown function: brin_summarize_new_values()
+ SELECT brin_summarize_new_values('tenk1_unique1'); -- error, not a BRIN index
+-ERROR:  "tenk1_unique1" is not a BRIN index
++ERROR:  unknown function: brin_summarize_new_values()
+ SELECT brin_summarize_new_values('brinidx_bloom'); -- ok, no change expected
+- brin_summarize_new_values 
+----------------------------
+-                         0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_new_values()
+ -- Tests for brin_desummarize_range
+ SELECT brin_desummarize_range('brinidx_bloom', -1); -- error, invalid range
+-ERROR:  block number out of range: -1
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx_bloom', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx_bloom', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx_bloom', 100000000);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ -- Test brin_summarize_range
+ CREATE TABLE brin_summarize_bloom (
+     value int
+ ) WITH (fillfactor=10, autovacuum_enabled=false);
++NOTICE:  storage parameter "fillfactor" is ignored
++NOTICE:  storage parameter "autovacuum_enabled = false" is ignored
+ CREATE INDEX brin_summarize_bloom_idx ON brin_summarize_bloom USING brin (value) WITH (pages_per_range=2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_summarize_bloom_idx ON brin_summarize_bloom USING brin (value) WITH (pages_per_range=2)
++                                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Fill a few pages
+ DO $$
+ DECLARE curtid tid;
+@@ -369,60 +520,76 @@
+   END LOOP;
+ END;
+ $$;
++ERROR:  type "tid" does not exist
+ -- summarize one range
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', 0);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- nothing: already summarized
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', 1);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- summarize one range
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', 2);
+- brin_summarize_range 
+-----------------------
+-                    1
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- nothing: page doesn't exist in table
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', 4294967295);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- invalid block number values
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', -1);
+-ERROR:  block number out of range: -1
++ERROR:  unknown function: brin_summarize_range()
+ SELECT brin_summarize_range('brin_summarize_bloom_idx', 4294967296);
+-ERROR:  block number out of range: 4294967296
++ERROR:  unknown function: brin_summarize_range()
+ -- test brin cost estimates behave sanely based on correlation of values
+ CREATE TABLE brin_test_bloom (a INT, b INT);
+ INSERT INTO brin_test_bloom SELECT x/100,x%100 FROM generate_series(1,10000) x(x);
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ CREATE INDEX brin_test_bloom_a_idx ON brin_test_bloom USING brin (a) WITH (pages_per_range = 2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_test_bloom_a_idx ON brin_test_bloom USING brin (a) WITH (pages_per_range = 2)
++                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX brin_test_bloom_b_idx ON brin_test_bloom USING brin (b) WITH (pages_per_range = 2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_test_bloom_b_idx ON brin_test_bloom USING brin (b) WITH (pages_per_range = 2)
++                                                            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ VACUUM ANALYZE brin_test_bloom;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE brin_test_bloom
++^
+ -- Ensure brin index is used when columns are perfectly correlated
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_test_bloom WHERE a = 1;
+-                    QUERY PLAN                    
+---------------------------------------------------
+- Bitmap Heap Scan on brin_test_bloom
+-   Recheck Cond: (a = 1)
+-   ->  Bitmap Index Scan on brin_test_bloom_a_idx
+-         Index Cond: (a = 1)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_test_bloom WHERE a = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure brin index is not used when values are not correlated
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_test_bloom WHERE b = 1;
+-         QUERY PLAN          
+------------------------------
+- Seq Scan on brin_test_bloom
+-   Filter: (b = 1)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_test_bloom WHERE b = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>

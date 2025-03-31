@@ -1,0 +1,20 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k INT PRIMARY KEY,
+  V STRING
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE INDEX rbr_idx ON multiregion_db.public.table_regional_by_row (v);
+----
+Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹public›.‹table_regional_by_row› (‹v›) PARTITION BY ‹crdb_region›) ();
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey in relation table_regional_by_row
+ │    └── into rbr_idx+ (crdb_region, v: k)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[3] into rbr_idx+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index rbr_idx+ in relation table_regional_by_row
+ └── execute 1 system table mutations transaction

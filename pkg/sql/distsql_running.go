@@ -751,8 +751,10 @@ func (dsp *DistSQLPlanner) Run(
 	// then we are ignorant of the details of the execution plan, so we choose
 	// to be on the safe side and mark 'noMutations' as 'false'.
 	noMutations := planCtx.planner != nil && !planCtx.planner.curPlan.flags.IsSet(planFlagContainsMutation)
+	log.VEventf(ctx, 3, "noMutations = %t", noMutations)
 
 	if txn == nil {
+		log.VEventf(ctx, 3, "nil txn")
 		// Txn can be nil in some cases, like BulkIO flows. In such a case, we
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
@@ -795,6 +797,7 @@ func (dsp *DistSQLPlanner) Run(
 			// TODO(yuzefovich): fix the propagation of the lock spans with the leaf
 			// txns and remove this check. See #94290.
 			containsLocking := planCtx.planner != nil && planCtx.planner.curPlan.flags.IsSet(planFlagContainsLocking)
+			log.VEventf(ctx, 3, "containsLocking = %t", containsLocking)
 
 			// We also currently disable the usage of the Streamer API whenever
 			// we have a wrapped planNode. This is done to prevent scenarios
@@ -809,8 +812,15 @@ func (dsp *DistSQLPlanner) Run(
 			// cases.
 			mustUseRootTxn := func() bool {
 				for _, p := range plan.Processors {
-					if p.Spec.Core.LocalPlanNode != nil {
-						return true
+					if n := p.Spec.Core.LocalPlanNode; n != nil {
+						switch n.Name {
+						case "scan buffer", "buffer":
+							// scanBufferNode and bufferNode don't interact with
+							// txns directly, so they are safe.
+						default:
+							log.VEventf(ctx, 3, "must use root txn due to %q wrapped planNode", n.Name)
+							return true
+						}
 					}
 				}
 				return false
@@ -2549,24 +2559,29 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// For parallel checks we must make all `scanBufferNode`s in the plans
 	// concurrency-safe. (The need to be able to walk the planNode tree is why
 	// we currently disable the usage of the new DistSQL spec factory.)
-	observer := planObserver{
-		enterNode: func(_ context.Context, _ string, plan planNode) (bool, error) {
-			if s, ok := plan.(*scanBufferNode); ok {
-				s.makeConcurrencySafe(&mu)
+	var makeScanBuffersConcurrencySafe func(p planNode) error
+	makeScanBuffersConcurrencySafe = func(p planNode) error {
+		if s, ok := p.(*scanBufferNode); ok {
+			s.makeConcurrencySafe(&mu)
+		}
+		for i, n := 0, p.InputCount(); i < n; i++ {
+			input, err := p.Input(i)
+			if err != nil {
+				return err
 			}
-			return true, nil
-		},
+			if err := makeScanBuffersConcurrencySafe(input); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	for i := range checkPlans {
 		if checkPlans[i].plan.isPhysicalPlan() {
 			return errors.AssertionFailedf("unexpectedly physical plan is used for a parallel CHECK")
 		}
-		// Ignore the error since our observer never returns an error.
-		_ = walkPlan(
-			ctx,
-			checkPlans[i].plan.planNode,
-			observer,
-		)
+		if err := makeScanBuffersConcurrencySafe(checkPlans[i].plan.planNode); err != nil {
+			return err
+		}
 	}
 	var getSaveFlowsFunc func() SaveFlowsFunc
 	if planner.instrumentation.ShouldSaveFlows() {

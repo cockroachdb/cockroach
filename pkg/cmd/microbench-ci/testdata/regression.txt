@@ -11,8 +11,10 @@ benchmarks:
     compare_alpha: 0.05
     retries: 3
     metrics:
-      - "sec/op"
-      - "allocs/op"
+      - name: "sec/op"
+        threshold: 0.005
+      - name: "allocs/op"
+        threshold: 0.002
 
 ----
 
@@ -147,7 +149,6 @@ tree
 
 /abcdef123
 /abcdef123/artifacts
-/abcdef123/artifacts/.REGRESSED
 /abcdef123/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /abcdef123/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /abcdef123/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof

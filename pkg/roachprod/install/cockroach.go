@@ -28,11 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"golang.org/x/exp/maps"
 )
 
@@ -153,6 +154,10 @@ type StartOpts struct {
 	// EnableFluentSink determines whether to enable the fluent-servers attribute
 	// in the CockroachDB logging configuration.
 	EnableFluentSink bool
+
+	// PreStartHooks are hooks that are run after service registration has occurred,
+	// but before starting the cockroach process.
+	PreStartHooks []PreStartHook
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -387,7 +392,8 @@ func (c *SyncedCluster) fetchVersion(
 	if err != nil {
 		return nil, err
 	}
-	return version.Parse(strings.TrimSpace(result.CombinedOut))
+	v, err := version.Parse(strings.TrimSpace(result.CombinedOut))
+	return &v, err
 }
 
 // Start cockroach on the cluster. For non-multitenant deployments or
@@ -432,6 +438,16 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}, "\n"))
 		startOpts.SQLPort = config.DefaultSQLPort
 		startOpts.AdminUIPort = config.DefaultAdminUIPort
+	}
+
+	for _, hook := range startOpts.PreStartHooks {
+		hookCtx, cancel := context.WithTimeout(ctx, hook.Timeout)
+		l.Printf("running pre-start hook: %s", hook.Name)
+		err := panicAsError(hookCtx, l, hook.Fn)
+		cancel()
+		if err != nil {
+			return err
+		}
 	}
 
 	if startOpts.IsVirtualCluster() {
@@ -1165,7 +1181,7 @@ func (c *SyncedCluster) generateStartFlagsKV(
 		// N.B. WALFailover is only supported in v24+.
 		// If version is unknown, we only set WALFailover if StoreCount > 1.
 		// To silence redundant warnings, when other nodes are started, we reset WALFailover.
-		if startOpts.Version != nil && startOpts.Version.Major() < 24 {
+		if startOpts.Version != nil && startOpts.Version.Major().Year < 24 {
 			l.Printf("WARN: WALFailover is only supported in v24+. Ignoring --wal-failover flag.")
 			startOpts.WALFailover = ""
 		} else if startOpts.Version == nil && startOpts.StoreCount <= 1 {
@@ -1376,6 +1392,11 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	clusterSettings := map[string]string{
 		"cluster.organization": "Cockroach Labs - Production Testing",
 		"enterprise.license":   license,
+		// N.B. We now enable `PanicOnAssertions` for all roachprod clusters.
+		// (See https://github.com/cockroachdb/cockroach/issues/136858)
+		// Use the internal name instead of the user visible name, which wasn't
+		// added until 23.2, to avoid breaking mixed version tests.
+		"debug.panic_on_failed_assertions": "true",
 	}
 	for name, value := range c.ClusterSettings.ClusterSettings {
 		clusterSettings[name] = value
@@ -1670,4 +1691,32 @@ func getEnvVars() []string {
 // this workaround and just log the constants once when the cluster is started.
 func SuppressMetamorphicConstantsEnvVar() string {
 	return config.DisableMetamorphicTestingEnvVar
+}
+
+// PreStartHook is a hook that is run locally after service registration has completed
+// but before any cockroach processes have started in the cluster.
+type PreStartHook struct {
+	Name    string
+	Fn      func(context.Context) error
+	Timeout time.Duration
+}
+
+// logPanicToErr logs the panic stack trace and returns an error with the
+// panic message.
+func panicAsError(
+	ctx context.Context, l *logger.Logger, f func(context.Context) error,
+) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = logPanicToErr(l, r)
+		}
+	}()
+	return f(ctx)
+}
+
+// logPanicToErr logs the panic stack trace and returns an error with the
+// panic message.
+func logPanicToErr(l *logger.Logger, r interface{}) error {
+	l.Printf("panic stack trace:\n%s", debugutil.Stack())
+	return fmt.Errorf("panic (stack trace above): %v", r)
 }

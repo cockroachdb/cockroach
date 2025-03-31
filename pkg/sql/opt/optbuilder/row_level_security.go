@@ -59,13 +59,53 @@ func (b *Builder) addRowLevelSecurityFilter(
 func (b *Builder) buildRowLevelSecurityUsingExpression(
 	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
 ) opt.ScalarExpr {
+	combinedExpr := b.combinePolicyUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
+	if combinedExpr == nil {
+		// No policies, filter out all rows by adding a "false" expression.
+		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
+		return memo.FalseSingleton
+	}
+	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
+}
+
+// combinePolicyUsingExpressionForCommand generates a `tree.TypedExpr` command
+// for use in the scan. Depending on the policy command scope, it may simply
+// pass through to `buildRowLevelSecurityUsingExpressionForCommand`.
+// For other commands, the process is more complex and may involve multiple
+// calls to that function to generate the expression.
+func (b *Builder) combinePolicyUsingExpressionForCommand(
+	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
+) tree.TypedExpr {
+	// For DELETE and UPDATE, we always apply SELECT/ALL policies because
+	// reading the existing row is necessary before performing the write.
+	switch cmdScope {
+	case cat.PolicyScopeUpdate, cat.PolicyScopeDelete:
+		selectExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cat.PolicyScopeSelect)
+		if selectExpr == nil {
+			return selectExpr
+		}
+		updateExpr := b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
+		if updateExpr == nil {
+			return nil
+		}
+		return tree.NewTypedAndExpr(selectExpr, updateExpr)
+	default:
+		return b.buildRowLevelSecurityUsingExpressionForCommand(tabMeta, tableScope, cmdScope)
+	}
+}
+
+// buildRowLevelSecurityUsingExpressionForCommand will generate a tree.TypedExpr
+// for all policies that apply to the given policy command scope.
+func (b *Builder) buildRowLevelSecurityUsingExpressionForCommand(
+	tabMeta *opt.TableMeta, tableScope *scope, cmdScope cat.PolicyCommandScope,
+) tree.TypedExpr {
 	var policiesUsed opt.PolicyIDSet
 	var combinedExpr tree.TypedExpr
 	policies := tabMeta.Table.Policies()
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(policy cat.Policy, restrictive bool) {
-		if !policy.AppliesToRole(b.checkPrivilegeUser) || !b.policyAppliesToCommandScope(policy, cmdScope) {
+		if !policy.AppliesToRole(b.checkPrivilegeUser) || !policyAppliesToCommandScope(policy, cmdScope) {
 			return
 		}
 		strExpr := policy.UsingExpr
@@ -95,9 +135,8 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 		buildForPolicy(policy, false /* restrictive */)
 	}
 	if combinedExpr == nil {
-		// If no permissive policies apply, filter out all rows by adding a "false" expression.
-		b.factory.Metadata().GetRLSMeta().NoPoliciesApplied = true
-		return memo.FalseSingleton
+		// No permissive policies. Return an empty expr to force the caller to generate a deny-all expression.
+		return nil
 	}
 	for _, policy := range policies.Restrictive {
 		buildForPolicy(policy, true /* restrictive */)
@@ -108,15 +147,13 @@ func (b *Builder) buildRowLevelSecurityUsingExpression(
 		panic(errors.AssertionFailedf("at least one applicable policy should have been found"))
 	}
 	b.factory.Metadata().GetRLSMeta().AddPoliciesUsed(tabMeta.MetaID, policiesUsed, true /* applyFilterExpr */)
-	return b.buildScalar(combinedExpr, tableScope, nil, nil, nil)
+	return combinedExpr
 }
 
 // policyAppliesToCommandScope checks whether a given PolicyCommandScope applies
 // to the specified policy. It returns true if the policy is applicable and
 // false otherwise.
-func (b *Builder) policyAppliesToCommandScope(
-	policy cat.Policy, cmdScope cat.PolicyCommandScope,
-) bool {
+func policyAppliesToCommandScope(policy cat.Policy, cmdScope cat.PolicyCommandScope) bool {
 	if cmdScope == cat.PolicyScopeExempt {
 		return true
 	}
@@ -174,8 +211,6 @@ func (r *optRLSConstraintBuilder) Build(ctx context.Context) cat.CheckConstraint
 // genExpression builds the expression that will be used within the check
 // constraint built for RLS.
 func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []int) {
-	var sb strings.Builder
-
 	// colIDs tracks the column IDs referenced in all the policy expressions
 	// that are applied. We use a set as we need to combine the columns used
 	// for multiple policies.
@@ -196,12 +231,47 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 		return "true", nil
 	}
 
+	combinedExpr := r.combinePolicyWithCheckExpr(&colIDs)
+	// If no policies apply, then we will add a false check as nothing is allowed
+	// to be written.
+	if combinedExpr == "" {
+		r.md.GetRLSMeta().NoPoliciesApplied = true
+		return "false", nil
+	}
+	return combinedExpr, colIDs.Ordered()
+}
+
+// combinePolicyWithCheckExpr will build a combined expression depending if this
+// is INSERT or UPDATE.
+func (r *optRLSConstraintBuilder) combinePolicyWithCheckExpr(colIDs *intsets.Fast) string {
+	// When handling UPDATE, we need to add the SELECT/ALL using expressions
+	// first, then apply any UPDATE policy.
+	if r.isUpdate {
+		selExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeSelect)
+		if selExpr == "" {
+			return ""
+		}
+		updExpr := r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeUpdate)
+		if updExpr == "" {
+			return ""
+		}
+		return fmt.Sprintf("(%s) and (%s)", selExpr, updExpr)
+	}
+	return r.genPolicyWithCheckExprForCommand(colIDs, cat.PolicyScopeInsert)
+}
+
+// genPolicyWithCheckExprForCommand will build a WITH CHECK expression for the
+// given policy command.
+func (r *optRLSConstraintBuilder) genPolicyWithCheckExprForCommand(
+	colIDs *intsets.Fast, cmdScope cat.PolicyCommandScope,
+) string {
+	var sb strings.Builder
 	var policiesUsed opt.PolicyIDSet
 	policies := r.tabMeta.Table.Policies()
 
 	// Create a closure to handle building the expression for one policy.
 	buildForPolicy := func(p cat.Policy, restrictive bool) {
-		if !p.AppliesToRole(r.user) || !r.policyAppliesToCommand(&p, r.isUpdate) {
+		if !p.AppliesToRole(r.user) || !policyAppliesToCommandScope(p, cmdScope) {
 			return
 		}
 		policiesUsed.Add(p.ID)
@@ -245,7 +315,7 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 	// nothing is allowed to be written.
 	if sb.Len() == 0 {
 		r.md.GetRLSMeta().NoPoliciesApplied = true
-		return "false", nil
+		return "false"
 	}
 	sb.WriteString(")") // Close the outer parenthesis that surrounds all permissive policies
 	for _, policy := range policies.Restrictive {
@@ -256,24 +326,7 @@ func (r *optRLSConstraintBuilder) genExpression(ctx context.Context) (string, []
 		panic(errors.AssertionFailedf("at least one applicable policy should have been included"))
 	}
 	r.md.GetRLSMeta().AddPoliciesUsed(r.tabMeta.MetaID, policiesUsed, false /* applyFilterExpr */)
-	return sb.String(), colIDs.Ordered()
-}
-
-// policyAppliesToCommand will return true iff the command set in the policy
-// applies to the current mutation action.
-func (r *optRLSConstraintBuilder) policyAppliesToCommand(policy *cat.Policy, isUpdate bool) bool {
-	switch policy.Command {
-	case catpb.PolicyCommand_ALL:
-		return true
-	case catpb.PolicyCommand_SELECT, catpb.PolicyCommand_DELETE:
-		return false
-	case catpb.PolicyCommand_INSERT:
-		return !isUpdate
-	case catpb.PolicyCommand_UPDATE:
-		return isUpdate
-	default:
-		panic(errors.AssertionFailedf("unknown policy command %v", policy.Command))
-	}
+	return sb.String()
 }
 
 // isTableOwnerAndRLSNotForced returns true iff the user is the table owner and

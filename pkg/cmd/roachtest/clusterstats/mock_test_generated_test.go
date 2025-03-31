@@ -11,7 +11,7 @@ import (
 	task "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	test "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	version "github.com/cockroachdb/cockroach/pkg/util/version"
+	version "github.com/cockroachdb/version"
 	gomock "github.com/golang/mock/gomock"
 )
 

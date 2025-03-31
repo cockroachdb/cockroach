@@ -101,9 +101,9 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 		}
 		for _, rn := range nodes {
 			idx := int(rn.Status().ID - 1)
-			if len(rn.ApplyWork) > 0 {
+			if !rn.ApplyWork.Empty() {
 				fmt.Fprintf(env.Output, "> %d processing apply thread\n", idx+1)
-				for len(rn.ApplyWork) > 0 {
+				for !rn.ApplyWork.Empty() {
 					env.withIndent(func() { env.ProcessApplyThread(idx) })
 				}
 				done = false

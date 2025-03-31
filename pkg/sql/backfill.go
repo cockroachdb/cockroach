@@ -1012,8 +1012,6 @@ func (sc *SchemaChanger) distIndexBackfill(
 		log.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
 	}
 
-	readAsOf := sc.clock.Now()
-
 	var p *PhysicalPlan
 	var extEvalCtx extendedEvalContext
 	var planCtx *PlanningCtx
@@ -1045,7 +1043,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
 		if err != nil {
 			return err
 		}
@@ -1928,6 +1926,15 @@ func ValidateForwardIndexes(
 							"unable to find index by ID for ValidateForwardIndexes: %d",
 							idx.GetID())
 						indexName = idx.GetName()
+					}
+					if !idx.IsUnique() {
+						// For non-unique indexes, the table row count must match the index
+						// key count. Unlike unique indexes, we don't filter out any rows,
+						// so every row must have a corresponding entry in the index. A
+						// mismatch indicates an assertion failure.
+						return errors.AssertionFailedf(
+							"validation of non-unique index %s failed: expected %d rows, found %d",
+							idx.GetName(), errors.Safe(expectedCount), errors.Safe(idxLen))
 					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
@@ -2868,7 +2875,8 @@ func columnBackfillInTxn(
 	}
 	var columnBackfillerMon *mon.BytesMonitor
 	if evalCtx.Planner.Mon() != nil {
-		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(), "local-column-backfill-mon")
+		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
+			mon.MakeName("local-column-backfill-mon"))
 	}
 
 	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
@@ -2911,7 +2919,8 @@ func indexBackfillInTxn(
 ) error {
 	var indexBackfillerMon *mon.BytesMonitor
 	if evalCtx.Planner.Mon() != nil {
-		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(), "local-index-backfill-mon")
+		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
+			mon.MakeName("local-index-backfill-mon"))
 	}
 
 	var backfiller backfill.IndexBackfiller
@@ -2989,8 +2998,15 @@ func indexTruncateInTxn(
 // part of a restore, then timestamp will be too old and the job will fail. On
 // the next resume, a mergeTimestamp newer than the GC time will be picked and
 // the job can continue.
-func getMergeTimestamp(clock *hlc.Clock) hlc.Timestamp {
-	return clock.Now()
+func getMergeTimestamp(ctx context.Context, clock *hlc.Clock) hlc.Timestamp {
+	// Use the current timestamp plus the maximum allowed offset to account for
+	// potential clock skew across nodes. The chosen timestamp must be greater
+	// than all commit timestamps used so far. This may result in seeing rows
+	// that are already present in the index being merged, but that’s fine as
+	// they will be treated as no-ops.
+	ts := clock.Now().AddDuration(clock.MaxOffset())
+	log.Infof(ctx, "merging all keys in temporary index before time %v", ts)
+	return ts
 }
 
 func (sc *SchemaChanger) distIndexMerge(
@@ -3001,8 +3017,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	fractionScaler *multiStageFractionScaler,
 ) error {
 
-	mergeTimestamp := getMergeTimestamp(sc.clock)
-	log.Infof(ctx, "merging all keys in temporary index before time %v", mergeTimestamp)
+	mergeTimestamp := getMergeTimestamp(ctx, sc.clock)
 
 	// Gather the initial resume spans for the merge process.
 	progress, err := extractMergeProgress(sc.job, tableDesc, addedIndexes, temporaryIndexes)

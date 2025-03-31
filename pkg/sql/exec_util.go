@@ -1910,6 +1910,8 @@ type BackupRestoreTestingKnobs struct {
 	RunAfterRetryIteration func(err error) error
 
 	RunAfterRestoreProcDrains func()
+
+	RunBeforeResolvingCompactionDest func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -3645,10 +3647,6 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
-func (m *sessionDataMutator) SetRowLevelSecurity(val bool) {
-	m.data.RowLevelSecurityEnabled = val
-}
-
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }
@@ -4095,6 +4093,10 @@ func (m *sessionDataMutator) SetOptimizerCheckInputMinRowCount(val float64) {
 
 func (m *sessionDataMutator) SetOptimizerPlanLookupJoinsWithReverseScans(val bool) {
 	m.data.OptimizerPlanLookupJoinsWithReverseScans = val
+}
+
+func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
+	m.data.RegisterLatchWaitContentionEvents = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

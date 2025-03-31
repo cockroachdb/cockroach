@@ -9,31 +9,37 @@ benchmarks:
     compare_alpha: 0.025
     retries: 3
     metrics:
-      - "sec/op"
-      - "allocs/op"
+      - name: "sec/op"
+        threshold: .3
+      - name: "allocs/op"
+        threshold: .1
 
   - display_name: Sysbench
-    labels: ["KV", "1node", "local", "oltp_read_only"]
-    name: "BenchmarkSysbench/KV/1node_local/oltp_read_only"
+    labels: ["KV", "3node", "oltp_read_only"]
+    name: "BenchmarkSysbench/KV/3node/oltp_read_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    count: 20
-    iterations: 6000
+    count: 15
+    iterations: 3000
     compare_alpha: 0.025
     retries: 3
     metrics:
-      - "sec/op"
-      - "allocs/op"
+      - name: "sec/op"
+        threshold: .4
+      - name: "allocs/op"
+        threshold: .1
 
   - display_name: Sysbench
-    labels: ["KV", "1node", "local", "oltp_write_only"]
-    name: "BenchmarkSysbench/KV/1node_local/oltp_write_only"
+    labels: ["KV", "3node", "oltp_write_only"]
+    name: "BenchmarkSysbench/KV/3node/oltp_write_only"
     package: "pkg/sql/tests"
     runner_group: 2
-    count: 20
-    iterations: 6000
+    count: 15
+    iterations: 3000
     compare_alpha: 0.025
     retries: 3
     metrics:
-      - "sec/op"
-      - "allocs/op"
+      - name: "sec/op"
+        threshold: .4
+      - name: "allocs/op"
+        threshold: .1

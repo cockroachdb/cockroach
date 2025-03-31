@@ -1,6 +1,6 @@
-# ----------
+# ----------------------------------------------------------------------
 # Trigger split and other fixups.
-# ----------
+# ----------------------------------------------------------------------
 new-index min-partition-size=2 max-partition-size=4 beam-size=2
 vec1: (0, -1)
 vec2: (3, 10)
@@ -35,8 +35,7 @@ vec9: (5, 2)
 metrics
 ----
 2 successful splits
-5 fixups added to queue
-5 fixups processed
+0 pending splits/merges
 
 # Delete vector from primary index, but not from secondary index.
 delete not-found
@@ -73,5 +72,4 @@ vec4: 17 (centroid=1.25)
 metrics
 ----
 2 successful splits
-6 fixups added to queue
-6 fixups processed
+0 pending splits/merges

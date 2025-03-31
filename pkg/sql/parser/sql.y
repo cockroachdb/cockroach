@@ -3061,7 +3061,6 @@ alter_table_cmd:
   }
 | table_rls_mode ROW LEVEL SECURITY
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTableSetRLSMode{
       Mode: $1.rlsTableMode(),
     }
@@ -5058,7 +5057,6 @@ create_extension_stmt:
 alter_policy_stmt:
   ALTER POLICY name ON table_name RENAME TO name
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
       TableName: $5.unresolvedObjectName(),
@@ -5067,7 +5065,6 @@ alter_policy_stmt:
   }
 | ALTER POLICY name ON table_name opt_policy_roles opt_policy_exprs
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterPolicy{
       PolicyName: tree.Name($3),
       TableName: $5.unresolvedObjectName(),
@@ -5080,7 +5077,7 @@ alter_policy_stmt:
 // %Help: CREATE POLICY - define a new row-level security policy for a table
 // %Category: DDL
 // %Text:
-// CREATE POLICY name ON table_name
+// CREATE POLICY [IF NOT EXISTS] name ON table_name
 //     [ AS { PERMISSIVE | RESTRICTIVE } ]
 //     [ FOR { ALL | SELECT | INSERT | UPDATE | DELETE } ]
 //     [ TO { role_name | PUBLIC | CURRENT_USER | SESSION_USER } [, ...] ]
@@ -5091,14 +5088,26 @@ alter_policy_stmt:
 create_policy_stmt:
   CREATE POLICY name ON table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs
   {
-    /* SKIP DOC */
     $$.val = &tree.CreatePolicy{
+      IfNotExists: false,
       PolicyName: tree.Name($3),
       TableName: $5.unresolvedObjectName(),
       Type: $6.policyType(),
       Cmd: $7.policyCommand(),
       Roles: $8.roleSpecList(),
       Exprs: $9.policyExpressions(),
+    }
+  }
+ | CREATE POLICY IF NOT EXISTS name ON table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs
+  {
+    $$.val = &tree.CreatePolicy{
+      IfNotExists: true,
+      PolicyName: tree.Name($6),
+      TableName: $8.unresolvedObjectName(),
+      Type: $9.policyType(),
+      Cmd: $10.policyCommand(),
+      Roles: $11.roleSpecList(),
+      Exprs: $12.policyExpressions(),
     }
   }
  | CREATE POLICY error // SHOW HELP: CREATE POLICY
@@ -5112,7 +5121,6 @@ create_policy_stmt:
 drop_policy_stmt:
   DROP POLICY name ON table_name opt_drop_behavior
   {
-    /* SKIP DOC */
     $$.val = &tree.DropPolicy{
       PolicyName: tree.Name($3),
       TableName: $5.unresolvedObjectName(),
@@ -5122,7 +5130,6 @@ drop_policy_stmt:
   }
 | DROP POLICY IF EXISTS name ON table_name opt_drop_behavior
   {
-    /* SKIP DOC */
     $$.val = &tree.DropPolicy{
       PolicyName: tree.Name($5),
       TableName: $7.unresolvedObjectName(),

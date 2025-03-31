@@ -75,7 +75,8 @@ func (tx *memTxn) GetPartition(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so return empty partition.
-			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel), nil
+			metadata := tx.store.makeEmptyRootMetadata()
+			return cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata), nil
 		}
 		return nil, err
 	}
@@ -102,8 +103,6 @@ func (tx *memTxn) SetRootPartition(
 
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
-
-	tx.store.reportPartitionSizeLocked(partition.Count())
 
 	// Grow or shrink CVStats slice if a new level is being added or removed.
 	expectedLevels := int(partition.Level() - 1)
@@ -142,7 +141,6 @@ func (tx *memTxn) InsertPartition(
 
 	// Update stats.
 	tx.store.mu.stats.NumPartitions++
-	tx.store.reportPartitionSizeLocked(partition.Count())
 
 	tx.store.updatedStructureLocked(tx)
 	return partitionKey, nil
@@ -193,13 +191,13 @@ func (tx *memTxn) GetPartitionMetadata(
 	if err != nil {
 		if partitionKey == cspann.RootKey && errors.Is(err, cspann.ErrPartitionNotFound) {
 			// Root partition has not yet been created, so create empty metadata.
-			return tx.store.makeEmptyRootPartitionMetadata(), nil
+			return tx.store.makeEmptyRootMetadata(), nil
 		}
 		return cspann.PartitionMetadata{}, err
 	}
 	defer memPart.lock.ReleaseShared()
 
-	return memPart.lock.partition.Metadata(), nil
+	return *memPart.lock.partition.Metadata(), nil
 }
 
 // AddToPartition implements the Txn interface.
@@ -207,6 +205,7 @@ func (tx *memTxn) AddToPartition(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
+	level cspann.Level,
 	vec vector.T,
 	childKey cspann.ChildKey,
 	valueBytes cspann.ValueBytes,
@@ -226,10 +225,15 @@ func (tx *memTxn) AddToPartition(
 
 	// Add the vector to the partition.
 	partition := memPart.lock.partition
-	if partition.Add(&tx.workspace, vec, childKey, valueBytes) {
+	if level != partition.Level() {
+		panic(errors.AssertionFailedf(
+			"AddToPartition level %d does not match actual partition level %d",
+			level, partition.Level()))
+	}
+
+	if partition.Add(&tx.workspace, vec, childKey, valueBytes, true /* overwrite */) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
-		tx.store.reportPartitionSizeLocked(partition.Count())
 		memPart.count.Add(1)
 	}
 
@@ -242,6 +246,7 @@ func (tx *memTxn) RemoveFromPartition(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
 	partitionKey cspann.PartitionKey,
+	level cspann.Level,
 	childKey cspann.ChildKey,
 ) error {
 	// Acquire exclusive lock on the partition in order to remove a vector.
@@ -257,10 +262,15 @@ func (tx *memTxn) RemoveFromPartition(
 
 	// Remove vector from the partition.
 	partition := memPart.lock.partition
+	if level != partition.Level() {
+		panic(errors.AssertionFailedf(
+			"RemoveFromPartition level %d does not match actual partition level %d",
+			level, partition.Level()))
+	}
+
 	if partition.ReplaceWithLastByKey(childKey) {
 		tx.store.mu.Lock()
 		defer tx.store.mu.Unlock()
-		tx.store.reportPartitionSizeLocked(partition.Count())
 		memPart.count.Add(-1)
 	}
 
@@ -279,20 +289,20 @@ func (tx *memTxn) RemoveFromPartition(
 func (tx *memTxn) SearchPartitions(
 	ctx context.Context,
 	treeKey cspann.TreeKey,
-	partitionKeys []cspann.PartitionKey,
+	toSearch []cspann.PartitionToSearch,
 	queryVector vector.T,
 	searchSet *cspann.SearchSet,
-	partitionCounts []int,
 ) (level cspann.Level, err error) {
-	for i := 0; i < len(partitionKeys); i++ {
+	for i := range toSearch {
 		var searchLevel cspann.Level
-		var partitionCount int
 
-		memPart, ok := tx.store.getPartition(treeKey, partitionKeys[i])
+		memPart, ok := tx.store.getPartition(treeKey, toSearch[i].Key)
 		if !ok {
-			if partitionKeys[i] == cspann.RootKey {
+			if toSearch[i].Key == cspann.RootKey {
 				// Root partition has not yet been created, so it must be empty.
 				searchLevel = cspann.LeafLevel
+				toSearch[i].StateDetails = cspann.MakeReadyDetails()
+				toSearch[i].Count = 0
 			} else {
 				return cspann.InvalidLevel, cspann.ErrPartitionNotFound
 			}
@@ -305,8 +315,10 @@ func (tx *memTxn) SearchPartitions(
 				memPart.lock.AcquireShared(tx.id)
 				defer memPart.lock.ReleaseShared()
 
-				searchLevel, partitionCount = memPart.lock.partition.Search(
-					&tx.workspace, partitionKeys[i], queryVector, searchSet)
+				partition := memPart.lock.partition
+				toSearch[i].StateDetails = partition.Metadata().StateDetails
+				searchLevel, toSearch[i].Count = partition.Search(
+					&tx.workspace, toSearch[i].Key, queryVector, searchSet)
 			}()
 		}
 
@@ -318,7 +330,6 @@ func (tx *memTxn) SearchPartitions(
 				"caller already searched a partition at level %d, cannot search at level %d",
 				level, searchLevel))
 		}
-		partitionCounts[i] = partitionCount
 	}
 
 	return level, nil
@@ -381,7 +392,8 @@ func (tx *memTxn) ensureLockedRootPartition(treeKey cspann.TreeKey) (*memPartiti
 	tx.store.mu.Lock()
 	defer tx.store.mu.Unlock()
 
-	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, cspann.LeafLevel)
+	metadata := tx.store.makeEmptyRootMetadataLocked()
+	root := cspann.CreateEmptyPartition(tx.store.rootQuantizer, metadata)
 	memPart = tx.store.insertPartitionLocked(treeKey, cspann.RootKey, root)
 	memPart.lock.Acquire(tx.id)
 

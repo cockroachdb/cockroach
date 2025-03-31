@@ -1,5 +1,4 @@
 setup
-set enable_row_level_security=on;
 CREATE DATABASE db1;
 CREATE SCHEMA db1.sc1;
 CREATE TABLE db1.sc1.t1 (

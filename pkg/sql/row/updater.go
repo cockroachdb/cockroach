@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +37,13 @@ type Updater struct {
 	UpdateCols            []catalog.Column
 	UpdateColIDtoRowIndex catalog.TableColMap
 	primaryKeyColChange   bool
+
+	// primaryLocked, if true, indicates that no lock is needed when modifying
+	// old KVs in the primary index because the caller already acquired it.
+	primaryLocked bool
+	// secondaryLocked, if set, indicates that no lock is needed when modifying
+	// old KVs in this secondary index because the caller already acquired it.
+	secondaryLocked catalog.Index
 
 	// rd and ri are used when the update this Updater is created for modifies
 	// the primary key of the table. In that case, rows must be deleted and
@@ -62,7 +71,10 @@ const (
 	UpdaterOnlyColumns rowUpdaterType = 1
 )
 
-// MakeUpdater creates a Updater for the given table.
+// MakeUpdater creates an Updater for the given table.
+//
+// lockedIndexes, if non-empty, specify the indexes in which old keys (those
+// that are read as part of the initial scan) have already been locked.
 //
 // UpdateCols are the columns being updated and correspond to the updateValues
 // that will be passed to UpdateRow.
@@ -77,6 +89,7 @@ func MakeUpdater(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
+	lockedIndexes []catalog.Index,
 	updateCols []catalog.Column,
 	requestedCols []catalog.Column,
 	updateType rowUpdaterType,
@@ -162,6 +175,22 @@ func MakeUpdater(
 		deleteOnlyHelper = &rh
 	}
 
+	var primaryLocked bool
+	var secondaryLocked catalog.Index
+	for _, index := range lockedIndexes {
+		if index.Primary() {
+			primaryLocked = true
+		} else {
+			secondaryLocked = index
+		}
+	}
+	if buildutil.CrdbTestBuild && len(lockedIndexes) > 1 && !primaryLocked {
+		// We don't expect multiple secondary indexes to be locked, yet if that
+		// happens in prod, we'll just not use the already acquired locks on all
+		// but the last secondary index, which means a possible performance hit
+		// but no correctness issues.
+		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
+	}
 	ru := Updater{
 		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, uniqueWithTombstoneIndexes, sv, internal, metrics),
 		DeleteHelper:          deleteOnlyHelper,
@@ -170,6 +199,8 @@ func MakeUpdater(
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
+		primaryLocked:         primaryLocked,
+		secondaryLocked:       secondaryLocked,
 		oldIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 		newIndexEntries:       make([][]rowenc.IndexEntry, len(includeIndexes)),
 	}
@@ -177,7 +208,11 @@ func MakeUpdater(
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
 		var err error
-		ru.rd = MakeDeleter(codec, tableDesc, nil /* lockedIndexes */, requestedCols, sv, internal, metrics)
+		// All indexes that were locked during the initial scan don't require
+		// locking when deleting from them - we only would delete KVs that we've
+		// scanned (and locked) already.
+		deleteLockedIndexes := lockedIndexes
+		ru.rd = MakeDeleter(codec, tableDesc, deleteLockedIndexes, requestedCols, sv, internal, metrics)
 		if ru.ri, err = MakeInserter(
 			ctx, txn, codec, tableDesc, uniqueWithTombstoneIndexes, requestedCols, alloc, sv, internal, metrics,
 		); err != nil {
@@ -313,7 +348,7 @@ func (ru *Updater) UpdateRow(
 				return nil, err
 			}
 		}
-		if ru.Helper.Indexes[i].GetType() == idxtype.INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() {
+		if ru.Helper.Indexes[i].GetType() == idxtype.INVERTED && !ru.Helper.Indexes[i].IsTemporaryIndexForBackfill() && !ru.Helper.Indexes[i].Merging() {
 			// Deduplicate the keys we're adding and removing if we're updating an
 			// inverted index. For example, imagine a table with an inverted index on j:
 			//
@@ -355,6 +390,14 @@ func (ru *Updater) UpdateRow(
 
 	b := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
+		// TODO(#143175): the current pattern of deleting the full row and then
+		// inserting the full row is suboptimal in how it handles unique
+		// secondary indexes when the row doesn't contain NULL values in the
+		// indexed columns. In such a scenario, the key in the unique secondary
+		// index doesn't necessarily change, so rather than performing a Del
+		// followed by a CPut we could skip the Del altogether. Furthermore, if
+		// we acquired the lock on this index during the initial scan we could
+		// replace a CPut with a Put.
 		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, vh, oth, traceKV); err != nil {
 			return nil, err
 		}
@@ -367,12 +410,18 @@ func (ru *Updater) UpdateRow(
 		return ru.newValues, nil
 	}
 
-	// Add the new values.
-	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, b,
-		&ru.Helper, primaryIndexKey, ru.FetchCols,
-		ru.newValues, ru.FetchColIDtoRowIndex,
-		ru.UpdateColIDtoRowIndex,
-		&ru.key, &ru.value, ru.valueBuf, oth, oldValues, PutOp, traceKV)
+	// Add the new values to the primary index.
+	kvOp := PutMustAcquireExclusiveLockOp
+	if ru.primaryLocked {
+		// Since the row PK doesn't change, and we've already locked it, we can
+		// skip the lock acquisition.
+		kvOp = PutOp
+	}
+	ru.valueBuf, err = prepareInsertOrUpdateBatch(
+		ctx, b, &ru.Helper, primaryIndexKey, ru.FetchCols, ru.newValues, ru.FetchColIDtoRowIndex,
+		ru.UpdateColIDtoRowIndex, &ru.key, &ru.value, ru.valueBuf, oth, oldValues,
+		kvOp, traceKV,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -382,8 +431,38 @@ func (ru *Updater) UpdateRow(
 	// in the new and old values.
 	var writtenIndexes intsets.Fast
 	for i, index := range ru.Helper.Indexes {
-		// TODO(yuzefovich): think about this.
-		const needsLock = true
+		alreadyLocked := ru.secondaryLocked != nil && ru.secondaryLocked.GetID() == index.GetID()
+		// putFn and sameKeyPutFn are the functions that should be invoked in
+		// order to write the new k/v entry. If the key doesn't change,
+		// sameKeyPutFn will be used, otherwise putFn will be used.
+		var putFn, sameKeyPutFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
+		if index.ForcePut() || !index.IsUnique() {
+			// See the comment on (catalog.Index).ForcePut() for more details.
+			// TODO(#140695): re-evaluate the lock need when we enable buffered
+			// writes with DDLs.
+			//
+			// For non-unique indexes we don't care whether there exists an
+			// entry already, so we can just use the Put. (In fact, since we
+			// always include the PK columns into the non-unique secondary index
+			// key, the current key should never already exist (unless we have a
+			// duplicate PK which will be detected when modifying the primary
+			// index).)
+			//
+			// We also don't need the lock.
+			putFn = insertPutFn
+			sameKeyPutFn = insertPutFn
+		} else {
+			// For unique indexes we need to ensure that key doesn't exist
+			// already.
+			putFn = insertCPutFn
+			// However, when updating an existing key, we must use a locking Put
+			// (unless we already acquired a lock on the key in which case we
+			// can elide the lock).
+			sameKeyPutFn = insertPutMustAcquireExclusiveLockFn
+			if alreadyLocked {
+				sameKeyPutFn = insertPutFn
+			}
+		}
 		if index.GetType() == idxtype.FORWARD {
 			oldIdx, newIdx := 0, 0
 			oldEntries, newEntries := ru.oldIndexEntries[i], ru.newIndexEntries[i]
@@ -402,35 +481,35 @@ func (ru *Updater) UpdateRow(
 			for oldIdx < len(oldEntries) && newIdx < len(newEntries) {
 				oldEntry, newEntry := &oldEntries[oldIdx], &newEntries[newIdx]
 				if oldEntry.Family == newEntry.Family {
-					// If the families are equal, then check if the keys have changed. If so, delete the old key.
-					// Then, issue a CPut for the new key or a Put if only the value has changed.
-					// Because the indexes will always have a k/v for family 0, it suffices to only
-					// add foreign key checks in this case, because we are guaranteed to enter here.
+					// If the families are equal, then check if the keys have
+					// changed. If so, delete the old key. Then, perform the
+					// write for the new k/v entry.
 					oldIdx++
 					newIdx++
 					var sameKey bool
 					if !bytes.Equal(oldEntry.Key, newEntry.Key) {
-						if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+						if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 							return nil, err
 						}
 					} else if !newEntry.Value.EqualTagAndData(oldEntry.Value) {
 						sameKey = true
-					} else if !index.IsTemporaryIndexForBackfill() {
+					} else if !index.IsTemporaryIndexForBackfill() && !index.Merging() {
 						// If this is a temporary index for backfill, we want to make sure we write out all
 						// index values even in the case where they should be the same. We do this because the
 						// temporary index is eventually merged into a newly added index that might be in a
 						// DELETE_ONLY state at the time of this update and thus the temporary index needs to
 						// have all of the entries.
 						//
-						// Otherwise, skip this put since the key and value are the same.
+						// For merging indexes we will compare timestamps during the merge process so all
+						// updates should always be captured into the final secondary index that is being
+						// merged.  Otherwise, skip this put since the key and value are the same.
 						continue
 					}
 
-					if index.ForcePut() || sameKey {
-						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+					if sameKey {
+						sameKeyPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					} else {
-						insertCPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+						putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					}
 					writtenIndexes.Add(i)
 				} else if oldEntry.Family < newEntry.Family {
@@ -442,7 +521,7 @@ func (ru *Updater) UpdateRow(
 					}
 					// In this case, the index has a k/v for a family that does not exist in
 					// the new set of k/v's for the row. So, we need to delete the old k/v.
-					if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+					if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 						return nil, err
 					}
 					oldIdx++
@@ -454,15 +533,9 @@ func (ru *Updater) UpdateRow(
 						)
 					}
 
-					if index.ForcePut() {
-						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
-					} else {
-						// In this case, the index now has a k/v that did not exist in the
-						// old row, so we should expect to not see a value for the new key,
-						// and put the new key in place.
-						insertCPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
-					}
+					// In this case, the index now has a k/v that did not exist
+					// in the old row, so we put the new key in place.
+					putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 					writtenIndexes.Add(i)
 					newIdx++
 				}
@@ -473,7 +546,7 @@ func (ru *Updater) UpdateRow(
 				// the new set of k/v's or 2) the index is a partial index and
 				// the new row values do not match the partial index predicate.
 				oldEntry := &oldEntries[oldIdx]
-				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, needsLock, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
+				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &oldEntry.Key, alreadyLocked, traceKV, ru.Helper.secIndexValDirs[i]); err != nil {
 					return nil, err
 				}
 				oldIdx++
@@ -486,30 +559,20 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				if index.ForcePut() {
-					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
-				} else {
-					insertCPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
-				}
+				putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
 				writtenIndexes.Add(i)
 				newIdx++
 			}
 		} else {
 			// Remove all inverted index entries, and re-add them.
 			for j := range ru.oldIndexEntries[i] {
-				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &ru.oldIndexEntries[i][j].Key, needsLock, traceKV, nil /* valDirs */); err != nil {
+				if err = ru.Helper.deleteIndexEntry(ctx, b, index, &ru.oldIndexEntries[i][j].Key, alreadyLocked, traceKV, nil /* valDirs */); err != nil {
 					return nil, err
 				}
 			}
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				if index.ForcePut() {
-					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, b, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
-				} else {
-					insertCPutFn(ctx, b, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
-				}
+				putFn(ctx, b, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
 			}
 		}
 	}
@@ -529,13 +592,12 @@ func (ru *Updater) UpdateRow(
 		// For determinism, add the entries for the secondary indexes in the same
 		// order as they appear in the helper.
 		for _, index := range ru.DeleteHelper.Indexes {
-			// TODO(yuzefovich): think about this.
-			const needsLock = true
+			alreadyLocked := ru.secondaryLocked != nil && ru.secondaryLocked.GetID() == index.GetID()
 			deletedSecondaryIndexEntries, ok := deleteOldSecondaryIndexEntries[index]
 
 			if ok {
 				for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
-					if err = ru.DeleteHelper.deleteIndexEntry(ctx, b, index, &deletedSecondaryIndexEntry.Key, needsLock, traceKV, nil /* valDirs */); err != nil {
+					if err = ru.DeleteHelper.deleteIndexEntry(ctx, b, index, &deletedSecondaryIndexEntry.Key, alreadyLocked, traceKV, nil /* valDirs */); err != nil {
 						return nil, err
 					}
 				}

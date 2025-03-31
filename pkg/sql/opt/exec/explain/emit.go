@@ -522,6 +522,12 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if s.KVContentionTime.HasValue() {
 			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
+		if s.KVLockWaitTime.HasValue() {
+			e.ob.AddField("KV lock wait time", string(humanizeutil.Duration(s.KVLockWaitTime.Value())))
+		}
+		if s.KVLatchWaitTime.HasValue() {
+			e.ob.AddField("KV latch wait time", string(humanizeutil.Duration(s.KVLatchWaitTime.Value())))
+		}
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
@@ -1172,7 +1178,14 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case callOp:
 		a := n.args.(*callArgs)
-		ob.Expr("procedure", a.Proc, nil /* columns */)
+		if a.Proc != nil {
+			// Unlike other expressions, we store Proc as *tree.RoutineExpr, so
+			// the nil value in Proc is different from the nil value that is
+			// checked in Expr:
+			//  (*tree.RoutineExpr)(nil)  vs (tree.TypedExpr)(nil)
+			// so we need an explicit nil check.
+			ob.Expr("procedure", a.Proc, nil /* columns */)
+		}
 
 	case simpleProjectOp,
 		serializingProjectOp,

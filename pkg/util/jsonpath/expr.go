@@ -92,3 +92,46 @@ func (a ArrayList) String() string {
 	sb.WriteString("]")
 	return sb.String()
 }
+
+type Filter struct {
+	Condition Path
+}
+
+var _ Path = Filter{}
+
+func (f Filter) String() string {
+	return fmt.Sprintf("?(%s)", f.Condition)
+}
+
+type Current struct{}
+
+var _ Path = Current{}
+
+func (c Current) String() string { return "@" }
+
+type Regex struct {
+	Regex string
+	// Flags are currently not used.
+	Flags string
+}
+
+var _ Path = Regex{}
+
+func (r Regex) String() string {
+	if r.Flags == "" {
+		return fmt.Sprintf("%q", r.Regex)
+	}
+	return fmt.Sprintf("%q flag %q", r.Regex, r.Flags)
+}
+
+var _ tree.RegexpCacheKey = Regex{}
+
+func (r Regex) Pattern() (string, error) {
+	return r.Regex, nil
+}
+
+type AnyKey struct{}
+
+var _ Path = AnyKey{}
+
+func (a AnyKey) String() string { return ".*" }

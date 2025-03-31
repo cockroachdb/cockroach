@@ -1243,11 +1243,24 @@ func prepareZoneConfig(
 func isCorrespondingTemporaryIndex(
 	b BuildCtx, tableID catid.DescID, idx catid.IndexID, otherIdx catid.IndexID,
 ) bool {
-	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
-		}).MustGetZeroOrOneElement()
-	return maybeCorresponding != nil
+	tmpIndexes := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, tmpIndex *scpb.TemporaryIndex) bool {
+			return tmpIndex.IndexID == idx
+		}).Elements()
+	for _, tmpIndex := range tmpIndexes {
+		foundPrimary := b.QueryByID(tableID).FilterPrimaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+				return primaryIndex.TemporaryIndexID == tmpIndex.IndexID && primaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		foundSecondary := b.QueryByID(tableID).FilterSecondaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+				return secondaryIndex.TemporaryIndexID == tmpIndex.IndexID && secondaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		if foundPrimary || foundSecondary {
+			return true
+		}
+	}
+	return false
 }
 
 // findCorrespondingTemporaryIndexByID finds the temporary index that
@@ -1258,10 +1271,27 @@ func isCorrespondingTemporaryIndex(
 func findCorrespondingTemporaryIndexByID(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) *scpb.TemporaryIndex {
-	return b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return e.SourceIndexID == indexID
+	primaryIdx := b.QueryByID(tableID).FilterPrimaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+			return primaryIndex.IndexID == indexID
 		}).MustGetZeroOrOneElement()
+	if primaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == primaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	secondaryIdx := b.QueryByID(tableID).FilterSecondaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+			return secondaryIndex.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	if secondaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == secondaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	return nil
 }
 
 // getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexes
@@ -1354,14 +1384,14 @@ func constructSideEffectPartitionElem(
 	return elem
 }
 
-// getMostRecentTableZoneCfg returns the most recent table (denoted by
+// getMostRecentTableZoneConfig returns the most recent table (denoted by
 // highest seqNum) zone config for the given tableID (if any exist).
 //
 // N.B. Adding a new zone config element entails adding a new element where the
 // seqNum is 1 greater than the most recent zone config element. This helps
 // ensure zone config changes are applied in the correct order during explicit
 // transactions.
-func getMostRecentTableZoneCfg(b BuildCtx, tableID catid.DescID) *scpb.TableZoneConfig {
+func getMostRecentTableZoneConfig(b BuildCtx, tableID catid.DescID) *scpb.TableZoneConfig {
 	maxSeq := uint32(0)
 	var tzo *scpb.TableZoneConfig
 	b.QueryByID(tableID).FilterTableZoneConfig().
@@ -1379,28 +1409,32 @@ func getMostRecentTableZoneCfg(b BuildCtx, tableID catid.DescID) *scpb.TableZone
 func configureZoneConfigForNewIndexBackfill(
 	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID,
 ) error {
-	mostRecentTableZoneConfig := getMostRecentTableZoneCfg(b, tableID)
+	// Short-circuit if there are no subzones for the old index.
+	if !hasSubzonesForIndex(b, tableID, oldIndexID) {
+		return nil
+	}
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
 	if mostRecentTableZoneConfig == nil {
 		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
 			" on tableID %d that does not a zone config set", oldIndexID, tableID)
 	}
-	tempIndex := b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return target == scpb.Transient && e.SourceIndexID == oldIndexID
-		}).MustGetZeroOrOneElement()
 	newIndex := getLatestPrimaryIndex(b, tableID)
+	tempIndex := findCorrespondingTemporaryIndexByID(b, tableID, newIndex.IndexID)
 	newIndexesForBackfill := []catid.IndexID{tempIndex.IndexID, newIndex.IndexID}
 	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
 	newSubzones := make([]zonepb.Subzone, 0)
 	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
 	// For the indexes we will use as a part of the backfill, ensure we copy
 	// over each subzone config from the old index to the backfill-related ones.
+	// NOTE: The subzones for the old index and temporary index will eventually
+	// be removed by the schema change GC job, but we need them to be present
+	// for the duration of this schema change.
 	for _, idxToAdd := range newIndexesForBackfill {
 		for _, subzone := range newZoneConfig.Subzones {
 			if subzone.IndexID == uint32(oldIndexID) {
 				subzone.IndexID = uint32(idxToAdd)
+				newSubzones = append(newSubzones, subzone)
 			}
-			newSubzones = append(newSubzones, subzone)
 		}
 	}
 	newZoneConfig.Subzones = newSubzones
@@ -1422,11 +1456,8 @@ func configureZoneConfigForNewIndexBackfill(
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
 func configureZoneConfigForNewIndexPartitioning(
-	b BuildCtx, tableID catid.DescID, indexDesc descpb.IndexDescriptor,
+	b BuildCtx, tableID catid.DescID, indexID descpb.IndexID,
 ) error {
-	if indexDesc.ID == 0 {
-		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
-	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
 	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 	if localityRBR != nil {
@@ -1436,8 +1467,8 @@ func configureZoneConfigForNewIndexPartitioning(
 			return err
 		}
 
-		indexIDs := []descpb.IndexID{indexDesc.ID}
-		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexDesc.ID); idx != nil {
+		indexIDs := []descpb.IndexID{indexID}
+		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
 			indexIDs = append(indexIDs, idx.IndexID)
 		}
 
@@ -1547,7 +1578,7 @@ func applyZoneConfigForMultiRegionTable(
 		return nil
 	}
 	mostRecentSeqNum := uint32(0)
-	mostRecentTableZoneConfig := getMostRecentTableZoneCfg(b, tableID)
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
 	if mostRecentTableZoneConfig != nil {
 		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
 	}

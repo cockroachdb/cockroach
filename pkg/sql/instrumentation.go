@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -830,6 +831,12 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if queryStats.ContentionTime != 0 {
 			ob.AddContentionTime(queryStats.ContentionTime)
 		}
+		if queryStats.LockWaitTime != 0 {
+			ob.AddLockWaitTime(queryStats.LockWaitTime)
+		}
+		if queryStats.LatchWaitTime != 0 {
+			ob.AddLatchWaitTime(queryStats.LatchWaitTime)
+		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
@@ -959,11 +966,22 @@ type execNodeTraceMetadata map[exec.Node][]execComponents
 type execComponents []execinfrapb.ComponentID
 
 // associateNodeWithComponents is called during planning, as processors are
-// planned for an execution operator.
+// planned for an execution operator. This function can be called multiple times
+// for the same exec.Node and execComponents.
 func (m execNodeTraceMetadata) associateNodeWithComponents(
 	node exec.Node, components execComponents,
 ) {
 	if prevComponents, ok := m[node]; ok {
+		// We already have some components associated with this node. Check
+		// whether this is a duplicate association (that should be a no-op).
+		for _, oldComponents := range prevComponents {
+			if slices.Equal(oldComponents, components) {
+				// This association has already been performed.
+				return
+			}
+		}
+		// This must be a new stage in the physical plan, so we want to extend
+		// the mapping for the exec.Node.
 		m[node] = append(prevComponents, components)
 	} else {
 		m[node] = []execComponents{components}
@@ -1031,6 +1049,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 					}
 					nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
 					nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
+					nodeStats.KVLockWaitTime.MaybeAdd(stats.KV.LockWaitTime)
+					nodeStats.KVLatchWaitTime.MaybeAdd(stats.KV.LatchWaitTime)
 					nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 					nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
 					nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)

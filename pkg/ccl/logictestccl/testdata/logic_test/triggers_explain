@@ -124,6 +124,9 @@ quality of service: regular
 │ regions: <hidden>
 │ actual row count: 0
 │ vectorized batch count: 0
+│ KV contention time: 0µs
+│ KV lock wait time: 0µs
+│ KV latch wait time: 0µs
 │ estimated row count: 0 (missing stats)
 │ table: xy
 │ set: x, y
@@ -194,6 +197,8 @@ quality of service: regular
                           vectorized batch count: 0
                           KV time: 0µs
                           KV contention time: 0µs
+                          KV lock wait time: 0µs
+                          KV latch wait time: 0µs
                           KV rows decoded: 0
                           KV pairs read: 0
                           KV bytes read: 0 B
@@ -338,6 +343,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 0
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -367,6 +375,8 @@ quality of service: regular
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV contention time: 0µs
+│                 KV lock wait time: 0µs
+│                 KV latch wait time: 0µs
 │                 KV rows decoded: 0
 │                 KV pairs read: 0
 │                 KV bytes read: 0 B
@@ -412,6 +422,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -441,6 +454,8 @@ quality of service: regular
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV contention time: 0µs
+│                 KV lock wait time: 0µs
+│                 KV latch wait time: 0µs
 │                 KV rows decoded: 1
 │                 KV pairs read: 2
 │                 KV bytes read: 8 B
@@ -684,6 +699,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 0
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -710,6 +728,8 @@ quality of service: regular
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV contention time: 0µs
+│                 KV lock wait time: 0µs
+│                 KV latch wait time: 0µs
 │                 KV rows decoded: 0
 │                 KV pairs read: 0
 │                 KV bytes read: 0 B
@@ -757,6 +777,9 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ actual row count: 1
 │   │ vectorized batch count: 0
+│   │ KV contention time: 0µs
+│   │ KV lock wait time: 0µs
+│   │ KV latch wait time: 0µs
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -783,6 +806,8 @@ quality of service: regular
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV contention time: 0µs
+│                 KV lock wait time: 0µs
+│                 KV latch wait time: 0µs
 │                 KV rows decoded: 1
 │                 KV pairs read: 2
 │                 KV bytes read: 8 B
@@ -807,6 +832,9 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ KV contention time: 0µs
+        │   │ KV lock wait time: 0µs
+        │   │ KV latch wait time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ table: child
         │   │ set: fk
@@ -880,6 +908,8 @@ quality of service: regular
         │                           │     vectorized batch count: 0
         │                           │     KV time: 0µs
         │                           │     KV contention time: 0µs
+        │                           │     KV lock wait time: 0µs
+        │                           │     KV latch wait time: 0µs
         │                           │     KV rows decoded: 1
         │                           │     KV pairs read: 2
         │                           │     KV bytes read: 8 B
@@ -927,6 +957,8 @@ quality of service: regular
         │           │ vectorized batch count: 0
         │           │ KV time: 0µs
         │           │ KV contention time: 0µs
+        │           │ KV lock wait time: 0µs
+        │           │ KV latch wait time: 0µs
         │           │ KV rows decoded: 1
         │           │ KV pairs read: 2
         │           │ KV bytes read: 8 B
@@ -1025,6 +1057,9 @@ quality of service: regular
 │     regions: <hidden>
 │     actual row count: 1
 │     vectorized batch count: 0
+│     KV contention time: 0µs
+│     KV lock wait time: 0µs
+│     KV latch wait time: 0µs
 │     estimated row count: 0 (missing stats)
 │     from: parent
 │     spans: /2/0
@@ -1041,6 +1076,9 @@ quality of service: regular
         │   │ regions: <hidden>
         │   │ actual row count: 0
         │   │ vectorized batch count: 0
+        │   │ KV contention time: 0µs
+        │   │ KV lock wait time: 0µs
+        │   │ KV latch wait time: 0µs
         │   │ estimated row count: 0 (missing stats)
         │   │ from: child
         │   │
@@ -1103,6 +1141,8 @@ quality of service: regular
         │                                 vectorized batch count: 0
         │                                 KV time: 0µs
         │                                 KV contention time: 0µs
+        │                                 KV lock wait time: 0µs
+        │                                 KV latch wait time: 0µs
         │                                 KV rows decoded: 1
         │                                 KV pairs read: 2
         │                                 KV bytes read: 8 B

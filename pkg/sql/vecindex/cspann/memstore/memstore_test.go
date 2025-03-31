@@ -36,6 +36,10 @@ func (ts *testStore) AllowMultipleTrees() bool {
 	return true
 }
 
+func (ts *testStore) SupportsTry() bool {
+	return true
+}
+
 func (ts *testStore) MakeTreeKey(t *testing.T, treeID int) cspann.TreeKey {
 	return ToTreeKey(TreeID(treeID))
 }
@@ -55,12 +59,13 @@ func TestMemStore(t *testing.T) {
 	ctx := context.Background()
 
 	makeStore := func(quantizer quantize.Quantizer) commontest.TestStore {
-		return &testStore{Store: New(2, 42)}
+		return &testStore{Store: New(quantizer, 42)}
 	}
 
 	suite.Run(t, commontest.NewStoreTestSuite(ctx, makeStore))
 
-	store := New(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 	testPKs := []cspann.KeyBytes{{11}, {12}}
 	testVectors := []vector.T{{100, 200}, {300, 400}}
@@ -119,7 +124,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 	valueBytes2 := cspann.ValueBytes{3, 4}
 
 	// Insert root partition into new store.
-	store := New(2, 42)
+	quantizer := quantize.NewRaBitQuantizer(2, 42)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
 	var wait sync.WaitGroup
@@ -130,7 +136,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 
 		// Ensure the root partition has been created.
 		err := txn.AddToPartition(
-			ctx, treeKey, cspann.RootKey, vector.T{10, 10}, childKey1, valueBytes1)
+			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{10, 10}, childKey1, valueBytes1)
 		require.NoError(t, err)
 
 		// Acquire partition lock.
@@ -145,15 +151,14 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 			defer commontest.CommitTransaction(ctx, t, store, txn2)
 
 			searchSet := cspann.SearchSet{MaxResults: 1}
-			partitionCounts := []int{0}
-			_, err := txn2.SearchPartitions(ctx, treeKey,
-				[]cspann.PartitionKey{cspann.RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
+			toSearch := []cspann.PartitionToSearch{{Key: cspann.RootKey}}
+			_, err := txn2.SearchPartitions(ctx, treeKey, toSearch, vector.T{0, 0}, &searchSet)
 			require.NoError(t, err)
 			result1 := cspann.SearchResult{
 				QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5,
 				ParentPartitionKey: cspann.RootKey, ChildKey: childKey2, ValueBytes: valueBytes2}
 			require.Equal(t, cspann.SearchResults{result1}, searchSet.PopResults())
-			require.Equal(t, 2, partitionCounts[0])
+			require.Equal(t, 2, toSearch[0].Count)
 
 			wait.Done()
 		}()
@@ -161,7 +166,8 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey2, valueBytes2)
+		err = txn.AddToPartition(
+			ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{3, 4}, childKey2, valueBytes2)
 		require.NoError(t, err)
 	}()
 
@@ -174,8 +180,8 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 
 	ctx := context.Background()
 	var workspace workspace.T
-	store := New(2, 42)
 	quantizer := quantize.NewUnQuantizer(2)
+	store := New(quantizer, 42)
 	treeKey := ToTreeKey(TreeID(0))
 
 	txn := commontest.BeginTransaction(ctx, t, store)
@@ -191,9 +197,11 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	valueBytes30 := cspann.ValueBytes{5, 6}
 	valueBytes40 := cspann.ValueBytes{7, 8}
 
-	err := txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{1, 2}, childKey10, valueBytes10)
+	err := txn.AddToPartition(
+		ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{1, 2}, childKey10, valueBytes10)
 	require.NoError(t, err)
-	err = txn.AddToPartition(ctx, treeKey, cspann.RootKey, vector.T{3, 4}, childKey20, valueBytes20)
+	err = txn.AddToPartition(
+		ctx, treeKey, cspann.RootKey, cspann.LeafLevel, vector.T{3, 4}, childKey20, valueBytes20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -202,27 +210,35 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(1.05), stats.VectorsPerPartition)
 	require.Equal(t, []cspann.CVStats{}, stats.CVStats)
 
 	// Upsert new root partition with higher level and check stats.
 	oldRoot, err := txn.GetPartition(ctx, treeKey, cspann.RootKey)
 	require.NoError(t, err)
-	newRoot := cspann.NewPartition(oldRoot.Quantizer(), oldRoot.QuantizedSet(),
-		oldRoot.ChildKeys(), oldRoot.ValueBytes(), cspann.Level(3))
+	metadata := cspann.PartitionMetadata{
+		Level:        3,
+		Centroid:     oldRoot.QuantizedSet().GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
+	newRoot := cspann.NewPartition(metadata, oldRoot.Quantizer(), oldRoot.QuantizedSet(),
+		oldRoot.ChildKeys(), oldRoot.ValueBytes())
 	require.NoError(t, txn.SetRootPartition(ctx, treeKey, newRoot))
 	stats.CVStats = []cspann.CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(1.0975), stats.VectorsPerPartition)
 	require.Equal(t, []cspann.CVStats{{Mean: 2.5, Variance: 0}, {Mean: 1, Variance: 0}}, roundCVStats(stats.CVStats))
 
 	// Insert new partition with lower level and check stats.
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
 	quantizedSet := quantizer.Quantize(&workspace, vectors)
-	partition := cspann.NewPartition(quantizer, quantizedSet,
-		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30}, 2)
+	metadata = cspann.PartitionMetadata{
+		Level:        2,
+		Centroid:     quantizedSet.GetCentroid(),
+		StateDetails: cspann.MakeReadyDetails(),
+	}
+	partition := cspann.NewPartition(metadata, quantizer, quantizedSet,
+		[]cspann.ChildKey{childKey30}, []cspann.ValueBytes{valueBytes30})
 	partitionKey, err := txn.InsertPartition(ctx, treeKey, partition)
 	require.NoError(t, err)
 
@@ -230,31 +246,29 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.0926), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	err = txn.AddToPartition(ctx, treeKey, partitionKey, vector.T{7, 8}, childKey40, valueBytes40)
+	err = txn.AddToPartition(
+		ctx, treeKey, partitionKey, partition.Level(), vector.T{7, 8}, childKey40, valueBytes40)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1380), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
 	// Remove vector from partition and check stats.
-	err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, childKey30)
+	err = txn.RemoveFromPartition(ctx, treeKey, partitionKey, partition.Level(), childKey30)
 	require.NoError(t, err)
 
 	stats.CVStats = []cspann.CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1311), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 
@@ -263,7 +277,6 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	err = store.MergeStats(ctx, &stats, true /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), stats.NumPartitions)
-	require.Equal(t, float64(1.1311), scalar.Round(stats.VectorsPerPartition, 4))
 	require.Equal(t, []cspann.CVStats{
 		{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 }
@@ -274,14 +287,16 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 
 	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42)
 	unquantizer := quantize.NewUnQuantizer(2)
-	store := New(2, 42)
+	store := New(raBitQuantizer, 42)
 	store.mu.partitions = make(map[qualifiedPartitionKey]*memPartition)
+	centroid := []float32{4, 3}
 
 	memPart := &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
+		cspann.PartitionMetadata{Level: 1, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
 		unquantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          []float32{4, 3},
+			Centroid:          centroid,
 			CentroidDistances: []float32{1, 2, 3},
 			Vectors: vector.Set{
 				Dims:  2,
@@ -290,16 +305,16 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 			},
 		},
 		[]cspann.ChildKey{{PartitionKey: 10}, {PartitionKey: 20}},
-		[]cspann.ValueBytes{{1, 2}, {3, 4}},
-		cspann.Level(1))
+		[]cspann.ValueBytes{{1, 2}, {3, 4}})
 	qkey10 := makeQualifiedPartitionKey(ToTreeKey(1), 10)
 	store.mu.partitions[qkey10] = memPart
 
 	memPart = &memPartition{}
 	memPart.lock.partition = cspann.NewPartition(
+		cspann.PartitionMetadata{Level: 2, Centroid: centroid, StateDetails: cspann.MakeReadyDetails()},
 		raBitQuantizer,
 		&quantize.UnQuantizedVectorSet{
-			Centroid:          []float32{4, 3},
+			Centroid:          centroid,
 			CentroidDistances: []float32{1, 2, 3, 4},
 			Vectors: vector.Set{
 				Dims:  2,
@@ -308,8 +323,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 			},
 		},
 		[]cspann.ChildKey{{PartitionKey: 10}, {PartitionKey: 20}, {PartitionKey: 30}},
-		[]cspann.ValueBytes{{1, 2}, {3, 4}, {5, 6}},
-		cspann.Level(2))
+		[]cspann.ValueBytes{{1, 2}, {3, 4}, {5, 6}})
 	qkey20 := makeQualifiedPartitionKey(ToTreeKey(1), 20)
 	store.mu.partitions[qkey20] = memPart
 
@@ -319,9 +333,8 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		string([]byte{3, 4}): {12, 13},
 	}
 	store.mu.stats = cspann.IndexStats{
-		NumPartitions:       2,
-		VectorsPerPartition: 100,
-		CVStats:             []cspann.CVStats{{Mean: 0.5, Variance: 0.25}},
+		NumPartitions: 2,
+		CVStats:       []cspann.CVStats{{Mean: 0.5, Variance: 0.25}},
 	}
 
 	// Round-trip the data.
@@ -342,7 +355,6 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.Equal(t, cspann.PartitionKey(100), store2.mu.nextKey)
 	require.Len(t, store2.mu.vectors, 2)
 	require.Equal(t, vector.T{12, 13}, store2.mu.vectors[string([]byte{3, 4})])
-	require.Equal(t, float64(100), store2.mu.stats.VectorsPerPartition)
 	require.Equal(t, int64(42), store2.seed)
 }
 
@@ -415,6 +427,29 @@ func TestInMemoryLock(t *testing.T) {
 		var acquired atomic.Bool
 		go func() {
 			l.AcquireShared(2)
+			acquired.Store(true)
+			l.ReleaseShared()
+		}()
+
+		runtime.Gosched()
+		require.False(t, acquired.Load())
+
+		l.Release()
+	})
+
+	t.Run("uniqueOwner does not support reentrancy", func(t *testing.T) {
+		var l memLock
+		l.Acquire(uniqueOwner)
+		require.False(t, l.IsAcquiredBy(uniqueOwner))
+
+		var acquired atomic.Bool
+		go func() {
+			l.Acquire(uniqueOwner)
+			acquired.Store(true)
+			l.Release()
+		}()
+		go func() {
+			l.AcquireShared(uniqueOwner)
 			acquired.Store(true)
 			l.ReleaseShared()
 		}()

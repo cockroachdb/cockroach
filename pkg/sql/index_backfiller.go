@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -44,23 +43,19 @@ func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
 	if !current.MinimumWriteTimestamp.IsEmpty() {
 		return current, nil
 	}
-	// Pick an arbitrary read timestamp for the reads of the backfill.
-	// It's safe to use any timestamp to read even if we've partially backfilled
-	// at an earlier timestamp because other writing transactions have been
-	// writing at the appropriate timestamps in-between.
-	backfillReadTimestamp := ib.execCfg.Clock.Now()
+	minWriteTimestamp := ib.execCfg.Clock.Now()
 	targetSpans := make([]roachpb.Span, len(current.DestIndexIDs))
 	for i, idxID := range current.DestIndexIDs {
 		targetSpans[i] = td.IndexSpan(ib.execCfg.Codec, idxID)
 	}
 	if err := scanTargetSpansToPushTimestampCache(
-		ctx, ib.execCfg.DB, backfillReadTimestamp, targetSpans,
+		ctx, ib.execCfg.DB, minWriteTimestamp, targetSpans,
 	); err != nil {
 		return scexec.BackfillProgress{}, err
 	}
 	return scexec.BackfillProgress{
 		Backfill:              current.Backfill,
-		MinimumWriteTimestamp: backfillReadTimestamp,
+		MinimumWriteTimestamp: minWriteTimestamp,
 	}, nil
 }
 
@@ -72,19 +67,6 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
 ) (retErr error) {
-	// Potentially install a protected timestamp before the GC interval is hit,
-	// which can help avoid transaction retry errors, with shorter GC intervals.
-	protectedTimestampCleaner := ib.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx,
-		job,
-		descriptor,
-		progress.MinimumWriteTimestamp)
-	defer func() {
-		cleanupError := protectedTimestampCleaner(ctx)
-		if cleanupError != nil {
-			retErr = errors.CombineErrors(retErr, cleanupError)
-		}
-	}()
-
 	var completed = struct {
 		syncutil.Mutex
 		g roachpb.SpanGroup
@@ -101,8 +83,12 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.CompletedSpans = addCompleted(
-			meta.BulkProcessorProgress.CompletedSpans...)
+		progress.CompletedSpans = append(progress.CompletedSpans, addCompleted(
+			meta.BulkProcessorProgress.CompletedSpans...)...)
+		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
+		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
+			knobs.RunBeforeIndexBackfillProgressUpdate(progress.CompletedSpans)
+		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 	var spansToDo []roachpb.Span
@@ -116,15 +102,22 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if len(spansToDo) == 0 { // already done
 		return nil
 	}
+
 	now := ib.execCfg.DB.Clock().Now()
+	// Pick now as the read timestamp for the backfill. It's safe to use this
+	// timestamp to read even if we've partially backfilled at an earlier
+	// timestamp because other writing transactions have been writing at the
+	// appropriate timestamps in-between.
+	readAsOf := now
 	run, retErr := ib.plan(
 		ctx,
 		descriptor,
 		now,
 		progress.MinimumWriteTimestamp,
-		progress.MinimumWriteTimestamp,
+		readAsOf,
 		spansToDo,
 		progress.DestIndexIDs,
+		progress.SourceIndexID,
 		updateFunc,
 	)
 	if retErr != nil {
@@ -175,6 +168,7 @@ func (ib *IndexBackfillPlanner) plan(
 	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
+	sourceIndexID descpb.IndexID,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) (runFunc func(context.Context) error, _ error) {
 
@@ -195,8 +189,8 @@ func (ib *IndexBackfillPlanner) plan(
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
 		const writeAtRequestTimestamp = true
 		spec, err := initIndexBackfillerSpec(
-			*td.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize,
-			indexesToBackfill,
+			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
+			indexesToBackfill, sourceIndexID,
 		)
 		if err != nil {
 			return err

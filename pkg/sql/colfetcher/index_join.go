@@ -591,6 +591,7 @@ func NewColIndexJoin(
 		)
 	}
 
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		cFetcherMemoryLimit,
@@ -599,7 +600,7 @@ func NewColIndexJoin(
 		0, /* estimatedRowCount */
 		flowCtx.TraceKV,
 		false, /* singleUse */
-		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		shouldCollectStats,
 		false, /* alwaysReallocate */
 	}
 	if err = fetcher.Init(
@@ -641,6 +642,11 @@ func NewColIndexJoin(
 		// enqueued requests) alone might exceed the budget leading to the
 		// Streamer erroring out in Enqueue().
 		op.mem.inputBatchSizeLimit = cFetcherMemoryLimit
+	}
+	if shouldCollectStats {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			op.ContentionEventsListener.Init(flowTxn.ID())
+		}
 	}
 
 	return op, nil

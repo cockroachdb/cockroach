@@ -393,7 +393,6 @@ func TestRLSBlocking(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE rls (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `SET enable_row_level_security = on`)
 		sqlDB.Exec(t, `INSERT INTO rls VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `INSERT INTO rls VALUES (1, 'second')`)
 
@@ -2354,8 +2353,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	}
 }
 
-// Test checkpointing when the highwater does not move due to some issues with
-// specific spans lagging behind
+// TestChangefeedLaggingSpanCheckpointing tests checkpointing when the highwater
+// does not advance due to specific spans lagging behind.
 func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2369,7 +2368,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		DistSQL.(*execinfra.TestingKnobs).
 		Changefeed.(*TestingKnobs)
 
-	// Initialize table with multiple ranges.
+	// Initialize table with 20 ranges.
 	sqlDB.Exec(t, `
   CREATE TABLE foo (key INT PRIMARY KEY);
   INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
@@ -2381,28 +2380,39 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	changefeedbase.SpanCheckpointInterval.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 	changefeedbase.SpanCheckpointMaxBytes.Override(
-		context.Background(), &s.ClusterSettings().SV, 100<<20)
+		context.Background(), &s.ClusterSettings().SV, 100<<20 /* 100 MiB */)
 	changefeedbase.SpanCheckpointLagThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
 
-	// We'll start changefeed with the cursor.
+	// We'll start the changefeed with the cursor set to the current time (not insert time).
+	// NB: The changefeed created in this test doesn't actually send any message events.
 	var tsStr string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() from foo`).Scan(&tsStr)
 	cursor := parseTimeToHLC(t, tsStr)
+	t.Logf("cursor: %v", cursor)
 
 	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
 	var laggingSpans roachpb.SpanGroup
-	numLagging := 0
+	nonLaggingSpans := make(map[string]int)
+	var numLagging, numNonLagging int
 	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) bool {
-		// Skip spans that were skipped before; otherwise skip some spans.
-		seenBefore := laggingSpans.Encloses(checkpoint.Span)
-		if seenBefore || (numLagging < 5 && rnd.Int()%3 == 0) {
-			if !seenBefore {
-				laggingSpans.Add(checkpoint.Span)
-				numLagging++
-			}
+		// Skip spans that we already picked to be lagging.
+		if laggingSpans.Encloses(checkpoint.Span) {
 			return true /* skip */
 		}
+		// Skip additional updates for some non-lagging spans so that we can
+		// have more than one timestamp in the checkpoint.
+		if i, ok := nonLaggingSpans[checkpoint.Span.String()]; ok {
+			return i%3 == 0
+		}
+		// Ensure we have a few spans that are lagging at the cursor.
+		if numLagging == 0 || (numLagging < 5 && rnd.Int()%3 == 0) {
+			laggingSpans.Add(checkpoint.Span)
+			numLagging++
+			return true /* skip */
+		}
+		nonLaggingSpans[checkpoint.Span.String()] = numNonLagging
+		numNonLagging++
 		return false
 	}
 
@@ -2419,49 +2429,65 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		return job.Progress()
 	}
 
-	// Should eventually checkpoint all spans around the lagging span
+	// We should eventually checkpoint some spans that are ahead of the highwater.
+	// We'll wait until we have two unique timestamps.
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if loadCheckpoint(t, progress) != nil {
+		cp := maps.Collect(loadCheckpoint(t, progress).All())
+		if len(cp) >= 2 {
 			return nil
 		}
-		return errors.New("waiting for checkpoint")
+		return errors.New("waiting for checkpoint with two different timestamps")
 	})
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
 
 	// We expect highwater to be 0 (because we skipped some spans) or exactly cursor
-	// (this is mostly due to racy updates sent from aggregators to the frontier.
+	// (this is mostly due to racy updates sent from aggregators to the frontier).
 	// However, the checkpoint timestamp should be at least at the cursor.
 	progress := loadProgress()
-	require.True(t, progress.GetHighWater().IsEmpty() || *progress.GetHighWater() == cursor,
-		"expected empty highwater or %s,  found %s", cursor, progress.GetHighWater())
+	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().Equal(cursor),
+		"expected empty highwater or %s, found %s", cursor, progress.GetHighWater())
 	spanLevelCheckpoint := loadCheckpoint(t, progress)
 	require.NotNil(t, spanLevelCheckpoint)
-	minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
-	require.True(t, cursor.LessEq(minCheckpointTS))
+	require.True(t, cursor.LessEq(spanLevelCheckpoint.MinTimestamp()))
 
+	// Construct a reverse index from spans to timestamps.
+	spanTimestamps := make(map[string]hlc.Timestamp)
+	for ts, spans := range spanLevelCheckpoint.All() {
+		for _, s := range spans {
+			spanTimestamps[s.String()] = ts
+		}
+	}
+
+	var rangefeedStarted bool
 	var incorrectCheckpointErr error
 	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
+		rangefeedStarted = true
+
 		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
 			incorrectCheckpointErr = errors.Newf(
 				"rangefeed for span %s expected to start @%s, started @%s instead",
 				stp.Span, expectedTS, stp.StartAfter)
 		}
 
+		// Verify that the start time for each span is correct.
 		for _, sp := range spans {
-			if laggingSpans.Encloses(sp.Span) {
-				if !sp.StartAfter.Equal(cursor) {
-					setErr(sp, cursor)
+			if checkpointTS := spanTimestamps[sp.Span.String()]; checkpointTS.IsSet() {
+				// Any span in the checkpoint should be resumed at its checkpoint timestamp.
+				if !sp.StartAfter.Equal(checkpointTS) {
+					setErr(sp, checkpointTS)
 				}
 			} else {
-				if !sp.StartAfter.Equal(minCheckpointTS) {
-					setErr(sp, minCheckpointTS)
+				// Any spans not in the checkpoint should be at the cursor.
+				if !sp.StartAfter.Equal(cursor) {
+					setErr(sp, cursor)
 				}
 			}
 		}
 	}
+	knobs.FeedKnobs.ShouldSkipCheckpoint = nil
 
 	sqlDB.Exec(t, "RESUME JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StateRunning)
@@ -2469,7 +2495,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	// Wait until highwater advances past cursor.
 	testutils.SucceedsSoon(t, func() error {
 		progress := loadProgress()
-		if hw := progress.GetHighWater(); hw != nil && cursor.LessEq(*hw) {
+		if hw := progress.GetHighWater(); hw != nil && cursor.Less(*hw) {
 			return nil
 		}
 		return errors.New("waiting for checkpoint advance")
@@ -2477,6 +2503,9 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 
 	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
 	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
+	// Verify the rangefeed started. This guards against the testing knob
+	// not being called, which was happening in earlier versions of the code.
+	require.True(t, rangefeedStarted)
 	// Verify we didn't see incorrect timestamps when resuming.
 	require.NoError(t, incorrectCheckpointErr)
 }
@@ -4204,6 +4233,89 @@ func TestChangefeedEnrichedAvro(t *testing.T) {
 	}
 }
 
+func TestChangefeedEnrichedWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name      string
+		options   []string
+		sinks     []string
+		assertion func(topic string) []string
+	}{
+		{
+			name: "json with diff", options: []string{"diff", "format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "before": null, "op": "c"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "before": {"a": 0, "b": "dog"}, "op": "u"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": null, "before": {"a": 0, "b": "cat"}, "op": "d"}`, topic),
+				}
+			},
+		},
+		{
+			name: "json without diff", options: []string{"format=json"}, sinks: []string{"kafka", "pubsub", "sinkless", "webhook"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "dog"}, "op": "c"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": {"a": 0, "b": "cat"}, "op": "u"}`, topic),
+					fmt.Sprintf(`%s: {"a": 0}->{"after": null, "op": "d"}`, topic),
+				}
+			},
+		},
+		{
+			name: "avro with diff", options: []string{"diff", "format=avro"}, sinks: []string{"kafka"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "before": null, "op": {"string": "c"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "cat"}}}, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "u"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": null, "before": {"foo_before": {"a": {"long": 0}, "b": {"string": "cat"}}}, "op": {"string": "d"}}`, topic),
+				}
+			},
+		},
+		{
+			name: "avro without diff", options: []string{"format=avro"}, sinks: []string{"kafka"},
+			assertion: func(topic string) []string {
+				return []string{
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "dog"}}}, "op": {"string": "c"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": {"foo": {"a": {"long": 0}, "b": {"string": "cat"}}}, "op": {"string": "u"}}`, topic),
+					fmt.Sprintf(`%s: {"a":{"long":0}}->{"after": null, "op": {"string": "d"}}`, topic),
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH envelope=enriched, %s`, strings.Join(tc.options, ", ")))
+				defer closeFeed(t, foo)
+
+				sqlDB.Exec(t, `UPDATE foo SET b = 'cat'`)
+				sqlDB.Exec(t, `DELETE FROM foo WHERE b = 'cat'`)
+
+				// TODO(#139660): the webhook sink forces topic_in_value, but
+				// this is not supported by the enriched envelope type. We should adapt
+				// the test framework to account for this.
+				topic := "foo"
+				if _, ok := foo.(*webhookFeed); ok {
+					topic = ""
+				}
+
+				assertPayloadsEnriched(t, foo, tc.assertion(topic), nil)
+			}
+			for _, sink := range tc.sinks {
+				cdcTest(t, testFn, feedTestForceSink(sink))
+			}
+		})
+	}
+}
+
 func TestChangefeedEnrichedSourceWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5779,6 +5891,62 @@ func TestChangefeedOutdatedCursor(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestNoTenants)
+}
+
+// TestChangefeedCursorWarning ensures that we show a warning if
+// any of the tables we're creating a changefeed is past
+// the warning threshold.
+func TestChangefeedCursorAgeWarning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var cursorAges = []time.Duration{
+		time.Hour,
+		6 * time.Hour,
+	}
+
+	testutils.RunValues(t, "cursor age", cursorAges, func(t *testing.T, cursorAge time.Duration) {
+		s, stopServer := makeServer(t)
+		defer stopServer()
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.OverrideCursorAge = func() int64 {
+			return int64(cursorAge)
+		}
+
+		warning := fmt.Sprintf(
+			"the provided cursor is %d hours old; older cursors can result in increased changefeed latency",
+			int64(cursorAge/time.Hour))
+		noWarning := "(no notice)"
+
+		expectedWarning := func(initial_scan string) string {
+			if cursorAge == time.Hour || initial_scan == "only" {
+				return noWarning
+			}
+			return warning
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
+		timeNow := strings.Split(s.Server.Clock().Now().AsOfSystemTime(), ".")[0]
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='only'`,
+				timeNow), expectedWarning("only"))
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='yes'`,
+				timeNow), expectedWarning("yes"))
+
+		expectNotice(t, s.Server,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
+				timeNow), expectedWarning("no"))
+	})
 }
 
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
@@ -9191,7 +9359,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 	mm := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("test-mm"),
+		Name:      mon.MakeName("test-mm"),
 		Limit:     budget,
 		Increment: 128, /* small allocation increment */
 		Settings:  cluster.MakeTestingClusterSettings(),
@@ -10792,6 +10960,58 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	})
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
+}
+
+func TestCDCQuerySelectSingleRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	errCh := make(chan error, 1)
+	knobsFn := func(knobs *base.TestingKnobs) {
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		cfKnobs.HandleDistChangefeedError = func(err error) error {
+			errCh <- err
+			return err
+		}
+	}
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		db.Exec(t, `INSERT INTO foo VALUES (1), (2), (3);`)
+
+		// initial_scan='only' is not required, but it makes testing this easier.
+		foo := feed(t, f, `CREATE CHANGEFEED WITH initial_scan='only' AS SELECT * FROM foo WHERE key = 1`)
+		defer closeFeed(t, foo)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			assertPayloads(t, foo, []string{`foo: [1]->{"key": 1}`})
+		}()
+
+		select {
+		case err := <-errCh:
+			// Ignore any error after the above assertion completed, because
+			// it's likely just due to feed shutdown.
+			select {
+			case <-done:
+			default:
+				t.Fatalf("unexpected error: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("timed out")
+		case <-done:
+			return
+		}
+	}
+	cdcTest(t, testFn, withKnobsFn(knobsFn))
 }
 
 func assertReasonableMVCCTimestamp(t *testing.T, ts string) {

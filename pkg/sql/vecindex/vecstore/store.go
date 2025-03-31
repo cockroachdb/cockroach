@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -131,7 +133,7 @@ func (s *Store) SetMinimumConsistency(consistency kvpb.ReadConsistencyType) {
 	s.minConsistency = consistency
 }
 
-// BeginTransaction is part of the cspann.Store interface. Begin creates a new
+// BeginTransaction is part of the cspann.Store interface. It creates a new
 // KV transaction on behalf of the user and prepares it to operate on the vector
 // store.
 func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
@@ -140,16 +142,43 @@ func (s *Store) BeginTransaction(ctx context.Context) (cspann.Txn, error) {
 	return &txn, nil
 }
 
-// CommitTransaction is part of the cspann.Store interface. Commit commits the
+// CommitTransaction is part of the cspann.Store interface. It commits the
 // underlying KV transaction wrapped by the cspann.Txn passed in.
 func (s *Store) CommitTransaction(ctx context.Context, txn cspann.Txn) error {
 	return txn.(*Txn).kv.Commit(ctx)
 }
 
-// AbortTransaction is part of the cspann.Store interface. Abort causes the
+// AbortTransaction is part of the cspann.Store interface. It causes the
 // underlying KV transaction wrapped by the passed cspann.Txn to roll back.
 func (s *Store) AbortTransaction(ctx context.Context, txn cspann.Txn) error {
 	return txn.(*Txn).kv.Rollback(ctx)
+}
+
+// RunTransaction is part of the cspann.Store interface. It runs a function in
+// the context of a transaction.
+func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) error) (err error) {
+	var txn cspann.Txn
+	txn, err = s.BeginTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			err = s.CommitTransaction(ctx, txn)
+		}
+		if err != nil {
+			err = errors.CombineErrors(err, s.AbortTransaction(ctx, txn))
+		}
+	}()
+
+	return fn(txn)
+}
+
+// MakePartitionKey is part of the cspann.Store interface. It allocates a new
+// unique partition key.
+func (s *Store) MakePartitionKey() cspann.PartitionKey {
+	instanceID := s.db.KV().Context().NodeID.SQLInstanceID()
+	return cspann.PartitionKey(unique.GenerateUniqueInt(unique.ProcessUniqueID(instanceID)))
 }
 
 // EstimatePartitionCount is part of the cspann.Store interface. It returns an
@@ -159,6 +188,13 @@ func (s *Store) EstimatePartitionCount(
 ) (int, error) {
 	// Create a batch with INCONSISTENT read consistency to avoid updating the
 	// timestamp cache or blocking on locks.
+	// NOTE: In rare edge cases, INCONSISTENT scans can return results that are
+	// arbitrarily old. However, there is a fixup processor on every node, so each
+	// partition has its size checked multiple times across nodes. At least two
+	// nodes in a cluster will have up-to-date results for any given partition, so
+	// stale results are not a concern in practice. If we ever find evidence that
+	// it is, we can fall back to a consistent scan if the inconsistent scan
+	// returns results that are too old.
 	b := s.db.KV().NewBatch()
 	b.Header.ReadConsistency = s.minConsistency
 
@@ -183,16 +219,90 @@ func (s *Store) MergeStats(ctx context.Context, stats *cspann.IndexStats, skipMe
 	return nil
 }
 
+// TryDeletePartition is part of the cspann.Store interface. It deletes an
+// existing partition.
+func (s *Store) TryDeletePartition(
+	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) error {
+	return errors.AssertionFailedf("TryDeletePartition is not yet implemented")
+}
+
+// TryCreateEmptyPartition is part of the cspann.Store interface. It creates a
+// new partition that contains no vectors.
+func (s *Store) TryCreateEmptyPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	metadata cspann.PartitionMetadata,
+) error {
+	return errors.AssertionFailedf("TryCreateEmptyPartition is not yet implemented")
+}
+
+// TryGetPartition is part of the cspann.Store interface. It returns an existing
+// partition, including both its metadata and data.
+func (s *Store) TryGetPartition(
+	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (*cspann.Partition, error) {
+	return nil, errors.AssertionFailedf("TryGetPartition is not yet implemented")
+}
+
+// TryGetPartitionMetadata is part of the cspann.Store interface. It returns the
+// metadata of an existing partition.
+func (s *Store) TryGetPartitionMetadata(
+	ctx context.Context, treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
+) (cspann.PartitionMetadata, error) {
+	return cspann.PartitionMetadata{},
+		errors.AssertionFailedf("TryGetPartitionMetadata is not yet implemented")
+}
+
+// TryUpdatePartitionMetadata is part of the cspann.Store interface. It updates
+// the metadata for an existing partition.
+func (s *Store) TryUpdatePartitionMetadata(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	metadata cspann.PartitionMetadata,
+	expected cspann.PartitionMetadata,
+) error {
+	return errors.AssertionFailedf("TryUpdatePartitionMetadata is not yet implemented")
+}
+
+// TryAddToPartition is part of the cspann.Store interface. It adds vectors to
+// an existing partition.
+func (s *Store) TryAddToPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	vectors vector.Set,
+	childKeys []cspann.ChildKey,
+	valueBytes []cspann.ValueBytes,
+	expected cspann.PartitionMetadata,
+) (added bool, err error) {
+	return false, errors.AssertionFailedf("TryAddToPartition is not yet implemented")
+}
+
+// TryRemoveFromPartition is part of the cspann.Store interface. It removes
+// vectors from an existing partition.
+func (s *Store) TryRemoveFromPartition(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	partitionKey cspann.PartitionKey,
+	childKeys []cspann.ChildKey,
+	expected cspann.PartitionMetadata,
+) (removed bool, err error) {
+	return false, errors.AssertionFailedf("TryRemoveFromPartition is not yet implemented")
+}
+
 // encodePartitionKey takes a partition key and creates a KV key to read that
 // partition's metadata. Vector data can be read by scanning from the metadata
 // to the next partition's metadata.
 func (s *Store) encodePartitionKey(
 	treeKey cspann.TreeKey, partitionKey cspann.PartitionKey,
 ) roachpb.Key {
-	capacity := len(s.prefix) + len(treeKey) + EncodedPartitionKeyLen(partitionKey)
+	capacity := len(s.prefix) + len(treeKey) + vecencoding.EncodedPartitionKeyLen(partitionKey)
 	keyBuffer := make(roachpb.Key, 0, capacity)
 	keyBuffer = append(keyBuffer, s.prefix...)
 	keyBuffer = append(keyBuffer, treeKey...)
-	keyBuffer = EncodePartitionKey(keyBuffer, partitionKey)
+	keyBuffer = vecencoding.EncodePartitionKey(keyBuffer, partitionKey)
 	return keyBuffer
 }

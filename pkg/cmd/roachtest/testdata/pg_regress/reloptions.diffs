@@ -1,0 +1,367 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/reloptions.out --label=/mnt/data1/postgres/src/test/regress/results/reloptions.out /mnt/data1/postgres/src/test/regress/expected/reloptions.out /mnt/data1/postgres/src/test/regress/results/reloptions.out
+--- /mnt/data1/postgres/src/test/regress/expected/reloptions.out
++++ /mnt/data1/postgres/src/test/regress/results/reloptions.out
+@@ -1,226 +1,240 @@
+ -- Simple create
+ CREATE TABLE reloptions_test(i INT) WITH (FiLLFaCToR=30,
+ 	autovacuum_enabled = false, autovacuum_analyze_scale_factor = 0.2);
++ERROR:  unimplemented: storage parameter "autovacuum_analyze_scale_factor"
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/43299/_version_
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                                  reloptions                                  
+-------------------------------------------------------------------------------
+- {fillfactor=30,autovacuum_enabled=false,autovacuum_analyze_scale_factor=0.2}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ -- Fail min/max values check
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=2);
+-ERROR:  value 2 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++NOTICE:  storage parameter "fillfactor" is ignored
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=110);
+-ERROR:  value 110 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_analyze_scale_factor = -10.0);
+-ERROR:  value -10.0 out of bounds for option "autovacuum_analyze_scale_factor"
+-DETAIL:  Valid values are between "0.000000" and "100.000000".
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_analyze_scale_factor = 110.0);
+-ERROR:  value 110.0 out of bounds for option "autovacuum_analyze_scale_factor"
+-DETAIL:  Valid values are between "0.000000" and "100.000000".
++ERROR:  relation "root.public.reloptions_test2" already exists
+ -- Fail when option and namespace do not exist
+ CREATE TABLE reloptions_test2(i INT) WITH (not_existing_option=2);
+-ERROR:  unrecognized parameter "not_existing_option"
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (not_existing_namespace.fillfactor=2);
+-ERROR:  unrecognized parameter namespace "not_existing_namespace"
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE TABLE reloptions_test2(i INT) WITH (not_existing_namespace.fillfactor=2)
++                                                                 ^
++HINT:  try \h CREATE TABLE
+ -- Fail while setting improper values
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=-30.1);
+-ERROR:  value -30.1 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor='string');
+-ERROR:  invalid value for integer option "fillfactor": string
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=true);
+-ERROR:  invalid value for integer option "fillfactor": true
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_enabled=12);
+-ERROR:  invalid value for boolean option "autovacuum_enabled": 12
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_enabled=30.5);
+-ERROR:  invalid value for boolean option "autovacuum_enabled": 30.5
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_enabled='string');
+-ERROR:  invalid value for boolean option "autovacuum_enabled": string
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_analyze_scale_factor='string');
+-ERROR:  invalid value for floating point option "autovacuum_analyze_scale_factor": string
++ERROR:  relation "root.public.reloptions_test2" already exists
+ CREATE TABLE reloptions_test2(i INT) WITH (autovacuum_analyze_scale_factor=true);
+-ERROR:  invalid value for floating point option "autovacuum_analyze_scale_factor": true
++ERROR:  relation "root.public.reloptions_test2" already exists
+ -- Fail if option is specified twice
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor=30, fillfactor=40);
+-ERROR:  parameter "fillfactor" specified more than once
++ERROR:  relation "root.public.reloptions_test2" already exists
+ -- Specifying name only for a non-Boolean option should fail
+ CREATE TABLE reloptions_test2(i INT) WITH (fillfactor);
+-ERROR:  invalid value for integer option "fillfactor": true
++ERROR:  at or near ")": syntax error
++DETAIL:  source SQL:
++CREATE TABLE reloptions_test2(i INT) WITH (fillfactor)
++                                                     ^
++HINT:  try \h CREATE TABLE
+ -- Simple ALTER TABLE
+ ALTER TABLE reloptions_test SET (fillfactor=31,
+ 	autovacuum_analyze_scale_factor = 0.3);
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                                  reloptions                                  
+-------------------------------------------------------------------------------
+- {autovacuum_enabled=false,fillfactor=31,autovacuum_analyze_scale_factor=0.3}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ -- Set boolean option to true without specifying value
+ ALTER TABLE reloptions_test SET (autovacuum_enabled, fillfactor=32);
++ERROR:  at or near ",": syntax error
++DETAIL:  source SQL:
++ALTER TABLE reloptions_test SET (autovacuum_enabled, fillfactor=32)
++                                                   ^
++HINT:  try \h ALTER TABLE
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                                 reloptions                                  
+------------------------------------------------------------------------------
+- {autovacuum_analyze_scale_factor=0.3,autovacuum_enabled=true,fillfactor=32}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ -- Check that RESET works well
+ ALTER TABLE reloptions_test RESET (fillfactor);
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                          reloptions                           
+----------------------------------------------------------------
+- {autovacuum_analyze_scale_factor=0.3,autovacuum_enabled=true}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ -- Resetting all values causes the column to become null
+ ALTER TABLE reloptions_test RESET (autovacuum_enabled,
+ 	autovacuum_analyze_scale_factor);
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass AND
+        reloptions IS NULL;
+- reloptions 
+-------------
+- 
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ -- RESET fails if a value is specified
+ ALTER TABLE reloptions_test RESET (fillfactor=12);
+-ERROR:  RESET must not include values for parameters
++ERROR:  at or near "=": syntax error
++DETAIL:  source SQL:
++ALTER TABLE reloptions_test RESET (fillfactor=12)
++                                             ^
++HINT:  try \h ALTER TABLE
+ -- Test vacuum_truncate option
+ DROP TABLE reloptions_test;
++ERROR:  relation "reloptions_test" does not exist
+ CREATE TEMP TABLE reloptions_test(i INT NOT NULL, j text)
+ 	WITH (vacuum_truncate=false,
+ 	toast.vacuum_truncate=false,
+ 	autovacuum_enabled=false);
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE TEMP TABLE reloptions_test(i INT NOT NULL, j text)
++	WITH (vacuum_truncate=false,
++	toast.vacuum_truncate=false,
++      ^
++HINT:  try \h CREATE TABLE
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                    reloptions                    
+---------------------------------------------------
+- {vacuum_truncate=false,autovacuum_enabled=false}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ INSERT INTO reloptions_test VALUES (1, NULL), (NULL, NULL);
+-ERROR:  null value in column "i" of relation "reloptions_test" violates not-null constraint
+-DETAIL:  Failing row contains (null, null).
++ERROR:  relation "reloptions_test" does not exist
+ -- Do an aggressive vacuum to prevent page-skipping.
+ VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) reloptions_test;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) reloptions_test
++^
+ SELECT pg_relation_size('reloptions_test') > 0;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_relation_size()
+ SELECT reloptions FROM pg_class WHERE oid =
+ 	(SELECT reltoastrelid FROM pg_class
+ 	WHERE oid = 'reloptions_test'::regclass);
+-       reloptions        
+--------------------------
+- {vacuum_truncate=false}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ ALTER TABLE reloptions_test RESET (vacuum_truncate);
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-         reloptions         
+-----------------------------
+- {autovacuum_enabled=false}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ INSERT INTO reloptions_test VALUES (1, NULL), (NULL, NULL);
+-ERROR:  null value in column "i" of relation "reloptions_test" violates not-null constraint
+-DETAIL:  Failing row contains (null, null).
++ERROR:  relation "reloptions_test" does not exist
+ -- Do an aggressive vacuum to prevent page-skipping.
+ VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) reloptions_test;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) reloptions_test
++^
+ SELECT pg_relation_size('reloptions_test') = 0;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_relation_size()
+ -- Test toast.* options
+ DROP TABLE reloptions_test;
++ERROR:  relation "reloptions_test" does not exist
+ CREATE TABLE reloptions_test (s VARCHAR)
+ 	WITH (toast.autovacuum_vacuum_cost_delay = 23);
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE TABLE reloptions_test (s VARCHAR)
++	WITH (toast.autovacuum_vacuum_cost_delay = 23)
++            ^
++HINT:  try \h CREATE TABLE
+ SELECT reltoastrelid as toast_oid
+ 	FROM pg_class WHERE oid = 'reloptions_test'::regclass \gset
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = :toast_oid;
+-            reloptions             
+------------------------------------
+- {autovacuum_vacuum_cost_delay=23}
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT reloptions FROM pg_class WHERE oid = :toast_oid
++                                            ^
+ ALTER TABLE reloptions_test SET (toast.autovacuum_vacuum_cost_delay = 24);
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++ALTER TABLE reloptions_test SET (toast.autovacuum_vacuum_cost_delay = 24)
++                                      ^
++HINT:  try \h ALTER TABLE
+ SELECT reloptions FROM pg_class WHERE oid = :toast_oid;
+-            reloptions             
+------------------------------------
+- {autovacuum_vacuum_cost_delay=24}
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT reloptions FROM pg_class WHERE oid = :toast_oid
++                                            ^
+ ALTER TABLE reloptions_test RESET (toast.autovacuum_vacuum_cost_delay);
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++ALTER TABLE reloptions_test RESET (toast.autovacuum_vacuum_cost_delay)
++                                        ^
++HINT:  try \h ALTER TABLE
+ SELECT reloptions FROM pg_class WHERE oid = :toast_oid;
+- reloptions 
+-------------
+- 
+-(1 row)
+-
++ERROR:  at or near ":": syntax error
++DETAIL:  source SQL:
++SELECT reloptions FROM pg_class WHERE oid = :toast_oid
++                                            ^
+ -- Fail on non-existent options in toast namespace
+ CREATE TABLE reloptions_test2 (i int) WITH (toast.not_existing_option = 42);
+-ERROR:  unrecognized parameter "not_existing_option"
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE TABLE reloptions_test2 (i int) WITH (toast.not_existing_option = 42)
++                                                 ^
++HINT:  try \h CREATE TABLE
+ -- Mix TOAST & heap
+ DROP TABLE reloptions_test;
++ERROR:  relation "reloptions_test" does not exist
+ CREATE TABLE reloptions_test (s VARCHAR) WITH
+ 	(toast.autovacuum_vacuum_cost_delay = 23,
+ 	autovacuum_vacuum_cost_delay = 24, fillfactor = 40);
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE TABLE reloptions_test (s VARCHAR) WITH
++	(toast.autovacuum_vacuum_cost_delay = 23,
++       ^
++HINT:  try \h CREATE TABLE
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test'::regclass;
+-                   reloptions                    
+--------------------------------------------------
+- {autovacuum_vacuum_cost_delay=24,fillfactor=40}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = (
+ 	SELECT reltoastrelid FROM pg_class WHERE oid = 'reloptions_test'::regclass);
+-            reloptions             
+------------------------------------
+- {autovacuum_vacuum_cost_delay=23}
+-(1 row)
+-
++ERROR:  relation "reloptions_test" does not exist
+ --
+ -- CREATE INDEX, ALTER INDEX for btrees
+ --
+ CREATE INDEX reloptions_test_idx ON reloptions_test (s) WITH (fillfactor=30);
++ERROR:  relation "reloptions_test" does not exist
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test_idx'::regclass;
+-   reloptions    
+------------------
+- {fillfactor=30}
+-(1 row)
+-
++ERROR:  relation "reloptions_test_idx" does not exist
+ -- Fail when option and namespace do not exist
+ CREATE INDEX reloptions_test_idx ON reloptions_test (s)
+ 	WITH (not_existing_option=2);
+-ERROR:  unrecognized parameter "not_existing_option"
++ERROR:  relation "reloptions_test" does not exist
+ CREATE INDEX reloptions_test_idx ON reloptions_test (s)
+ 	WITH (not_existing_ns.fillfactor=2);
+-ERROR:  unrecognized parameter namespace "not_existing_ns"
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++CREATE INDEX reloptions_test_idx ON reloptions_test (s)
++	WITH (not_existing_ns.fillfactor=2)
++                      ^
++HINT:  try \h CREATE INDEX
+ -- Check allowed ranges
+ CREATE INDEX reloptions_test_idx2 ON reloptions_test (s) WITH (fillfactor=1);
+-ERROR:  value 1 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "reloptions_test" does not exist
+ CREATE INDEX reloptions_test_idx2 ON reloptions_test (s) WITH (fillfactor=130);
+-ERROR:  value 130 out of bounds for option "fillfactor"
+-DETAIL:  Valid values are between "10" and "100".
++ERROR:  relation "reloptions_test" does not exist
+ -- Check ALTER
+ ALTER INDEX reloptions_test_idx SET (fillfactor=40);
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++ALTER INDEX reloptions_test_idx SET (fillfactor=40)
++                                ^
++HINT:  try \h ALTER INDEX
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test_idx'::regclass;
+-   reloptions    
+------------------
+- {fillfactor=40}
+-(1 row)
+-
++ERROR:  relation "reloptions_test_idx" does not exist
+ -- Check ALTER on empty reloption list
+ CREATE INDEX reloptions_test_idx3 ON reloptions_test (s);
++ERROR:  relation "reloptions_test" does not exist
+ ALTER INDEX reloptions_test_idx3 SET (fillfactor=40);
++ERROR:  at or near "set": syntax error
++DETAIL:  source SQL:
++ALTER INDEX reloptions_test_idx3 SET (fillfactor=40)
++                                 ^
++HINT:  try \h ALTER INDEX
+ SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test_idx3'::regclass;
+-   reloptions    
+------------------
+- {fillfactor=40}
+-(1 row)
+-
++ERROR:  relation "reloptions_test_idx3" does not exist

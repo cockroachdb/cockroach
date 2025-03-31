@@ -220,7 +220,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
-					BaFmt:                  ba,
+					Batch:                  ba,
 				}
 				return ""
 
@@ -735,7 +735,9 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	// Set the latch manager's long latch threshold to infinity to disable
 	// logging, which could cause a test to erroneously fail.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
-	concurrency.UnreplicatedLockReliability.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},

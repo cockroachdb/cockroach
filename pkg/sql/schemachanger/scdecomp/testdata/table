@@ -913,6 +913,7 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
+    recreateTargetId: 0
     referencedColumnIds:
     - 1
     sharding: null

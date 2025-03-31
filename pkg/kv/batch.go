@@ -301,6 +301,7 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *kvpb.QueryResolvedTimestampRequest:
 			case *kvpb.BarrierRequest:
 			case *kvpb.LinkExternalSSTableRequest:
+			case *kvpb.ExciseRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -578,9 +579,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 // This is used by logical data replication and other uses of this API
 // are discouraged since the semantics are subject to change as
 // required by that feature.
-func (b *Batch) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
-) {
+func (b *Batch) CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -594,7 +593,6 @@ func (b *Batch) CPutWithOriginTimestamp(
 	}
 	r := kvpb.NewConditionalPut(k, v, expValue, false)
 	r.(*kvpb.ConditionalPutRequest).OriginTimestamp = ts
-	r.(*kvpb.ConditionalPutRequest).ShouldWinOriginTimestampTie = shouldWinTie
 	b.appendReqs(r)
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)

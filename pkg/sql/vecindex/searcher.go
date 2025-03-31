@@ -56,7 +56,7 @@ func (s *Searcher) Search(
 	if err != nil {
 		return err
 	}
-	s.results = s.searchSet.PopUnsortedResults()
+	s.results = s.searchSet.PopResults()
 	return nil
 }
 

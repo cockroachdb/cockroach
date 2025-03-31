@@ -488,6 +488,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		// During an offline initial scan, we need to replicate the whole table, not
 		// just the primary keys.
 		UseTableSpan: payload.CreateTable && progress.ReplicatedTime.IsEmpty(),
+		StreamID:     streampb.StreamID(payload.StreamID),
 	}
 	for _, pair := range payload.ReplicationPairs {
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
@@ -583,6 +584,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress.ReplicatedTime,
 		progress.Checkpoint,
 		tableMetadataByDestID,
+		plan.SourceTypes,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
 		payload.Discard,
@@ -750,7 +752,7 @@ func (rh *rowHandler) handleTraceAgg(agg *execinfrapb.TracingAggregatorEvents) {
 	// aggregate.
 	rh.r.mu.Lock()
 	defer rh.r.mu.Unlock()
-	rh.r.mu.perNodeAggregatorStats[componentID] = agg.Events
+	rh.r.mu.perNodeAggregatorStats[componentID] = *agg
 }
 
 func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {

@@ -65,6 +65,8 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
+	// We don't make builtins for T_any because PG's builtins just error but, if we did, they would have underscores.
+	types.Any.Oid():         {},
 	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
@@ -107,6 +109,10 @@ func init() {
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
+		case oid.T_any:
+			// Postgres doesn't have any_send or any_recv. It does have any_in and any_out,
+			// but they always error, so let's just skip these builtins altogether.
+			continue
 		case oid.T_trigger:
 			// TRIGGER is not valid in any context apart from the return-type of a
 			// trigger function.
@@ -2038,7 +2044,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_column_size": makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.VariadicType{
-				VarType: types.AnyElement,
+				VarType: types.Any,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2053,7 +2059,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
-			Volatility: volatility.Immutable,
+			Volatility: volatility.Stable,
 		}),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like

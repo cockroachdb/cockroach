@@ -262,6 +262,214 @@ $[false]
 ----
 $[false]
 
+parse
+1 < 1
+----
+(1 < 1) -- normalized!
+
+parse
+1 <= 1
+----
+(1 <= 1) -- normalized!
+
+parse
+1 > 1
+----
+(1 > 1) -- normalized!
+
+parse
+1 >= 1
+----
+(1 >= 1) -- normalized!
+
+parse
+1 != 1
+----
+(1 != 1) -- normalized!
+
+parse
+1 == 1
+----
+(1 == 1) -- normalized!
+
+parse
+((true < false))
+----
+(true < false) -- normalized!
+
+parse
+((true <= false))
+----
+(true <= false) -- normalized!
+
+parse
+((true > false))
+----
+(true > false) -- normalized!
+
+parse
+((true >= false))
+----
+(true >= false) -- normalized!
+
+parse
+((true != false))
+----
+(true != false) -- normalized!
+
+parse
+((true == false))
+----
+(true == false) -- normalized!
+
+parse
+$ < 1
+----
+($ < 1) -- normalized!
+
+parse
+$ == $
+----
+($ == $) -- normalized!
+
+parse
+1 == 1 && 1 != 1
+----
+((1 == 1) && (1 != 1)) -- normalized!
+
+parse
+1 == 1 || 1 != 1
+----
+((1 == 1) || (1 != 1)) -- normalized!
+
+parse
+$.abc ? ($.a[1] > 2)
+----
+$."abc"?(($."a"[1] > 2)) -- normalized!
+
+# TODO(normanchenn): this should be not allowed
+parse
+@
+----
+@
+
+parse
+$.a[*] ? (@.b > 100)
+----
+$."a"[*]?((@."b" > 100)) -- normalized!
+
+parse
+$.a[*] ? (@.b > 100 || (@.c < 100))
+----
+$."a"[*]?(((@."b" > 100) || (@."c" < 100))) -- normalized!
+
+parse
+1 + 1
+----
+(1 + 1) -- normalized!
+
+parse
+1 + 1 * 2
+----
+(1 + (1 * 2)) -- normalized!
+
+parse
+1 + 2 - 3 * 4 / 5 % 6
+----
+((1 + 2) - (((3 * 4) / 5) % 6)) -- normalized!
+
+parse
+(1 + 2) * (3 - 4) / 5
+----
+(((1 + 2) * (3 - 4)) / 5) -- normalized!
+
+parse
+1 * 2 + 3 * 4
+----
+((1 * 2) + (3 * 4)) -- normalized!
+
+parse
+1 + 2 * (3 - 4) / (5 + 6) - 7 % 8
+----
+((1 + ((2 * (3 - 4)) / (5 + 6))) - (7 % 8)) -- normalized!
+
+parse
+1 * (2 + 3) - 4 / (5 - 6) % 7
+----
+((1 * (2 + 3)) - ((4 / (5 - 6)) % 7)) -- normalized!
+
+parse
+((1 + 2) * 3) - (4 % 5) * 6
+----
+(((1 + 2) * 3) - ((4 % 5) * 6)) -- normalized!
+
+parse
+1 + 2 - 3 + 4 - 5
+----
+((((1 + 2) - 3) + 4) - 5) -- normalized!
+
+parse
+$.c[$.b - $.a]
+----
+$."c"[($."b" - $."a")] -- normalized!
+
+parse
+$.c[$.b - $.a to $.d - $.b]
+----
+$."c"[($."b" - $."a") to ($."d" - $."b")] -- normalized!
+
+parse
+"hello" == "hello"
+----
+("hello" == "hello") -- normalized!
+
+parse
+$.a ? (@.b == "string")
+----
+$."a"?((@."b" == "string")) -- normalized!
+
+error
+"a" && "b"
+----
+at or near "&": syntax error
+DETAIL: source SQL:
+"a" && "b"
+    ^
+
+parse
+null == null
+----
+(null == null) -- normalized!
+
+parse
+null + null
+----
+(null + null) -- normalized!
+
+error
+!null
+----
+at or near "null": syntax error
+DETAIL: source SQL:
+!null
+ ^
+
+parse
+$.a ? (@.b like_regex "^[aeiou]")
+----
+$."a"?((@."b" like_regex "^[aeiou]")) -- normalized!
+
+parse
+$.*
+----
+$.*
+
+parse
+$.abc.*.def.*
+----
+$."abc".*."def".* -- normalized!
+
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]

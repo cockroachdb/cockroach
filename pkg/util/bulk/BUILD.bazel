@@ -18,5 +18,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
     ],
 )

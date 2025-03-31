@@ -18,7 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
@@ -61,6 +63,9 @@ func TestIndex(t *testing.T) {
 			case "new-index":
 				return state.NewIndex(d)
 
+			case "load-index":
+				return state.LoadIndex(d)
+
 			case "format-tree":
 				return state.FormatTree(d)
 
@@ -79,7 +84,7 @@ func TestIndex(t *testing.T) {
 			case "delete":
 				return state.Delete(d)
 
-			case "force-split-or-merge":
+			case "force-split", "force-merge":
 				return state.ForceSplitOrMerge(d)
 
 			case "recall":
@@ -99,85 +104,62 @@ func TestIndex(t *testing.T) {
 }
 
 type testState struct {
-	T          *testing.T
-	Ctx        context.Context
-	Workspace  workspace.T
-	Stopper    *stop.Stopper
-	Quantizer  quantize.Quantizer
-	InMemStore *memstore.Store
-	Index      *cspann.Index
-	Options    cspann.IndexOptions
-	Features   vector.Set
+	T         *testing.T
+	Ctx       context.Context
+	Workspace workspace.T
+	Stopper   *stop.Stopper
+	Quantizer quantize.Quantizer
+	MemStore  *memstore.Store
+	Index     *cspann.Index
+	Options   cspann.IndexOptions
+	Features  vector.Set
 
 	// Metrics
-	SuccessfulSplits int
-	FixupsAdded      int
-	FixupsProcessed  int
+	SuccessfulSplits    int
+	PendingSplitsMerges int
 }
 
 func (s *testState) NewIndex(d *datadriven.TestData) string {
-	var err error
-	dims := 2
-	s.Options = cspann.IndexOptions{IsDeterministic: true}
-	for _, arg := range d.CmdArgs {
-		switch arg.Key {
-		case "min-partition-size":
-			s.Options.MinPartitionSize = s.parseInt(arg)
-
-		case "max-partition-size":
-			s.Options.MaxPartitionSize = s.parseInt(arg)
-
-		case "quality-samples":
-			s.Options.QualitySamples = s.parseInt(arg)
-
-		case "dims":
-			dims = s.parseInt(arg)
-
-		case "beam-size":
-			s.Options.BaseBeamSize = s.parseInt(arg)
-		}
-	}
-
-	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
-	s.InMemStore = memstore.New(dims, 42)
-	s.Index, err = cspann.NewIndex(s.Ctx, s.InMemStore, s.Quantizer, 42, &s.Options, s.Stopper)
-	require.NoError(s.T, err)
-
-	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
-	s.Index.Fixups().OnFixupAdded(func() { s.FixupsAdded++ })
-	s.Index.Fixups().OnFixupProcessed(func() { s.FixupsProcessed++ })
-
-	// Suspend background fixups until ProcessFixups is explicitly called, so
-	// that vector index operations can be deterministic.
-	s.Index.SuspendFixups()
+	s.makeNewIndex(d)
 
 	// Insert initial vectors.
 	return s.Insert(d)
 }
 
+func (s *testState) LoadIndex(d *datadriven.TestData) string {
+	s.makeNewIndex(d)
+
+	var treeKey cspann.TreeKey
+	lines := strings.Split(d.Input, "\n")
+	s.loadIndexFromFormat(treeKey, lines, 0)
+
+	return fmt.Sprintf("Loaded %d vectors.\n", len(s.MemStore.GetAllVectors()))
+}
+
 func (s *testState) Reset() {
 	// Reset state between tests.
 	s.SuccessfulSplits = 0
-	s.FixupsAdded = 0
-	s.FixupsProcessed = 0
+	s.PendingSplitsMerges = 0
 }
 
 func (s *testState) FormatTree(d *datadriven.TestData) string {
-	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
+	defer commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 	var treeKey cspann.TreeKey
+	rootPartitionKey := cspann.RootKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
 		case "tree":
 			treeKey = s.parseTreeID(arg)
+
+		case "root":
+			rootPartitionKey = cspann.PartitionKey(s.parseInt(arg))
 		}
 	}
 
-	var idxCtx cspann.Context
-	idxCtx.Init(txn)
-	tree, err := s.Index.Format(
-		s.Ctx, &idxCtx, treeKey, cspann.FormatOptions{PrimaryKeyStrings: true})
+	options := cspann.FormatOptions{PrimaryKeyStrings: true, RootPartitionKey: rootPartitionKey}
+	tree, err := s.Index.Format(s.Ctx, treeKey, options)
 	require.NoError(s.T, err)
 	return tree
 }
@@ -214,11 +196,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 
 	// Search the index within a transaction.
 	var idxCtx cspann.Context
-	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 	idxCtx.Init(txn)
 	err := s.Index.Search(s.Ctx, &idxCtx, treeKey, vec, &searchSet, options)
 	require.NoError(s.T, err)
-	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 	var buf bytes.Buffer
 	results := searchSet.PopResults()
@@ -265,11 +247,11 @@ func (s *testState) SearchForInsert(d *datadriven.TestData) string {
 
 	// Search the index within a transaction.
 	var idxCtx cspann.Context
-	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 	idxCtx.Init(txn)
 	result, err := s.Index.SearchForInsert(s.Ctx, &idxCtx, treeKey, vec)
 	require.NoError(s.T, err)
-	commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "partition %d, centroid=", result.ChildKey.PartitionKey)
@@ -311,11 +293,11 @@ func (s *testState) SearchForDelete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Search within a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 		idxCtx.Init(txn)
 		result, err := s.Index.SearchForDelete(s.Ctx, &idxCtx, treeKey, vec, key)
 		require.NoError(s.T, err)
-		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+		commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 		if result == nil {
 			fmt.Fprintf(&buf, "%s: vector not found\n", string(key))
@@ -383,12 +365,12 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 		idxCtx.Init(txn)
-		s.InMemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
-		require.NoError(s.T,
-			s.Index.Insert(s.Ctx, &idxCtx, treeKey, vectors.At(i), childKeys[i].KeyBytes))
-		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+		s.MemStore.InsertVector(childKeys[i].KeyBytes, vectors.At(i))
+		err := s.Index.Insert(s.Ctx, &idxCtx, treeKey, vectors.At(i), childKeys[i].KeyBytes)
+		require.NoError(s.T, err)
+		commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 		if (i+1)%step == 0 && !noFixups {
 			// Run synchronous fixups so that test results are deterministic.
@@ -434,7 +416,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		key, vec := s.parseKeyAndVector(line)
 
 		// Delete within the scope of a transaction.
-		txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
+		txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
 
 		// If notFound=true, then simulate case where the vector is deleted in
 		// the primary index, but it cannot be found in the secondary index.
@@ -443,9 +425,9 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 			err := s.Index.Delete(s.Ctx, &idxCtx, treeKey, vec, key)
 			require.NoError(s.T, err)
 		}
-		s.InMemStore.DeleteVector(key)
+		s.MemStore.DeleteVector(key)
 
-		commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+		commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 		if (i+1)%s.Options.MaxPartitionSize == 0 {
 			// Run synchronous fixups so that test results are deterministic.
@@ -461,6 +443,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 	var parentPartitionKey, partitionKey cspann.PartitionKey
+	var steps int
 	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -470,17 +453,25 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 		case "partition-key":
 			partitionKey = cspann.PartitionKey(s.parseInt(arg))
 
+		case "steps":
+			steps = s.parseInt(arg)
+
 		case "tree":
 			treeKey = s.parseTreeID(arg)
 		}
 	}
 
-	if d.Cmd == "force-split-or-merge" {
-		s.Index.ForceSplitOrMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey)
-	}
+	// Perform N steps in a split or merge operation.
+	for range max(steps, 1) {
+		if d.Cmd == "force-split" {
+			s.Index.ForceSplit(s.Ctx, treeKey, parentPartitionKey, partitionKey, steps > 0)
+		} else {
+			s.Index.ForceMerge(s.Ctx, treeKey, parentPartitionKey, partitionKey, steps > 0)
+		}
 
-	// Ensure the fixup runs.
-	s.Index.ProcessFixups()
+		// Ensure the fixup runs.
+		s.Index.ProcessFixups()
+	}
 
 	return s.FormatTree(d)
 }
@@ -518,7 +509,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		}
 	}
 
-	data := s.InMemStore.GetAllVectors()
+	data := s.MemStore.GetAllVectors()
 
 	// Construct list of feature offsets.
 	if samples == nil {
@@ -537,8 +528,8 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		copy(samples, remaining[:numSamples])
 	}
 
-	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
+	defer commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 	// calcTruth calculates the true nearest neighbors for the query vector.
 	calcTruth := func(queryVector vector.T, data []cspann.VectorWithKey) []cspann.KeyBytes {
@@ -601,8 +592,8 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 }
 
 func (s *testState) ValidateTree(d *datadriven.TestData) string {
-	txn := commontest.BeginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commontest.CommitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	txn := commontest.BeginTransaction(s.Ctx, s.T, s.MemStore)
+	defer commontest.CommitTransaction(s.Ctx, s.T, s.MemStore, txn)
 
 	var treeKey cspann.TreeKey
 	for _, arg := range d.CmdArgs {
@@ -657,9 +648,47 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 func (s *testState) ShowMetrics(d *datadriven.TestData) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%d successful splits\n", s.SuccessfulSplits))
-	buf.WriteString(fmt.Sprintf("%d fixups added to queue\n", s.FixupsAdded))
-	buf.WriteString(fmt.Sprintf("%d fixups processed\n", s.FixupsProcessed))
+	buf.WriteString(fmt.Sprintf("%d pending splits/merges\n", s.PendingSplitsMerges))
 	return buf.String()
+}
+
+func (s *testState) makeNewIndex(d *datadriven.TestData) {
+	var err error
+	dims := 2
+	s.Options = cspann.IndexOptions{IsDeterministic: true}
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "min-partition-size":
+			s.Options.MinPartitionSize = s.parseInt(arg)
+
+		case "max-partition-size":
+			s.Options.MaxPartitionSize = s.parseInt(arg)
+
+		case "quality-samples":
+			s.Options.QualitySamples = s.parseInt(arg)
+
+		case "dims":
+			dims = s.parseInt(arg)
+
+		case "beam-size":
+			s.Options.BaseBeamSize = s.parseInt(arg)
+
+		case "new-fixups":
+			s.Options.UseNewFixups = true
+		}
+	}
+
+	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
+	s.MemStore = memstore.New(s.Quantizer, 42)
+	s.Index, err = cspann.NewIndex(s.Ctx, s.MemStore, s.Quantizer, 42, &s.Options, s.Stopper)
+	require.NoError(s.T, err)
+
+	s.Index.Fixups().OnSuccessfulSplit(func() { s.SuccessfulSplits++ })
+	s.Index.Fixups().OnPendingSplitsMerges(func(count int) { s.PendingSplitsMerges = count })
+
+	// Suspend background fixups until ProcessFixups is explicitly called, so
+	// that vector index operations can be deterministic.
+	s.Index.SuspendFixups()
 }
 
 func (s *testState) parseInt(arg datadriven.CmdArg) int {
@@ -710,13 +739,129 @@ func (s *testState) parseKeyAndVector(line string) (cspann.KeyBytes, vector.T) {
 	if len(parts) == 1 {
 		// Get the value from the store.
 		key := cspann.KeyBytes(line)
-		return key, s.InMemStore.GetVector(key)
+		return key, s.MemStore.GetVector(key)
 	}
 
 	// Parse the value after the colon.
 	require.Len(s.T, parts, 2)
 	key := cspann.KeyBytes(parts[0])
 	return key, s.parseVector(parts[1])
+}
+
+func (s *testState) loadIndexFromFormat(
+	treeKey cspann.TreeKey, lines []string, indent int,
+) (remaining []string, level cspann.Level, centroid vector.T, childKey cspann.ChildKey) {
+	// Ensure line contains "• ", note that the '•' rune is 3 UTF-8 bytes.
+	idx := strings.Index(lines[0], "• ")
+	require.NotEqual(s.T, -1, idx)
+	line := lines[0][idx+4:]
+	idx = strings.Index(line, " ")
+
+	if line[0] < '0' || line[0] > '9' {
+		// This is a leaf vector.
+		keyBytes := []byte(strings.TrimSpace(line[:idx]))
+		line = strings.TrimSpace(line[idx:])
+		vec := s.parseVector(line)
+		s.MemStore.InsertVector(keyBytes, vec)
+		randomized := s.Index.RandomizeVector(vec, make(vector.T, len(vec)))
+		return lines[1:], cspann.LeafLevel, randomized, cspann.ChildKey{KeyBytes: keyBytes}
+	}
+
+	// This is an interior partition.
+	val, err := strconv.Atoi(line[:idx])
+	require.NoError(s.T, err)
+	partitionKey := cspann.PartitionKey(val)
+	s.MemStore.EnsureUniquePartitionKey(treeKey, partitionKey)
+	line = line[idx:]
+
+	// Parse centroid and state.
+	details := cspann.MakeReadyDetails()
+	idx = strings.Index(line, "[")
+	if idx != -1 {
+		require.True(s.T, strings.HasSuffix(line, "]"))
+		details = parsePartitionStateDetails(line[idx+1 : len(line)-1])
+		line = line[:idx-1]
+	}
+	centroid = s.parseVector(line)
+	centroid = s.Index.RandomizeVector(centroid, make(vector.T, len(centroid)))
+
+	lines = lines[1:]
+
+	childLevel := cspann.LeafLevel
+	childVectors := vector.MakeSet(len(centroid))
+	childKeys := []cspann.ChildKey(nil)
+	childIndent := 0
+
+	// Loop over children.
+	for len(lines) > 0 && len(lines[0]) > indent {
+		if strings.HasSuffix(lines[0], "│") {
+			childIndent = len(lines[0])
+			lines = lines[1:]
+		}
+		require.Greater(s.T, childIndent, 0)
+
+		var childVector vector.T
+		lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
+		childVectors.Add(childVector)
+		childKeys = append(childKeys, childKey)
+	}
+
+	metadata := cspann.PartitionMetadata{
+		Level:        childLevel,
+		Centroid:     centroid,
+		StateDetails: details,
+	}
+	err = s.MemStore.TryCreateEmptyPartition(s.Ctx, treeKey, partitionKey, metadata)
+	require.NoError(s.T, err)
+
+	if len(childKeys) > 0 {
+		valueBytes := make([]cspann.ValueBytes, len(childKeys))
+		added, err := s.MemStore.TryAddToPartition(
+			s.Ctx, treeKey, partitionKey, childVectors, childKeys, valueBytes, metadata)
+		require.NoError(s.T, err)
+		require.True(s.T, added)
+	}
+
+	return lines, childLevel + 1, centroid, cspann.ChildKey{PartitionKey: partitionKey}
+}
+
+// parsePartitionStateDetails parses a partition state details string in this
+// format:
+//
+//	Ready
+//	DrainingForSplit:1,2
+//	Merging:1
+func parsePartitionStateDetails(s string) cspann.PartitionStateDetails {
+	var details cspann.PartitionStateDetails
+	idx := strings.Index(s, ":")
+	if idx == -1 {
+		details.State = cspann.ParsePartitionState(s)
+		return details
+	}
+	details.State = cspann.ParsePartitionState(s[:idx])
+
+	// Parse the partition keys after the colon.
+	remaining := s[idx+1:]
+	if comma := strings.Index(remaining, ","); comma != -1 {
+		// Two keys means we're parsing targets.
+		if num, err := strconv.Atoi(remaining[:comma]); err == nil {
+			details.Target1 = cspann.PartitionKey(num)
+		}
+		if num, err := strconv.Atoi(remaining[comma+1:]); err == nil {
+			details.Target2 = cspann.PartitionKey(num)
+		}
+	} else if num, err := strconv.Atoi(remaining); err == nil {
+		// Has one parameter - set as Source for merge operations, Target1
+		// otherwise.
+		switch details.State {
+		case cspann.MergingState, cspann.DrainingForMergeState, cspann.RemovingLevelState:
+			details.Source = cspann.PartitionKey(num)
+		default:
+			details.Target1 = cspann.PartitionKey(num)
+		}
+	}
+
+	return details
 }
 
 // findMAP returns mean average precision, which compares a set of predicted
@@ -756,7 +901,7 @@ func TestRandomizeVector(t *testing.T) {
 	const dims = 97
 	const count = 5
 	quantizer := quantize.NewRaBitQuantizer(dims, 46)
-	inMemStore := memstore.New(dims, 42)
+	inMemStore := memstore.New(quantizer, 42)
 	index, err := cspann.NewIndex(ctx, inMemStore, quantizer, 42, &cspann.IndexOptions{}, stopper)
 	require.NoError(t, err)
 
@@ -826,8 +971,8 @@ func TestIndexConcurrency(t *testing.T) {
 			QualitySamples:   4,
 		}
 		seed := int64(i)
-		store := memstore.New(vectors.Dims, seed)
 		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, seed)
+		store := memstore.New(quantizer, seed)
 		index, err := cspann.NewIndex(ctx, store, quantizer, seed, &options, stopper)
 		require.NoError(t, err)
 
@@ -848,6 +993,8 @@ func buildIndex(
 	vectors vector.Set,
 	primaryKeys []cspann.KeyBytes,
 ) {
+	var insertCount atomic.Uint64
+
 	// Insert block of vectors within the scope of a transaction.
 	insertBlock := func(idxCtx *cspann.Context, start, end int) {
 		for i := start; i < end; i++ {
@@ -857,6 +1004,7 @@ func buildIndex(
 			require.NoError(t,
 				index.Insert(ctx, idxCtx, nil /* treeKey */, vectors.At(i), primaryKeys[i]))
 			commontest.CommitTransaction(ctx, t, store, txn)
+			insertCount.Add(1)
 		}
 	}
 
@@ -879,15 +1027,21 @@ func buildIndex(
 			}
 		}(i, end)
 	}
+
+	for int(insertCount.Load()) < vectors.Count {
+		time.Sleep(time.Second)
+		log.Infof(ctx, "%d vectors inserted", insertCount.Load())
+
+		// Fail on foreground goroutine if any background goroutines failed.
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
 	wait.Wait()
 
 	// Process any remaining fixups.
 	index.ProcessFixups()
-
-	// Fail on foreground goroutine if any background goroutines failed.
-	if t.Failed() {
-		t.FailNow()
-	}
 }
 
 func validateIndex(ctx context.Context, t *testing.T, store *memstore.Store) int {

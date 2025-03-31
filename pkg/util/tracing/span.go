@@ -315,6 +315,16 @@ func (sp *Span) GetRecording(recType tracingpb.RecordingType) tracingpb.Recordin
 	return sp.i.GetRecording(recType, false /* finishing */)
 }
 
+func (sp *Span) GetFullTraceRecording(recType tracingpb.RecordingType) Trace {
+	if sp.detectUseAfterFinish() {
+		return Trace{}
+	}
+	if sp.RecordingType() == tracingpb.RecordingOff {
+		return Trace{}
+	}
+	return sp.i.GetFullTraceRecording(recType)
+}
+
 // GetConfiguredRecording is like GetRecording, except the type of recording it
 // returns is the one that the span has been previously configured with.
 //

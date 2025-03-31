@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -929,6 +930,11 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This test has always been flaky under deadlock since its introduction. Due
+	// to its complexity, we are not going to spend time on improving it now.
+	skip.UnderDuress(t)
+
 	run := func(t *testing.T, alignLeaseholders bool, alsoSplit bool) {
 
 		// The stores 0 and 1 are the "LHS", and the stores 2 and 3 are the RHS.
@@ -1010,21 +1016,52 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		// writing.
 		manuals[2].Increment(2000)
 
+		defer func() {
+			if !t.Failed() {
+				return
+			}
+			t.Logf("maxNanos=%d", maxNanos)
+			t.Logf("manuals[2]=%d", manuals[2].UnixNano())
+		}()
+
 		// Write the data from a different transaction to establish the time for the
 		// key as 10 ns in the future.
-		_, pErr := kv.SendWrapped(ctx, tc.Servers[2].DistSenderI().(kv.Sender), putArgs(keyC, []byte("value")))
-		require.Nil(t, pErr)
+		{
+			ctx, fagrs := tracing.ContextWithRecordingSpan(ctx, tc.Servers[2].Tracer(), "keyC-write")
+			resp, pErr := kv.SendWrapped(ctx, tc.Servers[2].DistSenderI().(kv.Sender), putArgs(keyC, []byte("value")))
+			rec := fagrs()
+			require.Nil(t, pErr, "%v", rec)
+			defer func() {
+				if !t.Failed() {
+					return
+				}
+				t.Logf("keyC-write: %+v", resp)
+				t.Logf("keyC-write: %s", rec)
+			}()
+		}
 
 		// Create two identical transactions. The first one will perform a read to a
 		// store before the merge, the second will only read after the merge.
 		txn := roachpb.MakeTransaction("txn1", keyA, isolation.Serializable, 1, now, maxOffset, instanceId, 0, false /* omitInRangefeeds */)
 		txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, 1, now, maxOffset, instanceId, 0, false /* omitInRangefeeds */)
 
-		// Simulate a read which will cause the observed time to be set to now
-		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyA))
-		require.Nil(t, pErr)
-		// The client needs to update its transaction to the returned transaction which has observed timestamps in it
-		txn = *resp.Header().Txn
+		// Simulate a read which will cause the observed time to be set to now.
+		{
+			ctx, fagrs := tracing.ContextWithRecordingSpan(ctx, tc.Servers[1].Tracer(), "txn1-keyA-get")
+			resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyA))
+			rec := fagrs()
+			require.Nil(t, pErr, "%v", rec)
+			// The client needs to update its transaction to the returned transaction which has observed timestamps in it
+			txn = *resp.Header().Txn
+			defer func() {
+				if !t.Failed() {
+					return
+				}
+				t.Logf("txn1-keyA-get: %+v", resp)
+				t.Logf("txn1-keyA-get: %s", rec)
+				t.Logf("txn1-keyA-get resp txn: %s", txn)
+			}()
+		}
 
 		// Now move the ranges, being careful not to move either leaseholder
 		// C: 3 (RHS - replica) => 0 (LHS leaseholder)
@@ -1047,8 +1084,13 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 
 		// Try and read the transaction from the context of a new transaction. This
 		// will fail as expected as the observed timestamp will not be set.
-		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn2}, getArgs(keyC))
-		require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+		{
+			ctx, fagrs := tracing.ContextWithRecordingSpan(ctx, tc.Servers[0].Tracer(), "txn2get-should-rwue")
+			_, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn2},
+				getArgs(keyC))
+			rec := fagrs()
+			require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail(), "%s", rec)
+		}
 
 		// Try and read the key from the existing transaction. This should fail the
 		// same way.
@@ -1057,8 +1099,12 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		// - Other error (Bad) - We expect an uncertainty error so the client can choose a new timestamp and retry.
 		// - Not found (Bad) - Error because the data was written before us.
 		// - Found (Bad) - The write HLC timestamp is after our timestamp.
-		_, pErr = kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyC))
-		require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+		{
+			ctx, fagrs := tracing.ContextWithRecordingSpan(ctx, tc.Servers[0].Tracer(), "txn1get-should-rwue")
+			_, pErr := kv.SendWrappedWith(ctx, tc.Servers[0].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyC))
+			rec := fagrs()
+			require.IsType(t, &kvpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail(), "%s", rec)
+		}
 	}
 
 	testutils.RunTrueAndFalse(t, "alignLeaseholders", func(t *testing.T, alignLeaseholders bool) {
@@ -2737,9 +2783,12 @@ func TestChangeReplicasGeneration(t *testing.T) {
 func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Increase the verbosity of the test to help investigate failures.
+	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
+
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-
 	stickyVFSRegistry := fs.NewStickyRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
@@ -2787,6 +2836,7 @@ func TestLossQuorumCauseLeaderWatcherToSignalUnavailable(t *testing.T) {
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
+	log.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
 	tc.StopServer(stoppedNodeInx)
 	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 
@@ -5776,7 +5826,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	// txn2 is never unblocked (from the perspective of the client).
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
-	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
@@ -5804,6 +5854,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	txn2StartedOnce := sync.OnceFunc(func() { close(txn2Started) })
 	txn2Done := make(chan struct{})
 	txn1HasLock := make(chan struct{})
+	txn1HasLockOnce := sync.OnceFunc(func() { close(txn1HasLock) })
 
 	g := ctxgroup.WithContext(ctx)
 	g.Go(func() error {
@@ -5812,7 +5863,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			close(txn1HasLock)
+			txn1HasLockOnce()
 			t.Log("txn1: lock acquired, waiting for txn2 cancellation")
 			<-txn2Done
 			t.Log("txn1: done")
@@ -5885,14 +5936,14 @@ func TestMergeReplicatesLocks(t *testing.T) {
 		ctx = context.Background()
 		st  = cluster.MakeClusterSettings()
 	)
-	concurrency.UnreplicatedLockReliability.Override(ctx, &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 
 	for _, b := range []bool{true, false} {
 		name := "lhs-lock"
-		lockKey := lhsKey
+		lockKeySuffix := lhsKey
 		if b {
 			name = "rhs-lock"
-			lockKey = rhsKey
+			lockKeySuffix = rhsKey
 		}
 		t.Run(name, func(t *testing.T) {
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
@@ -5900,9 +5951,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 					Settings: st,
 				},
 			})
+
+			sql := tc.ServerConn(0)
 			defer tc.Stopper().Stop(ctx)
 			scratch := tc.ScratchRange(t)
-			splitKey := append(scratch[:len(scratch):len(scratch)], splitPoint...)
+			mkKey := func(s string) roachpb.Key {
+				prefix := scratch.Clone()
+				return append(prefix[:len(prefix):len(prefix)], s...)
+			}
+
+			lockKey := mkKey(lockKeySuffix)
+			splitKey := mkKey(splitPoint)
 			tc.SplitRangeOrFatal(t, splitKey)
 			// Write a value for the key because at the moment we don't create locks for
 			// non-existent keys.
@@ -5961,6 +6020,13 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			t.Log("cancelling txn2")
 			txn2Cancel()
 			require.NoError(t, g.Wait())
+			failures := kvtestutils.CheckConsistency(ctx, sql, roachpb.Span{
+				Key:    keys.ScratchRangeMin,
+				EndKey: keys.ScratchRangeMax,
+			})
+			for _, err := range failures {
+				t.Errorf("consistency failure: %s", err.Error())
+			}
 		})
 	}
 }

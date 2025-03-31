@@ -784,7 +784,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	// rowContainer. This is a bytes value that will ensure we fall back to disk
 	// but use memory for at least a couple of rows.
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeMonitorName("test-monitor"),
+		Name:      mon.MakeName("test-monitor"),
 		Limit:     (numRows - routerRowBufSize) / 2,
 		Increment: 1,
 		Settings:  st,

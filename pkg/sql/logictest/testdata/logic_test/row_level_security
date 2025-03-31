@@ -14,14 +14,6 @@ USE db1;
 statement ok
 GRANT ADMIN to testuser;
 
-statement ok
-SET enable_row_level_security = on;
-
-query T
-show session enable_row_level_security;
-----
-on
-
 subtest create_drop_sanity
 
 statement ok
@@ -39,8 +31,21 @@ create_policy
 statement error pq: policy with name "p1" already exists on table "sanity1"
 CREATE POLICY p1 on sanity1 WITH CHECK (true);
 
+statement notice NOTICE: policy "p1" already exists on table "sanity1", skipping
+CREATE POLICY IF NOT EXISTS p1 on sanity1;
+
 statement ok
-CREATE POLICY p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
+CREATE POLICY IF NOT EXISTS p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
+
+query TT
+SHOW CREATE TABLE sanity1;
+----
+sanity1  CREATE TABLE public.sanity1 (
+           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+           CONSTRAINT sanity1_pkey PRIMARY KEY (rowid ASC)
+         );
+         CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
+         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
 
 statement notice NOTICE: relation "nonexist" does not exist, skipping
 DROP POLICY IF EXISTS notthere on nonexist;
@@ -87,7 +92,7 @@ statement ok
 DROP POLICY p1 on explicit1;
 
 statement ok
-CREATE POLICY p1 on explicit1 AS PERMISSIVE USING (false);
+CREATE POLICY IF NOT EXISTS p1 on explicit1 AS PERMISSIVE USING (false);
 
 statement ok
 COMMIT;
@@ -122,7 +127,7 @@ statement ok
 CREATE POLICY "policy2" ON multi_pol_tab1 AS RESTRICTIVE
 
 statement ok
-CREATE POLICY "policy3" ON multi_pol_tab1 FOR ALL
+CREATE POLICY IF NOT EXISTS "policy3" ON multi_pol_tab1 FOR ALL
 
 statement ok
 CREATE POLICY "policy4" ON multi_pol_tab1 FOR INSERT
@@ -171,6 +176,19 @@ oid  polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithch
 7    policy7  110       r       true           {0}            NULL     NULL
 8    policy8  110       *       true           {0,835509264}  NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab1
+----
+name     cmd     type         roles                using_expr  with_check_expr
+policy1  ALL     permissive   {public}             ·           ·
+policy2  ALL     restrictive  {public}             ·           ·
+policy3  ALL     permissive   {public}             ·           ·
+policy4  INSERT  permissive   {public}             ·           ·
+policy5  UPDATE  permissive   {public}             ·           ·
+policy6  DELETE  permissive   {public}             ·           ·
+policy7  SELECT  permissive   {public}             ·           ·
+policy8  ALL     permissive   {public,papa_roach}  ·           ·
+
 statement ok
 CREATE TABLE multi_pol_tab2 (c1 INT NOT NULL PRIMARY KEY)
 
@@ -216,6 +234,19 @@ oid  polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
 1    policy11  112       *       true           {0}       NULL     NULL
 2    policy12  112       *       true           {0}       NULL     NULL
 
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR multi_pol_tab2
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy9   ALL  permissive  {public}  ·           ·
+policy10  ALL  permissive  {public}  ·           ·
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR public.multi_pol_tab3
+----
+name      cmd  type        roles     using_expr  with_check_expr
+policy11  ALL  permissive  {public}  ·           ·
+policy12  ALL  permissive  {public}  ·           ·
 
 statement ok
 DROP POLICY "policy1" ON multi_pol_tab1
@@ -295,7 +326,7 @@ statement ok
 CREATE TABLE role_exist_chk();
 
 statement error pq: role/user "zeke" does not exist
-CREATE POLICY p1 on role_exist_chk to zeke;
+CREATE POLICY IF NOT EXISTS p1 on role_exist_chk to zeke;
 
 statement ok
 CREATE USER zeke;
@@ -324,12 +355,12 @@ statement ok
 GRANT ALL ON db1.* to john;
 
 statement ok
+ALTER TABLE target OWNER TO john;
+
+statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
 
 user testuser
-
-statement ok
-SET enable_row_level_security = on;
 
 statement ok
 USE db1;
@@ -355,9 +386,6 @@ target  CREATE TABLE public.target (
         CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser
 
 user root
-
-statement ok
-SET enable_row_level_security = on;
 
 statement ok
 USE db1;
@@ -388,10 +416,15 @@ statement ok
 CREATE TABLE z1 (c1 text);
 
 statement ok
-CREATE POLICY p1 on z1 WITH CHECK (c1::greeting = 'hi'::greeting);
+CREATE POLICY IF NOT EXISTS p1 on z1 WITH CHECK (c1::greeting = 'hi'::greeting);
 
 query T rowsort
 select polwithcheck from pg_catalog.pg_policy
+----
+c1::public.greeting = 'hi':::public.greeting
+
+query T rowsort
+select with_check_expr from [SHOW POLICIES FOR z1];
 ----
 c1::public.greeting = 'hi':::public.greeting
 
@@ -459,6 +492,11 @@ CREATE POLICY pol1 on funcref USING (is_valid(c1)) WITH CHECK (is_valid(c1));
 
 query T
 select polqual from pg_catalog.pg_policy
+----
+public.is_valid(c1)
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR funcref];
 ----
 public.is_valid(c1)
 
@@ -592,11 +630,10 @@ CREATE TABLE public.flying_roaches (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
   CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
-);
-CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
+)
 
 query T
-select policy_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+select rls_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
 {"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
 
@@ -715,21 +752,15 @@ select create_statement from crdb_internal.create_statements where descriptor_na
 CREATE TABLE public.roaches (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-);
-ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+)
 
-query TT
-select policy_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
+query TTT
+select rls_statements, alter_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
 ----
-{}  CREATE TABLE public.roaches (
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-    )
-
-query T
-select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
-----
-{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}
+{"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}  {}  CREATE TABLE public.roaches (
+                                                                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                                                          CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
+                                                                                        )
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
@@ -743,15 +774,7 @@ roaches  CREATE TABLE public.roaches (
          )
 
 query T
-select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
-----
-CREATE TABLE public.roaches (
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-)
-
-query T
-select policy_statements from crdb_internal.create_statements where descriptor_name='roaches'
+select rls_statements from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 {}
 
@@ -822,6 +845,11 @@ GRANT USAGE ON seq1 TO buck;
 
 statement ok
 create policy restrict_select on bbteams for select to buck,current_user,session_user using (is_valid(league) and nextval('seq1') < 1000);
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR bbteams];
+----
+public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8)
 
 # confirm admin can see all
 query TT
@@ -906,7 +934,7 @@ statement ok
 CREATE POLICY restrict_insert ON bbteams FOR INSERT TO buck WITH CHECK (false);
 
 statement ok
-CREATE POLICY restrict_delete ON bbteams FOR DELETE TO buck USING (false);
+CREATE POLICY IF NOT EXISTS restrict_delete ON bbteams FOR DELETE TO buck USING (false);
 
 statement ok
 CREATE POLICY restrict_update ON bbteams FOR UPDATE TO buck USING (false);
@@ -1192,7 +1220,7 @@ statement ok
 CREATE POLICY p2 ON sensitive_data_table FOR INSERT TO sensitive_user WITH CHECK (C1 != 55);
 
 statement ok
-CREATE POLICY p3 ON sensitive_data_table FOR UPDATE TO sensitive_user USING (true) WITH CHECK (C1 >= 10);
+CREATE POLICY IF NOT EXISTS p3 ON sensitive_data_table FOR UPDATE TO sensitive_user USING (true) WITH CHECK (C1 >= 10);
 
 statement ok
 SET ROLE sensitive_user;
@@ -1235,6 +1263,195 @@ DROP FUNCTION my_non_sec_definer_reader_function;
 
 statement ok
 DROP TABLE sensitive_data_table CASCADE;
+
+subtest alter_policy
+
+statement ok
+CREATE TABLE alter_policy_table (c1 INT NOT NULL PRIMARY KEY, c2 TEXT, FAMILY (c1, c2));
+
+statement ok
+ALTER TABLE alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE ROLE alter_policy_role;
+
+statement ok
+CREATE ROLE aux1;
+
+statement ok
+CREATE USER aux2;
+
+statement ok
+CREATE SEQUENCE seq1;
+
+statement ok
+GRANT ALL ON seq1 TO alter_policy_role;
+
+statement ok
+ALTER TABLE alter_policy_table OWNER TO alter_policy_role;
+
+statement ok
+SET ROLE alter_policy_role;
+
+statement ok
+CREATE POLICY p ON alter_policy_table FOR INSERT WITH CHECK (false);
+
+statement error pq: new row violates row-level security policy for table "alter_policy_table"
+INSERT INTO alter_policy_table VALUES (1, 'one'), (2, 'two'), (3, 'three');
+
+statement error pq: only WITH CHECK expression allowed for INSERT
+ALTER POLICY p ON alter_policy_table USING (true);
+
+statement ok
+ALTER POLICY p ON alter_policy_table WITH CHECK (nextval('seq1') < 10000);
+
+statement ok
+INSERT INTO alter_policy_table VALUES (1, 'one'), (2, 'two'), (3, 'three');
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+
+statement ok
+ALTER POLICY p ON alter_policy_table RENAME TO p_ins;
+
+statement ok
+CREATE POLICY p ON alter_policy_table FOR SELECT TO aux1 USING (c1 > 0);
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+
+statement error pq: policy "p_sel" for table "alter_policy_table" does not exist
+ALTER POLICY p_sel ON alter_policy_table WITH CHECK (true);
+
+statement error pq: WITH CHECK cannot be applied to SELECT or DELETE
+ALTER POLICY p ON alter_policy_table WITH CHECK (true);
+
+statement ok
+ALTER POLICY p ON alter_policy_table TO alter_policy_role,aux1,aux2 USING (c1 != 1);
+
+query I
+SELECT c1 FROM alter_policy_table ORDER BY c1;
+----
+2
+3
+
+statement ok
+ALTER POLICY p ON alter_policy_table RENAME TO p_sel;
+
+query TT
+SHOW CREATE TABLE alter_policy_table;
+----
+alter_policy_table  CREATE TABLE public.alter_policy_table (
+                      c1 INT8 NOT NULL,
+                      c2 STRING NULL,
+                      CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
+                      FAMILY fam_0_c1_c2 (c1, c2)
+                    );
+                    ALTER TABLE public.alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+                    CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
+                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8)
+
+query TTTTTT colnames
+SELECT name,cmd,type,roles,using_expr,with_check_expr
+FROM [SHOW POLICIES FOR alter_policy_table]
+ORDER BY name DESC;
+----
+name   cmd     type        roles                          using_expr      with_check_expr
+p_sel  SELECT  permissive  {alter_policy_role,aux1,aux2}  c1 != 1:::INT8  ·
+p_ins  INSERT  permissive  {public}                       ·               nextval('public.seq1'::REGCLASS) < 10000:::INT8
+
+statement ok
+SET ROLE root;
+
+statement error pq: cannot drop sequence seq1 because other objects depend on it
+DROP SEQUENCE seq1;
+
+# Change the policy so there isn't a dependency on seq1 anymore.
+statement ok
+ALTER POLICY p_ins ON alter_policy_table WITH CHECK (true);
+
+statement ok
+DROP SEQUENCE seq1;
+
+statement ok
+DROP TABLE alter_policy_table;
+
+statement ok
+DROP ROLE alter_policy_role, aux1, aux2;
+
+# Verify that you need to be the table owner to do any of the RLS DDLs
+subtest table_owner_and_rls_ddl
+
+statement ok
+CREATE USER tab_owner;
+
+statement ok
+CREATE USER nontab_owner;
+
+statement ok
+CREATE TABLE table_owner_test ();
+
+statement ok
+ALTER TABLE table_owner_test OWNER TO tab_owner;
+
+statement ok
+GRANT ALL ON table_owner_test TO nontab_owner;
+
+statement ok
+SET ROLE tab_owner;
+
+statement ok
+ALTER TABLE table_owner_test ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p1 on table_owner_test;
+
+statement ok
+DROP POLICY p1 on table_owner_test;
+
+statement ok
+CREATE POLICY new_p1 on table_owner_test;
+
+statement ok
+ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
+
+statement ok
+ALTER POLICY p1 on table_owner_test RENAME TO new_p1;
+
+statement ok
+ALTER POLICY new_p1 on table_owner_test USING (true);
+
+statement ok
+SET ROLE nontab_owner;
+
+statement error pq: must be owner of relation table_owner_test
+ALTER TABLE table_owner_test DISABLE ROW LEVEL SECURITY;
+
+statement error pq: must be owner of relation table_owner_test
+ALTER TABLE table_owner_test NO FORCE ROW LEVEL SECURITY;
+
+statement error pq: must be owner of relation table_owner_test
+CREATE POLICY IF NOT EXISTS p2 on table_owner_test;
+
+statement error pq: must be owner of relation table_owner_test
+DROP POLICY new_p1 on table_owner_test;
+
+statement error pq: must be owner of relation table_owner_test
+ALTER POLICY new_p1 on table_owner_test WITH CHECK (true);
+
+statement error pq: must be owner of relation table_owner_test
+ALTER POLICY new_p1 on table_owner_test RENAME TO p1;
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE table_owner_test;
+
+statement ok
+DROP ROLE nontab_owner, tab_owner;
 
 subtest force
 
@@ -1366,9 +1583,15 @@ SELECT c1, c2 FROM force_check WHERE c1 > 0 ORDER BY c1;
 ----
 50 fifty
 
+statement ok
+SET ROLE root;
+
 # Turn on force again, but it shouldn't matter because we aren't the owner anymore
 statement ok
 ALTER TABLE force_check FORCE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE forcer;
 
 # q2 - should not reuse because table version change
 query IT
@@ -1456,6 +1679,241 @@ SET ROLE root
 
 statement ok
 DROP TABLE force_check CASCADE;
+
+# Test to make sure that the scan to enforce uniqueness is done without RLS policies.
+subtest uniq
+
+statement ok
+CREATE TABLE uniq (rls_col TEXT, uniq_col INT8 UNIQUE);
+
+statement ok
+CREATE USER uniq_user;
+
+statement ok
+GRANT ALL ON uniq TO uniq_user;
+
+statement ok
+ALTER TABLE uniq OWNER TO uniq_user;
+
+statement ok
+SET ROLE uniq_user;
+
+statement ok
+ALTER TABLE uniq NO FORCE ROW LEVEL SECURITY, ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY access ON uniq USING (rls_col = 'cat');
+
+statement ok
+INSERT INTO uniq VALUES ('cat', 1), ('cat', 2), ('dog', 3), ('cat', 4), ('hamster', 5);
+
+statement ok
+ALTER TABLE uniq FORCE ROW LEVEL SECURITY;
+
+statement error pq: duplicate key value violates unique constraint "uniq_uniq_col_key"\nDETAIL: Key \(uniq_col\)=\(3\) already exists.
+INSERT INTO uniq VALUES ('cat', 3);
+
+statement ok
+INSERT INTO uniq VALUES ('cat', 6);
+
+statement error pq: new row violates row-level security policy for table "uniq"
+INSERT INTO uniq VALUES ('dog', 6);
+
+statement error pq: duplicate key value violates unique constraint "uniq_uniq_col_key"\nDETAIL: Key \(uniq_col\)=\(5\) already exists.
+UPDATE uniq SET uniq_col = 5 WHERE uniq_col = 1;
+
+statement ok
+UPDATE uniq SET uniq_col = 7 WHERE uniq_col = 1;
+
+# Ensure that any attempts to update an invisible row will be a no-op
+query TI
+UPDATE uniq SET uniq_col = 8 WHERE uniq_col = 5 RETURNING rls_col, uniq_col;
+----
+
+statement ok
+ALTER TABLE uniq NO FORCE ROW LEVEL SECURITY;
+
+query TI
+select rls_col, uniq_col FROM uniq ORDER BY uniq_col;
+----
+cat      2
+dog      3
+cat      4
+hamster  5
+cat      6
+cat      7
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE uniq;
+
+statement ok
+DROP USER uniq_user;
+
+# Test to make sure that the scan to enforce foreign keys is exempt from RLS policies.
+subtest fk
+
+statement ok
+CREATE TABLE parent (key INT8 NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE child (
+  rls_col TEXT,
+  key INT8 NOT NULL,
+  CONSTRAINT fk FOREIGN KEY (key) REFERENCES parent(key) ON DELETE CASCADE
+);
+
+statement ok
+CREATE USER fk_user;
+
+statement ok
+GRANT ALL ON parent TO fk_user;
+
+statement ok
+GRANT ALL ON child TO fk_user;
+
+statement ok
+ALTER TABLE parent OWNER TO fk_user;
+
+statement ok
+ALTER TABLE child OWNER TO fk_user;
+
+statement ok
+SET ROLE fk_user;
+
+statement ok
+INSERT INTO parent SELECT * FROM generate_series(1,6);
+
+statement ok
+INSERT INTO child VALUES ('bedroom', 1), ('office', 2)
+
+# Set RLS at the parent and ensure FK still enforced.
+statement ok
+ALTER TABLE parent ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement error pq: insert on table "child" violates foreign key constraint "fk"
+INSERT INTO child VALUES ('hall', 7);
+
+statement ok
+INSERT INTO child VALUES ('hall', 3);
+
+# mimic the FK lookup to show that the given RLS policies will hide the value
+query I
+SELECT 1 FROM parent WHERE key = 3;
+----
+
+query I
+SELECT key FROM child ORDER BY key;
+----
+1
+2
+3
+
+# Set RLS at the child and ensure FK still enforced
+statement ok
+ALTER TABLE child ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY ins1 ON child FOR INSERT WITH CHECK (rls_col = 'bedroom');
+
+statement error pq: insert on table "child" violates foreign key constraint "fk"
+INSERT INTO child VALUES ('bedroom', 7);
+
+statement error pq: new row violates row-level security policy for table "child"
+INSERT INTO child VALUES ('deck', 7);
+
+statement ok
+INSERT INTO child VALUES ('bedroom', 4);
+
+# Disable RLS at the parent so that we can do a delete and have it cascade down
+statement ok
+ALTER TABLE parent NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+DELETE FROM parent WHERE key = 1;
+
+statement ok
+CREATE POLICY sel1 ON child FOR SELECT USING (true);
+
+query I
+SELECT key FROM child ORDER BY key;
+----
+2
+3
+4
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE child;
+
+statement ok
+DROP TABLE parent;
+
+statement ok
+DROP USER fk_user;
+
+# Ensure CHECK constraints can work alongside RLS policies
+subtest check_constraint
+
+statement ok
+CREATE TABLE rgb_only (col text, check (col = 'red' or col = 'green' or col = 'blue'));
+
+statement ok
+CREATE USER rgb_only_user;
+
+statement ok
+ALTER TABLE rgb_only OWNER TO rgb_only_user;
+
+statement ok
+SET ROLE rgb_only_user;
+
+statement ok
+ALTER TABLE rgb_only ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_sel ON rgb_only FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY IF NOT EXISTS p_subset ON rgb_only FOR INSERT WITH CHECK (col = 'red' or col = 'brown');
+
+statement ok
+INSERT INTO rgb_only VALUES ('red')
+
+# Allowed by policy, reject by CHECK constraint
+statement error pq: failed to satisfy CHECK constraint \(\(\(col = 'red':::STRING\) OR \(col = 'green':::STRING\)\) OR \(col = 'blue':::STRING\)\)
+INSERT INTO rgb_only VALUES ('brown')
+
+# Disallowed by policy, accepted by CHECK constraint
+statement error pq: new row violates row-level security policy for table "rgb_only"
+INSERT INTO rgb_only VALUES ('green')
+
+statement ok
+DROP POLICY p_subset ON rgb_only;
+
+statement ok
+CREATE POLICY p_disjoint ON rgb_only FOR INSERT WITH CHECK (col = 'black');
+
+# Disallowed by both.
+statement error pq: new row violates row-level security policy for table "rgb_only"
+INSERT INTO rgb_only VALUES ('blue')
+
+query T
+SELECT col FROM rgb_only ORDER BY col;
+----
+red
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE rgb_only;
+
+statement ok
+DROP USER rgb_only_user;
 
 subtest truncate
 
@@ -1616,7 +2074,11 @@ statement ok
 SET ROLE root
 
 statement ok
-CREATE POLICY rls_cache_policy ON rls_cache_test FOR SELECT TO rls_cache_user USING (c1 != 'a');
+CREATE POLICY IF NOT EXISTS rls_cache_policy ON rls_cache_test FOR SELECT TO rls_cache_user USING (c1 != 'a');
+
+# Should be a no-op because the policy already exists
+statement ok
+CREATE POLICY IF NOT EXISTS rls_cache_policy ON rls_cache_test;
 
 statement ok
 SET ROLE rls_cache_user;
@@ -1744,7 +2206,7 @@ statement ok
 ALTER TABLE rlsInsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
 statement ok
-CREATE POLICY p_insert ON rlsInsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 not between '2012-01-01' and '2012-12-31');
+CREATE POLICY IF NOT EXISTS p_insert ON rlsInsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 not between '2012-01-01' and '2012-12-31');
 
 statement ok
 CREATE POLICY p_select ON rlsInsert AS PERMISSIVE FOR SELECT TO buck USING (true);
@@ -1754,7 +2216,7 @@ GRANT ALL on rlsInsert TO buck;
 
 # Sanity that the admin can insert anything
 statement ok
-INSERT INTO rlsInsert VALUES (1, 'first', '2012-06-30');
+INSERT INTO rlsInsert VALUES (1, 'first', '2012-06-30'),(0, 'zero', NULL);
 
 statement ok
 SET ROLE buck;
@@ -1769,6 +2231,10 @@ INSERT INTO rlsInsert VALUES (3, 'third', '2012-07-08');
 # Violates policy because date is in 2012.
 statement error pq: new row violates row-level security policy for table "rlsinsert"
 INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert;
+
+# Violates policy because date is NULL
+statement error pq: new row violates row-level security policy for table "rlsinsert"
+INSERT INTO rlsInsert VALUES (4, 'four', NULL)
 
 statement ok
 INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert WHERE c3 not between '2012-01-01' and '2012-12-31';
@@ -1803,6 +2269,7 @@ INSERT INTO rlsInsert VALUES (4, 'fourth', '2022-10-08');
 query I
 select c1 from rlsInsert ORDER BY c1;
 ----
+0
 1
 2
 7
@@ -1841,7 +2308,11 @@ statement ok
 CREATE POLICY p_select ON bbteams FOR SELECT TO buck USING (true);
 
 statement ok
-CREATE POLICY p_insert ON bbteams FOR INSERT TO buck WITH CHECK (nextval('seq1') < 1000);
+CREATE POLICY IF NOT EXISTS p_insert ON bbteams FOR INSERT TO buck WITH CHECK (nextval('seq1') < 1000);
+
+# Should be a no-op because policy already exists
+statement ok
+CREATE POLICY IF NOT EXISTS p_insert ON bbteams;
 
 statement ok
 GRANT ALL on bbteams TO buck;
@@ -1914,7 +2385,7 @@ statement ok
 CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
 
 statement ok
-CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
+CREATE POLICY IF NOT EXISTS or3 ON multip AS PERMISSIVE USING (key = 3);
 
 statement ok
 CREATE POLICY and1 ON multip AS RESTRICTIVE USING (value not like '%sensitive%')
@@ -2008,6 +2479,25 @@ CREATE POLICY or2 ON multip AS PERMISSIVE USING (key = 2);
 statement ok
 CREATE POLICY or3 ON multip AS PERMISSIVE USING (key = 3);
 
+query TTTTT colnames,rowsort
+select name, cmd, type, roles, with_check_expr from [SHOW POLICIES FOR multip];
+----
+name  cmd  type         roles     with_check_expr
+and1  ALL  restrictive  {public}  ·
+and2  ALL  restrictive  {public}  ·
+or1   ALL  permissive   {public}  ·
+or2   ALL  permissive   {public}  ·
+or3   ALL  permissive   {public}  ·
+
+query T rowsort
+select using_expr from [SHOW POLICIES FOR multip];
+----
+value NOT LIKE '%sensitive%':::STRING
+value NOT LIKE '%confidential%':::STRING
+key = 1:::INT8
+key = 2:::INT8
+key = 3:::INT8
+
 statement ok
 SET ROLE multi_user;
 
@@ -2041,7 +2531,7 @@ INSERT INTO multip VALUES (4, 'confidential');
 statement ok
 SET ROLE root;
 
-query IT
+query IT rowsort
 select * FROM multip ORDER BY key, value;
 ----
 1  okay
@@ -2054,6 +2544,379 @@ DROP TABLE multip;
 statement ok
 DROP USER multi_user;
 
-subtest multiple_insert_policies
+subtest show_policies_edge_cases
+
+statement error pq: relation "nonexistent_table" does not exist
+SHOW POLICIES FOR nonexistent_table;
+
+statement ok
+CREATE TABLE rls_disabled (id INT PRIMARY KEY);
+
+statement ok
+CREATE POLICY p1 ON rls_disabled USING (true);
+
+statement ok
+ALTER TABLE rls_disabled DISABLE ROW LEVEL SECURITY;
+
+query TTTTTT colnames
+SHOW POLICIES FOR rls_disabled;
+----
+name  cmd  type        roles     using_expr  with_check_expr
+p1    ALL  permissive  {public}  true        ·
+
+# Test case 3: Show policies for a table with no policies
+statement ok
+CREATE TABLE no_policies (id INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE no_policies ENABLE ROW LEVEL SECURITY;
+
+query TTTTTT
+SHOW POLICIES FOR no_policies;
+----
+
+# This is another test for multiple policies. But the focus here is how multiple
+# policies are applied when they apply for other commands. For example, having
+# a policy that applies to SELECT and a policy that applies to DELETE.
+subtest multi_policies_multi_cmd
+
+statement ok
+create table r1 (c1 int);
+
+statement ok
+alter table r1 enable row level security;
+
+statement ok
+insert into r1 values (0),(1),(2),(3),(4),(5),(22);
+
+statement ok
+create policy sel1 on r1 for select using (c1 % 2 = 0);
+
+statement ok
+create policy upd1 on r1 for update using (c1 between 0 and 20);
+
+statement ok
+create user r1_user;
+
+statement ok
+grant all on r1 to r1_user;
+
+statement ok
+set role r1_user;
+
+# UPDATE should only apply to the combination of both policies.
+statement ok
+update r1 set c1 = c1 ;
+
+query I rowsort
+update r1 set c1 = c1 returning c1;
+----
+0
+2
+4
+
+statement error pq: new row violates row-level security policy for table "r1"
+update r1 set c1 = c1 + 1;
+
+statement error pq: new row violates row-level security policy for table "r1"
+update r1 set c1 = c1 + 1 where c1 between 1 and 3;
+
+statement ok
+update r1 set c1 = c1 + 2 where c1 between 1 and 10;
+
+query I rowsort
+update r1 set c1 = c1 + 2 where c1 between 1 and 10 returning c1;
+----
+6
+8
+
+query I
+update r1 set c1 = c1 + 2 where c1 > 20 returning c1;
+----
+
+query I rowsort
+SELECT * FROM r1;
+----
+0
+6
+8
+22
+
+statement ok
+SET ROLE root;
+
+query I rowsort
+SELECT * FROM r1;
+----
+0
+1
+3
+5
+6
+8
+22
+
+statement ok
+DROP TABLE r1;
+
+# Do another test of select and update policies, but use simple expressions and
+# try out different combinations of those expressions.
+statement ok
+CREATE TABLE cnt (counter INT);
+
+statement ok
+INSERT INTO cnt VALUES (1);
+
+statement ok
+GRANT ALL ON cnt TO r1_user;
+
+statement ok
+ALTER TABLE cnt ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE cnt OWNER TO r1_user;
+
+statement ok
+SET ROLE r1_user;
+
+statement ok
+CREATE POLICY IF NOT EXISTS upd1 ON cnt FOR UPDATE USING (true);
+
+# Only an UPDATE policy and no SELECT policy. Nothing is updated.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now create only a SELECT policy. Same behaviour as before.
+statement ok
+DROP POLICY upd1 ON cnt;
+
+statement ok
+CREATE POLICY sel1 ON cnt FOR SELECT USING (true);
+
+query I
+SELECT * FROM cnt;
+----
+1
+
+# Any locking modes on the query will cause the UPDATE policies to be applied,
+# which will filter out the row.
+query I
+SELECT * FROM cnt FOR UPDATE;
+----
+
+
+query I
+SELECT * FROM cnt FOR SHARE;
+----
+
+
+let $cnt_oid
+SELECT 'cnt'::REGCLASS::OID;
+
+query I
+SELECT * FROM [$cnt_oid as t];
+----
+1
+
+query I
+SELECT * FROM [$cnt_oid as t] FOR UPDATE;
+----
+
+query I
+SELECT * FROM [$cnt_oid as t] FOR SHARE;
+----
+
+# Update with a SELECT policy but no UPDATE policy. Nothing should be returned.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now add a SELECT policy, but it still filters everything out.
+statement ok
+CREATE POLICY upd1 ON cnt FOR UPDATE USING (false);
+
+# Same as before, no update occurs because the reading of existing rows filters
+# everything out.
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+
+# Now alter the UPDATE policy with one that allows everything.
+statement ok
+ALTER POLICY upd1 ON cnt USING (true);
+
+query I
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+----
+2
+
+# Update the UPDATE policy so that it allows old rows but blocks all new rows.
+statement ok
+ALTER POLICY upd1 ON cnt USING (true) WITH CHECK (false);
+
+# We are able to read the row but cannot write a new row as it violates the
+# update policy.
+statement error pq: new row violates row-level security policy for table "cnt"
+UPDATE cnt SET counter = counter + 1 RETURNING counter;
+
+# Verify that select policy (true) with no delete policy will not delete anything.
+query I
+delete from cnt where counter is not null returning counter;
+----
+
+statement ok
+delete from cnt;
+
+query I
+select counter from cnt;
+----
+2
+
+# Now change the select policy to be always false, and delete policy to be always true.
+statement ok
+ALTER POLICY sel1 ON cnt USING (false);
+
+statement ok
+CREATE POLICY del1 ON cnt FOR DELETE USING (true);
+
+query I
+delete from cnt where counter > 0 returning counter;
+----
+
+statement ok
+delete from cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+# Drop the select policy entirely. It should be no different than a deny-all select policy.
+statement ok
+DROP POLICY sel1 ON cnt;
+
+statement ok
+ALTER TABLE cnt FORCE ROW LEVEL SECURITY;
+
+query I
+delete from cnt where counter > 0 returning counter;
+----
+
+statement ok
+delete from cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+statement ok
+ALTER TABLE cnt FORCE ROW LEVEL SECURITY;
+
+# Now change the select policy to always return true, and delete policy to always return false.
+statement ok
+DROP POLICY del1 ON cnt;
+
+statement ok
+CREATE POLICY sel1 ON cnt FOR SELECT USING (true);
+
+statement ok
+CREATE POLICY IF NOT EXISTS del1 ON cnt FOR DELETE USING (false);
+
+query I
+DELETE FROM cnt WHERE counter > 0 RETURNING counter;
+----
+
+statement ok
+DELETE FROM cnt;
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+query I
+SELECT counter FROM cnt;
+----
+2
+
+statement ok
+ALTER TABLE cnt NO FORCE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP TABLE cnt;
+
+statement ok
+DROP USER r1_user;
+
+subtest show_policies_roles_and_users
+
+statement ok
+CREATE ROLE test_role1;
+
+statement ok
+CREATE ROLE test_role2;
+
+statement ok
+CREATE USER test_user1;
+
+statement ok
+CREATE USER test_user2;
+
+statement ok
+CREATE TABLE policy_roles_test (id INT PRIMARY KEY, val TEXT);
+
+statement ok
+CREATE POLICY mixed_policy ON policy_roles_test TO test_role1, test_user1, test_role2, test_user2;
+
+query TTTTTT colnames
+SHOW POLICIES FOR policy_roles_test
+----
+name          cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy  ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+
+statement ok
+CREATE POLICY users_only_policy ON policy_roles_test TO test_user1, test_user2;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR policy_roles_test
+----
+name               cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy       ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+users_only_policy  ALL  permissive  {test_user1,test_user2}                        ·           ·
+
+statement ok
+CREATE POLICY roles_only_policy ON policy_roles_test TO test_role1, test_role2;
+
+query TTTTTT colnames,rowsort
+SHOW POLICIES FOR policy_roles_test
+----
+name               cmd  type        roles                                          using_expr  with_check_expr
+mixed_policy       ALL  permissive  {test_role1,test_role2,test_user1,test_user2}  ·           ·
+roles_only_policy  ALL  permissive  {test_role1,test_role2}                        ·           ·
+users_only_policy  ALL  permissive  {test_user1,test_user2}                        ·           ·
+
+statement ok
+DROP TABLE policy_roles_test;
+
+statement ok
+DROP USER test_user1;
+
+statement ok
+DROP USER test_user2;
+
+statement ok
+DROP ROLE test_role1;
+
+statement ok
+DROP ROLE test_role2;
 
 subtest end

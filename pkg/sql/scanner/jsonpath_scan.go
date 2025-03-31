@@ -27,7 +27,8 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 	switch ch {
 	case '$':
 		// Root path ($)
-		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' {
+		if s.peek() == '.' || s.peek() == eof || s.peek() == ' ' || s.peek() == '[' || s.peek() == ')' || s.peek() == '?' {
+			lval.SetID(lexbase.ROOT)
 			return
 		}
 
@@ -45,9 +46,67 @@ func (s *JSONPathScanner) Scan(lval ScanSymType) {
 		return
 	case identQuote:
 		// "[^"]"
-		if s.scanString(lval, identQuote, false /* allowEscapes */, true /* requireUTF8 */) {
-			lval.SetID(lexbase.IDENT)
+		// When scanning string literals for like_regex patterns, we need to
+		// consider how to handle escape characters similarly to Postgres.
+		// See: https://www.postgresql.org/docs/current/functions-json.html#JSONPATH-REGULAR-EXPRESSIONS,
+		// "any backslashes you want to use in the regular expression must be doubled".
+		//
+		// With allowEscapes == true,
+		//  - String literal input "^\\$" is scanned as "^\\$" (one escaped backslash)
+		//  - This matches the behaviour of Postgres.
+		// With allowEscapes == false,
+		//  - String literal input "^\\$" is scanned as "^\\\\$" (two escaped backslashes)
+		if s.scanString(lval, identQuote, true /* allowEscapes */, true /* requireUTF8 */) {
+			lval.SetID(lexbase.STRING)
 		}
+		return
+	case '=':
+		if s.peek() == '=' { // ==
+			s.pos++
+			lval.SetID(lexbase.EQUAL)
+			return
+		}
+		return
+	case '!':
+		if s.peek() == '=' { // !=
+			s.pos++
+			lval.SetID(lexbase.NOT_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.NOT)
+		return
+	case '>':
+		if s.peek() == '=' { // >=
+			s.pos++
+			lval.SetID(lexbase.GREATER_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.GREATER)
+		return
+	case '<':
+		if s.peek() == '=' { // <=
+			s.pos++
+			lval.SetID(lexbase.LESS_EQUAL)
+			return
+		}
+		lval.SetID(lexbase.LESS)
+		return
+	case '&':
+		if s.peek() == '&' { // &&
+			s.pos++
+			lval.SetID(lexbase.AND)
+			return
+		}
+		return
+	case '|':
+		if s.peek() == '|' { // ||
+			s.pos++
+			lval.SetID(lexbase.OR)
+			return
+		}
+		return
+	case '@':
+		lval.SetID(lexbase.CURRENT)
 		return
 	default:
 		if sqllexbase.IsDigit(ch) {

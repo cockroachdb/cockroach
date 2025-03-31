@@ -57,9 +57,6 @@ type ShowCreateDisplayOptions struct {
 	// RedactableValues causes all constants, literals, and other user-provided
 	// values to be surrounded with redaction markers.
 	RedactableValues bool
-	// IgnoreRLSStatements causes all row level security related statements to
-	// not show up in the SHOW CREATE TABLE output.
-	IgnoreRLSStatements bool
 }
 
 // ShowCreateTable returns a valid SQL representation of the CREATE
@@ -199,24 +196,6 @@ func ShowCreateTable(
 
 	if err := showCreateLocality(desc, f); err != nil {
 		return "", err
-	}
-
-	if !displayOptions.IgnoreRLSStatements {
-		if alterRLSStatements, err := showRLSAlterStatement(tn, desc, true); err != nil {
-			return "", err
-		} else {
-			buf := &f.Buffer
-			buf.WriteString(alterRLSStatements)
-		}
-
-		for _, policyDesc := range desc.GetPolicies() {
-			if policyStatements, err := showPolicyStatement(ctx, tn, desc, p.EvalContext(), &p.semaCtx, p.SessionData(), policyDesc, true); err != nil {
-				return "", err
-			} else {
-				buf := &f.Buffer
-				buf.WriteString(policyStatements)
-			}
-		}
 	}
 
 	if !displayOptions.IgnoreComments {

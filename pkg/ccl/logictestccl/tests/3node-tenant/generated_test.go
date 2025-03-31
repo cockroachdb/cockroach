@@ -337,6 +337,13 @@ func TestTenantLogic_bpchar(
 	runLogicTest(t, "bpchar")
 }
 
+func TestTenantLogic_buffered_writes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "buffered_writes")
+}
+
 func TestTenantLogic_builtin_function(
 	t *testing.T,
 ) {
@@ -1154,6 +1161,20 @@ func TestTenantLogic_json_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "json_index")
+}
+
+func TestTenantLogic_jsonb_path_exists(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists")
+}
+
+func TestTenantLogic_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query")
 }
 
 func TestTenantLogic_jsonpath(

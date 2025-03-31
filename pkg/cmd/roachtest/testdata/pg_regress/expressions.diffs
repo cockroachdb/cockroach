@@ -1,0 +1,362 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out --label=/mnt/data1/postgres/src/test/regress/results/expressions.out /mnt/data1/postgres/src/test/regress/expected/expressions.out /mnt/data1/postgres/src/test/regress/results/expressions.out
+--- /mnt/data1/postgres/src/test/regress/expected/expressions.out
++++ /mnt/data1/postgres/src/test/regress/results/expressions.out
+@@ -59,33 +59,13 @@
+ 
+ -- precision overflow
+ SELECT current_time = current_time(7);
+-WARNING:  TIME(7) WITH TIME ZONE precision reduced to maximum allowed, 6
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  current_time(): precision 7 out of range
+ SELECT current_timestamp = current_timestamp(7);
+-WARNING:  TIMESTAMP(7) WITH TIME ZONE precision reduced to maximum allowed, 6
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  current_timestamp(): precision 7 out of range
+ SELECT localtime = localtime(7);
+-WARNING:  TIME(7) precision reduced to maximum allowed, 6
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  localtime(): precision 7 out of range
+ SELECT localtimestamp = localtimestamp(7);
+-WARNING:  TIMESTAMP(7) precision reduced to maximum allowed, 6
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  localtimestamp(): precision 7 out of range
+ -- current_role/user/user is tested in rolenames.sql
+ -- current database / catalog
+ SELECT current_catalog = current_database();
+@@ -121,37 +101,28 @@
+ --
+ begin;
+ create table numeric_tbl (f1 numeric(18,3), f2 numeric);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ create view numeric_view as
+   select
+     f1, f1::numeric(16,4) as f1164, f1::numeric as f1n,
+     f2, f2::numeric(16,4) as f2164, f2::numeric as f2n
+   from numeric_tbl;
+ \d+ numeric_view
+-                           View "public.numeric_view"
+- Column |     Type      | Collation | Nullable | Default | Storage | Description 
+---------+---------------+-----------+----------+---------+---------+-------------
+- f1     | numeric(18,3) |           |          |         | main    | 
+- f1164  | numeric(16,4) |           |          |         | main    | 
+- f1n    | numeric       |           |          |         | main    | 
+- f2     | numeric       |           |          |         | main    | 
+- f2164  | numeric(16,4) |           |          |         | main    | 
+- f2n    | numeric       |           |          |         | main    | 
+-View definition:
+- SELECT f1,
+-    f1::numeric(16,4) AS f1164,
+-    f1::numeric AS f1n,
+-    f2,
+-    f2::numeric(16,4) AS f2164,
+-    f2 AS f2n
+-   FROM numeric_tbl;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(numeric_view)$' COLLATE pg_catalog.default
++                                                                            ^
+ explain (verbose, costs off) select * from numeric_view;
+-                                                                      QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+- Seq Scan on public.numeric_tbl
+-   Output: numeric_tbl.f1, (numeric_tbl.f1)::numeric(16,4), (numeric_tbl.f1)::numeric, numeric_tbl.f2, (numeric_tbl.f2)::numeric(16,4), numeric_tbl.f2
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from numeric_view
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- bpchar, lacking planner support for its length coercion function,
+ -- could behave differently
+ create table bpchar_tbl (f1 character(16) unique, f2 bpchar);
+@@ -161,64 +132,54 @@
+     f2, f2::character(14) as f214, f2::bpchar as f2n
+   from bpchar_tbl;
+ \d+ bpchar_view
+-                            View "public.bpchar_view"
+- Column |     Type      | Collation | Nullable | Default | Storage  | Description 
+---------+---------------+-----------+----------+---------+----------+-------------
+- f1     | character(16) |           |          |         | extended | 
+- f114   | character(14) |           |          |         | extended | 
+- f1n    | bpchar        |           |          |         | extended | 
+- f2     | bpchar        |           |          |         | extended | 
+- f214   | character(14) |           |          |         | extended | 
+- f2n    | bpchar        |           |          |         | extended | 
+-View definition:
+- SELECT f1,
+-    f1::character(14) AS f114,
+-    f1::bpchar AS f1n,
+-    f2,
+-    f2::character(14) AS f214,
+-    f2 AS f2n
+-   FROM bpchar_tbl;
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(bpchar_view)$' COLLATE pg_catalog.default
++                                                                           ^
+ explain (verbose, costs off) select * from bpchar_view
+   where f1::bpchar = 'foo';
+-                                                                   QUERY PLAN                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------
+- Index Scan using bpchar_tbl_f1_key on public.bpchar_tbl
+-   Output: bpchar_tbl.f1, (bpchar_tbl.f1)::character(14), (bpchar_tbl.f1)::bpchar, bpchar_tbl.f2, (bpchar_tbl.f2)::character(14), bpchar_tbl.f2
+-   Index Cond: ((bpchar_tbl.f1)::bpchar = 'foo'::bpchar)
+-(3 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off) select * from bpchar_view
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ rollback;
++WARNING:  there is no transaction in progress
+ --
+ -- Ordinarily, IN/NOT IN can be converted to a ScalarArrayOpExpr
+ -- with a suitably-chosen array type.
+ --
+ explain (verbose, costs off)
+ select random() IN (1, 4, 8.0);
+-                         QUERY PLAN                         
+-------------------------------------------------------------
+- Result
+-   Output: (random() = ANY ('{1,4,8}'::double precision[]))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ explain (verbose, costs off)
+ select random()::int IN (1, 4, 8.0);
+-                                QUERY PLAN                                 
+----------------------------------------------------------------------------
+- Result
+-   Output: (((random())::integer)::numeric = ANY ('{1,4,8.0}'::numeric[]))
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (verbose, costs off)
++                        ^
++HINT:  try \h <SELECTCLAUSE>
+ -- However, if there's not a common supertype for the IN elements,
+ -- we should instead try to produce "x = v1 OR x = v2 OR ...".
+ -- In most cases that'll fail for lack of all the requisite = operators,
+ -- but it can succeed sometimes.  So this should complain about lack of
+ -- an = operator, not about cast failure.
+ select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
+-ERROR:  operator does not exist: point = box
+-LINE 1: select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0));
+-                              ^
+-HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select '(0,0)'::point in ('(0,0,0,0)'::box, point(0,0))
++                      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/21286/_version_
+ --
+ -- Tests for ScalarArrayOpExpr with a hashfn
+ --
+@@ -230,6 +191,7 @@
+ 	return $1;
+ end;
+ $$ language plpgsql stable;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ create function return_text_input(text) returns text as $$
+ begin
+ 	return $1;
+@@ -327,22 +289,65 @@
+ (1 row)
+ 
+ rollback;
++WARNING:  there is no transaction in progress
+ -- Test with non-strict equality function.
+ -- We need to create our own type for this.
+ begin;
+ create type myint;
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type myint
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create function myintin(cstring) returns myint strict immutable language
+   internal as 'int4in';
+-NOTICE:  return type myint is only a shell
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create function myintout(myint) returns cstring strict immutable language
+   internal as 'int4out';
+-NOTICE:  argument type myint is only a shell
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create function myinthash(myint) returns integer strict immutable language
+   internal as 'hashint4';
+-NOTICE:  argument type myint is only a shell
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create type myint (input = myintin, output = myintout, like = int4);
++ERROR:  at or near "input": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type myint (input = myintin, output = myintout, like = int4)
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27793/_version_
+ create cast (int4 as myint) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (int4 as myint) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create cast (myint as int4) without function;
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create cast (myint as int4) without function
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ create function myinteq(myint, myint) returns bool as $$
+ begin
+   if $1 is null and $2 is null then
+@@ -352,11 +357,13 @@
+   end if;
+ end;
+ $$ language plpgsql immutable;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create function myintne(myint, myint) returns bool as $$
+ begin
+   return not myinteq($1, $2);
+ end;
+ $$ language plpgsql immutable;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ create operator = (
+   leftarg    = myint,
+   rightarg   = myint,
+@@ -367,6 +374,12 @@
+   join       = eqjoinsel,
+   merges
+ );
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create operator = (
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ create operator <> (
+   leftarg    = myint,
+   rightarg   = myint,
+@@ -377,47 +390,39 @@
+   join       = eqjoinsel,
+   merges
+ );
++ERROR:  at or near "<": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create operator <> (
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ create operator class myint_ops
+ default for type myint using hash as
+   operator    1   =  (myint, myint),
+   function    1   myinthash(myint);
++ERROR:  at or near "class": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create operator class myint_ops
++                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/65017/_version_
+ create table inttest (a myint);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ insert into inttest values(1::myint),(null);
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- try an array with enough elements to cause hashing
+ select * from inttest where a in (1::myint,2::myint,3::myint,4::myint,5::myint,6::myint,7::myint,8::myint,9::myint, null);
+- a 
+----
+- 1
+- 
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from inttest where a not in (1::myint,2::myint,3::myint,4::myint,5::myint,6::myint,7::myint,8::myint,9::myint, null);
+- a 
+----
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from inttest where a not in (0::myint,2::myint,3::myint,4::myint,5::myint,6::myint,7::myint,8::myint,9::myint, null);
+- a 
+----
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ -- ensure the result matched with the non-hashed version.  We simply remove
+ -- some array elements so that we don't reach the hashing threshold.
+ select * from inttest where a in (1::myint,2::myint,3::myint,4::myint,5::myint, null);
+- a 
+----
+- 1
+- 
+-(2 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from inttest where a not in (1::myint,2::myint,3::myint,4::myint,5::myint, null);
+- a 
+----
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ select * from inttest where a not in (0::myint,2::myint,3::myint,4::myint,5::myint, null);
+- a 
+----
+-(0 rows)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ rollback;

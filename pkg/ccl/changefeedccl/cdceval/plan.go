@@ -84,13 +84,15 @@ func normalizeExpression(
 
 	// Determine if we need diff option.
 	var withDiff bool
-	plan.CollectPlanColumns(func(column colinfo.ResultColumn) bool {
+	if err := plan.CollectPlanColumns(func(column colinfo.ResultColumn) bool {
 		if uint32(prevCol.GetID()) == column.PGAttributeNum {
 			withDiff = true
 			return true // stop.
 		}
 		return false // keep going.
-	})
+	}); err != nil {
+		return nil, false, err
+	}
 	return norm, withDiff, nil
 }
 
@@ -132,7 +134,15 @@ func SpansForExpression(
 		return nil, withErrorHint(err, d.FamilyName, d.HasOtherFamilies)
 	}
 
-	return plan.Spans, nil
+	// Make sure any single-key spans are expanded to have end keys.
+	spans := plan.Spans
+	for i := range spans {
+		if len(spans[i].EndKey) == 0 {
+			spans[i].EndKey = spans[i].Key.Clone().Next()
+		}
+	}
+
+	return spans, nil
 }
 
 // withErrorHint wraps error with error hints.

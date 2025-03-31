@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
-var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
-var supportedPsycopgTag = "3c58e96e1000ef60060fb8139687028cb274838d"
+var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+)(?:\.(?P<subpoint>\d+))?)?)?$`)
+var supportedPsycopgTag = "3.2.6"
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r registry.Registry) {
@@ -44,8 +44,26 @@ func registerPsycopg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
+		// Turn off autocommit_before_ddl and READ COMMITTED for this test
+		// specifically. The psycopg tests rely on doing schema changes in
+		// transactions with multiple statements.
+		t.Status("turning off autocommit_before_ddl and using serializable isolation")
+		db, err := c.ConnE(ctx, t.L(), node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, stmt := range []string{
+			`ALTER ROLE ALL SET autocommit_before_ddl = 'false'`,
+			`ALTER ROLE ALL SET default_transaction_isolation = 'serializable'`,
+		} {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				t.Fatal(err)
+			}
+		}
+		db.Close()
+
 		t.Status("cloning psycopg and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, t, "psycopg", "psycopg2", psycopgReleaseTagRegex)
+		latestTag, err := repeatGetLatestTag(ctx, t, "psycopg", "psycopg", psycopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +79,39 @@ func registerPsycopg(r registry.Registry) {
 		if err := repeatRunE(
 			ctx, t, c, node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-virtualenv python3-setuptools python-setuptools`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "set python3.10 as default", `
+				sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+				sudo update-alternatives --config python3`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "install pip",
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
+			"upgrade pip and install pytest",
+			`source venv/bin/activate && pip install -U pip && pip install pytest pytest-xdist`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -72,27 +122,24 @@ func registerPsycopg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): When psycopg 2.9.4 is released and tagged,
-		//    use the tag version instead of the commit.
-		// if err := repeatGitCloneE(
-		//	ctx, t, c,
-		//	"https://github.com/psycopg/psycopg2.git",
-		//	"/mnt/data1/psycopg",
-		//	supportedPsycopgTag,
-		//	node,
-		// ); err != nil {
-		//	t.Fatal(err)
-		// }
-		if err = c.RunE(ctx, option.WithNodes(node), "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
-			t.Fatal(err)
-		}
-		if err = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
+		if err := repeatGitCloneE(
+			ctx, t, c,
+			"https://github.com/psycopg/psycopg.git",
+			"/mnt/data1/psycopg",
+			supportedPsycopgTag,
+			node,
+		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("building Psycopg")
 		if err := repeatRunE(
-			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
+			ctx, t, c, node, "building Psycopg",
+			`source venv/bin/activate &&
+			cd /mnt/data1/psycopg/ &&
+			pip install --config-settings editable_mode=strict -e "./psycopg[dev,test]" &&  # for the base Python package
+			pip install --config-settings editable_mode=strict -e ./psycopg_pool &&         # for the connection pool
+			pip install --config-settings editable_mode=strict ./psycopg_c                  # for the C speedup module`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -102,15 +149,14 @@ func registerPsycopg(r registry.Registry) {
 
 		t.Status("running psycopg test suite")
 
+		const testResultsXML = "/mnt/data1/psycopg/test_results.xml"
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), fmt.Sprintf(
-			`cd /mnt/data1/psycopg/ &&
-			export PSYCOPG2_TESTDB=defaultdb &&
-			export PSYCOPG2_TESTDB_USER=%s &&
-			export PSYCOPG2_TESTDB_PASSWORD=%s &&
-			export PSYCOPG2_TESTDB_PORT={pgport:1} &&
-			export PSYCOPG2_TESTDB_HOST=localhost &&
-			make check PYTHON_VERSION=3`,
-			install.DefaultUser, install.DefaultPassword))
+			`source venv/bin/activate &&
+			cd /mnt/data1/psycopg/ &&
+			export PSYCOPG_TEST_DSN="host=localhost port={pgport:1} user=%[1]s password=%[2]s dbname=defaultdb" &&
+			export PGPASSWORD=%[2]s
+			pytest -vv --junit-xml=%[3]s`,
+			install.DefaultUser, install.DefaultPassword, testResultsXML))
 
 		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors
@@ -120,13 +166,24 @@ func registerPsycopg(r registry.Registry) {
 
 		// Result error contains stdout, stderr, and any error content returned by exec package.
 		rawResults := []byte(result.Stdout + result.Stderr)
-
 		t.Status("collating the test results")
 		t.L().Printf("Test Results: %s", rawResults)
 
+		result, err = repeatRunWithDetailsSingleNode(
+			ctx,
+			c,
+			t,
+			node,
+			fmt.Sprintf("fetching results file %s", testResultsXML),
+			fmt.Sprintf("cat %s", testResultsXML),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		results.parsePythonUnitTestOutput(rawResults, psycopgBlockList, psycopgIgnoreList)
+		results.parseJUnitXML(t, psycopgBlockList, psycopgIgnoreList, []byte(result.Stdout))
 		results.summarizeAll(
 			t, "psycopg" /* ormName */, "psycopgBlockList", psycopgBlockList,
 			version, supportedPsycopgTag,

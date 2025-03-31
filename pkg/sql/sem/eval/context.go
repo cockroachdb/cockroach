@@ -432,7 +432,7 @@ func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placehol
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName("test-monitor"),
+		Name:     mon.MakeName("test-monitor"),
 		Settings: st,
 	})
 	return MakeTestingEvalContextWithMon(st, monitor)
@@ -934,7 +934,7 @@ type ReplicationStreamManager interface {
 	) (streampb.ReplicationProducerSpec, error)
 
 	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
-	AuthorizeViaReplicationPriv(ctx context.Context) error
+	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

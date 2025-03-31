@@ -193,13 +193,13 @@ func (f *IPTablesPartitionFailure) Cleanup(
 func (f *IPTablesPartitionFailure) WaitForFailureToPropagate(
 	_ context.Context, _ *logger.Logger, _ FailureArgs,
 ) error {
-	// IPTables rules are applied immediately, so we don't need to wait for them to propagate.
+	// TODO(Darryl): Monitor cluster (e.g. for replica convergence) and block until it's stable.
 	return nil
 }
 
 func (f *IPTablesPartitionFailure) WaitForFailureToRestore(
 	_ context.Context, _ *logger.Logger, _ FailureArgs,
 ) error {
-	// IPTables rules are applied immediately, so we don't need to wait for them to propagate.
+	// TODO(Darryl): Monitor cluster (e.g. for replica convergence) and block until it's stable.
 	return nil
 }
