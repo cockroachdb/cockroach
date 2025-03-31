@@ -1,0 +1,92 @@
+new-txn txn=t1
+----
+
+put k=a v=v1 txn=t1
+----
+
+commit txn=t1
+----
+
+new-txn txn=t2
+----
+
+get txn=t2 k=a lock=Exclusive dur=Unreplicated
+----
+get: "\xfaa"="v1"
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t2 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)]
+
+savepoint txn=t2 name=s1
+----
+
+put k=a v=v2 txn=t2
+----
+
+print-in-memory-lock-table retry
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t2 epoch: 0, iso: Serializable, ts: <stripped>, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+
+rollback-to txn=t2 name=s1
+----
+
+get k=a txn=t2
+----
+get: "\xfaa"="v1"
+
+commit txn=t2
+----
+
+# Without an explicit savepoint the unreplicated lock is replaced.
+new-txn txn=t3
+----
+
+get txn=t3 k=a lock=Exclusive dur=Unreplicated
+----
+get: "\xfaa"="v1"
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t3 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)]
+
+put k=a v=v2 txn=t3
+----
+
+print-in-memory-lock-table retry
+----
+num=0
+
+commit txn=t3
+----
+
+# If the unreplicated lock would also be rolled back with the replicated lock,
+# we go ahead and drop it.
+new-txn txn=t4
+----
+
+get txn=t4 k=a lock=Exclusive dur=Unreplicated
+----
+get: "\xfaa"="v2"
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa"
+  holder: txn: t4 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)]
+
+put k=a v=v2 txn=t4
+----
+
+print-in-memory-lock-table retry
+----
+num=0
+
+commit txn=t4
+----

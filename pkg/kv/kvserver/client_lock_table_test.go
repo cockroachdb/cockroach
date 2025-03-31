@@ -58,6 +58,16 @@ func TestClientLockTableDataDriven(t *testing.T) {
 		evalCtx := newEvalCtx(t, rangeStartKey, store.StateEngine(), db)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// Make it a bit easier to spot if someone accidentally used an
+			// insufficent number of `-`s when writing a test.
+
+			if d.Input != "" {
+				switch d.Cmd {
+				case "batch":
+				default:
+					d.Fatalf(t, "command %q does not support input (did you end the command with `----`?)", d.Cmd)
+				}
+			}
 
 			switch d.Cmd {
 			case "new-txn":
@@ -93,6 +103,8 @@ func TestClientLockTableDataDriven(t *testing.T) {
 						b.GetForUpdate(key, dur)
 					case lock.Shared:
 						b.GetForShare(key, dur)
+					default:
+						d.Fatalf(t, "unknown lock strength: %v", str)
 					}
 					b.Requests()[0].GetGet().LockNonExisting = d.HasArg("lock-non-existing")
 					err := txn.Run(ctx, b)
@@ -131,6 +143,14 @@ func TestClientLockTableDataDriven(t *testing.T) {
 					return fmt.Sprintf("error: %s", err.Error())
 				}
 				return ""
+			case "rollback-to":
+				if err := evalCtx.rollbackTxnTo(ctx, d); err != nil {
+					return fmt.Sprintf("error: %s", err.Error())
+				}
+				return ""
+			case "savepoint":
+				evalCtx.createSavepoint(ctx, d)
+				return ""
 			case "print-in-memory-lock-table":
 				rangeDesc, err := s.LookupRange(rangeStartKey)
 				if err != nil {
@@ -140,19 +160,17 @@ func TestClientLockTableDataDriven(t *testing.T) {
 				if err != nil {
 					d.Fatalf(t, "get replica: %s", err)
 				}
-				return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+				return maybeRetry(d, func() string {
+					return evalCtx.scrubTS(evalCtx.replaceAllTxnUUIDs(r.GetConcurrencyManager().TestingLockTableString()))
+				})
 			case "print-replicated-lock-table":
 				startKey := evalCtx.getNamedKey("start", d)
 				endKey := evalCtx.getNamedKey("end", d)
-				actual := evalCtx.printLockTable(ctx, d, startKey, endKey)
 				// Because of pipelined writes, the lock table might not be up to date
-				// if we check it too quickly, so we retry a few times.
-				const maxRetries = 100
-				for try := 0; try < maxRetries && actual != d.Expected; try++ {
-					time.Sleep(100 * time.Millisecond)
-					actual = evalCtx.printLockTable(ctx, d, startKey, endKey)
-				}
-				return actual
+				// if we check it too quickly, we just always retry
+				return retryUntilMatch(d, func() string {
+					return evalCtx.printLockTable(ctx, d, startKey, endKey)
+				})
 			case "exec-sql":
 				_, err := sqlDB.Exec(d.Input)
 				if err != nil {
@@ -175,6 +193,7 @@ type evalCtx struct {
 
 	txnsByName       map[string]*kv.Txn
 	txnsByUUIDToName map[string]string
+	savepointsByName map[string]kv.SavepointToken
 }
 
 func newEvalCtx(t *testing.T, rsk roachpb.Key, s storage.Reader, db *kv.DB) *evalCtx {
@@ -186,6 +205,7 @@ func newEvalCtx(t *testing.T, rsk roachpb.Key, s storage.Reader, db *kv.DB) *eva
 
 		txnsByName:       make(map[string]*kv.Txn),
 		txnsByUUIDToName: make(map[string]string),
+		savepointsByName: make(map[string]kv.SavepointToken),
 	}
 }
 
@@ -216,6 +236,36 @@ func (e *evalCtx) mustGetTxn(d *datadriven.TestData) *kv.Txn {
 		d.Fatalf(e.t, "txn %q doesn't exists", txnName)
 	}
 	return txn
+}
+
+func (e *evalCtx) createSavepoint(ctx context.Context, d *datadriven.TestData) {
+	var savepointName string
+	d.ScanArgs(e.t, "name", &savepointName)
+	if savepointName == "" {
+		d.Fatalf(e.t, "savepoint requires a name")
+	}
+	txn := e.mustGetTxn(d)
+
+	savepoint, err := txn.CreateSavepoint(ctx)
+	if err != nil {
+		d.Fatalf(e.t, "create savepoint: %s", err)
+	}
+	e.savepointsByName[savepointName] = savepoint
+}
+
+func (e *evalCtx) rollbackTxnTo(ctx context.Context, d *datadriven.TestData) error {
+	var savepointName string
+	d.ScanArgs(e.t, "name", &savepointName)
+	if savepointName == "" {
+		d.Fatalf(e.t, "rollback-to requires a name")
+	}
+	savepoint, ok := e.savepointsByName[savepointName]
+	if !ok {
+		d.Fatalf(e.t, "savepoint %s does not exist", savepointName)
+	}
+	delete(e.savepointsByName, savepointName)
+	txn := e.mustGetTxn(d)
+	return txn.RollbackToSavepoint(ctx, savepoint)
 }
 
 func (e *evalCtx) mustGetAndRemoveTxn(d *datadriven.TestData) *kv.Txn {
@@ -361,6 +411,23 @@ func (e *evalCtx) replaceAllTxnUUIDs(input string) string {
 		input = strings.Replace(input, uuid, name, -1)
 	}
 	return input
+}
+
+func maybeRetry(d *datadriven.TestData, f func() string) string {
+	if !d.HasArg("retry") {
+		return f()
+	}
+	return retryUntilMatch(d, f)
+}
+
+func retryUntilMatch(d *datadriven.TestData, f func() string) string {
+	const maxRetries = 100
+	actual := f()
+	for try := 0; try < maxRetries && actual != d.Expected; try++ {
+		time.Sleep(100 * time.Millisecond)
+		actual = f()
+	}
+	return actual
 }
 
 // ts: 1739967161.672801000,0,

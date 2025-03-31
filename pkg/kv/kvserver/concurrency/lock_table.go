@@ -3657,21 +3657,28 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 			canFree = false
 			break
 		}
-		// NB: Strictly speaking, we should also be checking if the sequence number
-		// of the unreplicated lock we're about to forget here is less than or equal
-		// to the replicated lock acquisition. Otherwise, a savepoint rollback could
-		// cause us to roll back the replicated lock (in favor of which we're
-		// deciding to no longer track this unreplicated lock). However, this would
-		// mean that the common case of unreplicated locks being re-acquired as
-		// replicated ones won't be able to take advantage of this optimization
-		// (think SELECT FOR UPDATE or implicit exclusive locks acquired as part of
-		// UPDATE statements). We thus decide to ignore sequence numbers in our
-		// determination here -- savepoint rollbacks are rare enough. It's also
-		// not like unreplicated locks can't be lost for other reasons.
+
+		// We only check sequence numbers in this case if the transaction in
+		// question has ever produced an explicit rollback.
 		//
-		// TODO(ssd): Any change to this behaviour must consider IgnoredSeqNumbers
-		// and the case of the unreplicated locks being flushed. See the
-		// discussion on #140113.
+		// The goal is to make sure that in the common case of unreplicated locks
+		// being re-acquired as replicated ones (think SELECT FOR UPDATE or implicit
+		// exclusive locks acquired as part of UPDATE statements) we can still take
+		// advantage of this optimization for most transactions that don't use
+		// explicit savepoints.
+		if acq.MaxExplicitRollbackTarget > 0 {
+			minSeqNum := tl.unreplicatedInfo.minSeqNumber(str)
+			if minSeqNum <= acq.Txn.Sequence {
+				// If the minSequenceNumber is over the max explicit rollback target,
+				// then in the case of a rollback, we know that both of these locks
+				// would have been rolled back anyway, so we can still drop our
+				// unreplicated lock.
+				if minSeqNum <= acq.MaxExplicitRollbackTarget {
+					canFree = false
+					break
+				}
+			}
+		}
 	}
 	if !canFree {
 		// The replicated lock acquisition doesn't offer sufficient protection

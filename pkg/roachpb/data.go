@@ -1633,6 +1633,13 @@ func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange
 	t.IgnoredSeqNums = enginepb.TxnSeqListAppend(t.IgnoredSeqNums, newRange)
 }
 
+// AddExplicitSavepointTarget sets the current Max
+func (t *Transaction) AddExplicitSavepointTarget(target enginepb.TxnSeq) {
+	if t.MaxExplicitRollbackTarget < target {
+		t.MaxExplicitRollbackTarget = target
+	}
+}
+
 // AsRecord returns a TransactionRecord object containing only the subset of
 // fields from the receiver that must be persisted in the transaction record.
 func (t *Transaction) AsRecord() TransactionRecord {
@@ -2362,13 +2369,15 @@ func MakeLockAcquisition(
 	dur lock.Durability,
 	str lock.Strength,
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+	maxRollbackTarget enginepb.TxnSeq,
 ) LockAcquisition {
 	return LockAcquisition{
-		Span:           Span{Key: key},
-		Txn:            txn,
-		Durability:     dur,
-		Strength:       str,
-		IgnoredSeqNums: ignoredSeqNums,
+		Span:                      Span{Key: key},
+		Txn:                       txn,
+		Durability:                dur,
+		Strength:                  str,
+		IgnoredSeqNums:            ignoredSeqNums,
+		MaxExplicitRollbackTarget: maxRollbackTarget,
 	}
 }
 

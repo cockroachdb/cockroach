@@ -100,6 +100,7 @@ func (tc *TxnCoordSender) CreateSavepoint(ctx context.Context) (kv.SavepointToke
 		reqInt.createSavepointLocked(ctx, s)
 	}
 
+	tc.mu.txn.AddExplicitSavepointTarget(s.seqNum)
 	return s, nil
 }
 
