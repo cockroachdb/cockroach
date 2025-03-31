@@ -56,6 +56,12 @@ func delArgs(key roachpb.Key, seq enginepb.TxnSeq) *kvpb.DeleteRequest {
 	}
 }
 
+func delRangeArgs(key, endKey roachpb.Key, seq enginepb.TxnSeq) *kvpb.DeleteRangeRequest {
+	return &kvpb.DeleteRangeRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key, EndKey: endKey, Sequence: seq},
+	}
+}
+
 func makeBufferedWrite(key roachpb.Key, vals ...bufferedValue) bufferedWrite {
 	return bufferedWrite{key: key, vals: vals}
 }
@@ -1209,7 +1215,6 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 // Delete requests that have the MustAcquireExclusiveLock are decomposed into a
 // locking Get and a buffered write.
 func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
-
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1457,6 +1462,119 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	ba = &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	putC := putArgs(keyC, valAStr, txn.Sequence)
+	ba.Add(putC)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+
+	// Commit the transaction. We flushed the buffer already, and no subsequent
+	// writes were buffered, so the buffer should be empty. As such, no write
+	// requests should be added to the batch.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
+}
+
+// TestTxnWriteBufferDeleteRange ensures that the txnWriteBuffer correctly
+// handles DeleteRange requests. In particular, whenever we see a batch with a
+// DeleteRange request, the write buffer is flushed and write buffering is
+// turned off for subsequent requests.
+func TestTxnWriteBufferDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	valA := "valA"
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, valA, txn.Sequence)
+	delC := delArgs(keyC, txn.Sequence)
+	ba.Add(putA)
+	ba.Add(delC)
+
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// All the requests should be buffered and not make it past the
+	// txnWriteBuffer. The response returned should be indistinguishable.
+	require.Equal(t, numCalled, mockSender.NumCalled())
+	require.Len(t, br.Responses, 2)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+	// Verify the Put was buffered correctly.
+	expBufferedWrites := []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
+		makeBufferedWrite(keyC, makeBufferedValue("", 1)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// Send a DeleteRange requesst. This should result in the entire buffer
+	// being flushed. Note that we're flushing the delete to key C as well, even
+	// though it doesn't overlap with the DeleteRange request.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	delRange := delRangeArgs(keyA, keyB, txn.Sequence)
+	ba.Add(delRange)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 3)
+
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[2].GetInner())
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// Even though we flushed some writes, it shouldn't make it back to the response.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.DeleteRangeResponse{}, br.Responses[0].GetInner())
+
+	// Ensure the buffer is empty at this point.
+	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
+
+	// Subsequent batches should not be buffered.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putC := putArgs(keyC, valA, txn.Sequence)
 	ba.Add(putC)
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {

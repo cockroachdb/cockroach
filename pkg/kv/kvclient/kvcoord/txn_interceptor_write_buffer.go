@@ -169,6 +169,33 @@ func (twb *txnWriteBuffer) SendLocked(
 		return twb.flushBufferAndSendBatch(ctx, ba)
 	}
 
+	if _, ok := ba.GetArg(kvpb.DeleteRange); ok {
+		// DeleteRange requests can delete an arbitrary number of keys over a
+		// given keyspan. We won't know the exact scope of the delete until
+		// we've scanned the keyspan, which must happen on the server. We've got
+		// a couple of otions here:
+		// 1. We decompose the DeleteRange request into a (potentially locking)
+		// Scan followed by buffered point Deletes for each key in the scan's
+		// result.
+		// 2. We flush the buffer[1] and send the DeleteRange request to the KV
+		// layer.
+		//
+		// We choose option 2, as typically the number of keys deleted is large,
+		// and we may realize we're over budget after performing the initial
+		// scan of the keyspan. At that point, we'll have to flush the buffer
+		// anyway. Moreover, buffered writes are most impactful when a
+		// transaction is writing to a small number of keys. As such, it's fine
+		// to not optimize the DeleteRange case, as typically it results in a
+		// large writing transaction.
+		//
+		// [1] Technically, we only need to flush the overlapping portion of the
+		// buffer. However, for simplicity, the txnWriteBuffer doesn't support
+		// transactions with partially buffered writes and partially flushed
+		// writes. We could change this in the future if there's benefit to
+		// doing so.
+		return twb.flushBufferAndSendBatch(ctx, ba)
+	}
+
 	// Check if buffering writes from the supplied batch will run us over
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
