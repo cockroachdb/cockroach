@@ -191,7 +191,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT power(float8 '-inf', float8 'inf');
    power   
  ----------
-@@ -631,29 +592,60 @@
+@@ -631,9 +592,25 @@
     SET f1 = FLOAT8_TBL.f1 * '-1'
     WHERE FLOAT8_TBL.f1 > '0.0';
  SELECT f.f1 * '1e200' from FLOAT8_TBL f;
@@ -207,20 +207,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
 +
  SELECT f.f1 ^ '1e200' from FLOAT8_TBL f;
 -ERROR:  value out of range: overflow
--SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
-  ?column? 
- ----------
--        2
--(1 row)
++ ?column? 
++----------
 +        0
 + Infinity
 + Infinity
 + Infinity
 +        0
 +(5 rows)
++
+ SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
+  ?column? 
+ ----------
+@@ -641,19 +618,38 @@
+ (1 row)
  
-+SELECT 0 ^ 0 + 0 ^ 1 + 0 ^ 0.0 + 0 ^ 0.5;
-+ERROR:  integer out of range
  SELECT ln(f.f1) from FLOAT8_TBL f where f.f1 = '0.0' ;
 -ERROR:  cannot take logarithm of zero
 +    ln     
@@ -261,7 +262,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
   -1.2345678901234e+200
   -1.2345678901234e-200
  (5 rows)
-@@ -773,7 +765,11 @@
+@@ -773,7 +769,11 @@
  -- acosh(Inf) should be Inf, but some mingw versions produce NaN, so skip test
  -- SELECT acosh(float8 'infinity');
  SELECT acosh(float8 '-infinity');
@@ -274,7 +275,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT acosh(float8 'nan');
   acosh 
  -------
-@@ -781,9 +777,17 @@
+@@ -781,9 +781,17 @@
  (1 row)
  
  SELECT atanh(float8 'infinity');
@@ -294,7 +295,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT atanh(float8 'nan');
   atanh 
  -------
-@@ -803,50 +807,15 @@
+@@ -803,50 +811,15 @@
        (1.2e-17), (2.3e-13), (1.2e-9),
        (0.45), (1.1), (2.1), (3.4), (6), (28),
        (float8 'infinity'), (float8 'nan')) AS t(x);
@@ -348,7 +349,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  DROP TABLE FLOAT8_TBL;
  -- Check the float8 values exported for use by other tests
  SELECT * FROM FLOAT8_TBL;
-@@ -867,7 +836,7 @@
+@@ -867,7 +840,7 @@
  (1 row)
  
  SELECT '32767.6'::float8::int2;
@@ -357,7 +358,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT '-32768.4'::float8::int2;
    int2  
  --------
-@@ -875,7 +844,7 @@
+@@ -875,7 +848,7 @@
  (1 row)
  
  SELECT '-32768.6'::float8::int2;
@@ -366,7 +367,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT '2147483647.4'::float8::int4;
      int4    
  ------------
-@@ -883,7 +852,7 @@
+@@ -883,7 +856,7 @@
  (1 row)
  
  SELECT '2147483647.6'::float8::int4;
@@ -375,7 +376,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT '-2147483648.4'::float8::int4;
      int4     
  -------------
-@@ -891,7 +860,7 @@
+@@ -891,7 +864,7 @@
  (1 row)
  
  SELECT '-2147483648.6'::float8::int4;
@@ -384,7 +385,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT '9223372036854773760'::float8::int8;
          int8         
  ---------------------
-@@ -899,52 +868,26 @@
+@@ -899,52 +872,26 @@
  (1 row)
  
  SELECT '9223372036854775807'::float8::int8;
@@ -444,7 +445,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  SELECT x,
         tand(x),
         tand(x) IN ('-Infinity'::float8,-1,0,
-@@ -954,79 +897,117 @@
+@@ -954,79 +901,117 @@
                     1,'Infinity'::float8) AS cotd_exact
  FROM (VALUES (0), (45), (90), (135), (180),
        (225), (270), (315), (360)) AS t(x);
@@ -604,7 +605,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  -- float8: seeeeeee eeeeeeee eeeeeeee mmmmmmmm mmmmmmmm(x4)
  -- we don't care to assume the platform's strtod() handles subnormals
  -- correctly; those are "use at your own risk". However we do test
-@@ -1051,28 +1032,7 @@
+@@ -1051,28 +1036,7 @@
    from (select bits::bigint::xfloat8::float8 as flt
            from testdata
  	offset 0) s;
@@ -634,7 +635,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/float8.out --labe
  -- round-trip tests
  with testdata(bits) as (values
    (x'0000000000000000'),
-@@ -1220,225 +1180,9 @@
+@@ -1220,225 +1184,9 @@
    from (select bits::bigint::xfloat8::float8 as flt
            from testdata
  	offset 0) s;
