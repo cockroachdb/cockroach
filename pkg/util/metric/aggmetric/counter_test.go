@@ -47,7 +47,7 @@ func TestAggCounter(t *testing.T) {
 		Name: "foo_counter",
 	}, "tenant_id", "counter_label")
 	r.AddMetric(c)
-	c.initWithCacheStorageType([]string{"tenant_id", "counter_label"})
+	c.initWithCacheStorageType(c.GetMetadata().Name, []string{"tenant_id", "counter_label"})
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(size int, key, value interface{}) bool {

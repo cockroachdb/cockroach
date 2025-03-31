@@ -168,6 +168,7 @@ server.user_login.timeout	duration	10s	timeout after which client authentication
 server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	application
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	application
 server.web_session.timeout (alias: server.web_session_timeout)	duration	168h0m0s	the duration that a newly created web session will be valid	application
+sql.application_name_metrics.enabled	boolean	false	When enabled, SQL metrics would export application name as and additional label.The number of unique label combinations is limited to 5000 by default.	application
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	application
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
@@ -182,6 +183,7 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed	application
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed	application
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed	application
+sql.database_name_metrics.enabled	boolean	false	When enabled, SQL metrics would export database name as and additional label.The number of unique label combinations is limited to 5000 by default.	application
 sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	"setting to true uses the same size for all columns to compute scan cost
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application

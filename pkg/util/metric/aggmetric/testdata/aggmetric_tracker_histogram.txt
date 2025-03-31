@@ -1,0 +1,109 @@
+metric_tracker dbNameMetricsEnabled=true appNameMetricsEnabled=true
+----
+histo_gram_bucket{db="test_db",app="test_app",le="+Inf"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="1"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="1024"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="128"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="16"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="2"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="256"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="32"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="4"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="512"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="64"} 1
+histo_gram_bucket{db="test_db",app="test_app",le="8"} 1
+histo_gram_bucket{le="+Inf"} 1
+histo_gram_bucket{le="1"} 1
+histo_gram_bucket{le="1024"} 1
+histo_gram_bucket{le="128"} 1
+histo_gram_bucket{le="16"} 1
+histo_gram_bucket{le="2"} 1
+histo_gram_bucket{le="256"} 1
+histo_gram_bucket{le="32"} 1
+histo_gram_bucket{le="4"} 1
+histo_gram_bucket{le="512"} 1
+histo_gram_bucket{le="64"} 1
+histo_gram_bucket{le="8"} 1
+histo_gram_count 1
+histo_gram_count{db="test_db",app="test_app"} 1
+histo_gram_sum 1
+histo_gram_sum{db="test_db",app="test_app"} 1
+
+metric_tracker dbNameMetricsEnabled=false appNameMetricsEnabled=false
+----
+histo_gram_bucket{le="+Inf"} 2
+histo_gram_bucket{le="1"} 2
+histo_gram_bucket{le="1024"} 2
+histo_gram_bucket{le="128"} 2
+histo_gram_bucket{le="16"} 2
+histo_gram_bucket{le="2"} 2
+histo_gram_bucket{le="256"} 2
+histo_gram_bucket{le="32"} 2
+histo_gram_bucket{le="4"} 2
+histo_gram_bucket{le="512"} 2
+histo_gram_bucket{le="64"} 2
+histo_gram_bucket{le="8"} 2
+histo_gram_count 2
+histo_gram_sum 2
+
+metric_tracker dbNameMetricsEnabled=true appNameMetricsEnabled=false
+----
+histo_gram_bucket{db="test_db",le="+Inf"} 1
+histo_gram_bucket{db="test_db",le="1"} 1
+histo_gram_bucket{db="test_db",le="1024"} 1
+histo_gram_bucket{db="test_db",le="128"} 1
+histo_gram_bucket{db="test_db",le="16"} 1
+histo_gram_bucket{db="test_db",le="2"} 1
+histo_gram_bucket{db="test_db",le="256"} 1
+histo_gram_bucket{db="test_db",le="32"} 1
+histo_gram_bucket{db="test_db",le="4"} 1
+histo_gram_bucket{db="test_db",le="512"} 1
+histo_gram_bucket{db="test_db",le="64"} 1
+histo_gram_bucket{db="test_db",le="8"} 1
+histo_gram_bucket{le="+Inf"} 3
+histo_gram_bucket{le="1"} 3
+histo_gram_bucket{le="1024"} 3
+histo_gram_bucket{le="128"} 3
+histo_gram_bucket{le="16"} 3
+histo_gram_bucket{le="2"} 3
+histo_gram_bucket{le="256"} 3
+histo_gram_bucket{le="32"} 3
+histo_gram_bucket{le="4"} 3
+histo_gram_bucket{le="512"} 3
+histo_gram_bucket{le="64"} 3
+histo_gram_bucket{le="8"} 3
+histo_gram_count 3
+histo_gram_count{db="test_db"} 1
+histo_gram_sum 3
+histo_gram_sum{db="test_db"} 1
+
+metric_tracker dbNameMetricsEnabled=false appNameMetricsEnabled=true
+----
+histo_gram_bucket{app="test_app",le="+Inf"} 1
+histo_gram_bucket{app="test_app",le="1"} 1
+histo_gram_bucket{app="test_app",le="1024"} 1
+histo_gram_bucket{app="test_app",le="128"} 1
+histo_gram_bucket{app="test_app",le="16"} 1
+histo_gram_bucket{app="test_app",le="2"} 1
+histo_gram_bucket{app="test_app",le="256"} 1
+histo_gram_bucket{app="test_app",le="32"} 1
+histo_gram_bucket{app="test_app",le="4"} 1
+histo_gram_bucket{app="test_app",le="512"} 1
+histo_gram_bucket{app="test_app",le="64"} 1
+histo_gram_bucket{app="test_app",le="8"} 1
+histo_gram_bucket{le="+Inf"} 4
+histo_gram_bucket{le="1"} 4
+histo_gram_bucket{le="1024"} 4
+histo_gram_bucket{le="128"} 4
+histo_gram_bucket{le="16"} 4
+histo_gram_bucket{le="2"} 4
+histo_gram_bucket{le="256"} 4
+histo_gram_bucket{le="32"} 4
+histo_gram_bucket{le="4"} 4
+histo_gram_bucket{le="512"} 4
+histo_gram_bucket{le="64"} 4
+histo_gram_bucket{le="8"} 4
+histo_gram_count 4
+histo_gram_count{app="test_app"} 1
+histo_gram_sum 4
+histo_gram_sum{app="test_app"} 1

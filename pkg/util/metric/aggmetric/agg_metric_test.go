@@ -282,7 +282,7 @@ func TestAggHistogramRotate(t *testing.T) {
 	}
 }
 
-func TestAggMetricClear(t *testing.T) {
+func TestAggMetricReinitialise(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r := metric.NewRegistry()
@@ -290,30 +290,33 @@ func TestAggMetricClear(t *testing.T) {
 
 	c := NewCounter(metric.Metadata{
 		Name: "foo_counter",
-	}, "tenant_id")
+	}, "db_name")
 	r.AddMetric(c)
 
 	d := NewCounter(metric.Metadata{
 		Name: "bar_counter",
-	}, "tenant_id")
-	d.initWithCacheStorageType([]string{"tenant_id"})
+	}, "db_name")
+	d.initWithCacheStorageType(d.GetMetadata().Name, []string{"db_name"})
 	r.AddMetric(d)
 
 	tenant2 := roachpb.MustMakeTenantID(2)
 	c1 := c.AddChild(tenant2.String())
 
-	t.Run("before clear", func(t *testing.T) {
+	t.Run("before reinitialisation", func(t *testing.T) {
 		c1.Inc(2)
 		d.Inc(2, "3")
-		testFile := "aggMetric_pre_clear.txt"
+		testFile := "aggMetric_pre_reinitialisation.txt"
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 
-	c.clear()
-	d.clear()
+	c.reinitialise("db_name", "app_name")
+	d.reinitialise("db_name", "app_name")
 
-	t.Run("post clear", func(t *testing.T) {
-		testFile := "aggMetric_post_clear.txt"
+	t.Run("post reinitialisation", func(t *testing.T) {
+		c1 = c.AddChild("default_db", "default_app")
+		c1.Inc(2)
+		d.Inc(2, "default_db", "default_app")
+		testFile := "aggMetric_post_reinitialisation.txt"
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
 }

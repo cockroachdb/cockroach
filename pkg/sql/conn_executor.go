@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -391,6 +392,10 @@ type Server struct {
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
+	// aggMetricTracker tracks the aggmetric with cache as childSet storage.
+	// It is used to reinitialize the aggmetric when the settings are changed.
+	aggMetricTracker *aggmetric.MetricTracker
+
 	mu struct {
 		syncutil.Mutex
 		connectionCount     int64
@@ -466,6 +471,17 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
+
+	aggMetricTracker := aggmetric.GetMetricTracker()
+
+	aggmetric.DBNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		aggMetricTracker.ReinitialiseMetrics(&cfg.Settings.SV)
+	})
+
+	aggmetric.AppNameLabelEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		aggMetricTracker.ReinitialiseMetrics(&cfg.Settings.SV)
+	})
+
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
@@ -486,6 +502,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			cfg.Settings,
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
+		aggMetricTracker:        aggMetricTracker,
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)

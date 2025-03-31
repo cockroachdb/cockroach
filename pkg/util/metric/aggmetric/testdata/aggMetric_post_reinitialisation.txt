@@ -1,0 +1,6 @@
+echo
+----
+bar_counter 4
+bar_counter{db_name="default_db",app_name="default_app"} 2
+foo_counter 4
+foo_counter{db_name="default_db",app_name="default_app"} 2
