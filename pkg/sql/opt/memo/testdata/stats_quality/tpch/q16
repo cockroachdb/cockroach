@@ -54,7 +54,7 @@ ORDER BY
 sort
  ├── save-table-name: q16_sort_1
  ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) supplier_cnt:29(int!null)
- ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
+ ├── stats: [rows=9929.3, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
  ├── key: (11-13)
  ├── fd: (11-13)-->(29)
  ├── ordering: -29,+11,+12,+13
@@ -62,32 +62,32 @@ sort
       ├── save-table-name: q16_group_by_2
       ├── columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null) count:29(int!null)
       ├── grouping columns: p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      ├── stats: [rows=9929.297, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
+      ├── stats: [rows=9929.3, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(29)=9929.3, null(29)=0, distinct(11-13)=9929.3, null(11-13)=0]
       ├── key: (11-13)
       ├── fd: (11-13)-->(29)
       ├── distinct-on
       │    ├── save-table-name: q16_distinct_on_3
       │    ├── columns: ps_suppkey:2(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
       │    ├── grouping columns: ps_suppkey:2(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │    ├── stats: [rows=28797.62, distinct(2)=9375.8, null(2)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
+      │    ├── stats: [rows=28797.6, distinct(2)=9375.8, null(2)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
       │    ├── key: (2,11-13)
       │    └── anti-join (hash)
       │         ├── save-table-name: q16_anti_join_4
       │         ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │         ├── stats: [rows=28797.62, distinct(1)=10657.8, null(1)=0, distinct(2)=9375.8, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
+      │         ├── stats: [rows=28797.6, distinct(1)=10657.8, null(1)=0, distinct(2)=9375.8, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11-13)=9929.3, null(11-13)=0, distinct(2,11-13)=28797.6, null(2,11-13)=0]
       │         ├── key: (2,8)
       │         ├── fd: (8)-->(11-13), (1)==(8), (8)==(1)
       │         ├── inner-join (lookup partsupp)
       │         │    ├── save-table-name: q16_lookup_join_5
       │         │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
       │         │    ├── key columns: [8] = [1]
-      │         │    ├── stats: [rows=42797.83, distinct(1)=10657.8, null(1)=0, distinct(2)=9787.31, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0]
+      │         │    ├── stats: [rows=42797.8, distinct(1)=10657.8, null(1)=0, distinct(2)=9787.31, null(2)=0, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0]
       │         │    ├── key: (2,8)
       │         │    ├── fd: (8)-->(11-13), (1)==(8), (8)==(1)
       │         │    ├── select
       │         │    │    ├── save-table-name: q16_select_6
       │         │    │    ├── columns: p_partkey:8(int!null) p_brand:11(char!null) p_type:12(varchar!null) p_size:13(int!null)
-      │         │    │    ├── stats: [rows=10658.85, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11,13)=199.999, null(11,13)=0, distinct(11-13)=10639.6, null(11-13)=0]
+      │         │    │    ├── stats: [rows=10658.9, distinct(8)=10657.8, null(8)=0, distinct(11)=24.9999, null(11)=0, distinct(12)=150, null(12)=0, distinct(13)=8, null(13)=0, distinct(11,13)=199.999, null(11,13)=0, distinct(11-13)=10639.6, null(11-13)=0]
       │         │    │    │   histogram(11)=  0    407.17    7376.2      0       0         0         2446    429.55
       │         │    │    │                 <--- 'Brand#11' -------- 'Brand#45' --- e'Brand#45\x00' ------ 'Brand#55'
       │         │    │    │   histogram(13)=  0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4 0 1332.4
@@ -116,7 +116,7 @@ sort
       │         ├── select
       │         │    ├── save-table-name: q16_select_8
       │         │    ├── columns: s_suppkey:19(int!null) s_comment:25(varchar!null)
-      │         │    ├── stats: [rows=3333.333, distinct(19)=3328.26, null(19)=0, distinct(25)=3333.33, null(25)=0]
+      │         │    ├── stats: [rows=3333.33, distinct(19)=3328.26, null(19)=0, distinct(25)=3333.33, null(25)=0]
       │         │    ├── key: (19)
       │         │    ├── fd: (19)-->(25)
       │         │    ├── scan supplier

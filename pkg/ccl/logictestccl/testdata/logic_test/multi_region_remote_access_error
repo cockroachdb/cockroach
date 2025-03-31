@@ -1079,7 +1079,7 @@ project
       │    ├── key columns: [26 22] = [13 9]
       │    ├── lookup columns are key
       │    ├── immutable
-      │    ├── stats: [rows=3333.333]
+      │    ├── stats: [rows=3333.33]
       │    ├── cost: 4309.11778
       │    ├── fd: ()-->(13), (9)-->(11)
       │    ├── limit hint: 1.00
@@ -1092,7 +1092,7 @@ project
       │    │    ├── prefix key columns: [21] = [26]
       │    │    ├── inverted-expr
       │    │    │    └── t1.j:24 @> t2.j:3
-      │    │    ├── stats: [rows=3333.333, distinct(21)=1, null(21)=0, distinct(22)=964.524, null(22)=0, distinct(26)=1, null(26)=0]
+      │    │    ├── stats: [rows=3333.33, distinct(21)=1, null(21)=0, distinct(22)=964.524, null(22)=0, distinct(26)=1, null(26)=0]
       │    │    ├── cost: 3837.19889
       │    │    ├── fd: ()-->(26)
       │    │    ├── limit hint: 100.00

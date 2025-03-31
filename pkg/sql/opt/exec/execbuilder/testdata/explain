@@ -1769,7 +1769,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1780,7 +1780,7 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1789,7 +1789,7 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1797,7 +1797,7 @@ distribute
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1817,7 +1817,7 @@ EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1828,7 +1828,7 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1837,7 +1837,7 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1845,7 +1845,7 @@ distribute
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1865,7 +1865,7 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1876,7 +1876,7 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1885,7 +1885,7 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1893,7 +1893,7 @@ distribute
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
@@ -1921,7 +1921,7 @@ EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1418.32951
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
@@ -1932,7 +1932,7 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.3333]
+      ├── stats: [rows=333.333]
       ├── cost: 1218.30951
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
@@ -1941,7 +1941,7 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.3333]
+           ├── stats: [rows=333.333]
            ├── cost: 1145.73667
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
@@ -1949,7 +1949,7 @@ distribute
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.3333]
+           │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc

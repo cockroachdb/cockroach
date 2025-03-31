@@ -66,18 +66,18 @@ sort
       ├── project
       │    ├── save-table-name: q12_project_3
       │    ├── columns: column30:30(int!null) column32:32(int!null) l_shipmode:26(char!null)
-      │    ├── stats: [rows=29610.71, distinct(26)=2, null(26)=0, distinct(30)=5, null(30)=0, distinct(32)=5, null(32)=0]
+      │    ├── stats: [rows=29610.7, distinct(26)=2, null(26)=0, distinct(30)=5, null(30)=0, distinct(32)=5, null(32)=0]
       │    ├── inner-join (lookup orders)
       │    │    ├── save-table-name: q12_lookup_join_4
       │    │    ├── columns: o_orderkey:1(int!null) o_orderpriority:6(char!null) l_orderkey:12(int!null) l_shipdate:22(date!null) l_commitdate:23(date!null) l_receiptdate:24(date!null) l_shipmode:26(char!null)
       │    │    ├── key columns: [12] = [1]
       │    │    ├── lookup columns are key
-      │    │    ├── stats: [rows=29610.71, distinct(1)=29397.4, null(1)=0, distinct(6)=5, null(6)=0, distinct(12)=29397.4, null(12)=0, distinct(22)=2525.98, null(22)=0, distinct(23)=2465.98, null(23)=0, distinct(24)=365, null(24)=0, distinct(26)=2, null(26)=0]
+      │    │    ├── stats: [rows=29610.7, distinct(1)=29397.4, null(1)=0, distinct(6)=5, null(6)=0, distinct(12)=29397.4, null(12)=0, distinct(22)=2525.98, null(22)=0, distinct(23)=2465.98, null(23)=0, distinct(24)=365, null(24)=0, distinct(26)=2, null(26)=0]
       │    │    ├── fd: (1)-->(6), (1)==(12), (12)==(1)
       │    │    ├── select
       │    │    │    ├── save-table-name: q12_select_5
       │    │    │    ├── columns: l_orderkey:12(int!null) l_shipdate:22(date!null) l_commitdate:23(date!null) l_receiptdate:24(date!null) l_shipmode:26(char!null)
-      │    │    │    ├── stats: [rows=29610.71, distinct(12)=29397.4, null(12)=0, distinct(22)=2526, null(22)=0, distinct(23)=2466, null(23)=0, distinct(24)=365, null(24)=0, distinct(26)=2, null(26)=0, distinct(24,26)=730, null(24,26)=0]
+      │    │    │    ├── stats: [rows=29610.7, distinct(12)=29397.4, null(12)=0, distinct(22)=2526, null(22)=0, distinct(23)=2466, null(23)=0, distinct(24)=365, null(24)=0, distinct(26)=2, null(26)=0, distinct(24,26)=730, null(24,26)=0]
       │    │    │    │   histogram(24)=  0     94.925     797.26     132.88     816.24     132.88     835.22     151.86     835.22     94.925     854.2     132.88     911.17     37.957     835.22     113.9      835.22     132.88     873.18     94.925     854.2     94.925     873.18     151.86     911.17     37.957     911.17     37.957     854.2     75.915     911.17     18.979     835.22     132.88     911.17     75.915     911.17     37.957     854.2     75.915     892.19     56.936     854.2     94.925     911.17     37.957     816.24     113.9      911.17     151.86     835.22     113.9      892.19     37.957     873.18     94.925     892.19     94.925     873.18     132.88     854.2     94.925     622.63     77.828
       │    │    │    │                 <--- '1994-01-01' -------- '1994-01-13' -------- '1994-01-25' -------- '1994-02-06' -------- '1994-02-18' ------- '1994-03-02' -------- '1994-03-15' -------- '1994-03-28' -------- '1994-04-12' -------- '1994-04-23' ------- '1994-05-08' -------- '1994-05-18' -------- '1994-05-30' -------- '1994-06-11' ------- '1994-06-20' -------- '1994-06-30' -------- '1994-07-10' -------- '1994-07-23' -------- '1994-08-05' ------- '1994-08-15' -------- '1994-08-29' ------- '1994-09-09' -------- '1994-09-21' -------- '1994-09-30' -------- '1994-10-12' -------- '1994-10-22' -------- '1994-11-01' -------- '1994-11-12' -------- '1994-11-27' -------- '1994-12-11' ------- '1994-12-22' -------- '1994-12-31'
       │    │    │    │   histogram(26)=  0  14805   0  14805

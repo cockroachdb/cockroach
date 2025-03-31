@@ -62,21 +62,21 @@ project
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── stats: [rows=2008.967, distinct(2)=200.094, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2006.79, null(6)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
+ │    │    ├── stats: [rows=2008.97, distinct(2)=200.094, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2006.79, null(6)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
  │    │    ├── fd: (19)-->(49), (2)==(19), (19)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── save-table-name: q17_lookup_join_4
  │    │    │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) p_partkey:19(int!null) "?column?":49(float!null)
  │    │    │    ├── key columns: [19] = [2]
  │    │    │    ├── immutable
- │    │    │    ├── stats: [rows=6026.901, distinct(1)=6015.04, null(1)=0, distinct(2)=200.094, null(2)=0, distinct(4)=7, null(4)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
+ │    │    │    ├── stats: [rows=6026.9, distinct(1)=6015.04, null(1)=0, distinct(2)=200.094, null(2)=0, distinct(4)=7, null(4)=0, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
  │    │    │    ├── key: (1,4)
  │    │    │    ├── fd: (19)-->(49), (1,4)-->(2), (2)==(19), (19)==(2)
  │    │    │    ├── project
  │    │    │    │    ├── save-table-name: q17_project_5
  │    │    │    │    ├── columns: "?column?":49(float!null) p_partkey:19(int!null)
  │    │    │    │    ├── immutable
- │    │    │    │    ├── stats: [rows=200.0938, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
+ │    │    │    │    ├── stats: [rows=200.094, distinct(19)=200.094, null(19)=0, distinct(49)=200.094, null(49)=0]
  │    │    │    │    ├── key: (19)
  │    │    │    │    ├── fd: (19)-->(49)
  │    │    │    │    ├── group-by (streaming)
@@ -84,7 +84,7 @@ project
  │    │    │    │    │    ├── columns: p_partkey:19(int!null) avg:48(float!null)
  │    │    │    │    │    ├── grouping columns: p_partkey:19(int!null)
  │    │    │    │    │    ├── internal-ordering: +(19|31) opt(22,25)
- │    │    │    │    │    ├── stats: [rows=200.0938, distinct(19)=200.094, null(19)=0, distinct(48)=200.094, null(48)=0]
+ │    │    │    │    │    ├── stats: [rows=200.094, distinct(19)=200.094, null(19)=0, distinct(48)=200.094, null(48)=0]
  │    │    │    │    │    ├── key: (19)
  │    │    │    │    │    ├── fd: (19)-->(48)
  │    │    │    │    │    ├── inner-join (lookup lineitem)
@@ -92,21 +92,21 @@ project
  │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null) l_partkey:31(int!null) l_quantity:34(float!null)
  │    │    │    │    │    │    ├── key columns: [30 33] = [30 33]
  │    │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    │    ├── stats: [rows=6026.912, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(31)=200.094, null(31)=0, distinct(34)=50, null(34)=0]
+ │    │    │    │    │    │    ├── stats: [rows=6026.91, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(31)=200.094, null(31)=0, distinct(34)=50, null(34)=0]
  │    │    │    │    │    │    ├── fd: ()-->(22,25), (19)==(31), (31)==(19)
  │    │    │    │    │    │    ├── ordering: +(19|31) opt(22,25) [actual: +19]
  │    │    │    │    │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    │    │    │    │    ├── save-table-name: q17_lookup_join_8
  │    │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null) l_orderkey:30(int!null) l_partkey:31(int!null) l_linenumber:33(int!null)
  │    │    │    │    │    │    │    ├── key columns: [19] = [31]
- │    │    │    │    │    │    │    ├── stats: [rows=6026.912, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(30)=6015.05, null(30)=0, distinct(31)=200.094, null(31)=0, distinct(33)=7, null(33)=0]
+ │    │    │    │    │    │    │    ├── stats: [rows=6026.91, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(30)=6015.05, null(30)=0, distinct(31)=200.094, null(31)=0, distinct(33)=7, null(33)=0]
  │    │    │    │    │    │    │    ├── key: (30,33)
  │    │    │    │    │    │    │    ├── fd: ()-->(22,25), (30,33)-->(31), (19)==(31), (31)==(19)
  │    │    │    │    │    │    │    ├── ordering: +(19|31) opt(22,25) [actual: +19]
  │    │    │    │    │    │    │    ├── select
  │    │    │    │    │    │    │    │    ├── save-table-name: q17_select_9
  │    │    │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null)
- │    │    │    │    │    │    │    │    ├── stats: [rows=200.0942, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(22,25)=1, null(22,25)=0]
+ │    │    │    │    │    │    │    │    ├── stats: [rows=200.094, distinct(19)=200.094, null(19)=0, distinct(22)=1, null(22)=0, distinct(25)=1, null(25)=0, distinct(22,25)=1, null(22,25)=0]
  │    │    │    │    │    │    │    │    │   histogram(22)=  0    200.09
  │    │    │    │    │    │    │    │    │                 <--- 'Brand#23'
  │    │    │    │    │    │    │    │    │   histogram(25)=  0   200.09

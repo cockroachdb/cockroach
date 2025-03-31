@@ -1591,7 +1591,7 @@ root
            │    │    ├── select
            │    │    │    ├── columns: p_old:16(int!null) p_new:17(int!null)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=0.3333333, distinct(16)=0.333333, null(16)=0, distinct(17)=0.333333, null(17)=0]
+           │    │    │    ├── stats: [rows=0.333333, distinct(16)=0.333333, null(16)=0, distinct(17)=0.333333, null(17)=0]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(16,17)
            │    │    │    ├── with-scan &1

@@ -49,7 +49,7 @@ expr
 left-join (lookup t.public.abc@ab)
  ├── columns: t.public.abc.a:7(int) t.public.abc.b:8(int)
  ├── key columns: [7] = [7]
- ├── stats: [rows=3333.333, distinct(7)=100, null(7)=33.3333]
+ ├── stats: [rows=3333.33, distinct(7)=100, null(7)=33.3333]
  ├── cost: 41692.65
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
@@ -122,7 +122,7 @@ expr
 inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  ├── immutable
- ├── stats: [rows=333333.3]
+ ├── stats: [rows=333333]
  ├── cost: 5698.99479
  ├── prune: (9)
  ├── interesting orderings: (+1,+2)
@@ -140,7 +140,7 @@ inner-join-apply
  │    ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  │    ├── outer: (1)
  │    ├── immutable
- │    ├── stats: [rows=333.3333, distinct(1)=1, null(1)=0]
+ │    ├── stats: [rows=333.333, distinct(1)=1, null(1)=0]
  │    ├── cost: 1108.75
  │    ├── prune: (9)
  │    ├── scan t.public.def
