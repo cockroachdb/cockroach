@@ -860,6 +860,7 @@ func maybeCreateVirtualColumnForIndex(
 	// TODO(postamar): call addColumn instead of building AST.
 	d := &tree.ColumnTableDef{
 		Name: tree.Name(colName),
+		Type: types.AnyElement,
 	}
 	d.Computed.Computed = true
 	d.Computed.Virtual = true
@@ -867,13 +868,9 @@ func maybeCreateVirtualColumnForIndex(
 	d.Nullable.Nullability = tree.Null
 	// Infer column type from expression.
 	{
-		replacedExpr := b.ComputedColumnExpression(tbl, d)
-		typedExpr, err := tree.TypeCheck(b, replacedExpr, b.SemaCtx(), types.AnyElement)
-		if err != nil {
-			panic(err)
-		}
-		d.Type = typedExpr.ResolvedType()
-		validateColumnIndexableType(typedExpr.ResolvedType())
+		_, columnType := b.ComputedColumnExpression(tbl, d, tree.ExpressionIndexElementExpr)
+		d.Type = columnType
+		validateColumnIndexableType(columnType)
 	}
 	alterTableAddColumn(b, tn, tbl, stmt, &tree.AlterTableAddColumn{ColumnDef: d})
 	// When a virtual column for an index expression gets added for CREATE INDEX
