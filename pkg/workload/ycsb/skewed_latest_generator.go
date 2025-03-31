@@ -6,8 +6,9 @@
 package ycsb
 
 import (
+	"math/rand/v2"
+
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"golang.org/x/exp/rand"
 )
 
 // SkewedLatestGenerator is a random number generator that generates numbers in
