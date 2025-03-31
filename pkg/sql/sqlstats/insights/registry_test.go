@@ -53,6 +53,7 @@ func TestRegistry(t *testing.T) {
 				},
 				stmts: []*sqlstats.RecordedStmtStats{
 					{
+						SessionID:         session.ID,
 						StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 						FingerprintID:     appstatspb.StmtFingerprintID(100),
 						ServiceLatencySec: 2,
@@ -72,7 +73,7 @@ func TestRegistry(t *testing.T) {
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
 
-		registry.ObserveStatement(session.ID, txns[0].stmts[0])
+		registry.ObserveStatement(txns[0].stmts[0])
 		registry.ObserveTransaction(session.ID, txns[0].txn)
 
 		expected := []*Insight{{
@@ -97,6 +98,7 @@ func TestRegistry(t *testing.T) {
 		// when the transaction does not have this information.
 		txn := &sqlstats.RecordedTxnStats{TransactionID: uuid.MakeV4(), Committed: false}
 		stmt := &sqlstats.RecordedStmtStats{
+			SessionID:         session.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 2,
@@ -123,7 +125,7 @@ func TestRegistry(t *testing.T) {
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
-		registry.ObserveStatement(session.ID, stmt)
+		registry.ObserveStatement(stmt)
 		// Transaction status is set during transaction stats recorded based on
 		// if the transaction committed. We'll inject the failure here to align
 		// it with the test. The insights integration tests will verify that this
@@ -152,6 +154,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		transaction := &sqlstats.RecordedTxnStats{TransactionID: uuid.MakeV4(), Committed: true}
 		statement := &sqlstats.RecordedStmtStats{
+			SessionID:         session.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 2,
@@ -160,7 +163,7 @@ func TestRegistry(t *testing.T) {
 		LatencyThreshold.Override(ctx, &st.SV, 0)
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
-		registry.ObserveStatement(session.ID, statement)
+		registry.ObserveStatement(statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		var actual []*Insight
@@ -178,13 +181,14 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		stmt := &sqlstats.RecordedStmtStats{
+			SessionID:         session.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 0.5,
 		}
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
-		registry.ObserveStatement(session.ID, stmt)
+		registry.ObserveStatement(stmt)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		var actual []*Insight
@@ -210,6 +214,7 @@ func TestRegistry(t *testing.T) {
 				},
 				stmts: []*sqlstats.RecordedStmtStats{
 					{
+						SessionID:         session.ID,
 						StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 						FingerprintID:     appstatspb.StmtFingerprintID(100),
 						ServiceLatencySec: 2,
@@ -224,6 +229,7 @@ func TestRegistry(t *testing.T) {
 				},
 				stmts: []*sqlstats.RecordedStmtStats{
 					{
+						SessionID:         otherSession.ID,
 						StatementID:       clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 						FingerprintID:     appstatspb.StmtFingerprintID(101),
 						ServiceLatencySec: 3,
@@ -265,7 +271,7 @@ func TestRegistry(t *testing.T) {
 
 		for _, txn := range txns {
 			for _, stmt := range txn.stmts {
-				registry.ObserveStatement(txn.sessionID, stmt)
+				registry.ObserveStatement(stmt)
 			}
 			registry.ObserveTransaction(txn.sessionID, txn.txn)
 		}
@@ -289,11 +295,13 @@ func TestRegistry(t *testing.T) {
 	t.Run("sibling statements without problems", func(t *testing.T) {
 		transaction := &sqlstats.RecordedTxnStats{TransactionID: uuid.MakeV4(), Committed: true}
 		statement := &sqlstats.RecordedStmtStats{
+			SessionID:         session.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 2,
 		}
 		siblingStatement := &sqlstats.RecordedStmtStats{
+			SessionID:     session.ID,
 			StatementID:   clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 			FingerprintID: appstatspb.StmtFingerprintID(101),
 		}
@@ -322,8 +330,8 @@ func TestRegistry(t *testing.T) {
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
-		registry.ObserveStatement(session.ID, statement)
-		registry.ObserveStatement(session.ID, siblingStatement)
+		registry.ObserveStatement(statement)
+		registry.ObserveStatement(siblingStatement)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		var actual []*Insight
@@ -350,6 +358,7 @@ func TestRegistry(t *testing.T) {
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
 		contentionDuration := 10 * time.Second
 		statement := &sqlstats.RecordedStmtStats{
+			SessionID:         session.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 0.00001,
@@ -362,7 +371,7 @@ func TestRegistry(t *testing.T) {
 			},
 		}
 
-		registry.ObserveStatement(session.ID, statement)
+		registry.ObserveStatement(statement)
 		registry.ObserveTransaction(session.ID, txnHighContention)
 
 		expected := []*Insight{
@@ -398,18 +407,21 @@ func TestRegistry(t *testing.T) {
 		stmts := []*sqlstats.RecordedStmtStats{
 			// copy the statement objects below:
 			{
+				SessionID:         session.ID,
 				StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 				FingerprintID:     appstatspb.StmtFingerprintID(100),
 				ServiceLatencySec: 2,
 				Query:             "SELECT * FROM users",
 			},
 			{
+				SessionID:         session.ID,
 				StatementID:       clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 				FingerprintID:     appstatspb.StmtFingerprintID(101),
 				ServiceLatencySec: 2,
 				Query:             "SET vectorize = '_'",
 			},
 			{
+				SessionID:         session.ID,
 				StatementID:       clusterunique.IDFromBytes([]byte("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")),
 				FingerprintID:     appstatspb.StmtFingerprintID(102),
 				ServiceLatencySec: 2,
@@ -442,7 +454,7 @@ func TestRegistry(t *testing.T) {
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store, nil)
 		for _, s := range stmts {
-			registry.ObserveStatement(session.ID, s)
+			registry.ObserveStatement(s)
 		}
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -481,14 +493,21 @@ func TestInsightsRegistry_Clear(t *testing.T) {
 		// Create some test data.
 		sessionA := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 		sessionB := Session{ID: clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))}
-		statement := &sqlstats.RecordedStmtStats{
+		statementA := &sqlstats.RecordedStmtStats{
+			SessionID:         sessionA.ID,
+			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+			FingerprintID:     appstatspb.StmtFingerprintID(100),
+			ServiceLatencySec: 2,
+		}
+		statementB := &sqlstats.RecordedStmtStats{
+			SessionID:         sessionB.ID,
 			StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:     appstatspb.StmtFingerprintID(100),
 			ServiceLatencySec: 2,
 		}
 		// Record the test data, assert it's cached.
-		registry.ObserveStatement(sessionA.ID, statement)
-		registry.ObserveStatement(sessionB.ID, statement)
+		registry.ObserveStatement(statementA)
+		registry.ObserveStatement(statementB)
 		expLenStmts := 2
 		// No need to acquire the lock here, as the registry is not attached to anything.
 		require.Len(t, registry.statements, expLenStmts)
@@ -510,16 +529,24 @@ func TestInsightsRegistry_ClearSession(t *testing.T) {
 	// Create some test data.
 	sessionA := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 	sessionB := Session{ID: clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))}
-	statement := &sqlstats.RecordedStmtStats{
+	statementA := &sqlstats.RecordedStmtStats{
 		Failed:            false,
+		SessionID:         sessionA.ID,
+		StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+		FingerprintID:     appstatspb.StmtFingerprintID(100),
+		ServiceLatencySec: 2,
+	}
+	statementB := &sqlstats.RecordedStmtStats{
+		Failed:            false,
+		SessionID:         sessionB.ID,
 		StatementID:       clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 		FingerprintID:     appstatspb.StmtFingerprintID(100),
 		ServiceLatencySec: 2,
 	}
 
 	// Record the test data, assert it's cached.
-	registry.ObserveStatement(sessionA.ID, statement)
-	registry.ObserveStatement(sessionB.ID, statement)
+	registry.ObserveStatement(statementA)
+	registry.ObserveStatement(statementB)
 	// No need to acquire the lock here, as the registry is not attached to anything.
 	require.Len(t, registry.statements, 2)
 
