@@ -3352,10 +3352,85 @@ SELECT (
 FROM table3_119441 AS baz;
 ----
 project
- ├── columns: col3_5:28(varchar!null)
+ ├── columns: col3_5:28(varchar)
  ├── prune: (28)
- ├── scan table3_119441 [as=baz]
- │    ├── columns: baz.col3_5:1(varchar!null)
- │    └── prune: (1)
+ ├── reject-nulls: (28)
+ ├── left-join-apply
+ │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char) col3_5:27(varchar)
+ │    ├── prune: (27)
+ │    ├── reject-nulls: (27)
+ │    ├── scan table3_119441 [as=baz]
+ │    │    ├── columns: baz.col3_5:1(varchar!null) baz.col3_11:2(char)
+ │    │    ├── prune: (1,2)
+ │    │    └── unfiltered-cols: (1-6)
+ │    ├── project
+ │    │    ├── columns: col3_5:27(varchar)
+ │    │    ├── outer: (1,2)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(27)
+ │    │    ├── prune: (27)
+ │    │    ├── limit
+ │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
+ │    │    │    ├── outer: (2)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8-10,14-16,22), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
+ │    │    │    ├── interesting orderings: (+(9|10)) (+22)
+ │    │    │    ├── inner-join (hash)
+ │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4!null) col2_2:15(string!null) col2_3:16(bytes!null) table3_119441.col3_16:22(int!null)
+ │    │    │    │    ├── outer: (2)
+ │    │    │    │    ├── fd: ()-->(9,10,15), (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8), (14)==(22), (22)==(14)
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── interesting orderings: (+(9|10)) (+22)
+ │    │    │    │    ├── top-k
+ │    │    │    │    │    ├── columns: table3_119441.col3_16:22(int)
+ │    │    │    │    │    ├── internal-ordering: +22
+ │    │    │    │    │    ├── k: 6
+ │    │    │    │    │    ├── cardinality: [0 - 6]
+ │    │    │    │    │    ├── interesting orderings: (+22)
+ │    │    │    │    │    └── scan table3_119441
+ │    │    │    │    │         ├── columns: table3_119441.col3_16:22(int)
+ │    │    │    │    │         └── prune: (22)
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── columns: col1_8:8(bytes!null) col1_11:9(string!null) col1_12:10(string!null) col2_1:14(int4) col2_2:15(string!null) col2_3:16(bytes!null)
+ │    │    │    │    │    ├── fd: (9)==(10,15), (10)==(9,15), (15)==(9,10), (8)==(16), (16)==(8)
+ │    │    │    │    │    ├── prune: (14)
+ │    │    │    │    │    ├── interesting orderings: (+(9|10))
+ │    │    │    │    │    ├── scan table2_119441
+ │    │    │    │    │    │    ├── columns: col2_1:14(int4) col2_2:15(string) col2_3:16(bytes)
+ │    │    │    │    │    │    ├── prune: (14-16)
+ │    │    │    │    │    │    └── unfiltered-cols: (14-19)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string!null) col1_12:10(string!null)
+ │    │    │    │    │    │    ├── fd: (9)==(10), (10)==(9)
+ │    │    │    │    │    │    ├── prune: (8)
+ │    │    │    │    │    │    ├── interesting orderings: (+(9|10))
+ │    │    │    │    │    │    ├── scan table1_119441
+ │    │    │    │    │    │    │    ├── columns: col1_8:8(bytes) col1_11:9(string) col1_12:10(string)
+ │    │    │    │    │    │    │    ├── prune: (8-10)
+ │    │    │    │    │    │    │    └── interesting orderings: (+9)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── eq [type=bool, outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+ │    │    │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │    │    │              └── variable: col1_12:10 [type=string]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── eq [type=bool, outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+ │    │    │    │    │         │    ├── variable: col1_8:8 [type=bytes]
+ │    │    │    │    │         │    └── variable: col2_3:16 [type=bytes]
+ │    │    │    │    │         └── eq [type=bool, outer=(9,15), constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+ │    │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │    │              └── variable: col2_2:15 [type=string]
+ │    │    │    │    └── filters
+ │    │    │    │         ├── eq [type=bool, outer=(14,22), constraints=(/14: (/NULL - ]; /22: (/NULL - ]), fd=(14)==(22), (22)==(14)]
+ │    │    │    │         │    ├── variable: col2_1:14 [type=int4]
+ │    │    │    │         │    └── variable: table3_119441.col3_16:22 [type=int]
+ │    │    │    │         └── eq [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+ │    │    │    │              ├── variable: col1_11:9 [type=string]
+ │    │    │    │              └── variable: baz.col3_11:2 [type=char]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── projections
+ │    │         └── variable: baz.col3_5:1 [as=col3_5:27, type=varchar, outer=(1)]
+ │    └── filters (true)
  └── projections
-      └── variable: baz.col3_5:1 [as=col3_5:28, type=varchar, outer=(1)]
+      └── variable: col3_5:27 [as=col3_5:28, type=varchar, outer=(27)]
