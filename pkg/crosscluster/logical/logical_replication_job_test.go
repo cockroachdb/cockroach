@@ -1047,6 +1047,51 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	}
 }
 
+func TestMismatchColIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, s, sqlA, sqlB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer tc.Stopper().Stop(ctx)
+
+	rng, _ := randutil.NewPseudoRand()
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+
+	createStmt := fmt.Sprintf("CREATE TABLE foo (pk int primary key, payload string)")
+	sqlA.Exec(t, createStmt)
+	sqlA.Exec(t, "ALTER TABLE foo ADD COLUMN baz INT DEFAULT 2")
+
+	// Insert some data into foo
+	sqlA.Exec(t, "INSERT INTO foo VALUES (1, 'hello')")
+	sqlA.Exec(t, "INSERT INTO foo VALUES (2, 'world')")
+
+	sqlB.Exec(t, createStmt)
+	sqlB.Exec(t, "ALTER TABLE foo ADD COLUMN bar INT DEFAULT 2")
+
+	sqlB.Exec(t, "ALTER TABLE foo ADD COLUMN baz INT DEFAULT 2")
+	sqlB.Exec(t, "INSERT INTO foo VALUES (3, 'hello', 3)")
+	sqlB.Exec(t, "ALTER TABLE foo DROP COLUMN bar")
+	sqlB.Exec(t, "INSERT INTO foo VALUES (4, 'world')")
+
+	var jobBID jobspb.JobID
+	createLDRQuery := replicationtestutils.CreateLDRStmtWithRandomMode(rng, "CREATE LOGICAL REPLICATION STREAM FROM TABLE foo ON $1 INTO TABLE foo WITH MODE = ")
+	t.Logf("creating replication stream with query: %s", createLDRQuery)
+	sqlB.QueryRow(t, createLDRQuery, dbAURL.String()).Scan(&jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), sqlB, jobBID)
+
+	var jobAID jobspb.JobID
+	sqlA.QueryRow(t, createLDRQuery, dbBURL.String()).Scan(&jobAID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), sqlA, jobAID)
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, sqlA.DB, "a"))
+	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, sqlB.DB, "b"))
+	compareReplicatedTables(t, s, "a", "b", "foo", sqlA, sqlB)
+
+}
+
 // TestLogicalAutoReplan asserts that if a new node can participate in the
 // logical replication job, it will trigger distSQL replanning.
 func TestLogicalAutoReplan(t *testing.T) {

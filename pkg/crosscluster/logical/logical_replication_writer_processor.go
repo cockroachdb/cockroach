@@ -678,6 +678,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	if err != nil {
 		return err
 	}
+
 	// Put any events that failed to apply into purgatory (flushing if needed).
 	if err := lrw.purgatory.Store(ctx, unapplied, unappliedBytes); err != nil {
 		return err
@@ -1084,16 +1085,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
 	err error, eligibility retryEligibility,
 ) retryEligibility {
-	if eligibility != retryAllowed {
-		return eligibility
-	}
 
-	if errors.Is(err, errInjected) {
-		return tooOld
-	}
-
-	// TODO(dt): maybe this should only be constraint violation errors?
-	return retryAllowed
+	return errType
 }
 
 const logAllDLQs = true

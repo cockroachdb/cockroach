@@ -8,6 +8,7 @@ package replicationtestutils
 import (
 	"context"
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
@@ -38,4 +39,14 @@ func CheckEmptyDLQs(ctx context.Context, db sqlutils.DBHandle, dbName string) er
 		return errors.Newf("didn't find any any dlq tables in database %s", dbName)
 	}
 	return nil
+}
+
+// Randomly adds a mode to the current stmt, which must be of the form:
+// "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = "
+func CreateLDRStmtWithRandomMode(rng *rand.Rand, currentstmt string) string {
+	mode := "immediate"
+	if rng.Intn(1) == 0 {
+		mode = "validated"
+	}
+	return fmt.Sprintf("%s '%s'", currentstmt, mode)
 }
