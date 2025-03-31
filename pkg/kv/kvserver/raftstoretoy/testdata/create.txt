@@ -1,0 +1,3 @@
+create rid=10 replid=5
+----
+op123: l1

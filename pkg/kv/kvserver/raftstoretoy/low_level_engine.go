@@ -14,18 +14,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-type LLBatch interface {
+type LLBatchBase interface {
 	Put(ctx context.Context, key roachpb.Key, value []byte)
 	Del(ctx context.Context, key roachpb.Key)
+}
+
+type LLSyncedBatch interface {
+	LLBatchBase
+	Commit() error
+	Close()
+}
+
+type LLBatch interface {
+	LLBatchBase
 	Commit(sync bool) error
 	Close()
 }
 
 type LLEngine interface {
 	NewBatch() LLBatch
+	Get(key roachpb.Key) ([]byte, error)
 	Flush() error
 	Dump(w io.Writer) error
 }
+
+const tombstone = "∅"
 
 type mockBatch struct {
 	e  *mockEngine
@@ -37,7 +50,7 @@ func (b *mockBatch) Put(ctx context.Context, key roachpb.Key, value []byte) {
 }
 
 func (b *mockBatch) Del(ctx context.Context, key roachpb.Key) {
-	b.wb[string(key)] = "\x00"
+	b.wb[string(key)] = tombstone
 }
 
 func (b *mockBatch) Commit(sync bool) error {
@@ -47,6 +60,15 @@ func (b *mockBatch) Commit(sync bool) error {
 
 func (b *mockBatch) Close() {}
 
+type syncMockBatch struct {
+	mockBatch
+}
+
+func (b *syncMockBatch) Commit() error {
+	b.e.commit(b.wb, true)
+	return nil
+}
+
 type mockEngine struct {
 	vol map[string]string // in memtbl, not durable and not flushed
 	dur map[string]string // in memtbl, durable but not flushed
@@ -55,11 +77,27 @@ type mockEngine struct {
 
 var _ LLEngine = &mockEngine{}
 
+func (e *mockEngine) Get(key roachpb.Key) ([]byte, error) {
+	for _, m := range []map[string]string{e.vol, e.dur, e.lsm} {
+		if v, ok := m[string(key)]; ok && v != tombstone {
+			return []byte(v), nil
+		}
+	}
+	return nil, nil
+}
+
 func (e *mockEngine) NewBatch() LLBatch {
 	return &mockBatch{
 		e:  e,
 		wb: make(map[string]string),
 	}
+}
+
+func (e *mockEngine) NewSyncedBatch() LLSyncedBatch {
+	return &syncMockBatch{mockBatch{
+		e:  e,
+		wb: make(map[string]string),
+	}}
 }
 
 func (e *mockEngine) commit(wb map[string]string, sync bool) {
@@ -91,11 +129,16 @@ func (e *mockEngine) Flush() error {
 	}
 	e.dur = nil
 	for k, v := range e.lsm {
-		if v == "\x00" {
+		if v == tombstone {
 			delete(e.lsm, k)
 		}
 	}
 	return nil
+}
+
+func (e *mockEngine) Crash() {
+	e.vol = nil
+	_ = e.Flush() // simulate WAL replay at startup
 }
 
 func (e *mockEngine) Dump(w io.Writer) error {

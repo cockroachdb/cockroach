@@ -1,10 +1,12 @@
 syntax = "proto3";
-package cockroach.kv.kvserver.raftstoretoy.wagpb;
-option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/wagpb";
+package cockroach.kv.kvserver.raftstoretoy.rspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb";
 
 import "gogoproto/gogo.proto";
 
 message CreateOp {
-  uint64 range_id =    1 [(gogoproto.customname)="RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  uint64 replica_id =  2 [(gogoproto.customname)="ReplicaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  uint64 wag_index =    1 [(gogoproto.customname)="WAGIndex", (gogoproto.casttype) = "WAGIndex"];
+  uint64 range_id =    2 [(gogoproto.customname)="RangeID", (gogoproto.casttype) = "RangeID"];
+  uint64 replica_id =  3 [(gogoproto.customname)="ReplicaID", (gogoproto.casttype) = "ReplicaID"];
+  uint64 log_id =  4 [(gogoproto.customname)="LogID", (gogoproto.casttype) = "LogID"];
 }

@@ -5,20 +5,12 @@
 
 package raftstoretoy
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
-)
-
-type WAGIndex uint64
-
-func (i WAGIndex) String() string { return fmt.Sprintf("op%d", i) }
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rspb"
 
 // ReplicaPos reflects the durable state of a Replica as persisted in the log
 // engine. The aim of WAG recovery is to replay operations from the WAG to
 // this end state.
 type ReplicaPos struct {
 	ID       rspb.FullLogID
-	WAGIndex WAGIndex // WAG operation to replay to
+	WAGIndex rspb.WAGIndex // WAG operation to replay to
 }

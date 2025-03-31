@@ -24,7 +24,7 @@ const (
 // LogPosition identifies a specific position in a Raft log.
 type LogPosition struct {
 	rspb.LogID
-	Index RaftIndex
+	Index rspb.RaftIndex
 }
 
 // WAGDependency represents a dependency edge in the Write-Ahead Graph.

@@ -17,7 +17,26 @@ type (
 	ReplicaID roachpb.ReplicaID
 	LogID     uint16
 	RaftIndex kvpb.RaftIndex
+	WAGIndex  uint64
 )
+
+func (rid RangeID) String() string {
+	return (roachpb.RangeID(rid)).String()
+}
+
+func (replid ReplicaID) String() string {
+	return (roachpb.ReplicaID(replid)).String()
+}
+
+func (lid LogID) String() string {
+	return fmt.Sprintf("l%d", lid)
+}
+
+func (idx RaftIndex) String() string {
+	return fmt.Sprintf("ridx%d", idx)
+}
+
+func (i WAGIndex) String() string { return fmt.Sprintf("op%d", i) }
 
 // FullLogID uniquely identifies a Raft log. A Replica for a given RangeID may
 // exist under multiple (increasing) ReplicaID over its lifetime due to
