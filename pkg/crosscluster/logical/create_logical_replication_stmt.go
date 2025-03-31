@@ -477,13 +477,14 @@ func doLDRPlan(
 		}
 		for i := range srcExternalCatalog.Tables {
 			destTableDesc := dstTableDescs[i]
+			mayUseKVWriter := false
 			if details.Mode != jobspb.LogicalReplicationDetails_Validated {
 				if len(destTableDesc.OutboundForeignKeys()) > 0 || len(destTableDesc.InboundForeignKeys()) > 0 {
 					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are only supported with MODE = 'validated'")
 				}
+				mayUseKVWriter = true
 			}
-
-			err := tabledesc.CheckLogicalReplicationCompatibility(&srcExternalCatalog.Tables[i], destTableDesc.TableDesc(), skipSchemaCheck || details.CreateTable)
+			err := tabledesc.CheckLogicalReplicationCompatibility(&srcExternalCatalog.Tables[i], destTableDesc.TableDesc(), skipSchemaCheck || details.CreateTable, mayUseKVWriter)
 			if err != nil {
 				return err
 			}
