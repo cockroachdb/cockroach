@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -2536,6 +2538,12 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 	}
 
+	// If schema locked is set then we need to defer any modifications to descriptors
+	// into the job phase.
+	if err := ex.maybeDeferDescriptorUpdatesForSchemaLocked(ctx); err != nil {
+		return err
+	}
+
 	if err := ex.createJobs(ctx); err != nil {
 		return err
 	}
@@ -2582,6 +2590,86 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		return err
 	}
 	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	return nil
+}
+
+// maybeDeferDescriptorUpdatesForSchemaLocked when schema_locked is set on any
+// descriptor, the connExecutor will revert changes and defer them to the job
+// phase. This allows us to automatically unset schema_locked on a broad range
+// of schema changes in the legacy schema changer.
+func (ex *connExecutor) maybeDeferDescriptorUpdatesForSchemaLocked(ctx context.Context) error {
+	// If there are uncommitted descriptor and schema_locked needs to be unset,
+	// then lets get that done here.
+	if ex.extraTxnState.descCollection.HasUncommittedDescriptors() && ex.planner.extendedEvalCtx.ResetSchemaLockedOnCommit {
+		// We only support a legacy schema changes with a single job
+		// for manipulating schema_locked.
+		if ex.planner.extendedEvalCtx.jobs.numToCreate() > 1 {
+			return errors.AssertionFailedf("auto schema_locked unset is designed for single job only.")
+		}
+		// Pick up the job that has schema_locked set there should only be *one*.
+		// The planner.writeSchemaChange will intentionally only make a job for
+		// locked descriptor. All other descriptor wait for one versions will be
+		// driven by this  single job. Normally, for non-schema locked objects we
+		// would have one job per-descriptor.
+		var jobData *jobs.Record
+		for _, desc := range ex.extraTxnState.descCollection.GetUncommittedTables() {
+			original, _, err := ex.extraTxnState.descCollection.GetUncommittedMutableTableByID(desc.GetID())
+			if err != nil {
+				return err
+			}
+			if original != nil && original.IsSchemaLocked() {
+				jobData = ex.extraTxnState.jobs.uniqueToCreate[original.GetID()]
+				if jobData == nil {
+					continue
+				}
+				break
+			}
+		}
+		ba := ex.state.mu.txn.NewBatch()
+		// Next any descriptor modifications will be undone, and the descriptor
+		// will be "unlocked". This will ensure that any schema changes that attempt
+		// modifications will be forced to retry. The job will publish the update
+		// that we need to publish.
+		for _, desc := range ex.extraTxnState.descCollection.GetUncommittedTables() {
+			original, mutDesc, err := ex.extraTxnState.descCollection.GetUncommittedMutableTableByID(desc.GetID())
+			if err != nil {
+				return err
+			}
+			// Clear the schema locked and save the update we need to
+			// apply via the job.
+			mutDesc.SchemaLocked = false
+			// This initial update will be applied by the job, the descriptor
+			// needs to stay locked for the duration of the schema change job,
+			// if it was originally locked. Otherwise, this descriptor can be
+			// modified concurrently after.
+			if mutDesc.SchemaLocked {
+				mutDesc.SchemaLockedJobID = jobData.JobID
+			}
+			scDetails := jobData.Details.(jobspb.SchemaChangeDetails)
+			scDetails.SchemaLockedUpdates = append(scDetails.SchemaLockedUpdates, mutDesc.TableDesc())
+			if original != nil && original.IsSchemaLocked() {
+				scDetails.SchemaLockedDescIDs = append(scDetails.SchemaLockedDescIDs, desc.GetID())
+			}
+			jobData.Details = scDetails
+			// Restore the descriptor back to its original state,
+			// and only unset the schema_locked.
+			var originalMut *tabledesc.Mutable
+			if original != nil {
+				originalMut = original.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+				// The job ID here is used to track who should reset
+				// schema_locked / the job ID.
+				originalMut.SchemaLocked = false
+				originalMut.SchemaLockedJobID = jobData.JobID
+				if err := ex.extraTxnState.descCollection.WriteDescToBatch(ctx, false, originalMut, ba); err != nil {
+					return err
+				}
+			}
+		}
+		// Finally update all of the descriptors.
+		if err := ex.state.mu.txn.Run(ctx, ba); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
