@@ -69,6 +69,12 @@ type StorageAppend struct {
 	// LeadTerm is the term of the leader on whose behalf the storage write is
 	// being made. Populated if Entries or Snapshot is not empty. A non-empty
 	// LeadTerm never regresses, as well as the StorageAppend.Mark().
+	//
+	// See the StorageAppend.Mark() comment for why this term is attached.
+	//
+	// TODO(pav-kv): consider populating LeadTerm unconditionally, since there is
+	// no harm in doing so, and it can be informational. It's also nice to say
+	// that Mark() never regresses, instead of specifying when it is not empty.
 	LeadTerm uint64
 	// Responses contains messages that should be sent AFTER the updates above
 	// have been *durably* persisted in log storage. Messages addressed to the
@@ -84,6 +90,53 @@ func (m *StorageAppend) Empty() bool {
 
 // Mark returns a non-empty log mark if the storage write has a snapshot or
 // entries. Not-empty marks do not regress across consecutive storage writes.
+//
+// The log mark consists of the last accepted term and the last appended index.
+// This (term, index) tuple is consulted when durability of those log entries is
+// signaled to the unstable. If the term matches the last accepted term by the
+// time the acknowledgement is received (see unstable.stableTo), the unstable
+// log can be truncated up to the given index.
+//
+// The LogMark logic prevents temporary inconsistencies between the unstable and
+// stable log. Consider the following example with 5 nodes, A B C D E:
+//
+//  1. A is the leader.
+//  2. A proposes some log entries but only B receives these entries.
+//  3. B gets the Ready and the entries are appended asynchronously.
+//  4. A crashes and C becomes leader after getting a vote from D and E.
+//  5. C proposes some log entries and B receives these entries, overwriting the
+//     previous unstable log entries that are in the process of being appended.
+//     The entries have a larger term than the previous entries but the same
+//     indexes. It begins appending these new entries asynchronously.
+//  6. C crashes and A restarts and becomes leader again after getting the vote
+//     from D and E.
+//  7. B receives the entries from A which are the same as the ones from step 2,
+//     overwriting the previous unstable log entries that are in the process of
+//     being appended from step 5. The entries have the original terms and
+//     indexes from step 2. Recall that log entries retain their original term
+//     numbers when a leader replicates entries from previous terms. It begins
+//     appending these new entries asynchronously.
+//  8. The asynchronous log appends from the first Ready complete and stableTo
+//     is called.
+//  9. However, the log entries from the second Ready are still in the
+//     asynchronous append pipeline and will overwrite (in stable storage) the
+//     entries from the first Ready at some future point. We can't truncate the
+//     unstable log yet, or a future read from Storage might see the entries
+//     from step 5 before they have been replaced by the entries from step 7.
+//     Instead, we must wait until we are sure that the entries are stable and
+//     that no in-progress appends might overwrite them before removing entries
+//     from the unstable log.
+//
+// If accTerm has changed by the time the StorageAppendAck is signaled, the
+// acknowledgement is ignored, and the unstable log is not truncated. The
+// unstable log is only truncated when the term has remained unchanged from the
+// time that the StorageAppend was sent to the time that the response is
+// received, indicating that no new leader has overwritten the log.
+//
+// TODO(pav-kv): explain the above in simpler words, and with a diagram.
+// TODO(pav-kv): unstable entries can be partially released even if the last
+// accepted term changed, if we track the (term, index) points at which the log
+// was truncated.
 func (m *StorageAppend) Mark() LogMark {
 	if ln := len(m.Entries); ln > 0 {
 		return LogMark{Term: m.LeadTerm, Index: m.Entries[ln-1].Index}
