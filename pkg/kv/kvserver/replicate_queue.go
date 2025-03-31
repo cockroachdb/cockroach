@@ -986,7 +986,7 @@ type ReplicaLeaseMover interface {
 // This synchronous method won't work easily with simulation.
 type RangeRebalancer interface {
 	// TransferLease uses a LeaseMover interface to move a lease between stores.
-	// The QPS is used to update stats for the stores.
+	// The rangeUsageInfo is used to update stats for the stores invovled.
 	TransferLease(
 		ctx context.Context,
 		rlm ReplicaLeaseMover,
