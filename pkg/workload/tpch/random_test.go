@@ -6,18 +6,17 @@
 package tpch
 
 import (
+	"math/rand/v2"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/rand"
 )
 
 func TestRandPartName(t *testing.T) {
 	var a bufalloc.ByteAllocator
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 	seen := make(map[string]int)
 	runOneRound := func() {
 		res := randPartName(rng, &a)

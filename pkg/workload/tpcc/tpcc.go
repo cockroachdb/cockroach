@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"regexp"
 	"strconv"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
-	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -658,15 +658,15 @@ func (w *tpcc) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
 	seed := RandomSeed.Seed()
-	aCharsInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, aCharsAlphabet)
-	lettersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, lettersAlphabet)
-	numbersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, numbersAlphabet)
+	aCharsInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, aCharsAlphabet)
+	lettersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, lettersAlphabet)
+	numbersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, numbersAlphabet)
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
 				return &generateLocals{
 					rng: tpccRand{
-						Rand: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+						Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 						// Intentionally wait until here to initialize the precomputed rands
 						// so a caller of Tables that only wants schema doesn't compute
 						// them.

@@ -6,9 +6,8 @@
 package workloadimpl
 
 import (
+	"math/rand/v2"
 	"sync"
-
-	"golang.org/x/exp/rand"
 )
 
 // PrecomputedRand is a precomputed sequence of random data in some alphabet.

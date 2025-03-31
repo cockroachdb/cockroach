@@ -8,6 +8,7 @@ package concurrency
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -1524,7 +1524,6 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
 	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	const numKeys = 2
 	var items []workloadItem
@@ -1532,19 +1531,19 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	const maxStartedTxns = 10
 	const numRequests = 10000
 	for i := 0; i < numRequests; i++ {
-		ts := timestamps[rng.Intn(len(timestamps))]
-		keysPerm := rng.Perm(len(keys))
+		ts := timestamps[rand.IntN(len(timestamps))]
+		keysPerm := rand.Perm(len(keys))
 		latchSpans := &spanset.SpanSet{}
 		lockSpans := &lockspanset.LockSpanSet{}
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
-			str := strs[rand.Intn(len(strs))]
+			str := strs[rand.IntN(len(strs))]
 			sa, latchTs := latchAccessForLockStrength(str, ts)
 			latchSpans.AddMVCC(sa, span, latchTs)
 			lockSpans.Add(str, span)
 		}
 		var txn *roachpb.Transaction
-		if rng.Intn(2) == 0 {
+		if rand.IntN(2) == 0 {
 			txn = &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					ID:             nextUUID(&txnCounter),
@@ -1567,7 +1566,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 		if txn != nil {
 			startedTxnIDs = append(startedTxnIDs, txn.ID)
 		}
-		randomMaxStartedTxns := rng.Intn(maxStartedTxns)
+		randomMaxStartedTxns := rand.IntN(maxStartedTxns)
 		for len(startedTxnIDs) > randomMaxStartedTxns {
 			items = append(items, workloadItem{finish: startedTxnIDs[0]})
 			startedTxnIDs = startedTxnIDs[1:]
@@ -1594,19 +1593,18 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	possibleNumRequests := []int{1000, 3000, 10000}
 	possibleNumActiveTxns := []int{2, 4, 8, 16, 32}
 	possibleProbTxnalReq := []float64{0.9, 1, 0.75}
 	possibleProbCreateNewTxn := []float64{0.75, 0.25, 0.1}
 	possibleProbOnlyRead := []float64{0.5, 0.25}
 
-	numRequests := possibleNumRequests[rng.Intn(len(possibleNumRequests))]
-	numActiveTxns := possibleNumActiveTxns[rng.Intn(len(possibleNumActiveTxns))]
-	probTxnalReq := possibleProbTxnalReq[rng.Intn(len(possibleProbTxnalReq))] // rest will be non-txnal
-	probCreateNewTxn := possibleProbCreateNewTxn[rng.Intn(len(possibleProbTxnalReq))]
+	numRequests := possibleNumRequests[rand.IntN(len(possibleNumRequests))]
+	numActiveTxns := possibleNumActiveTxns[rand.IntN(len(possibleNumActiveTxns))]
+	probTxnalReq := possibleProbTxnalReq[rand.IntN(len(possibleProbTxnalReq))] // rest will be non-txnal
+	probCreateNewTxn := possibleProbCreateNewTxn[rand.IntN(len(possibleProbTxnalReq))]
 	probDupAccessWithWeakerStr := 0.5
-	probOnlyRead := possibleProbOnlyRead[rng.Intn(len(possibleProbOnlyRead))]
+	probOnlyRead := possibleProbOnlyRead[rand.IntN(len(possibleProbOnlyRead))]
 
 	if syncutil.DeadlockEnabled || util.RaceEnabled {
 		// We've seen 10,000 requests to be too much when running a deadlock/race
@@ -1654,25 +1652,24 @@ func testLockTableConcurrentRequests(
 		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
 	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	activeTxns := make([]*enginepb.TxnMeta, 0, numActiveTxns)
 	var items []workloadItem
 	for i := 0; i < numRequests; i++ {
 		var txnMeta *enginepb.TxnMeta
 		var ts hlc.Timestamp
 
-		if rng.Float64() < probTxnalReq {
+		if rand.Float64() < probTxnalReq {
 			// Transactional request.
-			shouldCreateNewTxn := len(activeTxns) < numActiveTxns || rng.Float64() < probCreateNewTxn
+			shouldCreateNewTxn := len(activeTxns) < numActiveTxns || rand.Float64() < probCreateNewTxn
 			if shouldCreateNewTxn {
 				numTxnsCreated++
-				ts = timestamps[rng.Intn(len(timestamps))]
+				ts = timestamps[rand.IntN(len(timestamps))]
 				txnMeta = &enginepb.TxnMeta{
 					ID:             nextUUID(&txnCounter),
 					WriteTimestamp: ts,
 				}
 				if len(activeTxns) == numActiveTxns {
-					txnIndex := rng.Intn(numActiveTxns)
+					txnIndex := rand.IntN(numActiveTxns)
 					// We've reached the maximum number of active transactions the test
 					// desires; replace an existing transaction.
 					oldTxn := activeTxns[txnIndex]
@@ -1682,19 +1679,19 @@ func testLockTableConcurrentRequests(
 					activeTxns = append(activeTxns, txnMeta)
 				}
 			} else {
-				txnIndex := rng.Intn(numActiveTxns)
+				txnIndex := rand.IntN(numActiveTxns)
 				txnMeta = activeTxns[txnIndex]
 				ts = txnMeta.WriteTimestamp
 			}
 		} else {
 			// Create a non-transactional request.
-			ts = timestamps[rng.Intn(len(timestamps))]
+			ts = timestamps[rand.IntN(len(timestamps))]
 		}
-		keysPerm := rng.Perm(len(keys))
+		keysPerm := rand.Perm(len(keys))
 		latchSpans := &spanset.SpanSet{}
 		lockSpans := &lockspanset.LockSpanSet{}
-		onlyReads := txnMeta == nil && rng.Float64() < probOnlyRead
-		numKeys := rng.Intn(len(keys)-1) + 1
+		onlyReads := txnMeta == nil && rand.Float64() < probOnlyRead
+		numKeys := rand.IntN(len(keys)-1) + 1
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = ts
 		request := &Request{
@@ -1716,7 +1713,7 @@ func testLockTableConcurrentRequests(
 			str := lock.None
 			if !onlyReads && txnMeta != nil {
 				// Randomly select a lock strength (including lock.None).
-				str = strs[rand.Intn(len(strs))]
+				str = strs[rand.IntN(len(strs))]
 			}
 			sa, latchTs := latchAccessForLockStrength(str, ts)
 			latchSpans.AddMVCC(sa, span, latchTs)
@@ -1725,7 +1722,7 @@ func testLockTableConcurrentRequests(
 				// Randomly select a lock durability. Shared and Exclusive locks
 				// can be unreplicated, but Intent can not.
 				dur := lock.Replicated
-				if str != lock.Intent && rng.Intn(2) == 0 {
+				if str != lock.Intent && rand.IntN(2) == 0 {
 					dur = lock.Unreplicated
 				}
 				toAcq := lockToAcquire{span.Key, str, dur}
@@ -1733,18 +1730,18 @@ func testLockTableConcurrentRequests(
 			}
 
 			dupAccess := str != lock.None && // nothing weaker than lock.None
-				rng.Float64() < probDupAccessWithWeakerStr
+				rand.Float64() < probDupAccessWithWeakerStr
 
 			if dupAccess {
 				dupStr := lock.None // only thing weaker
 				switch str {
 				case lock.Shared:
 				case lock.Exclusive:
-					if rng.Intn(2) == 0 {
+					if rand.IntN(2) == 0 {
 						dupStr = lock.Shared
 					}
 				case lock.Intent:
-					rn := rng.Intn(3)
+					rn := rand.IntN(3)
 					if rn == 0 {
 						dupStr = lock.Shared
 					} else if rn == 1 {

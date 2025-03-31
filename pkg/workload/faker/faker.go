@@ -5,7 +5,7 @@
 
 package faker
 
-import "golang.org/x/exp/rand"
+import "math/rand/v2"
 
 // This is a rough go port of https://github.com/joke2k/faker.
 
@@ -62,5 +62,5 @@ func (e *weightedEntries) Rand(rng *rand.Rand) interface{} {
 }
 
 func randInt(rng *rand.Rand, minInclusive, maxInclusive int) int {
-	return rng.Intn(maxInclusive-minInclusive+1) + minInclusive
+	return rng.IntN(maxInclusive-minInclusive+1) + minInclusive
 }

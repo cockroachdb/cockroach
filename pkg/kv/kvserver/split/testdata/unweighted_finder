@@ -7,4 +7,4 @@ finder weighted=false
 eval seed=2022 iterations=100
 ----
 description                                            no_key(%)  avg_diff(%)  max_diff(%)  avg_optimal_diff(%)  max_optimal_diff(%)
-w=uni(1)/k=zip(10000000000)/s=uni(1000)/s(%)=95/13000  1.00       4.65         26.64        0.00                 0.01
+w=uni(1)/k=zip(10000000000)/s=uni(1000)/s(%)=95/13000  1.00       4.54         21.18        0.00                 0.01
