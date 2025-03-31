@@ -134,14 +134,16 @@ const (
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
-	descID            descpb.ID
-	mutationID        descpb.MutationID
-	droppedDatabaseID descpb.ID
-	droppedSchemaIDs  catalog.DescriptorIDSet
-	droppedFnIDs      catalog.DescriptorIDSet
-	sqlInstanceID     base.SQLInstanceID
-	leaseMgr          *lease.Manager
-	db                isql.DB
+	descID             descpb.ID
+	schemaLockedDescs  catalog.DescriptorIDSet
+	mutationID         descpb.MutationID
+	droppedDatabaseID  descpb.ID
+	droppedSchemaIDs   catalog.DescriptorIDSet
+	droppedFnIDs       catalog.DescriptorIDSet
+	initialDescUpdates []*descpb.TableDescriptor
+	sqlInstanceID      base.SQLInstanceID
+	leaseMgr           *lease.Manager
+	db                 isql.DB
 
 	metrics *SchemaChangerMetrics
 
@@ -789,6 +791,12 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
+	// Apply any initial descriptor updates before anything else
+	// gets done.
+	if err := sc.maybeApplyInitialDescriptorUpdates(ctx); err != nil {
+		return err
+	}
+
 	// Pull out the requested descriptor.
 	desc, err := sc.getTargetDescriptor(ctx)
 	if err != nil {
@@ -848,6 +856,11 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 		// updated.
 		if refreshStats {
 			sc.refreshStats(latestDesc)
+		}
+		// Finally, once everything is done we can revert the schema_locked
+		// flag at the end on table descriptors.
+		if err := sc.maybeUnlockTableDescriptors(ctx); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -984,6 +997,74 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 	}()
 
 	return err
+}
+
+func (sc *SchemaChanger) maybeApplyInitialDescriptorUpdates(ctx context.Context) error {
+	// If no initial updates exist nothing needs to be done.
+	if len(sc.initialDescUpdates) == 0 {
+		return nil
+	}
+	err := sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		// Loop over all the descriptors and apply their initial updates.
+		for _, descUpdate := range sc.initialDescUpdates {
+			tbl, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descUpdate.GetID())
+			if err != nil {
+				return err
+			}
+			// Some other update happened, we should fail the schema
+			// change. Note: This should never happen because the collection
+			// should be blocked from mutating these descriptors.
+			if tbl.OriginalVersion() != descUpdate.GetVersion() {
+				return errors.AssertionFailedf("unexpected descriptor modificatons detected for automatic schema_locked reset.")
+			}
+			// Write out the modified descriptor and bump up the version number.
+			*tbl.TableDesc() = *descUpdate
+			tbl.MaybeIncrementVersion()
+			if err := txn.Descriptors().WriteDesc(ctx, false, tbl, txn.KV()); err != nil {
+				return err
+			}
+		}
+		// Clear the initial update from the job payload, now that it has been
+		// applied.
+		return sc.job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			details := md.Payload.GetSchemaChange()
+			details.SchemaLockedUpdates = nil
+			ju.UpdatePayload(md.Payload)
+			return nil
+		})
+	})
+	if err != nil {
+		return err
+	}
+	// Clear the state in memory.
+	sc.initialDescUpdates = nil
+	return nil
+}
+
+// maybeUnlockTableDescriptors resets schema_locked on table descriptors if it
+// was originally set.
+func (sc *SchemaChanger) maybeUnlockTableDescriptors(ctx context.Context) error {
+	// If no descriptors are locked nothing needs to be done here.
+	if sc.schemaLockedDescs.Len() == 0 {
+		return nil
+	}
+	// Once everything is done we can revert the schema_locked
+	// flag at the end.
+	return sc.txn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		for _, descID := range sc.schemaLockedDescs.Ordered() {
+			mutDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descID)
+			if err != nil {
+				return err
+			}
+			mutDesc.SchemaLocked = true
+			mutDesc.SchemaLockedJobID = jobspb.InvalidJobID
+			err = txn.Descriptors().WriteDesc(ctx, false, mutDesc, txn.KV())
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // handlePermanentSchemaChangeError cleans up schema changes that cannot
@@ -1259,6 +1340,10 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		}
 		return txn.KV().Run(ctx, b)
 	}); err != nil {
+		return err
+	}
+	// Reset schema_locked if it was set on table descriptors.
+	if err := sc.maybeUnlockTableDescriptors(ctx); err != nil {
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", gcJobID)
@@ -2721,6 +2806,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			return err
 		}
 	}
+	setLockedDescs := catalog.MakeDescriptorIDSet(details.SchemaLockedDescIDs...)
 	execSchemaChange := func(descID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID, droppedSchemaIDs descpb.IDs, droppedFnIDs descpb.IDs) error {
 		sc := SchemaChanger{
 			descID:               descID,
@@ -2728,6 +2814,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			droppedSchemaIDs:     catalog.MakeDescriptorIDSet(droppedSchemaIDs...),
 			droppedFnIDs:         catalog.MakeDescriptorIDSet(droppedFnIDs...),
 			droppedDatabaseID:    droppedDatabaseID,
+			schemaLockedDescs:    setLockedDescs,
+			initialDescUpdates:   details.SchemaLockedUpdates,
 			sqlInstanceID:        p.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),
 			db:                   p.ExecCfg().InternalDB,
 			leaseMgr:             p.ExecCfg().LeaseManager,

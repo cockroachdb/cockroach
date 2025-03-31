@@ -7,6 +7,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -948,6 +949,13 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		}
 		if mutationsHaveErrs {
 			return
+		}
+	}
+
+	// Validate the schema locked job ID.
+	{
+		if desc.SchemaLockedJobID != jobspb.InvalidJobID && desc.SchemaLocked {
+			vea.Report(errors.AssertionFailedf("job ID %d is set with schema_locked enabled.", desc.SchemaLockedJobID))
 		}
 	}
 

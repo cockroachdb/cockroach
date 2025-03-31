@@ -3918,6 +3918,7 @@ func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
 // Safe for concurrent use.
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
 	newTxn := txn == nil || evalCtx.Txn != txn
+	evalCtx.ResetSchemaLockedOnCommit = false
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()

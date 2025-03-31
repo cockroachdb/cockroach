@@ -110,7 +110,16 @@ func (p *planner) writeTypeSchemaChange(
 	// Check if there is a cached specification for this type, otherwise create one.
 	record, recordExists := p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
-	if recordExists {
+	// For automatic schema_locked unsetting the type descriptor jobs will not be
+	// utilized. Instead, the main table involved will execute the logic, which will
+	// be equivalent to WaitForOneVersion.
+	jobRequired := !p.extendedEvalCtx.ResetSchemaLockedOnCommit
+	if !jobRequired && len(transitioningMembers) > 0 {
+		// Sanity: We should never be doing any modifications on the type descriptor
+		// enums with our supported schema changes.
+		return errors.AssertionFailedf("complex type modification is not allowed with schema_locked set on %s(%d)", typeDesc.GetName(), typeDesc.GetID())
+	}
+	if recordExists && jobRequired {
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
 			TypeID:               typeDesc.ID,
@@ -131,7 +140,7 @@ func (p *planner) writeTypeSchemaChange(
 				return !beingDropped
 			})
 		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
-	} else {
+	} else if jobRequired {
 		// Or, create a new job.
 		newRecord := jobs.Record{
 			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),

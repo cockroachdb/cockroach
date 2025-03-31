@@ -60,6 +60,9 @@ func (tc *Collection) ValidateUncommittedDescriptors(
 	}
 	var descs []catalog.Descriptor
 	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if tc.deletedDescs.Contains(desc.GetID()) {
+			return nil
+		}
 		descs = append(descs, desc)
 		return nil
 	})
