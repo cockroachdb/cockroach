@@ -175,6 +175,23 @@ func TestPutS3(t *testing.T) {
 					testSettings)
 			})
 
+			t.Run("skip-checksums", func(t *testing.T) {
+				if locked {
+					skip.IgnoreLint(t, "object-locked buckets do not support skipping checksums")
+				}
+				skipIfNoDefaultConfig(t, ctx)
+				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+					"s3://%s/%s-%d?%s=%s&%s=true",
+					bucket, "backup-test-skip-checksums", testID,
+					cloud.AuthParam, cloud.AuthParamImplicit, AWSSkipChecksumParam,
+				),
+					false,
+					user,
+					nil, /* db */
+					testSettings,
+				)
+			})
+
 			t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
 				skipIfNoDefaultConfig(t, ctx)
 				// Unsupported server side encryption option.
@@ -369,6 +386,7 @@ func TestPutS3Endpoint(t *testing.T) {
 			t, u.String(), false, user, nil /* db */, testSettings,
 		)
 	})
+
 	t.Run("use-path-style", func(t *testing.T) {
 		// EngFlow machines have no internet access, and queries even to localhost will time out.
 		// So this test is skipped above.
