@@ -569,3 +569,31 @@ message LogicalReplicationOfflineScanSpec {
     optional string metrics_label = 8 [(gogoproto.nullable) = false];
 
 }
+
+message CompactBackupsSpec {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  optional string default_uri = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
+  optional jobs.jobspb.BackupDetails.Destination destination = 3 [(gogoproto.nullable) = false];
+  optional jobs.jobspb.BackupEncryptionOptions encryption = 4;
+  optional util.hlc.Timestamp startTime = 5 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp endTime = 6 [(gogoproto.nullable) = false];
+  optional ElidePrefix elide_mode = 7 [(gogoproto.nullable) = false];
+  // spans represents the entire set of spans to be compacted. We send all of the
+	// spans to all processors because each processor needs to be able to call
+	// generateAndSendImportSpans to then cross check the generated spans against
+	// the assigned spans. We are uncertain if generateAndSendImportSpans will work
+	// if it is only provided the assigned spans, so to be safe we send the entire
+	// set of spans.
+  repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
+  // assigned_spans represents the spans assigned to this particular processor 
+  // to compact.
+  repeated roachpb.Span assigned_spans = 9 [(gogoproto.nullable) = false];
+  optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+	// Since compaction processors each have to run generateAndSendImportSpans,
+	// both target_size and max_files are sent through to the spec to ensure
+	// consistent values are used in the event those cluster settings are changed
+	// before the processors can load them.
+	optional int64 target_size = 11 [(gogoproto.nullable) = false];
+	optional int64 max_files = 12 [(gogoproto.nullable) = false];
+	// NEXT ID: 13.
+}
