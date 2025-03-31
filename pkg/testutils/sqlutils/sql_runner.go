@@ -256,13 +256,11 @@ func (sr *SQLRunner) ExpectErrWithRetry(
 	err = retryOpts.DoWithRetryable(context.Background(), func(ctx context.Context) (error, bool) {
 		_, err = sr.DB.ExecContext(context.Background(), query, args...)
 		if testutils.IsError(err, retryableErrorRE) {
-			// This is a retryable error, so we should retry.
 			return err, true
 		}
 		if err == nil {
 			return nil, false
 		}
-		// This is not a retryable error, so we should not retry.
 		return err, false
 	})
 	sr.expectErr(t, query, err, errRE)
