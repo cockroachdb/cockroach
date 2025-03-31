@@ -432,27 +432,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		publisher = histogram.CreateUdpPublisher(*individualOperationReceiverAddr)
 	}
 
-	metricsExporter, file, err := maybeInitAndCreateExporter(gen)
+	metricsExporter, file, err := maybeInitAndCreateExporter()
 	if err != nil {
 		return errors.Wrap(err, "error creating metrics exporter")
 	}
-	defer func() {
-		if metricsExporter != nil {
-			if err = metricsExporter.Close(func() error {
-				if file == nil {
-					log.Infof(ctx, "no file to close")
-					return nil
-				}
-
-				if err := file.Close(); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
-				log.Warningf(ctx, "failed to close metrics exporter: %v", err)
-			}
-		}
-	}()
+	defer closeExporter(ctx, metricsExporter, file)
 
 	reg := histogram.NewRegistryWithPublisherAndExporter(
 		*histogramsMaxLatency,
@@ -666,13 +650,15 @@ func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	}
 }
 
-func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.File, error) {
+func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 	if *histograms == "" {
 		return nil, nil, nil
 	}
 
 	var metricsExporter exporter.Exporter
 	var file *os.File
+	var tempFilePath string
+	var finalPath string
 
 	switch *histogramExportFormat {
 	case "json":
@@ -705,7 +691,13 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 		return nil, nil, err
 	}
 
-	file, err = os.Create(*histograms)
+	// Create a temporary file path
+	finalPath = *histograms
+	dir := filepath.Dir(finalPath)
+	tempFilePath = filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d", filepath.Base(finalPath), timeutil.Now().UnixNano()))
+
+	// Create the temporary file instead of the final file
+	file, err = os.Create(tempFilePath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -714,4 +706,45 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 	metricsExporter.Init(&writer)
 
 	return metricsExporter, file, nil
+}
+
+func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file *os.File) {
+	if metricsExporter != nil {
+		if err := metricsExporter.Close(func() error {
+			if file == nil {
+				log.Infof(ctx, "no file to close")
+				return nil
+			}
+			return renameTempFile(file, *histograms)
+		}); err != nil {
+			log.Warningf(ctx, "failed to close metrics exporter: %v", err)
+		}
+	}
+}
+
+func renameTempFile(file *os.File, finalPath string) error {
+	tempPath := file.Name()
+	defer func() {
+		_ = os.Remove(tempPath) // Clean up the temp folder if still exists
+	}()
+
+	// Sync file to ensure all data is written to disk
+	if err := file.Sync(); err != nil {
+		// If we are not able to sync the file, we should not attempt to rename it.
+		// This is to avoid the case where an incomplete file is renamed.
+		return err
+	}
+
+	// Close the file
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	// Rename from temp to final path
+	// This is atomic on all unix-like systems
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return errors.Wrap(err, "failed to rename temporary file")
+	}
+
+	return nil
 }
