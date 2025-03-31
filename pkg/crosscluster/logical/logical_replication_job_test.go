@@ -1388,6 +1388,86 @@ func TestThreeWayReplication(t *testing.T) {
 	verifyExpectedRowAllServers(t, runners, expectedRows, dbNames)
 }
 
+func TestTombstoneUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+	// This test is a regression test for a bug where replicating a delete does
+	// not update the origin timestamp assigned to a tombstone if the replicated
+	// value is overwriting a tombstone.
+	//
+	// Replicating the bug requires three databases ('src-a', 'src-b', 'dst').
+	//
+	// Here's the timeline of events:
+	//
+	// 1. row is inserted into 'src-a', 'src-b', and 'dst'
+	// 2. row is deleted from 'dst'
+	// 3. row is updated in 'src-b'
+	// 4. row is deleted in 'src-a'
+	//
+	// 5. Replication is started from 'src-a' -> 'dst' and allowed to catch up to now.
+	// 6. Replication is started from 'srb-b' -> 'dst' and allowed to catch up to now.
+	//
+	// In this example, the last delete is the LWW winner. But if tombstones are not updated, then the update in 'src-b' will be
+	// replicated to 'dst' will win LWW since the replicated delete was no-op'd.
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	numDBs := 3
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 1, numDBs)
+	defer server.Stopper().Stop(ctx)
+	PGURLs := GetPGURLs(t, s, dbNames)
+
+	// Insert row into all three databases
+	for i := range runners {
+		runners[i].Exec(t, "UPSERT INTO tab VALUES (1, 'initial')")
+	}
+
+	srcA, srcB, dst := runners[0], runners[1], runners[2]
+	urlSrcA, urlSrcB, _ := PGURLs[0].String(), PGURLs[1].String(), PGURLs[2].String()
+
+	// Grab timestamp that will be used as a cursor for starting the logical replication jobs
+	start := s.Clock().Now()
+
+	// Delete the row in the dest, this should lose all LWW conflicts.
+	dst.Exec(t, "DELETE FROM tab WHERE pk = 1")
+
+	// Update the row in one of the sources, this should lose LWW conlficts to
+	// the final delete.
+	srcB.Exec(t, "UPSERT INTO tab VALUES (1, 'updated')")
+
+	// Delete the row in the other source, this should win LWW.
+	srcA.Exec(t, "DELETE FROM tab WHERE pk = 1")
+
+	dst.CheckQueryResults(t, "SELECT * FROM tab", [][]string{})
+	srcA.CheckQueryResults(t, "SELECT * FROM tab", [][]string{})
+	srcB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "updated"}})
+
+	// 5. Replicate the delete from 'src-a' -> 'dst'
+	var jobIDSrcA jobspb.JobID
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+		urlSrcA, start.AsOfSystemTime()).Scan(&jobIDSrcA)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcA)
+
+	// 6. Replicate the update from 'src-b' -> 'dst'
+	var jobIDSrcB jobspb.JobID
+	dst.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = VALIDATED, CURSOR = $2",
+		urlSrcB, start.AsOfSystemTime()).Scan(&jobIDSrcB)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dst, jobIDSrcB)
+
+	// Verify that the delete won LWW since it has the highest mvcc value
+	dst.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{})
+}
+
 func TestForeignKeyConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
