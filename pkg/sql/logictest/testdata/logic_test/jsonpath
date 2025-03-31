@@ -150,6 +150,9 @@ SELECT '$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  '::JSON
 ----
 $."a"?((@."b" == 1))."c"?((@."d" == 2))
 
+statement error pgcode 2201B pq: could not parse .* invalid regular expression: error parsing regexp: missing closing \)
+SELECT '$ ? (@ like_regex "(invalid pattern")'::JSONPATH
+
 ## When we allow table creation
 
 # statement ok
