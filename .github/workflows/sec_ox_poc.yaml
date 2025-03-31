@@ -26,6 +26,6 @@ jobs:
       - name: Run OX Security Scan to check for vulnerabilities
         uses: oxsecurity/ox-security-scan@main
         with:
-          api_key: ${{ secrets.OX_API_KEY }}
+          ox_api_key: ${{ secrets.OX_API_KEY }}
           ox_fail_on_timeout: true
           ox_fail_on_error: true
