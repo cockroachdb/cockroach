@@ -75,6 +75,10 @@ do so:
 
 # Updating the golang version
 
+The Go upgrade process is documented [here](https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/4193714322/CockroachDB+Go+upgrade+policy+and+process).
+This checklist is meant to be followed by the dev-inf team member that
+performs the upgrade and constructs the draft PR.
+
 Please copy this checklist into the relevant commit message and perform these
 steps:
 
@@ -87,7 +91,8 @@ steps:
 * [ ] Adjust `--@io_bazel_rules_go//go/toolchain:sdk_version` in [.bazelrc](../.bazelrc).
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk`. You may need to bump [rules_go](https://github.com/bazelbuild/rules_go/releases). Also edit the filenames listed in `sdks` and update all the hashes to match what you built in the step above.
 * [ ] Bump the version in `WORKSPACE` under `go_download_sdk` for the FIPS version of Go (`go_sdk_fips`).
-* [ ] Run `./dev generate bazel` to refresh `distdir_files.bzl`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
+* [ ] Upgrade golang.org/x packages; these are maintained by the Go project and it's reasonable to upgrade them when doing our Go upgrade. Run `grep -e '^\tgolang.org/x' go.mod | grep -v vcs | grep -v image | grep -v typeparams | cut -w -f2 | sed 's/$/@latest/' | xargs go get`. (Note: we don't upgrade certain libraries that are not linked into CRDB, hence the `grep -v`.)
+* [ ] Run `./dev generate bazel --mirror`, then `bazel fetch @distdir//:archives` to ensure you've updated all hashes to the correct value.
 * [ ] Bump the go version in `go.mod`.
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
