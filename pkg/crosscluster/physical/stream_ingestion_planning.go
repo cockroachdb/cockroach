@@ -181,7 +181,7 @@ func ingestionPlanHook(
 			return nil
 		}
 
-		readerID, err := createReaderTenant(ctx, p, tenantInfo.Name, destinationTenantID, options)
+		readerID, err := createReaderTenant(ctx, p, tenantInfo.Name, destinationTenantID, options, false)
 		if err != nil {
 			return err
 		}
@@ -300,11 +300,17 @@ func createReaderTenant(
 	tenantName roachpb.TenantName,
 	destinationTenantID roachpb.TenantID,
 	options *resolvedTenantReplicationOptions,
+	ready bool,
 ) (roachpb.TenantID, error) {
 	var readerID roachpb.TenantID
 	if options.ReaderTenantEnabled() {
 		var readerInfo mtinfopb.TenantInfoWithUsage
-		readerInfo.DataState = mtinfopb.DataStateAdd
+		if ready {
+			readerInfo.DataState = mtinfopb.DataStateReady
+			readerInfo.ServiceMode = mtinfopb.ServiceModeShared
+		} else {
+			readerInfo.DataState = mtinfopb.DataStateAdd
+		}
 		readerInfo.Name = tenantName + "-readonly"
 		readerInfo.ReadFromTenant = &destinationTenantID
 
