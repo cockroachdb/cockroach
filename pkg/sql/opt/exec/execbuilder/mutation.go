@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -418,6 +419,10 @@ func rearrangeColumns(
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colOrdMap, err error) {
+	if ep, cols, ok, err := b.tryBuildFastPathUpdate(upd); err != nil || ok {
+		return ep, cols, err
+	}
+
 	var neededPassThroughCols opt.OptionalColList
 	if upd.NeedResults() {
 		// The RETURNING clause of the Update can refer to the columns
@@ -494,6 +499,276 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		outputCols = b.mutationOutputColMap(upd)
 	}
 	return ep, outputCols, nil
+}
+
+func (b *Builder) tryBuildFastPathUpdate(
+	upd *memo.UpdateExpr,
+) (_ execPlan, outputCols colOrdMap, ok bool, _ error) {
+	if len(upd.UniqueChecks) != 0 {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+	if len(upd.FKChecks) != 0 {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+	if len(upd.FKCascades) != 0 {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+	if upd.AfterTriggers != nil && len(upd.AfterTriggers.Triggers) != 0 {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+
+	md := b.mem.Metadata()
+
+	var neededPassThroughCols opt.OptionalColList
+	if upd.NeedResults() {
+		// The RETURNING clause of the Update can refer to the columns
+		// in any of the FROM tables. As a result, the Update may need
+		// to passthrough those columns so the projection above can use
+		// them.
+		neededPassThroughCols = opt.OptionalColList(upd.PassthroughCols)
+	}
+	colList := appendColsWhenPresent(
+		upd.FetchCols, upd.UpdateCols, neededPassThroughCols, upd.CheckCols,
+		upd.PartialIndexPutCols, upd.PartialIndexDelCols,
+		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutQuantizedVecCols,
+		upd.VectorIndexDelPartitionCols,
+	)
+
+	// Look for input of the form (project (select (scan))) with cardinality
+	// [0-1], and turn it into values rows. Could be (project (scan)) or (select
+	// (scan)) or simply (scan). Maybe even (select (project (scan))). We need to
+	// make sure that all of the columns originally provided by the scan can be
+	// determined exactly from the scan constraint and the select filters.
+	//
+	// what if the scan isn't on the primary index? that seems fine, as long as
+	// we're able to figure out all the scan-provided columns exactly, and the
+	// cardinality is at most 1.
+	//
+	// what if there are other operators mixed in? I think any mix of select and
+	// project is fine. we want to avoid joins. we can add other operators as we
+	// run into them.
+	//
+	// algorithm is to recurse downward, finding the source of each column,
+	// building scalar expressions as necessary. we'll assume filters are true and
+	// will place the RHS of those as the expression as long as they have the form
+	// col = x or col is not distinct from x or col in (x)
+	//
+	// we'll maintain a map of columns we're looking for -> column reference to
+	// replace. at the end, if the map is not empty, we failed to find a suitable
+	// constraint / filter for each column.
+	//
+	// what if there are extra filters or constraints left over from the select
+	// and scan? that also seems like a failure
+
+	colExprs := make(map[opt.ColumnID]opt.ScalarExpr)
+
+	// walk the scalar expr, replacing variables with the corresponding scalar
+	// expr in the map, and place the expression in the map
+	// this needs to make a deep copy to avoid mutating the memo
+	buildColExpr := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		// copy and replace?
+		// replacefn to replace the variableExpr
+		// annoying part is that we don't need to intern any of these... just need
+		// to build the scalar expr enough to execbuild it
+
+		// can we instead get execbuild to build it the right way?? then we wouldn't
+		// need to do the replacement here
+		// would just need to walk and check the map
+
+		// yes, maybe with a custom indexvarhelper?
+		// or some other custom thing
+
+		// is it safe to inline? I'm not so sure it is
+		// would be safer to replace the scan with values, and the select with project
+		// and keep the outer project
+		// but this adds some inefficiency
+		// maybe I can avoid any variable expressions?
+		// let's try that at first
+		if _, ok := colExprs[col]; ok {
+			return false
+		}
+		colExprs[col] = e
+		return true
+	}
+
+	// look for conditions of the form
+	// Eq()
+	// or
+	// In()
+	// or
+	// Is()
+	// with Variable on the LHS
+	// and Const on right (or null / true / false)
+	// what about placeholders? yes, those could also be on the right
+	// in fact, any scalar expression could be on the RHS
+	// we could recurse on AND as well... but not OR
+	//
+	// we just need the RHS to evaluate to a single value
+	// we don't need it to have been fully evaluated
+	//
+	// we could use ExtractConstColumns, but that wouldn't handle placeholders?
+	// and wouldn't tell us if there are any filters left over
+	// so we'll walk them ourselves for now
+	//
+	// todo: check if we can use idxconstraint for this?
+	var gatherFilterExpr func(opt.ScalarExpr) bool
+	gatherFilterExpr = func(e opt.ScalarExpr) bool {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			if md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
+				return buildColExpr(t.Col, memo.TrueSingleton)
+			}
+			return false
+		case *memo.NotExpr:
+			if v, ok := t.Input.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					buildColExpr(v.Col, memo.FalseSingleton)
+				}
+			}
+			return false
+		case *memo.AndExpr:
+			return gatherFilterExpr(t.Left) && gatherFilterExpr(t.Right)
+		case *memo.EqExpr:
+			// has to handle NULL...?
+			// NULL has to turn into a CPut mismatch... how to do that?
+			// has to be done in the fast path operator itself
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				return buildColExpr(v.Col, t.Right)
+			}
+			return false
+		case *memo.NeExpr:
+			// has to handle NULL...?
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					return buildColExpr(v.Col, &memo.NotExpr{Input: t.Right})
+				}
+			}
+			return false
+		case *memo.InExpr:
+			// has to handle NULL...?
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				return buildColExpr(v.Col, t.Right)
+			}
+			return false
+		case *memo.IsExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				return buildColExpr(v.Col, t.Right)
+			}
+			return false
+		case *memo.IsNotExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					return buildColExpr(v.Col, &memo.NotExpr{Input: t.Right})
+				}
+			}
+			return false
+		default:
+			return false
+		}
+	}
+
+	var gatherColExprs func(memo.RelExpr) bool
+	gatherColExprs = func(e memo.RelExpr) bool {
+		if !e.Relational().Cardinality.IsZeroOrOne() {
+			return false
+		}
+		switch t := e.(type) {
+		case *memo.ProjectExpr:
+			if !gatherColExprs(t.Input) {
+				return false
+			}
+			for i := range t.Projections {
+				item := &t.Projections[i]
+				if !buildColExpr(item.Col, item.Element) {
+					return false
+				}
+			}
+			return true
+		case *memo.SelectExpr:
+			if !gatherColExprs(t.Input) {
+				return false
+			}
+			for i := range t.Filters {
+				filter := &t.Filters[i]
+				if !gatherFilterExpr(filter.Condition) {
+					return false
+				}
+			}
+			return true
+		case *memo.ScanExpr:
+			constCols := t.Constraint.ExtractConstCols(b.ctx, b.evalCtx)
+			for i := 0; i < t.Constraint.Columns.Count(); i++ {
+				col := t.Constraint.Columns.Get(i).ID()
+				if constCols.Contains(col) {
+					val := t.Constraint.Spans.Get(0).StartKey().Value(i)
+					typ := md.ColumnMeta(col).Type
+					expr := &memo.ConstExpr{Value: val, Typ: typ}
+					if !buildColExpr(col, expr) {
+						return false
+					}
+				}
+			}
+			return true
+		default:
+			return false
+		}
+	}
+	if !gatherColExprs(upd.Input) {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+
+	rows := makeTypedExprMatrix(1, len(colList))
+	scalarCtx := buildScalarCtx{}
+	for i, col := range colList {
+		sExpr, ok := colExprs[col]
+		if !ok {
+			return execPlan{}, colOrdMap{}, false, nil
+		}
+		rowExpr, err := b.buildScalar(&scalarCtx, sExpr)
+		if err != nil {
+			return execPlan{}, colOrdMap{}, false, err
+		}
+		rows[0][i] = rowExpr
+	}
+
+	// Construct the UpdateFastPath node.
+	tab := md.Table(upd.Table)
+	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
+	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
+	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
+	checkOrds := ordinalSetFromColList(upd.CheckCols)
+
+	// Construct the result columns for the passthrough set.
+	var passthroughCols colinfo.ResultColumns
+	if upd.NeedResults() {
+		for _, passthroughCol := range upd.PassthroughCols {
+			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
+			passthroughCols = append(passthroughCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+		}
+	}
+
+	node, err := b.factory.ConstructUpdateFastPath(
+		rows,
+		tab,
+		fetchColOrds,
+		updateColOrds,
+		returnColOrds,
+		checkOrds,
+		passthroughCols,
+		upd.UniqueWithTombstoneIndexes,
+		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
+			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+
+	// Construct the output column map.
+	ep := execPlan{root: node}
+	if upd.NeedResults() {
+		outputCols = b.mutationOutputColMap(upd)
+	}
+	return ep, outputCols, true, nil
 }
 
 func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colOrdMap, err error) {

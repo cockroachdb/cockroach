@@ -189,6 +189,13 @@ func getResultColumns(
 			a.Passthrough...,
 		), nil
 
+	case updateFastPathOp:
+		a := args.(*updateFastPathArgs)
+		return appendColumns(
+			tableColumns(a.Table, a.ReturnCols),
+			a.Passthrough...,
+		), nil
+
 	case upsertOp:
 		a := args.(*upsertArgs)
 		return tableColumns(a.Table, a.ReturnCols), nil

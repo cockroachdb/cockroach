@@ -1165,20 +1165,28 @@ func (b *Batch) bulkRequest(
 // WARNING: introduce new usages of this function with care. See discussion in
 // https://github.com/cockroachdb/cockroach/pull/112937.
 // TODO(yuzefovich): look into removing this confusing function.
-func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
+func (b *Batch) GetResult(idx int) (*Result, KeyValue, []byte, error) {
 	origIdx := idx
+
+	var expValue []byte
+	/*
+		   // TODO: get this from the batch
+		   if cputReq, ok := b.reqs[idx]. .(kvpb.ConditionalPutRequest); ok {
+			}
+	*/
+
 	for i := range b.Results {
 		r := &b.Results[i]
 		if idx < r.calls {
 			if idx < len(r.Rows) {
-				return r, r.Rows[idx], nil
+				return r, r.Rows[idx], expValue, nil
 			} else if idx < len(r.Keys) {
-				return r, KeyValue{Key: r.Keys[idx]}, nil
+				return r, KeyValue{Key: r.Keys[idx]}, expValue, nil
 			} else {
-				return r, KeyValue{}, nil
+				return r, KeyValue{}, expValue, nil
 			}
 		}
 		idx -= r.calls
 	}
-	return nil, KeyValue{}, errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
+	return nil, KeyValue{}, nil, errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
 }

@@ -45,7 +45,8 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			break
 		}
 		j := origPErr.Index.Index
-		_, kv, err := b.GetResult(int(j))
+		// TODO: check expValue before converting this error
+		_, kv, _, err := b.GetResult(int(j))
 		if err != nil {
 			return err
 		}

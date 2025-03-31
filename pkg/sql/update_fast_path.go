@@ -7,7 +7,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -119,9 +118,10 @@ func (u *updateFastPathNode) BatchedNext(params runParams) (bool, error) {
 
 	u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := u.run.tu.finalize(params.ctx); err != nil {
-		// if the error is ConditionFailedError, rollback to savepoint and report 0
+		// TODO: if the error is ConditionFailedError, rollback to savepoint and report 0
 		// rows modified
-		fmt.Println(err)
+		//fmt.Println(err)
+		//u.run.tu.rollbackToSavepoint()
 		return false, err
 	}
 	// Remember we're done for the next call to BatchedNext().

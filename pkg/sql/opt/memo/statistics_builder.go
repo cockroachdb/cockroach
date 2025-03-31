@@ -5284,6 +5284,7 @@ func (sb *statisticsBuilder) factorOutVirtualCols(
 	}
 
 	// Replace all virtual col expressions with the corresponding virtual col.
+	// Does this handle recursive replacements?
 	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
 		for _, ve := range virtExprs {
