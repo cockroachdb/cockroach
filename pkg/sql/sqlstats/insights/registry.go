@@ -31,16 +31,14 @@ func (r *lockingRegistry) Clear() {
 	r.statements = make(map[clusterunique.ID]*statementBuf)
 }
 
-func (r *lockingRegistry) ObserveStatement(
-	sessionID clusterunique.ID, statement *sqlstats.RecordedStmtStats,
-) {
+func (r *lockingRegistry) ObserveStatement(statement *sqlstats.RecordedStmtStats) {
 	if !r.enabled() {
 		return
 	}
-	b, ok := r.statements[sessionID]
+	b, ok := r.statements[statement.SessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
-		r.statements[sessionID] = b
+		r.statements[statement.SessionID] = b
 	}
 	b.append(statement)
 }
