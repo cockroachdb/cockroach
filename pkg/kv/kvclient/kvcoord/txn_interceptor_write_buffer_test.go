@@ -8,11 +8,13 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -22,11 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeMockTxnWriteBuffer() (txnWriteBuffer, *mockLockedSender) {
+func makeMockTxnWriteBuffer(st *cluster.Settings) (txnWriteBuffer, *mockLockedSender) {
 	mockSender := &mockLockedSender{}
 	return txnWriteBuffer{
 		enabled: true,
 		wrapped: mockSender,
+		st:      st,
 	}, mockSender
 }
 
@@ -73,7 +76,7 @@ func TestTxnWriteBufferBuffersBlindWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -145,7 +148,7 @@ func TestTxnWriteBufferWritesToSameKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -243,7 +246,7 @@ func TestTxnWriteBufferBlindWritesIncludingOtherRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -322,36 +325,6 @@ func TestTxnWriteBufferCorrectlyAdjustsFlushErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
-
-	txn := makeTxnProto()
-	txn.Sequence = 1
-	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
-
-	// Perform some blind writes.
-	ba := &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: &txn}
-	putA := putArgs(keyA, "val1", txn.Sequence)
-	getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
-	delC := delArgs(keyC, txn.Sequence)
-	ba.Add(putA)
-	ba.Add(getB)
-	ba.Add(delC)
-
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
-
-		br := ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	br, pErr := twb.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
 	for errIdx, resErrIdx := range map[int32]int32{
 		0: -1, // points to the Put; -1 to denote nil
 		1: -1, // points to the Del; -1 to denote nil
@@ -359,6 +332,36 @@ func TestTxnWriteBufferCorrectlyAdjustsFlushErrors(t *testing.T) {
 		3: 1,  // points to the EndTxn
 	} {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
+			ctx := context.Background()
+			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+			txn := makeTxnProto()
+			txn.Sequence = 1
+			keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+
+			// Perform some blind writes.
+			ba := &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			putA := putArgs(keyA, "val1", txn.Sequence)
+			getB := &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{Key: keyB}}
+			delC := delArgs(keyC, txn.Sequence)
+			ba.Add(putA)
+			ba.Add(getB)
+			ba.Add(delC)
+
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			br, pErr := twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
+
 			// Commit the transaction. This should flush the buffer as well.
 			ba = &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: &txn}
@@ -377,7 +380,7 @@ func TestTxnWriteBufferCorrectlyAdjustsFlushErrors(t *testing.T) {
 				return nil, pErr
 			})
 
-			br, pErr := twb.SendLocked(ctx, ba)
+			br, pErr = twb.SendLocked(ctx, ba)
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Equal(t, &txn, pErr.GetTxn())
@@ -402,20 +405,20 @@ func TestTxnWriteBufferCorrectlyAdjustsErrorsAfterBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
-
-	txn := makeTxnProto()
-	txn.Sequence = 1
-	keyA, keyB, keyC, keyD, keyE, keyF := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
-		roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
-
 	for errIdx, resErrIdx := range map[int32]int32{
 		0: 1, // points to the GetB
 		1: 4, // points to the GetE
 		2: 5, // points to the GetF
 	} {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
+			ctx := context.Background()
+			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+			txn := makeTxnProto()
+			txn.Sequence = 1
+			keyA, keyB, keyC, keyD, keyE, keyF := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+				roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+
 			// Construct a batch request where some of the requests will be buffered.
 			ba := &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: &txn}
@@ -451,31 +454,31 @@ func TestTxnWriteBufferCorrectlyAdjustsErrorsAfterBuffering(t *testing.T) {
 
 			require.NotNil(t, pErr.Index)
 			require.Equal(t, resErrIdx, pErr.Index.Index)
+
+			// Finish off the test by commiting the transaction and sanity checking the
+			// buffer is flushed as expected.
+			ba = &kvpb.BatchRequest{}
+			ba.Header = kvpb.Header{Txn: &txn}
+			ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Len(t, ba.Requests, 4)
+
+				// We now expect the buffer to be flushed along with the commit.
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
+				require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[3].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			})
+
+			br, pErr = twb.SendLocked(ctx, ba)
+			require.Nil(t, pErr)
+			require.NotNil(t, br)
 		})
-
-		// Finish off the test by commiting the transaction and sanity checking the
-		// buffer is flushed as expected.
-		ba := &kvpb.BatchRequest{}
-		ba.Header = kvpb.Header{Txn: &txn}
-		ba.Add(&kvpb.EndTxnRequest{Commit: true})
-
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 4)
-
-			// We now expect the buffer to be flushed along with the commit.
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
-			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[3].GetInner())
-
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-
-		br, pErr := twb.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
 	}
 }
 
@@ -485,7 +488,7 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	putAtSeq := func(key roachpb.Key, val string, seq enginepb.TxnSeq) {
 		txn := makeTxnProto()
@@ -678,7 +681,7 @@ func TestTxnWriteBufferServesPointReadsAfterScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -737,7 +740,7 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	putAtSeq := func(key roachpb.Key, val string, seq enginepb.TxnSeq) {
 		txn := makeTxnProto()
@@ -962,7 +965,7 @@ func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1068,7 +1071,7 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	testutils.RunTrueAndFalse(t, "condEvalSuccessful", func(t *testing.T, condEvalSuccessful bool) {
 		twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
@@ -1081,12 +1084,12 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 		txn := makeTxnProto()
 		txn.Sequence = 10
 		keyA := roachpb.Key("a")
-		valA := "val"
+		valAStr := "valA"
 
 		// Blindly write to keys A.
 		ba := &kvpb.BatchRequest{}
 		ba.Header = kvpb.Header{Txn: &txn}
-		cputA := cputArgs(keyA, valA, valA, txn.Sequence)
+		cputA := cputArgs(keyA, valAStr, valAStr, txn.Sequence)
 		ba.Add(cputA)
 
 		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -1149,7 +1152,7 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
 		return nil
@@ -1206,10 +1209,11 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 // Delete requests that have the MustAcquireExclusiveLock are decomposed into a
 // locking Get and a buffered write.
 func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1280,7 +1284,7 @@ func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer()
+	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1328,4 +1332,168 @@ func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
 	br, pErr = twb.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
+}
+
+// TestTxnWriteBufferEstimateSize is a unit test for
+// txnWriteBuffer.estimateSize().
+func TestTxnWriteBufferEstimateSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	twb, _ := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+
+	st := cluster.MakeTestingClusterSettings()
+	twb.st = st
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA := roachpb.Key("a")
+	valAStr := "valA"
+	valA := roachpb.MakeValueFromString(valAStr)
+	keyLarge := roachpb.Key("a" + strings.Repeat("A", 1000))
+	valLargeStr := "val" + strings.Repeat("A", 1000)
+	valLarge := roachpb.MakeValueFromString(valLargeStr)
+	emptyVal := roachpb.Value{}
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, valAStr, txn.Sequence)
+	ba.Add(putA)
+
+	require.Equal(t,
+		int64(len(keyA)+valA.Size())+bufferedWriteStructOverhead+bufferedValueStructOverhead,
+		twb.estimateSize(ba),
+	)
+
+	ba = &kvpb.BatchRequest{}
+	cputLarge := cputArgs(keyLarge, valLargeStr, "", txn.Sequence)
+	ba.Add(cputLarge)
+
+	require.Equal(t,
+		int64(len(keyLarge)+valLarge.Size())+bufferedWriteStructOverhead+bufferedValueStructOverhead,
+		twb.estimateSize(ba),
+	)
+
+	ba = &kvpb.BatchRequest{}
+	delA := delArgs(keyA, txn.Sequence)
+	ba.Add(delA)
+
+	// NB: note that we're overcounting here, as we're deleting a key that's
+	// already present in the buffer. But that's what estimating is about.
+	require.Equal(t,
+		int64(len(keyA)+emptyVal.Size())+bufferedWriteStructOverhead,
+		twb.estimateSize(ba),
+	)
+}
+
+// TestTxnWriteBufferFlushesWhenOverbudget verifies that the txnWriteBuffer
+// flushes the buffer on receiving a batch request that'll run it over budget.
+// It also ensures subsequent batches are not buffered.
+func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	twb, mockSender := makeMockTxnWriteBuffer(st)
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+	valAStr := "valA"
+	valA := roachpb.MakeValueFromString(valAStr)
+
+	putAEstimate := int64(len(keyA)+valA.Size()) + bufferedWriteStructOverhead + bufferedValueStructOverhead
+
+	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, putAEstimate)
+
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putA := putArgs(keyA, valAStr, txn.Sequence)
+	ba.Add(putA)
+
+	numCalled := mockSender.NumCalled()
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// All the requests should be buffered and not make it past the
+	// txnWriteBuffer. The response returned should be indistinguishable.
+	require.Equal(t, numCalled, mockSender.NumCalled())
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+	// Verify the Put was buffered correctly.
+	expBufferedWrites := []bufferedWrite{
+		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
+	}
+	require.Equal(t, expBufferedWrites, twb.testingBufferedWritesAsSlice())
+
+	// The next batch will contain a write request that'll run us over budget.
+	// The buffer should be flushed.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	delB := delArgs(keyB, txn.Sequence)
+	ba.Add(delB)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 2)
+
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	// Even though we flushed the Put, it shouldn't make it back to the response.
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.DeleteResponse{}, br.Responses[0].GetInner())
+
+	// Ensure the buffer is empty at this point.
+	require.Equal(t, 0, len(twb.testingBufferedWritesAsSlice()))
+
+	// Subsequent batches should not be buffered.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	putC := putArgs(keyC, valAStr, txn.Sequence)
+	ba.Add(putC)
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+
+		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.PutResponse{}, br.Responses[0].GetInner())
+
+	// Commit the transaction. We flushed the buffer already, and no subsequent
+	// writes were buffered, so the buffer should be empty. As such, no write
+	// requests should be added to the batch.
+	ba = &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Len(t, br.Responses, 1)
+	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
