@@ -43,10 +43,11 @@ var _ Allocator = &allocatorState{}
 
 // TODO(sumeer): temporary constants.
 const (
-	RebalanceInterval           time.Duration = 10 * time.Second
-	rateChangeLimiterGCInterval               = 15 * time.Second
-	numAllocators                             = 20
-	maxFractionPendingThreshold               = 0.1
+	RebalanceInterval                  time.Duration = 10 * time.Second
+	rateChangeLimiterGCInterval                      = 15 * time.Second
+	numAllocators                                    = 20
+	maxFractionPendingThreshold                      = 0.1
+	waitBeforeSheddingRemoteReplicaCPU               = 120 * time.Second
 )
 
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
@@ -69,6 +70,9 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 //   change the fact that it is cpu overloaded.
 
 // Called periodically, say every 10s.
+//
+// We do not want to shed replicas for CPU from a remote store until its had a
+// chance to shed leases.
 func (a *allocatorState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
@@ -150,11 +154,25 @@ func (a *allocatorState) rebalanceStores(
 	leaseTransferCount := 0
 	for _, store := range sheddingStores {
 		log.Infof(ctx, "shedding store %v sls=%v", store.StoreID, store.storeLoadSummary)
+		ss := a.cs.stores[store.StoreID]
 		// TODO(sumeer): For remote stores that are cpu overloaded, wait for them
 		// to shed leases first. See earlier longer to do.
-
+		//
+		// When there is CPU overload on the remote store, we should wait out the
+		// grace period before moving ranges.
+		//
+		// TODO: Below is example logic, which doesn't consider when this store
+		// became CPU overloaded, only that it hasn't recently shed any leases. We
+		// should also consider the last time it became CPU overloaded in addition
+		// to it not having shed leases recently.
+		//
+		// if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+		// 	!ss.lastLeaseShedAt.IsZero() &&
+		// 	now.Sub(ss.lastLeaseShedAt) < waitBeforeSheddingRemoteReplicaCPU {
+		// 	// We wait out the grace period.
+		// 	continue
+		// }
 		doneShedding := false
-		ss := a.cs.stores[store.StoreID]
 		topKRanges := ss.adjusted.topKRanges[localStoreID]
 		n := topKRanges.len()
 		if n > 0 {

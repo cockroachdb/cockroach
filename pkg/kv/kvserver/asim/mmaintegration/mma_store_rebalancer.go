@@ -45,6 +45,11 @@ type MMAStoreRebalancer struct {
 	// currentlyRebalancing is true if the rebalancer is currently in the process of
 	// computing or applying rebalance changes.
 	currentlyRebalancing bool
+	// TODO: This is not currently hooked up to the simulator state, nor is it
+	// hooked up to be passed into the mma allocator. This is a placeholder for
+	// tracking the last time a store shed leases, with the intention to use it
+	// to populate StoreCapacity the no_leases_shed_last_rebalance field.
+	lastLeaseTransfer time.Time
 }
 
 // NewMMAStoreRebalancer creates a new MMAStoreRebalancer.
@@ -144,6 +149,13 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				msr.currentlyRebalancing = false
 				log.VInfof(ctx, 1, "no pending changes to process, will wait for next tick")
 				return
+			}
+
+			// Record the last time a lease transfer was requested.
+			for _, change := range msr.pendingChanges {
+				if change.IsTransferLease() {
+					msr.lastLeaseTransfer = tick
+				}
 			}
 		}
 
