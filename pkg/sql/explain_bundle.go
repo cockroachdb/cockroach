@@ -553,6 +553,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	fmt.Fprintf(&buf, "\n")
 
+	c.PrintUser(&buf)
+	fmt.Fprintf(&buf, "\n")
+
 	// Show the values of session variables and cluster settings that have
 	// values different from their defaults.
 	if err := c.PrintSessionSettings(&buf, b.sv, false /* all */); err != nil {
@@ -1010,6 +1013,12 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	return err
 }
 
+func (c *stmtEnvCollector) PrintUser(w io.Writer) {
+	// Show the connected user. If the bundle includes a statement for a table
+	// with RLS enabled, this helps to explain why certain policies were enforced.
+	fmt.Fprintf(w, "-- User: %s\n", c.p.User())
+}
+
 // makeSingleLine replaces all control characters with a single space. This is
 // needed so that session variables and cluster settings would fit on a single
 // line.
@@ -1098,20 +1107,22 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		// We'll skip this variable only if its value matches both of the
 		// defaults.
 		skip := value == binaryDefault && value == clusterDefault
-		if buildutil.CrdbTestBuild {
+		commentOut := false // If skip is true, should we leave a commented out version of the var?
+		switch varName {
+		case "direct_columnar_scans_enabled":
 			// In test builds we might randomize some setting defaults, so
 			// we need to ignore them to make the tests deterministic.
-			switch varName {
-			case "direct_columnar_scans_enabled":
-				// This variable's default is randomized in test builds.
+			skip = buildutil.CrdbTestBuild
+		case "role":
+			// If a role is set, we comment it out in env.sql. Otherwise, running
+			// 'debug sb recreate' will fail with a non-existent user/role error.
+			if !skip {
 				skip = true
+				commentOut = true
 			}
 		}
 		// Use the "binary default" as the value that we will set to.
 		defaultValue := binaryDefault
-		if skip && !all {
-			continue
-		}
 		if _, ok := sessionVarNeedsEscaping[varName]; ok || anyWhitespace.MatchString(value) {
 			value = lexbase.EscapeSQLString(value)
 		}
@@ -1119,6 +1130,14 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 			// Need a special case for empty strings to make the SET statement
 			// parsable.
 			value = "''"
+		}
+		if skip && !all {
+			if commentOut {
+				// When commenting it out, keep the SET command mostly intact
+				// so it can be easily uncommented later if needed.
+				fmt.Fprintf(w, "-- SET %s = %s; -- skip\n", varName, value)
+			}
+			continue
 		}
 		fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", varName, value, defaultValue)
 	}
