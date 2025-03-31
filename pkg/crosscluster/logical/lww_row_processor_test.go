@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -79,7 +80,7 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		return tableName
 	}
 
-	setup := func(t *testing.T, schemaTmpl string) (*sqlRowProcessor, func(...interface{}) roachpb.KeyValue) {
+	setup := func(t *testing.T, schemaTmpl string) (*sqlRowProcessor, func(...interface{}) roachpb.KeyValue, func()) {
 		tableNameSrc := createTable(t, schemaTmpl)
 		tableNameDst := createTable(t, schemaTmpl)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
@@ -89,20 +90,23 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 			dstDesc.GetID(): {
 				srcDesc: srcDesc,
 			},
-		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{})
+		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{}, s.Codec(), s.LeaseManager().(*lease.Manager))
 		require.NoError(t, err)
 		return rp, func(datums ...interface{}) roachpb.KeyValue {
-			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
-			kv.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			return kv
-		}
+				kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
+				kv.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+				return kv
+			}, func() {
+				rp.ReleaseLeases(ctx)
+			}
 	}
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
 			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=true")
 			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
-			rp, encoder := setup(t, tc.schemaTmpl)
+			rp, encoder, cleanup := setup(t, tc.schemaTmpl)
+			defer cleanup()
 			keyValue := encoder(tc.row...)
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
@@ -112,7 +116,8 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/insert-without-optimistic-insert", tc.name), func(t *testing.T) {
 			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=false")
 			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
-			rp, encoder := setup(t, tc.schemaTmpl)
+			rp, encoder, cleanup := setup(t, tc.schemaTmpl)
+			defer cleanup()
 			keyValue := encoder(tc.row...)
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
@@ -120,7 +125,8 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 			}))
 		})
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
-			rp, encoder := setup(t, tc.schemaTmpl)
+			rp, encoder, cleanup := setup(t, tc.schemaTmpl)
+			defer cleanup()
 			keyValue := encoder(tc.row...)
 			keyValue.Value.RawBytes = nil
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -157,7 +163,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 		desc.GetID(): {
 			srcDesc: desc,
 		},
-	}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)), sd, execinfrapb.LogicalReplicationWriterSpec{})
+	}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)), sd, execinfrapb.LogicalReplicationWriterSpec{}, s.Codec(), s.LeaseManager().(*lease.Manager))
 	require.NoError(b, err)
 
 	// In some configs, we'll be simulating processing the same INSERT over and
@@ -345,7 +351,7 @@ func TestLWWConflictResolution(t *testing.T) {
 			dstDesc.GetID(): {
 				srcDesc: srcDesc,
 			},
-		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{})
+		}, jobspb.JobID(1), s.InternalDB().(descs.DB), s.InternalExecutor().(isql.Executor), sd, execinfrapb.LogicalReplicationWriterSpec{}, s.Codec(), s.LeaseManager().(*lease.Manager))
 		require.NoError(t, err)
 
 		if useKVProc {

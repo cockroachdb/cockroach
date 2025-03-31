@@ -151,6 +151,10 @@ func (aq *applierQuerier) DeleteRow(
 	return aq.processRow(ctx, txn, ie, row, prevRow, deleteMutation)
 }
 
+func (aq *applierQuerier) ReleaseLeases(ctx context.Context) {
+	// No leases to release.
+}
+
 func (aq *applierQuerier) processRow(
 	ctx context.Context,
 	txn isql.Txn,
