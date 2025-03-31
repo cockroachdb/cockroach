@@ -34,7 +34,7 @@ type allocatorState struct {
 
 	changeRateLimiter *storeChangeRateLimiter
 
-	changeIDCounter changeID
+	changeIDCounter ChangeID
 
 	rand *rand.Rand
 }
@@ -475,18 +475,20 @@ func (a *allocatorState) ProcessStoreLeaseholderMsg(msg *StoreLeaseholderMsg) {
 }
 
 // AdjustPendingChangesDisposition implements the Allocator interface.
-func (a *allocatorState) AdjustPendingChangesDisposition(
-	changes []PendingRangeChange, success bool,
-) {
-	for _, rangeChange := range changes {
-		for _, replicaChange := range rangeChange.pendingReplicaChanges {
-			if success {
-				a.cs.markPendingChangeEnacted(replicaChange.changeID, a.cs.ts.Now())
-			} else {
-				a.cs.undoPendingChange(replicaChange.changeID)
-			}
+func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
+	for _, changeID := range changeIDs {
+		if success {
+			a.cs.markPendingChangeEnacted(changeID, a.cs.ts.Now())
+		} else {
+			a.cs.undoPendingChange(changeID)
 		}
 	}
+}
+
+// RegisterExternalChanges implements the Allocator interface.
+func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
+	// TODO: integration component to register external changes.
+	panic("unimplemented")
 }
 
 // ComputeChanges implements the Allocator interface.
