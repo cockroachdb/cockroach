@@ -69,7 +69,15 @@ type Allocator interface {
 	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangesDisposition(changes []PendingRangeChange, success bool)
+	AdjustPendingChangesDisposition(changes []ChangeID, success bool)
+
+	// RegisterExternalChanges informs this allocator about yet to complete
+	// changes to the cluster which were not initiated by this allocator. The
+	// caller is returned a list of ChangeIDs, corresponding 1:1 to each  replica
+	// change provided as an argument. The returned list of ChangeIDs should then
+	// be used to call AdjustPendingChangesDisposition when the changes are
+	// completed, either successfully or not.
+	RegisterExternalChanges(changes []ReplicaChange) []ChangeID
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//

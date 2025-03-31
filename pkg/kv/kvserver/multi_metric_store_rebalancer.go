@@ -108,6 +108,6 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) {
 				}
 			}
 		}
-		m.allocator.AdjustPendingChangesDisposition([]mma.PendingRangeChange{change}, success)
+		m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
 	}
 }

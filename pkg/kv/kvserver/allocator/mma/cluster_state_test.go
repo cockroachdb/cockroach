@@ -182,7 +182,7 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
 		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
-			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
+			change.ChangeID, change.target.StoreID, change.target.NodeID, change.rangeID,
 			change.loadDelta, change.startTime.Sub(testingBaseTime),
 		)
 		if !(change.enactedAtTime == time.Time{}) {
@@ -240,13 +240,13 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	// NB: Although redundant, we compare all of the de-normalized pending change
 	// to ensure that they are in sync.
 	sort.Slice(clusterPendingChangeList, func(i, j int) bool {
-		return clusterPendingChangeList[i].changeID < clusterPendingChangeList[j].changeID
+		return clusterPendingChangeList[i].ChangeID < clusterPendingChangeList[j].ChangeID
 	})
 	sort.Slice(storePendingChangeList, func(i, j int) bool {
-		return storePendingChangeList[i].changeID < storePendingChangeList[j].changeID
+		return storePendingChangeList[i].ChangeID < storePendingChangeList[j].ChangeID
 	})
 	sort.Slice(rangePendingChangeList, func(i, j int) bool {
-		return rangePendingChangeList[i].changeID < rangePendingChangeList[j].changeID
+		return rangePendingChangeList[i].ChangeID < rangePendingChangeList[j].ChangeID
 	})
 	require.EqualValues(t, clusterPendingChangeList, storePendingChangeList)
 	require.EqualValues(t, rangePendingChangeList, storePendingChangeList)
@@ -384,7 +384,7 @@ func TestClusterState(t *testing.T) {
 
 				case "make-pending-changes":
 					var rid int
-					var changes []replicaChange
+					var changes []ReplicaChange
 					d.ScanArgs(t, "range-id", &rid)
 					rangeID := roachpb.RangeID(rid)
 					rState := cs.ranges[rangeID]
@@ -431,9 +431,9 @@ func TestClusterState(t *testing.T) {
 				case "reject-pending-changes":
 					var changeIDsInt []int
 					d.ScanArgs(t, "change-ids", &changeIDsInt)
-					changeIDs := make([]changeID, 0, len(changeIDsInt))
+					changeIDs := make([]ChangeID, 0, len(changeIDsInt))
 					for _, id := range changeIDsInt {
-						changeIDs = append(changeIDs, changeID(id))
+						changeIDs = append(changeIDs, ChangeID(id))
 					}
 					cs.pendingChangesRejected(changeIDs)
 					return printPendingChanges(testingGetPendingChanges(t, cs))
