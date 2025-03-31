@@ -1,0 +1,31 @@
+name: OX Security POC Scan
+
+on:
+  push:
+    branches:
+      - master
+      - 'release-*'
+      - 'staging-*'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - 'release-*'
+      - 'staging-*'
+
+jobs:
+  ox-security-scan:
+    name: Run OX Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Run OX Security Scan to check for vulnerabilities
+        uses: oxsecurity/ox-security-scan@main
+        with:
+          api_key: ${{ secrets.OX_API_KEY }}
+          ox_fail_on_timeout: true
+          ox_fail_on_error: true
