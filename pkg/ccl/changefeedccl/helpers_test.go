@@ -143,8 +143,10 @@ func applySourceAssertion(
 	}
 	for _, m := range payloads {
 		var message map[string]any
-		if err := gojson.Unmarshal(m.Value, &message); err != nil {
-			return errors.Wrapf(err, `unmarshal: %s`, m.Value)
+		decoder := gojson.NewDecoder(bytes.NewReader(m.Value))
+		decoder.UseNumber()
+		if err := decoder.Decode(&message); err != nil {
+			return errors.Wrapf(err, `decode: %s`, m.Value)
 		}
 
 		// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`

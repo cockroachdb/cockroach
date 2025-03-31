@@ -104,9 +104,17 @@ func newEnrichedSourceProvider(
 
 	var nonFixedJSONFields []string
 	nonFixedDataIdx := map[string]int{}
+	addNonFixedJSONfield := func(fieldName string) {
+		nonFixedJSONFields = append(nonFixedJSONFields, fieldName)
+		nonFixedDataIdx[fieldName] = len(nonFixedJSONFields) - 1
+	}
+
 	if opts.MVCCTimestamps {
-		nonFixedJSONFields = append(nonFixedJSONFields, fieldNameMVCCTimestamp)
-		nonFixedDataIdx[fieldNameMVCCTimestamp] = len(nonFixedJSONFields) - 1
+		addNonFixedJSONfield(fieldNameMVCCTimestamp)
+	}
+	if opts.UpdatedTimestamps {
+		addNonFixedJSONfield(fieldNameUpdatedTSNS)
+		addNonFixedJSONfield(fieldNameUpdatedTSHLC)
 	}
 	// TODO(#139661): Add other non fixed fields.
 
@@ -131,18 +139,24 @@ func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 }
 
 // GetJSON returns a json object for the source data.
-func (p *enrichedSourceProvider) GetJSON(updated cdcevent.Row) (json.JSON, error) {
+func (p *enrichedSourceProvider) GetJSON(
+	updated cdcevent.Row, evCtx eventContext,
+) (json.JSON, error) {
 	// TODO(#139661): Add other non fixed fields.
 	clear(p.jsonNonFixedData)
 	if p.opts.mvccTimestamp {
-		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(updated.MvccTimestamp.AsOfSystemTime())
+		p.jsonNonFixedData[fieldNameMVCCTimestamp] = json.FromString(evCtx.mvcc.AsOfSystemTime())
+	}
+	if p.opts.updated {
+		p.jsonNonFixedData[fieldNameUpdatedTSNS] = json.FromInt64(evCtx.updated.WallTime)
+		p.jsonNonFixedData[fieldNameUpdatedTSHLC] = json.FromString(evCtx.updated.AsOfSystemTime())
 	}
 	return p.jsonPartialObject.NewObject(p.jsonNonFixedData)
 }
 
 // GetAvro returns an avro FunctionalRecord for the source data.
 func (p *enrichedSourceProvider) GetAvro(
-	row cdcevent.Row, schemaPrefix string,
+	row cdcevent.Row, schemaPrefix string, evCtx eventContext,
 ) (*avro.FunctionalRecord, error) {
 	fromRow := func(row cdcevent.Row, dest map[string]any) {
 		// If this is the first use of the avro record (ie the first row the encoder processed), set the fixed fields.
@@ -158,7 +172,11 @@ func (p *enrichedSourceProvider) GetAvro(
 		}
 
 		if p.opts.mvccTimestamp {
-			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, row.MvccTimestamp.AsOfSystemTime())
+			dest[fieldNameMVCCTimestamp] = goavro.Union(avro.SchemaTypeString, evCtx.mvcc.AsOfSystemTime())
+		}
+		if p.opts.updated {
+			dest[fieldNameUpdatedTSNS] = goavro.Union(avro.SchemaTypeLong, evCtx.updated.WallTime)
+			dest[fieldNameUpdatedTSHLC] = goavro.Union(avro.SchemaTypeString, evCtx.updated.AsOfSystemTime())
 		}
 		// TODO(#139661): Add other non fixed fields.
 	}
@@ -179,6 +197,8 @@ const (
 	fieldNameNodeName           = "node_name"
 	fieldNameNodeID             = "node_id"
 	fieldNameMVCCTimestamp      = "mvcc_timestamp"
+	fieldNameUpdatedTSNS        = "ts_ns"
+	fieldNameUpdatedTSHLC       = "ts_hlc"
 )
 
 type fieldInfo struct {
@@ -286,6 +306,28 @@ var allFieldInfo = map[string]fieldInfo{
 		},
 		kafkaConnectSchema: kcjsonschema.Schema{
 			Field:    fieldNameMVCCTimestamp,
+			TypeName: kcjsonschema.SchemaTypeString,
+			Optional: true,
+		},
+	},
+	fieldNameUpdatedTSNS: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameUpdatedTSNS,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeLong},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameUpdatedTSNS,
+			TypeName: kcjsonschema.SchemaTypeInt64,
+			Optional: true,
+		},
+	},
+	fieldNameUpdatedTSHLC: {
+		avroSchemaField: avro.SchemaField{
+			Name:       fieldNameUpdatedTSHLC,
+			SchemaType: []avro.SchemaType{avro.SchemaTypeNull, avro.SchemaTypeString},
+		},
+		kafkaConnectSchema: kcjsonschema.Schema{
+			Field:    fieldNameUpdatedTSHLC,
 			TypeName: kcjsonschema.SchemaTypeString,
 			Optional: true,
 		},
