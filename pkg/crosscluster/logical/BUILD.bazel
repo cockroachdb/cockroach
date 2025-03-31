@@ -16,6 +16,7 @@ go_library(
         "purgatory.go",
         "range_stats.go",
         "replication_statements.go",
+        "sql_row_writer.go",
         "udf_row_processor.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical",
@@ -120,6 +121,7 @@ go_test(
         "purgatory_test.go",
         "range_stats_test.go",
         "replication_statements_test.go",
+        "sql_row_writer_test.go",
         "udf_row_processor_test.go",
     ],
     data = glob(["testdata/**"]) + [
@@ -167,6 +169,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
+        "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/jobutils",
