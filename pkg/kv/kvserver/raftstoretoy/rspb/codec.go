@@ -7,29 +7,6 @@ package rspb
 
 import "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 
-//go:generate stringer --type=KeyKind --linecomment
-
-type KeyKind byte
-
-const (
-	KeyKindUnknown KeyKind = iota
-	KeyKindRaftLogEntry
-	KeyKindRaftLogHardState
-	KeyKindRaftLogTruncatedState
-	KeyKindRaftLogInit
-	KeyKindRaftLogDestroy
-	KeyKindRaftLogApplyingIndex
-	KeyKindSentinel
-)
-
-var KeyKindByString = make(map[string]KeyKind)
-
-func init() {
-	for i := KeyKindUnknown; i < KeyKindSentinel; i++ {
-		KeyKindByString[i.String()] = i
-	}
-}
-
 type RaftLogKey kvpb.RaftIndex
 
 func (RaftLogKey) KeyKind() KeyKind {

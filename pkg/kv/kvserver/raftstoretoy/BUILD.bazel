@@ -14,20 +14,18 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/raftstoretoy/rspb:wagpb_go_proto",
+        "//pkg/kv/kvserver/raftstoretoy/rspb",
         "//pkg/roachpb",
     ],
 )
 
 go_test(
     name = "raftstoretoy_test",
-    srcs = [
-        "datadriven_test.go",
-        "low_level_engine_test.go",
-    ],
+    srcs = ["datadriven_test.go"],
     data = glob(["testdata/**"]),
     embed = [":raftstoretoy"],
     deps = [
+        "//pkg/kv/kvserver/raftstoretoy/rspb",
         "//pkg/roachpb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

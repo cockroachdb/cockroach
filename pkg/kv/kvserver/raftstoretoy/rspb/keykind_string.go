@@ -14,21 +14,22 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[KeyKindUnknown-0]
-	_ = x[KeyKindRaftLogEntry-1]
+	_ = x[KeyKindLogIDGenerator-1]
 	_ = x[KeyKindRaftLogHardState-2]
 	_ = x[KeyKindRaftLogTruncatedState-3]
 	_ = x[KeyKindRaftLogInit-4]
 	_ = x[KeyKindRaftLogDestroy-5]
 	_ = x[KeyKindRaftLogApplyingIndex-6]
-	_ = x[KeyKindSentinel-7]
+	_ = x[KeyKindRaftLogEntry-7]
+	_ = x[KeyKindSentinel-8]
 }
 
 func (i KeyKind) String() string {
 	switch i {
 	case KeyKindUnknown:
 		return "KeyKindUnknown"
-	case KeyKindRaftLogEntry:
-		return "KeyKindRaftLogEntry"
+	case KeyKindLogIDGenerator:
+		return "KeyKindLogIDGenerator"
 	case KeyKindRaftLogHardState:
 		return "KeyKindRaftLogHardState"
 	case KeyKindRaftLogTruncatedState:
@@ -39,6 +40,8 @@ func (i KeyKind) String() string {
 		return "KeyKindRaftLogDestroy"
 	case KeyKindRaftLogApplyingIndex:
 		return "KeyKindRaftLogApplyingIndex"
+	case KeyKindRaftLogEntry:
+		return "KeyKindRaftLogEntry"
 	case KeyKindSentinel:
 		return "KeyKindSentinel"
 	default:
