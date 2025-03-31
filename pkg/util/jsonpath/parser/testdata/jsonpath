@@ -494,6 +494,14 @@ parse
 ----
 (1 + (2 * (-4))) -- normalized!
 
+error
+$ ? (@ like_regex "(invalid pattern")
+----
+at or near ")": syntax error: invalid regular expression: error parsing regexp: missing closing ): `(invalid pattern`
+DETAIL: source SQL:
+$ ? (@ like_regex "(invalid pattern")
+                                    ^
+
 # postgres allows floats as array indexes
 # parse
 # $.abc[1.0]
