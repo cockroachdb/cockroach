@@ -944,6 +944,46 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.gist.sql",
 		)
 	})
+
+	t.Run("row-level security", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE rls1 (pk INT PRIMARY KEY, u TEXT, val SMALLINT)")
+		alterTableDDL := "ALTER TABLE public.rls1 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"
+		r.Exec(t, alterTableDDL)
+		r.Exec(t, "CREATE POLICY policy1 ON rls1 USING (u = 'hal')")
+		r.Exec(t, "CREATE USER rls_user")
+		r.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING TO rls_user")
+		r.Exec(t, "ALTER TABLE rls1 OWNER TO rls_user")
+		r.Exec(t, "SET ROLE rls_user")
+		defer r.Exec(t, "SET ROLE root")
+
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG,VERBOSE) SELECT * FROM rls1")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.rls1", func(name, contents string) error {
+				if name == "env.sql" {
+					if !strings.Contains(contents, `-- User: rls_user`) {
+						return errors.Errorf("could not find user 'rls_user' in env.sql:\n%s", contents)
+					}
+				}
+				if name == "plan.txt" {
+					if !strings.Contains(contents, `policies: policy1`) {
+						return errors.Errorf("could not find policy information in the plan.txt:\n%s", contents)
+					}
+					if !strings.Contains(contents, "filter: ((u)[string] = ('hal')[string])[bool]") {
+						return errors.Errorf("could not find injected filter from policy in the plan.txt:\n%s", contents)
+					}
+				}
+				if name == "schema.sql" {
+					for _, ddl := range []string{alterTableDDL, "CREATE POLICY policy1 ON public.rls1"} {
+						if !strings.Contains(contents, ddl) {
+							return errors.Errorf("could not find ddl %q in schema.sql:\n%s", ddl, contents)
+						}
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.rls1.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
