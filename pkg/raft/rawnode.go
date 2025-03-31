@@ -355,7 +355,7 @@ func newStorageAppendRespMsg(self pb.PeerID, app StorageAppend) pb.Message {
 // AckAppend notifies the RawNode that the storage write has been persisted.
 func (rn *RawNode) AckAppend(ack StorageAppendAck) {
 	r := rn.raft
-	for msg := range ack.step(r.id) {
+	for msg := range ack.Step(r.id) {
 		if err := rn.Step(msg); err != nil {
 			r.logger.Fatalf("failed to step local raft message [%s]: %v",
 				DescribeMessage(msg, emptyEntryFormatter), err)

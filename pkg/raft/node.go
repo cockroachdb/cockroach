@@ -109,8 +109,13 @@ func (m *StorageAppend) MustSync() bool {
 	return len(m.Responses) != 0
 }
 
-// NeedAck returns true if the RawNode wants to be notified after the writes are
-// durable on the log storage.
+// NeedAck returns true if the local RawNode expects a StorageAppendAck to
+// confirm durability of a snapshot or entries.
+//
+// TODO(pav-kv): this should also return true if there are self-directed
+// messages in Responses. The only caller of this is in tests, and works around.
+// The prod code doesn't use this call and delivers acks unconditionally because
+// there is no harm in doing so.
 func (m *StorageAppend) NeedAck() bool {
 	return len(m.Entries) != 0 || m.Snapshot != nil
 }
@@ -173,7 +178,7 @@ type StorageAppendAck struct {
 // sending responses to stale proposers. We can double-down on this, and make an
 // invariant that all the Responses are addressed to the same proposer. Then it
 // is either the local RawNode, or a remote one. So we can avoid scanning the
-// Responses twice (in Send and step).
+// Responses twice (in Send and Step).
 func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
 	return func(yield func(pb.Message) bool) {
 		for _, msg := range m.responses {
@@ -184,9 +189,9 @@ func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
 	}
 }
 
-// step iterates through the messages that should be stepped to the local
+// Step iterates through the messages that should be stepped to the local
 // RawNode when applying this acknowledgement.
-func (m *StorageAppendAck) step(self pb.PeerID) iter.Seq[pb.Message] {
+func (m *StorageAppendAck) Step(self pb.PeerID) iter.Seq[pb.Message] {
 	return func(yield func(pb.Message) bool) {
 		for _, msg := range m.responses {
 			// TODO(pav-kv): remove msg.From == self after Responses no longer
