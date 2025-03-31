@@ -98,6 +98,7 @@ kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes u
 kv.transaction.randomized_anchor_key.enabled	boolean	false	dictates whether a transactions anchor key is randomized or not	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
 kv.transaction.write_buffering.enabled	boolean	false	if enabled, transactional writes are buffered on the client	application
+kv.transaction.write_buffering.max_buffer_size	integer	4194304	if non-zero, defines that maximum size of the buffer that will be used to buffer transactional writes per-transaction	application
 kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
