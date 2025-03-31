@@ -9,6 +9,8 @@
 package aggmetric
 
 import (
+	"fmt"
+	"hash/fnv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -18,6 +20,8 @@ import (
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+var delimiter = []byte{'_'}
 
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
@@ -186,7 +190,12 @@ type labelValuesSlice []string
 func (lv *labelValuesSlice) labelValues() []string { return []string(*lv) }
 
 func metricKey(labels ...string) string {
-	return strings.Join(labels, ",")
+	hash := fnv.New64a()
+	for _, label := range labels {
+		_, _ = hash.Write([]byte(label))
+		_, _ = hash.Write(delimiter)
+	}
+	return fmt.Sprintf("%x", hash.Sum64())
 }
 
 type ChildrenStorage interface {
