@@ -293,6 +293,10 @@ func formatPostRequest(req issues.PostRequest) (string, error) {
 	q := u.Query()
 	q.Add("title", formatter.Title(data))
 	q.Add("body", post.String())
+	// Adding a template parameter is required to be able to view the rendered
+	// template on GitHub, otherwise it just takes you to the template selection
+	// page.
+	q.Add("template", "none")
 	u.RawQuery = q.Encode()
 	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 
