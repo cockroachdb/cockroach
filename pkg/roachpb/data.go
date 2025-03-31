@@ -1331,6 +1331,7 @@ func (t *Transaction) Restart(
 	t.LockSpans = nil
 	t.InFlightWrites = nil
 	t.IgnoredSeqNums = nil
+	t.MaxExplicitRollbackTarget = 0
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place
@@ -1409,6 +1410,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.LockSpans = o.LockSpans
 		t.InFlightWrites = o.InFlightWrites
 		t.IgnoredSeqNums = o.IgnoredSeqNums
+		t.MaxExplicitRollbackTarget = o.MaxExplicitRollbackTarget
 	} else if t.Epoch == o.Epoch {
 		// Forward all epoch-scoped state.
 		switch t.Status {
@@ -1461,6 +1463,7 @@ func (t *Transaction) Update(o *Transaction) {
 		if len(o.IgnoredSeqNums) > 0 {
 			t.IgnoredSeqNums = o.IgnoredSeqNums
 		}
+		t.AddExplicitSavepointTarget(o.MaxExplicitRollbackTarget)
 	} else /* t.Epoch > o.Epoch */ {
 		// Ignore epoch-specific state from previous epoch. However, ensure that
 		// the transaction status still makes sense.
@@ -1586,6 +1589,9 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if ni := len(t.IgnoredSeqNums); ni > 0 {
 		w.Printf(" isn=%d", ni)
 	}
+	if t.MaxExplicitRollbackTarget > 0 {
+		w.Printf(" mrt=%d", t.MaxExplicitRollbackTarget)
+	}
 }
 
 // ResetObservedTimestamps clears out all timestamps recorded from individual
@@ -1631,6 +1637,13 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, b
 // See enginepb.TxnSeqListAppend for more details.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
 	t.IgnoredSeqNums = enginepb.TxnSeqListAppend(t.IgnoredSeqNums, newRange)
+}
+
+// AddExplicitSavepointTarget sets the current Max
+func (t *Transaction) AddExplicitSavepointTarget(target enginepb.TxnSeq) {
+	if t.MaxExplicitRollbackTarget < target {
+		t.MaxExplicitRollbackTarget = target
+	}
 }
 
 // AsRecord returns a TransactionRecord object containing only the subset of
@@ -2362,13 +2375,15 @@ func MakeLockAcquisition(
 	dur lock.Durability,
 	str lock.Strength,
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+	maxRollbackTarget enginepb.TxnSeq,
 ) LockAcquisition {
 	return LockAcquisition{
-		Span:           Span{Key: key},
-		Txn:            txn,
-		Durability:     dur,
-		Strength:       str,
-		IgnoredSeqNums: ignoredSeqNums,
+		Span:                      Span{Key: key},
+		Txn:                       txn,
+		Durability:                dur,
+		Strength:                  str,
+		IgnoredSeqNums:            ignoredSeqNums,
+		MaxExplicitRollbackTarget: maxRollbackTarget,
 	}
 }
 

@@ -392,7 +392,8 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				strength := ScanLockStrength(t, d)
 				acq := roachpb.MakeLockAcquisition(
-					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
+					req.Txn.TxnMeta, roachpb.Key(key), durability, strength,
+					req.Txn.IgnoredSeqNums, req.Txn.MaxExplicitRollbackTarget,
 				)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
@@ -1310,7 +1311,7 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 
 func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, toAcq lockToAcquire) error {
 	acq := roachpb.MakeLockAcquisition(
-		txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, txn.IgnoredSeqNums,
+		txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, txn.IgnoredSeqNums, txn.MaxExplicitRollbackTarget,
 	)
 	err := e.lt.AcquireLock(&acq)
 	if err != nil {
@@ -1850,7 +1851,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	}
 	for _, toAcq := range item.locksToAcquire {
 		acq := roachpb.MakeLockAcquisition(
-			item.Txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, item.Txn.IgnoredSeqNums,
+			item.Txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, item.Txn.IgnoredSeqNums, item.Txn.MaxExplicitRollbackTarget,
 		)
 		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
@@ -2053,7 +2054,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 			for i := 0; i < locks; i++ {
 				k := roachpb.Key(fmt.Sprintf("%03d", i))
 				acq := roachpb.MakeLockAcquisition(
-					txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, txn.IgnoredSeqNums,
+					txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, txn.IgnoredSeqNums, txn.MaxExplicitRollbackTarget,
 				)
 				err := lt.AcquireLock(&acq)
 				if err != nil {
