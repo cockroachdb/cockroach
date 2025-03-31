@@ -73,7 +73,7 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0]
+      │    ├── stats: [rows=222.222, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -160,7 +160,7 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=222.2222, distinct(2)=7, null(2)=0]
+      │    ├── stats: [rows=222.222, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -293,7 +293,7 @@ SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)',
 select
  ├── columns: i:1(int) g:2(geometry)
  ├── immutable
- ├── stats: [rows=733.3333, distinct(1)=598.889, null(1)=18.3333, distinct(2)=7, null(2)=36.6667]
+ ├── stats: [rows=733.333, distinct(1)=598.889, null(1)=18.3333, distinct(2)=7, null(2)=36.6667]
  ├── scan t
  │    ├── columns: i:1(int) g:2(geometry)
  │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
@@ -343,7 +343,7 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
+      │    ├── stats: [rows=211.111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -380,7 +380,7 @@ project
       ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
-      │    ├── stats: [rows=211.1111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
+      │    ├── stats: [rows=211.111, distinct(1)=199.969, null(1)=5.27778, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
       │    ├── sort
@@ -463,7 +463,7 @@ SELECT * FROM t WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
 select
  ├── columns: i:1(int) g:2(geometry!null)
  ├── immutable
- ├── stats: [rows=11.11111, distinct(1)=10.5717, null(1)=10, distinct(2)=4, null(2)=0]
+ ├── stats: [rows=11.1111, distinct(1)=10.5717, null(1)=10, distinct(2)=4, null(2)=0]
  ├── index-join t
  │    ├── columns: i:1(int) g:2(geometry)
  │    ├── stats: [rows=100]
@@ -499,11 +499,11 @@ SELECT i FROM t@t_g_idx WHERE st_intersects('LINESTRING(.5 .5, .7 .7)', g)
 project
  ├── columns: i:1(int)
  ├── immutable
- ├── stats: [rows=11.11111]
+ ├── stats: [rows=11.1111]
  └── select
       ├── columns: i:1(int) g:2(geometry!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=4, null(2)=0]
+      ├── stats: [rows=11.1111, distinct(2)=4, null(2)=0]
       ├── index-join t
       │    ├── columns: i:1(int) g:2(geometry)
       │    ├── stats: [rows=100]
@@ -751,18 +751,18 @@ HAVING _st_dwithinexclusive(b, b, -0.38)::BOOL;
 project
  ├── columns: count:21(int!null)
  ├── immutable
- ├── stats: [rows=0.3333333]
+ ├── stats: [rows=0.333333]
  └── group-by (hash)
       ├── columns: b:2(geography!null) count_rows:21(int!null)
       ├── grouping columns: b:2(geography!null)
       ├── immutable
-      ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0]
+      ├── stats: [rows=0.333333, distinct(2)=0.333333, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(21)
       ├── select
       │    ├── columns: b:2(geography!null)
       │    ├── immutable
-      │    ├── stats: [rows=0.3333333, distinct(2)=0.333333, null(2)=0]
+      │    ├── stats: [rows=0.333333, distinct(2)=0.333333, null(2)=0]
       │    ├── scan t62289
       │    │    ├── columns: b:2(geography)
       │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0]
