@@ -260,11 +260,14 @@ func RangesInfoWithDistribution(
 		sort.Sort(targetReplicaCount)
 		maxLeaseRequestedIdx := 0
 		rangeInfo := ret[rngIdx]
+		// For each range, there is an array of target
+		// Add non voter
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
 			targetReplicaCount[replCandidateIdx].req--
 			storeID := StoreID(targetReplicaCount[replCandidateIdx].id)
 			rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
 				StoreID: roachpb.StoreID(storeID),
+				Type:    roachpb.NON_VOTER,
 			}
 			if targetLeaseCount[storeID] >
 				targetLeaseCount[StoreID(rangeInfo.Descriptor.InternalReplicas[maxLeaseRequestedIdx].StoreID)] {
