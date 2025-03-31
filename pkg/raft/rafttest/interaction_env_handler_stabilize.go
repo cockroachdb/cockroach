@@ -76,10 +76,7 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 			}
 		}
 		for _, rn := range nodes {
-			id := rn.Status().ID
-			// NB: we grab the messages just to see whether to print the header.
-			// DeliverMsgs will do it again.
-			if msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */, false /* drop */); len(msgs) > 0 {
+			if id := rn.Status().ID; env.hasMessages(id) {
 				fmt.Fprintf(env.Output, "> %d receiving messages\n", id)
 				env.withIndent(func() { env.DeliverMsgs(-1 /* typ */, Recipient{ID: id}) })
 				done = false
@@ -113,6 +110,14 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 			return nil
 		}
 	}
+}
+
+func (env *InteractionEnv) hasMessages(id raftpb.PeerID) bool {
+	if int(id) <= len(env.Nodes) && len(env.Nodes[id-1].AppendAcks) > 0 {
+		return true
+	}
+	msgs, _ := splitMsgs(env.Messages, id, -1 /* typ */, false /* drop */)
+	return len(msgs) > 0
 }
 
 // splitMsgs extracts messages for the given recipient of the given type (-1 for

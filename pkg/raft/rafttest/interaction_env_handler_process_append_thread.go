@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
@@ -54,19 +55,19 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 	m := n.AppendWork[0]
 	n.AppendWork = n.AppendWork[1:]
 
-	resps := m.Responses
-	m.Responses = nil
-	env.Output.WriteString("Processing:\n")
 	env.Output.WriteString(m.Describe(defaultEntryFormatter))
 	if err := processAppend(n, m); err != nil {
 		return err
 	}
 
-	env.Output.WriteString("Responses:\n")
-	for _, m := range resps {
-		env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
+	ack := m.Ack()
+	for msg := range ack.Send(raftpb.PeerID(idx + 1)) {
+		env.Messages = append(env.Messages, msg)
 	}
-	env.Messages = append(env.Messages, resps...)
+	if m.MustSync() {
+		n.AppendAcks = append(n.AppendAcks, ack)
+	}
+
 	return nil
 }
 

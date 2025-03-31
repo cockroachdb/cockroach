@@ -54,6 +54,7 @@ type Node struct {
 	asyncWrites bool
 
 	AppendWork []raft.StorageAppend
+	AppendAcks []raft.StorageAppendAck
 	ApplyWork  pb.LogSpan
 	History    []pb.Snapshot
 }

@@ -159,7 +159,7 @@ type StorageAppendAck struct {
 // sending responses to stale proposers. We can double-down on this, and make an
 // invariant that all the Responses are addressed to the same proposer. Then it
 // is either the local RawNode, or a remote one. So we can avoid scanning the
-// Responses twice (in Send and step).
+// Responses twice (in Send and Step).
 func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
 	return func(yield func(pb.Message) bool) {
 		for _, msg := range m.responses {
@@ -172,9 +172,9 @@ func (m *StorageAppendAck) Send(self pb.PeerID) iter.Seq[pb.Message] {
 	}
 }
 
-// step iterates through the messages that should be stepped to the local
+// Step iterates through the messages that should be stepped to the local
 // RawNode when applying this acknowledgement.
-func (m *StorageAppendAck) step(self pb.PeerID) iter.Seq[pb.Message] {
+func (m *StorageAppendAck) Step(self pb.PeerID) iter.Seq[pb.Message] {
 	return func(yield func(pb.Message) bool) {
 		for _, msg := range m.responses {
 			// TODO(pav-kv): remove msg.From != self after Responses no longer

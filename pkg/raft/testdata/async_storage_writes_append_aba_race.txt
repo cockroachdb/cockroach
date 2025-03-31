@@ -141,29 +141,26 @@ process-ready 4 5 6
 process-append-thread 3 4 5 6
 ----
 > 3 processing append thread
-  Processing:
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   3->3 MsgVoteResp Term:2 Log:0/0
 > 4 processing append thread
-  Processing:
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   4->3 MsgVoteResp Term:2 Log:0/0
 > 5 processing append thread
-  Processing:
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   5->3 MsgVoteResp Term:2 Log:0/0
 > 6 processing append thread
-  Processing:
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   6->3 MsgVoteResp Term:2 Log:0/0
 
 deliver-msgs 3
 ----
 3->3 MsgVoteResp Term:2 Log:0/0
+3->3 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 3 received MsgVoteResp from 3 at term 2
 INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 4->3 MsgVoteResp Term:2 Log:0/0
@@ -220,10 +217,13 @@ INFO replace the unstable entries from index 12
 dropped: 3->2 MsgVote Term:2 Log:1/11
 dropped: 3->2 MsgFortifyLeader Term:2 Log:0/0
 dropped: 3->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+4->4 StorageAppendAck Mark:{Term:0 Index:0}
 dropped: 3->4 MsgFortifyLeader Term:2 Log:0/0
 dropped: 3->4 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+5->5 StorageAppendAck Mark:{Term:0 Index:0}
 dropped: 3->5 MsgFortifyLeader Term:2 Log:0/0
 dropped: 3->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
+6->6 StorageAppendAck Mark:{Term:0 Index:0}
 dropped: 3->6 MsgFortifyLeader Term:2 Log:0/0
 dropped: 3->6 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 dropped: 3->7 MsgVote Term:2 Log:1/11
@@ -306,29 +306,26 @@ process-ready 5 6 7
 process-append-thread 4 5 6 7
 ----
 > 4 processing append thread
-  Processing:
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   4->4 MsgVoteResp Term:3 Log:0/0
 > 5 processing append thread
-  Processing:
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   5->4 MsgVoteResp Term:3 Log:0/0
 > 6 processing append thread
-  Processing:
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   6->4 MsgVoteResp Term:3 Log:0/0
 > 7 processing append thread
-  Processing:
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  Responses:
+  OnSync:
   7->4 MsgVoteResp Term:3 Log:0/0
 
 deliver-msgs 4
 ----
 4->4 MsgVoteResp Term:3 Log:0/0
+4->4 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 4 received MsgVoteResp from 4 at term 3
 INFO 4 has received 1 MsgVoteResp votes and 0 vote rejections
 5->4 MsgVoteResp Term:3 Log:0/0
@@ -432,9 +429,8 @@ raft-log 1
 
 process-append-thread 1
 ----
-Processing:
 Entry: 1/12 EntryNormal "init_prop"
-Responses:
+OnSync:
 1->2 MsgAppResp Term:1 Log:0/12 Commit:11
 AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
 
@@ -453,28 +449,26 @@ raft-log 1
 stabilize 1
 ----
 > 1 receiving messages
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
+  1->1 StorageAppendAck Mark:{Term:1 Index:12}
   INFO mark (term,index)=(1,12) mismatched the last accepted term 3 in unstable log; ignoring 
 > 1 processing append thread
-  Processing:
   HardState {Term:2 Commit:11 Lead:3 LeadEpoch:1}
   Entry: 2/12 EntryNormal ""
-  Responses:
+  OnSync:
   1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:2 Log:0/12 Commit:11
   AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
-  Processing:
   HardState {Term:3 Commit:11 Lead:4 LeadEpoch:1}
   Entry: 3/12 EntryNormal ""
-  Responses:
+  OnSync:
   1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->4 MsgAppResp Term:3 Log:0/12 Commit:11
   AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
 > 1 receiving messages
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
+  1->1 StorageAppendAck Mark:{Term:2 Index:12}
   INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable log; ignoring 
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
+  1->1 StorageAppendAck Mark:{Term:3 Index:12}
 
 raft-log 1
 ----

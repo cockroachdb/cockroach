@@ -357,7 +357,7 @@ func (rn *RawNode) AckAppend(ack StorageAppendAck) {
 	// The snapshot precedes the entries. We acknowledge the snapshot first, then
 	// the entries, as required by the unstable structure.
 	r := rn.raft
-	for msg := range ack.step(r.id) {
+	for msg := range ack.Step(r.id) {
 		_ = rn.Step(msg) // TODO(pav-kv): return error
 	}
 	if ack.SnapIndex != 0 {
