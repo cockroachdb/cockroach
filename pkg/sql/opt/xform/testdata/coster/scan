@@ -106,7 +106,7 @@ limit
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
- │    ├── stats: [rows=1666.667, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
+ │    ├── stats: [rows=1666.67, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
  │    ├── cost: 464.049997
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -114,7 +114,7 @@ limit
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
- │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0]
+ │    │    ├── stats: [rows=33333.3, distinct(1)=33333.3, null(1)=0]
  │    │    ├── cost: 452.019998
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
@@ -138,7 +138,7 @@ limit
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
- │    ├── stats: [rows=22.50001, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=22.5, null(1,2)=0]
+ │    ├── stats: [rows=22.5, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=22.5, null(1,2)=0]
  │    ├── cost: 446.529807
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -192,7 +192,7 @@ select
  ├── columns: id:1!null
  ├── cardinality: [0 - 1000]
  ├── immutable
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
  ├── cost: 1038.03
  ├── key: (1)
  ├── scan speed_test
@@ -213,7 +213,7 @@ select
  ├── columns: id:1!null
  ├── cardinality: [0 - 2000]
  ├── immutable
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
  ├── cost: 1043.03
  ├── key: (1)
  ├── scan speed_test
@@ -757,7 +757,7 @@ SELECT * FROM inv@{FORCE_INVERTED_INDEX} WHERE j->'a' = '1'
 index-join inv
  ├── columns: k:1!null j:2
  ├── immutable
- ├── stats: [rows=111.1111]
+ ├── stats: [rows=111.111]
  ├── cost: 803.595556
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -766,7 +766,7 @@ index-join inv
       ├── inverted constraint: /5/1
       │    └── spans: ["a"/1, "a"/1]
       ├── flags:
-      ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
+      ├── stats: [rows=111.111, distinct(5)=100, null(5)=0]
       ├── cost: 132.464444
       └── key: (1)
 
@@ -824,5 +824,5 @@ SELECT x FROM b WHERE x < 13
 scan b@xyz
  ├── columns: x:1!null
  ├── constraint: /1/2/3/5: (/NULL - /12]
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
  └── cost: 360.52

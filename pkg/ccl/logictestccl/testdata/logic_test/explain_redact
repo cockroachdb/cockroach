@@ -294,7 +294,7 @@ EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
 scan q
  ├── columns: q:1 r:2
  ├── constraint: /1: ‹×›
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
  ├── cost: 378.02
  ├── key: (1)
  ├── fd: (1)-->(2)
@@ -307,7 +307,7 @@ EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM q WHERE q > 2
 scan q
  ├── columns: q:1(int!null) r:2(int)
  ├── constraint: /1: ‹×›
- ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
  ├── cost: 378.02
  ├── key: (1)
  ├── fd: (1)-->(2)
