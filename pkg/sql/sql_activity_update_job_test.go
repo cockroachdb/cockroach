@@ -880,6 +880,32 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
 					require.NoError(t, err)
 				}
+			case "explain-sql-activity-select-all-statements":
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectAllStatementsQuery()
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+					require.NoError(t, err)
+				}
+			case "explain-sql-activity-select-top-statements":
+				limit := sqlStatsActivityTopCount.Get(&st.SV)
+
+				var mockAggTsStr string
+				d.ScanArgs(t, "aggTs", &mockAggTsStr)
+				mockAggTs, err := time.Parse(timeLayout, mockAggTsStr)
+				require.NoError(t, err)
+
+				q := updater.buildSelectTopStatementsQuery()
+				rows := db.QueryStr(t, "EXPLAIN (VERBOSE) "+q, mockAggTs, limit)
+				for _, row := range rows {
+					_, err := fmt.Fprintf(&buf, "%s\n", strings.Join(row, ","))
+					require.NoError(t, err)
+				}
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
