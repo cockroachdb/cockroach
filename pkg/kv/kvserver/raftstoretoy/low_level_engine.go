@@ -6,226 +6,213 @@
 package raftstoretoy
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/logpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
-type LowLevelEngine struct {
-	eng storage.Engine
+type LLBatch interface {
+	Put(ctx context.Context, key roachpb.Key, value []byte)
+	Del(ctx context.Context, key roachpb.Key)
+	Commit(sync bool) error
+	Close()
 }
 
-type LowLevelBatch struct {
-	b storage.Batch
+type LLEngine interface {
+	NewBatch() LLBatch
+	Flush() error
+	Dump(w io.Writer) error
 }
 
-func (llb *LowLevelBatch) Put(ctx context.Context, key roachpb.Key, value []byte) error {
-	var v roachpb.Value
-	v.SetBytes(value)
-	_, err := storage.MVCCPut(ctx, llb.b, key, hlc.Timestamp{}, v, storage.MVCCWriteOptions{})
-	return err
+type mockBatch struct {
+	e  *mockEngine
+	wb map[string]string
 }
 
-func (llb *LowLevelBatch) Clear(ctx context.Context, key roachpb.Key) error {
-	_, _, err := storage.MVCCDelete(ctx, llb.b, key, hlc.Timestamp{}, storage.MVCCWriteOptions{})
-	return err
+func (b *mockBatch) Put(ctx context.Context, key roachpb.Key, value []byte) {
+	b.wb[string(key)] = string(value)
 }
 
-func (llb *LowLevelBatch) Commit(sync bool) error {
-	return llb.b.Commit(sync)
+func (b *mockBatch) Del(ctx context.Context, key roachpb.Key) {
+	b.wb[string(key)] = "\x00"
 }
 
-func (llb *LowLevelBatch) Close() {
-	llb.b.Close()
+func (b *mockBatch) Commit(sync bool) error {
+	b.e.commit(b.wb, sync)
+	return nil
 }
 
-func (lle *LowLevelEngine) NewBatch() *LowLevelBatch {
-	return &LowLevelBatch{b: lle.eng.NewBatch()}
+func (b *mockBatch) Close() {}
+
+type mockEngine struct {
+	vol map[string]string // in memtbl, not durable and not flushed
+	dur map[string]string // in memtbl, durable but not flushed
+	lsm map[string]string // LSM contents (flushed and durable)
 }
 
-func (lle *LowLevelEngine) Flush() error {
-	return lle.eng.Flush()
-}
+var _ LLEngine = &mockEngine{}
 
-func (lle *LowLevelEngine) Dump(w io.Writer, enc Encoding) error {
-	type strMVCCKey struct {
-		key string
-		ts  hlc.Timestamp
+func (e *mockEngine) NewBatch() LLBatch {
+	return &mockBatch{
+		e:  e,
+		wb: make(map[string]string),
 	}
-	type val struct {
-		durStd, durGD []byte
-	}
-	seen := map[strMVCCKey]val{}
-	for _, dur := range []storage.DurabilityRequirement{
-		storage.StandardDurability, storage.GuaranteedDurability,
-	} {
-		r := lle.eng.NewReader(dur)
-		err := r.MVCCIterate(context.Background(),
-			roachpb.LocalMax, roachpb.KeyMax,
-			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges, fs.UnknownReadCategory,
-			func(value storage.MVCCKeyValue, stack storage.MVCCRangeKeyStack) error {
-				if !stack.IsEmpty() {
-					// We don't need this in this toy.
-					return errors.New("unimplemented: range keys")
-				}
-				if !value.Key.Timestamp.IsEmpty() {
-					// We don't need to bring MVCC into this toy.
-					return errors.New("unimplemented: MVCC timestamps")
-				}
-				sKey := strMVCCKey{
-					key: string(value.Key.Key),
-					ts:  value.Key.Timestamp,
-				}
-				if _, ok := seen[sKey]; !ok {
-					seen[sKey] = val{}
-				}
-				v := seen[sKey]
+}
 
-				switch dur {
-				case storage.StandardDurability:
-					v.durStd = value.Value
-				case storage.GuaranteedDurability:
-					v.durGD = value.Value
-				default:
-					panic("unknown durability")
-				}
-				seen[sKey] = v
-				return nil
-			})
-		r.Close()
-		if err != nil {
-			return err
+func (e *mockEngine) commit(wb map[string]string, sync bool) {
+	if e.dur == nil {
+		e.dur = make(map[string]string)
+	}
+	if e.vol == nil {
+		e.vol = make(map[string]string)
+	}
+	for k, v := range wb {
+		e.vol[k] = v
+	}
+
+	if sync {
+		for k, v := range e.vol {
+			e.dur[k] = v
 		}
+		e.vol = nil
+	}
+}
+
+func (e *mockEngine) Flush() error {
+	e.commit(nil, true)
+	if e.lsm == nil {
+		e.lsm = make(map[string]string)
+	}
+	for k, v := range e.dur {
+		e.lsm[k] = v
+	}
+	e.dur = nil
+	for k, v := range e.lsm {
+		if v == "\x00" {
+			delete(e.lsm, k)
+		}
+	}
+	return nil
+}
+
+func (e *mockEngine) Dump(w io.Writer) error {
+	type val struct {
+		vol, dur, lsm []byte
+	}
+	dst := map[string]val{}
+	for k, v := range e.vol {
+		dst[k] = val{vol: []byte(v)}
+	}
+	for k, v := range e.dur {
+		ent := dst[k]
+		ent.dur = []byte(v)
+		dst[k] = ent
+	}
+	for k, v := range e.lsm {
+		ent := dst[k]
+		ent.lsm = []byte(v)
+		dst[k] = ent
 	}
 
 	type flat struct {
-		k strMVCCKey
+		k roachpb.Key
 		v val
 	}
 	var sl []flat
-	for k, v := range seen {
-		sl = append(sl, flat{k, v})
+	for k, v := range dst {
+		sl = append(sl, flat{roachpb.Key(k), v})
 	}
 	sort.Slice(sl, func(i, j int) bool {
-		if sl[i].k.key == sl[j].k.key {
-			if sl[i].k.ts == sl[j].k.ts {
-				iStdSet, jStdSet := sl[i].v.durStd != nil, sl[j].v.durStd != nil
-				iGDSet, jGDSet := sl[i].v.durGD != nil, sl[j].v.durGD != nil
-				if iStdSet == jStdSet {
-					return iGDSet != jGDSet
-				}
-				if jStdSet {
-					return true
-				}
-				return false
+		if sl[i].k.Equal(sl[j].k) {
+			iStdSet, jStdSet := sl[i].v.dur != nil, sl[j].v.dur != nil
+			iGDSet, jGDSet := sl[i].v.lsm != nil, sl[j].v.lsm != nil
+			if iStdSet == jStdSet {
+				return iGDSet != jGDSet
 			}
-			return sl[i].k.ts.Less(sl[j].k.ts)
+			if jStdSet {
+				return true
+			}
+			return false
 		}
-		if sl[i].k.key < sl[j].k.key {
+		if sl[i].k.Less(sl[j].k) {
 			return true
 		}
 		return false
 	})
 
 	for _, f := range sl {
-		obj, err := enc.Decode([]byte(f.k.key), nil)
-		if err != nil {
-			return err
+		_, _ = fmt.Fprintf(w, "%s ->", f.k)
+		if f.v.vol != nil {
+			_, _ = fmt.Fprintf(w, " %q%s", f.v.vol, "♱")
 		}
-		_, _ = fmt.Fprintf(w, "%+v", obj)
-		if !f.k.ts.IsEmpty() {
-			_, _ = fmt.Fprint(w, " ", f.k.ts)
+		if f.v.dur != nil {
+			_, _ = fmt.Fprintf(w, " %q%s", f.v.dur, "⚐")
 		}
-		_, _ = fmt.Fprint(w, " ->")
-		decor := "*"
-		if bytes.Equal(f.v.durStd, f.v.durGD) {
-			decor = ""
-			f.v.durGD = nil
-		}
-		_, _ = fmt.Fprint(w, " ", string(decInlineVal(f.v.durStd)), decor)
-		if f.v.durGD != nil {
-			_, _ = fmt.Fprint(w, " ", string(decInlineVal(f.v.durGD)))
+		if f.v.lsm != nil {
+			_, _ = fmt.Fprintf(w, " %q", f.v.lsm)
 		}
 		_, _ = fmt.Fprintln(w)
 	}
 	return nil
 }
 
-func decInlineVal(v []byte) []byte {
-	var meta enginepb.MVCCMetadata
-	if err := meta.Unmarshal(v); err != nil {
-		return []byte(err.Error())
-	}
-	val := roachpb.Value{RawBytes: meta.RawBytes}
-	result, err := val.GetBytes()
-	if err != nil {
-		return []byte(err.Error())
-	}
-	return result
-}
-
-func NewLowLevelEngine() *LowLevelEngine {
-	return &LowLevelEngine{eng: storage.NewDefaultInMemForTesting()}
-}
-
 type llLogEngine struct {
-	enc Encoding
-	e   *LowLevelEngine
+	c rscodec.Codec
+	e LLEngine
 
 	buf []byte // scratch buf
 }
 
-func (llle *llLogEngine) Append(ctx context.Context, id FullLogID, entry LogEntry) error {
+func (llle *llLogEngine) Append(ctx context.Context, id rscodec.FullLogID, entry LogEntry) error {
 	//TODO implement me
 	panic("implement me")
 }
 
 func (llle *llLogEngine) Create(
 	ctx context.Context, req CreateRequest,
-) (FullLogID, WAGIndex, error) {
+) (rscodec.FullLogID, WAGIndex, error) {
 	b := llle.e.NewBatch()
 	defer b.Close()
 
-	lid := logpb.LogID(1) // TODO(tbg): allocate
+	lid := rscodec.LogID(1) // TODO(tbg): allocate
 	// wix := WAGIndex(123)  // TODO(tbg): allocate
 
 	op := CreateOp{
-		ID: FullLogID{
+		ID: rscodec.FullLogID{
 			RangeID:   req.RangeID,
 			ReplicaID: req.ReplicaID,
 			LogID:     lid,
 		},
 	}
+	_ = op
 
-	llle.enc.Encode(llle.buf[:0], op)
-	err := b.Put(ctx, MakeKey(req.RangeID, req.ReplicaID), []byte("hi"))
-	return FullLogID{}, 0, err
+	// llle.c.Encode(llle.buf[:0], op)
+	err := errors.New("fixme")
+	// err := b.Put(ctx, MakeKey(req.RangeID, req.ReplicaID), []byte("hi"))
+	return rscodec.FullLogID{}, 0, err
 }
 
-func (llle *llLogEngine) get(ctx context.Context, k Key) ([]byte, error) {
-	r := llle.e.eng.NewReader(storage.StandardDurability)
-	defer r.Close()
-	res, err := storage.MVCCGet(ctx, r, k.Encode(), hlc.Timestamp{}, storage.MVCCGetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	if !res.Value.IsPresent() {
-		return nil, nil
-	}
-	return res.Value.GetBytes()
-}
+//func (llle *llLogEngine) get(ctx context.Context, k Key) ([]byte, error) {
+//	r := llle.e.eng.NewReader(storage.StandardDurability)
+//	defer r.Close()
+//	res, err := storage.MVCCGet(ctx, r, k.Encode(), hlc.Timestamp{}, storage.MVCCGetOptions{})
+//	if err != nil {
+//		return nil, err
+//	}
+//	if !res.Value.IsPresent() {
+//		return nil, nil
+//	}
+//	return res.Value.GetBytes()
+//}
 
-func (llle *llLogEngine) Destroy(ctx context.Context, id FullLogID, req Destroy) (WAGIndex, error) {
+func (llle *llLogEngine) Destroy(
+	ctx context.Context, id rscodec.FullLogID, req Destroy,
+) (WAGIndex, error) {
 	//TODO implement me
 	panic("implement me")
 }

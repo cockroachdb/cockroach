@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "raftstoretoy",
+    srcs = [
+        "data.go",
+        "data_log.go",
+        "keys.go",
+        "log.go",
+        "log_engine.go",
+        "low_level_encoding.go",
+        "low_level_engine.go",
+        "sm_engine.go",
+        "wag.go",
+        "wag_ops.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/raftstoretoy/rscodec",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "raftstoretoy_test",
+    srcs = [
+        "datadriven_test.go",
+        "low_level_engine_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":raftstoretoy"],
+    deps = [
+        "//pkg/kv/kvserver/raftstoretoy/rscodec",
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

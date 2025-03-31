@@ -5,7 +5,10 @@
 
 package raftstoretoy
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // WAGOperation represents operations that can appear in the log.
 type WAGOperation interface {
@@ -40,13 +43,13 @@ func (Merge) Apply() {}
 
 // CreateRequest represents a request to initialize a replica via snapshot.
 type CreateRequest struct {
-	RangeID   roachpb.RangeID
-	ReplicaID roachpb.ReplicaID
+	RangeID   rscodec.RangeID
+	ReplicaID rscodec.ReplicaID
 	// Additional snapshot metadata would go here
 }
 
 type CreateOp struct {
-	ID FullLogID
+	ID rscodec.FullLogID
 	// TODO(tbg): snap metadata, or at least HardState
 }
 

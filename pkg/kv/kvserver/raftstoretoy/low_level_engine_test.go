@@ -13,15 +13,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var k = MakeKey
-
 func TestLowLevelEngine(t *testing.T) {
 	ctx := context.Background()
-	lle := NewLowLevelEngine()
+	lle := &mockEngine{}
+
+	k := func(s string) []byte {
+		return []byte(s)
+	}
 
 	{
 		b := lle.NewBatch()
-		require.NoError(t, b.Put(ctx, k("hello"), []byte("version1")))
+		b.Put(ctx, k("hello"), []byte("version0"))
+		require.NoError(t, b.Commit(true))
+		b.Put(ctx, k("hello"), []byte("version1"))
 		require.NoError(t, b.Commit(false))
 
 		var buf strings.Builder
@@ -33,8 +37,8 @@ func TestLowLevelEngine(t *testing.T) {
 
 	{
 		b := lle.NewBatch()
-		require.NoError(t, b.Put(ctx, k("hello"), []byte("version2")))
-		require.NoError(t, b.Put(ctx, k("goodbye"), []byte("version2")))
+		b.Put(ctx, k("hello"), []byte("version2"))
+		b.Put(ctx, k("goodbye"), []byte("version2"))
 		require.NoError(t, b.Commit(false))
 
 		var buf strings.Builder

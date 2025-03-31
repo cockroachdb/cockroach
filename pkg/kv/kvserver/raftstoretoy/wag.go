@@ -5,7 +5,7 @@
 
 package raftstoretoy
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/logpb"
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftstoretoy/rscodec"
 
 // WAGNodeType identifies the type of operation in the Write-Ahead Graph.
 type WAGNodeType int
@@ -23,7 +23,7 @@ const (
 
 // LogPosition identifies a specific position in a Raft log.
 type LogPosition struct {
-	logpb.LogID
+	rscodec.LogID
 	Index RaftIndex
 }
 

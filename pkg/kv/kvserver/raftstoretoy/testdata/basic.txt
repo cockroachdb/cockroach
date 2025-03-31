@@ -1,3 +1,7 @@
-create range=5 repl=1
+enc kind=KeyKindRaftLogEntry rid=0 lid=0
 ----
-op0: r0/0.0
+01000000000000000000000000000000000000
+
+enc kind=KeyKindRaftLogEntry rid=12 lid=5 ridx=9999999
+----
+01000000000000000c0005000000000098967f
