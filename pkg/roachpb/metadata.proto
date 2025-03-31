@@ -349,6 +349,11 @@ message StoreCapacity {
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
   reserved 11;
   reserved 12;
+  // no_leases_shed_last_rebalance is set to true if this store did not shed
+  // any leases during the last mma.ComputeChanges(), otherwise false if the
+  // store shed leases in the last rebalance attempt, or hasn't run
+  // mma.ComputeChanges() yet.
+  optional bool no_leases_shed_last_rebalance = 17 [(gogoproto.nullable) = false];
 }
 
 // StoreProperties contains configuration and OS-level details for a storage device.
