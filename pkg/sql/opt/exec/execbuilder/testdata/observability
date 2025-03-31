@@ -684,4 +684,3 @@ vectorized: true
                                                                                                   estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
                                                                                                   table: statement_statistics@primary
                                                                                                   spans: /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
-
