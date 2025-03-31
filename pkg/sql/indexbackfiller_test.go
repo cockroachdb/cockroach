@@ -8,9 +8,11 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -29,15 +31,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -551,5 +560,200 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 	for _, test := range indexBackfillerTestCases {
 		t.Run(test.name, func(t *testing.T) { run(t, test) })
+	}
+}
+
+// TestIndexBackfillerResumePreservesProgress tests that spans completed during
+// a backfill are properly preserved during PAUSE/RESUMEs. In particular,
+// we test the following backfill sequence (where b[n] denotes the same
+// backfill, just at different points of progression):
+//
+//	b[1] -> PAUSE -> RESUME -> b[2] -> PAUSE -> RESUME -> b[3]
+//
+// Before #140358, b[2] only checkpointed the spans it has completed since the
+// backfill was resumed -- leading to [b3] redoing work already completed since
+// b[1].
+func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "timing-sensitive test")
+
+	ctx := context.Background()
+	backfillProgressUpdateCh := make(chan struct{})
+	backfillProgressCompletedCh := make(chan []roachpb.Span)
+	checkpointedSpansCh := make(chan []roachpb.Span)
+	const numSpans = 100
+	var isBlockingBackfillProgress atomic.Bool
+	isBlockingBackfillProgress.Store(true)
+	var isBlockingCheckpoint atomic.Bool
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					// We want to push progress every batch_size rows to control
+					// the backfill incrementally.
+					BulkAdderFlushesEveryBatch: true,
+					RunBeforeIndexBackfillProgressUpdate: func(completed []roachpb.Span) {
+						if isBlockingBackfillProgress.Load() {
+							<-backfillProgressUpdateCh
+							backfillProgressCompletedCh <- completed
+						}
+					},
+				},
+				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+					RunBeforeBackfill: func(progresses []scexec.BackfillProgress) error {
+						if isBlockingCheckpoint.Load() && progresses != nil && progresses[0].CompletedSpans != nil {
+							checkpointedSpansCh <- progresses[0].CompletedSpans
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+	// Start the server with a testing knob
+	tc := testcluster.NewTestCluster(t, 1, clusterArgs)
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Conns[0]
+
+	_, err := db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = 10`)
+	require.NoError(t, err)
+	// Ensure that we checkpoint our progress to the backfill job so that
+	// RESUMEs can get an up-to-date backfill progress.
+	_, err = db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '0s'`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE t(i INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO t SELECT generate_series(1, $1)`, numSpans)
+	require.NoError(t, err)
+	_, err = db.Exec(`ALTER TABLE t SPLIT AT TABLE generate_series(1, $1)`, numSpans)
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+	var descID catid.DescID
+	descIDRow := db.QueryRow(`SELECT 't'::regclass::oid`)
+	err = descIDRow.Scan(&descID)
+	require.NoError(t, err)
+
+	var jobID int
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := db.Exec(`ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
+		if err != nil && err.Error() != fmt.Sprintf("pq: job %d was paused before it completed", jobID) {
+			return err
+		}
+		return nil
+	})
+
+	g.GoCtx(func(ctx context.Context) error {
+		testutils.SucceedsSoon(t, func() error {
+			jobIDRow := db.QueryRow(`
+				SELECT job_id FROM [SHOW JOBS]
+				WHERE job_type = 'NEW SCHEMA CHANGE' AND description ILIKE '%ADD COLUMN%'`,
+			)
+			if err := jobIDRow.Scan(&jobID); err != nil {
+				return err
+			}
+			return nil
+		})
+
+		ensureJobState := func(targetState string) {
+			testutils.SucceedsSoon(t, func() error {
+				var jobState string
+				statusRow := db.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID)
+				if err := statusRow.Scan(&jobState); err != nil {
+					return err
+				}
+				if jobState != targetState {
+					return errors.Errorf("expected job to be %s, but found status: %s",
+						targetState, jobState)
+				}
+				return nil
+			})
+		}
+
+		// Let the backfill step forward a bit before we do our PAUSE/RESUME
+		// dance.
+		var spansCompletedBeforePause []roachpb.Span
+		for i := 0; i < 2; i++ {
+			backfillProgressUpdateCh <- struct{}{}
+			spansCompletedBeforePause = <-backfillProgressCompletedCh
+		}
+
+		_, err := db.Exec(`PAUSE JOB $1`, jobID)
+		if err != nil {
+			return err
+		}
+		ensureJobState("paused")
+
+		_, err = db.Exec(`RESUME JOB $1`, jobID)
+		if err != nil {
+			return err
+		}
+		ensureJobState("running")
+
+		for i := 0; i < 2; i++ {
+			backfillProgressUpdateCh <- struct{}{}
+			<-backfillProgressCompletedCh
+		}
+		isBlockingCheckpoint.Store(true)
+
+		_, err = db.Exec(`PAUSE JOB $1`, jobID)
+		if err != nil {
+			return err
+		}
+		ensureJobState("paused")
+
+		_, err = db.Exec(`RESUME JOB $1`, jobID)
+		if err != nil {
+			return err
+		}
+		ensureJobState("running")
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			timer := time.NewTimer(1 * time.Minute)
+			defer timer.Stop()
+			select {
+			case checkpointed := <-checkpointedSpansCh:
+				isBlockingCheckpoint.Store(false)
+				var sg roachpb.SpanGroup
+				sg.Add(checkpointed...)
+				// Ensure that the spans we completed before any PAUSE is
+				// fully contained in our checkpointed completed spans group.
+				require.True(t, sg.Encloses(spansCompletedBeforePause...))
+			case <-timer.C:
+				require.Fail(t, "timed out waiting for checkpoint")
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			isBlockingBackfillProgress.Store(false)
+			timer := time.NewTimer(1 * time.Minute)
+			defer timer.Stop()
+			select {
+			case backfillProgressUpdateCh <- struct{}{}:
+				<-backfillProgressCompletedCh
+			case <-timer.C:
+				require.Fail(t, "timed out waiting for backfill progress")
+			}
+		}()
+
+		// Wait for both operations to complete
+		wg.Wait()
+
+		// Now we can wait for the job to succeed
+		ensureJobState("succeeded")
+		return nil
+	})
+
+	if err = g.Wait(); err != nil {
+		require.NoError(t, err)
 	}
 }
