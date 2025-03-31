@@ -19,20 +19,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	kv_prober_virtual_table = "crdb_internal.probe_ranges"
-)
-
 func registerKVProberMixedVersion(r registry.Registry) {
-	// kv-prober/mixed-version tests ??
 	r.Add(registry.TestSpec{
 		Name:             "kv-prober/mixed-version",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Randomized:       true,
-		Run:              runSQLStatsMixedVersion,
+		Run:              runKVProberMixedVersion,
 	})
 }
 
