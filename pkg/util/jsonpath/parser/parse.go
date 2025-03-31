@@ -22,6 +22,10 @@ func init() {
 	}
 }
 
+var (
+	ReCache = tree.NewRegexpCache(16)
+)
+
 type Parser struct {
 	scanner    scanner.JSONPathScanner
 	lexer      lexer
