@@ -2334,7 +2334,11 @@ func registerCDC(r registry.Registry) {
 				kafkaArgs: kafkaFeedArgs{
 					validateOrder: true,
 				},
-				opts: map[string]string{"initial_scan": "'no'"},
+				opts: map[string]string{
+					"initial_scan":        "'no'",
+					"mvcc_timestamp":      "", // HACK
+					"enriched_properties": "source",
+				},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
