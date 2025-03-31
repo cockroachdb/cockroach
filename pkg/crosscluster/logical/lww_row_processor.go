@@ -280,6 +280,10 @@ func (srp *sqlRowProcessor) ReleaseLeases(ctx context.Context) {
 	srp.querier.ReleaseLeases(ctx)
 }
 
+func (srp *sqlRowProcessor) BatchSize() int {
+	return int(flushBatchSize.Get(&srp.settings.SV))
+}
+
 func (*sqlRowProcessor) Close(ctx context.Context) {}
 
 var errInjected = errors.New("injected synthetic error")

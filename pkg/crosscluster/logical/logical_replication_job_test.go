@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -1689,7 +1691,8 @@ func GetReverseJobID(
 }
 
 type mockBatchHandler struct {
-	err error
+	err       error
+	batchSize int
 }
 
 var _ BatchHandler = &mockBatchHandler{}
@@ -1707,6 +1710,7 @@ func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 func (m mockBatchHandler) Close(context.Context)               {}
 func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
 func (m mockBatchHandler) ReleaseLeases(_ context.Context)     {}
+func (m mockBatchHandler) BatchSize() int                      { return m.batchSize }
 
 type mockDLQ int
 
@@ -1734,16 +1738,19 @@ func TestFlushErrorHandling(t *testing.T) {
 	ctx := context.Background()
 	dlq := mockDLQ(0)
 	lrw := &logicalReplicationWriterProcessor{
-		metrics:      MakeMetrics(0).(*Metrics),
-		getBatchSize: func() int { return 1 },
-		dlqClient:    &dlq,
+		metrics:   MakeMetrics(0).(*Metrics),
+		dlqClient: &dlq,
 	}
 	lrw.purgatory.flush = lrw.flushBuffer
 	lrw.purgatory.bytesGauge = lrw.metrics.RetryQueueBytes
 	lrw.purgatory.eventsGauge = lrw.metrics.RetryQueueEvents
 	lrw.purgatory.debug = &streampb.DebugLogicalConsumerStatus{}
 
-	lrw.bh = []BatchHandler{(mockBatchHandler{pgerror.New(pgcode.UniqueViolation, "index write conflict")})}
+	lrw.bh = []BatchHandler{(mockBatchHandler{
+		err:       pgerror.New(pgcode.UniqueViolation, "index write conflict"),
+		batchSize: 1,
+	})}
+
 	lrw.bhStats = make([]flushStats, 1)
 
 	lrw.purgatory.byteLimit = func() int64 { return 1 }
@@ -2692,4 +2699,44 @@ func TestFailDestAfterSourceFailure(t *testing.T) {
 
 	dbB.Exec(t, "RESUME JOB $1", jobBID)
 	jobutils.WaitForJobToFail(t, dbB, jobBID)
+}
+
+func TestGetWriterType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	t.Run("validated-mode", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
+		require.NoError(t, err)
+		require.Equal(t, writerTypeSQL, wt)
+	})
+
+	t.Run("immediate-mode-pre-25.2", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.V25_1.Version(),
+			clusterversion.V25_1.Version(),
+			true, /* initializeVersion */
+		)
+		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
+		require.NoError(t, err)
+		require.Equal(t, writerTypeSQL, wt)
+	})
+
+	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.V25_2.Version(),
+			clusterversion.PreviousRelease.Version(),
+			true, /* initializeVersion */
+		)
+		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeSQL))
+		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
+		require.NoError(t, err)
+		require.Equal(t, writerTypeSQL, wt)
+
+		immediateModeWriter.Override(ctx, &st.SV, string(writerTypeLegacyKV))
+		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
+		require.NoError(t, err)
+		require.Equal(t, writerTypeLegacyKV, wt)
+	})
 }
