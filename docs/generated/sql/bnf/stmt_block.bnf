@@ -2882,6 +2882,7 @@ restore_options ::=
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
+	| 'EXPERIMENTAL' 'COPY'
 	| 'REMOVE_REGIONS'
 
 scrub_option_list ::=
