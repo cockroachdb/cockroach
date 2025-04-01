@@ -1260,5 +1260,5 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-core-5.8.2.tar.gz": "764a3b3757bb8c3c6a02ba3344731a3d71e558220adcb0cf7e43c9bba2c37ba8",
     "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz": "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
     "https://storage.googleapis.com/public-bazel-artifacts/python/six-1.10.0.tar.gz": "105f8d68616f8248e24bf0e9372ef04d3cc10104f1980f54d57b2ce73a5ad56a",
-    "https://storage.googleapis.com/public-bazel-artifacts/zlib/zlib-1.2.11.tar.gz": "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
+    "https://storage.googleapis.com/public-bazel-artifacts/zlib/zlib-1.3.1.tar.gz": "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
 }
