@@ -285,7 +285,9 @@ func (tu *tableUpserter) updateConflictingRow(
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
-	_, err := tu.ru.UpdateRow(ctx, b, fetchRow, updateValues, pm, vh, nil, traceKV)
+	_, err := tu.ru.UpdateRow(
+		ctx, b, fetchRow, updateValues, pm, vh, nil, false /* mustValidateOldPKValues */, traceKV,
+	)
 	if err != nil {
 		return err
 	}
