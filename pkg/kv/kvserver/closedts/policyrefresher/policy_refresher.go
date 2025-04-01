@@ -164,26 +164,55 @@ func (pr *PolicyRefresher) Run(ctx context.Context) {
 	}
 	closedts.RangeClosedTimestampPolicyRefreshInterval.SetOnChange(&pr.settings.SV, onConfigChange)
 
+	latencyRefresherConfigUpdateCh := make(chan struct{}, 1)
+	onLatencyRefresherConfigChange := func(ctx context.Context) {
+		select {
+		case configUpdateCh <- struct{}{}:
+		default:
+		}
+	}
+	closedts.RangeClosedTimestampPolicyRefreshInterval.SetOnChange(&pr.settings.SV, onLatencyRefresherConfigChange)
+
 	_ /* err */ = pr.stopper.RunAsyncTask(ctx, "closed timestamp policy refresher",
 		func(ctx context.Context) {
-			var refreshTimer timeutil.Timer
-			defer refreshTimer.Stop()
+			getPolicyRefresh := func() time.Duration {
+				return closedts.RangeClosedTimestampPolicyRefreshInterval.Get(&pr.settings.SV)
+			}
+			getLatencyRefresh := func() time.Duration {
+				return closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Get(&pr.settings.SV)
+			}
+
+			var policyRefresherTimer timeutil.Timer
+			policyRefresherTimer.Reset(getPolicyRefresh())
+			defer policyRefresherTimer.Stop()
+
+			var latencyRefresherTimer timeutil.Timer
+			latencyRefresherTimer.Reset(getLatencyRefresh())
+			defer latencyRefresherTimer.Stop()
+
 			for {
-				refreshInterval := closedts.RangeClosedTimestampPolicyRefreshInterval.Get(&pr.settings.SV)
-				if refreshInterval > 0 {
-					refreshTimer.Reset(refreshInterval)
-				} else {
-					refreshTimer.Stop()
-				}
 				select {
+				// Refresh the policy on-demand.
 				case <-pr.refreshNotificationCh:
 					pr.refreshPolicies(pr.detachReplicas())
-				case <-refreshTimer.C:
-					refreshTimer.Read = true
-					pr.updateLatencyCache()
+
+				// Refresh the policy for ranges with leaseholders on the node.
+				case <-policyRefresherTimer.C:
+					policyRefresherTimer.Read = true
 					pr.refreshPolicies(pr.getLeaseholderReplicas())
+					policyRefresherTimer.Reset(getPolicyRefresh())
 				case <-configUpdateCh:
-					continue
+					policyRefresherTimer.Reset(getPolicyRefresh())
+
+				// Refresh the latency cache.
+				case <-latencyRefresherTimer.C:
+					latencyRefresherTimer.Read = true
+					latencyRefresherTimer.Reset(getLatencyRefresh())
+					pr.updateLatencyCache()
+				case <-latencyRefresherConfigUpdateCh:
+					latencyRefresherTimer.Reset(getLatencyRefresh())
+
+				// Stop the for loop.
 				case <-pr.stopper.ShouldQuiesce():
 					return
 				case <-ctx.Done():
