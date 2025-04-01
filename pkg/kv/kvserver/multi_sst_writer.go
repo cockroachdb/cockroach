@@ -118,9 +118,14 @@ func (msstw *multiSSTWriter) emitRangeKey(key rangekey.Span) {
 }
 
 func (msstw *multiSSTWriter) emitRangeDel(key rangedel.Span) {
+	wb := msstw.currSST.EstimatedSize()
 	if err := msstw.currSST.ClearRawEncodedRange(key.Start, key.End); err != nil {
 		panic(fmt.Sprintf("failed to put range del in sst: %s", err))
 	}
+	// NB: this update is often zero in practice since currSST also has an
+	// internal fragmenter and EstimatedSize doesn't try to estimate for the keys
+	// buffered.
+	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - wb)
 }
 
 // currentSpan returns the current user-provided span that
@@ -363,8 +368,6 @@ func (msstw *multiSSTWriter) PutInternalRangeDelete(ctx context.Context, start, 
 	if err := msstw.rolloverSST(ctx, decodedStart, decodedEnd); err != nil {
 		return err
 	}
-	prevWriteBytes := msstw.currSST.EstimatedSize()
-	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	msstw.rangeDelFrag.Add(rangedel.Span{Start: start, End: end})
 	return nil
 }
@@ -380,15 +383,12 @@ func (msstw *multiSSTWriter) PutInternalRangeKey(
 		return err
 	}
 	prevWriteBytes := msstw.currSST.EstimatedSize()
-	if err := msstw.currSST.PutInternalRangeKey(start, end, key); err != nil {
-		return errors.Wrap(err, "failed to put range key in sst")
-	}
 
-	// TODO(tbg): why isn't this updating `rangeKeyFrag`? PutInternalRangeKey
-	// can only occur with shared SSTs, which I believe is the case in which
-	// incoming range keys aren't already pre-fragmented.
-	// See PutRangeKey below which *does* fragment, though I don't think it
-	// would strictly need to.
+	msstw.rangeKeyFrag.Add(rangekey.Span{
+		Start: start,
+		End:   end,
+		Keys:  []rangekey.Key{key},
+	})
 
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
@@ -406,12 +406,8 @@ func (msstw *multiSSTWriter) PutRangeKey(
 
 	startKey, endKey := storage.EngineKey{Key: start}.Encode(), storage.EngineKey{Key: end}.Encode()
 	startTrailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet)
-	msstw.rangeKeyFrag.Add(rangekey.Span{
-		Start: startKey,
-		End:   endKey,
-		Keys:  []rangekey.Key{{Trailer: startTrailer, Suffix: suffix, Value: value}},
-	})
-	return nil
+	rk := rangekey.Key{Trailer: startTrailer, Suffix: suffix, Value: value}
+	return msstw.PutInternalRangeKey(ctx, startKey, endKey, rk)
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
