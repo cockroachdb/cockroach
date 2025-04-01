@@ -265,6 +265,7 @@ func newRootTxnCoordSender(
 		stopper: tcs.stopper,
 		metrics: &tcs.metrics,
 		mu:      &tcs.mu.Mutex,
+		knobs:   &tcs.testingKnobs,
 	}
 	tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
 		metrics:    &tcs.metrics,

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -163,7 +164,11 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
 	}
 
-	return base.TestClusterArgs{
+	if cfg.testSettings != nil {
+		cfg.testSettings(ctx, st)
+	}
+
+	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: storeKnobs,
@@ -189,6 +194,12 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			Settings: st,
 		},
 	}
+
+	if cfg.testArgs != nil {
+		cfg.testArgs(&args)
+	}
+
+	return args
 }
 
 func randWithSeed(
@@ -267,6 +278,14 @@ type kvnemesisTestCfg struct {
 	assertRaftApply bool
 	// If set, overrides the default lease type for ranges.
 	leaseTypeOverride roachpb.LeaseType
+
+	// testSettings is passed the settings object used for the kvnemesis
+	// TestCluster.
+	testSettings func(context.Context, *cluster.Settings)
+
+	// testArgs is passed the TestClusterArgs used to start the kvnemesis
+	// TestCluster.
+	testArgs func(*base.TestClusterArgs)
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -296,6 +315,53 @@ func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
 		invalidLeaseAppliedIndexProb: 0.9,
 		injectReproposalErrorProb:    0.5,
 		assertRaftApply:              true,
+	})
+}
+
+// TestKVNemesisSingleNode_UnreplicatedLocksOnly runs KVNemesis with
+// testing-only modifications that force the use of unreplicated locks in place
+// of replicated locks.
+//
+// The goal of this test is to discover problems with unreplicated lock flushing
+// on node operations and potentially other issues that prevent the use of
+// unreplicated locks to provide isolation.
+func TestKVNemesisSingleNode_UnreplicatedLocksOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer kvpb.TestingAlwaysUseUnreplicatedLocks()()
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     1,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		testSettings: func(ctx context.Context, st *cluster.Settings) {
+			concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
+			concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
+			concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)
+		},
+		testArgs: func(args *base.TestClusterArgs) {
+			if storeKnobs, ok := args.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs); ok {
+				storeKnobs.EvalKnobs.BumpTimestampCacheOnUnreplicatedLocks = true
+			} else {
+				args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						BumpTimestampCacheOnUnreplicatedLocks: true,
+					},
+				}
+			}
+			if clientKnobs, ok := args.ServerArgs.Knobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
+				clientKnobs.Disable1PCForAllLockingReadRequests = true
+			} else {
+				args.ServerArgs.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
+					Disable1PCForAllLockingReadRequests: true,
+				}
+			}
+		},
 	})
 }
 

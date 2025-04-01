@@ -125,11 +125,13 @@ var parallelCommitsEnabled = settings.RegisterBoolSetting(
 // In all cases, the interceptor abstracts away the details of this from all
 // interceptors above it in the coordinator interceptor stack.
 type txnCommitter struct {
-	st         *cluster.Settings
-	stopper    *stop.Stopper
-	wrapped    lockedSender
-	metrics    *TxnMetrics
-	mu         sync.Locker
+	st      *cluster.Settings
+	stopper *stop.Stopper
+	wrapped lockedSender
+	metrics *TxnMetrics
+	knobs   *ClientTestingKnobs
+	mu      sync.Locker
+
 	disable1PC bool
 }
 
@@ -583,10 +585,15 @@ func (tc *txnCommitter) maybeDisable1PC(ba *kvpb.BatchRequest) {
 	if tc.disable1PC {
 		return // already disabled; early return
 	}
+	var alwaysDisable bool
+	if tc.knobs != nil {
+		alwaysDisable = tc.knobs.Disable1PCForAllLockingReadRequests
+	}
+
 	for _, req := range ba.Requests {
 		if readOnlyReq, ok := req.GetInner().(kvpb.LockingReadRequest); ok {
 			_, dur := readOnlyReq.KeyLocking()
-			if dur == lock.Replicated {
+			if dur == lock.Replicated || alwaysDisable {
 				tc.disable1PC = true
 				return
 			}

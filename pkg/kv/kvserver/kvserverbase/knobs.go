@@ -62,6 +62,10 @@ type BatchEvalTestingKnobs struct {
 	// NOTE: This currently only applies to Migrate requests and only ignores the
 	// cluster version.
 	OverrideDoTimelyApplicationToAllReplicas bool
+
+	// BumpTimestampCacheOnUnreplicatedLocks bumps the timestamp
+	// cache for all locks, not just replicated locks.
+	BumpTimestampCacheOnUnreplicatedLocks bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during

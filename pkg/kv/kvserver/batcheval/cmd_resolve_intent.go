@@ -109,8 +109,11 @@ func ResolveIntent(
 	res.Local.ResolvedLocks = []roachpb.LockUpdate{update}
 	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
 
+	shouldBumpTSCache := replLocksReleased
+	shouldBumpTSCache = shouldBumpTSCache || cArgs.EvalCtx.EvalKnobs().BumpTimestampCacheOnUnreplicatedLocks
+
 	// Handle replicated lock releases.
-	if replLocksReleased && update.Status == roachpb.COMMITTED {
+	if shouldBumpTSCache && update.Status == roachpb.COMMITTED {
 		// A replicated {shared, exclusive} lock was released for a committed
 		// transaction. Now that the lock is no longer there, we still need to make
 		// sure other transactions can't write underneath the transaction's commit
