@@ -11,6 +11,10 @@ query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
 0    RANGE default
+42   TABLE system.public.statement_statistics
+43   TABLE system.public.transaction_statistics
+61   TABLE system.public.statement_activity
+62   TABLE system.public.transaction_activity
 106  TABLE test.public.t
 
 # The tests below test semantics around named zone for tenants. Tenants aren't
