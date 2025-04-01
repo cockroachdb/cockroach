@@ -173,20 +173,23 @@ func (a *allocatorState) rebalanceStores(
 		// 	continue
 		// }
 		doneShedding := false
-		topKRanges := ss.adjusted.topKRanges[localStoreID]
-		n := topKRanges.len()
-		if n > 0 {
-			var b strings.Builder
-			for i := 0; i < n; i++ {
-				rangeID := topKRanges.index(i)
-				rstate := a.cs.ranges[rangeID]
-				load := rstate.load.Load
-				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-					load[CPURate] = rstate.load.RaftCPU
+		if true {
+			// Debug logging.
+			topKRanges := ss.adjusted.topKRanges[localStoreID]
+			n := topKRanges.len()
+			if n > 0 {
+				var b strings.Builder
+				for i := 0; i < n; i++ {
+					rangeID := topKRanges.index(i)
+					rstate := a.cs.ranges[rangeID]
+					load := rstate.load.Load
+					if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+						load[CPURate] = rstate.load.RaftCPU
+					}
+					fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
 				}
-				fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
+				log.Infof(ctx, "top-K ranges %s: %s", topKRanges.dim, b.String())
 			}
-			log.Infof(ctx, "top-K ranges %s: %s", topKRanges.dim, b.String())
 		}
 
 		if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
@@ -194,8 +197,8 @@ func (a *allocatorState) rebalanceStores(
 			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
-			topKRanges = ss.adjusted.topKRanges[localStoreID]
-			n = topKRanges.len()
+			topKRanges := ss.adjusted.topKRanges[localStoreID]
+			n := topKRanges.len()
 			for i := 0; i < n; i++ {
 				rangeID := topKRanges.index(i)
 				rstate := a.cs.ranges[rangeID]
@@ -312,8 +315,8 @@ func (a *allocatorState) rebalanceStores(
 		}
 
 		// Iterate over top-K ranges first and try to move them.
-		topKRanges = ss.adjusted.topKRanges[localStoreID]
-		n = topKRanges.len()
+		topKRanges := ss.adjusted.topKRanges[localStoreID]
+		n := topKRanges.len()
 		for i := 0; i < n; i++ {
 			rangeID := topKRanges.index(i)
 			// TODO(sumeer): the following code belongs in a closure, since we will
