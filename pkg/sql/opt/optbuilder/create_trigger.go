@@ -240,7 +240,7 @@ func (b *Builder) buildFunctionForTrigger(
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 		plBuilder := newPLpgSQLBuilder(
 			b, basePLOptions(), ct.FuncName.String(), stmt.AST.Label,
-			nil /* colRefs */, triggerFuncParams, tableTyp, nil, /* outScope */
+			nil /* colRefs */, triggerFuncParams, tableTyp, nil /* outScope */, 0, /* resultBufferID */
 		)
 		funcScope = plBuilder.buildRootBlock(stmt.AST, funcScope, triggerFuncParams)
 	})
