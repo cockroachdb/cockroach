@@ -343,6 +343,9 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// sqlStatsIngester provides the interface to consume stats about a sql execution.
+	sqlStatsIngester *sslocal.SQLConcurrentBufferIngester
+
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
 	schemaTelemetryController *schematelemetrycontroller.Controller
@@ -439,12 +442,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
-		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			insightsProvider.Writer().Clear()
-		}
-	})
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
@@ -466,6 +463,13 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
 	)
+	sqlStatsIngester := sslocal.NewSQLConcurrentBufferIngester(insightsProvider)
+	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
+		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
+			sqlStatsIngester.Clear()
+		}
+	})
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
@@ -474,6 +478,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		pool:                    pool,
 		localSqlStats:           memSQLStats,
 		reportedStats:           reportedSQLStats,
+		sqlStatsIngester:        sqlStatsIngester,
 		reportedStatsController: reportedSQLStatsController,
 		insights:                insightsProvider,
 		reCache:                 tree.NewRegexpCache(512),
@@ -657,7 +662,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
-	s.insights.Start(ctx, stopper)
+	s.sqlStatsIngester.Start(ctx, stopper)
 	s.sqlStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
@@ -1211,14 +1216,10 @@ func (s *Server) newConnExecutor(
 	ex.applicationStats = applicationStats
 	// We ignore statements and transactions run by the internal executor by
 	// passing a nil writer.
-	var writer *insights.ConcurrentBufferIngester
-	if !ex.sessionData().Internal {
-		writer = ex.server.insights.Writer()
-	}
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
-		writer,
+		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
 		underOuterTxn,
