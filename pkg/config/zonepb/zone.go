@@ -17,10 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1494,10 +1497,197 @@ func (v ReplaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr
 // VisitPost satisfies the Visitor interface.
 func (ReplaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
-// ValidateNewUniqueConstraintsForSecondaryTenants validates that none of our
+// ValidateZoneAttrsAndLocalitiesForSystemTenant performs constraint/ lease
+// preferences validation for the system tenant. Only newly added constraints
+// are validated. The system tenant is allowed to reference both locality and
+// non-locality attributes as it has access to node information via the
+// NodeStatusServer.
+//
+// For the system tenant, this only catches typos in required constraints. This
+// is by design. We don't want to reject prohibited constraints whose
+// attributes/localities don't match any of the current nodes because it's a
+// reasonable use case to add prohibited constraints for a new set of nodes
+// before adding the new nodes to the cluster. If you had to first add one of
+// the nodes before creating the constraints, data could be replicated there
+// that shouldn't be.
+func ValidateZoneAttrsAndLocalitiesForSystemTenant(
+	b context.Context, getNodes NodeGetter, currentZone, newZone *ZoneConfig,
+) error {
+	nodes, err := getNodes(b, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+
+	// Check that each constraint matches some store somewhere in the cluster.
+	for _, constraint := range toValidate {
+		// We skip validation for negative constraints. See the function-level comment.
+		if constraint.Type == Constraint_PROHIBITED {
+			continue
+		}
+		var found bool
+	node:
+		for _, node := range nodes.Nodes {
+			for _, store := range node.StoreStatuses {
+				// We could alternatively use zonepb.StoreMatchesConstraint here to
+				// catch typos in prohibited constraints as well, but as noted in the
+				// function-level comment that could break very reasonable use cases for
+				// prohibited constraints.
+				if StoreSatisfiesConstraint(store.Desc, constraint) {
+					found = true
+					break node
+				}
+			}
+		}
+		if !found {
+			return pgerror.Newf(pgcode.CheckViolation,
+				"constraint %q matches no existing nodes within the cluster - did you enter it correctly?",
+				constraint)
+		}
+	}
+
+	return nil
+}
+
+// ValidateZoneLocalitiesForSecondaryTenants performs constraint/lease
+// preferences validation for secondary tenants. Only newly added constraints
+// are validated. Unless SecondaryTenantsAllZoneConfigsEnabled is set to 'true',
+// secondary tenants are only allowed to reference locality attributes as they
+// only have access to region information via the serverpb.TenantStatusServer.
+// In that case they're only allowed to reference the "region" and "zone" tiers.
+//
+// Unlike the system tenant, we also validate prohibited constraints. This is
+// because secondary tenant must operate in the narrow view exposed via the
+// serverpb.TenantStatusServer and are not allowed to configure arbitrary
+// constraints (required or otherwise).
+func ValidateZoneLocalitiesForSecondaryTenants(
+	ctx context.Context,
+	getRegions regionsGetter,
+	currentZone, newZone *ZoneConfig,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+) error {
+	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := validateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
+
+	// rs and zs will be lazily populated with regions and zones, respectively.
+	// These should not be accessed directly - use getRegionsAndZones helper
+	// instead.
+	var rs, zs map[string]struct{}
+	getRegionsAndZones := func() (regions, zones map[string]struct{}, _ error) {
+		if rs != nil {
+			return rs, zs, nil
+		}
+		resp, err := getRegions(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		rs, zs = make(map[string]struct{}), make(map[string]struct{})
+		for regionName, regionMeta := range resp.Regions {
+			rs[regionName] = struct{}{}
+			for _, zone := range regionMeta.Zones {
+				zs[zone] = struct{}{}
+			}
+		}
+		return rs, zs, nil
+	}
+
+	for _, constraint := range toValidate {
+		switch constraint.Key {
+		case "zone":
+			_, zones, err := getRegionsAndZones()
+			if err != nil {
+				return err
+			}
+			_, found := zones[constraint.Value]
+			if !found {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"zone %q not found",
+					constraint.Value,
+				)
+			}
+		case "region":
+			regions, _, err := getRegionsAndZones()
+			if err != nil {
+				return err
+			}
+			_, found := regions[constraint.Value]
+			if !found {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"region %q not found",
+					constraint.Value,
+				)
+			}
+		default:
+			if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(
+				codec, settings, sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// accumulateNewUniqueConstraints returns a list of unique constraints in the
+// given newZone config proto that are not in the currentZone
+func accumulateNewUniqueConstraints(currentZone, newZone *ZoneConfig) []Constraint {
+	seenConstraints := make(map[Constraint]struct{})
+	retConstraints := make([]Constraint, 0)
+	addToValidate := func(c Constraint) {
+		if _, ok := seenConstraints[c]; ok {
+			// Already in the list or in the current zone config, nothing to do.
+			return
+		}
+		retConstraints = append(retConstraints, c)
+		seenConstraints[c] = struct{}{}
+	}
+	// First scan all the current zone config constraints.
+	for _, constraints := range currentZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+	for _, constraints := range currentZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+	for _, leasePreferences := range currentZone.LeasePreferences {
+		for _, constraint := range leasePreferences.Constraints {
+			seenConstraints[constraint] = struct{}{}
+		}
+	}
+
+	// Then scan all the new zone config constraints, adding the ones that
+	// were not seen already.
+	for _, constraints := range newZone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	for _, constraints := range newZone.VoterConstraints {
+		for _, constraint := range constraints.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	for _, leasePreferences := range newZone.LeasePreferences {
+		for _, constraint := range leasePreferences.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	return retConstraints
+}
+
+// validateNewUniqueConstraintsForSecondaryTenants validates that none of our
 // zonepb.ConstraintsConjunction violate the given max replicas per region
 // set by sql.zone_configs.max_replicas_per_region.
-func ValidateNewUniqueConstraintsForSecondaryTenants(
+func validateNewUniqueConstraintsForSecondaryTenants(
 	sv *settings.Values, currentZone, newZone *ZoneConfig,
 ) error {
 	maxReplicas := MaxReplicasPerRegion.Get(sv)
@@ -1558,3 +1748,6 @@ func ValidateNewUniqueConstraintsForSecondaryTenants(
 	}
 	return nil
 }
+
+type NodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
+type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)

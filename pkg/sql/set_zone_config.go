@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -798,7 +797,6 @@ func (*setZoneConfigNode) Close(context.Context)          {}
 
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
-type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
 type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)
 
 // accumulateNewUniqueConstraints returns a list of unique constraints in the
@@ -875,148 +873,11 @@ func validateZoneAttrsAndLocalities(
 		if err != nil {
 			return err
 		}
-		return validateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, currentZone, newZone)
+		return zonepb.ValidateZoneAttrsAndLocalitiesForSystemTenant(ctx, ss.ListNodesInternal, currentZone, newZone)
 	}
-	return validateZoneLocalitiesForSecondaryTenants(
+	return zonepb.ValidateZoneLocalitiesForSecondaryTenants(
 		ctx, regionProvider.GetRegions, currentZone, newZone, execCfg.Codec, execCfg.Settings,
 	)
-}
-
-// validateZoneAttrsAndLocalitiesForSystemTenant performs constraint/ lease
-// preferences validation for the system tenant. Only newly added constraints
-// are validated. The system tenant is allowed to reference both locality and
-// non-locality attributes as it has access to node information via the
-// NodeStatusServer.
-//
-// For the system tenant, this only catches typos in required constraints. This
-// is by design. We don't want to reject prohibited constraints whose
-// attributes/localities don't match any of the current nodes because it's a
-// reasonable use case to add prohibited constraints for a new set of nodes
-// before adding the new nodes to the cluster. If you had to first add one of
-// the nodes before creating the constraints, data could be replicated there
-// that shouldn't be.
-func validateZoneAttrsAndLocalitiesForSystemTenant(
-	ctx context.Context, getNodes nodeGetter, currentZone, newZone *zonepb.ZoneConfig,
-) error {
-	nodes, err := getNodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return err
-	}
-
-	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
-
-	// Check that each constraint matches some store somewhere in the cluster.
-	for _, constraint := range toValidate {
-		// We skip validation for negative constraints. See the function-level comment.
-		if constraint.Type == zonepb.Constraint_PROHIBITED {
-			continue
-		}
-		var found bool
-	node:
-		for _, node := range nodes.Nodes {
-			for _, store := range node.StoreStatuses {
-				// We could alternatively use zonepb.StoreMatchesConstraint here to
-				// catch typos in prohibited constraints as well, but as noted in the
-				// function-level comment that could break very reasonable use cases for
-				// prohibited constraints.
-				if zonepb.StoreSatisfiesConstraint(store.Desc, constraint) {
-					found = true
-					break node
-				}
-			}
-		}
-		if !found {
-			return pgerror.Newf(pgcode.CheckViolation,
-				"constraint %q matches no existing nodes within the cluster - did you enter it correctly?",
-				constraint)
-		}
-	}
-
-	return nil
-}
-
-// validateZoneLocalitiesForSecondaryTenants performs constraint/lease
-// preferences validation for secondary tenants. Only newly added constraints
-// are validated. Unless SecondaryTenantsAllZoneConfigsEnabled is set to 'true',
-// secondary tenants are only allowed to reference locality attributes as they
-// only have access to region information via the serverpb.TenantStatusServer.
-// In that case they're only allowed to reference the "region" and "zone" tiers.
-//
-// Unlike the system tenant, we also validate prohibited constraints. This is
-// because secondary tenant must operate in the narrow view exposed via the
-// serverpb.TenantStatusServer and are not allowed to configure arbitrary
-// constraints (required or otherwise).
-func validateZoneLocalitiesForSecondaryTenants(
-	ctx context.Context,
-	getRegions regionsGetter,
-	currentZone, newZone *zonepb.ZoneConfig,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-) error {
-	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
-	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
-		return err
-	}
-
-	// rs and zs will be lazily populated with regions and zones, respectively.
-	// These should not be accessed directly - use getRegionsAndZones helper
-	// instead.
-	var rs, zs map[string]struct{}
-	getRegionsAndZones := func() (regions, zones map[string]struct{}, _ error) {
-		if rs != nil {
-			return rs, zs, nil
-		}
-		resp, err := getRegions(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		rs, zs = make(map[string]struct{}), make(map[string]struct{})
-		for regionName, regionMeta := range resp.Regions {
-			rs[regionName] = struct{}{}
-			for _, zone := range regionMeta.Zones {
-				zs[zone] = struct{}{}
-			}
-		}
-		return rs, zs, nil
-	}
-
-	for _, constraint := range toValidate {
-		switch constraint.Key {
-		case "zone":
-			_, zones, err := getRegionsAndZones()
-			if err != nil {
-				return err
-			}
-			_, found := zones[constraint.Value]
-			if !found {
-				return pgerror.Newf(
-					pgcode.CheckViolation,
-					"zone %q not found",
-					constraint.Value,
-				)
-			}
-		case "region":
-			regions, _, err := getRegionsAndZones()
-			if err != nil {
-				return err
-			}
-			_, found := regions[constraint.Value]
-			if !found {
-				return pgerror.Newf(
-					pgcode.CheckViolation,
-					"region %q not found",
-					constraint.Value,
-				)
-			}
-		default:
-			if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(
-				codec, settings, sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled,
-			); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 type zoneConfigUpdate struct {
