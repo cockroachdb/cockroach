@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,10 +27,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+var orParams = base.TestClusterArgs{
+	// Online restore is not supported in a secondary tenant yet.
+	ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	},
+}
+
+func onlineImpl(rng *rand.Rand) string {
+	opt := "EXPERIMENTAL DEFERRED COPY"
+	if rng.Intn(2) == 0 {
+		opt = "EXPERIMENTAL COPY"
+	}
+	return opt
+}
 
 func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -40,16 +57,11 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	ctx := context.Background()
 
 	const numAccounts = 1000
-	params := base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	}
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
 	defer cleanupFn()
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
 	defer cleanupFnRestored()
 
 	externalStorage := "nodelocal://1/backup"
@@ -116,6 +128,36 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	srv.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 	sqlDB.Exec(t, fmt.Sprintf(`SHOW JOB WHEN COMPLETE %s`, j[0][4]))
+}
+
+func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	rng, _ := randutil.NewTestRand()
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t,
+		singleNode,
+		numAccounts,
+		InitManualReplication,
+		orParams,
+	)
+	defer cleanupFn()
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_publishing_descriptors'")
+	var jobID jobspb.JobID
+	stmt := fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', %s, detached)", onlineImpl(rng))
+	sqlDB.QueryRow(t, stmt, localFoo).Scan(&jobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	// Set a pauspoint during the link phase which should not get hit because of
+	// checkpointing.
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_link'")
+	sqlDB.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 }
 
 func TestOnlineRestoreStatementResult(t *testing.T) {
