@@ -8,6 +8,7 @@ package policyrefresher
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,5 +176,49 @@ func TestPolicyRefresherEnqueueOnBlockingReplica(t *testing.T) {
 			return errors.Newf("expected replica to have policy %v, got %v", ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, r.GetPolicy())
 		}
 		return nil
+	})
+}
+
+// TestPolicyRefresherOnLatencyIntervalUpdate tests that the policy refresher
+// stays reactive to updates to the latency interval.
+func TestPolicyRefresherOnLatencyIntervalUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+
+	r := &mockReplica{}
+	getLeaseholders := func() []Replica { return []Replica{r} }
+
+	var called atomic.Bool
+	getLatencies := func() map[roachpb.NodeID]time.Duration {
+		called.Store(true)
+		return map[roachpb.NodeID]time.Duration{}
+	}
+
+	// Set the refresh interval to be really high at the start to ensure that the
+	// latency cache is not updated.
+	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(
+		ctx, &st.SV, 1*time.Hour)
+
+	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
+	require.NotNil(t, pr)
+	pr.Run(ctx)
+
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, false, called.Load())
+
+	// Set the refresh interval to short enough to ensure that the latency cache
+	// is updated.
+	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(
+		ctx, &st.SV, 10*time.Millisecond)
+
+	testutils.SucceedsSoon(t, func() error {
+		if called.Load() {
+			return nil
+		}
+		return errors.New("expected latency update")
 	})
 }
