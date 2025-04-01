@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -304,9 +306,13 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		// the same rangedel twice (as long as they're added in increasing seqno
 		// order), and we want to exercise the "tricky" case where pebble would
 		// complain about lack of proper fragmentation.
-		rdsp := roachpb.Span{Key: span.Key, EndKey: span.Key.Next()}
-		require.NoError(t, msstw.PutInternalRangeDelete(ctx, storage.EngineKey{Key: rdsp.Key}.Encode(),
-			storage.EngineKey{Key: rdsp.EndKey}.Encode()))
+		k := storage.EngineKey{Key: span.Key}.Encode()
+		ek := storage.EngineKey{Key: span.EndKey}.Encode()
+		require.NoError(t, msstw.PutInternalRangeDelete(ctx, k, ek))
+		rk := rangekey.Key{
+			Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet),
+		}
+		require.NoError(t, msstw.PutInternalRangeKey(ctx, k, ek, rk))
 
 	}
 

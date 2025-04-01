@@ -1,20 +1,29 @@
 echo
 ----
 >> sst0:
-rangedel: /Local/RangeID/0/r"{"-\x00"}
-rangedel: /Local/RangeID/0/{r"\x00"-s""}
-rangekeydel: /Local/RangeID/0/{r""-s""}
+rangedel: /Local/RangeID/0/{r""-s""}
+rangekeydel: /Local/RangeID/0/r"{"-\x00"}
+rangekeyset: /Local/RangeID/0/{r"\x00"-s""} -> /<empty>
+rangekeydel: /Local/RangeID/0/{r"\x00"-s""}
 >> sst1:
-rangedel: /Local/Range"d"{-}
 rangedel: /Local/Range{"d"-/Max}
+rangekeyset: /Local/RangeID/0/s"{"-\x00"} -> /<empty>
+rangekeydel: /Local/Range"d"{-}
+rangekeyset: /Local/Range{"d"-/Max} -> /<empty>
 rangekeydel: /Local/Range{"d"-/Max}
 >> sst2:
-rangedel: /Local/Lock/{Local/Range"d"-""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""}
-rangedel: /Local/Lock/{""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""-Local/Range/Max}
-rangekeydel: /Local/Lock/Local/Range{"d"-/Max}
+rangedel: /Local/Lock/Local/Range{"d"-/Max}
+rangekeyset: /Local/Range/Max{-} -> /<empty>
+rangekeydel: /Local/Lock/{Local/Range"d"-""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""}
+rangekeyset: /Local/Lock/{""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""-Local/Range/Max} -> /<empty>
+rangekeydel: /Local/Lock/{""\x12\x01k\x12d\x00\xff\x01\x00\x01\x00""-Local/Range/Max}
 >> sst3:
-rangedel: /Local/Lock{"d"-/""\x12d\x00\x01\x00""}
-rangedel: /Local/Lock/{""\x12d\x00\x01\x00""-Max}
-rangekeydel: /Local/Lock{"d"-/Max}
+rangedel: /Local/Lock{"d"-/Max}
+rangekeyset: /Local/Lock/{Local/Range/Max-""\x12\x01k\x12\xff\xff\x00\xff\x01\x00\x01\x00""} -> /<empty>
+rangekeydel: /Local/Lock{"d"-/""\x12d\x00\x01\x00""}
+rangekeyset: /Local/Lock/{""\x12d\x00\x01\x00""-Max} -> /<empty>
+rangekeydel: /Local/Lock/{""\x12d\x00\x01\x00""-Max}
 >> sst4:
-rangedel: d{-\x00}
+rangedel: {d-/Max}
+rangekeyset: /Local/Lock/{Max-""\x12\xff\xff\x00\x01\x00""} -> /<empty>
+rangekeyset: {d\x00-\xff\xff\x00} -> /<empty>
