@@ -703,59 +703,57 @@ func TestSetNodeLiveness(t *testing.T) {
 // output matches expectations.
 func TestTopology(t *testing.T) {
 	singleRegionTopology := LoadClusterInfo(SingleRegionConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `a
-  a1
+	require.Equal(t, `US
+  US_1
     └── [1 2 3 4 5]
-  a2
+  US_2
     └── [6 7 8 9 10]
-  a3
+  US_3
     └── [11 12 13 14 15]
 `, singleRegionTopology.String())
 
 	multiRegionTopology := LoadClusterInfo(MultiRegionConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `a
-  a1
+	require.Equal(t, `EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
   │ └── [1 2 3 4]
-  a2
+  US_East_2
   │ └── [5 6 7 8]
-  a3
+  US_East_3
   │ └── [9 10 11 12]
-b
-  b1
-  │ └── [13 14 15 16]
-  b2
-  │ └── [17 18 19 20]
-  b3
-  │ └── [21 22 23 24]
-c
-  c1
-    └── [25 26 27 28]
-  c2
-    └── [29 30 31 32]
-  c3
-    └── [33 34 35 36]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
 `, multiRegionTopology.String())
 
 	complexTopology := LoadClusterInfo(ComplexConfig, config.DefaultSimulationSettings()).Topology()
-	require.Equal(t, `a
-  a1
+	require.Equal(t, `EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
   │ └── [1]
-  a2
+  US_East_2
   │ └── [2 3]
-  a3
-  │ └── [4 5 6]
-  a4
-  │ └── [7 8 9 10 11 12 13 14 15 16]
-b
-  b1
-  │ └── [17 18]
-c
-  c1
-    └── [19 20 21]
-  c2
-    └── [22 23 24]
-  c3
-    └── [25 26 27 28]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
 `, complexTopology.String())
 
 }

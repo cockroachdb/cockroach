@@ -29,11 +29,11 @@ var SingleRegionConfig = ClusterInfo{
 	StoreDiskCapacityBytes: 1024 << 30, /* 1024 GiB */
 	Regions: []Region{
 		{
-			Name: "a",
+			Name: "US",
 			Zones: []Zone{
-				NewZoneWithSingleStore("a1", 5),
-				NewZoneWithSingleStore("a2", 5),
-				NewZoneWithSingleStore("a3", 5),
+				NewZoneWithSingleStore("US_1", 5),
+				NewZoneWithSingleStore("US_2", 5),
+				NewZoneWithSingleStore("US_3", 5),
 			},
 		},
 	},
@@ -45,11 +45,11 @@ var SingleRegionMultiStoreConfig = ClusterInfo{
 	StoreDiskCapacityBytes: 1024 << 30, /* 1024 GiB */
 	Regions: []Region{
 		{
-			Name: "a",
+			Name: "US",
 			Zones: []Zone{
-				NewZone("a1", 1, 5),
-				NewZone("a2", 1, 5),
-				NewZone("a3", 1, 5),
+				NewZone("US_1", 1, 5),
+				NewZone("US_2", 1, 5),
+				NewZone("US_3", 1, 5),
 			},
 		},
 	},
@@ -60,27 +60,27 @@ var MultiRegionConfig = ClusterInfo{
 	StoreDiskCapacityBytes: 2048 << 30, /* 2048 GiB */
 	Regions: []Region{
 		{
-			Name: "a",
+			Name: "US_East",
 			Zones: []Zone{
-				NewZoneWithSingleStore("a1", 4),
-				NewZoneWithSingleStore("a2", 4),
-				NewZoneWithSingleStore("a3", 4),
+				NewZoneWithSingleStore("US_East_1", 4),
+				NewZoneWithSingleStore("US_East_2", 4),
+				NewZoneWithSingleStore("US_East_3", 4),
 			},
 		},
 		{
-			Name: "b",
+			Name: "US_West",
 			Zones: []Zone{
-				NewZoneWithSingleStore("b1", 4),
-				NewZoneWithSingleStore("b2", 4),
-				NewZoneWithSingleStore("b3", 4),
+				NewZoneWithSingleStore("US_West_1", 4),
+				NewZoneWithSingleStore("US_West_2", 4),
+				NewZoneWithSingleStore("US_West_3", 4),
 			},
 		},
 		{
-			Name: "c",
+			Name: "EU",
 			Zones: []Zone{
-				NewZoneWithSingleStore("c1", 4),
-				NewZoneWithSingleStore("c2", 4),
-				NewZoneWithSingleStore("c3", 4),
+				NewZoneWithSingleStore("EU_1", 4),
+				NewZoneWithSingleStore("EU_2", 4),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
@@ -91,26 +91,26 @@ var ComplexConfig = ClusterInfo{
 	StoreDiskCapacityBytes: 2048 << 30, /* 2048 GiB */
 	Regions: []Region{
 		{
-			Name: "a",
+			Name: "US_East",
 			Zones: []Zone{
-				NewZoneWithSingleStore("a1", 1),
-				NewZoneWithSingleStore("a2", 2),
-				NewZoneWithSingleStore("a3", 3),
-				NewZoneWithSingleStore("a4", 10),
+				NewZoneWithSingleStore("US_East_1", 1),
+				NewZoneWithSingleStore("US_East_2", 2),
+				NewZoneWithSingleStore("US_East_3", 3),
+				NewZoneWithSingleStore("US_East_3", 10),
 			},
 		},
 		{
-			Name: "b",
+			Name: "US_West",
 			Zones: []Zone{
-				NewZoneWithSingleStore("b1", 2),
+				NewZoneWithSingleStore("US_West_1", 2),
 			},
 		},
 		{
-			Name: "c",
+			Name: "EU",
 			Zones: []Zone{
-				NewZoneWithSingleStore("c1", 3),
-				NewZoneWithSingleStore("c2", 3),
-				NewZoneWithSingleStore("c3", 4),
+				NewZoneWithSingleStore("EU_1", 3),
+				NewZoneWithSingleStore("EU_2", 3),
+				NewZoneWithSingleStore("EU_3", 4),
 			},
 		},
 	},
