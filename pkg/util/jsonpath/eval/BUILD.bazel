@@ -15,7 +15,6 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/json",

@@ -1624,8 +1624,6 @@ var jsonObjectKeysImpl = makeGeneratorOverload(
 var jsonPathQueryGeneratorType = types.Jsonb
 
 type jsonPathQueryGenerator struct {
-	evalCtx *eval.Context
-
 	target tree.DJSON
 	path   tree.DJsonpath
 	vars   tree.DJSON
@@ -1636,7 +1634,7 @@ type jsonPathQueryGenerator struct {
 }
 
 func makeJsonpathQueryGenerator(
-	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	target := tree.MustBeDJSON(args[0])
 	path := tree.MustBeDJsonpath(args[1])
@@ -1652,11 +1650,10 @@ func makeJsonpathQueryGenerator(
 		silent = tree.MustBeDBool(args[3])
 	}
 	return &jsonPathQueryGenerator{
-		evalCtx: evalCtx,
-		target:  target,
-		path:    path,
-		vars:    vars,
-		silent:  silent,
+		target: target,
+		path:   path,
+		vars:   vars,
+		silent: silent,
 	}, nil
 }
 
@@ -1667,7 +1664,7 @@ func (g *jsonPathQueryGenerator) ResolvedType() *types.T {
 
 // Start implements the eval.ValueGenerator interface.
 func (g *jsonPathQueryGenerator) Start(_ context.Context, _ *kv.Txn) error {
-	jsonb, err := jsonpath.JsonpathQuery(g.evalCtx, g.target, g.path, g.vars, g.silent)
+	jsonb, err := jsonpath.JsonpathQuery(g.target, g.path, g.vars, g.silent)
 	if err != nil {
 		return err
 	}
