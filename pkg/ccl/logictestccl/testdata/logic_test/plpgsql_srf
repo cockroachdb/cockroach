@@ -1,0 +1,591 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+
+statement ok
+CREATE TYPE typ AS (a INT);
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT 1; END $$;
+
+query I nosort
+SELECT f();
+----
+1
+
+query I nosort
+SELECT * FROM f();
+----
+1
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN RETURN QUERY SELECT * FROM generate_series(1, 3); END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+3
+
+query II nosort
+SELECT * FROM f(), f();
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+3  1
+3  2
+3  3
+
+# Case with multiple RETURN QUERY statements. Expect rows to be in order.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT * FROM generate_series(1, 3);
+    RETURN QUERY SELECT * FROM generate_series(4, 6);
+    RETURN QUERY SELECT * FROM generate_series(7, 9);
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+# RETURN NEXT should work as well.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT 1;
+    RETURN NEXT 2;
+    RETURN NEXT 3;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+3
+
+# RETURN NEXT with an expression.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT 1 + 1;
+    RETURN NEXT 2 + 2;
+    RETURN NEXT 3 + 3;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+2
+4
+6
+
+query I nosort
+SELECT * FROM f();
+----
+2
+4
+6
+
+# RETURN NEXT with a subquery reading from a table.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT (SELECT x FROM xy WHERE y = 2);
+    RETURN NEXT (SELECT x FROM xy WHERE y = 4);
+    RETURN NEXT (SELECT x FROM xy WHERE y = 6);
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+3
+5
+
+query I nosort
+SELECT * FROM f();
+----
+1
+3
+5
+
+statement ok
+DROP FUNCTION f;
+
+# RETURN QUERY with a union.
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+3
+
+statement ok
+DROP FUNCTION f;
+
+# RETURN QUERY with a join.
+statement ok
+CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT x, y FROM xy JOIN (SELECT 1 AS z UNION ALL SELECT 2) AS t ON xy.x = t.z;
+  END
+$$;
+
+query II nosort,colnames
+SELECT * FROM f() AS t(a INT, b INT);
+----
+a  b
+1  2
+
+statement ok
+DROP FUNCTION f;
+
+# RETURN QUERY with a CTE.
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY WITH cte AS (SELECT 1 AS x UNION ALL SELECT 2) SELECT x FROM cte;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+
+statement ok
+DROP FUNCTION f;
+
+# Parameterless RETURN can terminate the function early.
+statement ok
+CREATE FUNCTION f(b BOOL) RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT 1;
+    IF b THEN
+      RETURN;
+    END IF;
+    RETURN NEXT 2;
+  END
+$$;
+
+query I nosort
+SELECT f(true);
+----
+1
+
+query I nosort
+SELECT f(false);
+----
+1
+2
+
+statement ok
+DROP FUNCTION f;
+
+# Test RETURN NEXT with a loop.
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT := 1;
+  BEGIN
+    WHILE i <= 3 LOOP
+      RETURN NEXT i;
+      i := i + 1;
+    END LOOP;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+3
+
+statement ok
+DROP FUNCTION f;
+
+# Test RETURN NEXT and RETURN QUERY with a combination of IF statements a loops.
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    WHILE i < 3 LOOP
+      IF i = 0 THEN
+        RETURN NEXT 1;
+      ELSIF i = 1 THEN
+        RETURN QUERY SELECT 2;
+      ELSE
+        RETURN NEXT 3;
+      END IF;
+      i := i + 1;
+    END LOOP;
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+
+statement ok
+DROP FUNCTION f;
+
+# Nesting function calls should not interfere with RETURN NEXT/QUERY.
+statement ok
+CREATE FUNCTION f_nested() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'foo'; RETURN 2; END $$;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT 1;
+    SELECT f_nested();
+    RETURN NEXT f_nested();
+    RETURN NEXT 3;
+    RETURN QUERY SELECT * FROM f_nested();
+  END
+$$;
+
+query I nosort
+SELECT f();
+----
+1
+2
+3
+2
+
+statement ok
+CREATE FUNCTION g() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT * FROM f();
+  END
+$$;
+
+query I nosort
+SELECT g();
+----
+1
+2
+3
+2
+
+statement ok
+DROP FUNCTION g;
+DROP FUNCTION f;
+DROP FUNCTION f_nested;
+
+subtest composite
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF xy LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT (1, 2);
+    RETURN NEXT (3, 4);
+    RETURN NEXT (5, 6);
+  END
+$$;
+
+query T nosort
+SELECT f();
+----
+(1,2)
+(3,4)
+(5,6)
+
+query II nosort
+SELECT * FROM f();
+----
+1  2
+3  4
+5  6
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF typ LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT ROW(1);
+    RETURN QUERY SELECT 2;
+  END
+$$;
+
+query T nosort
+SELECT f();
+----
+(1)
+(2)
+
+query I nosort
+SELECT * FROM f();
+----
+1
+2
+
+statement ok
+DROP FUNCTION f;
+
+# Return TABLE.
+statement ok
+CREATE FUNCTION f() RETURNS TABLE (x INT, y INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT * FROM xy ORDER BY x;
+  END
+$$;
+
+# TODO(144013): we should be able to use nosort here, but the ordering is
+# dropped.
+query T rowsort
+SELECT f();
+----
+(1,2)
+(3,4)
+(5,6)
+
+query II nosort
+SELECT * FROM f();
+----
+1  2
+3  4
+5  6
+
+statement ok
+DROP FUNCTION f;
+
+subtest end
+
+subtest record
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT (1, 2);
+    RETURN NEXT (3, 4);
+    RETURN NEXT (5, 6);
+  END
+$$;
+
+query II nosort,colnames
+SELECT * FROM f() AS t(x INT, y INT);
+----
+x  y
+1  2
+3  4
+5  6
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT * FROM xy ORDER BY x;
+  END
+$$;
+
+query II nosort,colnames
+SELECT * FROM f() AS t(a INT, b INT);
+----
+a  b
+1  2
+3  4
+5  6
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT row(x, y)::xy FROM xy ORDER BY x;
+  END
+$$;
+
+query T nosort,colnames
+SELECT * FROM f() AS t(foo xy);
+----
+foo
+(1,2)
+(3,4)
+(5,6)
+
+statement ok
+DROP FUNCTION f;
+
+# Case with OUT parameters - the function doesn't have to be used as a data
+# source with a column definition list.
+statement ok
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT 1, 2;
+    RETURN NEXT;
+    x := 100;
+    y := 200;
+    RETURN NEXT;
+    RETURN;
+  END
+$$;
+
+query T nosort,colnames
+SELECT f();
+----
+f
+(1,2)
+(,)
+(100,200)
+
+query II nosort,colnames
+SELECT * FROM f();
+----
+x     y
+1     2
+NULL  NULL
+100   200
+
+statement ok
+DROP FUNCTION f;
+
+subtest end
+
+subtest errors
+
+statement error pgcode 42804 pq: RETURN cannot have a parameter in a function returning set
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN 1; END $$;
+
+statement error pgcode 42804 pq: cannot use RETURN NEXT in a non-SETOF function
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 1; END $$;
+
+statement error pgcode 42804 pq: cannot use RETURN QUERY in a non-SETOF function
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT 1; END $$;
+
+statement error pgcode 42804 pq: structure of query does not match function result type
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT True; END $$;
+
+statement error pgcode 42804 pq: structure of query does not match function result type
+CREATE FUNCTION f() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT 1, 100; END $$;
+
+statement error pgcode 42804 pq: structure of query does not match function result type
+CREATE FUNCTION f() RETURNS SETOF xy LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT 1; END $$;
+
+statement error pgcode 42804 pq: structure of query does not match function result type
+CREATE FUNCTION f() RETURNS SETOF xy LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT row(x, y)::xy FROM xy ORDER BY x;
+  END
+$$;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF typ LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 1; END $$;
+
+# TODO(drewk): this error differs from Postgres. There should be a check for
+# non-NULL non-composite expressions in RETURN and RETURN NEXT statements.
+statement error pgcode 22P02 pq: could not parse "1" as type tuple{int AS a}: record must be enclosed in \( and \)
+SELECT f();
+
+statement ok
+DROP FUNCTION f;
+
+statement ok
+CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN QUERY SELECT 1, 2; END $$;
+
+statement error pgcode 0A000 materialize mode required, but it is not allowed in this context
+SELECT f();
+
+statement error pgcode 42601 pq: a column definition list is required for functions returning "record"
+SELECT * FROM f();
+
+# If the column types aren't given, it's not a column definition list.
+statement error pgcode 42601 pq: a column definition list is required for functions returning "record"
+SELECT * FROM f() AS g(foo, bar);
+
+statement ok
+DROP FUNCTION f;
+
+statement error pgcode 42804 pq: RETURN NEXT cannot have a parameter in function with OUT parameters
+CREATE FUNCTION f(OUT x INT, OUT y INT) RETURNS SETOF RECORD LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NEXT ROW(3, 4);
+  END
+$$;
+
+subtest end

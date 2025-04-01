@@ -7751,3 +7751,155 @@ with &1 (foo)
                           │    └── projections
                           │         └── variable: x:7 [as=stmt_return_1:8]
                           └── const: 1
+
+# Set-returning function. Note the "add-to-srf-result" body statements.
+# Also note that the sub-routines are all tail-calls apart from the outermost,
+# since its result is not directly used by "f".
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS SETOF INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RETURN QUERY SELECT random()::INT * 100;
+    WHILE i <= n LOOP
+      RETURN NEXT i;
+      i := i + 1;
+    END LOOP;
+  END
+$$;
+----
+
+build format=show-scalars
+SELECT f(3);
+----
+project-set
+ ├── columns: f:24
+ ├── values
+ │    └── tuple
+ └── zip
+      └── udf: f
+           ├── args
+           │    └── const: 3
+           ├── params: n:1
+           └── body
+                └── project
+                     ├── columns: return_next_1:23
+                     ├── barrier
+                     │    ├── columns: i:2!null
+                     │    └── project
+                     │         ├── columns: i:2!null
+                     │         ├── values
+                     │         │    └── tuple
+                     │         └── projections
+                     │              └── const: 0 [as=i:2]
+                     └── projections
+                          └── udf: return_next_1 [as=return_next_1:23]
+                               ├── args
+                               │    ├── variable: n:1
+                               │    └── variable: i:2
+                               ├── params: n:3 i:4
+                               └── body
+                                    ├── add-to-srf-result
+                                    │    └── project
+                                    │         ├── columns: "?column?":5
+                                    │         ├── values
+                                    │         │    └── tuple
+                                    │         └── projections
+                                    │              └── mult [as="?column?":5]
+                                    │                   ├── cast: INT8
+                                    │                   │    └── function: random
+                                    │                   └── const: 100
+                                    └── project
+                                         ├── columns: stmt_loop_3:22
+                                         ├── values
+                                         │    └── tuple
+                                         └── projections
+                                              └── udf: stmt_loop_3 [as=stmt_loop_3:22]
+                                                   ├── tail-call
+                                                   ├── args
+                                                   │    ├── variable: n:3
+                                                   │    └── variable: i:4
+                                                   ├── params: n:9 i:10
+                                                   └── body
+                                                        └── project
+                                                             ├── columns: stmt_if_7:21
+                                                             ├── values
+                                                             │    └── tuple
+                                                             └── projections
+                                                                  └── case [as=stmt_if_7:21]
+                                                                       ├── true
+                                                                       ├── when
+                                                                       │    ├── le
+                                                                       │    │    ├── variable: i:10
+                                                                       │    │    └── variable: n:9
+                                                                       │    └── subquery
+                                                                       │         ├── tail-call
+                                                                       │         └── project
+                                                                       │              ├── columns: return_next_5:19
+                                                                       │              ├── values
+                                                                       │              │    └── tuple
+                                                                       │              └── projections
+                                                                       │                   └── udf: return_next_5 [as=return_next_5:19]
+                                                                       │                        ├── tail-call
+                                                                       │                        ├── args
+                                                                       │                        │    ├── variable: n:9
+                                                                       │                        │    └── variable: i:10
+                                                                       │                        ├── params: n:14 i:15
+                                                                       │                        └── body
+                                                                       │                             ├── add-to-srf-result
+                                                                       │                             │    └── project
+                                                                       │                             │         ├── columns: stmt_return_next_6:16
+                                                                       │                             │         ├── values
+                                                                       │                             │         │    └── tuple
+                                                                       │                             │         └── projections
+                                                                       │                             │              └── variable: i:15 [as=stmt_return_next_6:16]
+                                                                       │                             └── project
+                                                                       │                                  ├── columns: stmt_if_4:18
+                                                                       │                                  ├── project
+                                                                       │                                  │    ├── columns: i:17
+                                                                       │                                  │    ├── values
+                                                                       │                                  │    │    └── tuple
+                                                                       │                                  │    └── projections
+                                                                       │                                  │         └── plus [as=i:17]
+                                                                       │                                  │              ├── variable: i:15
+                                                                       │                                  │              └── const: 1
+                                                                       │                                  └── projections
+                                                                       │                                       └── udf: stmt_if_4 [as=stmt_if_4:18]
+                                                                       │                                            ├── tail-call
+                                                                       │                                            ├── args
+                                                                       │                                            │    ├── variable: n:14
+                                                                       │                                            │    └── variable: i:17
+                                                                       │                                            ├── params: n:11 i:12
+                                                                       │                                            └── body
+                                                                       │                                                 └── project
+                                                                       │                                                      ├── columns: stmt_loop_3:13
+                                                                       │                                                      ├── values
+                                                                       │                                                      │    └── tuple
+                                                                       │                                                      └── projections
+                                                                       │                                                           └── udf: stmt_loop_3 [as=stmt_loop_3:13]
+                                                                       │                                                                ├── tail-call
+                                                                       │                                                                ├── args
+                                                                       │                                                                │    ├── variable: n:11
+                                                                       │                                                                │    └── variable: i:12
+                                                                       │                                                                └── recursive-call
+                                                                       └── subquery
+                                                                            ├── tail-call
+                                                                            └── project
+                                                                                 ├── columns: loop_exit_2:20
+                                                                                 ├── values
+                                                                                 │    └── tuple
+                                                                                 └── projections
+                                                                                      └── udf: loop_exit_2 [as=loop_exit_2:20]
+                                                                                           ├── tail-call
+                                                                                           ├── args
+                                                                                           │    ├── variable: n:9
+                                                                                           │    └── variable: i:10
+                                                                                           ├── params: n:6 i:7
+                                                                                           └── body
+                                                                                                └── project
+                                                                                                     ├── columns: "_implicit_return":8
+                                                                                                     ├── values
+                                                                                                     │    └── tuple
+                                                                                                     └── projections
+                                                                                                          └── cast: VOID [as="_implicit_return":8]
+                                                                                                               └── null
