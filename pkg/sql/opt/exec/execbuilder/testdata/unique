@@ -620,9 +620,6 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
@@ -661,9 +658,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -702,9 +696,6 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
-            │     KV contention time: 0µs
-            │     KV lock wait time: 0µs
-            │     KV latch wait time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -745,9 +736,6 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer
@@ -786,9 +774,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -825,9 +810,6 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
-│           │     KV contention time: 0µs
-│           │     KV lock wait time: 0µs
-│           │     KV latch wait time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -864,9 +846,6 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
-            │     KV contention time: 0µs
-            │     KV lock wait time: 0µs
-            │     KV latch wait time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -2638,9 +2617,6 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 2
-│   │ KV contention time: 0µs
-│   │ KV lock wait time: 0µs
-│   │ KV latch wait time: 0µs
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │
@@ -2658,9 +2634,6 @@ quality of service: regular
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 KV time: 0µs
-│                 KV contention time: 0µs
-│                 KV lock wait time: 0µs
-│                 KV latch wait time: 0µs
 │                 KV rows decoded: 2
 │                 KV pairs read: 4
 │                 KV bytes read: 16 B
@@ -2680,9 +2653,6 @@ quality of service: regular
 │       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
 │       │   │ actual row count: 0
-│       │   │ KV contention time: 0µs
-│       │   │ KV lock wait time: 0µs
-│       │   │ KV latch wait time: 0µs
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c
 │       │   │
@@ -2705,9 +2675,6 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
-│       │           │     KV contention time: 0µs
-│       │           │     KV lock wait time: 0µs
-│       │           │     KV latch wait time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2753,9 +2720,6 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
-│       │           │     KV contention time: 0µs
-│       │           │     KV lock wait time: 0µs
-│       │           │     KV latch wait time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2791,9 +2755,6 @@ quality of service: regular
 │                   │     regions: <hidden>
 │                   │     actual row count: 2
 │                   │     KV time: 0µs
-│                   │     KV contention time: 0µs
-│                   │     KV lock wait time: 0µs
-│                   │     KV latch wait time: 0µs
 │                   │     KV rows decoded: 2
 │                   │     KV pairs read: 4
 │                   │     KV bytes read: 16 B
@@ -2843,9 +2804,6 @@ quality of service: regular
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
-                  KV contention time: 0µs
-                  KV lock wait time: 0µs
-                  KV latch wait time: 0µs
                   KV rows decoded: 2
                   KV pairs read: 4
                   KV bytes read: 16 B

@@ -1183,9 +1183,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_pkey
@@ -1196,9 +1193,6 @@ quality of service: regular
     │ regions: <hidden>
     │ actual row count: 1
     │ KV time: 0µs
-    │ KV contention time: 0µs
-    │ KV lock wait time: 0µs
-    │ KV latch wait time: 0µs
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
@@ -1258,9 +1252,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_a_key
@@ -1272,9 +1263,6 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 1
         │ KV time: 0µs
-        │ KV contention time: 0µs
-        │ KV lock wait time: 0µs
-        │ KV latch wait time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
@@ -1290,9 +1278,6 @@ quality of service: regular
             │ regions: <hidden>
             │ actual row count: 1
             │ KV time: 0µs
-            │ KV contention time: 0µs
-            │ KV lock wait time: 0µs
-            │ KV latch wait time: 0µs
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0

@@ -1014,9 +1014,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1029,9 +1026,6 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
-        │ KV contention time: 0µs
-        │ KV lock wait time: 0µs
-        │ KV latch wait time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
@@ -1085,9 +1079,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1099,9 +1090,6 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
-        │ KV contention time: 0µs
-        │ KV lock wait time: 0µs
-        │ KV latch wait time: 0µs
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
@@ -1117,9 +1105,6 @@ quality of service: regular
             │ regions: <hidden>
             │ actual row count: 0
             │ KV time: 0µs
-            │ KV contention time: 0µs
-            │ KV lock wait time: 0µs
-            │ KV latch wait time: 0µs
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
@@ -1176,9 +1161,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1191,9 +1173,6 @@ quality of service: regular
         │ regions: <hidden>
         │ actual row count: 1
         │ KV time: 0µs
-        │ KV contention time: 0µs
-        │ KV lock wait time: 0µs
-        │ KV latch wait time: 0µs
         │ KV rows decoded: 1
         │ KV pairs read: 2
         │ KV bytes read: 8 B
@@ -1263,9 +1242,6 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
-│ KV contention time: 0µs
-│ KV lock wait time: 0µs
-│ KV latch wait time: 0µs
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1280,9 +1256,6 @@ quality of service: regular
             │ regions: <hidden>
             │ actual row count: 0
             │ KV time: 0µs
-            │ KV contention time: 0µs
-            │ KV lock wait time: 0µs
-            │ KV latch wait time: 0µs
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
@@ -1298,9 +1271,6 @@ quality of service: regular
                 │ regions: <hidden>
                 │ actual row count: 0
                 │ KV time: 0µs
-                │ KV contention time: 0µs
-                │ KV lock wait time: 0µs
-                │ KV latch wait time: 0µs
                 │ KV rows decoded: 0
                 │ KV bytes read: 0 B
                 │ KV gRPC calls: 0
@@ -1316,9 +1286,6 @@ quality of service: regular
                     │ regions: <hidden>
                     │ actual row count: 1
                     │ KV time: 0µs
-                    │ KV contention time: 0µs
-                    │ KV lock wait time: 0µs
-                    │ KV latch wait time: 0µs
                     │ KV rows decoded: 1
                     │ KV pairs read: 2
                     │ KV bytes read: 8 B
