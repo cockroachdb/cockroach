@@ -360,6 +360,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		typeDeps.Add(int(id))
 	})
 
+	isSetReturning := cf.ReturnType != nil && cf.ReturnType.SetOf
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 
@@ -401,13 +402,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if cf.ReturnType != nil && cf.ReturnType.SetOf {
-			panic(unimplemented.NewWithIssueDetail(105240,
-				"set-returning PL/pgSQL functions",
-				"set-returning PL/pgSQL functions are not yet supported",
-			))
-		}
-
 		// Parse the function body.
 		stmt, err := plpgsqlparser.Parse(funcBodyStr)
 		if err != nil {
@@ -454,11 +448,14 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
-		options := basePLOptions().SetIsProcedure(cf.IsProcedure).SetSkipSQL(skipSQL)
+		options := basePLOptions().
+			SetIsSetReturning(isSetReturning).
+			SetIsProcedure(cf.IsProcedure).
+			SetSkipSQL(skipSQL)
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
 				b, options, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
-				funcReturnType, nil, /* outScope */
+				funcReturnType, nil /* outScope */, 0, /* resultBufferID */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
@@ -471,7 +468,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	if stmtScope != nil {
+	if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
 		// Validate that the result type of the last statement matches the
 		// return type of the function.
 		// TODO(mgartner): stmtScope.cols does not describe the result

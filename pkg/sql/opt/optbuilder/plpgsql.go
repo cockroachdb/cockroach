@@ -163,8 +163,15 @@ type plpgsqlBuilder struct {
 	// expressions.
 	colRefs *opt.ColSet
 
-	// returnType is the return type of the PL/pgSQL routine.
+	// returnType is the return type of the sub-routines that implement the
+	// PL/pgSQL routine. This is normally the same as the return type of the
+	// routine, but can be different in the case of a set-returning function, in
+	// which case it is types.Void.
 	returnType *types.T
+
+	// setReturnType, if set, is the return type of the set-returning function.
+	// It identifies the type of RETURN NEXT and RETURN QUERY statements.
+	setReturnType *types.T
 
 	// continuations is a stack of sub-routines that are called to resume
 	// execution from a certain point within the PL/pgSQL routine. For example,
@@ -190,6 +197,12 @@ type plpgsqlBuilder struct {
 	// building their body statements.
 	outScope *scope
 
+	// resultBufferID, if nonzero, uniquely identifies the result buffer for the
+	// set-returning PL/pgSQL function that is being built. Sub-routines may use
+	// this ID to add to the result set at arbitrary points during execution. This
+	// is how RETURN NEXT and RETURN QUERY are implemented.
+	resultBufferID memo.RoutineResultBufferID
+
 	routineName  string
 	identCounter int
 }
@@ -197,8 +210,10 @@ type plpgsqlBuilder struct {
 // plOptions is a set of options that can be used to modify the behavior of the
 // PLpgSQL builder.
 type plOptions struct {
-	isProcedure bool
-	isDoBlock   bool
+	isSetReturning   bool
+	insideDataSource bool
+	isProcedure      bool
+	isDoBlock        bool
 
 	// skipSQL is true if SQL statements and expressions should not be built.
 	// This is used during trigger function creation.
@@ -208,6 +223,20 @@ type plOptions struct {
 // basePLOptions returns a new plOptions struct with default values.
 func basePLOptions() plOptions {
 	return plOptions{}
+}
+
+// SetIsSetReturning returns a new plOptions struct with the isSetReturning flag
+// set to the given value.
+func (opts plOptions) SetIsSetReturning(isSetReturning bool) plOptions {
+	opts.isSetReturning = isSetReturning
+	return opts
+}
+
+// SetInsideDataSource returns a new plOptions struct with the insideDataSource
+// flag set to the given value.
+func (opts plOptions) SetInsideDataSource(insideDataSource bool) plOptions {
+	opts.insideDataSource = insideDataSource
+	return opts
 }
 
 // WithIsProcedure returns a new plOptions struct with the isProcedure flag set
@@ -253,16 +282,26 @@ func newPLpgSQLBuilder(
 	routineParams []routineParam,
 	returnType *types.T,
 	outScope *scope,
+	resultBufferID memo.RoutineResultBufferID,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:          ob,
-		options:     options,
-		colRefs:     colRefs,
-		returnType:  returnType,
-		blocks:      make([]plBlock, 0, initialBlocksCap),
-		routineName: routineName,
-		outScope:    outScope,
+		ob:             ob,
+		options:        options,
+		colRefs:        colRefs,
+		returnType:     returnType,
+		blocks:         make([]plBlock, 0, initialBlocksCap),
+		routineName:    routineName,
+		outScope:       outScope,
+		resultBufferID: resultBufferID,
+	}
+	if options.isSetReturning {
+		// The sub-routines for a set-returning PL/pgSQL function return VOID, since
+		// they don't return a value directly. Results are added to the result set
+		// by RETURN NEXT and RETURN QUERY statements instead; see their
+		// implementations in buildPLpgSQLStatements for details.
+		b.returnType = types.Void
+		b.setReturnType = returnType
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -479,7 +518,15 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	// For a RECORD-returning routine, infer the concrete type by examining the
 	// RETURN statements. This has to happen after building the declaration
 	// block because RETURN statements can reference declared variables.
-	if b.returnType.Identical(types.AnyTuple) {
+	returnType := b.returnType
+	if b.options.isSetReturning {
+		returnType = b.setReturnType
+		if !b.ob.insideFuncDef && returnType.Identical(types.AnyTuple) {
+			panic(errors.AssertionFailedf(
+				"set-returning PL/pgSQL function should have a concrete return type by now",
+			))
+		}
+	} else if returnType.Identical(types.AnyTuple) {
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
 		if rtyp := recordVisitor.typ; rtyp == nil || rtyp.Identical(types.AnyTuple) {
@@ -552,12 +599,18 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// statement must have no expression. Otherwise, the RETURN statement must
 			// have a non-empty expression.
 			expr := t.Expr
-			if b.hasOutParam() {
+			switch {
+			case b.options.isSetReturning:
+				if expr != nil {
+					panic(returnWithReturnsSetErr)
+				}
+				expr = tree.DNull
+			case b.hasOutParam():
 				if expr != nil {
 					panic(returnWithOUTParameterErr)
 				}
 				expr = b.makeReturnForOutParams()
-			} else if b.returnType.Family() == types.VoidFamily {
+			case b.returnType.Family() == types.VoidFamily:
 				if expr != nil {
 					if b.options.isProcedure {
 						panic(returnWithVoidParameterProcedureErr)
@@ -566,9 +619,10 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					}
 				}
 				expr = tree.DNull
-			}
-			if expr == nil {
-				panic(emptyReturnErr)
+			default:
+				if expr == nil {
+					panic(emptyReturnErr)
+				}
 			}
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
@@ -579,6 +633,78 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
+
+		case *ast.ReturnNext:
+			if !b.options.isSetReturning {
+				panic(returnNextScalarErr)
+			}
+			expr := t.Expr
+			if b.hasOutParam() {
+				// A set-returning routine with OUT parameters returns those parameters
+				// instead of an expression in a RETURN NEXT statement.
+				if expr != nil {
+					panic(returnNextWithOUTParameterErr)
+				}
+				expr = b.makeReturnForOutParams()
+			}
+			// RETURN NEXT is handled by projecting a single column with the return
+			// expression. This becomes the first body statement of a new continuation
+			// with output redirected to the result buffer.
+			retCon := b.makeContinuation("return_next")
+			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
+			returnScalar := b.buildSQLExpr(expr, b.setReturnType, retCon.s)
+			retColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return_next"))
+			retNextScope := retCon.s.push()
+			b.ob.synthesizeColumn(retNextScope, retColName, b.setReturnType, nil /* expr */, returnScalar)
+			b.ob.constructProjectForScope(retCon.s, retNextScope)
+			if b.options.insideDataSource && b.setReturnType.Family() == types.TupleFamily {
+				retNextScope = b.ob.expandRoutineTupleIntoCols(retNextScope)
+			}
+			b.appendBodyStmtFromScope(&retCon, retNextScope)
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			return b.callContinuation(&retCon, s)
+
+		case *ast.ReturnQuery:
+			if !b.options.isSetReturning {
+				panic(returnQueryScalarErr)
+			}
+			// RETURN QUERY is handled by building the query into the first body
+			// statement of a new continuation. The output of the query is redirected
+			// to the result buffer.
+			retCon := b.makeContinuation("return_next")
+			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
+			retQueryScope := b.buildSQLStatement(t.SqlStmt, retCon.s)
+			if !b.setReturnType.Identical(types.AnyTuple) {
+				// The query must be validated against the expected return type. Do not
+				// validate during creation of a RECORD-returning function, since the
+				// return type is not known until the function is invoked.
+				var expectedTypes []*types.T
+				if b.setReturnType.Family() == types.TupleFamily {
+					expectedTypes = b.setReturnType.TupleContents()
+				} else {
+					expectedTypes = []*types.T{b.setReturnType}
+				}
+				if len(retQueryScope.cols) != len(expectedTypes) {
+					panic(errors.WithDetailf(returnQueryBaseErr,
+						"Number of returned columns (%d) does not match expected column count (%d).",
+						len(retQueryScope.cols), len(expectedTypes),
+					))
+				}
+				for colIdx := range retQueryScope.cols {
+					colTyp := retQueryScope.cols[colIdx].typ
+					if !colTyp.Identical(expectedTypes[colIdx]) {
+						panic(errors.WithDetailf(returnQueryBaseErr,
+							"Returned type %v does not match expected type %v in column %d.",
+							colTyp.SQLStringForError(), expectedTypes[colIdx].SQLStringForError(), colIdx+1))
+					}
+				}
+			}
+			if !b.options.insideDataSource && b.setReturnType.Family() == types.TupleFamily {
+				retQueryScope = b.ob.combineRoutineColsIntoTuple(retQueryScope)
+			}
+			b.appendBodyStmtFromScope(&retCon, retQueryScope)
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			return b.callContinuation(&retCon, s)
 
 		case *ast.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
@@ -1828,11 +1954,11 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 // handleEndOfFunction handles the case when control flow reaches the end of a
 // PL/pgSQL routine without reaching a RETURN statement.
 func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
-	if b.hasOutParam() || b.returnType.Family() == types.VoidFamily {
-		// Routines with OUT-parameters and VOID return types need not explicitly
-		// specify a RETURN statement.
+	if b.options.isSetReturning || b.hasOutParam() || b.returnType.Family() == types.VoidFamily {
+		// Routines that return VOID, or have OUT parameters, or are set-returning
+		// functions need not explicitly specify a RETURN statement.
 		var returnExpr tree.Expr = tree.DNull
-		if b.hasOutParam() {
+		if b.hasOutParam() && !b.options.isSetReturning {
 			returnExpr = b.makeReturnForOutParams()
 		}
 		returnScope := inScope.push()
@@ -2757,6 +2883,21 @@ var (
 	)
 	returnWithVoidParameterProcedureErr = pgerror.New(pgcode.Syntax,
 		"RETURN cannot have a parameter in a procedure")
+	returnWithReturnsSetErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN cannot have a parameter in a function returning set",
+	)
+	returnQueryBaseErr = pgerror.New(pgcode.DatatypeMismatch,
+		"structure of query does not match function result type",
+	)
+	returnNextScalarErr = pgerror.New(pgcode.DatatypeMismatch,
+		"cannot use RETURN NEXT in a non-SETOF function",
+	)
+	returnQueryScalarErr = pgerror.New(pgcode.DatatypeMismatch,
+		"cannot use RETURN QUERY in a non-SETOF function",
+	)
+	returnNextWithOUTParameterErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN NEXT cannot have a parameter in function with OUT parameters",
+	)
 	emptyReturnErr = pgerror.New(pgcode.Syntax,
 		"missing expression at or near \"RETURN;\"",
 	)

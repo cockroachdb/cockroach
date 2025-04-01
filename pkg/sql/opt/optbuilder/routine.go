@@ -373,6 +373,41 @@ func (b *Builder) buildRoutine(
 		b.checkPrivilegeUser = checkPrivUser
 	}
 
+	// Special handling for set-returning PL/pgSQL functions.
+	//
+	// resultBufferID is used by set-returning PL/pgSQL functions to allow
+	// sub-routines to add to the result set at arbitrary points during execution.
+	var resultBufferID memo.RoutineResultBufferID
+	if isSetReturning && o.Language == tree.RoutineLangPLpgSQL {
+		// Allocate the result buffer ID so that sub-routines can add to the
+		// result set.
+		resultBufferID = b.factory.Memo().NextRoutineResultBufferID()
+		if o.ReturnsRecordType {
+			// A PL/pgSQL function that returns SETOF RECORD must be used as a data
+			// source and gets its concrete return type from the column definition
+			// list.
+			if !oldInsideDataSource {
+				// NOTE: This is the same error as returned by Postgres.
+				panic(
+					errors.WithHint(
+						pgerror.New(pgcode.FeatureNotSupported,
+							"materialize mode required, but it is not allowed in this context",
+						),
+						"PL/pgSQL functions that return SETOF RECORD are only allowed in data source "+
+							"context with a column definition list, "+
+							"e.g. SELECT * FROM my_func() AS (a INT, b STRING)",
+					),
+				)
+			}
+			rTyp := b.getColumnDefinitionListTypes(inScope)
+			if rTyp == nil {
+				panic(needColumnDefListForRecordErr)
+			}
+			f.SetTypeAnnotation(rTyp)
+		}
+		b.validateGeneratorFunctionReturnType(f.ResolvedOverload(), f.ResolvedType(), inScope)
+	}
+
 	// Build an expression for each statement in the function body.
 	var body []memo.RelExpr
 	var bodyProps []*physical.Required
@@ -439,13 +474,22 @@ func (b *Builder) buildRoutine(
 				class: param.Class,
 			})
 		}
-		options := basePLOptions().SetIsProcedure(isProc)
+		options := basePLOptions().
+			SetIsSetReturning(isSetReturning).
+			SetInsideDataSource(oldInsideDataSource).
+			SetIsProcedure(isProc)
 		plBuilder := newPLpgSQLBuilder(
-			b, options, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(), outScope,
+			b, options, def.Name, stmt.AST.Label, colRefs,
+			routineParams, f.ResolvedType(), outScope, resultBufferID,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
-		rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
-		stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, oldInsideDataSource, rTyp)
+		if !isSetReturning {
+			// Set-returning functions add to the result set during execution rather
+			// than directly returning the result of the last statement. The PL/pgSQL
+			// statements used to add to the result set handle their own validation.
+			rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
+			stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, oldInsideDataSource, rTyp)
+		}
 		body = []memo.RelExpr{stmtScope.expr}
 		bodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 		if b.verboseTracing {
@@ -472,6 +516,7 @@ func (b *Builder) buildRoutine(
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
 				Params:             params,
+				ResultBufferID:     resultBufferID,
 			},
 		},
 	)
@@ -834,7 +879,7 @@ func (b *Builder) buildPLpgSQLDoBody(do *plpgsqltree.DoBlock) *scope {
 	options := basePLOptions().WithIsProcedure().WithIsDoBlock()
 	plBuilder := newPLpgSQLBuilder(
 		b, options, doBlockRoutineName, do.Block.Label, nil, /* colRefs */
-		nil /* routineParams */, types.Void, nil, /* outScope */
+		nil /* routineParams */, types.Void, nil /* outScope */, 0, /* resultBufferID */
 	)
 	// Allocate a fresh scope, since DO blocks do not take parameters or reference
 	// variables or columns from the calling context.
