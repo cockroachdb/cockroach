@@ -4854,6 +4854,52 @@ Response object returned by ResetSQLStats.
 
 
 
+## DrainSqlStats
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.DrainSqlStatsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statements | [cockroach.sql.CollectedStatementStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedStatementStatistics) | repeated |  | [reserved](#support-status) |
+| transactions | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.DrainStatsResponse-cockroach.sql.CollectedTransactionStatistics) | repeated |  | [reserved](#support-status) |
+| fingerprint_count | [int64](#cockroach.server.serverpb.DrainStatsResponse-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## IndexUsageStatistics
 
 `GET /_status/indexusagestatistics`

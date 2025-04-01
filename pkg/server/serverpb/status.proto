@@ -1599,6 +1599,16 @@ message StatementsRequest {
   FetchMode fetch_mode = 5;
 }
 
+message DrainSqlStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message DrainStatsResponse {
+  repeated cockroach.sql.CollectedStatementStatistics statements = 1;
+  repeated cockroach.sql.CollectedTransactionStatistics transactions = 2;
+  int64 fingerprint_count = 3;
+}
+
 message StatementsResponse {
   message ExtendedStatementStatisticsKey {
     cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
@@ -2566,6 +2576,8 @@ service Status {
       post: "/_status/resetsqlstats"
       body: "*"
     };
+  }
+  rpc DrainSqlStats(DrainSqlStatsRequest) returns (DrainStatsResponse) {
   }
 
   rpc IndexUsageStatistics(IndexUsageStatisticsRequest) returns (IndexUsageStatisticsResponse) {
