@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -241,6 +242,7 @@ func (ru *Updater) UpdateRow(
 	pm PartialIndexUpdateHelper,
 	vh VectorIndexUpdateHelper,
 	oth *OriginTimestampCPutHelper,
+	mustValidateOldPKValues bool,
 	traceKV bool,
 ) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
@@ -396,7 +398,9 @@ func (ru *Updater) UpdateRow(
 		// followed by a CPut we could skip the Del altogether. Furthermore, if
 		// we acquired the lock on this index during the initial scan we could
 		// replace a CPut with a Put.
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, vh, oth, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(
+			ctx, batch, oldValues, pm, vh, oth, mustValidateOldPKValues, traceKV,
+		); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
@@ -418,7 +422,7 @@ func (ru *Updater) UpdateRow(
 	ru.valueBuf, err = prepareInsertOrUpdateBatch(
 		ctx, b, &ru.Helper, primaryIndexKey, ru.FetchCols, ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex, &ru.key, &ru.value, ru.valueBuf, oth, oldValues,
-		kvOp, traceKV,
+		kvOp, mustValidateOldPKValues, traceKV,
 	)
 	if err != nil {
 		return nil, err
@@ -657,4 +661,22 @@ func (ru *Updater) IsColumnOnlyUpdate() bool {
 	// (computing which indexes need to be updated and mapping sql rows to k/v
 	// operations) and these should be split.
 	return !ru.primaryKeyColChange && ru.DeleteHelper == nil && len(ru.Helper.Indexes) == 0
+}
+
+func updateCPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	expVal []byte,
+	traceKV bool,
+	keyEncodingDirs []encoding.Direction,
+) {
+	if traceKV {
+		log.VEventfDepth(
+			ctx, 1, 2, "CPut %s -> %s (swap)", keys.PrettyPrint(keyEncodingDirs, *key),
+			value.PrettyPrint(),
+		)
+	}
+	b.CPut(key, value, expVal)
 }

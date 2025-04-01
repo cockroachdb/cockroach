@@ -225,7 +225,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	}
 
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, updateValues, pm, vh, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(
+		params.ctx, oldValues, updateValues, pm, vh, false /* mustValidateOldPKValues */, u.run.traceKV,
+	)
 	if err != nil {
 		return err
 	}
