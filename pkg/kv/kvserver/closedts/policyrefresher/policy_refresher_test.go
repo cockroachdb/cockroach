@@ -7,6 +7,7 @@ package policyrefresher
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -135,6 +136,74 @@ func TestPolicyRefresher(t *testing.T) {
 	}
 }
 
+func TestLatencyRefreshInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+
+	r1 := newMockReplica(1)
+	getLeaseholders := func() []Replica { return []Replica{r1} }
+
+	m := map[roachpb.NodeID]time.Duration{
+		1: 100 * time.Millisecond,
+	}
+	getLatencies := func() map[roachpb.NodeID]time.Duration {
+		return m
+	}
+
+	testCases := []struct {
+		name          string
+		interval      time.Duration
+		expectRefresh bool
+	}{
+		{
+			name:          "disabled refresh (interval is too long to be refreshed)",
+			interval:      1 * time.Hour,
+			expectRefresh: false,
+		},
+		{
+			name:          "enabled refresh (positive interval)",
+			interval:      1 * time.Millisecond,
+			expectRefresh: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set the refresh interval.
+			closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(
+				ctx, &st.SV, tc.interval)
+
+			pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
+			require.NotNil(t, pr)
+
+			// Start the refresher.
+			pr.Run(ctx)
+
+			if tc.expectRefresh {
+				testutils.SucceedsSoon(t, func() error {
+					pr.mu.RLock()
+					defer pr.mu.RUnlock()
+					if reflect.DeepEqual(pr.mu.latencyCache, m) {
+						return nil
+					}
+					return errors.New("latency cache does not match expected value")
+
+				})
+			} else {
+				func() {
+					pr.mu.RLock()
+					defer pr.mu.RUnlock()
+					require.Empty(t, pr.mu.latencyCache)
+				}()
+			}
+		})
+	}
+}
+
 func TestPolicyRefresherEnqueueAndRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -152,12 +221,13 @@ func TestPolicyRefresherEnqueueAndRun(t *testing.T) {
 	}
 	getLatencies := func() map[roachpb.NodeID]time.Duration { return latencies }
 
-	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
-	require.NotNil(t, pr)
-
 	// Enable auto-tune.
 	closedts.LeadForGlobalReadsAutoTuneEnabled.Override(ctx, &st.SV, true)
-	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 1*time.Second)
+	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
+
+	pr := NewPolicyRefresher(stopper, st, getLeaseholders, getLatencies)
+	require.NotNil(t, pr)
 
 	// Start the refresher.
 	pr.Run(ctx)
@@ -211,7 +281,8 @@ func TestPolicyRefresherEnqueueOnBlockingReplica(t *testing.T) {
 
 	// Enable auto-tune.
 	closedts.LeadForGlobalReadsAutoTuneEnabled.Override(ctx, &st.SV, true)
-	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 1*time.Second)
+	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
 	// Start the refresher.
 	pr.Run(ctx)
