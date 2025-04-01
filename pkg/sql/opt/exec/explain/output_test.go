@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -381,4 +382,54 @@ func TestRetryFields(t *testing.T) {
 	}
 	assert.Truef(t, foundCount, "expected to find transaction retries, full output:\n\n%s", output.String())
 	assert.Truef(t, foundTime, "expected to find time spent retrying, full output:\n\n%s", output.String())
+}
+
+// TestMaximumMemoryUsage verifies that "maximum memory usage" statistic is
+// reported correctly in distributed plans. It is a regression test for #143617.
+func TestMaximumMemoryUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "multinode cluster setup times out under stress")
+	skip.UnderRace(t, "multinode cluster setup times out under race")
+
+	const numNodes = 3
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
+	// Set up such a distributed plan where memory-intensive aggregation occurs
+	// on the remote nodes whereas the gateway only merges streams of final
+	// results from remote nodes.
+	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+	db.Query(t, "CREATE TABLE t (k INT PRIMARY KEY, bucket INT, v STRING);")
+	db.Query(t, "INSERT INTO t SELECT i, i % 4, repeat('a', 1000) FROM generate_series(1, 10000) AS g(i);")
+	db.Query(t, "ALTER TABLE t SPLIT AT VALUES (5001);")
+	testutils.SucceedsSoon(t, func() error {
+		// Wrap this query in a retry loop since it might hit expected errors
+		// for some time.
+		_, err := db.DB.ExecContext(ctx, "ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[3], 5001)")
+		return err
+	})
+
+	rows := db.QueryStr(t, "EXPLAIN ANALYZE SELECT max(v) FROM t GROUP BY bucket;")
+	var output strings.Builder
+	maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
+	var maxMemoryUsage float64
+	for _, row := range rows {
+		output.WriteString(row[0])
+		output.WriteString("\n")
+		s := strings.TrimSpace(row[0])
+		if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
+			var err error
+			maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
+			require.NoError(t, err)
+		}
+	}
+	require.Greaterf(t, maxMemoryUsage, 5.0, "expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
 }
