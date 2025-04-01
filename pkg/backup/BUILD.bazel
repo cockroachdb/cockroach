@@ -17,6 +17,7 @@ go_library(
         "compaction_dist.go",
         "compaction_job.go",
         "compaction_policy.go",
+        "compaction_processor.go",
         "create_scheduled_backup.go",
         "generative_split_and_scatter_processor.go",
         "key_rewriter.go",
