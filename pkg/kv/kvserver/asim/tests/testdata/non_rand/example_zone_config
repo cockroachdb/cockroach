@@ -1,15 +1,15 @@
 # This test applies a configuration that prioritizes zone constraints, favoring
-# the a region. As a result, we expect a majority of replicas to be
-# distributed across stores numbered 1-12, all within the a region. The
+# the US_East region. As a result, we expect a majority of replicas to be
+# distributed across stores numbered 1-12, all within the US_East region. The
 # allocation of replicas to stores outside of this region is expected to be
 # zero.
 
 load_cluster config=multi_region
 ----
 
-# Create 200 ranges (RF=3) with zone preference set to a.
+# Create 200 ranges (RF=3) with zone preference set to US_East.
 set_span_config delay=1m
-[0,9999999999): num_replicas=3 constraints={'+region=a'}
+[0,9999999999): num_replicas=3 constraints={'+region=US_East'}
 ----
 
 assertion type=conformance under=0 violating=0
@@ -29,27 +29,27 @@ OK
 
 topology
 ----
-a
-  a1
+EU
+  EU_1
+  │ └── [25 26 27 28]
+  EU_2
+  │ └── [29 30 31 32]
+  EU_3
+  │ └── [33 34 35 36]
+US_East
+  US_East_1
   │ └── [1 2 3 4]
-  a2
+  US_East_2
   │ └── [5 6 7 8]
-  a3
+  US_East_3
   │ └── [9 10 11 12]
-b
-  b1
-  │ └── [13 14 15 16]
-  b2
-  │ └── [17 18 19 20]
-  b3
-  │ └── [21 22 23 24]
-c
-  c1
-    └── [25 26 27 28]
-  c2
-    └── [29 30 31 32]
-  c3
-    └── [33 34 35 36]
+US_West
+  US_West_1
+    └── [13 14 15 16]
+  US_West_2
+    └── [17 18 19 20]
+  US_West_3
+    └── [21 22 23 24]
 
 plot stat=replicas
 ----
