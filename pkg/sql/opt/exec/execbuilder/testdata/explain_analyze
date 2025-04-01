@@ -24,9 +24,6 @@ quality of service: regular
   regions: <hidden>
   actual row count: 0
   KV time: 0µs
-  KV contention time: 0µs
-  KV lock wait time: 0µs
-  KV latch wait time: 0µs
   KV rows decoded: 0
   KV bytes read: 0 B
   KV gRPC calls: 0
@@ -60,9 +57,6 @@ quality of service: regular
   regions: <hidden>
   actual row count: 3
   KV time: 0µs
-  KV contention time: 0µs
-  KV lock wait time: 0µs
-  KV latch wait time: 0µs
   KV rows decoded: 3
   KV pairs read: 6
   KV bytes read: 24 B
