@@ -157,7 +157,7 @@ tree
 /github-summary.md
 /qwerty456
 /qwerty456/artifacts
-/qwerty456/artifacts/_REGRESSED
+/qwerty456/artifacts/Sysbench_SQL_3node_oltp_read_write.REGRESSED
 /qwerty456/artifacts/cleaned_Sysbench_SQL_3node_oltp_read_write.log
 /qwerty456/artifacts/cpu_Sysbench_SQL_3node_oltp_read_write_merged.prof
 /qwerty456/artifacts/memory_Sysbench_SQL_3node_oltp_read_write_merged.prof
