@@ -169,13 +169,29 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 	}
 	closedts.RangeClosedTimestampPolicyRefreshInterval.SetOnChange(&pr.settings.SV, onConfigChange)
 
+	latencyRefresherConfigUpdateCh := make(chan struct{}, 1)
+	onLatencyRefresherConfigChange := func(ctx context.Context) {
+		select {
+		case latencyRefresherConfigUpdateCh <- struct{}{}:
+		default:
+		}
+	}
+	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.SetOnChange(&pr.settings.SV, onLatencyRefresherConfigChange)
+
 	getPolicyRefresh := func() time.Duration {
 		return closedts.RangeClosedTimestampPolicyRefreshInterval.Get(&pr.settings.SV)
+	}
+	getLatencyRefresh := func() time.Duration {
+		return closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Get(&pr.settings.SV)
 	}
 
 	var policyRefresherTimer timeutil.Timer
 	policyRefresherTimer.Reset(getPolicyRefresh())
 	defer policyRefresherTimer.Stop()
+
+	var latencyRefresherTimer timeutil.Timer
+	latencyRefresherTimer.Reset(getLatencyRefresh())
+	defer latencyRefresherTimer.Stop()
 
 	for {
 		select {
@@ -187,10 +203,17 @@ func (pr *PolicyRefresher) run(ctx context.Context) {
 		case <-policyRefresherTimer.C:
 			policyRefresherTimer.Read = true
 			policyRefresherTimer.Reset(getPolicyRefresh())
-			pr.updateLatencyCache()
 			pr.refreshPolicies(pr.getLeaseholderReplicas())
 		case <-configUpdateCh:
 			policyRefresherTimer.Reset(getPolicyRefresh())
+
+		// Refresh the latency cache.
+		case <-latencyRefresherTimer.C:
+			latencyRefresherTimer.Read = true
+			latencyRefresherTimer.Reset(getLatencyRefresh())
+			pr.updateLatencyCache()
+		case <-latencyRefresherConfigUpdateCh:
+			latencyRefresherTimer.Reset(getLatencyRefresh())
 
 		// Stop the for loop.
 		case <-pr.stopper.ShouldQuiesce():
