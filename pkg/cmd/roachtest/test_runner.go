@@ -2024,7 +2024,7 @@ func (r *testRunner) postProcessPerfMetrics(
 	}
 
 	// Collect and aggregate metrics from all relevant nodes
-	if err := metrics.collectFromNodes(c, dstDirFn); err != nil {
+	if err := metrics.collectFromNodes(c, dstDirFn, t.L()); err != nil {
 		t.L().PrintfCtx(ctx, "failed to collect metrics: %v", err)
 		return
 	}
@@ -2036,12 +2036,13 @@ func (r *testRunner) postProcessPerfMetrics(
 }
 
 func (m *perfMetricsCollector) collectFromNodes(
-	c *clusterImpl, dstDirFn func(nodeIdx int) string,
+	c *clusterImpl, dstDirFn func(nodeIdx int) string, log *logger.Logger,
 ) error {
 	for _, node := range getPerfArtifactsNode(c) {
 		files, err := m.findMetricsFiles(dstDirFn(node))
 		if err != nil {
-			return errors.Wrapf(err, "finding metrics files")
+			log.Printf("[warning] failed to find metrics files, will continue: %s", err)
+			continue
 		}
 
 		if err := m.processFiles(files); err != nil {
