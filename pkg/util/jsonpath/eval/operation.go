@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,7 +125,7 @@ func (ctx *jsonpathCtx) evalRegex(
 	}
 
 	regexOp := op.Right.(jsonpath.Regex)
-	r, err := ctx.evalCtx.ReCache.GetRegexp(regexOp)
+	r, err := parser.ReCache.GetRegexp(regexOp)
 	if err != nil {
 		return jsonpathBoolUnknown, err
 	}
