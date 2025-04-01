@@ -446,3 +446,5 @@ replace google.golang.org/protobuf => google.golang.org/protobuf v1.29.1
 
 // Take etcd-io/raft from the branch corresponding to release-23.2 in our fork.
 replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20240612143628-49a8a628fa47
+
+replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
