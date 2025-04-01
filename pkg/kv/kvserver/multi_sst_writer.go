@@ -380,15 +380,12 @@ func (msstw *multiSSTWriter) PutInternalRangeKey(
 		return err
 	}
 	prevWriteBytes := msstw.currSST.EstimatedSize()
-	if err := msstw.currSST.PutInternalRangeKey(start, end, key); err != nil {
-		return errors.Wrap(err, "failed to put range key in sst")
-	}
 
-	// TODO(tbg): why isn't this updating `rangeKeyFrag`? PutInternalRangeKey
-	// can only occur with shared SSTs, which I believe is the case in which
-	// incoming range keys aren't already pre-fragmented.
-	// See PutRangeKey below which *does* fragment, though I don't think it
-	// would strictly need to.
+	msstw.rangeKeyFrag.Add(rangekey.Span{
+		Start: start,
+		End:   end,
+		Keys:  []rangekey.Key{key},
+	})
 
 	msstw.writeBytes += int64(msstw.currSST.EstimatedSize() - prevWriteBytes)
 	return nil
@@ -406,12 +403,8 @@ func (msstw *multiSSTWriter) PutRangeKey(
 
 	startKey, endKey := storage.EngineKey{Key: start}.Encode(), storage.EngineKey{Key: end}.Encode()
 	startTrailer := pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindRangeKeySet)
-	msstw.rangeKeyFrag.Add(rangekey.Span{
-		Start: startKey,
-		End:   endKey,
-		Keys:  []rangekey.Key{{Trailer: startTrailer, Suffix: suffix, Value: value}},
-	})
-	return nil
+	rk := rangekey.Key{Trailer: startTrailer, Suffix: suffix, Value: value}
+	return msstw.PutInternalRangeKey(ctx, startKey, endKey, rk)
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
