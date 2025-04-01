@@ -36,6 +36,44 @@ ALTER TABLE system.transaction_activity INJECT STATISTICS '[
 ]'
 ----
 
+# Pretend we have max number of rows in the statement activity table
+run-sql
+ALTER TABLE system.statement_activity INJECT STATISTICS '[
+  {
+    "columns": ["aggregated_ts"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 72
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id","plan_hash"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id","plan_hash","app_name"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 200000,
+    "distinct_count": 200000
+  }
+]'
+----
+
+
+
 # Pretend we have max number of rows in the transaction_statistics table
 run-sql
 ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
@@ -71,6 +109,50 @@ ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
   }
 ]'
 ----
+
+
+# Pretend we have max number of rows in the statement_statistics table
+run-sql
+ALTER TABLE system.statement_statistics INJECT STATISTICS '[
+  {
+    "columns": ["aggregated_ts"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 12
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id","plan_hash","app_name","node_id","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id","plan_hash","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","transaction_fingerprint_id","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["aggregated_ts","fingerprint_id","crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  },
+  {
+    "columns": ["crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"],
+    "created_at": "2023-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000
+  }
+]'
+----
+
 
 # This command will run EXPLAIN on the query used to select and aggregate
 # all transactions from system.transaction_statistic in the supplied time
@@ -245,5 +327,428 @@ vectorized: true
                                                           estimated row count: 83,333 (8.3% of the table; stats collected <hidden> ago)
                                                           table: transaction_statistics@primary
                                                           spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
+----
+----
+
+
+
+explain-sql-activity-select-all-statements aggTs=(2023-04-10 16:00:00)
+----
+----
+distribution: local
+vectorized: true
+
+• render
+│ columns: (fingerprint_id, plan_hash, app_name, max_agg_interval, merged_metadata, merged_stats, max_plan, idx_rec, int8, "?column?", "coalesce", "coalesce", float8, "coalesce")
+│ render idx_rec: jsonb_array_to_string_array(merged_stats->'index_recommendations')
+│ render int8: ((merged_stats->'statistics')->>'cnt')::INT8
+│ render ?column?: ((merged_stats->'statistics')->>'cnt')::FLOAT8 * (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render coalesce: COALESCE((((merged_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+│ render coalesce: COALESCE((((merged_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+│ render float8: (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render coalesce: COALESCE((((merged_stats->'statistics')->'latencyInfo')->>'p99')::FLOAT8, 0.0)
+│ render fingerprint_id: fingerprint_id
+│ render plan_hash: plan_hash
+│ render app_name: app_name
+│ render max_agg_interval: max_agg_interval
+│ render merged_metadata: merged_metadata
+│ render merged_stats: merged_stats
+│ render max_plan: max_plan
+│
+└── • render
+    │ columns: (fingerprint_id, plan_hash, app_name, max_agg_interval, merged_metadata, merged_stats, max_plan)
+    │ render fingerprint_id: fingerprint_id
+    │ render plan_hash: plan_hash
+    │ render app_name: app_name
+    │ render max_agg_interval: max
+    │ render merged_metadata: merge_stats_metadata
+    │ render merged_stats: merge_statement_stats
+    │ render max_plan: max
+    │
+    └── • group (hash)
+        │ columns: (fingerprint_id, plan_hash, app_name, max, merge_stats_metadata, merge_statement_stats, max)
+        │ estimated row count: 27,778
+        │ aggregate 0: max(agg_interval)
+        │ aggregate 1: merge_stats_metadata(metadata)
+        │ aggregate 2: merge_statement_stats(statistics)
+        │ aggregate 3: max(plan)
+        │ group by: fingerprint_id, plan_hash, app_name
+        │
+        └── • project
+            │ columns: (fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+            │
+            └── • union all
+                │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │ estimated row count: 0
+                │
+                ├── • union all
+                │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │ estimated row count: 0
+                │   │
+                │   ├── • union all
+                │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │   │ estimated row count: 0
+                │   │   │
+                │   │   ├── • filter
+                │   │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │   │   │ estimated row count: 0
+                │   │   │   │ filter: app_name NOT LIKE '$ internal%'
+                │   │   │   │
+                │   │   │   └── • scan
+                │   │   │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                │   │   │         table: statement_statistics@primary
+                │   │   │         spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z
+                │   │   │
+                │   │   └── • filter
+                │   │       │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │       │ estimated row count: 0
+                │   │       │ filter: app_name NOT LIKE '$ internal%'
+                │   │       │
+                │   │       └── • scan
+                │   │             columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │   │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                │   │             table: statement_statistics@primary
+                │   │             spans: /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z
+                │   │
+                │   └── • union all
+                │       │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │       │ estimated row count: 0
+                │       │
+                │       ├── • filter
+                │       │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │       │   │ estimated row count: 0
+                │       │   │ filter: app_name NOT LIKE '$ internal%'
+                │       │   │
+                │       │   └── • scan
+                │       │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │       │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                │       │         table: statement_statistics@primary
+                │       │         spans: /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z
+                │       │
+                │       └── • filter
+                │           │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │           │ estimated row count: 0
+                │           │ filter: app_name NOT LIKE '$ internal%'
+                │           │
+                │           └── • scan
+                │                 columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │                 estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                │                 table: statement_statistics@primary
+                │                 spans: /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z
+                │
+                └── • union all
+                    │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │ estimated row count: 0
+                    │
+                    ├── • union all
+                    │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │   │ estimated row count: 0
+                    │   │
+                    │   ├── • filter
+                    │   │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │   │   │ estimated row count: 0
+                    │   │   │ filter: app_name NOT LIKE '$ internal%'
+                    │   │   │
+                    │   │   └── • scan
+                    │   │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                    │   │         table: statement_statistics@primary
+                    │   │         spans: /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z
+                    │   │
+                    │   └── • filter
+                    │       │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │       │ estimated row count: 0
+                    │       │ filter: app_name NOT LIKE '$ internal%'
+                    │       │
+                    │       └── • scan
+                    │             columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                    │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                    │             table: statement_statistics@primary
+                    │             spans: /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z
+                    │
+                    └── • union all
+                        │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                        │ estimated row count: 0
+                        │
+                        ├── • filter
+                        │   │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                        │   │ estimated row count: 0
+                        │   │ filter: app_name NOT LIKE '$ internal%'
+                        │   │
+                        │   └── • scan
+                        │         columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                        │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                        │         table: statement_statistics@primary
+                        │         spans: /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z
+                        │
+                        └── • filter
+                            │ columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                            │ estimated row count: 0
+                            │ filter: app_name NOT LIKE '$ internal%'
+                            │
+                            └── • scan
+                                  columns: (aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                  table: statement_statistics@primary
+                                  spans: /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
+----
+----
+
+
+explain-sql-activity-select-top-statements aggTs=(2023-04-10 16:00:00)
+----
+----
+distribution: local
+vectorized: true
+
+• render
+│ columns: (fingerprint_id, plan_hash, app_name, max_agg_interval, metadata, merged_stats, max_plan, idx_rec, int8, "?column?", "coalesce", "coalesce", float8, "coalesce")
+│ render idx_rec: jsonb_array_to_string_array(merged_stats->'index_recommendations')
+│ render int8: ((merged_stats->'statistics')->>'cnt')::INT8
+│ render ?column?: ((merged_stats->'statistics')->>'cnt')::FLOAT8 * (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render coalesce: COALESCE((((merged_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+│ render coalesce: COALESCE((((merged_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+│ render float8: (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+│ render coalesce: COALESCE((((merged_stats->'statistics')->'latencyInfo')->>'p99')::FLOAT8, 0.0)
+│ render fingerprint_id: fingerprint_id
+│ render plan_hash: plan_hash
+│ render app_name: app_name
+│ render max_agg_interval: max_agg_interval
+│ render max_plan: max_plan
+│ render metadata: metadata
+│ render merged_stats: merged_stats
+│
+└── • render
+    │ columns: (fingerprint_id, plan_hash, app_name, max_agg_interval, max_plan, metadata, merged_stats)
+    │ render fingerprint_id: fingerprint_id
+    │ render plan_hash: plan_hash
+    │ render app_name: app_name
+    │ render max_agg_interval: max
+    │ render max_plan: max
+    │ render metadata: merge_stats_metadata
+    │ render merged_stats: merge_statement_stats
+    │
+    └── • group (hash)
+        │ columns: (fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats)
+        │ estimated row count: 2
+        │ aggregate 0: max(agg_interval)
+        │ aggregate 1: max(plan)
+        │ aggregate 2: merge_stats_metadata(metadata)
+        │ aggregate 3: merge_statement_stats(statistics)
+        │ group by: fingerprint_id, plan_hash, app_name
+        │
+        └── • project
+            │ columns: (fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+            │
+            └── • project
+                │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency, aggregated_ts, fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan)
+                │
+                └── • lookup join (inner)
+                    │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, agg_interval, metadata, statistics, plan)
+                    │ estimated row count: 2
+                    │ table: statement_statistics@primary
+                    │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+                    │ equality cols are key
+                    │
+                    └── • lookup join (inner)
+                        │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
+                        │ estimated row count: 2
+                        │ table: statement_statistics@fingerprint_stats_idx
+                        │ equality: (fingerprint_id) = (fingerprint_id)
+                        │ pred: (aggregated_ts = aggregated_ts) AND (app_name = app_name)
+                        │
+                        └── • filter
+                            │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency)
+                            │ estimated row count: 21,997
+                            │ filter: (((((cnt_rank < 500) OR (lat_rank < 500)) OR (combined_rank < 500)) OR ((contention_rank < 500) AND (contention_mean > 0.0))) OR ((cpu_rank < 500) AND (cpu_mean > 0.0))) OR ((p99_rank < 500) AND (p99_latency > 0.0))
+                            │
+                            └── • render
+                                │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency)
+                                │ render aggregated_ts: aggregated_ts
+                                │ render fingerprint_id: fingerprint_id
+                                │ render app_name: app_name
+                                │ render cnt_rank: row_number
+                                │ render lat_rank: row_number
+                                │ render combined_rank: row_number
+                                │ render contention_rank: row_number
+                                │ render cpu_rank: row_number
+                                │ render p99_rank: row_number
+                                │ render contention_mean: COALESCE((((merged_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                                │ render cpu_mean: COALESCE((((merged_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+                                │ render p99_latency: COALESCE((((merged_stats->'statistics')->'latencyInfo')->>'p99')::FLOAT8, 0.0)
+                                │
+                                └── • window
+                                    │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1, row_number)
+                                    │ estimated row count: 27,778
+                                    │ window 0: row_number() OVER (ORDER BY row_number_6_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                    │
+                                    └── • window
+                                        │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                        │ estimated row count: 27,778
+                                        │ window 0: row_number() OVER (ORDER BY row_number_5_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                        │
+                                        └── • window
+                                            │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                            │ estimated row count: 27,778
+                                            │ window 0: row_number() OVER (ORDER BY row_number_4_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                            │
+                                            └── • window
+                                                │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                                │ estimated row count: 27,778
+                                                │ window 0: row_number() OVER (ORDER BY row_number_3_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                │
+                                                └── • window
+                                                    │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                                    │ estimated row count: 27,778
+                                                    │ window 0: row_number() OVER (ORDER BY row_number_2_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                    │
+                                                    └── • window
+                                                        │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                                        │ estimated row count: 27,778
+                                                        │ window 0: row_number() OVER (ORDER BY row_number_1_orderby_1_1 DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                                                        │
+                                                        └── • render
+                                                            │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats, row_number_1_orderby_1_1, row_number_2_orderby_1_1, row_number_3_orderby_1_1, row_number_4_orderby_1_1, row_number_5_orderby_1_1, row_number_6_orderby_1_1)
+                                                            │ render row_number_1_orderby_1_1: ((merged_stats->'statistics')->>'cnt')::INT8
+                                                            │ render row_number_2_orderby_1_1: (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                                                            │ render row_number_3_orderby_1_1: ((merged_stats->'statistics')->>'cnt')::FLOAT8 * (((merged_stats->'statistics')->'svcLat')->>'mean')::FLOAT8
+                                                            │ render row_number_4_orderby_1_1: COALESCE((((merged_stats->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                                                            │ render row_number_5_orderby_1_1: COALESCE((((merged_stats->'execution_statistics')->'cpuSQLNanos')->>'mean')::FLOAT8, 0.0)
+                                                            │ render row_number_6_orderby_1_1: COALESCE((((merged_stats->'statistics')->'latencyInfo')->>'p99')::FLOAT8, 0.0)
+                                                            │ render aggregated_ts: aggregated_ts
+                                                            │ render fingerprint_id: fingerprint_id
+                                                            │ render app_name: app_name
+                                                            │ render merged_stats: merged_stats
+                                                            │
+                                                            └── • render
+                                                                │ columns: (aggregated_ts, fingerprint_id, app_name, merged_stats)
+                                                                │ render aggregated_ts: any_not_null
+                                                                │ render fingerprint_id: fingerprint_id
+                                                                │ render app_name: app_name
+                                                                │ render merged_stats: merge_statement_stats
+                                                                │
+                                                                └── • group (hash)
+                                                                    │ columns: (fingerprint_id, app_name, merge_statement_stats, any_not_null)
+                                                                    │ estimated row count: 27,778
+                                                                    │ aggregate 0: merge_statement_stats(statistics)
+                                                                    │ aggregate 1: any_not_null(aggregated_ts)
+                                                                    │ group by: fingerprint_id, app_name
+                                                                    │
+                                                                    └── • union all
+                                                                        │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │ estimated row count: 0
+                                                                        │
+                                                                        ├── • union all
+                                                                        │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │ estimated row count: 0
+                                                                        │   │
+                                                                        │   ├── • union all
+                                                                        │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │   │ estimated row count: 0
+                                                                        │   │   │
+                                                                        │   │   ├── • filter
+                                                                        │   │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │   │   │ estimated row count: 0
+                                                                        │   │   │   │ filter: app_name NOT LIKE '$ internal%'
+                                                                        │   │   │   │
+                                                                        │   │   │   └── • scan
+                                                                        │   │   │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                        │   │   │         table: statement_statistics@primary
+                                                                        │   │   │         spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z
+                                                                        │   │   │
+                                                                        │   │   └── • filter
+                                                                        │   │       │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │       │ estimated row count: 0
+                                                                        │   │       │ filter: app_name NOT LIKE '$ internal%'
+                                                                        │   │       │
+                                                                        │   │       └── • scan
+                                                                        │   │             columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │   │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                        │   │             table: statement_statistics@primary
+                                                                        │   │             spans: /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z
+                                                                        │   │
+                                                                        │   └── • union all
+                                                                        │       │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │       │ estimated row count: 0
+                                                                        │       │
+                                                                        │       ├── • filter
+                                                                        │       │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │       │   │ estimated row count: 0
+                                                                        │       │   │ filter: app_name NOT LIKE '$ internal%'
+                                                                        │       │   │
+                                                                        │       │   └── • scan
+                                                                        │       │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │       │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                        │       │         table: statement_statistics@primary
+                                                                        │       │         spans: /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z
+                                                                        │       │
+                                                                        │       └── • filter
+                                                                        │           │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │           │ estimated row count: 0
+                                                                        │           │ filter: app_name NOT LIKE '$ internal%'
+                                                                        │           │
+                                                                        │           └── • scan
+                                                                        │                 columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                        │                 estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                        │                 table: statement_statistics@primary
+                                                                        │                 spans: /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z
+                                                                        │
+                                                                        └── • union all
+                                                                            │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │ estimated row count: 0
+                                                                            │
+                                                                            ├── • union all
+                                                                            │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │   │ estimated row count: 0
+                                                                            │   │
+                                                                            │   ├── • filter
+                                                                            │   │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │   │   │ estimated row count: 0
+                                                                            │   │   │ filter: app_name NOT LIKE '$ internal%'
+                                                                            │   │   │
+                                                                            │   │   └── • scan
+                                                                            │   │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │   │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                            │   │         table: statement_statistics@primary
+                                                                            │   │         spans: /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z
+                                                                            │   │
+                                                                            │   └── • filter
+                                                                            │       │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │       │ estimated row count: 0
+                                                                            │       │ filter: app_name NOT LIKE '$ internal%'
+                                                                            │       │
+                                                                            │       └── • scan
+                                                                            │             columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                            │             estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                            │             table: statement_statistics@primary
+                                                                            │             spans: /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z
+                                                                            │
+                                                                            └── • union all
+                                                                                │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                                │ estimated row count: 0
+                                                                                │
+                                                                                ├── • filter
+                                                                                │   │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                                │   │ estimated row count: 0
+                                                                                │   │ filter: app_name NOT LIKE '$ internal%'
+                                                                                │   │
+                                                                                │   └── • scan
+                                                                                │         columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                                │         estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                │         table: statement_statistics@primary
+                                                                                │         spans: /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z
+                                                                                │
+                                                                                └── • filter
+                                                                                    │ columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                                    │ estimated row count: 0
+                                                                                    │ filter: app_name NOT LIKE '$ internal%'
+                                                                                    │
+                                                                                    └── • scan
+                                                                                          columns: (aggregated_ts, fingerprint_id, app_name, statistics)
+                                                                                          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                                                                                          table: statement_statistics@primary
+                                                                                          spans: /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
 ----
 ----
