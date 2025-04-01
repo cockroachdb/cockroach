@@ -7,7 +7,7 @@ SELECT k, s FROM a WHERE s >= 'foo'
 ----
 select
  ├── columns: k:1!null s:3!null
- ├── stats: [rows=333.3333, distinct(3)=33.3333, null(3)=0]
+ ├── stats: [rows=333.333, distinct(3)=33.3333, null(3)=0]
  ├── cost: 1098.65
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -132,7 +132,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b =
 ----
 select
  ├── columns: n:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)
@@ -155,7 +155,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=[2],FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b = 7
 ----
 select
  ├── columns: n:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)

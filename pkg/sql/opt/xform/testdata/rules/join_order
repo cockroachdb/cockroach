@@ -469,7 +469,7 @@ inner-join (cross)
  │    ├── interesting orderings: (+7) (+11) (+15)
  │    ├── inner-join (cross)
  │    │    ├── columns: t.public.cy.c:11(int!null) t.public.cy.y:12(int) t.public.dz.d:15(int!null) t.public.dz.z:16(int)
- │    │    ├── stats: [rows=1000000]
+ │    │    ├── stats: [rows=1e+06]
  │    │    ├── cost: 12167.0063
  │    │    ├── key: (11,15)
  │    │    ├── fd: (11)-->(12), (15)-->(16)

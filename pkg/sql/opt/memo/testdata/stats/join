@@ -412,7 +412,7 @@ inner-join (hash)
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:7(int!null) v:8(int!null)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── immutable
- ├── stats: [rows=3333.333, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0]
+ ├── stats: [rows=3333.33, distinct(1)=500, null(1)=0, distinct(7)=500, null(7)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
@@ -442,18 +442,18 @@ GROUP BY y
 project
  ├── columns: count:13(int!null)
  ├── immutable
- ├── stats: [rows=138.1701]
+ ├── stats: [rows=138.17]
  └── group-by (hash)
       ├── columns: y:2(int) count_rows:13(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=138.1701, distinct(2)=138.17, null(2)=0]
+      ├── stats: [rows=138.17, distinct(2)=138.17, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(13)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=166.6667, distinct(1)=166.667, null(1)=0, distinct(2)=138.17, null(2)=0]
+      │    ├── stats: [rows=166.667, distinct(1)=166.667, null(1)=0, distinct(2)=138.17, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -490,7 +490,7 @@ project
       ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=4833.333, distinct(2)=400, null(2)=0]
+      │    ├── stats: [rows=4833.33, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -553,12 +553,12 @@ GROUP BY y
 project
  ├── columns: count:12(int!null)
  ├── immutable
- ├── stats: [rows=399.9039]
+ ├── stats: [rows=399.904]
  └── group-by (hash)
       ├── columns: y:2(int) count_rows:12(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=399.9039, distinct(2)=399.904, null(2)=1]
+      ├── stats: [rows=399.904, distinct(2)=399.904, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(12)
       ├── left-join (hash)
@@ -602,7 +602,7 @@ project
       │    ├── columns: x:1(int) y:2(int) u:7(int) v:8(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       │    ├── immutable
-      │    ├── stats: [rows=11666.67, distinct(2)=400, null(2)=6666.67]
+      │    ├── stats: [rows=11666.7, distinct(2)=400, null(2)=6666.67]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
@@ -636,7 +636,7 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN (SELECT * FROM xyz WHERE x=10) 
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
- ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
+ ├── stats: [rows=10.3537, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
  ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
@@ -664,7 +664,7 @@ SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
 ----
 inner-join (hash)
  ├── columns: u:1(int!null) v:2(int) w:3(int!null) x:7(int!null) y:8(int) z:9(int)
- ├── stats: [rows=10.35371, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
+ ├── stats: [rows=10.3537, distinct(1)=1, null(1)=0, distinct(7)=1, null(7)=0]
  ├── fd: ()-->(1,3,7), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: u:1(int) v:2(int) w:3(int!null)
@@ -1246,17 +1246,17 @@ SELECT (
 ----
 project
  ├── columns: "?column?":24(int)
- ├── stats: [rows=1000000]
+ ├── stats: [rows=1e+06]
  ├── ensure-distinct-on
  │    ├── columns: t0.rowid:4(int!null) "?column?":23(int)
  │    ├── grouping columns: t0.rowid:4(int!null)
  │    ├── error: "more than one row returned by a subquery used as an expression"
- │    ├── stats: [rows=1000000]
+ │    ├── stats: [rows=1e+06]
  │    ├── key: (4)
  │    ├── fd: (4)-->(23)
  │    ├── left-join-apply
  │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null) "?column?":23(int)
- │    │    ├── stats: [rows=1000000]
+ │    │    ├── stats: [rows=1e+06]
  │    │    ├── fd: (4)-->(2)
  │    │    ├── scan table0 [as=t0]
  │    │    │    ├── columns: t0.col1:2(bool) t0.rowid:4(int!null)
@@ -1651,22 +1651,22 @@ SELECT * FROM xysd, uv WHERE (s = 'foo' AND u = 3 AND v = 4) OR (s = 'bar' AND u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null)
- ├── stats: [rows=59372.65, distinct(3)=2, null(3)=0, distinct(7)=2, null(7)=0, distinct(8)=2, null(8)=0, distinct(7,8)=2.18365, null(7,8)=0]
+ ├── stats: [rows=59372.7, distinct(3)=2, null(3)=0, distinct(7)=2, null(7)=0, distinct(8)=2, null(8)=0, distinct(7,8)=2.18365, null(7,8)=0]
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── distinct-on
       ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
       ├── grouping columns: x:1(int!null) rowid:9(int!null)
-      ├── stats: [rows=16247.17, distinct(1,9)=16247.2, null(1,9)=0]
+      ├── stats: [rows=16247.2, distinct(1,9)=16247.2, null(1,9)=0]
       ├── key: (1,9)
       ├── fd: (1,9)-->(2-4,7,8)
       ├── union-all
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null) rowid:9(int!null)
       │    ├── left columns: x:12(int) y:13(int) s:14(string) d:15(decimal) u:18(int) v:19(int) rowid:20(int)
       │    ├── right columns: x:23(int) y:24(int) s:25(string) d:26(decimal) u:29(int) v:30(int) rowid:31(int)
-      │    ├── stats: [rows=16247.17, distinct(1,9)=16247.2, null(1,9)=0]
+      │    ├── stats: [rows=16247.2, distinct(1,9)=16247.2, null(1,9)=0]
       │    ├── inner-join (cross)
       │    │    ├── columns: x:12(int!null) y:13(int) s:14(string!null) d:15(decimal!null) u:18(int!null) v:19(int!null) rowid:20(int!null)
-      │    │    ├── stats: [rows=8123.585, distinct(12,20)=8123.58, null(12,20)=0]
+      │    │    ├── stats: [rows=8123.58, distinct(12,20)=8123.58, null(12,20)=0]
       │    │    ├── key: (12,20)
       │    │    ├── fd: ()-->(14,18,19), (12)-->(13,15), (15)-->(12,13)
       │    │    ├── index-join xysd
@@ -1682,7 +1682,7 @@ project
       │    │    │         └── fd: ()-->(14), (12)-->(15), (15)-->(12)
       │    │    ├── select
       │    │    │    ├── columns: u:18(int!null) v:19(int!null) rowid:20(int!null)
-      │    │    │    ├── stats: [rows=16.24717, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=16.2472, null(20)=0, distinct(18,19)=1, null(18,19)=0]
+      │    │    │    ├── stats: [rows=16.2472, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(20)=16.2472, null(20)=0, distinct(18,19)=1, null(18,19)=0]
       │    │    │    ├── key: (20)
       │    │    │    ├── fd: ()-->(18,19)
       │    │    │    ├── scan uv
@@ -1696,7 +1696,7 @@ project
       │    │    └── filters (true)
       │    └── inner-join (cross)
       │         ├── columns: x:23(int!null) y:24(int) s:25(string!null) d:26(decimal!null) u:29(int!null) v:30(int!null) rowid:31(int!null)
-      │         ├── stats: [rows=8123.585, distinct(23,31)=8123.58, null(23,31)=0]
+      │         ├── stats: [rows=8123.58, distinct(23,31)=8123.58, null(23,31)=0]
       │         ├── key: (23,31)
       │         ├── fd: ()-->(25,29,30), (23)-->(24,26), (26)-->(23,24)
       │         ├── index-join xysd
@@ -1712,7 +1712,7 @@ project
       │         │         └── fd: ()-->(25), (23)-->(26), (26)-->(23)
       │         ├── select
       │         │    ├── columns: u:29(int!null) v:30(int!null) rowid:31(int!null)
-      │         │    ├── stats: [rows=16.24717, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=16.2472, null(31)=0, distinct(29,30)=1, null(29,30)=0]
+      │         │    ├── stats: [rows=16.2472, distinct(29)=1, null(29)=0, distinct(30)=1, null(30)=0, distinct(31)=16.2472, null(31)=0, distinct(29,30)=1, null(29,30)=0]
       │         │    ├── key: (31)
       │         │    ├── fd: ()-->(29,30)
       │         │    ├── scan uv
@@ -1774,7 +1774,7 @@ SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = clas
 ----
 inner-join (cross)
  ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=29403.99, distinct(1)=100, null(1)=0]
+ ├── stats: [rows=29404, distinct(1)=100, null(1)=0]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
@@ -1816,7 +1816,7 @@ SELECT * FROM classes LEFT OUTER JOIN classRequest ON
 ----
 left-join (cross)
  ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- ├── stats: [rows=333333.3]
+ ├── stats: [rows=333333]
  ├── fd: (6)-->(7-9)
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
@@ -1890,7 +1890,7 @@ SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
 ----
 semi-join (cross)
  ├── columns: classid:1(int) description:2(varchar)
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── scan classes
  │    ├── columns: classid:1(int) description:2(varchar)
  │    └── stats: [rows=1000]
@@ -2159,7 +2159,7 @@ SELECT * FROM t0_88455 LEFT OUTER JOIN t1_88455 ON t0_88455.c0<1 OR t0_88455.c0>
 ----
 left-join (cross)
  ├── columns: c0:1(int) c0:5(int)
- ├── stats: [rows=21.66667]
+ ├── stats: [rows=21.6667]
  ├── scan t0_88455
  │    ├── columns: t0_88455.c0:1(int)
  │    └── stats: [rows=13, distinct(1)=13, null(1)=0]

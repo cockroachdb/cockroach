@@ -277,12 +277,12 @@ SELECT b FROM abc WHERE a % 2 = 0
 project
  ├── columns: b:2(int!null)
  ├── immutable
- ├── stats: [rows=6.666667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
+ ├── stats: [rows=6.66667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
  │   virtcolstats: (2)
  ├── select
  │    ├── columns: a:1(int!null)
  │    ├── immutable
- │    ├── stats: [rows=6.666667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
+ │    ├── stats: [rows=6.66667, distinct(1)=6.66667, null(1)=0, distinct(2)=5.55556, null(2)=0]
  │    │   virtcolstats: (2)
  │    ├── key: (1)
  │    ├── scan abc

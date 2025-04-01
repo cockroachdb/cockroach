@@ -71,7 +71,7 @@ top-k
       ├── save-table-name: q21_group_by_2
       ├── columns: s_name:2(char!null) count_rows:83(int!null)
       ├── grouping columns: s_name:2(char!null)
-      ├── stats: [rows=8389.301, distinct(2)=8389.3, null(2)=0, distinct(83)=8389.3, null(83)=0]
+      ├── stats: [rows=8389.3, distinct(2)=8389.3, null(2)=0, distinct(83)=8389.3, null(83)=0]
       ├── key: (2)
       ├── fd: (2)-->(83)
       ├── inner-join (lookup orders)
@@ -79,32 +79,32 @@ top-k
       │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_commitdate:21(date!null) l1.l_receiptdate:22(date!null) o_orderkey:28(int!null) o_orderstatus:30(char!null) n_nationkey:39(int!null) n_name:40(char!null)
       │    ├── key columns: [10] = [28]
       │    ├── lookup columns are key
-      │    ├── stats: [rows=17924.78, distinct(1)=8350.92, null(1)=0, distinct(2)=8389.3, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=17713.1, null(10)=0, distinct(12)=8350.92, null(12)=0, distinct(21)=2464.52, null(21)=0, distinct(22)=2552.02, null(22)=0, distinct(28)=17713.1, null(28)=0, distinct(30)=1, null(30)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+      │    ├── stats: [rows=17924.8, distinct(1)=8350.92, null(1)=0, distinct(2)=8389.3, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=17713.1, null(10)=0, distinct(12)=8350.92, null(12)=0, distinct(21)=2464.52, null(21)=0, distinct(22)=2552.02, null(22)=0, distinct(28)=17713.1, null(28)=0, distinct(30)=1, null(30)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    ├── fd: ()-->(30,40), (1)-->(2,4), (10)==(28), (28)==(10), (1)==(12), (12)==(1), (4)==(39), (39)==(4)
       │    ├── anti-join (lookup lineitem [as=l3])
       │    │    ├── save-table-name: q21_lookup_join_4
       │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_commitdate:21(date!null) l1.l_receiptdate:22(date!null) n_nationkey:39(int!null) n_name:40(char!null)
       │    │    ├── key columns: [10] = [63]
-      │    │    ├── stats: [rows=17924.78, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=17924.8, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2465.98, null(21)=0, distinct(22)=2553.97, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+      │    │    ├── stats: [rows=17924.8, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=17924.8, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2465.98, null(21)=0, distinct(22)=2553.97, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    │    ├── fd: ()-->(40), (1)-->(2,4), (4)==(39), (39)==(4), (1)==(12), (12)==(1)
       │    │    ├── semi-join (lookup lineitem [as=l2])
       │    │    │    ├── save-table-name: q21_lookup_join_5
       │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_commitdate:21(date!null) l1.l_receiptdate:22(date!null) n_nationkey:39(int!null) n_name:40(char!null)
       │    │    │    ├── key columns: [10] = [45]
-      │    │    │    ├── stats: [rows=26887.16, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=26887.2, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2466, null(21)=0, distinct(22)=2553.99, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+      │    │    │    ├── stats: [rows=26887.2, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=26887.2, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2466, null(21)=0, distinct(22)=2553.99, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    │    │    ├── fd: ()-->(40), (1)-->(2,4), (4)==(39), (39)==(4), (1)==(12), (12)==(1)
       │    │    │    ├── inner-join (lookup lineitem [as=l1])
       │    │    │    │    ├── save-table-name: q21_lookup_join_6
       │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_commitdate:21(date!null) l1.l_receiptdate:22(date!null) n_nationkey:39(int!null) n_name:40(char!null)
       │    │    │    │    ├── key columns: [10 13] = [10 13]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── stats: [rows=80661.49, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=78049.9, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2466, null(21)=0, distinct(22)=2554, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+      │    │    │    │    ├── stats: [rows=80661.5, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=78049.9, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(21)=2466, null(21)=0, distinct(22)=2554, null(22)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    │    │    │    ├── fd: ()-->(40), (1)-->(2,4), (4)==(39), (39)==(4), (1)==(12), (12)==(1)
       │    │    │    │    ├── inner-join (lookup lineitem@l_sk [as=l1])
       │    │    │    │    │    ├── save-table-name: q21_lookup_join_7
       │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_nationkey:4(int!null) l1.l_orderkey:10(int!null) l1.l_suppkey:12(int!null) l1.l_linenumber:13(int!null) n_nationkey:39(int!null) n_name:40(char!null)
       │    │    │    │    │    ├── key columns: [1] = [12]
-      │    │    │    │    │    ├── stats: [rows=241984.5, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=223798, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(13)=7, null(13)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+      │    │    │    │    │    ├── stats: [rows=241984, distinct(1)=399.935, null(1)=0, distinct(2)=399.992, null(2)=0, distinct(4)=1, null(4)=0, distinct(10)=223798, null(10)=0, distinct(12)=399.935, null(12)=0, distinct(13)=7, null(13)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
       │    │    │    │    │    ├── key: (10,13)
       │    │    │    │    │    ├── fd: ()-->(40), (1)-->(2,4), (10,13)-->(12), (4)==(39), (39)==(4), (1)==(12), (12)==(1)
       │    │    │    │    │    ├── inner-join (lookup supplier)

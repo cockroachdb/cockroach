@@ -87,7 +87,7 @@ sort
       │    │    │    ├── save-table-name: q22_select_5
       │    │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
       │    │    │    ├── immutable
-      │    │    │    ├── stats: [rows=16666.67, distinct(1)=16659, null(1)=0, distinct(5)=16666.7, null(5)=0, distinct(6)=16666.7, null(6)=0]
+      │    │    │    ├── stats: [rows=16666.7, distinct(1)=16659, null(1)=0, distinct(5)=16666.7, null(5)=0, distinct(6)=16666.7, null(6)=0]
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: (1)-->(5,6)
       │    │    │    ├── scan customer
@@ -119,7 +119,7 @@ sort
       │    │    │                        │    ├── save-table-name: q22_select_8
       │    │    │                        │    ├── columns: c_phone:15(char!null) c_acctbal:16(float!null)
       │    │    │                        │    ├── immutable
-      │    │    │                        │    ├── stats: [rows=45460.05, distinct(15)=45460.1, null(15)=0, distinct(16)=45460.1, null(16)=0]
+      │    │    │                        │    ├── stats: [rows=45460.1, distinct(15)=45460.1, null(15)=0, distinct(16)=45460.1, null(16)=0]
       │    │    │                        │    │   histogram(16)=  0   0   45455     5
       │    │    │                        │    │                 <--- 0.0 ------- 9998.32
       │    │    │                        │    ├── scan customer

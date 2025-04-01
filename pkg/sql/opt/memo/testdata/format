@@ -8,7 +8,7 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=98.17716]
+ ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
  ├── key: (1)
  ├── fd: (1)-->(6,7)
@@ -17,7 +17,7 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
@@ -27,7 +27,7 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
@@ -67,18 +67,18 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
- ├── stats: [rows=98.17716]
+ ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
  ├── ordering: +1
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
  │    ├── ordering: +1
  │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
@@ -282,19 +282,19 @@ opt format=(hide-miscprops,hide-physprops,hide-columns)
 SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 ----
 project
- ├── stats: [rows=98.17716]
+ ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── prune: (1,6,7)
  ├── sort
- │    ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── prune: (6)
  │    └── group-by (hash)
- │         ├── stats: [rows=98.17716, distinct(1)=98.1772, null(1)=1]
+ │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
@@ -396,7 +396,7 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=39.99842]
+ ├── stats: [rows=39.9984]
  ├── cost: 1115.77722
  ├── key: (1)
  ├── fd: (1)-->(6,7)
@@ -405,7 +405,7 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
+ │    ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │    ├── cost: 1114.95725
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
@@ -415,7 +415,7 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
+ │         ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │         ├── cost: 1109.07998
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
@@ -423,7 +423,7 @@ project
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=333.3333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── stats: [rows=333.333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -461,7 +461,7 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
- ├── stats: [rows=39.99842]
+ ├── stats: [rows=39.9984]
  ├── cost: 1115.77722
  ├── key: (1)
  ├── fd: (1)-->(6,7)
@@ -470,7 +470,7 @@ project
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
- │    ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
+ │    ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │    ├── cost: 1114.95725
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
@@ -480,7 +480,7 @@ project
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
- │         ├── stats: [rows=39.99842, distinct(1)=39.9984, null(1)=0]
+ │         ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │         ├── cost: 1109.07998
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
@@ -488,7 +488,7 @@ project
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=333.3333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
+ │         │    ├── stats: [rows=333.333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
@@ -582,7 +582,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)
@@ -614,7 +614,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)
@@ -646,7 +646,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)
@@ -678,7 +678,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b =
 ----
 select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
- ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty
  ├── key: (1)
