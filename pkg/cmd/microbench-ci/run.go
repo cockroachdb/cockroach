@@ -124,7 +124,7 @@ func (b *Benchmark) run() error {
 	// Write change marker file if the benchmark changed.
 	if status != NoChange {
 		marker := strings.ToUpper(status.String())
-		err := os.WriteFile(path.Join(suite.artifactsDir(New), "."+marker), nil, 0644)
+		err := os.WriteFile(path.Join(suite.artifactsDir(New), "_"+marker), nil, 0644)
 		if err != nil {
 			return err
 		}
