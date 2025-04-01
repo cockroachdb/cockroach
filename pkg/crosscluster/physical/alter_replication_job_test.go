@@ -114,6 +114,30 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	c.CompareResult(`SELECT * FROM d.t2`)
 }
 
+func TestAlterTenantAddReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+	c.DestSysSQL.CheckQueryResults(t, "SELECT name FROM [SHOW TENANTS] ORDER BY name",
+		[][]string{{"destination"}, {"system"}},
+	)
+	c.DestSysSQL.Exec(t, "ALTER TENANT $1 SET REPLICATION READ VIRTUAL CLUSTER", args.DestTenantName)
+	c.DestSysSQL.CheckQueryResults(t, "SELECT name, data_state FROM [SHOW TENANTS] ORDER BY name",
+		[][]string{{"destination", "replicating"}, {"destination-readonly", "ready"}, {"system", "ready"}},
+	)
+}
+
 func TestAlterTenantPauseResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

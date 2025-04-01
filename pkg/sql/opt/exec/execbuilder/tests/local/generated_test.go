@@ -428,13 +428,6 @@ func TestExecBuild_not_visible_index(
 	runExecBuildLogicTest(t, "not_visible_index")
 }
 
-func TestExecBuild_observability(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "observability")
-}
-
 func TestExecBuild_orderby(
 	t *testing.T,
 ) {
