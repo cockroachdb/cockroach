@@ -43,6 +43,9 @@ func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Conte
 // of the table, and are materialized only for the purpose of updating vector
 // indexes.
 //
+// The mustValidateOldValues parameter indicates whether the expected previous
+// row must be verified (using CPut).
+//
 // The traceKV parameter determines whether the individual K/V operations
 // should be logged to the context. We use a separate argument here instead
 // of a Value field on the context because Value access in context.Context
@@ -52,10 +55,11 @@ func (td *tableDeleter) row(
 	values tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	mustValidateOldValues bool,
 	traceKV bool,
 ) error {
 	td.currentBatchSize++
-	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, traceKV)
+	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, nil, mustValidateOldValues, traceKV)
 }
 
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
