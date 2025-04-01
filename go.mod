@@ -509,3 +509,5 @@ replace github.com/prometheus/client_golang => github.com/cockroachdb/client_gol
 
 // Can be removed when we upgrade past v1.7.1. (see https://github.com/snowflakedb/gosnowflake/issues/970)
 replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake v1.6.25
+
+replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
