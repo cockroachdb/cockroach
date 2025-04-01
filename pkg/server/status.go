@@ -3142,9 +3142,7 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
-// iterateNodes iterates nodeFn over all non-removed nodes concurrently.
-// It then calls nodeResponse for every valid result of nodeFn, and
-// nodeError on every error result.
+// iterateNodes calls iterateNodesExt with max concurrency
 func iterateNodes[Client, Result any](
 	ctx context.Context,
 	iter ServerIterator,
@@ -3155,6 +3153,36 @@ func iterateNodes[Client, Result any](
 	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (Result, error),
 	responseFn func(nodeID roachpb.NodeID, resp Result),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
+) error {
+	return iterateNodesExt(ctx,
+		iter,
+		stopper,
+		errorCtx,
+		dialFn,
+		nodeFn,
+		responseFn,
+		errorFn,
+		iterateNodesOpts{nodeFnTimeout: nodeFnTimeout, maxConcurrency: apiconstants.MaxConcurrentRequests})
+}
+
+type iterateNodesOpts struct {
+	nodeFnTimeout  time.Duration
+	maxConcurrency uint64
+}
+
+// iterateNodesExt iterates nodeFn over all non-removed nodes with a max
+// concurrency of iterateNodesOpts.maxConcurreny. It then calls nodeResponse
+// for every valid result of nodeFn, and nodeError on every error result.
+func iterateNodesExt[Client, Result any](
+	ctx context.Context,
+	iter ServerIterator,
+	stopper *stop.Stopper,
+	errorCtx redact.RedactableString,
+	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (Client, error),
+	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (Result, error),
+	responseFn func(nodeID roachpb.NodeID, resp Result),
+	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
+	opts iterateNodesOpts,
 ) error {
 	nodeStatuses, err := iter.getAllNodes(ctx)
 	if err != nil {
@@ -3186,11 +3214,11 @@ func iterateNodes[Client, Result any](
 		}
 
 		var res Result
-		if nodeFnTimeout == noTimeout {
+		if opts.nodeFnTimeout == noTimeout {
 			res, err = nodeFn(ctx, client, nodeID)
 		} else {
 			err = timeutil.RunWithTimeout(ctx, "iterate-nodes-fn",
-				nodeFnTimeout, func(ctx context.Context) error {
+				opts.nodeFnTimeout, func(ctx context.Context) error {
 					var _err error
 					res, _err = nodeFn(ctx, client, nodeID)
 					return _err
@@ -3205,7 +3233,11 @@ func iterateNodes[Client, Result any](
 	}
 
 	// Issue the requests concurrently.
-	sem := quotapool.NewIntPool("node status", apiconstants.MaxConcurrentRequests)
+	var maxConcurrency uint64 = apiconstants.MaxConcurrentRequests
+	if opts.maxConcurrency > 0 {
+		maxConcurrency = opts.maxConcurrency
+	}
+	sem := quotapool.NewIntPool("node status", maxConcurrency)
 	ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 	for nodeID := range nodeStatuses {
