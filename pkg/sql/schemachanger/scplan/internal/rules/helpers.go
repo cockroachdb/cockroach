@@ -134,6 +134,13 @@ func JoinOnPolicyID(a, b NodeVars, relationIDVar, policyID rel.Var) rel.Clause {
 	return joinOnPolicyIDUntyped(a.El, b.El, relationIDVar, policyID)
 }
 
+// JoinOnPartitionName joins elements on partition name.
+func JoinOnPartitionName(
+	a, b NodeVars, relationIDVar, indexIDVar, partitionNameVar rel.Var,
+) rel.Clause {
+	return joinOnPartitionNameUntyped(a.El, b.El, relationIDVar, indexIDVar, partitionNameVar)
+}
+
 // ColumnInIndex requires that a column exists within an index.
 func ColumnInIndex(
 	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
@@ -341,6 +348,17 @@ var (
 			return rel.Clauses{
 				JoinOnDescIDUntyped(a, b, descID),
 				policyID.Entities(screl.PolicyID, a, b),
+			}
+		},
+	)
+	joinOnPartitionNameUntyped = screl.Schema.Def5(
+		"joinOnPartitionName", "a", "b", "desc-id", "index-id", "partition-name", func(
+			a, b, descID, indexID, partitionName rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				JoinOnDescIDUntyped(a, b, descID),
+				indexID.Entities(screl.IndexID, a, b),
+				partitionName.Entities(screl.PartitionName, a, b),
 			}
 		},
 	)

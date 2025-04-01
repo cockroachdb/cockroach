@@ -3479,6 +3479,84 @@ deprules
     - SmallerColumnIDFirst(*scpb.Column, *scpb.Column)($later-column, $earlier-column)
     - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - joinTargetNode($earlier-column, $earlier-column-Target, $earlier-column-Node)
+- name: ensure database zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.DatabaseZoneConfig, *scpb.DatabaseZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure index zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.IndexZoneConfig, *scpb.IndexZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure named range zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.NamedRangeZoneConfig, *scpb.NamedRangeZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure partition zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - joinOnPartitionName($later-seqNum, $earlier-seqNum, $table-id, $index-id, $partition-name)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure table zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.TableZoneConfig, *scpb.TableZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: function name should be set before parent ids
   from: function-name-Node
   kind: Precedence
@@ -8150,6 +8228,84 @@ deprules
     - SmallerColumnIDFirst(*scpb.Column, *scpb.Column)($later-column, $earlier-column)
     - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - joinTargetNode($earlier-column, $earlier-column-Target, $earlier-column-Node)
+- name: ensure database zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.DatabaseZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.DatabaseZoneConfig, *scpb.DatabaseZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure index zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.IndexZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.IndexZoneConfig, *scpb.IndexZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure named range zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.NamedRangeZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.NamedRangeZoneConfig, *scpb.NamedRangeZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure partition zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.PartitionZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - joinOnIndexID($later-seqNum, $earlier-seqNum, $table-id, $index-id)
+    - joinOnPartitionName($later-seqNum, $earlier-seqNum, $table-id, $index-id, $partition-name)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure table zone configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - $earlier-seqNum[Type] = '*scpb.TableZoneConfig'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $seqnum)
+    - ToPublicOrTransient($later-seqNum-Target, $earlier-seqNum-Target)
+    - $later-seqNum-Node[CurrentStatus] = $status
+    - $earlier-seqNum-Node[CurrentStatus] = $status
+    - SmallerSeqNumFirst(*scpb.TableZoneConfig, *scpb.TableZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: function name should be set before parent ids
   from: function-name-Node
   kind: Precedence
