@@ -71,6 +71,11 @@ type ClientTestingKnobs struct {
 	// picking a transaction's anchor key; instead, the transaction is anchored at
 	// the first key it locks.
 	DisableTxnAnchorKeyRandomization bool
+
+	// Disable1PCForAllLockingRequests, if set, disables 1PC anytime a
+	// request is locking. In production, this is done automatically for
+	// replicated locks.
+	Disable1PCForAllLockingReadRequests bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

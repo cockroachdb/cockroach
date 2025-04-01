@@ -548,7 +548,16 @@ func EndTxn(
 		// transaction's commit timestamp to the key spans previously protected
 		// by the locks. We return the spans on the response and update the
 		// timestamp cache a few layers above to ensure this.
-		reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+
+		if cArgs.EvalCtx.EvalKnobs().BumpTimestampCacheOnUnreplicatedLocks {
+			lockSpan := make([]roachpb.Span, 0, len(resolvedLocks))
+			for _, lu := range resolvedLocks {
+				lockSpan = append(lockSpan, lu.Span)
+			}
+			reply.ReplicatedLocksReleasedOnCommit = lockSpan
+		} else {
+			reply.ReplicatedLocksReleasedOnCommit = releasedReplLocks
+		}
 
 		// Run the commit triggers if successfully committed.
 		triggerResult, err := RunCommitTrigger(

@@ -1874,6 +1874,17 @@ func scanLockStrength(str KeyLockingStrengthType) lock.Strength {
 	}
 }
 
+var testingAlwaysUseUnreplicatedLocks bool
+
+// TestingAlwaysUseUnreplicatedLocks changes the behaviour of
+// GuaranteedDurability locks to use unreplicated instead of replicated locks.
+func TestingAlwaysUseUnreplicatedLocks() func() {
+	testingAlwaysUseUnreplicatedLocks = true
+	return func() {
+		testingAlwaysUseUnreplicatedLocks = false
+	}
+}
+
 func scanLockDurability(dur KeyLockingDurabilityType) lock.Durability {
 	switch dur {
 	case Invalid:
@@ -1881,6 +1892,9 @@ func scanLockDurability(dur KeyLockingDurabilityType) lock.Durability {
 	case BestEffort:
 		return lock.Unreplicated
 	case GuaranteedDurability:
+		if testingAlwaysUseUnreplicatedLocks {
+			return lock.Unreplicated
+		}
 		return lock.Replicated
 	default:
 		panic(fmt.Sprintf("unknown durability type: %d", dur))
