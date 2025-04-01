@@ -139,12 +139,10 @@ func New(st *cluster.Settings, metrics Metrics, knobs *TestingKnobs) *Provider {
 
 	return &Provider{
 		store: store,
-		ingester: newConcurrentBufferIngester(
-			newRegistry(st, &compositeDetector{detectors: []detector{
-				&latencyThresholdDetector{st: st},
-				anomalyDetector,
-			}}, store, knobs),
-		),
+		registry: newRegistry(st, &compositeDetector{detectors: []detector{
+			&latencyThresholdDetector{st: st},
+			anomalyDetector,
+		}}, store, knobs),
 		anomalyDetector: anomalyDetector,
 	}
 }
