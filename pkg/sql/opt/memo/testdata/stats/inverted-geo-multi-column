@@ -71,19 +71,19 @@ SELECT k FROM t@m WHERE s = 'banana' AND st_intersects('LINESTRING(0.5 0.5, 0.7 
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=11.11111]
+ ├── stats: [rows=11.1111]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=59.37842]
+      │    ├── stats: [rows=16.9653]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -96,7 +96,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=59.37842]
+      │         ├── stats: [rows=16.9653]
       │         ├── key: (1)
       │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -107,7 +107,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              └── stats: [rows=59.37842, distinct(1)=16.9653, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=1.18757, null(3,7)=0]
+      │              └── stats: [rows=59.3784, distinct(1)=16.9653, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=1.18757, null(3,7)=0]
       │                  histogram(3)=  0   59.378
       │                               <--- 'banana'
       │                  histogram(7)=  0             0              9.1125e-11             50             9.3784             0              0             0
@@ -121,19 +121,19 @@ SELECT k FROM t@p WHERE s = 'banana' AND st_intersects('LINESTRING(0.5 0.5, 0.7 
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=11.11111]
+ ├── stats: [rows=11.1111]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.11111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=59.37842]
+      │    ├── stats: [rows=16.9653]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -146,7 +146,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=59.37842]
+      │         ├── stats: [rows=16.9653]
       │         ├── key: (1)
       │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:8(encodedkey!null)
@@ -156,7 +156,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=59.37842, distinct(1)=16.9653, null(1)=0, distinct(3)=1, null(3)=0, distinct(8)=1.18757, null(8)=0, distinct(3,8)=1.18757, null(3,8)=0]
+      │              ├── stats: [rows=59.3784, distinct(1)=16.9653, null(1)=0, distinct(3)=1, null(3)=0, distinct(8)=1.18757, null(8)=0, distinct(3,8)=1.18757, null(3,8)=0]
       │              │   histogram(3)=  0   59.378
       │              │                <--- 'banana'
       │              │   histogram(8)=  0             0              9.1125e-11             50             9.3784             0              0             0
@@ -183,19 +183,19 @@ SELECT k FROM t@m WHERE s IN ('apple', 'banana', 'cherry') AND st_intersects('LI
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=22.22222]
+ ├── stats: [rows=22.2222]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=118.7568]
+      │    ├── stats: [rows=33.9305]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -208,7 +208,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=118.7568]
+      │         ├── stats: [rows=33.9305]
       │         ├── key: (1)
       │         └── scan t@m,inverted
       │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
@@ -222,7 +222,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              └── stats: [rows=118.7568, distinct(1)=33.9305, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=2.37514, null(3,7)=0]
+      │              └── stats: [rows=118.757, distinct(1)=33.9305, null(1)=0, distinct(3)=2, null(3)=0, distinct(7)=1.18757, null(7)=0, distinct(3,7)=2.37514, null(3,7)=0]
       │                  histogram(3)=  0   59.378   0   59.378
       │                               <--- 'banana' --- 'cherry'
       │                  histogram(7)=  0             0              1.8225e-10            100             18.757             0              0             0
@@ -236,19 +236,19 @@ SELECT k FROM t@p WHERE s IN ('apple', 'banana', 'cherry') AND st_intersects('LI
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=22.22222]
+ ├── stats: [rows=22.2222]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.22222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string)
-      │    ├── stats: [rows=121.5695]
+      │    ├── stats: [rows=34.7341]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── inverted-filter
@@ -261,7 +261,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=121.5695]
+      │         ├── stats: [rows=34.7341]
       │         ├── key: (1)
       │         └── scan t@p,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:9(encodedkey!null)
@@ -271,7 +271,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=121.5695, distinct(1)=34.7341, null(1)=0, distinct(3)=2, null(3)=0, distinct(9)=1.18757, null(9)=0, distinct(3,9)=2.37514, null(3,9)=0]
+      │              ├── stats: [rows=121.57, distinct(1)=34.7341, null(1)=0, distinct(3)=2, null(3)=0, distinct(9)=1.18757, null(9)=0, distinct(3,9)=2.37514, null(3,9)=0]
       │              │   histogram(3)=  0   60.785   0   60.785
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(9)=  0             0              1.8657e-10           102.37           19.201             0              0             0
@@ -296,12 +296,12 @@ SELECT k FROM t@mp WHERE i = 400 AND s IN ('apple', 'banana', 'cherry') AND st_i
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=0.3333334]
+ ├── stats: [rows=0.333333]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.3333334, distinct(2)=0.333333, null(2)=0, distinct(3)=0.333333, null(3)=0, distinct(4)=0.333333, null(4)=0, distinct(3,4)=0.333333, null(3,4)=0]
+      ├── stats: [rows=0.333333, distinct(2)=0.333333, null(2)=0, distinct(3)=0.333333, null(3)=0, distinct(4)=0.333333, null(4)=0, distinct(3,4)=0.333333, null(3,4)=0]
       │   histogram(3)=  0  0.16667   0  0.16667
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0 0.33333
@@ -310,7 +310,7 @@ project
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=2.503931]
+      │    ├── stats: [rows=0.715409]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -323,7 +323,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=2.503931]
+      │         ├── stats: [rows=0.715409]
       │         ├── key: (1)
       │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -334,7 +334,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=2.503931, distinct(1)=0.715409, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
+      │              ├── stats: [rows=2.50393, distinct(1)=0.715409, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
       │              │   histogram(3)=  0   1.252    0   1.252
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 2.5039
@@ -351,12 +351,12 @@ SELECT k FROM t@mp WHERE i IN (200, 300, 400) AND s IN ('apple', 'banana', 'cher
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=0.6737262]
+ ├── stats: [rows=0.673726]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.6737262, distinct(2)=0.673726, null(2)=0, distinct(3)=0.673726, null(3)=0, distinct(4)=0.673726, null(4)=0, distinct(3,4)=0.673726, null(3,4)=0]
+      ├── stats: [rows=0.673726, distinct(2)=0.673726, null(2)=0, distinct(3)=0.673726, null(3)=0, distinct(4)=0.673726, null(4)=0, distinct(3,4)=0.673726, null(3,4)=0]
       │   histogram(3)=  0  0.33686   0  0.33686
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0 0.11229 0 0.22458 0 0.33686
@@ -365,7 +365,7 @@ project
       ├── fd: (1)-->(2-4)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=10.11106]
+      │    ├── stats: [rows=2.88887]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -378,7 +378,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=10.11106]
+      │         ├── stats: [rows=2.88887]
       │         ├── key: (1)
       │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -392,7 +392,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              └── stats: [rows=10.11106, distinct(1)=2.88887, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=7.05532, null(3,4,10)=0]
+      │              └── stats: [rows=10.1111, distinct(1)=2.88887, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=7.05532, null(3,4,10)=0]
       │                  histogram(3)=  0   5.0555   0   5.0555
       │                               <--- 'banana' --- 'cherry'
       │                  histogram(4)=  0 1.6852 0 3.3704 0 5.0555

@@ -61,7 +61,7 @@ SELECT * FROM t@a_idx WHERE a @> '{}'
 index-join t
  ├── columns: k:1(int!null) a:2(int[]!null)
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -69,7 +69,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: [, NULL/NULL)
-      ├── stats: [rows=1020]
+      ├── stats: [rows=1000]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -87,7 +87,7 @@ SELECT * FROM t WHERE a @> '{2}'
 index-join t
  ├── columns: k:1(int!null) a:2(int[]!null)
  ├── immutable
- ├── stats: [rows=111.1111]
+ ├── stats: [rows=111.111]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan t@a_idx,inverted
@@ -107,7 +107,7 @@ SELECT * FROM t WHERE a @> '{2}' OR a @> '{3}'
 index-join t
  ├── columns: k:1(int!null) a:2(int[]!null)
  ├── immutable
- ├── stats: [rows=333.3333, distinct(2)=3, null(2)=0]
+ ├── stats: [rows=333.333, distinct(2)=3, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inverted-filter
@@ -115,7 +115,7 @@ index-join t
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
       │    └── union spans: [2, 4)
-      ├── stats: [rows=20]
+      ├── stats: [rows=19.6078]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -133,7 +133,7 @@ SELECT * FROM t@a_idx WHERE a <@ '{}'
 select
  ├── columns: k:1(int!null) a:2(int[])
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
@@ -161,12 +161,12 @@ SELECT * FROM t WHERE a <@ '{2}'
 select
  ├── columns: k:1(int!null) a:2(int[])
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=20]
+ │    ├── stats: [rows=19.6078]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -176,7 +176,7 @@ select
  │         │    └── union spans
  │         │         ├── [[], []]
  │         │         └── [2, 2]
- │         ├── stats: [rows=20]
+ │         ├── stats: [rows=19.6078]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -198,12 +198,12 @@ SELECT * FROM t WHERE a <@ '{2}' OR a <@ '{3}'
 select
  ├── columns: k:1(int!null) a:2(int[])
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.4118]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -213,7 +213,7 @@ select
  │         │    └── union spans
  │         │         ├── [[], []]
  │         │         └── [2, 4)
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.4118]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
@@ -236,12 +236,12 @@ SELECT * FROM t WHERE a <@ '{2}' AND a <@ '{3}'
 select
  ├── columns: k:1(int!null) a:2(int[])
  ├── immutable
- ├── stats: [rows=111.1111]
+ ├── stats: [rows=111.111]
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── index-join t
  │    ├── columns: k:1(int!null) a:2(int[])
- │    ├── stats: [rows=30]
+ │    ├── stats: [rows=29.4118]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── inverted-filter
@@ -256,7 +256,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: [3, 3]
- │         ├── stats: [rows=30]
+ │         ├── stats: [rows=29.4118]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
