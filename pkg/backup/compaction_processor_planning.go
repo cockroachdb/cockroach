@@ -32,8 +32,6 @@ import (
 // in the backup chain that need to be compacted. It sends updates from the
 // BulkProcessor to the provided progress channel. It is the caller's
 // responsibility to close the progress channel.
-//
-//lint:ignore U1000 unused
 func runCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
