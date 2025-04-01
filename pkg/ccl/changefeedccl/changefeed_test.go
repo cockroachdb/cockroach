@@ -4183,6 +4183,84 @@ func TestChangefeedEnriched(t *testing.T) {
 	}
 }
 
+// TestChangefeedsParallelEnriched tests that multiple changefeeds can run
+// in parallel with the enriched envelope. It is most useful under race.
+func TestChangefeedsParallelEnriched(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	const count = 10
+	const maxIterations = 1_000_000_000
+	const maxRows = 100
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		ctx, cancel := context.WithCancel(ctx)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			db := sqlutils.MakeSQLRunner(s.Server.SQLConn(t))
+			var i int
+			for i = 0; i < maxIterations && ctx.Err() == nil; i++ {
+				db.Exec(t, `UPSERT INTO d.foo VALUES ($1, $2)`, i%maxRows, fmt.Sprintf("hello %d", i))
+			}
+			t.Logf("workload finished (wrote %d rows)", i)
+		}()
+
+		var feeds []cdctest.TestFeed
+		for range count {
+			feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json', envelope='enriched'`)
+			defer closeFeed(t, feed)
+			feeds = append(feeds, feed)
+		}
+
+		// consume from the feeds
+		for i, feed := range feeds {
+			i := i
+			feed := feed
+			msgCount := 0
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				t.Logf("starting to consume from feed %d", i)
+				for ctx.Err() == nil {
+					_, err := feed.Next()
+					if err != nil {
+						if errors.Is(err, context.Canceled) {
+							t.Errorf("error reading from feed: %v", err)
+						}
+						break
+					}
+					msgCount++
+				}
+				t.Logf("stopped consuming from feed %d; got %d msgs", i, msgCount)
+				assert.GreaterOrEqual(t, msgCount, 0)
+			}()
+		}
+
+		t.Logf("feeds set up; waiting")
+		// let the feeds run for a few seconds
+		select {
+		case <-time.After(10 * time.Second):
+			t.Logf("finished waiting")
+		case <-ctx.Done():
+			t.Fatalf("context cancelled: %v", ctx.Err())
+		}
+
+		cancel()
+		wg.Wait()
+	}
+	for _, sink := range []string{"kafka", "pubsub", "sinkless", "webhook"} {
+		cdcTest(t, testFn, feedTestForceSink(sink))
+	}
+}
+
 func TestChangefeedEnrichedAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

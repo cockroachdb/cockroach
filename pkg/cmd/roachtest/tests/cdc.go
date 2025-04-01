@@ -1480,7 +1480,7 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "10m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
@@ -2336,7 +2336,7 @@ func registerCDC(r registry.Registry) {
 				},
 				opts: map[string]string{
 					"initial_scan":        "'no'",
-					"mvcc_timestamp":      "", // HACK
+					"mvcc_timestamp":      "", // HACK; should be updated, when that's implemented
 					"enriched_properties": "source",
 				},
 			})

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -347,6 +348,32 @@ func withTimeout(
 			return fn(ctx)
 		},
 	)
+}
+
+var wrappedAssertionRX = regexp.MustCompile(`([^:]+): (\[[^]]+\])->(.*)`)
+
+// assumption: json, wrapped
+// TODO: withSource, withSchema bool
+func wrappedEnvelopeAssertionToEnrichedAssertion(t *testing.T, assertion string) string {
+	t.Helper()
+	groups := wrappedAssertionRX.FindStringSubmatch(assertion)
+	require.Len(t, groups, 4)
+	topic, key, body := groups[1], groups[2], groups[3]
+
+	// decode, transform, encode the body
+	dec := gojson.NewDecoder(bytes.NewBufferString(body))
+	dec.UseNumber()
+	var bodyMap map[string]any
+	dec.Decode(&bodyMap)
+	require.Equal(t, dec.InputOffset(), len(body), "parsing assertion")
+
+	// for enriched messages without sources and schemas, this is really the only difference (right?)
+	bodyMap["op"] = "c"
+	bodyMap["ts_ns"] = timeutil.Now().UnixNano()
+
+	newBody, err := gojson.Marshal(bodyMap)
+	require.NoError(t, err)
+	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody)
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -886,10 +913,14 @@ func makeSpanGroupFromCheckpoint(
 	return spanGroup
 }
 
+var forceEnrichedEnvelope = metamorphic.ConstantWithTestBool("force-enriched-envelope", false)
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
+	// metamorph here for supported sinks? as a tmp measure
+
 	feed, err := f.Feed(create, args...)
 	if err != nil {
 		t.Fatal(err)

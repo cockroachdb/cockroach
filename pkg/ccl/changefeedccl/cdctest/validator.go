@@ -1027,8 +1027,6 @@ func ParseJSONValueTimestamps(v []byte) (updated, resolved hlc.Timestamp, err er
 		return hlc.Timestamp{}, hlc.Timestamp{}, errors.Wrapf(err, "parsing [%s] as json", v)
 	}
 
-	// fmt.Printf("ParseJSONValueTimestamps: %+#v from %v\n", valueRaw, string(v))
-
 	if valueRaw.Updated != `` {
 		if updated, err = hlc.ParseHLC(valueRaw.Updated); err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
