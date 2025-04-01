@@ -6031,6 +6031,52 @@ func TestMergeReplicatesLocks(t *testing.T) {
 	}
 }
 
+// TestCommitTriggerFailuresDontCauseUnexpectedCommittedError tests that errors
+// returned by the commit trigger don't cause transaction to unexpectedly
+// be marked as COMMITTED in the response.
+func TestCommitTriggerFailuresDontCauseUnexpectedCommittedError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Create an atomic boolean to control error injection
+	var shouldInjectError atomic.Bool
+
+	// errorInjector returns nil when the bool is false, and returns an error when
+	// the bool is true.
+	errorInjector := func() error {
+		if shouldInjectError.Load() {
+			return errors.New("boom")
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				CommitTriggerError: errorInjector,
+			},
+		}}},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+	db := tc.Server(0).DB()
+	tc.ScratchRange(t)
+
+	shouldInjectError.Store(true)
+	err := db.AdminSplit(ctx, scratchRKey("c"), hlc.MaxTimestamp)
+
+	// Verify that the error is expected.
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "boom")
+	require.False(t, errors.HasAssertionFailure(err), "%+v", err)
+
+	// Removing the error injector should allow the split to succeed.
+	shouldInjectError.Store(false)
+	require.NoError(t, db.AdminSplit(ctx, scratchRKey("c"), hlc.MaxTimestamp))
+}
+
 // BenchmarkLeaderTickWithLeaderLeases benchmarks the performance of the replica
 // tick when the replica is the leader and running leader leases.
 func BenchmarkLeaderTickWithLeaderLeases(b *testing.B) {
