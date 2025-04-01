@@ -48,6 +48,8 @@ func (le *LogEngine) Create(
 			return rspb.CreateOp{}, errors.Errorf("leftover bytes")
 		}
 		lid = rspb.LogID(n) + 1
+		sl = encoding.EncodeUint64Ascending(nil, uint64(lid))
+		b.Put(ctx, idKey, sl)
 	}
 
 	wix := rspb.WAGIndex(123)   // TODO(tbg): allocate
