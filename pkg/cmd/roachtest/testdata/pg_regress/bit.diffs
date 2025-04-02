@@ -480,7 +480,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/bit.out --label=/
  
  SELECT set_bit(B'0101011000100100', 16, 1);	-- fail
 -ERROR:  bit index 16 out of valid range (0..15)
-+ERROR:  set_bit(): SetBitAtIndex: bit index 16 out of valid range (0..15)
++ERROR:  set_bit(): bit index 16 out of valid range (0..15)
  -- Overlay
  SELECT overlay(B'0101011100' placing '001' from 2 for 3);
 -  overlay   

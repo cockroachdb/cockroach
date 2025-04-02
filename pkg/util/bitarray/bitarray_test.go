@@ -726,9 +726,9 @@ func TestGetBitAtIndex(t *testing.T) {
 		{"111111111111110001010101000000", "", 20, 0},
 		{"111111111111110001011101000000", "", 20, 1},
 		{"11111111", "", 7, 1},
-		{"010110", "GetBitAtIndex: bit index -1 out of valid range (0..5)", -1, 0},
-		{"", "GetBitAtIndex: bit index 0 out of valid range (0..-1)", 0, 0},
-		{"10100110", "GetBitAtIndex: bit index 8 out of valid range (0..7)", 8, 0},
+		{"010110", "bit index -1 out of valid range (0..5)", -1, 0},
+		{"", "bit index 0 out of valid range (0..-1)", 0, 0},
+		{"10100110", "bit index 8 out of valid range (0..7)", 8, 0},
 	}
 	for _, test := range testData {
 		t.Run(fmt.Sprintf("{%v,%d}", test.bitString, test.index), func(t *testing.T) {
@@ -758,9 +758,9 @@ func TestSetBitAtIndex(t *testing.T) {
 		{"1010101011", "", "1010101011", 0, 1},
 		{"1010101011", "", "1010101011", 1, 0},
 		{"111111111111110001010101000000", "", "111111111111110001011101000000", 20, 1},
-		{"010110", "SetBitAtIndex: bit index -1 out of valid range (0..5)", "", -1, 0},
-		{"10100110", "SetBitAtIndex: bit index 8 out of valid range (0..7)", "", 8, 0},
-		{"", "SetBitAtIndex: bit index 0 out of valid range (0..-1)", "", 0, 0},
+		{"010110", "bit index -1 out of valid range (0..5)", "", -1, 0},
+		{"10100110", "bit index 8 out of valid range (0..7)", "", 8, 0},
+		{"", "bit index 0 out of valid range (0..-1)", "", 0, 0},
 	}
 	for _, test := range testData {
 		t.Run(fmt.Sprintf("{%v,%d,%d}", test.bitString, test.index, test.toSet), func(t *testing.T) {
