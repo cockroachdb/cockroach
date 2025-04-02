@@ -651,7 +651,7 @@ func (r *Replica) ticksSinceLastMessageRLocked() int64 {
 // status where necessary.
 func (r *Replica) isRaftLeaderRLocked() bool {
 	// Defensively check replicaID != 0.
-	return r.replicaID != 0 && r.replicaID == r.mu.leaderID
+	return r.replicaID != 0 && r.replicaID == r.shMu.leaderID
 }
 
 var errRemoved = errors.New("replica removed")
@@ -955,10 +955,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var raftNodeBasicState replica_rac2.RaftNodeBasicState
 	var logSnapshot raft.LogSnapshot
 
-	r.mu.Lock()
-	rac2ModeForReady := r.mu.currentRACv2Mode
-	leaderID := r.mu.leaderID
+	rac2ModeForReady := r.shMu.currentRACv2Mode
+	leaderID := r.shMu.leaderID
 	lastLeaderID := leaderID
+
+	r.mu.Lock()
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
@@ -976,7 +977,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				// Ready, and switch to pull mode after that.
 				switchToPullModeAfterReady = true
 			}
-			r.mu.currentRACv2Mode = rac2ModeToUse
+			r.shMu.currentRACv2Mode = rac2ModeToUse
 		}
 		logSnapshot = raftGroup.LogSnapshot()
 		if hasReady = raftGroup.HasReady(); hasReady {
@@ -1256,11 +1257,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	r.asLogStorage().updateStateRaftMuLockedMuLocked(state)
 	var becameLeader bool
-	if r.mu.leaderID != leaderID {
-		r.mu.leaderID = leaderID
+	if r.shMu.leaderID != leaderID {
+		r.shMu.leaderID = leaderID
 		// Clear the remote proposal set. Would have been nil already if not
 		// previously the leader.
-		becameLeader = r.mu.leaderID == r.replicaID
+		becameLeader = leaderID == r.replicaID
 	}
 	r.mu.Unlock()
 
@@ -1570,9 +1571,7 @@ func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) {
 func (r *Replica) processRACv2RangeController(ctx context.Context) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	// Can read Replica.mu.currentRACv2Mode since updates require both raftMu
-	// and Replica.mu.
-	mode := r.mu.currentRACv2Mode
+	mode := r.shMu.currentRACv2Mode
 	var logSnapshot raft.LogSnapshot
 	if mode == rac2.MsgAppPull {
 		err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
@@ -1585,7 +1584,7 @@ func (r *Replica) processRACv2RangeController(ctx context.Context) {
 		}
 	}
 	r.flowControlV2.ProcessSchedulerEventRaftMuLocked(
-		ctx, r.mu.currentRACv2Mode, logSnapshot)
+		ctx, r.shMu.currentRACv2Mode, logSnapshot)
 }
 
 // SendMsgApp implements rac2.MsgAppSender.

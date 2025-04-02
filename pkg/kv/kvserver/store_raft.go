@@ -852,7 +852,7 @@ func (s *Store) supportWithdrawnCallback(supportWithdrawnForStoreIDs map[roachpb
 			if !r.mu.asleep {
 				return false
 			}
-			leader, err := r.getReplicaDescriptorByIDRLocked(r.mu.leaderID, roachpb.ReplicaDescriptor{})
+			leader, err := r.getReplicaDescriptorByIDRLocked(r.shMu.leaderID, roachpb.ReplicaDescriptor{})
 			// If we found the replica's leader's store, and it doesn't match any of
 			// the stores in supportWithdrawnForStoreIDs, the replica shouldn't wake
 			// up. In all other cases, the replica should wake up.
