@@ -986,8 +986,7 @@ func BenchmarkStatus(b *testing.B) {
 
 			b.Run("WithProgress", func(b *testing.B) {
 				b.ReportAllocs()
-				visit := func(pb.PeerID, ProgressType, tracker.Progress) {}
-
+				visit := func(pb.PeerID, tracker.Progress) {}
 				for i := 0; i < b.N; i++ {
 					rn.WithProgress(visit)
 				}
@@ -996,7 +995,7 @@ func BenchmarkStatus(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					var n uint64
-					visit := func(_ pb.PeerID, _ ProgressType, pr tracker.Progress) {
+					visit := func(_ pb.PeerID, pr tracker.Progress) {
 						n += pr.Match
 					}
 					rn.WithProgress(visit)

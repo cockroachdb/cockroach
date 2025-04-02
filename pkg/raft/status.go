@@ -62,15 +62,11 @@ func (b BasicStatus) Empty() bool {
 
 // withProgress calls the supplied visitor to introspect the progress for the
 // supplied raft group. Cannot be used to introspect p.Inflights.
-func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+func withProgress(r *raft, visitor func(id pb.PeerID, pr tracker.Progress)) {
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
-		typ := ProgressTypePeer
-		if pr.IsLearner {
-			typ = ProgressTypeLearner
-		}
 		p := *pr
 		p.Inflights = nil
-		visitor(id, typ, p)
+		visitor(id, p)
 	})
 }
 
@@ -129,7 +125,7 @@ func getSparseStatus(r *raft) SparseStatus {
 	s.BasicStatus = getBasicStatus(r)
 	if s.RaftState == pb.StateLeader {
 		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
-		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
+		withProgress(r, func(id pb.PeerID, pr tracker.Progress) {
 			s.Progress[id] = pr
 		})
 	}
