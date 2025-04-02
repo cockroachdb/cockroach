@@ -497,8 +497,8 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 			// recognize this and drop redundant primary indexes appropriately.
 			addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.oldSpec.primary, spec.col, scpb.ToPublic)
 		}
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter1Spec.primary, spec.col, scpb.Transient)
-		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter2Spec.primary, spec.col, scpb.Transient)
+		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter1Spec.primary, spec.col, scpb.TransientAbsent)
+		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.inter2Spec.primary, spec.col, scpb.TransientAbsent)
 		addStoredColumnToPrimaryIndexTargeting(b, spec.tbl.TableID, inflatedChain.finalSpec.primary, spec.col, scpb.ToPublic)
 		return inflatedChain.finalSpec.primary
 	}
@@ -521,8 +521,8 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 
 // addStoredColumnToPrimaryIndexTargeting adds a stored column `col` to primary
 // index `idx` and its associated temporary index.
-// The column in primary index is targeting `target` (either ToPublic or Transient),
-// and the column in its temporary index is always targeting Transient.
+// The column in primary index is targeting `target` (either ToPublic or TransientAbsent),
+// and the column in its temporary index is always targeting TransientAbsent.
 func addStoredColumnToPrimaryIndexTargeting(
 	b BuildCtx,
 	tableID catid.DescID,
@@ -531,7 +531,7 @@ func addStoredColumnToPrimaryIndexTargeting(
 	target scpb.TargetStatus,
 ) {
 	addIndexColumnToInternal(b, tableID, idx.IndexID, col.ColumnID, scpb.IndexColumn_STORED, target)
-	addIndexColumnToInternal(b, tableID, idx.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED, scpb.Transient)
+	addIndexColumnToInternal(b, tableID, idx.TemporaryIndexID, col.ColumnID, scpb.IndexColumn_STORED, scpb.TransientAbsent)
 }
 
 func addIndexColumnToInternal(
@@ -569,7 +569,7 @@ func addIndexColumnToInternal(
 	switch target {
 	case scpb.ToPublic:
 		b.Add(&indexCol)
-	case scpb.Transient:
+	case scpb.TransientAbsent:
 		b.AddTransient(&indexCol)
 	default:
 		panic(errors.AssertionFailedf("programming error: add index column element "+

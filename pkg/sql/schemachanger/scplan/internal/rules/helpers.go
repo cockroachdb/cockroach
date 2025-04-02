@@ -62,6 +62,47 @@ func toAbsent(from, to NodeVars) rel.Clause {
 	return toAbsentUntyped(from.Target, to.Target)
 }
 
+// TransientPublicPrecedesInitialPublic requires that the transient node
+// is ToTransientPublic and absent before. The other node is targeting ToPublic.
+func TransientPublicPrecedesInitialPublic(transientNode, otherNode NodeVars) rel.Clause {
+	return rel.And(
+		toPublicToTransientPublicUntyped(otherNode.Target, transientNode.Target),
+		transientNode.CurrentStatus(scpb.Status_ABSENT),
+	)
+}
+
+// TransientPublicPrecedesInitialDrop requires that the transient node
+// is ToTransientPublic and absent before. The other node is in ToDrop or
+// ToTransient.
+func TransientPublicPrecedesInitialDrop(transientNode, otherNode NodeVars) rel.Clause {
+	return rel.And(
+		toDropToTransientPublicUntyped(otherNode.Target, transientNode.Target),
+		transientNode.CurrentStatus(scpb.Status_ABSENT),
+	)
+}
+
+// PublicTerminalPrecedesTransientPublic requires the transient node is
+// ToTransientPublic and reached its final state only. The other node
+// is also init its terminal add state.
+func PublicTerminalPrecedesTransientPublic(otherNode, transientNode NodeVars) rel.Clause {
+	return rel.And(
+		toPublicToTransientPublicUntyped(otherNode.Target, transientNode.Target),
+		transientNode.CurrentStatus(scpb.Status_TRANSIENT_PUBLIC),
+		otherNode.CurrentStatus(scpb.Status_PUBLIC),
+	)
+}
+
+// DropTerminalPrecedesTransientPublic requires the transient node is
+// ToTransientPublic and reached its final state only. The other node
+// is also init its terminal drop state.
+func DropTerminalPrecedesTransientPublic(otherNode, transientNode NodeVars) rel.Clause {
+	return rel.And(
+		toDropToTransientPublicUntyped(otherNode.Target, transientNode.Target),
+		transientNode.CurrentStatus(scpb.Status_TRANSIENT_PUBLIC),
+		otherNode.CurrentStatus(scpb.Status_ABSENT),
+	)
+}
+
 // StatusesToAbsent requires that elements have a target of
 // toAbsent and that the current status is fromStatus/toStatus.
 func StatusesToAbsent(
@@ -215,7 +256,7 @@ func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.C
 		oldIndex.Type((*scpb.SecondaryIndex)(nil)),
 		newIndex.Type((*scpb.SecondaryIndex)(nil)),
 		oldIndex.TargetStatus(scpb.ToAbsent),
-		newIndex.TargetStatus(scpb.ToPublic, scpb.Transient),
+		newIndex.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
 		JoinOnDescID(oldIndex, newIndex, tableIDVar),
 		newIndex.El.AttrEqVar(screl.IndexID, indexIdVar),
 		JoinOn(oldIndex,
@@ -234,8 +275,8 @@ var (
 		"target1", "target2",
 		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
 			return rel.Clauses{
-				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
-				target2.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT),
+				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_PUBLIC),
+				target2.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC, scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_PUBLIC),
 			}
 		})
 
@@ -246,6 +287,30 @@ var (
 			return rel.Clauses{
 				target1.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 				target2.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			}
+		})
+
+	// toDropToTransientPublicUntyped makes sure target1 is targeting
+	// DROP/TRANSIENT_DROP and target2 is targeting TRANSIENT_PUBLIC.
+	toDropToTransientPublicUntyped = screl.Schema.Def2(
+		"toDropToTransientPublicUntyped",
+		"target1", "target2",
+		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
+			return rel.Clauses{
+				target1.AttrIn(screl.TargetStatus, scpb.Status_ABSENT, scpb.Status_TRANSIENT_ABSENT),
+				target2.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_PUBLIC),
+			}
+		})
+
+	// toPublicToTransientPublicUntyped makes sure target1 is targeting
+	// PUBLIC and target2 is targeting TRANSIENT_PUBLIC.
+	toPublicToTransientPublicUntyped = screl.Schema.Def2(
+		"toPublicToTransientPublicUntyped",
+		"target1", "target2",
+		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
+			return rel.Clauses{
+				target1.AttrIn(screl.TargetStatus, scpb.Status_PUBLIC),
+				target2.AttrEq(screl.TargetStatus, scpb.Status_TRANSIENT_PUBLIC),
 			}
 		})
 
@@ -468,7 +533,7 @@ func Not(predicate elementTypePredicate) elementTypePredicate {
 }
 
 // RegisterDepRuleForDrop is a convenience function which calls
-// RegisterDepRule with the cross-product of (ToAbsent,Transient)^2 Target
+// RegisterDepRule with the cross-product of (ToAbsent,TransientAbsent)^2 Target
 // states, which can't easily be composed.
 func RegisterDepRuleForDrop(
 	r *Registry,
@@ -505,7 +570,7 @@ func RegisterDepRuleForDrop(
 	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			from.TargetStatus(scpb.Transient),
+			from.TargetStatus(scpb.TransientAbsent),
 			from.CurrentStatus(transientFromStatus),
 			to.TargetStatus(scpb.ToAbsent),
 			to.CurrentStatus(toStatus),
@@ -517,7 +582,7 @@ func RegisterDepRuleForDrop(
 			fn(from, to),
 			from.TargetStatus(scpb.ToAbsent),
 			from.CurrentStatus(fromStatus),
-			to.TargetStatus(scpb.Transient),
+			to.TargetStatus(scpb.TransientAbsent),
 			to.CurrentStatus(transientToStatus),
 		)
 	})

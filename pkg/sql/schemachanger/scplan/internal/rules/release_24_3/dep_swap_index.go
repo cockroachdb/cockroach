@@ -33,7 +33,7 @@ func init() {
 				),
 				from.TargetStatus(scpb.ToAbsent),
 				from.CurrentStatus(scpb.Status_VALIDATED),
-				to.TargetStatus(scpb.ToPublic, scpb.Transient),
+				to.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
 				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
@@ -53,9 +53,9 @@ func init() {
 					to, screl.SourceIndexID,
 					"old-index-id",
 				),
-				from.TargetStatus(scpb.Transient),
+				from.TargetStatus(scpb.TransientAbsent),
 				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
-				to.TargetStatus(scpb.ToPublic, scpb.Transient),
+				to.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
 				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},

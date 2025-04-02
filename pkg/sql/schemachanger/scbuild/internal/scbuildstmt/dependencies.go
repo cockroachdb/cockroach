@@ -54,6 +54,10 @@ type BuildCtx interface {
 	// TRANSIENT_ABSENT.
 	AddTransient(element scpb.Element)
 
+	// DropTransient adds a public element to the BuilderState state targeting
+	// TRANSIENT_PUBLIC.
+	DropTransient(element scpb.Element)
+
 	// Drop sets the ABSENT target on an existing element in the BuilderState.
 	Drop(element scpb.Element)
 

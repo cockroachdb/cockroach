@@ -19,3 +19,14 @@ func (i *immediateVisitor) AddTableZoneConfig(
 	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID, protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
 	return nil
 }
+
+func (i *immediateVisitor) SetTableSchemaLocked(
+	ctx context.Context, op scop.SetTableSchemaLocked,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.SchemaLocked = op.Locked
+	return nil
+}
