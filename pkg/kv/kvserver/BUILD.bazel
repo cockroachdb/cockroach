@@ -22,6 +22,7 @@ go_library(
         "metric_rules.go",
         "metrics.go",
         "multi_metric_store_rebalancer.go",
+        "multi_sst_writer.go",
         "mvcc_gc_queue.go",
         "queue.go",
         "queue_helpers_testutil.go",

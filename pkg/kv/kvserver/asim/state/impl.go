@@ -939,10 +939,12 @@ func (s *state) RangeSpan(rangeID RangeID) (Key, Key, bool) {
 // if the Replica for the Range on the Store is already the leaseholder.
 func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	if !s.ValidTransfer(rangeID, storeID) {
+		fmt.Printf("invalid transfer: range %d, store %d\n", rangeID, storeID)
 		return false
 	}
 	oldStore, ok := s.LeaseholderStore(rangeID)
 	if !ok {
+		fmt.Printf("store %d not found\n", oldStore.StoreID())
 		return false
 	}
 
@@ -994,10 +996,12 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// The store doesn't exist, not a valid transfer target.
 	if _, ok := s.Store(storeID); !ok {
+		fmt.Printf("store %d not found\n", storeID)
 		return false
 	}
 	// The range doesn't exist, not a valid transfer target.
 	if _, ok := s.Range(rangeID); !ok {
+		fmt.Printf("range %d not found\n", rangeID)
 		return false
 	}
 	rng, _ := s.Range(rangeID)
@@ -1006,11 +1010,13 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// A replica for the range does not exist on the store, we cannot transfer
 	// a lease to it.
 	if !ok {
+		fmt.Printf("replica %d not found\n", rangeID)
 		return false
 	}
 	// The leaseholder replica for the range is already on the store, we can't
 	// transfer it to ourselves.
 	if repl == rng.Leaseholder() {
+		fmt.Printf("leaseholder replica %d already on store %d\n", rangeID, storeID)
 		return false
 	}
 	return true
