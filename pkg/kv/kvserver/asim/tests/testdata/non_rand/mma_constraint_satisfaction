@@ -20,14 +20,20 @@ setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false
 # 50 replicas to place / 9
 
 # work but it feels brittle (number of ranges and replica_weights has to be evenly divisible)
-
-gen_ranges ranges=10 repl_factor=5 placement_type=weighted lease_weights=(1,0,0,0,0,0,0,0,0) replica_weights=(0.2,0.2,0.2,0.2,0.1,0.1,0,0,0)
+# per_range_placement=[(1,2,3),(1,2,3),(4,5,6),(4,5,6),(7,8,9)]
+gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement 
+lease: lease_weights=[s1=1]
+r1: store_weights=[s1=1,s2=1] replica_type=VOTER_FULL
+r2: store_weights=[s1=1,s2=1] replica_type=VOTER_FULL
+r3: store_weights=[s3=1,s4=1] replica_type=VOTER_FULL
+r4: store_weights=[s3=1,s4=1] replica_type=NON_VOTER
+r5: store_weights=[s5=1,s6=1] replica_type=NON_VOTER
 ----
+
 
 # 0.2, 0.2, 0, 0.2, 0.2, 0, 0.1, 0
 # three nodes in three regions (region a, b, c)
 
-# placing the replicas across the stores: generate the cluster with 9 nodes
 
 eval duration=30m samples=1 seed=42
 ----
@@ -36,18 +42,12 @@ OK
 print
 ----
 cluster state:
-stores(9)=[s1n1=(r1:1,r2:1,r3:1,r4:1,r5:1,r6:1,r7:1,r8:1,r9:1,r10:1),
-s2n2=(r1:2,r2:2,r3:2,r4:2,r5:2,r6:2,r7:2,r8:2,r9:2,r10:2),s3n3=(r1:3,r2:3,r3:3,r4:3,r5:3,r6:3,r7:3,r8:3,r9:3,r10:3),s4n4=(r1:4,r2:4,r3:4,r4:4,r5:4,r6:4,r7:4,r8:4,r9:4,r10:4),s5n5=(r1:5,r4:5,r5:5,r8:5,r9:5),s6n6=(r2:5,r3:5,r6:5,r7:5,r10:5),s7n7=(),s8n8=(),s9n9=()]
-ranges(10)=[r1(0)=(s1:r1*,s2:r2,s3:r3,s4:r4,s5:r5),r2(1000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s6:r5),r3(2000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s6:r5),r4(3000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s5:r5),r5(4000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s5:r5),r6(5000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s6:r5),r7(6000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s6:r5),r8(7000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s5:r5),r9(8000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s5:r5),r10(9000)=(s1:r1*,s2:r2,s3:r3,s4:r4,s6:r5)]
-
-
-plot stat=cpu show_last_value=true
-----
-----
+stores(9)=[s1n1=(r1:2,r2:1,r3:1,r4:2,r5:2,r6:2,r7:2,r8:1,r9:1,r10:1),s2n2=(r1:1,r2:2,r3:2,r4:1,r5:1,r6:1,r7:1,r8:2,r9:2,r10:2),s3n3=(r1:4,r2:3,r3:3,r4:3,r5:3,r6:3,r7:4,r8:4,r9:4,r10:4),s4n4=(r1:3,r2:4,r3:4,r4:4,r5:4,r6:4,r7:3,r8:3,r9:3,r10:3),s5n5=(r2:5,r4:5,r5:5,r7:5,r9:5),s6n6=(r1:5,r3:5,r6:5,r8:5,r10:5),s7n7=(),s8n8=(),s9n9=()] 
+ranges(10)=[r1(0)=(s1:r2(VOTER_FULL)*,s2:r1(VOTER_FULL),s3:r4(NON_VOTER),s4:r3(VOTER_FULL),s6:r5(NON_VOTER)),r2(1000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s3:r3(VOTER_FULL),s4:r4(NON_VOTER),s5:r5(NON_VOTER)),r3(2000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s3:r3(VOTER_FULL),s4:r4(NON_VOTER),s6:r5(NON_VOTER)),r4(3000)=(s1:r2(VOTER_FULL)*,s2:r1(VOTER_FULL),s3:r3(VOTER_FULL),s4:r4(NON_VOTER),s5:r5(NON_VOTER)),r5(4000)=(s1:r2(VOTER_FULL)*,s2:r1(VOTER_FULL),s3:r3(VOTER_FULL),s4:r4(NON_VOTER),s5:r5(NON_VOTER)),r6(5000)=(s1:r2(VOTER_FULL)*,s2:r1(VOTER_FULL),s3:r3(VOTER_FULL),s4:r4(NON_VOTER),s6:r5(NON_VOTER)),r7(6000)=(s1:r2(VOTER_FULL)*,s2:r1(VOTER_FULL),s3:r4(NON_VOTER),s4:r3(VOTER_FULL),s5:r5(NON_VOTER)),r8(7000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s3:r4(NON_VOTER),s4:r3(VOTER_FULL),s6:r5(NON_VOTER)),r9(8000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s3:r4(NON_VOTER),s4:r3(VOTER_FULL),s5:r5(NON_VOTER)),r10(9000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s3:r4(NON_VOTER),s4:r3(VOTER_FULL),s6:r5(NON_VOTER))]
 
  0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                              cpu
 
 last store values: [s1=0 s2=0 s3=0 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0]
 ----
-----
+unknown command: 0.00

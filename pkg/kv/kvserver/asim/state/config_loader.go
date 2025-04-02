@@ -317,7 +317,7 @@ type RangesInfo []RangeInfo
 
 func initializeRangesInfoWithSpanConfigs(
 	stores []StoreID, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
-) {
+) RangesInfo {
 	// There cannot be less keys than there are ranges.
 	if int64(numRanges) > maxKey-minKey {
 		panic(fmt.Sprintf(

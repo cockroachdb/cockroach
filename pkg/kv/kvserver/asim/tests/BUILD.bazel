@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "default_settings.go",
         "output.go",
-        "parser_replica_placement.go",
         "rand_framework.go",
         "rand_gen.go",
         "rand_util.go",
@@ -22,12 +21,10 @@ go_library(
         "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
-        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

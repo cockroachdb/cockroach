@@ -157,10 +157,7 @@ func RangesInfoWithStoreWeightOnRF(
 	ret := initializeRangesInfoWithSpanConfigs(stores, numRanges, config, minKey, maxKey, rangeSize)
 	rf := int(config.NumReplicas)
 
-	// We create each range in sorted order by start key. Then assign replicas
-	// to stores by finding the store with the highest remaining target replica
-	// count remaining; repeating for each replica.
-	totalRangeToAllocate := numRanges
+	totalRangeToAllocate := numRanges * rf
 	replicaFactor := make([]map[StoreID]int, rf)
 	for i := 0; i < rf; i++ {
 		replicaFactor[i] = make(map[StoreID]int)
@@ -169,12 +166,6 @@ func RangesInfoWithStoreWeightOnRF(
 			totalRangeToAllocate -= replicaFactor[i][store]
 		}
 	}
-
-	leaseholderToAllocate := make(map[StoreID]int)
-	for i := 0; i < numRanges; i++ {
-		leaseholderToAllocate[stores[i]] = int(float64(leaseConfigs.StoreWeights[stores[i]]) * float64(numRanges))
-	}
-
 	// Distribute the remaining ranges to the stores.
 	for i := 0; i < totalRangeToAllocate; i++ {
 		for j := 0; j < rf; j++ {
@@ -182,31 +173,41 @@ func RangesInfoWithStoreWeightOnRF(
 		}
 	}
 
+	leaseholderToAllocate := make(map[StoreID]int)
+	totalLeasesToAllocate := numRanges
+	for storeID, count := range leaseConfigs.StoreWeights {
+		leaseholderToAllocate[storeID] = int(float64(count) * float64(numRanges))
+		totalLeasesToAllocate -= leaseholderToAllocate[storeID]
+	}
+	for i := 0; i < totalLeasesToAllocate; i++ {
+		leaseholderToAllocate[stores[i%numOfStores]]++
+	}
+
 	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
 		rangeInfo := ret[rngIdx]
-
+		stores := make(map[StoreID]struct{}, 0)
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
 			// pick a store with remaining replicas to allocate
 			for storeID, count := range replicaFactor[replCandidateIdx] {
+				if _, ok := stores[storeID]; ok {
+					continue
+				}
 				if count > 0 {
 					rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
 						StoreID: roachpb.StoreID(storeID),
 						Type:    replicaConfigs[replCandidateIdx].ReplicaType,
 					}
+					stores[storeID] = struct{}{}
 					replicaFactor[replCandidateIdx][storeID]--
 					break
 				}
 			}
 		}
 
-		for storeID, count := range leaseConfigs.StoreWeights {
-			if count > 0 {
-				rangeInfo.Leaseholder = storeID
-				break
-			}
-		}
-
 		for storeID, count := range leaseholderToAllocate {
+			if _, ok := stores[storeID]; !ok {
+				continue
+			}
 			if count > 0 {
 				rangeInfo.Leaseholder = storeID
 				leaseholderToAllocate[storeID]--
@@ -283,7 +284,6 @@ func RangesInfoWithDistribution(
 		rangeInfo.Leaseholder = StoreID(lhStore)
 		ret[rngIdx] = rangeInfo
 	}
-
 	return ret
 }
 
