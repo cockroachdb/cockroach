@@ -6,6 +6,7 @@
 package tpcc
 
 import (
+	"math/rand/v2"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -13,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"golang.org/x/exp/rand"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -71,8 +71,8 @@ var itemTypes = []*types.T{
 func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	iID := rowIdx + 1
 
@@ -114,9 +114,9 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	no := numbersOffset(l.rng.Intn(len(numbersAlphabet)))
-	lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
+	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
@@ -172,8 +172,8 @@ var stockTypes = []*types.T{
 func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
@@ -244,10 +244,10 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
-	no := numbersOffset(l.rng.Intn(len(numbersAlphabet)))
-	lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
+	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
+	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
@@ -317,10 +317,10 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 ) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
-	no := numbersOffset(l.rng.Intn(len(numbersAlphabet)))
-	lo := lettersOffset(l.rng.Intn(len(lettersAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
+	no := numbersOffset(l.rng.IntN(len(numbersAlphabet)))
+	lo := lettersOffset(l.rng.IntN(len(lettersAlphabet)))
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -329,7 +329,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	// 10% of the customer rows have bad credit.
 	// See section 4.3, under the CUSTOMER table population section.
 	credit := goodCredit
-	if l.rng.Intn(9) == 0 {
+	if l.rng.IntN(9) == 0 {
 		// Poor 10% :(
 		credit = badCredit
 	}
@@ -415,8 +415,8 @@ var historyTypes = []*types.T{
 func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 	l := w.localsPool.Get().(*generateLocals)
 	defer w.localsPool.Put(l)
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 
 	// This used to be a V4 uuid made through the normal `uuid.MakeV4`
 	// constructor, but we 1) want them to be deterministic and 2) want these rows
@@ -480,7 +480,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Seed(RandomSeed.Seed() + uint64(rowIdx))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
 	numOrderLines := randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
@@ -500,7 +500,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 			// We need a random permutation of customers that stable for all orders in a
 			// district, so use the district ID to seed the random permutation.
 			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
-			for i, cID := range rand.New(rand.NewSource(uint64(dID))).Perm(numCustomersPerDistrict) {
+			for i, cID := range rand.New(rand.NewPCG(uint64(dID), 0)).Perm(numCustomersPerDistrict) {
 				w.randomCIDsCache.values[dID][i] = cID + 1
 			}
 		}
@@ -601,7 +601,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rng.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(orderRowIdx)))
 	numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
 	// NB: There is one batch of order_line rows per order
@@ -609,7 +609,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (orderRowIdx / numOrdersPerWarehouse)
 
-	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)
 	olOIDCol := cb.ColVec(0).Int64()
 	olDIDCol := cb.ColVec(1).Int64()

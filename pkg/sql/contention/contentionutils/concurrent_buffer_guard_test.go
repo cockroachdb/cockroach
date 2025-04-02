@@ -7,6 +7,7 @@ package contentionutils
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"testing"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand"
 )
 
 type pair struct {

@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
-	"golang.org/x/exp/rand"
 )
 
 const (
@@ -137,7 +137,7 @@ func (b *bank) Tables() []workload.Table {
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numBatches,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
+				rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
 
 				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
 				if rowEnd > b.rows {
@@ -201,15 +201,15 @@ func (b *bank) Ops(
 		},
 	}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
-			from := rng.Intn(b.rows)
-			to := rng.Intn(b.rows - 1)
+			from := rng.IntN(b.rows)
+			to := rng.IntN(b.rows - 1)
 			for from == to && b.rows != 1 {
-				to = rng.Intn(b.rows - 1)
+				to = rng.IntN(b.rows - 1)
 			}
-			amount := rand.Intn(maxTransfer)
+			amount := rand.IntN(maxTransfer)
 			start := timeutil.Now()
 			_, err := updateStmt.Exec(from, to, amount)
 			elapsed := timeutil.Since(start)

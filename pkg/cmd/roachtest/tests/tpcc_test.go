@@ -7,6 +7,7 @@ package tests
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand"
 )
 
 func TestTPCCSupportedWarehouses(t *testing.T) {
@@ -71,7 +71,7 @@ func TestGetMaxWarehousesAboveEfficiency(t *testing.T) {
 	// Generate test data for different warehouse counts
 	for wh := startWH; wh <= endWH; wh += whIncrement {
 		// Add random variation to count (-10 to +30)
-		currCount := baseCount + int64(rand.Intn(41)-10)
+		currCount := baseCount + int64(rand.IntN(41)-10)
 
 		// Create histogram summary
 		histograms.Summaries = append(histograms.Summaries, &roachtestutil.HistogramSummaryMetric{
