@@ -714,7 +714,7 @@ func (br *BatchResponse) Combine(
 	for i := range otherBatch.Responses {
 		pos := positions[i]
 		if br.Responses[pos] == (ResponseUnion{}) {
-			br.Responses[pos] = otherBatch.Responses[i]
+			br.Responses[pos].MustSetInner(otherBatch.Responses[i].GetInner().ShallowCopy())
 			continue
 		}
 		valLeft := br.Responses[pos].GetInner()
