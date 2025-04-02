@@ -6,12 +6,14 @@
 package state
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type requestCount struct {
@@ -141,6 +143,20 @@ func randDistribution(randSource *rand.Rand, n int) []float64 {
 	return distribution
 }
 
+type StructReplicas struct {
+	StoreID StoreID
+	Count   int
+}
+
+// We are given a number of stores, ranges, a list of replica configs, and a
+// list of lease configs. Some constraints: every store we pick here must be different for a single range.
+// store_weights=[s1=0.5,s2=0.5]          replica_type=VOTER
+// store_weights=[s2=0.5,s3=0.5]          replica_type=VOTER
+// store_weights=[s4=0.5,s5=0.5]          replica_type=VOTER
+// store_weights=[s4=0.33,s5=0.33,s7=0.33] replica_type=VOTER
+// store_weights=[s7=0.33,s8=0.33,s9=0.33] replica_type=VOTER]
+// replica=[(s1,s2,s4,s5,s7):1, (s7,s8,s9):1]
+// replica=[(region/zone/store):1]
 func RangesInfoWithStoreWeightOnRF(
 	numOfStores int,
 	replicaConfigs []ReplicaConfig,
@@ -157,108 +173,56 @@ func RangesInfoWithStoreWeightOnRF(
 	ret := initializeRangesInfoWithSpanConfigs(stores, numRanges, config, minKey, maxKey, rangeSize)
 	rf := int(config.NumReplicas)
 
-	totalRangeToAllocate := numRanges * rf
-	replicaFactor := make([]map[StoreID]int, rf)
+	replicaFactor := make([][]StructReplicas, rf)
 	for i := 0; i < rf; i++ {
-		replicaFactor[i] = make(map[StoreID]int)
-		for _, store := range stores {
-			replicaFactor[i][store] = int(float64(replicaConfigs[i].StoreWeights[store]) * float64(numRanges))
-			totalRangeToAllocate -= replicaFactor[i][store]
+		replicaFactor[i] = make([]StructReplicas, len(replicaConfigs[i].StoreWeights))
+		totalRangesToAllocate := numRanges
+		log.VInfof(context.Background(), 2, "replicaConfigs[i].StoreWeights: %d\n", replicaConfigs[i].StoreWeights)
+		for j := 0; j < len(replicaConfigs[i].StoreWeights); j++ {
+			sw := replicaConfigs[i].StoreWeights[j]
+			replicaFactor[i][j] = StructReplicas{
+				StoreID: sw.StoreID,
+				Count:   int(sw.Weight * float64(numRanges)),
+			}
+			totalRangesToAllocate -= replicaFactor[i][j].Count
 		}
+		replicaFactor[i][0].Count += totalRangesToAllocate
 	}
-	// Distribute the remaining ranges to the stores.
-	for i := 0; i < totalRangeToAllocate; i++ {
-		for j := 0; j < rf; j++ {
-			replicaFactor[j][stores[i]]++
-		}
-	}
-
-	leaseholderToAllocate := make(map[StoreID]int)
-	totalLeasesToAllocate := numRanges
-
-	// Get sorted store IDs for deterministic iteration
-	var sortedStoreIDs []StoreID
-	for storeID := range leaseConfigs.StoreWeights {
-		sortedStoreIDs = append(sortedStoreIDs, storeID)
-	}
-	sort.Slice(sortedStoreIDs, func(i, j int) bool {
-		return sortedStoreIDs[i] < sortedStoreIDs[j]
-	})
-
-	for _, storeID := range sortedStoreIDs {
-		count := leaseConfigs.StoreWeights[storeID]
-		leaseholderToAllocate[storeID] = int(float64(count) * float64(numRanges))
-		totalLeasesToAllocate -= leaseholderToAllocate[storeID]
-	}
-	for i := 0; i < totalLeasesToAllocate; i++ {
-		leaseholderToAllocate[stores[i%numOfStores]]++
-	}
+	log.VInfof(context.Background(), 2, "numRanges: %d, rf: %d, replicaFactor: %v\n", numRanges, rf, replicaFactor)
 
 	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
 		rangeInfo := ret[rngIdx]
-		stores := make(map[StoreID]struct{}, 0)
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
-			// Get sorted store IDs for deterministic iteration
-			var sortedStoreIDs []StoreID
-			for storeID := range replicaFactor[replCandidateIdx] {
-				sortedStoreIDs = append(sortedStoreIDs, storeID)
-			}
-			sort.Slice(sortedStoreIDs, func(i, j int) bool {
-				return sortedStoreIDs[i] < sortedStoreIDs[j]
-			})
-
 			// pick a store with remaining replicas to allocate
-			for _, storeID := range sortedStoreIDs {
-				count := replicaFactor[replCandidateIdx][storeID]
-				if _, ok := stores[storeID]; ok {
-					continue
-				}
+			for i := 0; i < len(replicaFactor[replCandidateIdx]); i++ {
+				count := replicaFactor[replCandidateIdx][i].Count
+				storeID := replicaFactor[replCandidateIdx][i].StoreID
 				if count > 0 {
 					rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
 						StoreID: roachpb.StoreID(storeID),
 						Type:    replicaConfigs[replCandidateIdx].ReplicaType,
 					}
-					stores[storeID] = struct{}{}
-					replicaFactor[replCandidateIdx][storeID]--
+					replicaFactor[replCandidateIdx][i].Count--
+					if leaseConfigs.ReplicaIdx-1 == replCandidateIdx {
+						rangeInfo.Leaseholder = storeID
+					}
 					break
 				}
 			}
-		}
-
-		fmt.Println("leaseholderToAllocate: ", leaseholderToAllocate)
-		fmt.Println("stores: ", stores)
-
-		maxLeaseholderRemainingCount := 0
-		maxLeaseholderRemainingStore := StoreID(0)
-
-		// Get sorted store IDs for deterministic iteration
-		var sortedStores []StoreID
-		for store := range stores {
-			sortedStores = append(sortedStores, store)
-		}
-		sort.Slice(sortedStores, func(i, j int) bool {
-			return sortedStores[i] < sortedStores[j]
-		})
-
-		for _, store := range sortedStores {
-			leaseholderCount := leaseholderToAllocate[store]
-			if leaseholderCount > maxLeaseholderRemainingCount {
-				maxLeaseholderRemainingCount = leaseholderCount
-				maxLeaseholderRemainingStore = store
+			if rangeInfo.Descriptor.InternalReplicas[replCandidateIdx].StoreID == 0 {
+				log.VInfof(context.Background(), 2, "range %d: replica %d: store %d is missing with replicaFactor %v\n", rngIdx, replCandidateIdx, stores, replicaFactor)
 			}
-		}
-
-		rangeInfo.Leaseholder = maxLeaseholderRemainingStore
-		leaseholderToAllocate[maxLeaseholderRemainingStore]--
-
-		if rangeInfo.Leaseholder == 0 {
-			fmt.Printf("range %d: leaseholder is missing, leaseholderToAllocate %v, stores %v\n", rangeInfo.Descriptor.RangeID, leaseholderToAllocate, stores)
 		}
 		ret[rngIdx] = rangeInfo
 	}
 
 	return ret
 }
+
+// For every store, there is a target replica and lease count. We iterate
+// through for every range, we iterate through every possible replica count,
+// Then we assign the replica by iterating through every store targets. We also
+// pick the one that has the highest lease count as the leaseholder here.
 
 // RangesInfoWithDistribution returns a RangesInfo, where the stores given are
 // initialized with the specified % of the replicas. This is done on a best
@@ -308,7 +272,6 @@ func RangesInfoWithDistribution(
 			storeID := StoreID(targetReplicaCount[replCandidateIdx].id)
 			rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
 				StoreID: roachpb.StoreID(storeID),
-				Type:    roachpb.NON_VOTER,
 			}
 			if targetLeaseCount[storeID] >
 				targetLeaseCount[StoreID(rangeInfo.Descriptor.InternalReplicas[maxLeaseRequestedIdx].StoreID)] {
