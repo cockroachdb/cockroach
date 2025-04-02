@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -590,6 +591,88 @@ func TestScheduledBackupCompaction(t *testing.T) {
 			"[SHOW BACKUP FROM '%s' IN 'nodelocal://1/backup']", backupPath),
 	).Scan(&numBackups)
 	require.Equal(t, 4, numBackups)
+}
+
+func TestBackupCompactionUnsupportedOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	backupCompactionThreshold.Override(ctx, &st.SV, 3)
+	execCfg := sql.ExecutorConfig{
+		Settings: st,
+	}
+	testcases := []struct {
+		name    string
+		details jobspb.BackupDetails
+		error   string
+	}{
+		{
+			"execution locality not supported",
+			jobspb.BackupDetails{
+				ScheduleID: 1,
+				ExecutionLocality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "us-east-2"},
+					},
+				},
+			},
+			"execution locality not supported for compaction",
+		},
+		{
+			"revision history not supported",
+			jobspb.BackupDetails{
+				ScheduleID:      1,
+				RevisionHistory: true,
+			},
+			"revision history not supported for compaction",
+		},
+		{
+			"scheduled backups only",
+			jobspb.BackupDetails{
+				ScheduleID: 0,
+			},
+			"only scheduled backups can be compacted",
+		},
+		{
+			"incremental locations not supported",
+			jobspb.BackupDetails{
+				ScheduleID: 1,
+				Destination: jobspb.BackupDetails_Destination{
+					IncrementalStorage: []string{"nodelocal://1/backup/incs"},
+				},
+			},
+			"custom incremental storage location not supported for compaction",
+		},
+		{
+			"tenant specific backups not supported",
+			jobspb.BackupDetails{
+				ScheduleID:        1,
+				SpecificTenantIds: []roachpb.TenantID{roachpb.MustMakeTenantID(12)},
+			},
+			"backups of tenants not supported for compaction",
+		},
+		{
+			"backups including tenants not supported",
+			jobspb.BackupDetails{
+				ScheduleID:                 1,
+				IncludeAllSecondaryTenants: true,
+			},
+			"backups of tenants not supported for compaction",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.details.StartTime = hlc.Timestamp{WallTime: 100} // Nonzero start time
+			jobID, err := maybeStartCompactionJob(
+				ctx, &execCfg, username.RootUserName(), tc.details,
+			)
+			require.Zero(t, jobID)
+			require.ErrorContains(t, err, tc.error)
+		})
+	}
 }
 
 // Start and end are unix epoch in nanoseconds.
