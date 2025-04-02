@@ -135,10 +135,12 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 // The table writer is in charge of accumulating the result rows.
 func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
 	// Check for NOT NULL constraint violations.
+	hasConflict := false
 	if u.run.tw.canaryOrdinal != -1 && rowVals[u.run.tw.canaryOrdinal] != tree.DNull {
 		// When there is a canary column and its value is not NULL, then an
 		// existing row is being updated, so check only the update columns for
 		// NOT NULL constraint violations.
+		hasConflict = true
 		offset := len(u.run.insertCols) + len(u.run.tw.fetchCols)
 		vals := rowVals[offset : offset+len(u.run.tw.updateCols)]
 		if err := enforceNotNullConstraints(vals, u.run.tw.updateCols); err != nil {
@@ -169,6 +171,7 @@ func (u *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			u.run.tw.tableDesc(), u.run.checkOrds, rowVals[:u.run.checkOrds.Len()],
+			catalog.MutationOpUpsert, hasConflict,
 		); err != nil {
 			return err
 		}

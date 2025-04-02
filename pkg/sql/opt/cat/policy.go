@@ -27,9 +27,55 @@ const (
 	PolicyScopeUpdate
 	// PolicyScopeDelete indicates that the policy applies to DELETE operations.
 	PolicyScopeDelete
+	// PolicyScopeInsertWithSelect applies to the INSERT that also needs SELECT
+	// access (i.e. returning rows).
+	PolicyScopeInsertWithSelect
+	// PolicyScopeUpsertConflictScan is used during the conflict detection phase of
+	// an UPSERT (i.e., INSERT ... ON CONFLICT). This scope applies to the scan of
+	// existing rows to determine whether a conflict exists.
+	//
+	// Unlike a typical SELECT, the USING expressions evaluated here do not filter
+	// rows silently — if a row violates the policy, the operation fails. This scope
+	// may also evaluate UPDATE USING expressions, since the conflict resolution
+	// path typically involves an update to the existing row.
+	PolicyScopeUpsertConflictScan
 	// PolicyScopeExempt indicates that the operation is exempt from row-level security policies.
 	PolicyScopeExempt
 )
+
+type RLSConstraintType int8
+
+const (
+	// RLSConstraintUnused is a placeholder value that should never be used except
+	// in validation checks.
+	RLSConstraintUnused RLSConstraintType = iota
+
+	// RLSBaseConstraint enforces RLS policies for general INSERT and UPDATE operations.
+	RLSBaseConstraint
+
+	// RLSUpsertConflictExistingRowConstraint enforces RLS during an UPSERT when a
+	// conflict is found. It applies to the *existing* row that was matched.
+	RLSUpsertConflictExistingRowConstraint
+
+	// RLSUpsertConflictNewRowConstraint enforces RLS for the *updated* row that
+	// will be written as part of an UPSERT with conflict.
+	RLSUpsertConflictNewRowConstraint
+
+	// RLSUpsertNoConflictConstraint enforces RLS when an UPSERT inserts a new row
+	// (i.e., no conflict occurred). Functionally similar to INSERT.
+	RLSUpsertNoConflictConstraint
+
+	// RLSConstraintTypeCount is the total number of defined RLS constraint types.
+	RLSConstraintTypeCount = RLSUpsertNoConflictConstraint
+)
+
+func (r RLSConstraintType) IsUpsert() bool {
+	return r >= RLSUpsertConflictExistingRowConstraint && r <= RLSUpsertNoConflictConstraint
+}
+
+func (r RLSConstraintType) IsUpsertConflict() bool {
+	return r == RLSUpsertConflictExistingRowConstraint || r == RLSUpsertConflictNewRowConstraint
+}
 
 // Policy defines an interface for a row-level security (RLS) policy on a table.
 // Policies use expressions to filter rows during read operations and/or restrict
