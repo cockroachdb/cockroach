@@ -258,13 +258,6 @@ func assertPayloadsBase(
 		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
 	}
 
-	if envelopeType != changefeedbase.OptEnvelopeEnriched && forceEnrichedEnvelope { // && didTransform ?
-		envelopeType = changefeedbase.OptEnvelopeEnriched
-		for i := range expected {
-			expected[i] = wrappedEnvelopeAssertionToEnrichedAssertion(t, expected[i])
-		}
-	}
-
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
@@ -300,6 +293,17 @@ func assertPayloadsBaseErr(
 		if !ordered {
 			return errors.Newf("payloads violate CDC per-key ordering guarantees:\n  %s",
 				strings.Join(actualFormatted, "\n  "))
+		}
+	}
+
+	if envelopeType == changefeedbase.OptEnvelopeWrapped && forceEnrichedEnvelope { // && didTransform ?
+		envelopeType = changefeedbase.OptEnvelopeEnriched
+		stripTs = true
+		for i := range expected {
+			expected[i], actualFormatted[i], err = wrappedEnvelopeAssertionToEnrichedAssertion(expected[i], actualFormatted[i])
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -362,26 +366,42 @@ var wrappedAssertionRX = regexp.MustCompile(`([^:]+): ([^-]+)->(.*)`)
 
 // assumption: json, wrapped
 // TODO: withSource, withSchema bool
-func wrappedEnvelopeAssertionToEnrichedAssertion(t testing.TB, assertion string) string {
-	t.Helper()
+func wrappedEnvelopeAssertionToEnrichedAssertion(assertion, actual string) (newAssertion, newActual string, err error) {
 	groups := wrappedAssertionRX.FindStringSubmatch(assertion)
-	require.Len(t, groups, 4, "parsing assertion: %s", assertion)
+	if len(groups) != 4 {
+		return "", "", fmt.Errorf("parsing assertion: %s", assertion)
+	}
 	topic, key, body := groups[1], groups[2], groups[3]
 
 	// decode, transform, encode the body
 	dec := gojson.NewDecoder(bytes.NewBufferString(body))
 	dec.UseNumber()
 	var bodyMap map[string]any
-	require.NoError(t, dec.Decode(&bodyMap))
-	require.Equal(t, dec.InputOffset(), int64(len(body)), "parsing assertion")
+	if err := dec.Decode(&bodyMap); err != nil {
+		return "", "", err
+	}
+	if dec.InputOffset() != int64(len(body)) {
+		return "", "", fmt.Errorf("parsing assertion: %s", assertion)
+	}
 
-	// for enriched messages without sources and schemas, this is really the only difference (right?)
-	bodyMap["op"] = "c"
-	bodyMap["ts_ns"] = timeutil.Now().UnixNano()
+	// also need to do something for the key ([0] -> {"a": 0}).... but how do you know about "a"
+	actualGroups := wrappedAssertionRX.FindStringSubmatch(actual)
+	if len(actualGroups) != 4 {
+		return "", "", fmt.Errorf("parsing actual: %s", actual)
+	}
+	actualKey := actualGroups[2]
+	// TODO: this is so gross... ideally we would know the primary key definition here. more required shared state.
+	// TODO: assert that the key values match
+	key = actualKey
+
+	// for enriched messages without sources and schemas, this is really the only difference (right?) (excluding ts_ns bc strip timestamps)
+	bodyMap["op"] = "c" // TODO: would have to parse this out of the actual too... this approach is trash
 
 	newBody, err := json.MakeJSON(bodyMap)
-	require.NoError(t, err)
-	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody.String())
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody.String()), actual, nil
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -930,9 +950,12 @@ func feed(
 
 	forceEnrichedEnvelope = true // DBG
 
+	// TODO: fix this topic name thing
+	_, isWebhook := f.(*webhookFeedFactory)
+
 	// metamorph here for supported sinks? as a tmp measure
 	// TODO: less dumb
-	if forceEnrichedEnvelope {
+	if !isWebhook && forceEnrichedEnvelope {
 		if strings.Contains(create, `envelope=wrapped`) {
 			create = strings.ReplaceAll(create, `envelope=wrapped`, `envelope=enriched`)
 			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)
