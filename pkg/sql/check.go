@@ -852,6 +852,8 @@ func checkMutationInput(
 	tabDesc catalog.TableDescriptor,
 	checkOrds checkSet,
 	checkVals tree.Datums,
+	mutOp catalog.MutationOpType,
+	hasConflict bool,
 ) error {
 	if len(checkVals) < checkOrds.Len() {
 		return errors.AssertionFailedf(
@@ -862,6 +864,11 @@ func checkMutationInput(
 	colIdx := 0
 	for i := range checks {
 		if !checkOrds.Contains(i) {
+			continue
+		}
+
+		if !checks[i].ShouldEvaluate(mutOp, hasConflict) {
+			colIdx++
 			continue
 		}
 
