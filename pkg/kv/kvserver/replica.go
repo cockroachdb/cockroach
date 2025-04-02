@@ -558,6 +558,14 @@ type Replica struct {
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
 		raftLogLastCheckSize int64
+
+		// leaderID is the ID of the leader replica within the Raft group.
+		// NB: this is updated in a separate critical section from the Raft group,
+		// and can therefore briefly be out of sync with the Raft status.
+		leaderID roachpb.ReplicaID
+		// currentRACv2Mode is always in-sync with RawNode.
+		// MsgAppPull <=> LazyReplication.
+		currentRACv2Mode rac2.RaftMsgAppMode
 	}
 
 	mu struct {
@@ -859,10 +867,6 @@ type Replica struct {
 		// TODO(erikgrinaker): make this never be nil.
 		internalRaftGroup *raft.RawNode
 
-		// The ID of the leader replica within the Raft group. NB: this is updated
-		// in a separate critical section from the Raft group, and can therefore
-		// briefly be out of sync with the Raft status.
-		leaderID roachpb.ReplicaID
 		// The most recently added replica for the range and when it was added.
 		// Used to determine whether a replica is new enough that we shouldn't
 		// penalize it for being slightly behind. These field gets cleared out once
@@ -989,11 +993,6 @@ type Replica struct {
 		// existing real implementation to be destroyed and replaced with a real
 		// implementation.
 		replicaFlowControlIntegration replicaFlowControlIntegration
-
-		// The currentRACv2Mode is always in-sync with RawNode.
-		// MsgAppPull <=> LazyReplication.
-		// Updated with both raftMu and mu held.
-		currentRACv2Mode rac2.RaftMsgAppMode
 
 		// raftTracer is used to trace raft messages that are sent with a
 		// tracing context.

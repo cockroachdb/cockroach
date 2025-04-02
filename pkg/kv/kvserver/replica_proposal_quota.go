@@ -145,8 +145,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// need for a setting change callback, as handleRaftReady (the caller), will
 	// be called at least at the tick interval for a non-quiescent range.
 	shouldInitQuotaPool := false
-	if r.mu.leaderID != lastLeaderID {
-		if r.replicaID == r.mu.leaderID {
+	if r.shMu.leaderID != lastLeaderID {
+		if r.replicaID == r.shMu.leaderID {
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.shMu.state.Desc.Replicas().Descriptors(), now)
 			r.mu.replicaFlowControlIntegration.onBecameLeader(ctx)
@@ -176,10 +176,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			}
 			return
 		}
-	} else if r.replicaID == r.mu.leaderID && r.mu.proposalQuota == nil && enabled {
+	} else if r.replicaID == r.shMu.leaderID && r.mu.proposalQuota == nil && enabled {
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 		shouldInitQuotaPool = true
-	} else if r.replicaID != r.mu.leaderID {
+	} else if r.replicaID != r.shMu.leaderID {
 		// We're a follower and have been since the last update. Nothing to do.
 		return
 	}
