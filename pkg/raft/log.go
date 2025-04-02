@@ -292,7 +292,7 @@ func (l *raftLog) nextCommittedEnts(allowUnstable bool) (ents []pb.Entry) {
 	if span.Empty() {
 		return nil
 	}
-	ents, err := l.slice(uint64(span.After), uint64(span.Last), l.maxApplyingEntsSize)
+	ents, err := l.slice(uint64(span.After), uint64(span.Last), noLimit)
 	if err != nil {
 		l.logger.Panicf("unexpected error when getting unapplied entries (%v)", err)
 	}
