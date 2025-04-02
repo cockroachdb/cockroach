@@ -1004,7 +1004,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -1069,7 +1069,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -1151,7 +1151,7 @@ vectorized: <hidden>
 plan type: generic, re-optimized
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -1232,7 +1232,7 @@ vectorized: <hidden>
 plan type: generic, re-optimized
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal

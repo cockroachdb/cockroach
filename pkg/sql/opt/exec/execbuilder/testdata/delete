@@ -483,7 +483,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -543,7 +543,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, re-optimized
 maximum memory usage: <hidden>
-network usage: <hidden>
+DistSQL network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal

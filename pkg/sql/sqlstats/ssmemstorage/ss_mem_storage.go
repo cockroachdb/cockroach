@@ -374,10 +374,10 @@ func (s *stmtStats) sizeUnsafeLocked() int64 {
 func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.Count++
 	count := s.mu.data.ExecStats.Count
-	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.NetworkBytesSent))
+	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.DistSQLNetworkBytesSent))
 	s.mu.data.ExecStats.MaxMemUsage.Record(count, float64(stats.MaxMemUsage))
 	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
-	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
+	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.DistSQLNetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
 	s.mu.data.ExecStats.CPUSQLNanos.Record(count, float64(stats.CPUTime.Nanoseconds()))
 

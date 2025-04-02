@@ -839,7 +839,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
-		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+		ob.AddDistSQLNetworkStats(queryStats.DistSQLNetworkMessages, queryStats.DistSQLNetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
 		if len(queryStats.Regions) > 0 {
 			ob.AddRegionsStats(queryStats.Regions)
