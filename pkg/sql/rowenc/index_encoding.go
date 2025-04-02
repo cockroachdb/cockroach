@@ -1151,6 +1151,10 @@ func encodeVectorIndexKey(
 	if err != nil {
 		return nil, err
 	}
+	key = growKey(
+		key,
+		vecencoding.EncodedPartitionKeyLen(partitionKey)+vecencoding.EncodedPartitionLevelLen(cspann.LeafLevel),
+	)
 	key = vecencoding.EncodePartitionKey(key, partitionKey)
 	key = vecencoding.EncodePartitionLevel(key, cspann.LeafLevel)
 	return key, err
