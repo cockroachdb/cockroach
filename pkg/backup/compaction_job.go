@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -218,8 +219,8 @@ func (b *backupResumer) ResumeCompaction(
 
 	var backupManifest *backuppb.BackupManifest
 	updatedDetails := initialDetails
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 	if initialDetails.URI == "" {
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 		if testingKnobs != nil && testingKnobs.RunBeforeResolvingCompactionDest != nil {
 			if err := testingKnobs.RunBeforeResolvingCompactionDest(); err != nil {
 				return err
@@ -334,6 +335,10 @@ func (b *backupResumer) ResumeCompaction(
 		}
 	}
 
+	if testingKnobs != nil && testingKnobs.AfterLoadingManifestOnResume != nil {
+		testingKnobs.AfterLoadingManifestOnResume(backupManifest)
+	}
+
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
 	// errors that are also rpc errors. Don't retry too aggressively.
@@ -342,9 +347,8 @@ func (b *backupResumer) ResumeCompaction(
 		MaxRetries: 5,
 	}
 
-	if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
-		execCtx.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy != nil {
-		retryOpts = *execCtx.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy
+	if testingKnobs != nil && testingKnobs.BackupDistSQLRetryPolicy != nil {
+		retryOpts = *testingKnobs.BackupDistSQLRetryPolicy
 	}
 
 	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
@@ -376,8 +380,6 @@ func (b *backupResumer) ResumeCompaction(
 
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
-		// TODO (kev-cao): Compactions currently do not create checkpoints, but this
-		// can be used to reload the manifest once we add checkpointing.
 		var reloadBackupErr error
 		mem.Shrink(ctx, memSize)
 		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, execCtx.ExecCfg(),
@@ -752,9 +754,13 @@ func concludeBackupCompaction(
 // the associated manifest.
 func processProgress(
 	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.BackupDetails,
 	manifest *backuppb.BackupManifest,
 	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	kmsEnv cloud.KMSEnv,
 ) error {
+	var lastCheckpointTime time.Time
 	// When a processor is done exporting a span, it will send a progress update
 	// to progCh.
 	for progress := range progCh {
@@ -763,15 +769,22 @@ func processProgress(
 			log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			return err
 		}
-		for _, file := range progDetails.Files {
-			manifest.Files = append(manifest.Files, file)
-			manifest.EntryCounts.Add(file.EntryCounts)
-		}
+		updateManifestWithProgress(progDetails, manifest)
+
 		// TODO (kev-cao): Add per node progress updates.
+
+		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
+			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
+		); err != nil {
+			log.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+		} else if wroteCheckpoint {
+			lastCheckpointTime = timeutil.Now()
+		}
 	}
 	return nil
 }
 
+// compactionJobDescription generates a redacted description of the job.
 func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
 	redactedURIs, err := sanitizeURIList(details.Destination.To)
@@ -822,8 +835,7 @@ func doCompaction(
 		)
 	}
 	checkpointLoop := func(ctx context.Context) error {
-		// TODO (kev-cao): Add logic for checkpointing during loop.
-		return processProgress(ctx, manifest, progCh)
+		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
 	}
 	// TODO (kev-cao): Add trace aggregator loop.
 
@@ -836,6 +848,49 @@ func doCompaction(
 	return concludeBackupCompaction(
 		ctx, execCtx, defaultStore, details.EncryptionOptions, kmsEnv, manifest,
 	)
+}
+
+// updateManifestWithProgress takes a progress update from the processors and
+// updates the backup manifest accordingly.
+func updateManifestWithProgress(
+	progDetails backuppb.BackupManifest_Progress, manifest *backuppb.BackupManifest,
+) {
+	for _, file := range progDetails.Files {
+		manifest.Files = append(manifest.Files, file)
+		manifest.EntryCounts.Add(file.EntryCounts)
+	}
+}
+
+// maybeWriteBackupCheckpoint writes a checkpoint for the backup if
+// the time since the last checkpoint exceeds the configured interval. If a
+// checkpoint is written, the function returns true.
+func maybeWriteBackupCheckpoint(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.BackupDetails,
+	manifest *backuppb.BackupManifest,
+	lastCheckpointTime time.Time,
+	kmsEnv cloud.KMSEnv,
+) (bool, error) {
+	if details.URI == "" {
+		return false, errors.New("backup details does not contain a default URI")
+	}
+	execCfg := execCtx.ExecCfg()
+	interval := BackupCheckpointInterval.Get(&execCfg.Settings.SV)
+	if timeutil.Since(lastCheckpointTime) < interval {
+		return false, nil
+	}
+	if err := backupinfo.WriteBackupManifestCheckpoint(
+		ctx, details.URI, details.EncryptionOptions, kmsEnv,
+		manifest, execCfg, execCtx.User(),
+	); err != nil {
+		return false, err
+	}
+	backupRestoreKnobs := execCfg.BackupRestoreTestingKnobs
+	if backupRestoreKnobs != nil && backupRestoreKnobs.AfterCompactBackupsCheckpoint != nil {
+		backupRestoreKnobs.AfterCompactBackupsCheckpoint()
+	}
+	return true, nil
 }
 
 func init() {

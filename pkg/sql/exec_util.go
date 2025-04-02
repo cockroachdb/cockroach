@@ -21,6 +21,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -1872,6 +1873,14 @@ type BackupRestoreTestingKnobs struct {
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
+
+	// AfterCompactBackupsCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// for compaction is written.
+	AfterCompactBackupsCheckpoint func()
+
+	// AfterLoadingManifestOnResume is run once the backup manifest has been
+	// loaded/created on the resumption of a compaction job.
+	AfterLoadingManifestOnResume func(manifest *backuppb.BackupManifest)
 
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
