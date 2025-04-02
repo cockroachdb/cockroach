@@ -117,13 +117,6 @@ func TestCCLLogic_crdb_internal(
 	runCCLLogicTest(t, "crdb_internal")
 }
 
-func TestCCLLogic_explain_call_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "explain_call_plpgsql")
-}
-
 func TestCCLLogic_explain_redact(
 	t *testing.T,
 ) {
@@ -374,13 +367,6 @@ func TestCCLLogic_triggers(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers")
-}
-
-func TestCCLLogic_triggers_explain(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "triggers_explain")
 }
 
 func TestCCLLogic_udf_params(
