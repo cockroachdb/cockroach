@@ -44,6 +44,10 @@ func toTransientAbsent(initalStatus scpb.Status, specs ...transitionSpec) target
 	return asTargetSpec(scpb.Status_TRANSIENT_ABSENT, initalStatus, specs...)
 }
 
+func toTransientPublic(initialStatus scpb.Status, specs ...transitionSpec) targetSpec {
+	return asTargetSpec(scpb.Status_TRANSIENT_PUBLIC, initialStatus, specs...)
+}
+
 func toTransientAbsentLikePublic() targetSpec {
 	return asTargetSpec(scpb.Status_TRANSIENT_ABSENT, scpb.Status_ABSENT)
 }
@@ -82,7 +86,7 @@ func makeTargetKey(elType reflect.Type, status scpb.Status) targetKey {
 }
 
 func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
-	var absentSpec, publicSpec, transientSpec *targetSpec
+	var absentSpec, publicSpec, transientAddSpec, transientDropSpec *targetSpec
 	for i := range targetSpecs {
 		s := &targetSpecs[i]
 		var p **targetSpec
@@ -92,14 +96,16 @@ func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
 		case scpb.Status_PUBLIC:
 			p = &publicSpec
 		case scpb.Status_TRANSIENT_ABSENT:
-			p = &transientSpec
+			p = &transientAddSpec
+		case scpb.Status_TRANSIENT_PUBLIC:
+			p = &transientDropSpec
 		default:
 			return nil, errors.Errorf("unsupported target %s", s.to)
 		}
 		if *p != nil {
 			return nil, errors.Errorf("duplicate %s spec", s.to)
 		}
-		if s.to != scpb.Status_ABSENT && s.from != scpb.Status_ABSENT {
+		if s.to != scpb.Status_ABSENT && s.to != scpb.Status_TRANSIENT_PUBLIC && s.from != scpb.Status_ABSENT {
 			return nil, errors.Errorf("expected %s spec to start in ABSENT, not %s", s.to, s.from)
 		}
 		*p = s
@@ -107,12 +113,12 @@ func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
 	if absentSpec == nil {
 		return nil, errors.Errorf("ABSENT spec is missing but required")
 	}
-	if transientSpec != nil {
-		if publicSpec != nil && len(transientSpec.transitionSpecs) == 0 {
+	if transientAddSpec != nil {
+		if publicSpec != nil && len(transientAddSpec.transitionSpecs) == 0 {
 			// Here we want the transient spec to be a copy of the public spec.
-			transientSpec.transitionSpecs = append(transientSpec.transitionSpecs, publicSpec.transitionSpecs...)
+			transientAddSpec.transitionSpecs = append(transientAddSpec.transitionSpecs, publicSpec.transitionSpecs...)
 		}
-		if err := populateTransientAbsent(absentSpec, transientSpec); err != nil {
+		if err := populateTransientAbsent(absentSpec, transientAddSpec); err != nil {
 			return nil, err
 		}
 	}
@@ -121,8 +127,11 @@ func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
 	if publicSpec != nil {
 		specs = append(specs, *publicSpec)
 	}
-	if transientSpec != nil {
-		specs = append(specs, *transientSpec)
+	if transientAddSpec != nil {
+		specs = append(specs, *transientAddSpec)
+	}
+	if transientDropSpec != nil {
+		specs = append(specs, *transientDropSpec)
 	}
 	for _, s := range specs {
 		if len(s.transitionSpecs) == 0 {

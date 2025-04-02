@@ -17,7 +17,7 @@ func AlterPolicy(b BuildCtx, n *tree.AlterPolicy) {
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{
 		RequireOwnership: true,
 	})
-	panicIfSchemaChangeIsDisallowed(tableElems, n)
+	checkTableSchemaChangePrerequisites(b, tableElems, n)
 	tbl := tableElems.FilterTable().MustGetOneElement()
 
 	// Alter of a policy implies that it must exist.

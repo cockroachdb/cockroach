@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -105,7 +106,7 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			}
 			// Ignore any other elements with undefined targets.
 			return false
-		case scpb.ToAbsent, scpb.Transient:
+		case scpb.ToAbsent, scpb.TransientAbsent:
 			// If the target is already ABSENT or TRANSIENT then the element is going
 			// away anyway and so it doesn't need to have a target set for this DROP.
 			return false
@@ -440,7 +441,7 @@ func absentTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element)
 }
 
 func transientTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
-	return target == scpb.Transient
+	return target == scpb.TransientAbsent
 }
 
 func validTargetFilter(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -969,22 +970,30 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
-// panicIfSchemaChangeIsDisallowed panics if a schema change is not allowed on
-// this table. A schema change is disallowed if one of the following is true:
-//   - The schema_locked table storage parameter is true, and this statement is
-//     not modifying the value of schema_locked.
+// checkTableSchemaChangePrerequisites checks any pre-requisites before a table
+// schema change is allowed. This function panics if a schema change is not
+// allowed on this table. A schema change is disallowed if one of the following
+// is true:
 //   - The table is referenced by logical data replication jobs, and the statement
 //     is not in the allow list of LDR schema changes.
-func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Statement) {
-	_, _, schemaLocked := scpb.FindTableSchemaLocked(tableElements)
+//   - schema_locked if the current version does not support transient drops
+//     of the lock.
+//
+// If the table in question is schema_locked, this logic removes the schema_locked
+// in a transient manner, allowing it to restore after the schema change.
+func checkTableSchemaChangePrerequisites(
+	b BuildCtx, tableElements ElementResultSet, n tree.Statement,
+) {
+	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
-		_, _, ns := scpb.FindNamespace(tableElements)
-		if ns == nil {
-			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+		// Before 25.2 we don't support auto-unsetting schema locked.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
+			ns := tableElements.FilterNamespace().MustGetOneElement()
+			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
 		}
-		panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+		// Unset schema_locked for the user.
+		b.DropTransient(schemaLocked)
 	}
-
 	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
 	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
 		var virtualColNames []string

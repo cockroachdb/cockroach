@@ -341,7 +341,7 @@ func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
 		return &ret[idx], true /* isNew */
 	}
 	isNotDropping := func(ts scpb.TargetStatus) bool {
-		return ts != scpb.ToAbsent && ts != scpb.Transient
+		return ts != scpb.ToAbsent && ts != scpb.TransientAbsent
 	}
 	for _, es := range elementStates {
 		switch e := es.element.(type) {
@@ -447,7 +447,11 @@ func (b buildCtx) Add(element scpb.Element) {
 }
 
 func (b buildCtx) AddTransient(element scpb.Element) {
-	b.Ensure(element, scpb.Transient, b.TargetMetadata())
+	b.Ensure(element, scpb.TransientAbsent, b.TargetMetadata())
+}
+
+func (b buildCtx) DropTransient(element scpb.Element) {
+	b.Ensure(element, scpb.TransientPublic, b.TargetMetadata())
 }
 
 // Drop implements the scbuildstmt.BuildCtx interface.

@@ -62,7 +62,7 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
 	dst := b.getExistingElementState(e)
 	switch target {
-	case scpb.ToAbsent, scpb.ToPublic, scpb.Transient:
+	case scpb.ToAbsent, scpb.ToPublic, scpb.TransientAbsent, scpb.TransientPublic:
 		// Sanity check.
 	default:
 		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
@@ -108,7 +108,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	// of it and investigate it further if needed.
 	if dst.current == scpb.Status_ABSENT &&
 		dst.target == scpb.ToAbsent &&
-		(target == scpb.ToPublic || target == scpb.Transient) &&
+		(target == scpb.ToPublic || target == scpb.TransientAbsent) &&
 		dst.metadata.IsLinkedToSchemaChange() {
 		panic(scerrors.NotImplementedErrorf(
 			nil,
@@ -156,7 +156,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// the transient path so it can be done but we must take care to migrate
 		// the current status to its transient equivalent if need be in order to
 		// avoid the possibility of a future transition to PUBLIC.
-		if target == scpb.Transient {
+		if target == scpb.TransientAbsent {
 			var ok bool
 			dst.current, ok = scpb.GetTransientEquivalent(dst.current)
 			if !ok {
@@ -167,7 +167,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 			}
 		}
 		return
-	case scpb.Transient:
+	case scpb.TransientAbsent:
 		// Here the new target is either to-absent, which effectively undoes the
 		// incumbent target, or it's to-public. In both cases if the current
 		// status is TRANSIENT_ we need to migrate it to its non-transient

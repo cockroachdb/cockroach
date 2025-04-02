@@ -24,7 +24,7 @@ func DropPolicy(b BuildCtx, n *tree.DropPolicy) {
 			pgnotice.Newf("relation %q does not exist, skipping", n.TableName.String()))
 		return
 	}
-	panicIfSchemaChangeIsDisallowed(tableElems, n)
+	checkTableSchemaChangePrerequisites(b, tableElems, n)
 
 	policyElems := b.ResolvePolicy(tbl.TableID, n.PolicyName, ResolveParams{
 		IsExistenceOptional: n.IfExists,
