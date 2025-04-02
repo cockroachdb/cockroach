@@ -6,6 +6,7 @@
 package backfill
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -411,7 +412,15 @@ func TestInitIndexesAllowList(t *testing.T) {
 	t.Run("nil allowList", func(t *testing.T) {
 		// A nil allowList means no filtering.
 		ib := &IndexBackfiller{}
-		ib.initIndexes(keys.SystemSQLCodec, desc, nil /* allowList */, 0 /* sourceIndexID */)
+		err := ib.initIndexes(
+			context.Background(),
+			keys.SystemSQLCodec,
+			desc,
+			nil, /* allowList */
+			0,   /* sourceIndexID */
+			nil, /* vecIndexMgr */
+		)
+		require.NoError(t, err)
 		require.Equal(t, 2, len(ib.added))
 		require.Equal(t, catid.IndexID(2), ib.added[0].GetID())
 		require.Equal(t, catid.IndexID(3), ib.added[1].GetID())
@@ -419,7 +428,15 @@ func TestInitIndexesAllowList(t *testing.T) {
 
 	t.Run("non-nil allowList", func(t *testing.T) {
 		ib := &IndexBackfiller{}
-		ib.initIndexes(keys.SystemSQLCodec, desc, []catid.IndexID{3} /* allowList */, 0 /* sourceIndexID */)
+		err := ib.initIndexes(
+			context.Background(),
+			keys.SystemSQLCodec,
+			desc,
+			[]catid.IndexID{3}, /* allowList */
+			0,                  /* sourceIndexID */
+			nil,                /* vecIndexMgr */
+		)
+		require.NoError(t, err)
 		require.Equal(t, 1, len(ib.added))
 		require.Equal(t, catid.IndexID(3), ib.added[0].GetID())
 	})
