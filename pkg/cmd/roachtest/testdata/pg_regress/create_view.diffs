@@ -119,7 +119,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 -ERROR:  cannot drop constraint view_base_table_pkey on table view_base_table because other objects depend on it
 -DETAIL:  view key_dependent_view depends on constraint view_base_table_pkey on table view_base_table
 -HINT:  Use DROP ... CASCADE to drop the dependent objects too.
-+ERROR:  relation "view_base_table" (325): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
++ERROR:  relation "view_base_table": unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/48026/_version_
  CREATE VIEW key_dependent_view_no_cols AS
