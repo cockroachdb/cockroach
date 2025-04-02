@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -310,7 +313,7 @@ crdb_internal.json_to_pb(
 		db.Exec(t, "INSERT INTO foo VALUES (3, 3)")
 		end := getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
-		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 
 		var backupPath string
 		db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup/7'").Scan(&backupPath)
@@ -324,7 +327,7 @@ crdb_internal.json_to_pb(
 		db.Exec(t, "INSERT INTO foo VALUES (4, 4)")
 		end = getTime(t)
 		db.Exec(t, fmt.Sprintf(incBackupAostCmd, 7, end))
-		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.details_has_checkpoint'")
+		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 		jobID = startCompaction(7, backupPath, start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
@@ -673,6 +676,90 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 			require.ErrorContains(t, err, tc.error)
 		})
 	}
+}
+
+func TestCompactionCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Need a large enough backup so that it doesn't finish in one iteration
+	const numAccounts = 1000
+	var mu syncutil.Mutex
+	var manifestNumFiles atomic.Int32
+	manifestNumFiles.Store(-1) // -1 means we haven't seen the manifests yet.
+	tc, db, _, cleanup := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					BackupRestore: &sql.BackupRestoreTestingKnobs{
+						AfterLoadingCompactionManifestOnResume: func(m *backuppb.BackupManifest) {
+							mu.Lock()
+							defer mu.Unlock()
+							manifestNumFiles.Store(int32(len(m.Files)))
+						},
+					},
+				},
+			},
+		},
+	)
+	defer cleanup()
+	writeQueries := func() {
+		db.Exec(t, "UPDATE data.bank SET balance = balance + 1")
+	}
+	db.Exec(t, "SET CLUSTER SETTING bulkio.backup.checkpoint_interval = '10ms'")
+	start := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO 'nodelocal://1/backup' AS OF SYSTEM TIME %d", start))
+	writeQueries()
+	db.Exec(t, "BACKUP INTO LATEST IN 'nodelocal://1/backup'")
+	writeQueries()
+	end := getTime(t)
+	db.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN 'nodelocal://1/backup' AS OF SYSTEM TIME %d", end))
+
+	var backupPath string
+	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+
+	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.write_checkpoint'")
+	var jobID jobspb.JobID
+	db.QueryRow(
+		t,
+		"SELECT crdb_internal.backup_compaction(ARRAY['nodelocal://1/backup'], $1, ''::BYTES, $2, $3)",
+		backupPath, start, end,
+	).Scan(&jobID)
+	// Ensure that the very first manifest when the job is initially started has
+	// no files.
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if manifestNumFiles.Load() < 0 {
+			return fmt.Errorf("waiting for manifest to be loaded")
+		}
+		return nil
+	})
+	require.Equal(t, 0, manifestNumFiles.Load(), "expected no files in manifest")
+	manifestNumFiles.Store(-1) // Reset for when the job is paused and resumed.
+
+	// Wait for the job to hit the pausepoint.
+	jobutils.WaitForJobToPause(t, db, jobID)
+	// Don't bother pausing on other checkpoints.
+	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+	db.Exec(t, "RESUME JOB $1", jobID)
+	jobutils.WaitForJobToRun(t, db, jobID)
+
+	// Now that the job has been paused and resumed after previously hitting a
+	// checkpoint, the initial manifest at the start of the job should have
+	// some files from before the pause.
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if manifestNumFiles.Load() < 0 {
+			return fmt.Errorf("waiting for manifest to be loaded")
+		}
+		return nil
+	})
+	require.Greater(t, manifestNumFiles.Load(), 0, "expected non-zero number of files in manifest")
+
+	waitForSuccessfulJob(t, tc, jobID)
+	validateCompactedBackupForTables(t, db, []string{"bank"}, "'nodelocal://1/backup'", start, end)
 }
 
 // Start and end are unix epoch in nanoseconds.
