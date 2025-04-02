@@ -181,6 +181,36 @@ func (ib *indexBackfiller) constructIndexEntries(
 	return nil
 }
 
+func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
+	ctx context.Context, indexEntry *rowenc.IndexEntry,
+) (bool, error) {
+	indexID, keyBytes, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
+	if err != nil {
+		return false, err
+	}
+
+	vih, ok := ib.VectorIndexes[indexID]
+	if !ok {
+		return false, nil
+	}
+
+	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), keyBytes, indexEntry)
+		if err != nil {
+			return err
+		}
+
+		b := txn.KV().NewBatch()
+		b.CPutAllowingIfNotExists(entry.Key, &entry.Value, entry.Value.TagAndDataBytes())
+		return txn.KV().Run(ctx, b)
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // ingestIndexEntries adds the batches of built index entries to the buffering
 // adder and reports progress back to the coordinator node.
 func (ib *indexBackfiller) ingestIndexEntries(
@@ -261,6 +291,15 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
+				if len(ib.VectorIndexes) > 0 {
+					isVectorIndex, err := ib.maybeReencodeVectorIndexEntry(ctx, &indexEntry)
+					if err != nil {
+						return err
+					} else if isVectorIndex {
+						continue
+					}
+				}
+
 				if err := adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}

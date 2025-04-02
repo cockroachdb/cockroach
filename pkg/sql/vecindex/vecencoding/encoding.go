@@ -37,11 +37,6 @@ type VectorIndexKey struct {
 	Suffix       []byte
 }
 
-type VectorIndexValue struct {
-	Encoding vector.T
-	Suffix   []byte
-}
-
 func KeyExtract(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexKey, err error) {
 	prefixLen := 0
 	for i := 0; i < numPrefixColumns; i++ {
@@ -75,19 +70,22 @@ func KeyExtract(keyBytes []byte, numPrefixColumns int) (vecIndexKey VectorIndexK
 	return vecIndexKey, nil
 }
 
-func ValueExtract(valueBytes []byte) (vecIndexValue VectorIndexValue, err error) {
-	valueBytes, _, err = encoding.DecodeUntaggedFloat32Value(valueBytes)
-	if err != nil {
-		return vecIndexValue, err
-	}
+func (vik *VectorIndexKey) Encode(appendTo []byte) []byte {
+	appendTo = append(appendTo, vik.Prefix...)
+	appendTo = EncodePartitionKey(appendTo, vik.PartitionKey)
+	appendTo = EncodePartitionLevel(appendTo, vik.Level)
+	return append(appendTo, vik.Suffix...)
+}
 
-	// The remaining bytes in valueBytes should be the encoded vector.
-	vecIndexValue.Suffix, vecIndexValue.Encoding, err = vector.Decode(valueBytes)
-	if err != nil {
-		return vecIndexValue, err
-	}
+func EncodedValueSideLen(vectorData []byte, compositeData []byte) int {
+	return len(vectorData) + len(compositeData)
+}
 
-	return vecIndexValue, nil
+func EncodeValueSide(appendTo []byte, vectorData []byte, compositeData []byte) []byte {
+	// The value side is encoded as a concatenation of the vector data and the
+	// composite data.
+	appendTo = append(appendTo, vectorData...)
+	return append(appendTo, compositeData...)
 }
 
 // EncodePartitionMetadata encodes the metadata for a partition.
@@ -202,6 +200,18 @@ func DecodeRaBitQVectorToSet(
 	}
 	vectorSet.Codes.Count++
 	return encVector, nil
+}
+
+func DecodeUnquantizedVector(encVector []byte) (vector.T, []byte, error) {
+	encVector, _, err := encoding.DecodeUntaggedFloat32Value(encVector)
+	if err != nil {
+		return nil, nil, err
+	}
+	encVector, v, err := vector.Decode(encVector)
+	if err != nil {
+		return nil, nil, err
+	}
+	return v, encVector, nil
 }
 
 // DecodeUnquantizedVectorToSet decodes a full vector entry into the given
