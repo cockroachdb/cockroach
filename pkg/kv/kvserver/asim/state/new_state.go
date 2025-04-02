@@ -175,7 +175,18 @@ func RangesInfoWithStoreWeightOnRF(
 
 	leaseholderToAllocate := make(map[StoreID]int)
 	totalLeasesToAllocate := numRanges
-	for storeID, count := range leaseConfigs.StoreWeights {
+
+	// Get sorted store IDs for deterministic iteration
+	var sortedStoreIDs []StoreID
+	for storeID := range leaseConfigs.StoreWeights {
+		sortedStoreIDs = append(sortedStoreIDs, storeID)
+	}
+	sort.Slice(sortedStoreIDs, func(i, j int) bool {
+		return sortedStoreIDs[i] < sortedStoreIDs[j]
+	})
+
+	for _, storeID := range sortedStoreIDs {
+		count := leaseConfigs.StoreWeights[storeID]
 		leaseholderToAllocate[storeID] = int(float64(count) * float64(numRanges))
 		totalLeasesToAllocate -= leaseholderToAllocate[storeID]
 	}
@@ -187,8 +198,18 @@ func RangesInfoWithStoreWeightOnRF(
 		rangeInfo := ret[rngIdx]
 		stores := make(map[StoreID]struct{}, 0)
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
+			// Get sorted store IDs for deterministic iteration
+			var sortedStoreIDs []StoreID
+			for storeID := range replicaFactor[replCandidateIdx] {
+				sortedStoreIDs = append(sortedStoreIDs, storeID)
+			}
+			sort.Slice(sortedStoreIDs, func(i, j int) bool {
+				return sortedStoreIDs[i] < sortedStoreIDs[j]
+			})
+
 			// pick a store with remaining replicas to allocate
-			for storeID, count := range replicaFactor[replCandidateIdx] {
+			for _, storeID := range sortedStoreIDs {
+				count := replicaFactor[replCandidateIdx][storeID]
 				if _, ok := stores[storeID]; ok {
 					continue
 				}
@@ -204,15 +225,34 @@ func RangesInfoWithStoreWeightOnRF(
 			}
 		}
 
-		for storeID, count := range leaseholderToAllocate {
-			if _, ok := stores[storeID]; !ok {
-				continue
+		fmt.Println("leaseholderToAllocate: ", leaseholderToAllocate)
+		fmt.Println("stores: ", stores)
+
+		maxLeaseholderRemainingCount := 0
+		maxLeaseholderRemainingStore := StoreID(0)
+
+		// Get sorted store IDs for deterministic iteration
+		var sortedStores []StoreID
+		for store := range stores {
+			sortedStores = append(sortedStores, store)
+		}
+		sort.Slice(sortedStores, func(i, j int) bool {
+			return sortedStores[i] < sortedStores[j]
+		})
+
+		for _, store := range sortedStores {
+			leaseholderCount := leaseholderToAllocate[store]
+			if leaseholderCount > maxLeaseholderRemainingCount {
+				maxLeaseholderRemainingCount = leaseholderCount
+				maxLeaseholderRemainingStore = store
 			}
-			if count > 0 {
-				rangeInfo.Leaseholder = storeID
-				leaseholderToAllocate[storeID]--
-				break
-			}
+		}
+
+		rangeInfo.Leaseholder = maxLeaseholderRemainingStore
+		leaseholderToAllocate[maxLeaseholderRemainingStore]--
+
+		if rangeInfo.Leaseholder == 0 {
+			fmt.Printf("range %d: leaseholder is missing, leaseholderToAllocate %v, stores %v\n", rangeInfo.Descriptor.RangeID, leaseholderToAllocate, stores)
 		}
 		ret[rngIdx] = rangeInfo
 	}
