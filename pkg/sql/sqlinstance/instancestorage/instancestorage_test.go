@@ -630,19 +630,7 @@ func TestReclaimLoop(t *testing.T) {
 
 	for i, id := range instanceIDs {
 		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i].ID(), sessionExpiry))
-		require.NoError(t, storage.CreateInstanceDataForTest(
-			ctx,
-			region,
-			id,
-			rpcAddresses[i],
-			sqlAddresses[i],
-			sessionIDs[i].ID(),
-			sessionExpiry,
-			localities[i],
-			binaryVersions[i],
-			/* encodeIsDraining */ true,
-			/* isDraining */ false,
-		))
+		require.NoError(t, storage.CreateInstanceDataForTest(ctx, region, id, rpcAddresses[i], sqlAddresses[i], sessionIDs[i].ID(), sessionExpiry, localities[i], binaryVersions[i], true, false, nil))
 	}
 
 	testutils.SucceedsSoon(t, func() error {
