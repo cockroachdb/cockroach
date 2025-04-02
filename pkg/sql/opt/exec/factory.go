@@ -527,6 +527,7 @@ type ExecutionStats struct {
 	SeekCount         optional.Uint
 	InternalSeekCount optional.Uint
 
+	ExecTime         optional.Duration
 	MaxAllocatedMem  optional.Uint
 	MaxAllocatedDisk optional.Uint
 	SQLCPUTime       optional.Duration
