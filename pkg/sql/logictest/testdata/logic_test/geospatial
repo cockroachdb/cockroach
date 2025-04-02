@@ -900,10 +900,10 @@ POLYGON ((20.012344998976914 -20.012345000286587, 20.012344998976914 -20.0123449
 POLYGON ((90 0, 90 0.000000000163709, 90.000000000327418 0.000000000163709, 90.000000000327418 0, 90 0))
 POLYGON ((90 0, 90 0.0439453125, 90.0439453125 0.0439453125, 90.0439453125 0, 90 0))
 
-statement error pq: st_pointfromgeohash\(\): invalid GeoHash: geohash decode '----': invalid character at index 0
+statement error pq: invalid GeoHash: geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
-statement error pq: st_pointfromgeohash\(\): length of GeoHash must be greater than 0
+statement error pq: length of GeoHash must be greater than 0
 SELECT ST_AsText(ST_PointFromGeoHash(''))
 
 query TTTTTTTT
@@ -1089,7 +1089,7 @@ false  false  true
 false  true   false
 true   true   true
 
-statement error st_isring\(\): should only be called on a linear feature: geom: unsupported type \*geom.Point
+statement error should only be called on a linear feature: geom: unsupported type \*geom.Point
 SELECT ST_IsRing('POINT(0 0)')
 
 # Topology operators
@@ -5881,13 +5881,13 @@ SELECT ST_AsText(ST_OrientedEnvelope(ST_GeomFromText('MULTIPOINT ((0 0), (-1 -1)
 POLYGON ((3 2, 2.88 2.16, -1.12 -0.84, -1 -1, 3 2))
 
 
-statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+statement error pq: end must be greater or equal to the start
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0.5,0.4))
 
-statement error pq: st_linesubstring\(\): start and and must be within 0 and 1
+statement error pq: start and and must be within 0 and 1
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0,1.4));
 
-statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+statement error pq: end must be greater or equal to the start
 select st_astext(st_linesubstring('POINT(0 0)'::geometry,0.5,0.4));
 
 query T nosort

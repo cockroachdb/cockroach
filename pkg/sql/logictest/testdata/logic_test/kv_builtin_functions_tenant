@@ -1,7 +1,7 @@
 # LogicTest: 3node-tenant
 
-query error pq: crdb_internal.kv_set_queue_active\(\): unimplemented: operation is unsupported within a virtual cluster
+query error pq: unimplemented: operation is unsupported within a virtual cluster
 select crdb_internal.kv_set_queue_active('split', true);
 
-query error pq: crdb_internal.kv_enqueue_replica\(\): unimplemented: operation is unsupported within a virtual cluster
+query error pq: unimplemented: operation is unsupported within a virtual cluster
 select crdb_internal.kv_enqueue_replica(42, 'split', true);
