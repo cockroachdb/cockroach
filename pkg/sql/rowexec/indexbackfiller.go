@@ -181,6 +181,36 @@ func (ib *indexBackfiller) constructIndexEntries(
 	return nil
 }
 
+func (ib *indexBackfiller) maybeReencodeVectorIndexEntry(
+	ctx context.Context, indexEntry *rowenc.IndexEntry,
+) (bool, error) {
+	indexID, keyBytes, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
+	if err != nil {
+		return false, err
+	}
+
+	vih, ok := ib.VectorIndexes[indexID]
+	if !ok {
+		return false, nil
+	}
+
+	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), keyBytes, indexEntry)
+		if err != nil {
+			return err
+		}
+
+		b := txn.KV().NewBatch()
+		b.CPut(entry.Key, &entry.Value, nil)
+		return txn.KV().Run(ctx, b)
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // ingestIndexEntries adds the batches of built index entries to the buffering
 // adder and reports progress back to the coordinator node.
 func (ib *indexBackfiller) ingestIndexEntries(
@@ -261,6 +291,21 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
+				// If there is at least one vector index being written, we need to check to see
+				// if this IndexEntry is going to a vector index and then re-encode it for that
+				// index if so.
+				//
+				// TODO(mw5h): batch up multiple index entries into a single batch.
+				// As is, we insert a single vector per batch, which is very slow.
+				if len(ib.VectorIndexes) > 0 {
+					isVectorIndex, err := ib.maybeReencodeVectorIndexEntry(ctx, &indexEntry)
+					if err != nil {
+						return err
+					} else if isVectorIndex {
+						continue
+					}
+				}
+
 				if err := adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
@@ -303,6 +348,13 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		return err
 	}
 
+	// If there are only vector indexes, we push the completed spans manually so that
+	// progress reporting works.
+	if ib.VectorOnly {
+		mu.Lock()
+		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
+		mu.Unlock()
+	}
 	if err := adder.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
 	}
