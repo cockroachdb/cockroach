@@ -476,7 +476,7 @@ VALUES
 
 # Regression tests for not closing the apply join's plan when the physical
 # planning for the main query in that plan fails (#82705, #83368).
-query error pq: parse_time\(\): could not parse \"\\\\E\" as type time
+query error pq: could not parse \"\\\\E\" as type time
 SELECT
   '1 day':::INTERVAL AS col_218767,
   (
@@ -527,7 +527,7 @@ FROM
   )
     AS tab_130094 (col_218765, col_218766);
 
-query error pq: st_mpointfromwkb\(\): error parsing EWKB: wkb: unknown byte order: 11000000
+query error pq: error parsing EWKB: wkb: unknown byte order: 11000000
 WITH
   with_111870 (col_664924) AS (SELECT * FROM (VALUES (true)) AS tab_397795 (col_664924))
 SELECT
@@ -702,7 +702,7 @@ CREATE INDEX on seed (_int8, _float8, _date);
 statement ok
 CREATE INVERTED INDEX on seed (_jsonb);
 
-statement error pgcode 22P02 pq: pg_lsn\(\): invalid input syntax for type pg_lsn: \"1\"
+statement error pgcode 22P02 pq: invalid input syntax for type pg_lsn: \"1\"
 SELECT
   tab378984.crdb_internal_mvcc_timestamp AS "%pcol857759",
   '48 years 7 mons 894 days 13:39:26.674765':::INTERVAL AS col857760,

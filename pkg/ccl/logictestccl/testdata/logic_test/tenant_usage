@@ -36,5 +36,5 @@ SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0)
 
 user testuser
 
-statement error crdb_internal.update_tenant_resource_limits\(\): user testuser does not have REPAIRCLUSTER system privilege
+statement error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)

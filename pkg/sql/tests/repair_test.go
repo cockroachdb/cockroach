@@ -369,7 +369,7 @@ func TestDescriptorRepair(t *testing.T) {
 SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
   FROM system.namespace WHERE name = 'foo';
 `,
-			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
+			expErrRE: `refusing to delete namespace entry for non-dropped descriptor`,
 		},
 		{ // 4
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
@@ -402,7 +402,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_descriptor($invalidTableID);`,
-			expErrRE: `pq: crdb_internal.unsafe_delete_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 7
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -427,7 +427,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       updateInvalidDuplicateColumnDescriptorNoForce,
-			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 9
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -456,7 +456,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID);`,
-			expErrRE: `pq: crdb_internal.unsafe_delete_namespace_entry\(\): failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 11
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -484,7 +484,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM system.descriptor WHERE id = 'test.foo'::REGCLASS::OID`,
 			},
 			op:       upsertInvalidNameInTestFooNoForce,
-			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation \"\" \($firstTableID\): empty relation name`,
+			expErrRE: `pq: relation \"\" \($firstTableID\): empty relation name`,
 		},
 	} {
 		name := fmt.Sprintf("case #%d: %s", caseIdx+1, tc.op)

@@ -377,6 +377,6 @@ ERROR: no rows in result set
 query_row
 SELECT pg_has_role('ldap_user', 'ldap-parent-unsynced', 'MEMBER')
 ----
-ERROR: pg_has_role(): role 'ldap-parent-unsynced' does not exist (SQLSTATE 42704)
+ERROR: role 'ldap-parent-unsynced' does not exist (SQLSTATE 42704)
 
 subtest end

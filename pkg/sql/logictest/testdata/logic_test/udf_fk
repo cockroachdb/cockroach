@@ -99,7 +99,7 @@ $$ LANGUAGE SQL;
 statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_seq_last(103,2);
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence \"test.public.s\" is not yet defined in this session
+statement error pgcode 55000 pq: currval of sequence \"test.public.s\" is not yet defined in this session
 SELECT currval('s');
 
 statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"

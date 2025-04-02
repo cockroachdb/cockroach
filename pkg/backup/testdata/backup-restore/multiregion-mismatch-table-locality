@@ -80,7 +80,7 @@ SELECT count(*) FROM d.t;
 exec-sql
 INSERT INTO d.t VALUES (4)
 ----
-pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+pq: current database defaultdb is not multi-region enabled
 
 exec-sql
 USE d;

@@ -172,10 +172,10 @@ subtest replication-builtins
 user root
 
 
-query error pq: crdb_internal\.stream_ingestion_stats_json\(\): unimplemented
+query error pq: unimplemented
 SELECT crdb_internal.stream_ingestion_stats_json(1);
 
-query error pq: crdb_internal\.stream_ingestion_stats_pb\(\): unimplemented
+query error pq: unimplemented
 SELECT crdb_internal.stream_ingestion_stats_pb(1);
 
 subtest node_tenant_capabilities_cache

@@ -9,7 +9,7 @@ INSERT INTO t VALUES (1)
 statement ok
 CREATE SEQUENCE distsql_test START WITH 10
 
-statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+statement error pgcode 55000 pq: lastval is not yet defined in this session
 SELECT lastval()
 
 # TODO(andrei): this error we get sometimes has a prefix of "lastval()" (as above), sometimes doesn't.

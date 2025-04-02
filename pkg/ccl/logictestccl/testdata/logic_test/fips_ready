@@ -10,5 +10,5 @@ _
 
 user testuser
 
-statement error pq: crdb_internal\.fips_ready\(\): user testuser does not have VIEWCLUSTERSETTING system privilege
+statement error pq: user testuser does not have VIEWCLUSTERSETTING system privilege
 SELECT crdb_internal.fips_ready()

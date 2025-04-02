@@ -125,17 +125,16 @@ othererror.XXUUU
 feature-usage
 SELECT crdb_internal.force_assertion_error('woo')
 ----
-error: pq: internal error: crdb_internal.force_assertion_error(): woo
+error: pq: internal error: woo
 errorcodes.XX000
 
 # XXUUU is pgcode.Uncategorized.
 feature-usage
 SELECT crdb_internal.set_vmodule('invalid')
 ----
-error: pq: crdb_internal.set_vmodule(): syntax error: expect comma-separated list of filename=N
+error: pq: syntax error: expect comma-separated list of filename=N
 errorcodes.XXUUU
 othererror.XXUUU
-othererror.XXUUU.crdb_internal.set_vmodule()
 
 # 22012 is pgcode.DivisionByZero.
 feature-usage
