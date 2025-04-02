@@ -328,7 +328,9 @@ message ExecStats {
   // run.
   optional int64 count = 1 [(gogoproto.nullable) = false];
 
-  // NetworkBytes collects the number of bytes sent over the network.
+  // NetworkBytes collects the number of bytes sent over the network by DistSQL
+  // components.
+  // TODO(yuzefovich): rename this all the way up to the DB Console.
   optional NumericStat network_bytes = 2 [(gogoproto.nullable) = false];
 
   // MaxMemUsage collects the maximum memory usage that occurred on a node.
@@ -338,7 +340,8 @@ message ExecStats {
   optional NumericStat contention_time = 4 [(gogoproto.nullable) = false];
 
   // NetworkMessages collects the number of messages that were sent over the
-  // network.
+  // network by DistSQL components.
+  // TODO(yuzefovich): rename this all the way up to the DB Console.
   optional NumericStat network_messages = 5 [(gogoproto.nullable) = false];
 
   // MaxDiskUsage collects the maximum temporary disk usage that occurred. This
