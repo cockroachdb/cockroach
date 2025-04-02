@@ -50,11 +50,14 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			break
 		}
 		j := origPErr.Index.Index
-		_, kv, err := b.GetResult(int(j))
+		_, expBytes, kv, err := b.GetResult(int(j))
 		if err != nil {
 			return err
 		}
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		if len(expBytes) == 0 {
+			// If we didn't expect the row to exist, this is a uniqueness violation.
+			return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		}
 
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key
