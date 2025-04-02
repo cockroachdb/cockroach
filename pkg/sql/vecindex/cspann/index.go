@@ -131,6 +131,9 @@ type Context struct {
 	// forInsert indicates that this is an insert operation (or a search for
 	// insert operation).
 	forInsert bool
+	// forDelete indicates that this is a delete operation (or a search for
+	// delete operation).
+	forDelete bool
 
 	tempSearchSet       SearchSet
 	tempSubSearchSet    SearchSet
@@ -449,6 +452,7 @@ func (vi *Index) SearchForDelete(
 		SkipRerank:  true,
 		UpdateStats: true,
 	}, LeafLevel)
+	idxCtx.forDelete = true
 
 	idxCtx.tempSearchSet = SearchSet{MaxResults: 1, MatchKey: key}
 
@@ -456,7 +460,7 @@ func (vi *Index) SearchForDelete(
 	// with a larger beam size, in order to minimize the chance of dangling
 	// vector references in the index.
 	baseBeamSize := max(vi.options.BaseBeamSize, 1)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		idxCtx.options.BaseBeamSize = baseBeamSize
 
 		err := vi.searchHelper(ctx, idxCtx, &idxCtx.tempSearchSet)
@@ -792,7 +796,7 @@ func (vi *Index) searchHelper(ctx context.Context, idxCtx *Context, searchSet *S
 			// Compute the Z-score of the candidate list if there are enough
 			// samples. Otherwise, use the default Z-score of 0.
 			if len(results) >= vi.options.QualitySamples {
-				for i := 0; i < vi.options.QualitySamples; i++ {
+				for i := range vi.options.QualitySamples {
 					idxCtx.tempQualitySamples[i] = float64(results[i].QuerySquaredDistance)
 				}
 				samples := idxCtx.tempQualitySamples[:vi.options.QualitySamples]
@@ -923,6 +927,14 @@ func (vi *Index) searchChildPartitions(
 			searchSet.RemoveByParent(partitionKey)
 		}
 
+		// If searching for vector to delete, skip partitions that are in a state
+		// that does not allow add and remove operations.
+		if idxCtx.forDelete && idxCtx.level == level {
+			if !idxCtx.tempToSearch[i].StateDetails.State.AllowAddOrRemove() {
+				searchSet.RemoveByParent(partitionKey)
+			}
+		}
+
 		// Enqueue background fixup if a split or merge operation needs to be
 		// started or continued after stalling.
 		state := idxCtx.tempToSearch[i].StateDetails
@@ -1050,7 +1062,8 @@ func (vi *Index) getFullVectors(
 		return nil, err
 	}
 
-	for i := 0; i < len(candidates); i++ {
+	i := 0
+	for i < len(candidates) {
 		candidates[i].Vector = idxCtx.tempVectorsWithKeys[i].Vector
 
 		// Exclude deleted vectors from results.
@@ -1065,7 +1078,8 @@ func (vi *Index) getFullVectors(
 			candidates[i] = candidates[len(candidates)-1]
 			candidates[len(candidates)-1] = SearchResult{} // for GC
 			candidates = candidates[:len(candidates)-1]
-			i--
+		} else {
+			i++
 		}
 	}
 

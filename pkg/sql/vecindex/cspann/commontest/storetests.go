@@ -1094,6 +1094,64 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 	}
 }
 
+func (suite *StoreTestSuite) TestTryClearPartition() {
+	store := suite.makeStore(suite.quantizer)
+	if !store.SupportsTry() {
+		return
+	}
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		// Partition does not yet exist.
+		_, err := store.TryClearPartition(suite.ctx, treeKey, cspann.PartitionKey(99),
+			cspann.PartitionMetadata{})
+		suite.ErrorIs(err, cspann.ErrPartitionNotFound)
+
+		// Create partition with some vectors.
+		partitionKey, partition := suite.createTestPartition(store, treeKey)
+
+		// Now clear should work.
+		expected := *partition.Metadata()
+		count, err := store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.NoError(err)
+		suite.Equal(3, count)
+
+		// Fetch back the partition and validate it.
+		partition, err = store.TryGetPartition(suite.ctx, treeKey, partitionKey)
+		suite.NoError(err)
+		suite.True(partition.Metadata().Equal(&expected))
+		suite.Equal(cspann.SecondLevel, partition.Level())
+		suite.Equal(vector.T{4, 3}, partition.Centroid())
+		suite.Equal([]cspann.ChildKey{}, partition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{}, partition.ValueBytes())
+
+		// Try to clear with mismatched expected metadata.
+		var errConditionFailed *cspann.ConditionFailedError
+		metadata := expected
+		metadata.StateDetails.State = cspann.DrainingForMergeState
+		_, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, metadata)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.True(errConditionFailed.Actual.Equal(&expected))
+
+		// Try again, this time with correct expected metadata.
+		count, err = store.TryClearPartition(suite.ctx, treeKey, partitionKey, expected)
+		suite.NoError(err)
+		suite.Equal(0, count)
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
 func (suite *StoreTestSuite) runInTransaction(store TestStore, fn func(tx cspann.Txn)) {
 	suite.NoError(store.RunTransaction(suite.ctx, func(tx cspann.Txn) error {
 		fn(tx)
