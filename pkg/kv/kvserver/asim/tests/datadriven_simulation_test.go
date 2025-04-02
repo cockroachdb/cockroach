@@ -279,7 +279,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
 				scanIfExists(t, d, "locality", &locality)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
-				fmt.Println("nodes_per_region", nodesPerRegion)
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
@@ -495,10 +494,13 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
 				return ""
 			case "print":
-				lastState := runs[len(runs)-1].S.String()
-				var buf strings.Builder
-				fmt.Fprintf(&buf, "cluster state:\n%s\n", lastState)
-				return buf.String()
+				if len(runs) > 0 {
+					lastState := runs[len(runs)-1].S.String()
+					var buf strings.Builder
+					fmt.Fprintf(&buf, "cluster state:\n%s\n", lastState)
+					return buf.String()
+				}
+				return ""
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1

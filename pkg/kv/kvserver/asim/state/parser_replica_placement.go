@@ -113,8 +113,8 @@ func Parse(input string) (Configuration, error) {
 
 		// Split into fields
 		fields := strings.Fields(rest)
-		if i == 0 {
-			// First line is lease configuration
+		if tag == "lease" {
+			// Parse lease configuration
 			if len(fields) < 1 {
 				return Configuration{}, fmt.Errorf("line %d: insufficient fields", i+1)
 			}
