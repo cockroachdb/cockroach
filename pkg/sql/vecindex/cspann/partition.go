@@ -253,6 +253,18 @@ func (p *Partition) Find(childKey ChildKey) int {
 	return -1
 }
 
+// Clear removes all vectors from the partition and returns the number of
+// vectors that were cleared. The centroid stays the same.
+func (p *Partition) Clear() int {
+	count := len(p.childKeys)
+	p.quantizedSet.Clear(p.quantizedSet.GetCentroid())
+	clear(p.childKeys)
+	p.childKeys = p.childKeys[:0]
+	clear(p.valueBytes)
+	p.valueBytes = p.valueBytes[:0]
+	return count
+}
+
 // CreateEmptyPartition returns an empty partition for the given quantizer and
 // level.
 func CreateEmptyPartition(quantizer quantize.Quantizer, metadata PartitionMetadata) *Partition {

@@ -237,6 +237,22 @@ func TestPartition(t *testing.T) {
 		require.Equal(t, -1, partition.Find(childKey40))
 		require.False(t, partition.ReplaceWithLastByKey(childKey40))
 	})
+
+	t.Run("test Clear", func(t *testing.T) {
+		partition := newTestPartition()
+		require.Equal(t, 3, partition.Clear())
+		require.Equal(t, 0, partition.Count())
+		require.Equal(t, []ChildKey{}, partition.ChildKeys())
+		require.Equal(t, []ValueBytes{}, partition.ValueBytes())
+		require.Equal(t, []float32{4, 3.33}, testutils.RoundFloats(partition.Centroid(), 2))
+
+		// Clear empty partition.
+		require.Equal(t, 0, partition.Clear())
+		require.Equal(t, 0, partition.Count())
+		require.Equal(t, []ChildKey{}, partition.ChildKeys())
+		require.Equal(t, []ValueBytes{}, partition.ValueBytes())
+		require.Equal(t, []float32{4, 3.33}, testutils.RoundFloats(partition.Centroid(), 2))
+	})
 }
 
 func roundResults(results SearchResults, prec int) SearchResults {
