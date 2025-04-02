@@ -78,6 +78,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ execution time: 0µs
 │ group by: k
 │ ordered: +k
 │
@@ -85,6 +86,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ estimated max sql temp disk usage: 0 B
     │ equality: (k) = (k)
@@ -146,6 +148,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +w
 │
@@ -153,6 +156,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ distinct on: w
     │
@@ -160,6 +164,7 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 5
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ equality: (k) = (w)
         │ left cols are key
@@ -219,6 +224,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 25
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │
@@ -226,6 +232,7 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 5
+│   │ execution time: 0µs
 │   │
 │   └── • scan
 │         sql nodes: <hidden>
@@ -247,6 +254,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 5
+    │ execution time: 0µs
     │
     └── • scan
           sql nodes: <hidden>
@@ -308,6 +316,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │
@@ -391,18 +400,21 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ into: child(c, p)
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • values
 │             sql nodes: <hidden>
 │             regions: <hidden>
 │             actual row count: 1
+│             execution time: 0µs
 │             size: 2 columns, 1 row
 │
 ├── • subquery
@@ -414,6 +426,7 @@ quality of service: regular
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
+│       │ execution time: 0µs
 │       │
 │       └── • scan
 │             sql nodes: <hidden>
@@ -438,6 +451,7 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │
         └── • lookup join (anti)
             │ sql nodes: <hidden>
@@ -450,6 +464,7 @@ quality of service: regular
             │ KV pairs read: 2
             │ KV bytes read: 8 B
             │ KV gRPC calls: 1
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ table: parent@parent_pkey
             │ equality: (column2) = (p)
@@ -459,6 +474,7 @@ quality of service: regular
                 │ sql nodes: <hidden>
                 │ regions: <hidden>
                 │ actual row count: 1
+                │ execution time: 0µs
                 │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
@@ -466,6 +482,7 @@ quality of service: regular
                       sql nodes: <hidden>
                       regions: <hidden>
                       actual row count: 1
+                      execution time: 0µs
                       estimated row count: 1
                       label: buffer 1
 ·

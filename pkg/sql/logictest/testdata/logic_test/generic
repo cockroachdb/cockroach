@@ -55,6 +55,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: (b = 2) AND (c = 3)
 │
 └── • index join (streamer)
@@ -109,6 +110,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: (b = 2) AND (c = 3)
 │
 └── • index join (streamer)
@@ -166,6 +168,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: (b = 2) AND (c = 3)
 │
 └── • index join (streamer)
@@ -220,6 +223,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: (b = 2) AND (c = 3)
 │
 └── • index join (streamer)
@@ -357,6 +361,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: t@t_pkey
 │ equality: (k) = (k)
@@ -373,6 +378,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: t@t_a_idx
     │ equality: ($1) = (a)
@@ -381,6 +387,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 2 columns, 1 row
 
 # The generic plan can be reused with different placeholder values.
@@ -408,6 +415,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: t@t_pkey
 │ equality: (k) = (k)
@@ -424,6 +432,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: t@t_a_idx
     │ equality: ($1) = (a)
@@ -432,6 +441,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 2 columns, 1 row
 
 statement ok
@@ -457,6 +467,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: c = 2
 │
 └── • index join (streamer)
@@ -521,6 +532,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: t@t_pkey
 │ equality: (k) = (k)
@@ -536,6 +548,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: t@t_t_idx
     │ equality: (column11) = (t)
@@ -544,6 +557,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 1 column, 1 row
 
 # The generic plan can be reused.
@@ -571,6 +585,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: t@t_pkey
 │ equality: (k) = (k)
@@ -586,6 +601,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: t@t_t_idx
     │ equality: (column11) = (t)
@@ -594,6 +610,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 1 column, 1 row
 
 statement ok
@@ -622,6 +639,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: s LIKE 'foo%'
 │
 └── • scan
@@ -665,6 +683,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: c = 1
 │
 └── • scan
@@ -705,6 +724,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: c = 1
 │
 └── • scan
@@ -754,6 +774,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: (b = 2) AND (c = 3)
 │
 └── • index join (streamer)
@@ -819,6 +840,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ execution time: 0µs
 │ filter: c = 20000
 │
 └── • index join (streamer)
@@ -891,6 +913,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: g@g_a_b_idx
 │ equality: (k) = (a)
@@ -904,6 +927,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: c@c_a_idx
     │ equality: (k) = (a)
@@ -912,6 +936,7 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
+        │ execution time: 0µs
         │ filter: c = 20000
         │
         └── • index join (streamer)
@@ -969,6 +994,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: g@g_a_b_idx
 │ equality: (k) = (a)
@@ -982,6 +1008,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: c@c_a_idx
     │ equality: (k) = (a)
@@ -995,6 +1022,7 @@ quality of service: regular
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t@t_pkey
         │ equality: (k) = (k)
@@ -1011,6 +1039,7 @@ quality of service: regular
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ table: t@t_a_idx
             │ equality: ($1) = (a)
@@ -1019,6 +1048,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 1
+                  execution time: 0µs
                   size: 2 columns, 1 row
 
 # On the seventh execution the generic plan is reused.
@@ -1046,6 +1076,7 @@ quality of service: regular
 │ KV rows decoded: 0
 │ KV bytes read: 0 B
 │ KV gRPC calls: 0
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ table: g@g_a_b_idx
 │ equality: (k) = (a)
@@ -1059,6 +1090,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: c@c_a_idx
     │ equality: (k) = (a)
@@ -1072,6 +1104,7 @@ quality of service: regular
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t@t_pkey
         │ equality: (k) = (k)
@@ -1088,6 +1121,7 @@ quality of service: regular
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ table: t@t_a_idx
             │ equality: ($1) = (a)
@@ -1096,6 +1130,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 1
+                  execution time: 0µs
                   size: 2 columns, 1 row
 
 statement ok
@@ -1178,6 +1213,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ estimated max sql temp disk usage: 0 B
     │ table: g@g_a_b_idx
@@ -1187,6 +1223,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 1 column, 1 row
 
 statement ok

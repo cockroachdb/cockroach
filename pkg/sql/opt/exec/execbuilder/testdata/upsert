@@ -1182,6 +1182,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_pkey
@@ -1196,6 +1197,7 @@ quality of service: regular
     │ KV rows decoded: 0
     │ KV bytes read: 0 B
     │ KV gRPC calls: 0
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: t137352@t137352_pkey
     │ equality: (column1) = (k)
@@ -1206,6 +1208,7 @@ quality of service: regular
           sql nodes: <hidden>
           regions: <hidden>
           actual row count: 1
+          execution time: 0µs
           size: 3 columns, 1 row
 
 statement ok
@@ -1234,6 +1237,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ into: t137352(k, a, b)
 │ auto commit
 │ arbiter indexes: t137352_a_key
@@ -1251,6 +1255,7 @@ quality of service: regular
         │ KV pairs read: 2
         │ KV bytes read: 8 B
         │ KV gRPC calls: 1
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: (k) = (k)
@@ -1268,6 +1273,7 @@ quality of service: regular
             │ KV pairs read: 2
             │ KV bytes read: 8 B
             │ KV gRPC calls: 1
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ table: t137352@t137352_a_key
             │ equality: (column2) = (a)
@@ -1278,6 +1284,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 1
+                  execution time: 0µs
                   size: 3 columns, 1 row
 
 # Regression test for #136458. The canary column ordinal should be correctly
