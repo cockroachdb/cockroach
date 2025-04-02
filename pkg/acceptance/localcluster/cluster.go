@@ -685,8 +685,8 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		Multiplier:     2,
 		Closer:         closer,
 	}
+	var pid int
 	for r := retry.Start(opts); r.Next(); {
-		var pid int
 		n.Lock()
 		if n.cmd != nil {
 			pid = n.cmd.Process.Pid
@@ -727,7 +727,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 
 		var uiURL *url.URL
 
-		//nolint:deferloop TODO(#137605)
+		//nolint:deferloop
 		defer func() {
 			log.Infof(ctx, "process %d started (db: %s ui: %s)", pid, pgURL, uiURL)
 		}()

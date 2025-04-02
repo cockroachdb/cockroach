@@ -361,18 +361,8 @@ func stageBinary(
 	}
 	dstBase = dstBase + suffix
 	dst := filepath.Join(dir, dstBase)
-	srcF, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer closeFileOrPanic(srcF)
-	dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0755)
-	if err != nil {
-		return err
-	}
-	defer closeFileOrPanic(dstF)
-	_, err = io.Copy(dstF, srcF)
-	return err
+
+	return copyFile(src, dst, 0755)
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
@@ -385,30 +375,26 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 	ext := SharedLibraryExtensionFromPlatform(platform)
 	for _, lib := range CRDBSharedLibraries {
 		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", "lib", lib+ext)
-		srcF, err := os.Open(src)
-		if err != nil {
-			return err
-		}
-		//nolint:deferloop TODO(#137605)
-		defer closeFileOrPanic(srcF)
 		dst := filepath.Join(dir, filepath.Base(src))
-		dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			return err
-		}
-		//nolint:deferloop TODO(#137605)
-		defer closeFileOrPanic(dstF)
-		_, err = io.Copy(dstF, srcF)
-		if err != nil {
+		if err := copyFile(src, dst, 0644); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func closeFileOrPanic(f io.Closer) {
-	err := f.Close()
+func copyFile(srcPath, dstPath string, perm os.FileMode) error {
+	srcF, err := os.Open(srcPath)
 	if err != nil {
-		panic(errors.Wrapf(err, "could not close file"))
+		return err
 	}
+	dstF, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE, perm)
+	if err != nil {
+		_ = srcF.Close()
+		return err
+	}
+	_, err = io.Copy(dstF, srcF)
+	err = errors.CombineErrors(err, dstF.Close())
+	err = errors.CombineErrors(err, srcF.Close())
+	return err
 }

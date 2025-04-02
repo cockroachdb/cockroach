@@ -720,7 +720,7 @@ func (w *querylog) processQueryLog(ctx context.Context) error {
 
 // getColumnsInfo populates the information about the columns of the tables
 // that at least one query was issued against.
-func (w *querylog) getColumnsInfo(db *gosql.DB) (retErr error) {
+func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 	w.state.columnsByTableName = make(map[string][]columnInfo)
 	for _, tableName := range w.state.tableNames {
 		if !w.state.tableUsed[tableName] {
@@ -729,83 +729,87 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) (retErr error) {
 			// information about the columns.
 			continue
 		}
+		if err := w.getColumnsInfoForTable(db, tableName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-		// columnTypeByColumnName is used only to distinguish between
-		// INT2/INT4/INT8 because otherwise they are mapped to the same INT type.
-		columnTypeByColumnName := make(map[string]string)
-		rows, err := db.Query(fmt.Sprintf("SELECT column_name, data_type FROM [SHOW COLUMNS FROM %s]", tableName))
-		if err != nil {
+func (w *querylog) getColumnsInfoForTable(db *gosql.DB, tableName string) (retErr error) {
+	// columnTypeByColumnName is used only to distinguish between
+	// INT2/INT4/INT8 because otherwise they are mapped to the same INT type.
+	columnTypeByColumnName := make(map[string]string)
+	rows, err := db.Query(fmt.Sprintf("SELECT column_name, data_type FROM [SHOW COLUMNS FROM %s]", tableName))
+	if err != nil {
+		return err
+	}
+	defer func(rows *gosql.Rows) {
+		retErr = errors.CombineErrors(retErr, rows.Close())
+	}(rows)
+	for rows.Next() {
+		var columnName, dataType string
+		if err = rows.Scan(&columnName, &dataType); err != nil {
 			return err
 		}
-		//nolint:deferloop TODO(#137605)
-		defer func(rows *gosql.Rows) {
-			retErr = errors.CombineErrors(retErr, rows.Close())
-		}(rows)
-		for rows.Next() {
-			var columnName, dataType string
-			if err = rows.Scan(&columnName, &dataType); err != nil {
-				return err
-			}
-			columnTypeByColumnName[columnName] = dataType
-		}
-		if err = rows.Err(); err != nil {
-			return err
-		}
+		columnTypeByColumnName[columnName] = dataType
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
 
-		// This schema introspection was copied from workload/rand.go (with slight
-		// modifications).
-		// TODO(yuzefovich): probably we need to extract it.
-		var relid int
-		if err := db.QueryRow(fmt.Sprintf("SELECT '%s'::REGCLASS::OID", tableName)).Scan(&relid); err != nil {
-			return err
-		}
-		rows, err = db.Query(
-			`
+	// This schema introspection was copied from workload/rand.go (with slight
+	// modifications).
+	// TODO(yuzefovich): probably we need to extract it.
+	var relid int
+	if err := db.QueryRow(fmt.Sprintf("SELECT '%s'::REGCLASS::OID", tableName)).Scan(&relid); err != nil {
+		return err
+	}
+	rows, err = db.Query(
+		`
 SELECT attname, atttypid, adsrc, NOT attnotnull
 FROM pg_catalog.pg_attribute
 LEFT JOIN pg_catalog.pg_attrdef
 ON attrelid=adrelid AND attnum=adnum
 WHERE attrelid=$1`, relid)
-		if err != nil {
-			return err
-		}
-		//nolint:deferloop TODO(#137605)
-		defer func(rows *gosql.Rows) {
-			retErr = errors.CombineErrors(retErr, rows.Close())
-		}(rows)
-
-		var cols []columnInfo
-		var numCols = 0
-
-		for rows.Next() {
-			var c columnInfo
-			c.dataPrecision = 0
-			c.dataScale = 0
-
-			var typOid int
-			if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable); err != nil {
-				return err
-			}
-			c.dataType = types.OidToType[oid.Oid(typOid)]
-			if c.dataType.Family() == types.IntFamily {
-				actualType := columnTypeByColumnName[c.name]
-				if actualType == `INT2` {
-					c.intRange = 1 << 16
-				} else if actualType == `INT4` {
-					c.intRange = 1 << 32
-				}
-			}
-			cols = append(cols, c)
-			numCols++
-		}
-		if err = rows.Err(); err != nil {
-			return err
-		}
-		if numCols == 0 {
-			return errors.Errorf("no columns detected")
-		}
-		w.state.columnsByTableName[tableName] = cols
+	if err != nil {
+		return err
 	}
+	defer func(rows *gosql.Rows) {
+		retErr = errors.CombineErrors(retErr, rows.Close())
+	}(rows)
+
+	var cols []columnInfo
+	var numCols = 0
+
+	for rows.Next() {
+		var c columnInfo
+		c.dataPrecision = 0
+		c.dataScale = 0
+
+		var typOid int
+		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable); err != nil {
+			return err
+		}
+		c.dataType = types.OidToType[oid.Oid(typOid)]
+		if c.dataType.Family() == types.IntFamily {
+			actualType := columnTypeByColumnName[c.name]
+			if actualType == `INT2` {
+				c.intRange = 1 << 16
+			} else if actualType == `INT4` {
+				c.intRange = 1 << 32
+			}
+		}
+		cols = append(cols, c)
+		numCols++
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if numCols == 0 {
+		return errors.Errorf("no columns detected")
+	}
+	w.state.columnsByTableName[tableName] = cols
 	return nil
 }
 
@@ -853,21 +857,20 @@ func (w *querylog) populateSamples(ctx context.Context, db *gosql.DB) (retErr er
 		if err != nil {
 			return err
 		}
-		//nolint:deferloop TODO(#137605)
-		defer func() { retErr = errors.CombineErrors(retErr, samples.Close()) }()
 		for samples.Next() {
 			rowOfSamples := make([]interface{}, len(cols))
 			for i := range rowOfSamples {
 				rowOfSamples[i] = new(interface{})
 			}
 			if err := samples.Scan(rowOfSamples...); err != nil {
+				_ = samples.Close()
 				return err
 			}
 			for i, sample := range rowOfSamples {
 				cols[i].samples = append(cols[i].samples, sample)
 			}
 		}
-		if err = samples.Err(); err != nil {
+		if err := errors.CombineErrors(samples.Err(), samples.Close()); err != nil {
 			return err
 		}
 	}

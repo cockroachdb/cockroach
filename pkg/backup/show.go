@@ -1223,11 +1223,10 @@ func backupShowerFileSetup() backupShower {
 				if err != nil {
 					return nil, err
 				}
-				//nolint:deferloop TODO(#137605)
-				defer it.Close()
 				var idx int
 				for ; ; it.Next() {
 					if ok, err := it.Valid(); err != nil {
+						it.Close()
 						return nil, err
 					} else if !ok {
 						break
@@ -1260,6 +1259,7 @@ func backupShowerFileSetup() backupShower {
 					})
 					idx++
 				}
+				it.Close()
 			}
 			return rows, nil
 		},
