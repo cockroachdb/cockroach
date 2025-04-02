@@ -444,6 +444,8 @@ type ExecutionStats struct {
 	// operator.
 	VectorizedBatchCount optional.Uint
 
+	// KVTime tracks the total execution time of an operator that explicitly
+	// perform KV reads. If it's set, then ExecTime will not be.
 	KVTime                optional.Duration
 	KVContentionTime      optional.Duration
 	KVLockWaitTime        optional.Duration
@@ -527,6 +529,9 @@ type ExecutionStats struct {
 	SeekCount         optional.Uint
 	InternalSeekCount optional.Uint
 
+	// ExecTime tracks the total execution time of an operator that doesn't
+	// explicitly perform KV reads. If it's set, then KVTime will not be.
+	ExecTime         optional.Duration
 	MaxAllocatedMem  optional.Uint
 	MaxAllocatedDisk optional.Uint
 	SQLCPUTime       optional.Duration

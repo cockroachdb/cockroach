@@ -69,6 +69,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │
 └── • scan
       sql nodes: <hidden>
@@ -107,6 +108,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 5
+│ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ estimated max sql temp disk usage: 0 B
 │ equality: (k) = (k)

@@ -96,6 +96,7 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
+    │ execution time: 0µs
     │
     ├── • index join (streamer)
     │   │ sql nodes: <hidden>
@@ -341,6 +342,7 @@ quality of service: regular
     │ KV pairs read: 2
     │ KV bytes read: 8 B
     │ KV gRPC calls: 1
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ table: b@b_pkey
     │ equality: (x) = (x)
@@ -437,6 +439,7 @@ quality of service: regular
     │ KV pairs read: 4
     │ KV bytes read: 16 B
     │ KV gRPC calls: 2
+    │ execution time: 0µs
     │ estimated max memory allocated: 0 B
     │ estimated max sql temp disk usage: 0 B
     │ table: xy@xy_pkey
