@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -257,6 +258,13 @@ func assertPayloadsBase(
 		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
 	}
 
+	if envelopeType != changefeedbase.OptEnvelopeEnriched && forceEnrichedEnvelope { // && didTransform ?
+		envelopeType = changefeedbase.OptEnvelopeEnriched
+		for i := range expected {
+			expected[i] = wrappedEnvelopeAssertionToEnrichedAssertion(t, expected[i])
+		}
+	}
+
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
@@ -350,30 +358,30 @@ func withTimeout(
 	)
 }
 
-var wrappedAssertionRX = regexp.MustCompile(`([^:]+): (\[[^]]+\])->(.*)`)
+var wrappedAssertionRX = regexp.MustCompile(`([^:]+): ([^-]+)->(.*)`)
 
 // assumption: json, wrapped
 // TODO: withSource, withSchema bool
-func wrappedEnvelopeAssertionToEnrichedAssertion(t *testing.T, assertion string) string {
+func wrappedEnvelopeAssertionToEnrichedAssertion(t testing.TB, assertion string) string {
 	t.Helper()
 	groups := wrappedAssertionRX.FindStringSubmatch(assertion)
-	require.Len(t, groups, 4)
+	require.Len(t, groups, 4, "parsing assertion: %s", assertion)
 	topic, key, body := groups[1], groups[2], groups[3]
 
 	// decode, transform, encode the body
 	dec := gojson.NewDecoder(bytes.NewBufferString(body))
 	dec.UseNumber()
 	var bodyMap map[string]any
-	dec.Decode(&bodyMap)
-	require.Equal(t, dec.InputOffset(), len(body), "parsing assertion")
+	require.NoError(t, dec.Decode(&bodyMap))
+	require.Equal(t, dec.InputOffset(), int64(len(body)), "parsing assertion")
 
 	// for enriched messages without sources and schemas, this is really the only difference (right?)
 	bodyMap["op"] = "c"
 	bodyMap["ts_ns"] = timeutil.Now().UnixNano()
 
-	newBody, err := gojson.Marshal(bodyMap)
+	newBody, err := json.MakeJSON(bodyMap)
 	require.NoError(t, err)
-	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody)
+	return fmt.Sprintf(`%s: %s->%s`, topic, key, newBody.String())
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
@@ -919,7 +927,27 @@ func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
+
+	forceEnrichedEnvelope = true // DBG
+
 	// metamorph here for supported sinks? as a tmp measure
+	// TODO: less dumb
+	if forceEnrichedEnvelope {
+		if strings.Contains(create, `envelope=wrapped`) {
+			create = strings.ReplaceAll(create, `envelope=wrapped`, `envelope=enriched`)
+			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)
+		} else if !strings.Contains(create, `envelope=`) {
+			create = fmt.Sprintf("%s, envelope=enriched", create)
+			t.Logf("overriding envelope=wrapped to envelope=enriched: %s", create)
+		} else if strings.Contains(create, `envelope=enriched`) {
+			// TODO: do nothing and note this in some shared state
+			_ = 42
+		} else {
+			// TODO: else, don't touch this, and also note that in some shared state
+			_ = 42
+		}
+
+	}
 
 	feed, err := f.Feed(create, args...)
 	if err != nil {
