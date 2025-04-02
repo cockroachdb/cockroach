@@ -19,7 +19,7 @@ CREATE SEQUENCE lastval_test
 statement ok
 CREATE SEQUENCE lastval_test_2 START WITH 10
 
-statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+statement error pgcode 55000 pq: lastval is not yet defined in this session
 SELECT lastval()
 
 query I
@@ -222,7 +222,7 @@ SELECT foo from select_test
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence "test.public.foo" is not yet defined in this session
+statement error pgcode 55000 pq: currval of sequence "test.public.foo" is not yet defined in this session
 SELECT currval('foo')
 
 query I
@@ -350,11 +350,11 @@ SELECT nextval('spécial')
 statement ok
 CREATE TABLE kv (k bytes primary key, v bytes)
 
-statement error pgcode 42809 nextval\(\): "test.public.kv" is not a sequence
+statement error pgcode 42809 "test.public.kv" is not a sequence
 SELECT nextval('kv')
 
 # This matches PG's error.
-statement error pq: nextval\(\): relation "@#%@!324234" does not exist
+statement error pq: relation "@#%@!324234" does not exist
 SELECT nextval('@#%@!324234')
 
 # You can create and find sequences from other databases.
@@ -479,10 +479,10 @@ SELECT nextval('setval_bounds_test')
 ----
 5
 
-statement error pgcode 22003 pq: setval\(\): value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+statement error pgcode 22003 pq: value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
 SELECT setval('setval_bounds_test', 11)
 
-statement error pgcode 22003 pq: setval\(\): value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+statement error pgcode 22003 pq: value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
 SELECT setval('setval_bounds_test', 0)
 
 # nextval fails with nonexistent sequences.
@@ -608,13 +608,13 @@ SELECT nextval('limit_test')
 ----
 10
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+statement error pgcode 2200H pq: reached maximum value of sequence "limit_test" \(10\)
 SELECT nextval('limit_test')
 
 let $limit_test_id
 SELECT 'limit_test'::regclass::int
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+statement error pgcode 2200H pq: reached maximum value of sequence "limit_test" \(10\)
 SELECT nextval($limit_test_id::regclass)
 
 query I
@@ -630,7 +630,7 @@ SELECT nextval('downward_limit_test')
 ----
 -10
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "downward_limit_test" \(-10\)
+statement error pgcode 2200H pq: reached minimum value of sequence "downward_limit_test" \(-10\)
 SELECT nextval('downward_limit_test')
 
 # Verify that it still works with integer overflows and underflows.
@@ -643,7 +643,7 @@ SELECT nextval('overflow_test')
 ----
 9223372036854775807
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "overflow_test" \(9223372036854775807\)
+statement error pgcode 2200H pq: reached maximum value of sequence "overflow_test" \(9223372036854775807\)
 SELECT nextval('overflow_test')
 
 statement ok
@@ -654,7 +654,7 @@ SELECT nextval('underflow_test')
 ----
 -9223372036854775808
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "underflow_test" \(-9223372036854775808\)
+statement error pgcode 2200H pq: reached minimum value of sequence "underflow_test" \(-9223372036854775808\)
 SELECT nextval('underflow_test')
 
 # USE WITH TABLES
@@ -950,10 +950,10 @@ CREATE SEQUENCE another_db.seq_schema_deny.seq;
 statement error pq: user testuser does not have SELECT privilege on relation priv_test
 SELECT * FROM priv_test
 
-statement error pq: nextval\(\): user testuser does not have UPDATE or USAGE privilege on relation priv_test
+statement error pq: user testuser does not have UPDATE or USAGE privilege on relation priv_test
 SELECT nextval('priv_test')
 
-statement error pq: setval\(\): user testuser does not have UPDATE privilege on relation priv_test
+statement error pq: user testuser does not have UPDATE privilege on relation priv_test
 SELECT setval('priv_test', 5)
 
 user root
@@ -1617,10 +1617,10 @@ SELECT last_value FROM cached_upper_bound_test;
 # by 10 each time (cache size of 5 * increment of 2). Despite the underlying sequence changing,
 # currval() and lastval() should not change.
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+statement error pgcode 2200H pq: reached maximum value of sequence "cached_upper_bound_test" \(4\)
 SELECT nextval('cached_upper_bound_test');
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "cached_upper_bound_test" \(4\)
+statement error pgcode 2200H pq: reached maximum value of sequence "cached_upper_bound_test" \(4\)
 SELECT nextval('cached_upper_bound_test');
 
 query I
@@ -1697,10 +1697,10 @@ SELECT last_value FROM cached_lower_bound_test;
 ----
 -10
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test" \(-4\)
 SELECT nextval('cached_lower_bound_test');
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test" \(-4\)
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test" \(-4\)
 SELECT nextval('cached_lower_bound_test');
 
 query I
@@ -1755,10 +1755,10 @@ SELECT last_value FROM cached_lower_bound_test_2;
 ----
 -6
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
 SELECT nextval('cached_lower_bound_test_2');
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
+statement error pgcode 2200H pq: reached minimum value of sequence "cached_lower_bound_test_2" \(-2\)
 SELECT nextval('cached_lower_bound_test_2');
 
 query I
@@ -1807,7 +1807,7 @@ db2  public  seq2  db1  public  t  sequences owning table
 test  public  tdb3ref  db3  public  s  table column refers to sequence
 
 # Testing parsing empty string for currval issue #34527.
-statement error pq: currval\(\): invalid table name:
+statement error pq: invalid table name:
 SELECT currval('')
 
 statement ok
@@ -2305,7 +2305,7 @@ SELECT nextval('customer_seq_check_cache_and_bounds_1')
 ----
 9
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_1" \(10\)
+statement error pgcode 2200H pq: reached maximum value of sequence "customer_seq_check_cache_and_bounds_1" \(10\)
 SELECT nextval('customer_seq_check_cache_and_bounds_1')
 
 # Set the cache to 5
@@ -2322,7 +2322,7 @@ SELECT nextval('customer_seq_check_cache_and_bounds_2')
 ----
 -1
 
-statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "customer_seq_check_cache_and_bounds_2" \(-2\)
+statement error pgcode 2200H pq: reached minimum value of sequence "customer_seq_check_cache_and_bounds_2" \(-2\)
 SELECT nextval('customer_seq_check_cache_and_bounds_2')
 
 # The value value(12) is equal with MAXVALUE(12)
@@ -2344,7 +2344,7 @@ SELECT nextval('customer_seq_check_cache_and_bounds_3')
 ----
 12
 
-statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
+statement error pgcode 2200H pq: reached maximum value of sequence "customer_seq_check_cache_and_bounds_3" \(12\)
 SELECT nextval('customer_seq_check_cache_and_bounds_3')
 
 subtest pg_sequence_last_value

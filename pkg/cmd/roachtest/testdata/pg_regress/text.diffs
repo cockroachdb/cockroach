@@ -194,14 +194,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- should fail
  select format('Hello %s %s', 'World');
 -ERROR:  too few arguments for format()
-+ERROR:  format(): error parsing format string: not enough arguments
++ERROR:  error parsing format string: not enough arguments
  select format('Hello %s');
 -ERROR:  too few arguments for format()
-+ERROR:  format(): error parsing format string: not enough arguments
++ERROR:  error parsing format string: not enough arguments
  select format('Hello %x', 20);
 -ERROR:  unrecognized format() type specifier "x"
 -HINT:  For a single "%" use "%%".
-+ERROR:  format(): error parsing format string: unrecognized verb x
++ERROR:  error parsing format string: unrecognized verb x
  -- check literal and sql identifiers
  select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
                   format                 
@@ -210,7 +210,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- should fail, sql identifier cannot be NULL
  select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
 -ERROR:  null values cannot be formatted as an SQL identifier
-+ERROR:  format(): error parsing format string: NULL cannot be formatted as a SQL identifier
++ERROR:  error parsing format string: NULL cannot be formatted as a SQL identifier
  -- check positional placeholders
  select format('%1$s %3$s', 1, 2, 3);
   format 
@@ -219,24 +219,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- should fail
  select format('%1$s %4$s', 1, 2, 3);
 -ERROR:  too few arguments for format()
-+ERROR:  format(): error parsing format string: not enough arguments
++ERROR:  error parsing format string: not enough arguments
  select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 -ERROR:  too few arguments for format()
-+ERROR:  format(): error parsing format string: not enough arguments
++ERROR:  error parsing format string: not enough arguments
  select format('%0$s', 'Hello');
 -ERROR:  format specifies argument 0, but arguments are numbered from 1
-+ERROR:  format(): error parsing format string: positions must be positive and 1-indexed
++ERROR:  error parsing format string: positions must be positive and 1-indexed
  select format('%*0$s', 'Hello');
 -ERROR:  format specifies argument 0, but arguments are numbered from 1
-+ERROR:  format(): error parsing format string: positions must be positive and 1-indexed
++ERROR:  error parsing format string: positions must be positive and 1-indexed
  select format('%1$', 1);
 -ERROR:  unterminated format() type specifier
 -HINT:  For a single "%" use "%%".
-+ERROR:  format(): error parsing format string: unterminated format specifier
++ERROR:  error parsing format string: unterminated format specifier
  select format('%1$1', 1);
 -ERROR:  unterminated format() type specifier
 -HINT:  For a single "%" use "%%".
-+ERROR:  format(): error parsing format string: unterminated format specifier
++ERROR:  error parsing format string: unterminated format specifier
  -- check mix of positional and ordered placeholders
  select format('Hello %s %1$s %s', 'World', 'Hello again');
              format             

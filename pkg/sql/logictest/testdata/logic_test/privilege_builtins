@@ -505,7 +505,7 @@ SELECT has_function_privilege((SELECT oid FROM pg_proc LIMIT 1), 'EXECUTE')
 ----
 true
 
-query error pq: has_function_privilege\(\): invalid function signature: does_not_exist
+query error pq: invalid function signature: does_not_exist
 SELECT has_function_privilege('does_not_exist', 'EXECUTE')
 
 query error pgcode 42883 unknown function: does_not_exist()

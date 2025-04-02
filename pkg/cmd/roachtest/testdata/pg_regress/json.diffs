@@ -521,7 +521,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -  {"b":3,"c":6}]
 -(1 row)
 -
-+ERROR:  array_to_json(): pretty printing is not supported
++ERROR:  pretty printing is not supported
  SELECT array_to_json(array_agg(q),false)
    FROM ( SELECT $$a$$ || x AS b, y AS c,
                 ARRAY[ROW(x.*,ARRAY[1,2,3]),
@@ -843,15 +843,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- nulls
  select (test_json->'field3') is null as expect_false
  from test_json
-@@ -928,42 +841,42 @@
- (1 row)
- 
- SELECT json_array_length('{"f1":1,"f2":[5,6]}');
--ERROR:  cannot get array length of a non-array
-+ERROR:  json_array_length(): cannot get array length of a non-array
- SELECT json_array_length('4');
--ERROR:  cannot get array length of a scalar
-+ERROR:  json_array_length(): cannot get array length of a scalar
+@@ -933,37 +846,37 @@
+ ERROR:  cannot get array length of a scalar
  -- each
  select json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null}');
 -     json_each     
@@ -2063,9 +2056,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT json_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 +ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -2095,19 +2088,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  SELECT json_build_object('{a,b,c}'::text[]); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of json_build_object() must consist of alternating keys and values.
-+ERROR:  json_build_object(): argument list must have even number of elements
  SELECT json_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
+ ERROR:  key value must be scalar, not array, composite, or json
  SELECT json_build_object('a', 'b', 'c'); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of json_build_object() must consist of alternating keys and values.
-+ERROR:  json_build_object(): argument list must have even number of elements
  SELECT json_build_object(NULL, 'a'); -- error, key cannot be NULL
--ERROR:  null value not allowed for object key
-+ERROR:  json_build_object(): null value not allowed for object key
+ ERROR:  null value not allowed for object key
  SELECT json_build_object('a', NULL); -- ok
   json_build_object 
  -------------------
@@ -2252,9 +2241,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT json_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 +ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -2265,7 +2254,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- empty objects/arrays
  SELECT json_build_array();
   json_build_array 
-@@ -2184,33 +2035,30 @@
+@@ -2184,7 +2035,7 @@
  SELECT json_build_object(1,2);
   json_build_object 
  -------------------
@@ -2274,21 +2263,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- keys must be scalar and not null
- SELECT json_build_object(null,2);
--ERROR:  null value not allowed for object key
-+ERROR:  json_build_object(): null value not allowed for object key
- SELECT json_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- SELECT json_build_object(json '{"a":1,"b":2}', 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- SELECT json_build_object('{1,2,3}'::int[], 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  json_build_object(): key value must be scalar, not array, composite, or json
- CREATE TEMP TABLE foo (serial_num int, name text, type text);
- INSERT INTO foo VALUES (847001,'t15','GE1043');
- INSERT INTO foo VALUES (847002,'t16','GE1043');
+@@ -2202,15 +2053,12 @@
  INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
  SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
  FROM foo;
@@ -2309,7 +2284,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  INSERT INTO foo VALUES (999999, NULL, 'bar');
-@@ -2233,53 +2081,54 @@
+@@ -2233,40 +2081,41 @@
  
  -- one dimension
  SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}');
@@ -2332,8 +2307,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- odd number error
  SELECT json_object('{a,b,c}');
--ERROR:  array must have even number of elements
-+ERROR:  json_object(): array must have even number of elements
+ ERROR:  array must have even number of elements
  -- one column error
  SELECT json_object('{{a},{b}}');
 -ERROR:  array must have two columns
@@ -2366,15 +2340,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- mismatched dimensions
  select json_object('{a,b,c,"d e f",g}','{1,2,3,"a b c"}');
--ERROR:  mismatched array dimensions
-+ERROR:  json_object(): mismatched array dimensions
- select json_object('{a,b,c,"d e f"}','{1,2,3,"a b c",g}');
--ERROR:  mismatched array dimensions
-+ERROR:  json_object(): mismatched array dimensions
- -- null key error
- select json_object('{a,b,NULL,"d e f"}','{1,2,3,"a b c"}');
--ERROR:  null value not allowed for object key
-+ERROR:  json_object(): null value not allowed for object key
+ ERROR:  mismatched array dimensions
+@@ -2277,9 +2126,9 @@
+ ERROR:  null value not allowed for object key
  -- empty key is allowed
  select json_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
 -                     json_object                     

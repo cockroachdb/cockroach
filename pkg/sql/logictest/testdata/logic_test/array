@@ -1175,7 +1175,7 @@ SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
-query error array_position\(\): initial position must not be null
+query error initial position must not be null
 SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
 
 query error unknown signature: array_position\(int, string, int\)

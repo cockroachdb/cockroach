@@ -632,18 +632,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  SELECT '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
   ?column? 
  ----------
-@@ -1036,9 +953,9 @@
- (1 row)
- 
- SELECT jsonb_array_length('{"f1":1,"f2":[5,6]}');
--ERROR:  cannot get array length of a non-array
-+ERROR:  jsonb_array_length(): cannot get array length of a non-array
- SELECT jsonb_array_length('4');
--ERROR:  cannot get array length of a scalar
-+ERROR:  jsonb_array_length(): cannot get array length of a scalar
- -- each
- SELECT jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null}');
-      jsonb_each     
 @@ -1119,29 +1036,13 @@
  
  -- exists
@@ -875,23 +863,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  SELECT jsonb_build_object('a',1,'b',1.2,'c',true,'d',null,'e',json '{"x": 3, "y": [1,2,3]}');
                             jsonb_build_object                            
  -------------------------------------------------------------------------
-@@ -1476,15 +1418,13 @@
- (1 row)
+@@ -1477,14 +1419,12 @@
  
  SELECT jsonb_build_object('{a,b,c}'::text[]); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
-+ERROR:  jsonb_build_object(): argument list must have even number of elements
  SELECT jsonb_build_object('{a,b,c}'::text[], '{d,e,f}'::text[]); -- error, key cannot be array
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ ERROR:  key value must be scalar, not array, composite, or json
  SELECT jsonb_build_object('a', 'b', 'c'); -- error
--ERROR:  argument list must have even number of elements
+ ERROR:  argument list must have even number of elements
 -HINT:  The arguments of jsonb_build_object() must consist of alternating keys and values.
-+ERROR:  jsonb_build_object(): argument list must have even number of elements
  SELECT jsonb_build_object(NULL, 'a'); -- error, key cannot be NULL
 -ERROR:  argument 1: key must not be null
-+ERROR:  jsonb_build_object(): null value not allowed for object key
++ERROR:  null value not allowed for object key
  SELECT jsonb_build_object('a', NULL); -- ok
   jsonb_build_object 
  --------------------
@@ -1035,9 +1019,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT jsonb_build_object(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 +ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -1048,21 +1032,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  -- empty objects/arrays
  SELECT jsonb_build_array();
   jsonb_build_array 
-@@ -1554,42 +1572,36 @@
+@@ -1554,7 +1572,7 @@
  
  -- keys must be scalar and not null
  SELECT jsonb_build_object(null,2);
 -ERROR:  argument 1: key must not be null
-+ERROR:  jsonb_build_object(): null value not allowed for object key
++ERROR:  null value not allowed for object key
  SELECT jsonb_build_object(r,2) FROM (SELECT 1 AS a, 2 AS b) r;
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+ ERROR:  key value must be scalar, not array, composite, or json
  SELECT jsonb_build_object(json '{"a":1,"b":2}', 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
- SELECT jsonb_build_object('{1,2,3}'::int[], 3);
--ERROR:  key value must be scalar, not array, composite, or json
-+ERROR:  jsonb_build_object(): key value must be scalar, not array, composite, or json
+@@ -1563,33 +1581,27 @@
+ ERROR:  key value must be scalar, not array, composite, or json
  -- handling of NULL values
  SELECT jsonb_object_agg(1, NULL::jsonb);
 - jsonb_object_agg 
@@ -1115,8 +1095,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- odd number error
  SELECT jsonb_object('{a,b,c}');
--ERROR:  array must have even number of elements
-+ERROR:  jsonb_object(): array must have even number of elements
+ ERROR:  array must have even number of elements
  -- one column error
  SELECT jsonb_object('{{a},{b}}');
 -ERROR:  array must have two columns
@@ -1135,7 +1114,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  --two argument form of jsonb_object
  select jsonb_object('{a,b,c,"d e f"}','{1,2,3,"a b c"}');
                     jsonb_object                   
-@@ -1640,15 +1652,16 @@
+@@ -1640,7 +1652,8 @@
  
  -- too many dimensions
  SELECT jsonb_object('{{a,1},{b,2},{3,NULL},{"d e f","a b c"}}', '{{a,1},{b,2},{3,NULL},{"d e f","a b c"}}');
@@ -1144,18 +1123,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- mismatched dimensions
  select jsonb_object('{a,b,c,"d e f",g}','{1,2,3,"a b c"}');
--ERROR:  mismatched array dimensions
-+ERROR:  jsonb_object(): mismatched array dimensions
- select jsonb_object('{a,b,c,"d e f"}','{1,2,3,"a b c",g}');
--ERROR:  mismatched array dimensions
-+ERROR:  jsonb_object(): mismatched array dimensions
- -- null key error
- select jsonb_object('{a,b,NULL,"d e f"}','{1,2,3,"a b c"}');
--ERROR:  null value not allowed for object key
-+ERROR:  jsonb_object(): null value not allowed for object key
- -- empty key is allowed
- select jsonb_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
-                   jsonb_object                   
+ ERROR:  mismatched array dimensions
 @@ -2033,7 +2046,7 @@
  (6 rows)
  
@@ -3278,24 +3246,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  select '{"a":1 , "b":2, "c":3}'::jsonb - 'a';
       ?column?     
  ------------------
-@@ -4402,7 +4080,7 @@
- (1 row)
- 
- select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '[1,2,3]');
--ERROR:  path element at position 2 is null
-+ERROR:  jsonb_set(): path element at position 2 is null
- select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{n}', '{"1": 2}');
-                                 jsonb_set                                
- -------------------------------------------------------------------------
-@@ -4422,7 +4100,7 @@
- (1 row)
- 
- select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{d,NULL,0}', '{"1": 2}');
--ERROR:  path element at position 2 is null
-+ERROR:  jsonb_set(): path element at position 2 is null
- select jsonb_set('{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb, '{b,-1}', '"test"');
-                                 jsonb_set                                 
- --------------------------------------------------------------------------
 @@ -4436,39 +4114,27 @@
  (1 row)
  
@@ -3336,19 +3286,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  
  select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{b,-1e}'; -- invalid array subscript
 -ERROR:  path element at position 2 is not an integer: "-1e"
-+ERROR:  json_remove_path(): a path element is not an integer: -1e
++ERROR:  a path element is not an integer: -1e
  select '{"n":null, "a":1, "b":[1,2], "c":{"1":2}, "d":{"1":[2,3]}}'::jsonb #- '{d,1,0}';
 -                             ?column?                             
 +                         json_remove_path                         
  ------------------------------------------------------------------
   {"a": 1, "b": [1, 2], "c": {"1": 2}, "d": {"1": [3]}, "n": null}
  (1 row)
-@@ -4499,21 +4165,17 @@
- (1 row)
- 
+@@ -4501,17 +4167,13 @@
  select '"a"'::jsonb #- '{a}'; -- error
--ERROR:  cannot delete path in scalar
-+ERROR:  json_remove_path(): cannot delete path in scalar
+ ERROR:  cannot delete path in scalar
  select '{}'::jsonb #- '{a}';
 - ?column? 
 -----------
@@ -3363,25 +3310,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
 - []
 -(1 row)
 -
-+ERROR:  json_remove_path(): a path element is not an integer: a
++ERROR:  a path element is not an integer: a
  select jsonb_set('"a"','{a}','"b"'); --error
--ERROR:  cannot set path in scalar
-+ERROR:  jsonb_set(): cannot set path in scalar
+ ERROR:  cannot set path in scalar
  select jsonb_set('{}','{a}','"b"', false);
-  jsonb_set 
- -----------
 @@ -4601,67 +4263,49 @@
  (1 row)
  
  select jsonb_set('{"a": [1, 2, 3]}', '{a, non_integer}', '"new_value"');
 -ERROR:  path element at position 2 is not an integer: "non_integer"
-+ERROR:  jsonb_set(): strconv.Atoi: parsing "non_integer": invalid syntax
++ERROR:  strconv.Atoi: parsing "non_integer": invalid syntax
  select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, non_integer}', '"new_value"');
 -ERROR:  path element at position 3 is not an integer: "non_integer"
-+ERROR:  jsonb_set(): strconv.Atoi: parsing "non_integer": invalid syntax
++ERROR:  strconv.Atoi: parsing "non_integer": invalid syntax
  select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, NULL}', '"new_value"');
--ERROR:  path element at position 3 is null
-+ERROR:  jsonb_set(): path element at position 3 is null
+ ERROR:  path element at position 3 is null
  -- jsonb_set_lax
  \pset null NULL
  -- pass though non nulls to jsonb_set
@@ -3463,17 +3406,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonb.out --label
  \pset null ''
  -- jsonb_insert
  select jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"');
-@@ -4787,178 +4431,166 @@
- (1 row)
+@@ -4788,177 +4432,165 @@
  
  select jsonb_insert('{"a": {"b": "value"}}', '{a, b}', '"new_value"');
--ERROR:  cannot replace existing key
+ ERROR:  cannot replace existing key
 -HINT:  Try using the function jsonb_set to replace key value.
-+ERROR:  jsonb_insert(): cannot replace existing key
  select jsonb_insert('{"a": {"b": "value"}}', '{a, b}', '"new_value"', true);
--ERROR:  cannot replace existing key
+ ERROR:  cannot replace existing key
 -HINT:  Try using the function jsonb_set to replace key value.
-+ERROR:  jsonb_insert(): cannot replace existing key
  -- jsonb subscript
  select ('123'::jsonb)['a'];
 - jsonb 

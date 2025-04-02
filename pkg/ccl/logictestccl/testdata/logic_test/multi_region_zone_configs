@@ -1950,7 +1950,7 @@ TABLE tbl11  ALTER TABLE tbl11 CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-query error pq: crdb_internal\.reset_multi_region_zone_configs_for_table\(\): error resolving referenced table ID 1: relation "\[1\]" does not exist
+query error pq: error resolving referenced table ID 1: relation "\[1\]" does not exist
 SELECT crdb_internal.reset_multi_region_zone_configs_for_table(1)
 
 subtest reset_multi_region_zone_configs_database
@@ -2062,7 +2062,7 @@ let $descriptor_table_id
 SELECT table_id FROM crdb_internal.tables WHERE schema_name = 'public' AND name = 'descriptor'
 
 # Validate that builtin errors if called on a table id
-query error pq: crdb_internal\.reset_multi_region_zone_configs_for_database\(\): database "\[3\]" does not exist
+query error pq: database "\[3\]" does not exist
 SELECT crdb_internal.reset_multi_region_zone_configs_for_database($descriptor_table_id)
 
 user testuser

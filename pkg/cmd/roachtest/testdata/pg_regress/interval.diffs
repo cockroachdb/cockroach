@@ -1948,13 +1948,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/interval.out --la
 - @ 5 mons 12 hours             |           0 |       0.000 |   0.000000 |      0 |   12 |   0 |     5 |       2 |    0 |      0 |       0 |          0 |   13003200.000000
 -(10 rows)
 -
-+ERROR:  extract(): unsupported timespan: quarter
++ERROR:  unsupported timespan: quarter
  SELECT EXTRACT(FORTNIGHT FROM INTERVAL '2 days');  -- error
 -ERROR:  unit "fortnight" not recognized for type interval
-+ERROR:  extract(): unsupported timespan: fortnight
++ERROR:  unsupported timespan: fortnight
  SELECT EXTRACT(TIMEZONE FROM INTERVAL '2 days');  -- error
 -ERROR:  unit "timezone" not supported for type interval
-+ERROR:  extract(): unsupported timespan: timezone
++ERROR:  unsupported timespan: timezone
  SELECT EXTRACT(DECADE FROM INTERVAL '100 y');
   extract 
  ---------
