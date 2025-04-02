@@ -45,6 +45,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	ctx context.Context, tr *SeqTracker,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
+		AllowUnsynchronizedReplicationChanges: true,
 		// Drop the clock MaxOffset to reduce commit-wait time for
 		// transactions that write to global_read ranges.
 		MaxOffset: 10 * time.Millisecond,
