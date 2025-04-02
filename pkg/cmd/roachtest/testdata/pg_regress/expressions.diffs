@@ -11,7 +11,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
 - t
 -(1 row)
 -
-+ERROR:  current_time(): precision 7 out of range
++ERROR:  precision 7 out of range
  SELECT current_timestamp = current_timestamp(7);
 -WARNING:  TIMESTAMP(7) WITH TIME ZONE precision reduced to maximum allowed, 6
 - ?column? 
@@ -19,7 +19,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
 - t
 -(1 row)
 -
-+ERROR:  current_timestamp(): precision 7 out of range
++ERROR:  precision 7 out of range
  SELECT localtime = localtime(7);
 -WARNING:  TIME(7) precision reduced to maximum allowed, 6
 - ?column? 
@@ -27,7 +27,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
 - t
 -(1 row)
 -
-+ERROR:  localtime(): precision 7 out of range
++ERROR:  precision 7 out of range
  SELECT localtimestamp = localtimestamp(7);
 -WARNING:  TIMESTAMP(7) precision reduced to maximum allowed, 6
 - ?column? 
@@ -35,7 +35,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/expressions.out -
 - t
 -(1 row)
 -
-+ERROR:  localtimestamp(): precision 7 out of range
++ERROR:  precision 7 out of range
  -- current_role/user/user is tested in rolenames.sql
  -- current database / catalog
  SELECT current_catalog = current_database();

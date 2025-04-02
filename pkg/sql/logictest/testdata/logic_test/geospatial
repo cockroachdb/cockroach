@@ -922,10 +922,10 @@ POLYGON ((20.012344998976914 -20.012345000286587, 20.012344998976914 -20.0123449
 POLYGON ((90 0, 90 0.000000000163709, 90.000000000327418 0.000000000163709, 90.000000000327418 0, 90 0))
 POLYGON ((90 0, 90 0.0439453125, 90.0439453125 0.0439453125, 90.0439453125 0, 90 0))
 
-statement error pq: st_pointfromgeohash\(\): invalid GeoHash: geohash decode '----': invalid character at index 0
+statement error pq: invalid GeoHash: geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
-statement error pq: st_pointfromgeohash\(\): length of GeoHash must be greater than 0
+statement error pq: length of GeoHash must be greater than 0
 SELECT ST_AsText(ST_PointFromGeoHash(''))
 
 query TTTTTTTT
@@ -1111,7 +1111,7 @@ false  false  true
 false  true   false
 true   true   true
 
-statement error st_isring\(\): should only be called on a linear feature: geom: unsupported type \*geom.Point
+statement error should only be called on a linear feature: geom: unsupported type \*geom.Point
 SELECT ST_IsRing('POINT(0 0)')
 
 # Topology operators
@@ -3824,28 +3824,28 @@ LineString clockwise covering all the quadrants with SRID 4004  0.51  true   SRI
 LineString clockwise covering all the quadrants with SRID 4004  1.0   false  SRID=4004;POINT (2 2)                                   SRID=4004;POINT (2 2)                                                                                                                   SRID=4004;POINT (2 2)
 LineString clockwise covering all the quadrants with SRID 4004  1.0   true   SRID=4004;POINT (2 2)                                   SRID=4004;POINT (2 2)                                                                                                                   SRID=4004;POINT (2 2)
 
-statement error st_lineinterpolatepoint\(\): fraction -1.000000 should be within \[0 1\] range
+statement error fraction -1.000000 should be within \[0 1\] range
 SELECT ST_LineInterpolatePoint('LINESTRING (0 0, 1 1)'::geometry, -1)
 
-statement error st_lineinterpolatepoints\(\): fraction -1.000000 should be within \[0 1\] range
+statement error fraction -1.000000 should be within \[0 1\] range
 SELECT ST_LineInterpolatePoints('LINESTRING (0 0, 1 1)'::geometry, -1, false)
 
-statement error st_lineinterpolatepoint\(\): geometry MultiLineString should be LineString
+statement error geometry MultiLineString should be LineString
 SELECT ST_LineInterpolatePoint('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2)
 
-statement error st_lineinterpolatepoints\(\): geometry MultiLineString should be LineString
+statement error geometry MultiLineString should be LineString
 SELECT ST_LineInterpolatePoints('MULTILINESTRING ((0 0, 1 1), (1 1, 0 0))'::geometry, 0.2, false)
 
-statement error st_lineinterpolatepoint\(\): geometry Point should be LineString
+statement error geometry Point should be LineString
 SELECT ST_LineInterpolatePoint('POINT (0 0)'::geometry, 0.2)
 
-statement error st_lineinterpolatepoints\(\): geometry Point should be LineString
+statement error geometry Point should be LineString
 SELECT ST_LineInterpolatePoints('POINT (0 0)'::geometry, 0.2, false)
 
-statement error st_lineinterpolatepoint\(\): geometry Polygon should be LineString
+statement error geometry Polygon should be LineString
 SELECT ST_LineInterpolatePoint('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2)
 
-statement error st_lineinterpolatepoints\(\): geometry Polygon should be LineString
+statement error geometry Polygon should be LineString
 SELECT ST_LineInterpolatePoints('POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))'::geometry, 0.2, false)
 
 subtest geog_operators
@@ -4783,7 +4783,7 @@ Square (left)                             SRID=4326;POINT (-0.5 0.500006)     SR
 Square (right)                            SRID=4326;POINT (0.5 0.500006)      SRID=4326;POINT (0.5 0.500006)
 Square overlapping left and right square  SRID=4326;POINT (0.45 0.50001)      SRID=4326;POINT (0.45 0.50001)
 
-statement error st_centroid\(\): unhandled geography type GeometryCollection
+statement error unhandled geography type GeometryCollection
 SELECT ST_Centroid('GEOMETRYCOLLECTION(POINT(0 0), LINESTRING EMPTY)'::geography, true)
 
 query T
@@ -4791,7 +4791,7 @@ SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geography, -1))
 ----
 MULTIPOINT (0 0, 1 1)
 
-statement error st_segmentize\(\): maximum segment length must be positive
+statement error maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geography, 0)
 
 query TTT
@@ -4820,7 +4820,7 @@ SELECT ST_AsText(ST_Segmentize('MULTIPOINT (0 0, 1 1)'::geometry, -1))
 ----
 MULTIPOINT (0 0, 1 1)
 
-statement error st_segmentize\(\): maximum segment length must be positive
+statement error maximum segment length must be positive
 SELECT ST_Segmentize('POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))'::geometry, -1)
 
 # ST_Force*
@@ -5167,10 +5167,10 @@ false  false  97  false  false
 
 # Test for 2+ string arguments for Geometry where one side of the arguments
 # raises an error.
-statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
+statement error pq: error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 
-statement error pq: st_intersects\(\): error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
+statement error pq: error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
 query T
@@ -5436,7 +5436,7 @@ LINESTRING (1 2, 3 4, 5 6)
 MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))
 GEOMETRYCOLLECTION EMPTY
 
-statement error st_linemerge\(\): value out of range: overflow
+statement error value out of range: overflow
 select st_linemerge('01020000C003000000000000000000F0FF000000000000F8FF60DB272315DEBAC13CDE36003499DEC1000000000000F0FF000000000000F8FF9CDB5D9AA401E1C1D0C80253A5F1C4C1000000000000F0FF000000000000F8FF003E39CD6CDDD2C1A6909F31D737F4C1'::geometry);
 
 subtest public_schema_resolution
@@ -5663,10 +5663,10 @@ true
 false
 true
 
-statement error pq: st_pointinsidecircle\(\): radius of the circle has to be positive
+statement error pq: radius of the circle has to be positive
 SELECT ST_PointInsideCircle(ST_Point(1,2), 0.5, 2, -3);
 
-statement error pq: st_pointinsidecircle\(\): first parameter has to be of type Point
+statement error pq: first parameter has to be of type Point
 SELECT ST_PointInsideCircle(ST_GeomFromText('LINESTRING (-0.5 0.5, 0.5 0.5)'), 0.5, 2, -3);
 
 subtest st_linelocatepoint
@@ -5694,7 +5694,7 @@ SELECT round(ST_LineLocatePoint(line, point)::float, 2) FROM ( VALUES
 0.15
 0.53
 
-statement error pq: st_linelocatepoint\(\): first parameter has to be of type LineString
+statement error pq: first parameter has to be of type LineString
 SELECT ST_LineLocatePoint(ST_GeomFromText('GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))'), ST_Point(0, 0));
 
 
@@ -5765,7 +5765,7 @@ SELECT ST_AsText(ST_SnapToGrid(ST_MinimumBoundingCircle(ST_GeomFromText('POINT(0
 ----
 POINT (0 0)
 
-statement error st_minimumboundingcircle\(\): value out of range: overflow
+statement error value out of range: overflow
 SELECT st_astext(st_minimumboundingcircle(
   st_makepoint(
     (-0.23349138300862382)::FLOAT8,
@@ -5783,10 +5783,10 @@ SELECT ST_MinimumBoundingCircle(NULL::geometry) IS NULL;
 ----
 true
 
-statement error st_minimumboundingcircle\(\): value out of range: overflow
+statement error value out of range: overflow
 select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY)::GEOMETRY
 
-statement error st_minimumboundingcircle\(\): value out of range: overflow
+statement error value out of range: overflow
 select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY, 10)::GEOMETRY
 
 subtest st_unaryunion
@@ -5876,10 +5876,10 @@ SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0,2 5,2.5 4,3 5,3 1,0 0))'::geome
 ----
 MULTIPOINT (0.69466 0.92001, 2.44176 3.71642, 2.79788 3.8425, 1.05776 1.77173, 1.79696 2.42853)
 
-statement error pq: st_generatepoints\(\): zero area input Polygon
+statement error pq: zero area input Polygon
 SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0, 1 1, 1 1, 0 0))'::geometry, 4, 1))
 
-statement error pq: st_generatepoints\(\): seed must be greater than zero
+statement error pq: seed must be greater than zero
 SELECT ST_AsText(ST_GeneratePoints('POLYGON((0 0,2 5,2.5 4,3 5,3 1,0 0))'::geometry, 5, 0))
 
 query T nosort
@@ -5903,13 +5903,13 @@ SELECT ST_AsText(ST_OrientedEnvelope(ST_GeomFromText('MULTIPOINT ((0 0), (-1 -1)
 POLYGON ((3 2, 2.88 2.16, -1.12 -0.84, -1 -1, 3 2))
 
 
-statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+statement error pq: end must be greater or equal to the start
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0.5,0.4))
 
-statement error pq: st_linesubstring\(\): start and and must be within 0 and 1
+statement error pq: start and and must be within 0 and 1
 select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0,1.4));
 
-statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+statement error pq: end must be greater or equal to the start
 select st_astext(st_linesubstring('POINT(0 0)'::geometry,0.5,0.4));
 
 query T nosort
@@ -6037,13 +6037,13 @@ SELECT
 ----
 NULL NULL
 
-statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+statement error pq: argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))
 
-statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+statement error pq: argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('LINESTRING(0 0, 1 0, 1 1, 0 1, 0 0)', 4326))
 
-statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
+statement error pq: argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('POINT(0 0)', 4326))
 
 subtest st_asmvtgeom
@@ -6343,7 +6343,7 @@ SELECT ST_AsText(ST_TileEnvelope(3, 1, 1, ST_MakeEnvelope(-180, -90, 180, 90, 43
 ----
 POLYGON ((-140.625 42.1875, -140.625 70.3125, -84.375 70.3125, -84.375 42.1875, -140.625 42.1875))
 
-statement error pgcode 22023 pq: st_tileenvelope\(\): Unable to compute bbox
+statement error pgcode 22023 pq: Unable to compute bbox
 SELECT st_tileenvelope(0, 0, 0, '010500000000000000');
 
 subtest end
