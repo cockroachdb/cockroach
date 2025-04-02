@@ -256,7 +256,7 @@ func (e *confluentAvroEncoder) EncodeValue(
 			afterDataSchema = currentSchema
 			opts = avro.EnvelopeOpts{AfterField: true, BeforeField: e.beforeField, OpField: true, TsField: true, SourceField: e.sourceField}
 			if e.sourceField {
-				if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix); err != nil {
+				if sourceDataSchema, err = e.enrichedSourceProvider.GetAvro(updatedRow, e.schemaPrefix, evCtx); err != nil {
 					return nil, err
 				}
 			}
