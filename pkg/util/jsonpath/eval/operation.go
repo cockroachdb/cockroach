@@ -90,9 +90,30 @@ func (ctx *jsonpathCtx) evalOperation(
 		return []json.JSON{convertFromBool(res)}, nil
 	case jsonpath.OpPlus, jsonpath.OpMinus:
 		return ctx.evalUnaryArithmetic(op, jsonValue)
+	case jsonpath.OpExists:
+		res, err := ctx.evalExists(op, jsonValue)
+		if err != nil {
+			return []json.JSON{convertFromBool(jsonpathBoolUnknown)}, err
+		}
+		return []json.JSON{convertFromBool(res)}, nil
 	default:
 		panic(errors.AssertionFailedf("unhandled operation type"))
 	}
+}
+
+func (ctx *jsonpathCtx) evalExists(
+	op jsonpath.Operation, jsonValue json.JSON,
+) (jsonpathBool, error) {
+	// TODO(normanchenn): Only in strict mode do we need to evaluate all items.
+	// We can optimize this by short-circuiting in lax mode.
+	l, err := ctx.evalAndUnwrapResult(op.Left, jsonValue, false /* unwrap */)
+	if err != nil {
+		return jsonpathBoolUnknown, err
+	}
+	if len(l) == 0 {
+		return jsonpathBoolFalse, nil
+	}
+	return jsonpathBoolTrue, nil
 }
 
 func (ctx *jsonpathCtx) evalRegex(

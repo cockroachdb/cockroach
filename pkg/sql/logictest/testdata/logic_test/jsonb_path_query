@@ -1054,3 +1054,23 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[1 to last, last to last]');
 3
 4
 4
+
+query T
+SELECT jsonb_path_query('[1, 2, 3]', 'exists($[*])');
+----
+true
+
+query T
+SELECT jsonb_path_query('[]', 'exists($[*])');
+----
+false
+
+query T
+SELECT jsonb_path_query('[{"items": [{"id": 1}, {"id": 2}]}, {"items": []}]', '$[*] ? (exists(@.items[*].id))');
+----
+{"items": [{"id": 1}, {"id": 2}]}
+
+query T
+SELECT jsonb_path_query('[{"a": 1, "b": 2}, {"a": 1}, {"b": 2}, {}]', '$[*] ? (exists(@.a) && exists(@.b))');
+----
+{"a": 1, "b": 2}
