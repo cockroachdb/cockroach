@@ -645,11 +645,8 @@ func TestCommitPagination(t *testing.T) {
 
 func TestCommitPaginationWithAsyncStorageWrites(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1))
-	cfg := newTestConfig(1, 10, 1, s)
-	cfg.MaxCommittedSizePerReady = 2048
+	rn := newTestRawNode(1, 10, 1, s)
 
-	rn, err := NewRawNode(cfg)
-	require.NoError(t, err)
 	require.NoError(t, rn.Campaign())
 
 	// Persist vote.
