@@ -442,10 +442,16 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if err != nil {
 			t.L().Printf("Failed to read %s: %s", tmpFilePath, err)
 		}
-		issueURI := regexp.MustCompile(`https:\/\/go\.crdb\.dev\/issue-v\/(\d+)\/[^\/|^\s]+`)
+		issueURI := regexp.MustCompile(`https://go\.crdb\.dev/issue-v/(\d+)/[^/|^\s]+`)
 		actualB = issueURI.ReplaceAll(actualB, []byte("https://go.crdb.dev/issue-v/$1/_version_"))
-		docsURI := regexp.MustCompile(`https:\/\/www\.cockroachlabs.com\/docs\/[^\/|^\s]+`)
+		docsURI := regexp.MustCompile(`https://www\.cockroachlabs.com/docs/[^/|^\s]+`)
 		actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
+
+		// Remove table ID from the unimplemented error for dropping the PK
+		// without a replacement (to reduce the diff churn).
+		dropPK := regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`)
+		actualB = dropPK.ReplaceAll(actualB, []byte("$1$2"))
+
 		err = os.WriteFile(diffFilePath, actualB, 0644)
 		if err != nil {
 			t.L().Printf("Failed to write %s: %s", diffFilePath, err)
