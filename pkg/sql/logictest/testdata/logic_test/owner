@@ -372,4 +372,3 @@ skipif config local-mixed-24.3 local-mixed-25.1
 # are not a member of.
 statement error testuser3 cannot transfer ownership to otherrole
 ALTER JOB $testuser_job_id OWNER TO otherrole
-
