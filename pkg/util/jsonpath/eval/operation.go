@@ -358,6 +358,9 @@ func (ctx *jsonpathCtx) evalArithmetic(
 			return nil, tree.ErrDivByZero
 		}
 	case jsonpath.OpMod:
+		if rightNum.IsZero() {
+			return nil, tree.ErrDivByZero
+		}
 		_, err = tree.DecimalCtx.Rem(&res, leftNum, rightNum)
 	default:
 		panic(errors.AssertionFailedf("unhandled jsonpath arithmetic type"))
