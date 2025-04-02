@@ -499,6 +499,10 @@ func ghURL(t *testing.T, title, body string) string {
 	q := u.Query()
 	q.Add("title", title)
 	q.Add("body", body)
+	// Adding a template parameter is required to be able to view the rendered
+	// template on GitHub, otherwise it just takes you to the template selection
+	// page.
+	q.Add("template", "none")
 	u.RawQuery = q.Encode()
 	return u.String()
 }
