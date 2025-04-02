@@ -5879,10 +5879,10 @@ def go_deps():
         name = "com_github_knz_strtime",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/strtime",
-        sha256 = "c1e1b06c339798387413af1444f06f31a483d4f5278ab3a91b6cd5d7cd8d91a1",
-        strip_prefix = "github.com/knz/strtime@v0.0.0-20200318182718-be999391ffa9",
+        sha256 = "8743d12484dd18c95cfccbd253557ef1d2aa3298299f79eacf62d4a91dd24e6e",
+        strip_prefix = "github.com/cockroachdb/strtime@v0.0.0-20250401230151-b9140bbb29b5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/strtime/com_github_knz_strtime-v0.0.0-20200318182718-be999391ffa9.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/strtime/com_github_cockroachdb_strtime-v0.0.0-20250401230151-b9140bbb29b5.zip",
         ],
     )
     go_repository(
