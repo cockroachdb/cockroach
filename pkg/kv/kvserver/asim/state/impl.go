@@ -188,6 +188,7 @@ func (s *state) String() string {
 		}
 	}
 	builder.WriteString("] ")
+	builder.WriteString("\n")
 
 	nRanges := len(orderedRanges)
 	iterRanges := 0
@@ -1495,7 +1496,7 @@ func (r *rng) String() string {
 
 	for i, storeID := range storeIDs {
 		replica := r.replicas[storeID]
-		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
+		builder.WriteString(fmt.Sprintf("s%d:r%d(%s)", storeID, replica.replicaID, replica.desc.Type))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
