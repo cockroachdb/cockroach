@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
-	"golang.org/x/exp/rand"
 )
 
 const (
@@ -120,7 +120,7 @@ func (g *gen) shuffleLocked() {
 }
 
 func genPermutations() *gen {
-	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+	rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
 	return &gen{
 		rng: rng,
 		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
@@ -146,7 +146,7 @@ func (s *sqlStats) Ops(
 		},
 	}
 	for i := 0; i < s.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(RandomSeed.Seed()))
+		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
 			start := timeutil.Now()

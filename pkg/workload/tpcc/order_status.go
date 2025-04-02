@@ -7,15 +7,14 @@ package tpcc
 
 import (
 	"context"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/exp/rand"
 )
 
 // From the TPCC spec, section 2.6:
@@ -112,15 +111,15 @@ func createOrderStatus(
 func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	o.config.auditor.orderStatusTransactions.Add(1)
 
-	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
 	d := orderStatusData{
-		dID: rng.Intn(10) + 1,
+		dID: rng.IntN(10) + 1,
 	}
 
 	// 2.6.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
-	if rng.Intn(100) < 60 {
+	if rng.IntN(100) < 60 {
 		d.cLast = string(o.config.randCLast(rng, &o.a))
 		o.config.auditor.orderStatusByLastName.Add(1)
 	} else {

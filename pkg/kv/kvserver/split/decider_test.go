@@ -7,7 +7,7 @@ package split
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -67,9 +67,9 @@ func ms(i int) time.Time {
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rand := rand.New(rand.NewSource(12))
+	rng := rand.New(rand.NewPCG(12, 12))
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rand,
+		randSource:    rng,
 		useWeighted:   false,
 		statRetention: 2 * time.Second,
 		statThreshold: 10,
@@ -232,10 +232,10 @@ func TestDecider(t *testing.T) {
 
 func TestDecider_MaxStat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rand := rand.New(rand.NewSource(11))
 
+	rng := rand.New(rand.NewPCG(11, 11))
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rand,
+		randSource:    rng,
 		useWeighted:   false,
 		statRetention: 10 * time.Second,
 		statThreshold: 100,
@@ -376,12 +376,12 @@ func TestMaxStatTracker(t *testing.T) {
 
 func TestDeciderMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rand := rand.New(rand.NewSource(11))
+	rng := rand.New(rand.NewPCG(11, 11))
 	timeStart := 1000
 
 	var dPopular Decider
 	loadSplitConfig := testLoadSplitConfig{
-		randSource:    rand,
+		randSource:    rng,
 		useWeighted:   false,
 		statRetention: time.Second,
 		statThreshold: 1,

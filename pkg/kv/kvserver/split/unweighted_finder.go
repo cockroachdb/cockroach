@@ -98,7 +98,7 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 	f.count++
 	if count < splitKeySampleSize {
 		idx = count
-	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize {
+	} else if idx = f.randSource.IntN(count); idx >= splitKeySampleSize {
 		// Increment all existing keys' counters.
 		for i := range f.samples {
 			if span.ProperlyContainsKey(f.samples[i].key) {
