@@ -31,7 +31,14 @@ import (
 // ConvertBatchError attempts to map a key-value error generated during a
 // key-value batch operating over the specified table to a user friendly SQL
 // error.
-func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
+//
+// If alwaysConvertCondFailed is set to true, ConditionFailedError (from CPut
+// failures) will always be converted to a duplicate key error even if the
+// expValue of the CPut was not empty. This is necessary when backfilling a
+// unique index.
+func ConvertBatchError(
+	ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch, alwaysConvertCondFailed bool,
+) error {
 	origPErr := b.MustPErr()
 	switch v := origPErr.GetDetail().(type) {
 	case *kvpb.MinTimestampBoundUnsatisfiableError:
@@ -50,11 +57,14 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			break
 		}
 		j := origPErr.Index.Index
-		_, kv, err := b.GetResult(int(j))
+		_, expBytes, kv, err := b.GetResult(int(j))
 		if err != nil {
 			return err
 		}
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		if alwaysConvertCondFailed || len(expBytes) == 0 {
+			// If we didn't expect the row to exist, this is a uniqueness violation.
+			return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		}
 
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key

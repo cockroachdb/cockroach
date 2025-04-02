@@ -184,7 +184,9 @@ func (v *vectorInserter) Next() coldata.Batch {
 			err = v.flowCtx.Txn.Run(ctx, kvba.Batch)
 		}
 		if err != nil {
-			colexecerror.ExpectedError(row.ConvertBatchError(ctx, v.desc, kvba.Batch))
+			colexecerror.ExpectedError(row.ConvertBatchError(
+				ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
+			))
 		}
 		numRows := end - start
 		start = end

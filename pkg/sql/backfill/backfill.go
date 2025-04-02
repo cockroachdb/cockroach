@@ -448,7 +448,7 @@ func ConvertBackfillError(
 	if err != nil {
 		return err
 	}
-	return row.ConvertBatchError(ctx, desc, b)
+	return row.ConvertBatchError(ctx, desc, b, true /* alwaysConvertCondFailed */)
 }
 
 type muBoundAccount struct {

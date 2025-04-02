@@ -141,7 +141,7 @@ func (tb *tableWriterBase) setRowsWrittenLimit(sd *sessiondata.SessionData) {
 func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
-		return row.ConvertBatchError(ctx, tb.desc, tb.b)
+		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
 	}
 	if err := tb.tryDoResponseAdmission(ctx); err != nil {
 		return err
@@ -180,7 +180,7 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	}
 	tb.lastBatchSize = tb.currentBatchSize
 	if err != nil {
-		return row.ConvertBatchError(ctx, tb.desc, tb.b)
+		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
 	}
 	return tb.tryDoResponseAdmission(ctx)
 }
