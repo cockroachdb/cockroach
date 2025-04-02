@@ -5,6 +5,13 @@
 
 package raft
 
+import (
+	"fmt"
+	"strings"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
+
 // termCache is a compressed representation of entryIDs of a raft log suffix.
 // It may cover entries in both stable and unstable parts of the log.
 //
@@ -136,4 +143,44 @@ func (tc *termCache) first() entryID {
 func (tc *termCache) reset(last entryID) {
 	// NB: any previous copy of the term cache is unmodified.
 	tc.cache = append(tc.cache[len(tc.cache):], last)
+}
+
+func convertEntryIDs(src []pb.EntryID) []entryID {
+	dst := make([]entryID, len(src))
+	for i, e := range src {
+		dst[i] = entryID{
+			term:  e.Term,
+			index: e.Index,
+		}
+	}
+	return dst
+}
+
+func convertToProtoEntryIDs(src []entryID) []pb.EntryID {
+	dst := make([]pb.EntryID, len(src))
+	for i, e := range src {
+		dst[i] = pb.EntryID{
+			Term:  e.term,
+			Index: e.index,
+		}
+	}
+	return dst
+}
+
+func (r *raft) prettyLogTermCacheContents(cache []entryID) {
+	if len(cache) == 0 {
+		r.logger.Infof("[]")
+		return
+	}
+
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, e := range cache {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "t%d/%d", e.term, e.index)
+	}
+	b.WriteByte(']')
+	r.logger.Infof("%s", b.String())
 }
