@@ -48,6 +48,10 @@ type updateRun struct {
 	// BatchedNext() has completed the work already.
 	done bool
 
+	// resultRowBuffer is used to prepare a result row for accumulation
+	// into the row container above, when rowsNeeded is set.
+	resultRowBuffer tree.Datums
+
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
@@ -77,6 +81,10 @@ func (u *updateNode) startExec(params runParams) error {
 			params.p.Mon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
+		u.run.resultRowBuffer = make([]tree.Datum, len(u.columns))
+		for i := range u.run.resultRowBuffer {
+			u.run.resultRowBuffer[i] = tree.DNull
+		}
 	}
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -240,7 +248,6 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
-		resultValues := make([]tree.Datum, len(u.columns))
 		largestRetIdx := -1
 		for i := range u.run.rowIdxToRetIdx {
 			retIdx := u.run.rowIdxToRetIdx[i]
@@ -248,7 +255,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				if retIdx >= largestRetIdx {
 					largestRetIdx = retIdx
 				}
-				resultValues[retIdx] = newValues[i]
+				u.run.resultRowBuffer[retIdx] = newValues[i]
 			}
 		}
 
@@ -257,10 +264,10 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// clause that refer to other tables (from the FROM clause of the update).
 		for i := 0; i < u.run.numPassthrough; i++ {
 			largestRetIdx++
-			resultValues[largestRetIdx] = passthroughValues[i]
+			u.run.resultRowBuffer[largestRetIdx] = passthroughValues[i]
 		}
 
-		if _, err := u.run.tu.rows.AddRow(params.ctx, resultValues); err != nil {
+		if _, err := u.run.tu.rows.AddRow(params.ctx, u.run.resultRowBuffer); err != nil {
 			return err
 		}
 	}
