@@ -680,6 +680,9 @@ func LoadTerm(
 // which is a serious issue. But if the caller is unsure, they can check the
 // LastIndex to distinguish.
 //
+// The bytesAccount is used to account for and limit the loaded bytes. It can be
+// nil when the accounting / limiting is not needed.
+//
 // TODO(#132114): eliminate both ErrCompacted and ErrUnavailable.
 // TODO(pavelkalinnikov): return all entries we've read, consider maxSize a
 // target size. Currently we may read one extra entry and drop it.

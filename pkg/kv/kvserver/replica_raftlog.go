@@ -77,12 +77,11 @@ func (r *replicaLogStorage) entriesLocked(
 	//
 	// TODO(pav-kv): we need better safety guardrails here. The log storage type
 	// can remember the readable bounds, and assert that reads do not cross them.
-	// TODO(pav-kv): r.raftMu.bytesAccount is broken - can't rely on raftMu here.
 	entries, _, loadedSize, err := logstore.LoadEntries(
 		r.AnnotateCtx(context.TODO()),
 		r.mu.stateLoader.StateLoader, r.store.TODOEngine(), r.RangeID,
 		r.store.raftEntryCache, r.raftMu.sideloaded, lo, hi, maxBytes,
-		&r.raftMu.bytesAccount,
+		nil, // bytesAccount is not used when reading under Replica.mu
 	)
 	r.store.metrics.RaftStorageReadBytes.Inc(int64(loadedSize))
 	return entries, err
