@@ -571,7 +571,7 @@ select crdb_internal.force_retry(interval '0s')
 ----
 0
 
-query error pq: crdb_internal.set_vmodule\(\): syntax error: expect comma-separated list of filename=N
+query error pq: syntax error: expect comma-separated list of filename=N
 select crdb_internal.set_vmodule('not anything reasonable')
 
 query I
@@ -967,7 +967,7 @@ query error is not less than end
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
 user testuser
-query error crdb_internal.compact_engine_span\(\): user testuser does not have REPAIRCLUSTER system privilege
+query error user testuser does not have REPAIRCLUSTER system privilege
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
 
 user root

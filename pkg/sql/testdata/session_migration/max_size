@@ -10,6 +10,6 @@ exec
 PREPARE q AS SELECT '$large_string'
 ----
 
-error regexp=(ERROR: crdb_internal.serialize_session\(\): serialized session size [[:digit:]]\.[[:digit:]] KiB exceeds max allowed size 2\.0 KiB \(SQLSTATE 54000\))
+error regexp=(ERROR: serialized session size [[:digit:]]\.[[:digit:]] KiB exceeds max allowed size 2\.0 KiB \(SQLSTATE 54000\))
 SELECT encode(crdb_internal.serialize_session(), 'hex')
 ----

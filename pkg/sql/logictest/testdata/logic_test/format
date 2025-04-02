@@ -25,13 +25,13 @@ select format('Hello %%%%')
 ----
 Hello %%
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 select format('Hello %s %s', 'World')
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 select format('Hello %s')
 
-query error pq: format\(\): error parsing format string: unrecognized verb x
+query error pq: error parsing format string: unrecognized verb x
 select format('Hello %x', 20)
 
 query T
@@ -54,7 +54,7 @@ select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
 ----
 INSERT INTO mytab VALUES(NULL,'Hello')
 
-query error pq: format\(\): error parsing format string: NULL cannot be formatted as a SQL identifier
+query error pq: error parsing format string: NULL cannot be formatted as a SQL identifier
 select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello')
 
 # Many of the below tests involve strings with a literal $.
@@ -71,25 +71,25 @@ select format('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 ----
 1 12
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 select format('%1$s %4$s', 1, 2, 3)
 
-query error pq: format\(\): error parsing format string: not enough arguments
+query error pq: error parsing format string: not enough arguments
 select format('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
 
-query error pq: format\(\): error parsing format string: positions must be positive and 1-indexed
+query error pq: error parsing format string: positions must be positive and 1-indexed
 select format('%0$s', 'Hello')
 
-query error pq: format\(\): error parsing format string: positions must be positive and 1-indexed
+query error pq: error parsing format string: positions must be positive and 1-indexed
 select format('%*0$s', 'Hello')
 
-query error pq: format\(\): error parsing format string: unterminated format specifier
+query error pq: error parsing format string: unterminated format specifier
 select format('%1$', 1)
 
-query error pq: format\(\): error parsing format string: unterminated format specifier
+query error pq: error parsing format string: unterminated format specifier
 select format('%1$1', 1)
 
-query error pq: format\(\): error parsing format string: unterminated format specifier
+query error pq: error parsing format string: unterminated format specifier
 select format('%1$1', 1)
 
 # Mixing positional and non-positional placeholders is allowed here, unusually.
@@ -191,5 +191,5 @@ select format('>>%2$*1$L<<', 0, 'Hello')
 # This isn't a Postgres test case, but Postgres
 # errors with 'unrecognized format() type specifier "2"',
 # so for compatibility we'll also error here.
-query error pq: format\(\): error parsing format string: positional argument flag must precede width flag
+query error pq: error parsing format string: positional argument flag must precede width flag
 select format('>>%*1$2$L<<', 10, 'Hello')
