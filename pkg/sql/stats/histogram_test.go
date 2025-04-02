@@ -940,6 +940,31 @@ func TestAdjustCounts(t *testing.T) {
 				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-60)},
 			},
 		},
+		{ // Over-estimate of distinct count for bools when both values were
+			// already sampled.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+			rowCount:      4,
+			distinctCount: 4,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+		},
+		{ // Over-estimate of distinct count for bools when only 'false' was
+			// already sampled (#142022).
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+			},
+			rowCount:      4,
+			distinctCount: 4,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+		},
 	}
 
 	ctx := context.Background()
