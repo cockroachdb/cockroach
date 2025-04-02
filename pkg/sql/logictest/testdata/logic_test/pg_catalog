@@ -2935,6 +2935,7 @@ copy_num_retries_per_batch                                 5                   N
 copy_transaction_quality_of_service                        background          NULL      NULL        NULL        string
 copy_write_pipelining_enabled                              off                 NULL      NULL        NULL        string
 cost_scans_with_default_col_size                           off                 NULL      NULL        NULL        string
+create_table_with_schema_locked                            off                 NULL      NULL        NULL        string
 database                                                   test                NULL      NULL        NULL        string
 datestyle                                                  ISO, MDY            NULL      NULL        NULL        string
 deadlock_timeout                                           0                   NULL      NULL        NULL        string
@@ -3152,6 +3153,7 @@ copy_num_retries_per_batch                                 5                   N
 copy_transaction_quality_of_service                        background          NULL  user     NULL      background          background
 copy_write_pipelining_enabled                              off                 NULL  user     NULL      off                 off
 cost_scans_with_default_col_size                           off                 NULL  user     NULL      off                 off
+create_table_with_schema_locked                            off                 NULL  user     NULL      off                 off
 database                                                   test                NULL  user     NULL      ·                   test
 datestyle                                                  ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
 deadlock_timeout                                           0                   NULL  user     NULL      0s                  0s
@@ -3364,6 +3366,7 @@ copy_transaction_quality_of_service                        NULL    NULL     NULL
 copy_write_pipelining_enabled                              NULL    NULL     NULL     NULL        NULL
 cost_scans_with_default_col_size                           NULL    NULL     NULL     NULL        NULL
 crdb_version                                               NULL    NULL     NULL     NULL        NULL
+create_table_with_schema_locked                            NULL    NULL     NULL     NULL        NULL
 database                                                   NULL    NULL     NULL     NULL        NULL
 datestyle                                                  NULL    NULL     NULL     NULL        NULL
 deadlock_timeout                                           NULL    NULL     NULL     NULL        NULL
