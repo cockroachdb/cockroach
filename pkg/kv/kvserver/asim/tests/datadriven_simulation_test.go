@@ -236,6 +236,12 @@ func TestDataDriven(t *testing.T) {
 					scanArg(t, d, "lease_weights", &leaseWeights)
 					scanArg(t, d, "replica_weights", &replicaWeights)
 				}
+				var replicaPlacement state.Configuration
+				if placementType == gen.ReplicaPlacement {
+					parsed, err := state.Parse(d.Input)
+					require.NoError(t, err)
+					replicaPlacement = parsed
+				}
 				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
 						Ranges:            ranges,
@@ -243,6 +249,7 @@ func TestDataDriven(t *testing.T) {
 						MaxKey:            maxKey,
 						ReplicationFactor: replFactor,
 						Bytes:             bytes,
+						ReplicaPlacement:  replicaPlacement,
 					},
 					PlacementType:  placementType,
 					LeaseWeights:   leaseWeights,
