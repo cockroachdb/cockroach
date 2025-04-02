@@ -753,6 +753,14 @@ var planCacheClusterMode = settings.RegisterEnumSetting(
 		sessiondatapb.PlanCacheModeAuto:         "auto",
 	})
 
+var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.create_table_with_schema_locked",
+	"default value for create_table_with_schema_locked; "+
+		"default value for the create_table_with_schema_locked session setting; controls "+
+		"if new created tables will have schema_locked set",
+	false)
+
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
@@ -4159,6 +4167,10 @@ func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
 
 func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
 	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
+}
+
+func (m *sessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
+	m.data.CreateTableWithSchemaLocked = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
