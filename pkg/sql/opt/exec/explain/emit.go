@@ -944,10 +944,15 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		a := n.args.(*vectorSearchArgs)
 		e.emitTableAndIndex("table", a.Table, a.Index, "" /* suffix */)
 		ob.Attr("target count", a.TargetNeighborCount)
-		if ob.flags.Verbose {
-			if !a.PrefixKey.IsEmpty() {
-				ob.Attr("prefix key", a.PrefixKey)
+		if a.PrefixConstraint != nil {
+			params := exec.ScanParams{
+				NeededCols:      a.OutCols,
+				IndexConstraint: a.PrefixConstraint,
 			}
+			e.emitSpans("prefix spans", a.Table, a.Index, params)
+		}
+		if ob.flags.Verbose {
+			// Vectors can have many dimensions, so don't print them unless verbose.
 			ob.Expr("query vector", a.QueryVector, nil /* varColumns */)
 		}
 
