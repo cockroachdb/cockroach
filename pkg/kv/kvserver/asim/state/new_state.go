@@ -141,6 +141,84 @@ func randDistribution(randSource *rand.Rand, n int) []float64 {
 	return distribution
 }
 
+func RangesInfoWithStoreWeightOnRF(
+	numOfStores int,
+	replicaConfigs []ReplicaConfig,
+	leaseConfigs LeaseConfig,
+	numRanges int,
+	config roachpb.SpanConfig,
+	minKey, maxKey, rangeSize int64,
+) RangesInfo {
+	stores := makeStoreList(numOfStores)
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		numRanges = 1
+	}
+	ret := initializeRangesInfoWithSpanConfigs(stores, numRanges, config, minKey, maxKey, rangeSize)
+	rf := int(config.NumReplicas)
+
+	// We create each range in sorted order by start key. Then assign replicas
+	// to stores by finding the store with the highest remaining target replica
+	// count remaining; repeating for each replica.
+	totalRangeToAllocate := numRanges
+	replicaFactor := make([]map[StoreID]int, rf)
+	for i := 0; i < rf; i++ {
+		replicaFactor[i] = make(map[StoreID]int)
+		for _, store := range stores {
+			replicaFactor[i][store] = int(float64(replicaConfigs[i].StoreWeights[store]) * float64(numRanges))
+			totalRangeToAllocate -= replicaFactor[i][store]
+		}
+	}
+
+	leaseholderToAllocate := make(map[StoreID]int)
+	for i := 0; i < numRanges; i++ {
+		leaseholderToAllocate[stores[i]] = int(float64(leaseConfigs.StoreWeights[stores[i]]) * float64(numRanges))
+	}
+
+	// Distribute the remaining ranges to the stores.
+	for i := 0; i < totalRangeToAllocate; i++ {
+		for j := 0; j < rf; j++ {
+			replicaFactor[j][stores[i]]++
+		}
+	}
+
+	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
+		rangeInfo := ret[rngIdx]
+
+		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
+			// pick a store with remaining replicas to allocate
+			for storeID, count := range replicaFactor[replCandidateIdx] {
+				if count > 0 {
+					rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
+						StoreID: roachpb.StoreID(storeID),
+						Type:    replicaConfigs[replCandidateIdx].ReplicaType,
+					}
+					replicaFactor[replCandidateIdx][storeID]--
+					break
+				}
+			}
+		}
+
+		for storeID, count := range leaseConfigs.StoreWeights {
+			if count > 0 {
+				rangeInfo.Leaseholder = storeID
+				break
+			}
+		}
+
+		for storeID, count := range leaseholderToAllocate {
+			if count > 0 {
+				rangeInfo.Leaseholder = storeID
+				leaseholderToAllocate[storeID]--
+				break
+			}
+		}
+		ret[rngIdx] = rangeInfo
+	}
+
+	return ret
+}
+
 // RangesInfoWithDistribution returns a RangesInfo, where the stores given are
 // initialized with the specified % of the replicas. This is done on a best
 // effort basis, given the replication factor. It may be impossible to satisfy

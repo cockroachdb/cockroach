@@ -264,6 +264,7 @@ const (
 	Random
 	WeightedRandom
 	Weighted
+	ReplicaPlacement
 )
 
 func (p PlacementType) String() string {
@@ -278,6 +279,8 @@ func (p PlacementType) String() string {
 		return "weighted_rand"
 	case Weighted:
 		return "weighted"
+	case ReplicaPlacement:
+		return "replica_placement"
 	default:
 		panic("unknown placement type")
 	}
@@ -295,6 +298,8 @@ func GetRangePlacementType(s string) PlacementType {
 		return WeightedRandom
 	case "weighted":
 		return Weighted
+	case "replica_placement":
+		return ReplicaPlacement
 	default:
 		panic(fmt.Sprintf("unknown placement type %s", s))
 	}
@@ -310,6 +315,7 @@ type BaseRanges struct {
 	MinKey, MaxKey    int64
 	ReplicationFactor int
 	Bytes             int64
+	ReplicaPlacement  state.Configuration
 }
 
 func (b BaseRanges) String() string {
@@ -330,6 +336,15 @@ func (b BaseRanges) GetRangesInfo(
 		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case WeightedRandom:
 		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
+	case ReplicaPlacement:
+		return state.RangesInfoWithStoreWeightOnRF(
+			numOfStores,
+			b.ReplicaPlacement.ReplicaConfigs,
+			b.ReplicaPlacement.LeaseWeights,
+			b.Ranges,
+			state.DefaultSpanConfigWithRF(b.ReplicationFactor),
+			b.MinKey, b.MaxKey, b.Bytes,
+		)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
