@@ -428,6 +428,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 		// Special handling for trigger functions.
 		buildSQL := true
+		isTriggerFn := false
 		if funcReturnType.Identical(types.Trigger) {
 			// Trigger functions cannot have user-defined parameters. However, they do
 			// have a set of implicitly defined parameters.
@@ -449,6 +450,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			// Analysis of SQL expressions for trigger functions must be deferred
 			// until the function is bound to a trigger.
 			buildSQL = false
+			isTriggerFn = true
 		}
 
 		// We need to disable stable function folding because we want to catch the
@@ -456,8 +458,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// the volatility.
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
-				funcReturnType, cf.IsProcedure, false /* isDoBlock */, buildSQL, nil, /* outScope */
+				b, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams, funcReturnType,
+				cf.IsProcedure, false /* isDoBlock */, isTriggerFn, buildSQL, nil, /* outScope */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})

@@ -621,6 +621,11 @@ message LocalOnlySessionData {
   // defaults to false in order to avoid registering a large number of
   // uninformative latch wait events.
   bool register_latch_wait_contention_events = 159;
+  // AllowCreateTriggerFunctionWithArgvReferences, when true, allows triggers to
+  // be created with trigger functions that use the TG_ARGV parameter even
+  // though it currently doesn't have Postgres-compatible 0-based indexing
+  // behavior.
+  bool allow_create_trigger_function_with_argv_references = 160;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

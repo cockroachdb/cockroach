@@ -4099,6 +4099,10 @@ func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
 	m.data.RegisterLatchWaitContentionEvents = val
 }
 
+func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
+	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
