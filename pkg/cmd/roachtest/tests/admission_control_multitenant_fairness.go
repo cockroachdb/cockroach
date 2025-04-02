@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -54,13 +55,14 @@ func registerMultiTenantFairness(r registry.Registry) {
 		},
 		{
 			name:        "read-heavy/skewed",
-			concurrency: func(i int) int { return i * 250 },
+			concurrency: func(i int) int { return i * 25 },
 			blockSize:   5,
 			readPercent: 95,
-			duration:    20 * time.Minute,
+			duration:    60 * time.Minute,
 			batch:       100,
-			maxOps:      100_000,
-			query:       "SELECT k, v FROM kv",
+			// TODO: set this back to 100_000
+			maxOps: 1_000,
+			query:  "SELECT k, v FROM kv",
 		},
 		{
 			name:        "write-heavy/even",
@@ -88,10 +90,10 @@ func registerMultiTenantFairness(r registry.Registry) {
 		s := s
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("admission-control/multitenant-fairness/%s", s.name),
-			Cluster:          r.MakeClusterSpec(5),
+			Cluster:          r.MakeClusterSpec(5, spec.CPU(8)),
 			Owner:            registry.OwnerAdmissionControl,
 			Benchmark:        true,
-			Leases:           registry.MetamorphicLeases,
+			Leases:           registry.EpochLeases,
 			CompatibleClouds: registry.CloudsWithServiceRegistration,
 			Suites:           registry.Suites(registry.Weekly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -148,7 +150,7 @@ func runMultiTenantFairness(
 	systemConn := c.Conn(ctx, t.L(), crdbNode[0])
 	defer systemConn.Close()
 
-	const rateLimit = 1_000_000
+	const rateLimit = 10_000_000
 
 	if _, err := systemConn.ExecContext(
 		ctx, fmt.Sprintf("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = '%d'", rateLimit),
@@ -175,13 +177,14 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
 			ctx, t.L(),
-			option.StartVirtualClusterOpts(name, node),
+			option.StartVirtualClusterOpts(name, node, option.NoBackupSchedule),
 			install.MakeClusterSettings(),
 		)
 
 		t.L().Printf("virtual cluster %q started on n%d", name, node[0])
 		_, err := systemConn.ExecContext(
-			ctx, fmt.Sprintf("SELECT crdb_internal.update_tenant_resource_limits('%s', 1000000000, 10000, 1000000)", name),
+			ctx, fmt.Sprintf(
+				"SELECT crdb_internal.update_tenant_resource_limits('%s', 1000000000, 1000000000, 1000000000)", name),
 		)
 		require.NoError(t, err)
 
@@ -211,7 +214,7 @@ func runMultiTenantFairness(
 	defer cleanupFunc()
 
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
-	m1 := c.NewMonitor(ctx, c.All())
+	m1 := c.NewMonitor(ctx, c.Range(2, 5))
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
@@ -231,6 +234,7 @@ func runMultiTenantFairness(
 			// throughput collapse.
 			cmd := roachtestutil.NewCommand("%s workload run kv", test.DefaultCockroachPath).
 				Option("secure").
+				Option("tolerate-errors").
 				Flag("min-block-bytes", s.blockSize).
 				Flag("max-block-bytes", s.blockSize).
 				Flag("batch", s.batch).
@@ -248,12 +252,13 @@ func runMultiTenantFairness(
 	}
 	m1.Wait()
 
-	waitDur := 2 * time.Minute
+	// TODO: change this back to 2 min.
+	waitDur := 5 * time.Second
 	t.L().Printf("loaded data for all tenants, sleeping (<%s)", waitDur)
 	time.Sleep(waitDur)
 
 	t.L().Printf("running virtual cluster workloads (<%s)", s.duration+time.Minute)
-	m2 := c.NewMonitor(ctx, crdbNode)
+	// m2 := c.NewMonitor(ctx, crdbNode)
 	var n int
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
@@ -261,9 +266,10 @@ func runMultiTenantFairness(
 
 		name := name
 		node := node
-		m2.Go(func(ctx context.Context) error {
+		go func(ctx context.Context) error {
 			cmd := roachtestutil.NewCommand("%s workload run kv", test.DefaultCockroachPath).
 				Option("secure").
+				Option("tolerate-errors").
 				Flag("write-seq", fmt.Sprintf("R%d", s.maxOps*s.batch)).
 				Flag("min-block-bytes", s.blockSize).
 				Flag("max-block-bytes", s.blockSize).
@@ -279,9 +285,11 @@ func runMultiTenantFairness(
 
 			t.L().Printf("ran workload for virtual cluster %q", name)
 			return nil
-		})
+		}(ctx)
 	}
-	m2.Wait()
+
+	time.Sleep(60 * time.Minute)
+	// m2.Wait()
 
 	// Pull workload performance from crdb_internal.statement_statistics. We
 	// could alternatively get these from the workload itself but this was

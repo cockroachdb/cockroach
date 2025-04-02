@@ -165,6 +165,104 @@ func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
 	sg.totalSlots = totalSlots
 }
 
+type slotAndCPUTimeTokenGranter struct {
+	sg            slotGranter
+	tokensEnabled bool
+	cpuTimeTokens int64
+
+	intTokensUsed         int64
+	intUncontrolledTokens int64
+}
+
+var _ granterWithLockedCalls = &slotAndCPUTimeTokenGranter{}
+var _ granter = &slotAndCPUTimeTokenGranter{}
+
+func (stg *slotAndCPUTimeTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
+	// Deduct tokens first since that is where the bottleneck will likely be.
+	if stg.tokensEnabled && stg.cpuTimeTokens <= 0 {
+		// Don't throttle the small amount of SQL work run by the system tenant.
+		return grantFailLocal
+	}
+	result := stg.sg.tryGetLocked(1, demuxHandle)
+	if result == grantSuccess {
+		stg.cpuTimeTokens -= count
+		stg.intTokensUsed += count
+	}
+	return result
+}
+
+// TODO(sumeer): this method tolerates count being negative. Since slots are
+// always being returned.
+func (stg *slotAndCPUTimeTokenGranter) returnGrantLocked(count int64, demuxHandle int8) {
+	stg.sg.returnGrantLocked(1, demuxHandle)
+	stg.cpuTimeTokens += count
+	stg.intTokensUsed -= count
+}
+
+func (stg *slotAndCPUTimeTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
+	stg.sg.tookWithoutPermissionLocked(1, demuxHandle)
+	if count > 0 && stg.cpuTimeTokens < 0 {
+		stg.intUncontrolledTokens += count
+	}
+	stg.cpuTimeTokens -= count
+	stg.intTokensUsed += count
+}
+
+func (stg *slotAndCPUTimeTokenGranter) requesterHasWaitingRequests() bool {
+	return stg.sg.requesterHasWaitingRequests()
+}
+
+func (stg *slotAndCPUTimeTokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+	haveSlots := false
+	if stg.sg.usedSlots < stg.sg.totalSlots || stg.sg.skipSlotEnforcement {
+		haveSlots = true
+	}
+	if !haveSlots {
+		return grantFailDueToSharedResource
+	}
+	if stg.tokensEnabled && stg.cpuTimeTokens <= 0 {
+		return grantFailLocal
+	}
+	tokens := stg.sg.requester.granted(grantChainID)
+	if tokens == 0 {
+		// Did not accept grant.
+		return grantFailLocal
+	}
+	stg.tookWithoutPermissionLocked(tokens, 0 /*arbitrary*/)
+	return grantSuccess
+}
+
+func (stg *slotAndCPUTimeTokenGranter) grantKind() grantKind {
+	return stg.sg.grantKind()
+}
+
+func (stg *slotAndCPUTimeTokenGranter) tryGet(count int64) (granted bool) {
+	return stg.sg.coord.tryGet(stg.sg.workKind, count, 0 /*arbitrary*/)
+}
+
+func (stg *slotAndCPUTimeTokenGranter) returnGrant(count int64) {
+	stg.sg.coord.returnGrant(stg.sg.workKind, count, 0 /*arbitrary*/)
+}
+
+func (stg *slotAndCPUTimeTokenGranter) tookWithoutPermission(count int64) {
+	stg.sg.coord.tookWithoutPermission(stg.sg.workKind, count, 0 /*arbitrary*/)
+}
+
+func (stg *slotAndCPUTimeTokenGranter) continueGrantChain(grantChainID grantChainID) {
+	stg.sg.coord.continueGrantChain(stg.sg.workKind, grantChainID)
+}
+
+func (stg *slotAndCPUTimeTokenGranter) getAndResetIntervalTokensUsed() (
+	tokens int64,
+	uncontrolled int64,
+) {
+	intTokensUsed := stg.intTokensUsed
+	stg.intTokensUsed = 0
+	intUncontrolledTokens := stg.intUncontrolledTokens
+	stg.intUncontrolledTokens = 0
+	return intTokensUsed, intUncontrolledTokens
+}
+
 // tokenGranter implements granterWithLockedCalls.
 type tokenGranter struct {
 	coord                *GrantCoordinator
@@ -866,6 +964,42 @@ var (
 		Name:        "admission.granter.slot_adjuster_decrements.kv",
 		Help:        "Number of decrements of the total KV slots",
 		Measurement: "Slots",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPUTimeTokens = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens.kv",
+		Help:        "Total CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensAdded = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_added.kv",
+		Help:        "CPU time tokens added (by adjustment or tick)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRemoved = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_removed.kv",
+		Help:        "CPU time tokens removed (by adjustment or tick)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvCPUTimeTokensRate = metric.Metadata{
+		Name:        "admission.granter.cpu_time_tokens_rate.kv",
+		Help:        "Rate of CPU time tokens (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvTenantCPUTimeTokensRate = metric.Metadata{
+		Name:        "admission.granter.tenant_cpu_time_tokens_rate.kv",
+		Help:        "Rate of CPU time tokens for tenant work (gauge)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	kvTokensToCPUMultiplier = metric.Metadata{
+		Name:        "admission.granter.tokens_to_cpu_multiplier.kv",
+		Help:        "Multiplier for CPU time tokens to convert to CPU nanos (percentage)",
+		Measurement: "Ratio",
 		Unit:        metric.Unit_COUNT,
 	}
 	kvIOTokensExhaustedDuration = metric.Metadata{

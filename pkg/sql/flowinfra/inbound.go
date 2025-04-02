@@ -209,8 +209,8 @@ func processProducerMessage(
 		admissionQ = flowBase.Cfg.SQLSQLResponseAdmissionQ
 	}
 	if admissionQ != nil {
-		if _, err := admissionQ.Admit(ctx, flowBase.admissionInfo); err != nil {
-			return processMessageResult{err: err, consumerClosed: false}
+		if resp := admissionQ.Admit(ctx, flowBase.admissionInfo); resp.Err != nil {
+			return processMessageResult{err: resp.Err, consumerClosed: false}
 		}
 	}
 	for {

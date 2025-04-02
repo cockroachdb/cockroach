@@ -414,6 +414,153 @@ func TestStoreCoordinators(t *testing.T) {
 	coords.Close()
 }
 
+func TestGrantCoordinatorCPUTimeToken(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if !goschedstats.Supported {
+		skip.IgnoreLint(t, "goschedstats not supported")
+	}
+	var ambientCtx log.AmbientContext
+	var requesters [numWorkKinds]*testRequester
+	var coord *GrantCoordinator
+	clearRequesterAndCoord := func() {
+		coord = nil
+		for i := range requesters {
+			requesters[i] = nil
+		}
+	}
+	var buf strings.Builder
+	flushAndReset := func() string {
+		fmt.Fprintf(&buf, "GrantCoordinator:\n%s\n", coord.String())
+		str := buf.String()
+		buf.Reset()
+		return str
+	}
+	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "granter_cpu_time"), func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "init-grant-coordinator":
+			clearRequesterAndCoord()
+			var opts Options
+			d.ScanArgs(t, "min-cpu", &opts.MinCPUSlots)
+			d.ScanArgs(t, "max-cpu", &opts.MaxCPUSlots)
+			opts.SQLKVResponseBurstTokens = 10000
+			opts.SQLSQLResponseBurstTokens = 10000
+			opts.makeRequesterFunc = func(
+				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+				metrics *WorkQueueMetrics, opts workQueueOptions) requester {
+				req := &testRequester{
+					workKind:               workKind,
+					granter:                granter,
+					usesTokens:             opts.usesTokens,
+					buf:                    &buf,
+					returnValueFromGranted: 1,
+				}
+				requesters[workKind] = req
+				return req
+			}
+			delayForGrantChainTermination = 0
+			opts.testingNoCallsToCPUMetricsProvider = true
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+			defer coords.Close()
+			coord = coords.Regular
+			return flushAndReset()
+
+		case "set-has-waiting-requests":
+			var v bool
+			d.ScanArgs(t, "v", &v)
+			requesters[scanWorkKind(t, d)].waitingRequests = v
+			return flushAndReset()
+
+		case "set-return-value-from-granted":
+			var v int
+			d.ScanArgs(t, "v", &v)
+			requesters[scanWorkKind(t, d)].returnValueFromGranted = int64(v)
+			return flushAndReset()
+
+		case "try-get":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tryGet(int64(v))
+			return flushAndReset()
+
+		case "return-grant":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].returnGrant(int64(v))
+			return flushAndReset()
+
+		case "took-without-permission":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanWorkKind(t, d)].tookWithoutPermission(int64(v))
+			return flushAndReset()
+
+		case "continue-grant-chain":
+			requesters[scanWorkKind(t, d)].continueGrantChain()
+			return flushAndReset()
+
+		case "cpu-load":
+			var runnable, procs int
+			d.ScanArgs(t, "runnable", &runnable)
+			d.ScanArgs(t, "procs", &procs)
+			infrequent := false
+			if d.HasArg("infrequent") {
+				d.ScanArgs(t, "infrequent", &infrequent)
+			}
+
+			samplePeriod := time.Millisecond
+			if infrequent {
+				samplePeriod = 250 * time.Millisecond
+			}
+			coord.CPULoad(runnable, procs, samplePeriod)
+			str := flushAndReset()
+			kvsa := coord.mu.cpuLoadListener.(*kvSlotAdjuster)
+			microsToMillis := func(micros int64) int64 {
+				return micros * int64(time.Microsecond) / int64(time.Millisecond)
+			}
+			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
+				str, kvsa.totalSlotsMetric.Value(),
+				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
+				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
+				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
+			)
+
+		case "cpu-time-token-adjust":
+			var timeMillis int
+			d.ScanArgs(t, "time-millis", &timeMillis)
+			var cpuTimeMillis int
+			d.ScanArgs(t, "cpu-time-millis", &cpuTimeMillis)
+			var procs int
+			d.ScanArgs(t, "procs", &procs)
+			coord.mu.Lock()
+			coord.mu.ctta.adjust(time.UnixMilli(int64(timeMillis)), int64(cpuTimeMillis), float64(procs))
+			coord.mu.Unlock()
+			return flushAndReset()
+
+		case "cpu-time-token-tick":
+			var remainingTicks int
+			d.ScanArgs(t, "remaining-ticks", &remainingTicks)
+			coord.mu.Lock()
+			coord.mu.ctta.allocateTokensTick(int64(remainingTicks))
+			coord.mu.Unlock()
+			return flushAndReset()
+
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	})
+}
+
 type testRequester struct {
 	workKind     WorkKind
 	additionalID string
@@ -427,6 +574,7 @@ type testRequester struct {
 }
 
 var _ requester = &testRequester{}
+var _ tenantTokensRequester = &testRequester{}
 
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
@@ -464,6 +612,17 @@ func (tr *testRequester) continueGrantChain() {
 	fmt.Fprintf(tr.buf, "%s%s: continueGrantChain\n", tr.workKind,
 		tr.additionalID)
 	tr.granter.continueGrantChain(tr.grantChainID)
+}
+
+func (tr *testRequester) tenantCPUTokensTick(tokensToAdd int64) (withoutPermissionTokens []int64) {
+	fmt.Fprintf(tr.buf, "%s%s: tenantCPUTokensTick(%d)\n", tr.workKind,
+		tr.additionalID, tokensToAdd)
+	return nil
+}
+
+func (tr *testRequester) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
+	fmt.Fprintf(tr.buf, "%s%s: setTenantCPUTokensBurstLimit(%d, %t)\n", tr.workKind,
+		tr.additionalID, tokens, enabled)
 }
 
 type storeTestRequester struct {
@@ -734,6 +893,12 @@ rate 17.70
 tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.77
 wait times: 0:0.00ms 1:0.00ms 2:0.00ms 3:0.00ms
 
+The uncontrolledTokens of 4000 is a problem? These tokens are consumed by these small
+tenants when there are no tokens available. But why is large tenant not being controlled
+by its own token rate? Its tenant tokens are ~8000. It is being controlled by the aggregate.
+Its token rate is just low enough to prevent it from bursting and taking without permission.
+If we used excessTokens to further reduce the tenant tokens, we would have underutilization.
+
 numSmallTenants = 8:
 
 12000: uncontrolledTokens: 14000, excessTokens: 0, tenantBurstTokens: 8000, tokens: 0
@@ -752,7 +917,7 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 	const workInitialTokens = 100
 	const workUsageTokens = workInitialTokens
 	const workDuration = workInitialTokens
-	const numSmallTenants = 8
+	const numSmallTenants = 4
 	type waitingWork struct {
 		startWait int
 	}
@@ -997,4 +1162,519 @@ func TestMultiTenantUncontrolledCPUTokenSim(t *testing.T) {
 		fmt.Printf(" %d:%.2fms", j, float64(waitTimes[j].waitTime)/float64(waitTimes[j].count))
 	}
 	fmt.Printf("\n")
+}
+
+// Uses uncontrolledTokens to set the tenant token rate. It works ok here, but
+// did not work well in roachtest. See
+// https://docs.google.com/document/d/1KlVckcxlEvnYUzMWcSp7JiKpsx3mQ1A8-FQ7yhS5Q44/edit?tab=t.0#bookmark=id.poebe8r8o0b0
+func TestMultiTenantUncontrolled2CPUTokenSim(t *testing.T) {
+	// 16ms of tokens per tick, represent 80%. want 20% consumed by tenant 0, 1,
+	// 2, 3 combined.
+	const tokensPerTick = 16
+	const burstTokens = 1000 * 16
+	tokens := burstTokens
+	const workInitialTokens = 100
+	const workUsageTokens = workInitialTokens
+	const workDuration = workInitialTokens
+	const numSmallTenants = 4
+	type waitingWork struct {
+		startWait int
+	}
+	var smallTenantWaiting [numSmallTenants][]waitingWork
+	type work struct {
+		tenant int
+		start  int
+	}
+	var started []work
+	var tokensUsed [numSmallTenants + 1]int
+	var tenantTokensNanos [numSmallTenants + 1]int64
+	tenantBurstTokensNanos := int64(burstTokens) * 1e6
+	for i := range tenantTokensNanos {
+		tenantTokensNanos[i] = tenantBurstTokensNanos
+	}
+	uncontrolledTokens := 0
+	type waitTime struct {
+		count    int
+		waitTime int
+	}
+	var waitTimes [numSmallTenants]waitTime
+
+	simulateIntervalMillis := 12 * 1000
+	lastTotalTokensUsed := 0
+	lastTokens := burstTokens
+	const printPerTick = false
+	for i := 0; i <= simulateIntervalMillis; i++ {
+		// Pop work that finished
+		{
+			j := 0
+			for ; j < len(started); j++ {
+				if started[j].start+workDuration > i {
+					break
+				}
+				returnTokens := workInitialTokens - workUsageTokens
+				tokens += returnTokens
+				tenantTokensNanos[started[j].tenant] += int64(returnTokens) * 1e6
+				tokensUsed[started[j].tenant] -= returnTokens
+			}
+			started = started[j:]
+		}
+		// Add tokens for tick.
+		tokens += tokensPerTick
+		// Cap tokens to burst.
+		if tokens > burstTokens {
+			tokens = burstTokens
+		}
+		if i%1000 == 0 {
+			totalTokensUsed := 0
+			for i := range tokensUsed {
+				totalTokensUsed += tokensUsed[i]
+			}
+			deltaTokensUsed := totalTokensUsed - lastTotalTokensUsed
+			lastTotalTokensUsed = totalTokensUsed
+			// Ignoring the fact that tokens are capped.
+			maxControlledTokensAvailable := burstTokens + lastTokens
+			minControlledTokensAvailable := min(maxControlledTokensAvailable, burstTokens)
+			if tokens < 0 {
+				// Don't let these become too negative.
+				tokens = 0
+			}
+			lastTokens = tokens
+			// For logging.
+			prevTenantBurstTokensNanos := tenantBurstTokensNanos
+			excessTokens := deltaTokensUsed - maxControlledTokensAvailable
+			if excessTokens < 0 {
+				excessTokens = 0
+			}
+			// TODO: should we do exponential smoothing of toDeduct?
+			toDeduct := max(excessTokens, uncontrolledTokens)
+			// Some tenants are exhausing our aggregate. We need to restrict
+			// them. How to restrict them?
+			//
+			// When we do tenantBurstTokensNanos -= int64(uncontrolledTokens) *
+			// 1e6 we could reduce tenantBurstTokens by a much larger value than
+			// what we should be doing. Cap this to 25% of burstTokens, which will
+			// be 4000.
+			//
+			// Second problem. When we deduct this from tenantTokensNanos we may
+			// still not become the restriction. The large tenant is being shaped by
+			// the aggregate, but keeping the burst close to 0. This is ok. In that
+			// case we don't want to reduce the tt. So now we don't use
+			// uncontrolledTokens to adjust tt.
+
+			// If toDeduct > 0, some tenant(s) may been hovering near the 75%. Say
+			// they had a burst of allowance of 100 and were hovering close to 75.
+			// And say we deduct by 25 here. So the burst allowance is 75 and the tt
+			// is 50. 50/75 = 66.67%, so not hovering close to 75%.
+
+			// Don't let the tenantBurstTokenNanos fall below 10%. This means each
+			// tenant can consume 2.5% of goal without being controlled. So if
+			// overload due to many small tenants, performance isolation will
+			// suffer. We deem this acceptable since we are trying to avoid queueing
+			// for small tenants in general.
+			tenantBurstTokensNanos -= int64(toDeduct) * 1e6
+			if tenantBurstTokensNanos < int64(burstTokens/10)*1e6 {
+				tenantBurstTokensNanos = int64(burstTokens/10) * 1e6
+			}
+			underUsage := minControlledTokensAvailable - deltaTokensUsed
+			if underUsage > 0 {
+				// We are under-utilizing the aggregate tokens. We need to
+				// increase the tenant burst tokens.
+				tenantBurstTokensNanos += int64(underUsage) * 1e6
+				if tenantBurstTokensNanos > burstTokens*1e6 {
+					tenantBurstTokensNanos = burstTokens * 1e6
+				}
+			}
+			fmt.Printf("%d: uncontrolled: %d, excess: %d, under-usage: %d, toDeduct; %d, tenantT: %d, tokens: %d, min/max: %d/%d\n",
+				i, uncontrolledTokens, excessTokens, underUsage, toDeduct,
+				tenantBurstTokensNanos/1e6, tokens, minControlledTokensAvailable, maxControlledTokensAvailable)
+			uncontrolledTokens = 0
+			// Under-utilization of aggregate tokens.
+			// if tokens > (burstTokens / 8) {
+			// 	tenantBurstTokensNanos = int64(burstTokens) * 1e6
+			// 	fmt.Printf("%d: tenantBurstTokens: %d\n", i, tenantBurstTokensNanos/1e6)
+			// }
+			deltaTenantBurstTokensNanos := tenantBurstTokensNanos - prevTenantBurstTokensNanos
+			fmt.Printf("%d: delta tenant burst tokens: %d\n", i, deltaTenantBurstTokensNanos/1e6)
+			for tenant := range tenantTokensNanos {
+				tenantTokensNanos[tenant] += deltaTenantBurstTokensNanos
+			}
+
+			fmt.Printf("%d: delta tokens used: %d\n", i, deltaTokensUsed)
+		}
+		for i := range tenantTokensNanos {
+			tenantTokensNanos[i] += tenantBurstTokensNanos / 1000
+			if tenantTokensNanos[i] > tenantBurstTokensNanos {
+				tenantTokensNanos[i] = tenantBurstTokensNanos
+			}
+		}
+		if printPerTick {
+			fmt.Printf("%d: tokens: %d tt:", i, tokens)
+			for i := range tenantTokensNanos {
+				fmt.Printf(" %d", tenantTokensNanos[i]/1e6)
+			}
+			fmt.Printf("\n")
+		}
+
+		// Try starting work using tokens.
+		for tokens > 0 {
+			tenant := -1
+			used := math.MaxInt
+			for j := range smallTenantWaiting {
+				if len(smallTenantWaiting[j]) > 0 && tokensUsed[j] < used && tenantTokensNanos[j] > 0 {
+					tenant = j
+					used = tokensUsed[j]
+				}
+			}
+			if tokensUsed[numSmallTenants] < used && tenantTokensNanos[numSmallTenants] > 0 {
+				tenant = numSmallTenants
+			}
+			if tenant < 0 {
+				if printPerTick {
+					fmt.Printf("%d: no tenant picked\n", i)
+				}
+				break
+			} else {
+				tokensUsed[tenant] += workInitialTokens
+				started = append(started, work{tenant: tenant, start: i})
+				tokens -= workInitialTokens
+				tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+				if tenant != numSmallTenants {
+					waitTimes[tenant].count++
+					wt := (i - smallTenantWaiting[tenant][0].startWait)
+					waitTimes[tenant].waitTime += wt
+					smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
+					if printPerTick {
+						fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+					}
+				} else {
+					if printPerTick {
+						fmt.Printf("%d: picked tenant %d\n", i, tenant)
+					}
+				}
+			}
+		}
+		// Either tokens < 0, or all tenants with waiting work have no more
+		// tenantTokensNanos[tenant]. In the latter case the following loop will
+		// by definition be unsuccessful. In the former case, it can do something.
+
+		// Try starting work using tenantTokensNanos.
+		for tenant := 0; tenant <= numSmallTenants; tenant++ {
+			for tenantTokensNanos[tenant] > (3*tenantBurstTokensNanos)/4 {
+				if tenant == numSmallTenants || len(smallTenantWaiting[tenant]) > 0 {
+					require.GreaterOrEqual(t, 0, tokens)
+					tokensUsed[tenant] += workInitialTokens
+					started = append(started, work{tenant: tenant, start: i})
+					tokens -= workInitialTokens
+					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+					uncontrolledTokens += workInitialTokens
+					if tenant != numSmallTenants {
+						waitTimes[tenant].count++
+						wt := (i - smallTenantWaiting[tenant][0].startWait)
+						waitTimes[tenant].waitTime += wt
+						smallTenantWaiting[tenant] = smallTenantWaiting[tenant][1:]
+						if printPerTick {
+							fmt.Printf("%d: picked tenant %d, wt: %d\n", i, tenant, wt)
+						}
+					} else {
+						if printPerTick {
+							fmt.Printf("%d: uncontrolled picked tenant %d\n", i, tenant)
+						}
+					}
+				} else {
+					break
+				}
+			}
+		}
+		if i%100 == 0 {
+			// Add a work unit for small tenants.
+			for tenant := range smallTenantWaiting {
+				haveTenantTokens := tenantTokensNanos[tenant] > 0
+				canBeUncontrolled := tenantTokensNanos[tenant] > (3*tenantBurstTokensNanos)/4
+				haveTokens := tokens > 0
+				if haveTenantTokens && (haveTokens || canBeUncontrolled) {
+					tokensUsed[tenant] += workInitialTokens
+					started = append(started, work{tenant: tenant, start: i})
+					tokens -= workInitialTokens
+					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+					if !haveTokens {
+						uncontrolledTokens += workInitialTokens
+						if printPerTick {
+							fmt.Printf("%d: arrived-admitted uncontrolled tenant %d\n", i, tenant)
+						}
+					} else {
+						if printPerTick {
+							fmt.Printf("%d: arrived-admitted tenant %d\n", i, tenant)
+						}
+					}
+					waitTimes[tenant].count++
+				} else {
+					smallTenantWaiting[tenant] = append(smallTenantWaiting[tenant], waitingWork{startWait: i})
+					if printPerTick {
+						fmt.Printf("%d: arrived-queued tenant %d\n", i, tenant)
+					}
+				}
+			}
+		}
+	}
+	sumTokensUsed := 0
+	for j := range tokensUsed {
+		sumTokensUsed += tokensUsed[j]
+	}
+	fmt.Printf("rate %.2f\n", float64(sumTokensUsed)/float64(simulateIntervalMillis))
+	fmt.Printf("tenant fractions:")
+	for j := range tokensUsed {
+		fmt.Printf(" %d:%.2f", j, float64(tokensUsed[j])/float64(sumTokensUsed))
+	}
+	fmt.Printf("\n")
+	fmt.Printf("wait times:")
+	for j := range waitTimes {
+		fmt.Printf(" %d:%.2fms", j, float64(waitTimes[j].waitTime)/float64(waitTimes[j].count))
+	}
+	fmt.Printf("\n")
+}
+
+/*
+numSmallTenants = 4:
+rate 17.37
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.77
+wait times: 0:0.00ms 1:0.00ms 2:0.00ms 3:0.00ms
+
+numSmallTenants = 12:
+rate 17.43
+tenant fractions: 0:0.06 1:0.06 2:0.06 3:0.06 4:0.06 5:0.06 6:0.06 7:0.06 8:0.06 9:0.06 10:0.06 11:0.06 12:0.31
+wait times: 0:0.00ms 1:0.00ms 2:0.00ms 3:0.00ms 4:0.00ms 5:0.00ms 6:0.00ms 7:0.00ms 8:0.00ms 9:0.00ms 10:0.01ms 11:0.06ms
+
+numSmallTenants = 20:
+rate 18.43
+tenant fractions: 0:0.05 1:0.05 2:0.05 3:0.05 4:0.05 5:0.05 6:0.05 7:0.05 8:0.05 9:0.05 10:0.05 11:0.05 12:0.05 13:0.05 14:0.05 15:0.05 16:0.05 17:0.05 18:0.05 19:0.05 20:0.07
+wait times: 0:842.03ms 1:847.69ms 2:853.40ms 3:859.11ms 4:864.83ms 5:870.59ms 6:876.36ms 7:882.14ms 8:887.96ms 9:893.79ms 10:899.62ms 11:896.68ms 12:902.56ms 13:908.44ms 14:914.32ms 15:920.21ms 16:926.09ms 17:931.97ms 18:937.85ms 19:943.74ms
+
+NB: using 85% in the above. The only reason tenant 20 is > 0.05 is because of the initial burst,
+and the simulation time being only 12s.
+*/
+func TestMultiTenantUncontrolled3CPUTokenSim(t *testing.T) {
+	// 16ms of tokens per tick, represent 80%. want 20% consumed by tenant 0, 1,
+	// 2, 3 combined.
+	const tokensPerTick80 = 16
+	const tokensPerTick85 = 17
+	const tenantTokensPerTick = 4
+	const burstTokens80 = 1000 * 16
+	const burstTokens85 = 1000 * 17
+	tokens80 := burstTokens80
+	tokens85 := burstTokens85
+	const workInitialTokens = 100
+	// TODO: the later code can't actually handle workUsageTokens !=
+	// workInitialTokens, since the uncontrolledTokens calculation will be
+	// wrong.
+	const workUsageTokens = workInitialTokens
+	const workDuration = workInitialTokens
+	const numSmallTenants = 20
+	type waitingWork struct {
+		startWait int
+	}
+	var smallTenantWaiting [numSmallTenants][]waitingWork
+	type work struct {
+		tenant int
+		start  int
+	}
+	var started []work
+	var tokensUsed [numSmallTenants + 1]int
+	var tenantTokensNanos [numSmallTenants + 1]int64
+	tenantBurstTokensNanos := int64(tenantTokensPerTick) * 1e6 * 1000
+	for i := range tenantTokensNanos {
+		tenantTokensNanos[i] = tenantBurstTokensNanos
+	}
+	// Consumed when 80 bucket was empty.
+	uncontrolledTokens := 0
+	type waitTime struct {
+		count    int
+		waitTime int
+	}
+	var waitTimes [numSmallTenants]waitTime
+
+	simulateIntervalMillis := 12 * 1000
+	lastTotalTokensUsed := 0
+	const printPerTick = true
+	for i := 0; i <= simulateIntervalMillis; i++ {
+		// Pop work that finished
+		{
+			j := 0
+			for ; j < len(started); j++ {
+				if started[j].start+workDuration > i {
+					break
+				}
+				returnTokens := workInitialTokens - workUsageTokens
+				tokens80 += returnTokens
+				tokens85 += returnTokens
+				tenantTokensNanos[started[j].tenant] += int64(returnTokens) * 1e6
+				tokensUsed[started[j].tenant] -= returnTokens
+			}
+			started = started[j:]
+		}
+		if i%1000 == 0 {
+			totalTokensUsed := 0
+			for i := range tokensUsed {
+				totalTokensUsed += tokensUsed[i]
+			}
+			deltaTokensUsed := totalTokensUsed - lastTotalTokensUsed
+			lastTotalTokensUsed = totalTokensUsed
+			// Ignoring the fact that tokens are capped.
+			if tokens85 < 0 {
+				// Don't let these become too negative.
+				tokens85 = 0
+			}
+			if tokens80 < burstTokens80-burstTokens85 {
+				// Don't let these become too negative.
+				tokens80 = burstTokens80 - burstTokens85
+			}
+			fmt.Printf("%d: uncontrolled: %d, usage: %d, tt:", i, uncontrolledTokens, deltaTokensUsed)
+			uncontrolledTokens = 0
+			for tenant := range tenantTokensNanos {
+				fmt.Printf(" %d", tenantTokensNanos[tenant]/1e6)
+				if tenantTokensNanos[tenant] < 0 {
+					tenantTokensNanos[tenant] = 0
+				}
+			}
+			fmt.Printf("\n")
+		}
+		// Add tokens for tick.
+		tokens80 += tokensPerTick80
+		tokens85 += tokensPerTick85
+		// Cap tokens to burst.
+		if tokens80 > burstTokens80 {
+			tokens80 = burstTokens80
+		}
+		if tokens85 > burstTokens85 {
+			tokens85 = burstTokens85
+		}
+		for i := range tenantTokensNanos {
+			tenantTokensNanos[i] += tenantTokensPerTick * 1e6
+			if tenantTokensNanos[i] > tenantBurstTokensNanos {
+				tenantTokensNanos[i] = tenantBurstTokensNanos
+			}
+		}
+		if printPerTick {
+			fmt.Printf("%d: tokens: %d,%d tt:", i, tokens80, tokens85)
+			for i := range tenantTokensNanos {
+				fmt.Printf(" %d", tenantTokensNanos[i]/1e6)
+			}
+			fmt.Printf("\n")
+		}
+
+		// Try starting work using tokens80 and tokens85.
+		for tokens80 > 0 || tokens85 > 0 {
+			pickedTenant := -1
+			pickedUsed := math.MaxInt
+			pickedTenantTokenNanos := int64(math.MinInt64)
+			for j := range smallTenantWaiting {
+				if len(smallTenantWaiting[j]) > 0 {
+					if tenantTokensNanos[j] > pickedTenantTokenNanos ||
+						(tenantTokensNanos[j] == pickedTenantTokenNanos && tokensUsed[j] < pickedUsed) {
+						pickedTenant = j
+						pickedUsed = tokensUsed[j]
+						pickedTenantTokenNanos = tenantTokensNanos[j]
+					}
+				}
+			}
+			if tenantTokensNanos[numSmallTenants] > pickedTenantTokenNanos ||
+				(tenantTokensNanos[numSmallTenants] == pickedTenantTokenNanos &&
+					tokensUsed[numSmallTenants] < pickedUsed) {
+				pickedTenant = numSmallTenants
+			}
+			if pickedTenant < 0 {
+				panic("no tenant picked")
+			}
+			qualifiesForTokens85 := pickedTenantTokenNanos > (3 * tenantBurstTokensNanos / 4)
+			if tokens80 <= 0 && !qualifiesForTokens85 {
+				break
+			}
+			if tokens80 <= 0 {
+				uncontrolledTokens += workInitialTokens
+			}
+			tokensUsed[pickedTenant] += workInitialTokens
+			started = append(started, work{tenant: pickedTenant, start: i})
+			tokens80 -= workInitialTokens
+			tokens85 -= workInitialTokens
+			tenantTokensNanos[pickedTenant] -= int64(workInitialTokens) * 1e6
+			if pickedTenant != numSmallTenants {
+				waitTimes[pickedTenant].count++
+				wt := (i - smallTenantWaiting[pickedTenant][0].startWait)
+				waitTimes[pickedTenant].waitTime += wt
+				smallTenantWaiting[pickedTenant] = smallTenantWaiting[pickedTenant][1:]
+				if printPerTick {
+					fmt.Printf("%d: picked tenant %d, wt: %d\n", i, pickedTenant, wt)
+				}
+			} else {
+				if printPerTick {
+					fmt.Printf("%d: picked tenant %d\n", i, pickedTenant)
+				}
+			}
+		}
+		// INVARIANT: tokens80 <= 0.
+		if tokens80 > 0 {
+			panic("tokens80 > 0")
+		}
+		if i%100 == 0 {
+			// Add a work unit for small tenants.
+			for tenant := range smallTenantWaiting {
+				qualifiesForTokens85 := tenantTokensNanos[tenant] > (3*tenantBurstTokensNanos)/4
+				haveTokens85 := tokens85 > 0
+				if qualifiesForTokens85 && haveTokens85 {
+					tokensUsed[tenant] += workInitialTokens
+					started = append(started, work{tenant: tenant, start: i})
+					tokens80 -= workInitialTokens
+					tokens85 -= workInitialTokens
+					tenantTokensNanos[tenant] -= int64(workInitialTokens) * 1e6
+					uncontrolledTokens += workInitialTokens
+					if printPerTick {
+						fmt.Printf("%d: arrived-admitted tenant %d\n", i, tenant)
+					}
+					waitTimes[tenant].count++
+				} else {
+					smallTenantWaiting[tenant] = append(smallTenantWaiting[tenant], waitingWork{startWait: i})
+					if printPerTick {
+						fmt.Printf("%d: arrived-queued tenant %d\n", i, tenant)
+					}
+				}
+			}
+		}
+	}
+	sumTokensUsed := 0
+	for j := range tokensUsed {
+		sumTokensUsed += tokensUsed[j]
+	}
+	fmt.Printf("rate %.2f\n", float64(sumTokensUsed)/float64(simulateIntervalMillis))
+	fmt.Printf("tenant fractions:")
+	for j := range tokensUsed {
+		fmt.Printf(" %d:%.2f", j, float64(tokensUsed[j])/float64(sumTokensUsed))
+	}
+	fmt.Printf("\n")
+	fmt.Printf("wait times:")
+	for j := range waitTimes {
+		fmt.Printf(" %d:%.2fms", j, float64(waitTimes[j].waitTime)/float64(waitTimes[j].count))
+	}
+	fmt.Printf("\n")
+}
+
+func TestSlowLockWithLogging(t *testing.T) {
+	// This test is not run in the normal test suite, but is useful for
+	// debugging.
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var mu syncutil.Mutex
+	mu.Lock()
+	go func() {
+		sll := slowMutexWithLogging{name: "foo", mu: &mu}
+		sll.lock()
+		sll.unlock()
+	}()
+	time.Sleep(12 * time.Second)
+	mu.Unlock()
+	time.Sleep(1 * time.Second)
+
+	sll := slowMutexWithLogging{name: "bar", mu: &mu}
+	sll.lock()
+	time.Sleep(6 * time.Second)
+	sll.unlock()
 }

@@ -395,10 +395,10 @@ func (i *Inbox) Next() coldata.Batch {
 		// Do admission control after memory accounting for the serialized bytes
 		// and before deserialization.
 		if i.admissionQ != nil {
-			if _, err := i.admissionQ.Admit(i.Ctx, i.admissionInfo); err != nil {
+			if resp := i.admissionQ.Admit(i.Ctx, i.admissionInfo); resp.Err != nil {
 				// err includes the case of context cancellation while waiting for
 				// admission.
-				colexecerror.ExpectedError(err)
+				colexecerror.ExpectedError(resp.Err)
 			}
 		}
 		batch := i.deserializer.Deserialize(m.Data.RawBytes)

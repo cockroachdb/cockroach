@@ -7,7 +7,7 @@ set-try-get-return-value v=true
 
 admit id=1 count=1 create-time-millis=1
 ----
-tryGet: returning true
+tryGet 1: returning true
 id 1: admit succeeded
 
 empty
@@ -20,11 +20,11 @@ set-try-get-return-value v=false
 
 admit id=2 count=1 create-time-millis=2
 ----
-tryGet: returning false
+tryGet 1: returning false
 
 admit id=3 count=5 create-time-millis=3
 ----
-tryGet: returning false
+tryGet 5: returning false
 
 granted
 ----
@@ -50,7 +50,7 @@ set-try-get-return-value v=false
 
 admit id=4 count=10 create-time-millis=5
 ----
-tryGet: returning false
+tryGet 10: returning false
 
 cancel-work id=4
 ----
@@ -58,7 +58,7 @@ id 4: admit failed
 
 admit id=5 count=15 create-time-millis=8
 ----
-tryGet: returning false
+tryGet 15: returning false
 
 # We skip the cancelled work in the queue.
 granted

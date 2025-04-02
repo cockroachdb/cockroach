@@ -335,11 +335,11 @@ func printWorkQueue(q *WorkQueue) string {
 			admissionpb.WorkPriority(tenant.fifoPriorityThreshold),
 			printTrimmedBytes(int64(tenant.used)),
 		))
-		if len(tenant.waitingWorkHeap) > 0 {
+		if len(tenant.waitingForGranterHeap) > 0 {
 			buf.WriteString("\n")
 
-			for i := range tenant.waitingWorkHeap {
-				w := tenant.waitingWorkHeap[i]
+			for i := range tenant.waitingForGranterHeap {
+				w := tenant.waitingForGranterHeap[i]
 				if i != 0 {
 					buf.WriteString("\n")
 				}

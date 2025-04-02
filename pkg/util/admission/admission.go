@@ -250,6 +250,11 @@ type granterWithLockedCalls interface {
 	tryGrantLocked(grantChainID grantChainID) grantResult
 }
 
+type granterWithBoth interface {
+	granter
+	granterWithLockedCalls
+}
+
 // granterWithIOTokens is used to abstract kvStoreTokenGranter for testing.
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).

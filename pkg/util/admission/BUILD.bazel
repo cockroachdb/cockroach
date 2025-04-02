@@ -48,6 +48,7 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
+        "@com_github_petermattis_goid//:goid",
     ],
 )
 
@@ -60,6 +61,7 @@ go_test(
         "elastic_cpu_work_queue_test.go",
         "granter_test.go",
         "io_load_listener_test.go",
+        "kv_slot_adjuster_test.go",
         "replicated_write_admission_test.go",
         "scheduler_latency_listener_test.go",
         "sequencer_test.go",

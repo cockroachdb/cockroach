@@ -581,6 +581,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
 	}
+	admissionOptions.CPUMetricsProvider = cpuMetricsProvider{}
 	gcoords := admission.NewGrantCoordinators(
 		cfg.AmbientCtx,
 		st,
@@ -2442,4 +2443,17 @@ func MakeServerOptionsForURL(
 		DefaultDatabase: catalogkeys.DefaultDatabaseName,
 	}
 	return clientConnOptions, serverParams
+}
+
+type cpuMetricsProvider struct{}
+
+var _ admission.CPUMetricsProvider = cpuMetricsProvider{}
+
+func (cpuMetricsProvider) GetCPUInfo() (totalCPUTimeMillis int64, cpuCapacity float64) {
+	userMillis, systemMillis, err := status.GetProcCPUTime(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	cpuCapacity = status.GetCPUCapacity()
+	return userMillis + systemMillis, cpuCapacity
 }

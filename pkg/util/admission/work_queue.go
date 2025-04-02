@@ -111,6 +111,14 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var SystemTenantBypassesCPUAdmission = settings.RegisterBoolSetting(
+	settings.SystemOnly, "admission.kv.system_tenant_bypass_cpu_admission.enabled",
+	"", true)
+
+var TenantTokenRateAllowedWithoutPermissionThresholdPercentage = settings.RegisterIntSetting(
+	settings.SystemOnly, "admission.kv.tenant_token_rate_permits_without_permission.enabled",
+	"", 75)
+
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
 // settings are also set to true. Unlike those settings, which are granular
@@ -251,6 +259,8 @@ func (r LogPosition) Less(o LogPosition) bool {
 	return r.Index < o.Index
 }
 
+const systemTenantID = 1
+
 // WorkQueue maintains a queue of work waiting to be admitted. Ordering of
 // work is achieved via 2 heaps: a tenant heap orders the tenants with waiting
 // work in increasing order of used slots or tokens, optionally adjusted by
@@ -289,7 +299,11 @@ type WorkQueue struct {
 
 	onAdmittedReplicatedWork onAdmittedReplicatedWork
 
-	mu struct {
+	// isCPUTimeTokenQueue => workKind == KVWork && !usesTokens. Such a queue
+	// interacts with a granter that has both slots (concurrency limit) and CPU
+	// time tokens.
+	isCPUTimeTokenQueue bool
+	mu                  struct {
 		syncutil.Mutex
 		// Tenants with waiting work.
 		tenantHeap tenantHeap
@@ -313,6 +327,12 @@ type WorkQueue struct {
 		epochLengthNanos            int64
 		epochClosingDeltaNanos      int64
 		maxQueueDelayToSwitchToLifo time.Duration
+
+		tenantCPUBurstLimit int64
+		tenantTokensEnabled bool
+		cpuTokenEstimator   meanCPUTokenEstimator
+
+		lastTenantLogTime time.Time
 	}
 	logThreshold log.EveryN
 	metrics      *WorkQueueMetrics
@@ -437,7 +457,7 @@ func initWorkQueue(
 
 func isInTenantHeap(tenant *tenantInfo) bool {
 	// If there is some waiting work, this tenant is in tenantHeap.
-	return len(tenant.waitingWorkHeap) > 0 || len(tenant.openEpochsHeap) > 0
+	return len(tenant.waitingForGranterHeap) > 0 || len(tenant.openEpochsHeap) > 0
 }
 
 func (q *WorkQueue) timeNow() time.Time {
@@ -574,9 +594,25 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 				break
 			}
 			heap.Pop(&tenant.openEpochsHeap)
-			heap.Push(&tenant.waitingWorkHeap, work)
+			tenant.pushWaitingWorkOntoHeap(waitingForGranterHeapKind, work)
 		}
 	}
+}
+
+type AdmitResponse struct {
+	Enabled bool
+	Err     error
+	// CPUTokensDeducted is only populated when WorkQueue is a
+	// CPUTimeTokenQueue.
+	CPUTokensDeducted int64
+
+	tenantID roachpb.TenantID
+}
+
+func (q *WorkQueue) tenantAllowedWithoutPermissionThreshold(tenant *tenantInfo) int64 {
+	thresholdPercentage :=
+		TenantTokenRateAllowedWithoutPermissionThresholdPercentage.Get(&q.settings.SV)
+	return (tenant.tenantCPUBurstLimit * thresholdPercentage) / 100
 }
 
 // Admit is called when requesting admission for some work. If err!=nil, the
@@ -584,12 +620,15 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 // The enabled return value is relevant when err=nil, and represents whether
 // admission control is enabled. AdmittedWorkDone must be called iff
 // enabled=true && err!=nil, and the WorkKind for this queue uses slots.
-func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err error) {
+func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 	if !info.ReplicatedWorkInfo.Enabled {
 		enabledSetting := admissionControlEnabledSettings[q.workKind]
 		if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
 			q.metrics.recordBypassedAdmission(info.Priority)
-			return false, nil
+			return AdmitResponse{
+				Enabled: false,
+				Err:     nil,
+			}
 		}
 	}
 
@@ -600,6 +639,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 
 	if info.RequestedCount == 0 {
 		// We treat unset RequestCounts as an implicit request of 1.
+		//
+		// For isCPUTimeTokenQueue, we will override this again below.
 		info.RequestedCount = 1
 	}
 	if !q.usesTokens && info.RequestedCount != 1 {
@@ -612,12 +653,20 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
 	// unlocked on all code paths.
-	q.mu.Lock()
+	sll := slowMutexWithLogging{name: "q.mu admit1", mu: &q.mu.Mutex}
+	sll.lock()
 	tenant, ok := q.mu.tenants[tenantID]
 	if !ok {
-		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID), q.mu.tenantCPUBurstLimit)
+		tenant.cpuTokenEstimator.init(q.mu.cpuTokenEstimator.meanCPUTokens())
 		q.mu.tenants[tenantID] = tenant
 	}
+	admitResponse := AdmitResponse{tenantID: info.TenantID}
+	if q.isCPUTimeTokenQueue {
+		admitResponse.CPUTokensDeducted = tenant.cpuTokenEstimator.meanCPUTokens()
+		info.RequestedCount = admitResponse.CPUTokensDeducted
+	}
+
 	if info.ReplicatedWorkInfo.Enabled {
 		if info.BypassAdmission {
 			// TODO(irfansharif): "Admin" work (like splits, scatters, lease
@@ -633,16 +682,26 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			panic("unexpected ReplicatedWrite.Enabled on slot-based queue")
 		}
 	}
+	if q.isCPUTimeTokenQueue && tenantID == systemTenantID &&
+		SystemTenantBypassesCPUAdmission.Get(&q.settings.SV) {
+		info.BypassAdmission = true
+	}
 	if info.BypassAdmission && q.workKind == KVWork {
 		tenant.used += uint64(info.RequestedCount)
 		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
 		}
-		q.mu.Unlock()
+		if q.isCPUTimeTokenQueue {
+			tenant.tenantCPUTokens -= info.RequestedCount
+			tenant.intervalStats.admittedCount++
+			tenant.intervalStats.cpuTokens += info.RequestedCount
+		}
+		sll.unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		q.metrics.recordBypassedAdmission(info.Priority)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse
 	}
 	// Work is subject to admission control.
 
@@ -650,80 +709,108 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	// that has bypassed admission control, since priorityStates is deciding the
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
-
-	if len(q.mu.tenantHeap) == 0 && !q.knobs.DisableWorkQueueFastPath {
-		// Fast-path. Try to grab token/slot.
-		// Optimistically update used to avoid locking again.
-		tenant.used += uint64(info.RequestedCount)
-		q.mu.Unlock()
-		// We have unlocked q.mu, so another concurrent request can also do tryGet
-		// and get ahead of this request. We don't need to be fair for such
-		// concurrent requests.
-		if q.granter.tryGet(info.RequestedCount) {
-			q.metrics.incAdmitted(info.Priority)
-			if info.ReplicatedWorkInfo.Enabled {
-				// TODO(irfansharif): There's a race here, and could lead to
-				// over-admission. It's possible that there are enqueued work
-				// items with lower log positions than the request that just got
-				// through using the fast-path, and since we're returning flow
-				// tokens by specifying a log prefix, we'd be returning more
-				// flow tokens than actually admitted. Fix it as part of #95563,
-				// by either adding more synchronization, getting rid of this
-				// fast path, or swapping this entry from the top-most one in
-				// the waiting heap (and fixing the heap).
-				if log.V(1) {
-					log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-						tenantID, info.Priority,
-						info.ReplicatedWorkInfo.RangeID,
-						info.ReplicatedWorkInfo.Origin,
-						info.ReplicatedWorkInfo.LogPosition.String(),
-						info.ReplicatedWorkInfo.Ingested,
-					)
-				}
-				q.onAdmittedReplicatedWork.admittedReplicatedWork(
-					roachpb.MustMakeTenantID(tenantID),
-					info.Priority,
-					info.ReplicatedWorkInfo,
-					info.RequestedCount,
-					info.CreateTime,
-					false, /* coordMuLocked */
-				)
-			}
-			q.metrics.recordFastPathAdmission(info.Priority)
-			return true, nil
-		}
-		// Did not get token/slot.
-		//
-		// There is a race here: before q.mu is acquired, the granter could
-		// experience a reduction in load and call
-		// WorkQueue.hasWaitingRequests to see if it should grant, but since
-		// there is nothing in the queue that method will return false. Then the
-		// work here queues up even though granter has spare capacity. We could
-		// add additional synchronization (and complexity to the granter
-		// interface) to deal with this, by keeping the granter's lock
-		// (GrantCoordinator.mu) locked when returning from tryGrant and call
-		// granter again to release that lock after this work has been queued.
-		// But it has the downside of extending the scope of
-		// GrantCoordinator.mu. Instead we tolerate this race in the knowledge
-		// that GrantCoordinator will periodically, at a high frequency, look at
-		// the state of the requesters to see if there is any queued work that
-		// can be granted admission.
-		q.mu.Lock()
-		// The tenant could have been removed. See the comment where the
-		// tenantInfo struct is declared.
-		tenant, ok = q.mu.tenants[tenantID]
-		if !ok {
-			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
-			q.mu.tenants[tenantID] = tenant
-		}
-		// Don't want to overflow tenant.used if it has decreased because of being
-		// reset to 0 by the GC goroutine.
-		if tenant.used >= uint64(info.RequestedCount) {
-			tenant.used -= uint64(info.RequestedCount)
+	waitForTenantTokens := false
+	if q.isCPUTimeTokenQueue {
+		if (tenant.waitingForTenantTokensHeap.Len() > 0 || tenant.tenantCPUTokens <= 0) &&
+			q.mu.tenantTokensEnabled {
+			waitForTenantTokens = true
 		} else {
-			tenant.used = 0
+			allowedWithoutPermissionThreshold := q.tenantAllowedWithoutPermissionThreshold(tenant)
+			tenant.tenantCPUTokens -= info.RequestedCount
+			if q.tryTakeWithoutPermissionLocked(
+				tenant, allowedWithoutPermissionThreshold, info.RequestedCount) {
+				sll.unlock()
+				q.granter.tookWithoutPermission(info.RequestedCount)
+				q.metrics.incAdmitted(info.Priority)
+				q.metrics.recordFastPathAdmission(info.Priority)
+				admitResponse.Enabled = true
+				return admitResponse
+			}
 		}
 	}
+	if !waitForTenantTokens {
+		if len(q.mu.tenantHeap) == 0 && !q.knobs.DisableWorkQueueFastPath {
+			// Fast-path. Try to grab token/slot.
+			// Optimistically update used to avoid locking again.
+			tenant.used += uint64(info.RequestedCount)
+			tenant.intervalStats.admittedCount++
+			tenant.intervalStats.cpuTokens += info.RequestedCount
+			sll.unlock()
+			// We have unlocked q.mu, so another concurrent request can also do tryGet
+			// and get ahead of this request. We don't need to be fair for such
+			// concurrent requests.
+			if q.granter.tryGet(info.RequestedCount) {
+				q.metrics.incAdmitted(info.Priority)
+				if info.ReplicatedWorkInfo.Enabled {
+					// TODO(irfansharif): There's a race here, and could lead to
+					// over-admission. It's possible that there are enqueued work
+					// items with lower log positions than the request that just got
+					// through using the fast-path, and since we're returning flow
+					// tokens by specifying a log prefix, we'd be returning more
+					// flow tokens than actually admitted. Fix it as part of #95563,
+					// by either adding more synchronization, getting rid of this
+					// fast path, or swapping this entry from the top-most one in
+					// the waiting heap (and fixing the heap).
+					if log.V(1) {
+						log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+							tenantID, info.Priority,
+							info.ReplicatedWorkInfo.RangeID,
+							info.ReplicatedWorkInfo.Origin,
+							info.ReplicatedWorkInfo.LogPosition.String(),
+							info.ReplicatedWorkInfo.Ingested,
+						)
+					}
+					q.onAdmittedReplicatedWork.admittedReplicatedWork(
+						roachpb.MustMakeTenantID(tenantID),
+						info.Priority,
+						info.ReplicatedWorkInfo,
+						info.RequestedCount,
+						info.CreateTime,
+						false, /* coordMuLocked */
+					)
+				}
+				q.metrics.recordFastPathAdmission(info.Priority)
+				admitResponse.Enabled = true
+				return admitResponse
+			}
+			// Did not get token/slot.
+			//
+			// There is a race here: before q.mu is acquired, the granter could
+			// experience a reduction in load and call
+			// WorkQueue.hasWaitingRequests to see if it should grant, but since
+			// there is nothing in the queue that method will return false. Then the
+			// work here queues up even though granter has spare capacity. We could
+			// add additional synchronization (and complexity to the granter
+			// interface) to deal with this, by keeping the granter's lock
+			// (GrantCoordinator.mu) locked when returning from tryGrant and call
+			// granter again to release that lock after this work has been queued.
+			// But it has the downside of extending the scope of
+			// GrantCoordinator.mu. Instead we tolerate this race in the knowledge
+			// that GrantCoordinator will periodically, at a high frequency, look at
+			// the state of the requesters to see if there is any queued work that
+			// can be granted admission.
+			sll = slowMutexWithLogging{name: "q.mu admit2", mu: &q.mu.Mutex}
+			sll.lock()
+			// The tenant could have been removed. See the comment where the
+			// tenantInfo struct is declared.
+			tenant, ok = q.mu.tenants[tenantID]
+			if !ok {
+				tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID), q.mu.tenantCPUBurstLimit)
+				tenant.cpuTokenEstimator.init(q.mu.cpuTokenEstimator.meanCPUTokens())
+				q.mu.tenants[tenantID] = tenant
+			}
+			// Don't want to overflow tenant.used if it has decreased because of being
+			// reset to 0 by the GC goroutine.
+			if tenant.used >= uint64(info.RequestedCount) {
+				tenant.used -= uint64(info.RequestedCount)
+			} else {
+				tenant.used = 0
+			}
+			tenant.intervalStats.admittedCount--
+			tenant.intervalStats.cpuTokens -= info.RequestedCount
+		}
+	}
+	// Need to wait.
 
 	// Check for cancellation.
 	startTime := q.timeNow()
@@ -731,42 +818,50 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if info.ReplicatedWorkInfo.Enabled {
 			panic("not equipped to deal with cancelable contexts below raft")
 		}
+		if q.isCPUTimeTokenQueue && !waitForTenantTokens {
+			// Return the TenantCPUTokens.
+			tenant.adjustTenantCPUTokens(info.RequestedCount)
+		}
 		// Already canceled. More likely to happen if cpu starvation is
 		// causing entering into the work queue to be delayed.
-		q.mu.Unlock()
+		sll.unlock()
 		q.metrics.incErrored(info.Priority)
 		deadline, _ := ctx.Deadline()
-		return true,
+		admitResponse.Enabled = true
+		admitResponse.Err =
 			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: deadline: %v, now: %v",
 				q.workKind, deadline, startTime)
+		return admitResponse
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
-	if int(info.Priority) < tenant.fifoPriorityThreshold {
+	if int(info.Priority) < tenant.fifoPriorityThreshold && !q.isCPUTimeTokenQueue {
 		ordering = lifoWorkOrdering
 	}
 	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
 	work.replicated = info.ReplicatedWorkInfo
 
 	inTenantHeap := isInTenantHeap(tenant)
-	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
-		heap.Push(&tenant.waitingWorkHeap, work)
+	if waitForTenantTokens {
+		tenant.pushWaitingWorkOntoHeap(waitingForTenantTokensHeapKind, work)
+	} else if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
+		tenant.pushWaitingWorkOntoHeap(waitingForGranterHeapKind, work)
 	} else {
-		heap.Push(&tenant.openEpochsHeap, work)
+		tenant.pushWaitingWorkOntoHeap(openEpochsHeapKind, work)
 	}
-	if !inTenantHeap {
+	if !inTenantHeap && !waitForTenantTokens {
 		heap.Push(&q.mu.tenantHeap, tenant)
 	}
-	// Else already in tenantHeap.
+	// Else already in tenantHeap or doesn't need to be.
 
 	// Release the lock.
-	q.mu.Unlock()
+	sll.unlock()
 
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
 		if log.V(1) {
 			q.mu.Lock()
-			queueLen := tenant.waitingWorkHeap.Len()
+			queueLen := tenant.waitingForGranterHeap.Len()
 			q.mu.Unlock()
 
 			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
@@ -778,7 +873,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			)
 		}
 
-		return false, nil // return without waiting (admission is asynchronous)
+		return admitResponse // return without waiting (admission is asynchronous)
 	}
 
 	// Start waiting for admission.
@@ -789,21 +884,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	select {
 	case <-ctx.Done():
 		waitDur := q.timeNow().Sub(startTime)
-		q.mu.Lock()
-		// The work was cancelled, so waitDur is less than the wait time this work
-		// would have encountered if it actually waited until admission. However,
-		// this lower bound is still useful for calculating the FIFO=>LIFO switch
-		// since it is possible that all work at this priority is exceeding the
-		// deadline and being cancelled. The risk here is that if the deadlines
-		// are too short, we could underestimate the actual wait time.
-		tenant.priorityStates.updateDelayLocked(work.priority, waitDur, true /* canceled */)
+		sll := slowMutexWithLogging{name: "q.mu admit3 canceled", mu: &q.mu.Mutex}
+		sll.lock()
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant. Don't bother
 			// decrementing tenant.used since we don't want to race with the gc
 			// goroutine that sets used=0 and could have GC'd tenant and returned it
 			// to the sync.Pool. We can fix this if needed by calling
 			// adjustTenantUsedLocked.
-			q.mu.Unlock()
+			//
+			// NB: We must not use the existing tenant variable.
+			sll.unlock()
 			q.granter.returnGrant(info.RequestedCount)
 			// The channel is sent to after releasing mu, so we don't need to hold
 			// mu when receiving from it. Additionally, we've already called
@@ -812,24 +903,46 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			chainID := <-work.ch
 			q.granter.continueGrantChain(chainID)
 		} else {
-			if work.inWaitingWorkHeap {
-				tenant.waitingWorkHeap.remove(work)
-			} else {
+			// NB: we can use the existing tenant variable, since the work is still
+			// in a heap, which mean the tenant cannot be GC'd.
+			switch work.heapKind {
+			case waitingForTenantTokensHeapKind:
+				tenant.waitingForTenantTokensHeap.remove(work)
+			case openEpochsHeapKind:
 				tenant.openEpochsHeap.remove(work)
+				if q.isCPUTimeTokenQueue {
+					// Return the tenantCPUTokens.
+					tenant.adjustTenantCPUTokens(info.RequestedCount)
+				}
+			case waitingForGranterHeapKind:
+				tenant.waitingForGranterHeap.remove(work)
+				if q.isCPUTimeTokenQueue {
+					// Return the tenantCPUTokens.
+					tenant.adjustTenantCPUTokens(info.RequestedCount)
+				}
 			}
-			if !isInTenantHeap(tenant) {
+			// The work was cancelled, so waitDur is less than the wait time this work
+			// would have encountered if it actually waited until admission. However,
+			// this lower bound is still useful for calculating the FIFO=>LIFO switch
+			// since it is possible that all work at this priority is exceeding the
+			// deadline and being cancelled. The risk here is that if the deadlines
+			// are too short, we could underestimate the actual wait time.
+			tenant.priorityStates.updateDelayLocked(work.priority, waitDur, true /* canceled */)
+			if !isInTenantHeap(tenant) && work.heapKind != waitingForTenantTokensHeapKind {
 				q.mu.tenantHeap.remove(tenant)
 			}
-			q.mu.Unlock()
+			sll.unlock()
 		}
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
 		log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-		return true,
-			errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
-				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+		admitResponse.Enabled = true
+		admitResponse.Err = errors.Newf(
+			"deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+			q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+		return admitResponse
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -842,7 +955,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, false)
 		q.granter.continueGrantChain(chainID)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse
 	}
 }
 
@@ -871,47 +985,135 @@ func recordAdmissionWorkQueueStats(
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
 // finished. It must be called iff the WorkKind of this WorkQueue uses slots
 // (not tokens), i.e., KVWork.
-func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Duration) {
+func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) {
 	if q.usesTokens {
 		panic(errors.AssertionFailedf("tokens should not be returned"))
 	}
-	// Single slot is allocated for the work in the granter, and tenant.used was
-	// incremented by 1.
-	additionalUsed := cpuTime - 1
-	if additionalUsed != 0 {
-		q.adjustTenantUsed(tenantID, additionalUsed.Nanoseconds())
+	cpuTokens := cpuTime.Nanoseconds()
+	var additionalUsed int64
+	if q.isCPUTimeTokenQueue {
+		additionalUsed = cpuTokens - resp.CPUTokensDeducted
+	} else {
+		// Single slot is allocated for the work in the granter, and tenant.used was
+		// incremented by 1.
+		additionalUsed = cpuTokens - 1
 	}
-	q.granter.returnGrant(1)
+
+	if additionalUsed != 0 {
+		var withoutPermissionTokens []int64
+		func() {
+			tid := resp.tenantID.ToUint64()
+			sll := slowMutexWithLogging{name: "q.mu work-done", mu: &q.mu.Mutex}
+			sll.lock()
+			defer sll.unlock()
+			tenant, ok := q.mu.tenants[tid]
+			if !ok {
+				return
+			}
+			q.adjustTenantUsedLocked(tenant, additionalUsed)
+			if q.isCPUTimeTokenQueue {
+				tenant.adjustTenantCPUTokens(-additionalUsed)
+				tenant.intervalStats.cpuTokens -= additionalUsed
+				q.mu.cpuTokenEstimator.workDone(cpuTokens)
+				tenant.cpuTokenEstimator.workDone(cpuTokens)
+				withoutPermissionTokens = q.tryAdmitFromWaitingForTenantTokensHeapLocked(tenant)
+			}
+		}()
+		for _, tokens := range withoutPermissionTokens {
+			if tokens < 0 {
+				panic("withoutPermissionTokens are negative")
+			}
+			q.granter.tookWithoutPermission(tokens)
+		}
+	}
+	if q.isCPUTimeTokenQueue {
+		// NB: we are calling returnGrant even it -additionalUsed is negative,
+		// since a slot is always being returned. slotAndCPUTimeTokenGranter
+		// allows the parameter to returnGrant to be negative.
+		q.granter.returnGrant(-additionalUsed)
+	} else {
+		q.granter.returnGrant(1)
+	}
+}
+
+func (q *WorkQueue) tryAdmitFromWaitingForTenantTokensHeapLocked(
+	tenant *tenantInfo,
+) (withoutPermissionTokens []int64) {
+	allowedWithoutPermissionThreshold := q.tenantAllowedWithoutPermissionThreshold(tenant)
+	tenantInHeap := isInTenantHeap(tenant)
+	for tenant.waitingForTenantTokensHeap.Len() > 0 &&
+		(tenant.tenantCPUTokens > 0 || !q.mu.tenantTokensEnabled) {
+		work := tenant.waitingForTenantTokensHeap[0]
+		heap.Pop(&tenant.waitingForTenantTokensHeap)
+		tenant.tenantCPUTokens -= work.requestedCount
+		work.waitForTenantTokens = q.timeSource.Since(work.enqueueingTime)
+		if q.tryTakeWithoutPermissionLocked(tenant, allowedWithoutPermissionThreshold, work.requestedCount) {
+			tenant.intervalStats.waitForTenantTokensTimeSum += work.waitForTenantTokens
+			tenant.intervalStats.waitTimeSum += work.waitForTenantTokens
+			withoutPermissionTokens = append(withoutPermissionTokens, work.requestedCount)
+			work.ch <- noGrantChain
+		} else {
+			tenant.pushWaitingWorkOntoHeap(waitingForGranterHeapKind, work)
+			if !tenantInHeap {
+				heap.Push(&q.mu.tenantHeap, tenant)
+				tenantInHeap = true
+			}
+		}
+	}
+	return withoutPermissionTokens
+}
+
+// Does not call granter.tookWithoutPermission. The caller must do so after
+// releasing the mutex.
+func (q *WorkQueue) tryTakeWithoutPermissionLocked(
+	tenant *tenantInfo, allowedWithoutPermissionThreshold int64, requestedCount int64,
+) bool {
+	if tenant.tenantCPUTokens <= allowedWithoutPermissionThreshold || !q.mu.tenantTokensEnabled {
+		return false
+	}
+	tenant.intervalStats.admittedCount++
+	tenant.intervalStats.cpuTokens += requestedCount
+	tenant.used += uint64(requestedCount)
+	if isInTenantHeap(tenant) {
+		q.mu.tenantHeap.fix(tenant)
+	}
+	return true
 }
 
 func (q *WorkQueue) hasWaitingRequests() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	sll := slowMutexWithLogging{name: "q.mu has-waiting", mu: &q.mu.Mutex}
+	sll.lock()
+	defer sll.unlock()
 	return len(q.mu.tenantHeap) > 0
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// Reduce critical section by getting time before mutex acquisition.
 	now := q.timeNow()
-	q.mu.Lock()
+	sll := slowMutexWithLogging{name: "q.mu granted", mu: &q.mu.Mutex}
+	sll.lock()
 	if len(q.mu.tenantHeap) == 0 {
-		q.mu.Unlock()
+		sll.unlock()
 		return 0
 	}
 	if fn := q.knobs.DisableWorkQueueGranting; fn != nil && fn() {
-		q.mu.Unlock()
+		sll.unlock()
 		return 0
 	}
 	tenant := q.mu.tenantHeap[0]
 	var item *waitingWork
-	if len(tenant.waitingWorkHeap) > 0 {
-		item = heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
+	if len(tenant.waitingForGranterHeap) > 0 {
+		item = heap.Pop(&tenant.waitingForGranterHeap).(*waitingWork)
 	} else {
 		item = heap.Pop(&tenant.openEpochsHeap).(*waitingWork)
 	}
 	waitDur := now.Sub(item.enqueueingTime)
 	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
 	tenant.used += uint64(item.requestedCount)
+	tenant.intervalStats.admittedCount++
+	tenant.intervalStats.cpuTokens += item.requestedCount
+	tenant.intervalStats.waitTimeSum += waitDur
+	tenant.intervalStats.waitForTenantTokensTimeSum += item.waitForTenantTokens
 	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
 	} else {
@@ -924,7 +1126,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// Cannot read tenant after release q.mu, since tenant may get GC'd and
 	// reused.
 	tenantID := tenant.id
-	q.mu.Unlock()
+	sll.unlock()
 
 	if !item.replicated.Enabled {
 		// Reduce critical section by sending on channel after releasing mutex.
@@ -934,7 +1136,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		// to replicated writes.
 		if log.V(1) {
 			q.mu.Lock()
-			queueLen := tenant.waitingWorkHeap.Len()
+			queueLen := tenant.waitingForGranterHeap.Len()
 			q.mu.Unlock()
 
 			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
@@ -966,13 +1168,15 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 }
 
 func (q *WorkQueue) gcTenantsAndResetUsed() {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	sll := slowMutexWithLogging{name: "q.mu gc-tenants", mu: &q.mu.Mutex}
+	sll.lock()
+	defer sll.unlock()
 	// With large numbers of active tenants, this iteration could hold the lock
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
 	for id, info := range q.mu.tenants {
-		if info.used == 0 && !isInTenantHeap(info) {
+		if info.used == 0 && !isInTenantHeap(info) && info.tenantCPUTokens == info.tenantCPUBurstLimit &&
+			info.waitingForTenantTokensHeap.Len() == 0 {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		} else {
@@ -995,6 +1199,10 @@ func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed i
 	if !ok {
 		return
 	}
+	q.adjustTenantUsedLocked(tenant, additionalUsed)
+}
+
+func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, additionalUsed int64) {
 	if additionalUsed < 0 {
 		toReturn := uint64(-additionalUsed)
 		if tenant.used < toReturn {
@@ -1032,9 +1240,13 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 		tenant := q.mu.tenants[id]
 		s.Printf("\n tenant-id: %d used: %d, w: %d, fifo: %d", tenant.id, tenant.used,
 			tenant.weight, tenant.fifoPriorityThreshold)
-		if len(tenant.waitingWorkHeap) > 0 {
+		if q.isCPUTimeTokenQueue {
+			s.Printf(" cpu: %d (burst %d) (work %d)", tenant.tenantCPUTokens,
+				tenant.tenantCPUBurstLimit, tenant.cpuTokenEstimator.meanCPUTokens())
+		}
+		if len(tenant.waitingForGranterHeap) > 0 {
 			// Sort items within waitingWorkHeap
-			sortedWaitingWorkHeap := slices.Clone(tenant.waitingWorkHeap)
+			sortedWaitingWorkHeap := slices.Clone(tenant.waitingForGranterHeap)
 			sort.Sort(&sortedWaitingWorkHeap)
 			s.Printf(" waiting work heap:")
 			for i := range sortedWaitingWorkHeap {
@@ -1060,6 +1272,17 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 					sortedOpenEpochsHeap[i].createTime/int64(time.Millisecond),
 					sortedOpenEpochsHeap[i].epoch,
 					sortedOpenEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
+			}
+		}
+		if len(tenant.waitingForTenantTokensHeap) > 0 {
+			sortedWaitingForTenantTokensHeap := slices.Clone(tenant.waitingForTenantTokensHeap)
+			sort.Sort(&sortedWaitingForTenantTokensHeap)
+			s.Printf(" waiting for-tenant tokens heap:")
+			for i := range sortedWaitingForTenantTokensHeap {
+				s.Printf(" [%d: pri: %d, ct: %d, qt: %d]", i,
+					sortedWaitingForTenantTokensHeap[i].priority,
+					sortedWaitingForTenantTokensHeap[i].createTime/int64(time.Millisecond),
+					sortedWaitingForTenantTokensHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
 			}
 		}
 	}
@@ -1170,6 +1393,58 @@ func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 		return true
 	}
 	for updateNextBatch() {
+	}
+}
+
+func (q *WorkQueue) tenantCPUTokensTick(tokensToAdd int64) (withoutPermissionTokens []int64) {
+	func() {
+		sll := slowMutexWithLogging{name: "q.mu tokens-tick", mu: &q.mu.Mutex}
+		sll.lock()
+		defer sll.unlock()
+		for _, tenant := range q.mu.tenants {
+			tenant.adjustTenantCPUTokens(tokensToAdd)
+			withoutPermissionTokens = append(withoutPermissionTokens,
+				q.tryAdmitFromWaitingForTenantTokensHeapLocked(tenant)...)
+		}
+	}()
+	return withoutPermissionTokens
+}
+
+func (q *WorkQueue) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
+	now := q.timeSource.Now()
+	sll := slowMutexWithLogging{name: "q.mu burst-limit", mu: &q.mu.Mutex}
+	sll.lock()
+	defer sll.unlock()
+	q.mu.tenantCPUBurstLimit = tokens
+	q.mu.tenantTokensEnabled = enabled
+	q.mu.cpuTokenEstimator.updateEstimate()
+	logTenantStats := false
+	if now.Sub(q.mu.lastTenantLogTime) > 30*time.Second {
+		q.mu.lastTenantLogTime = now
+		logTenantStats = true
+	}
+	for _, tenant := range q.mu.tenants {
+		lastTokens := tenant.tenantCPUTokens
+		burstDelta := tokens - tenant.tenantCPUBurstLimit
+		tenant.tenantCPUBurstLimit = tokens
+		tenant.adjustTenantCPUTokens(burstDelta)
+		minTokens := -tenant.tenantCPUBurstLimit / 4
+		if tenant.tenantCPUTokens < minTokens {
+			// This can happen if we reduced the burst limit by a large amount.
+			tenant.tenantCPUTokens = minTokens
+		}
+		tenant.cpuTokenEstimator.updateEstimate()
+
+		if logTenantStats && tenant.intervalStats.admittedCount > 0 {
+			log.Infof(q.ambientCtx,
+				"KV WorkQueue tenant %d(%s): count=%d mean-wait=%s mean-wait-for-tenant-tokens=%s per-work-tokens=%s",
+				tenant.id, time.Duration(lastTokens),
+				tenant.intervalStats.admittedCount,
+				tenant.intervalStats.waitTimeSum/time.Duration(tenant.intervalStats.admittedCount),
+				tenant.intervalStats.waitForTenantTokensTimeSum/time.Duration(tenant.intervalStats.admittedCount),
+				time.Duration(tenant.intervalStats.cpuTokens/tenant.intervalStats.admittedCount))
+			tenant.intervalStats = tenantIntervalStats{}
+		}
 	}
 }
 
@@ -1355,9 +1630,9 @@ type tenantInfo struct {
 	// simply (a) do not do used--, if used is already zero, or (b) do not do
 	// used-- if the request was canceled. This does imply some inaccuracy in
 	// accounting -- it can be fixed if needed.
-	used            uint64
-	waitingWorkHeap waitingWorkHeap
-	openEpochsHeap  openEpochsHeap
+	used                  uint64
+	waitingForGranterHeap waitingWorkHeap
+	openEpochsHeap        openEpochsHeap
 
 	priorityStates priorityStates
 	// priority >= fifoPriorityThreshold is FIFO. This uses a larger sized type
@@ -1367,6 +1642,21 @@ type tenantInfo struct {
 	// The heapIndex is maintained by the heap.Interface methods, and represents
 	// the heapIndex of the item in the heap.
 	heapIndex int
+
+	// Behavior when WorkQueue.isCPUTimeTokenQueue .
+	tenantCPUTokens            int64
+	tenantCPUBurstLimit        int64
+	waitingForTenantTokensHeap waitingWorkHeap
+	cpuTokenEstimator          meanCPUTokenEstimator
+
+	intervalStats tenantIntervalStats
+}
+
+type tenantIntervalStats struct {
+	admittedCount              int64
+	waitTimeSum                time.Duration
+	waitForTenantTokensTimeSum time.Duration
+	cpuTokens                  int64
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1382,18 +1672,47 @@ var tenantInfoPool = sync.Pool{
 	},
 }
 
-func newTenantInfo(id uint64, weight uint32) *tenantInfo {
+func newTenantInfo(id uint64, weight uint32, burstLimit int64) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
 	*ti = tenantInfo{
 		id:                    id,
 		weight:                weight,
-		waitingWorkHeap:       ti.waitingWorkHeap,
+		waitingForGranterHeap: ti.waitingForGranterHeap,
 		openEpochsHeap:        ti.openEpochsHeap,
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
 		fifoPriorityThreshold: int(admissionpb.LowPri),
 		heapIndex:             -1,
+		tenantCPUTokens:       burstLimit,
+		tenantCPUBurstLimit:   burstLimit,
 	}
 	return ti
+}
+
+func (ti *tenantInfo) adjustTenantCPUTokens(delta int64) {
+	ti.tenantCPUTokens += delta
+	if ti.tenantCPUTokens > ti.tenantCPUBurstLimit {
+		ti.tenantCPUTokens = ti.tenantCPUBurstLimit
+	}
+}
+
+type heapForWaitingWorkKind uint8
+
+const (
+	waitingForTenantTokensHeapKind heapForWaitingWorkKind = iota
+	openEpochsHeapKind
+	waitingForGranterHeapKind
+)
+
+func (ti *tenantInfo) pushWaitingWorkOntoHeap(heapKind heapForWaitingWorkKind, ww *waitingWork) {
+	ww.heapKind = heapKind
+	switch heapKind {
+	case waitingForTenantTokensHeapKind:
+		heap.Push(&ti.waitingForTenantTokensHeap, ww)
+	case openEpochsHeapKind:
+		heap.Push(&ti.openEpochsHeap, ww)
+	case waitingForGranterHeapKind:
+		heap.Push(&ti.waitingForGranterHeap, ww)
+	}
 }
 
 func releaseTenantInfo(ti *tenantInfo) {
@@ -1402,17 +1721,17 @@ func releaseTenantInfo(ti *tenantInfo) {
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
-	if cap(ti.waitingWorkHeap) > 100 {
-		ti.waitingWorkHeap = nil
+	if cap(ti.waitingForGranterHeap) > 100 {
+		ti.waitingForGranterHeap = nil
 	}
 	if cap(ti.openEpochsHeap) > 100 {
 		ti.openEpochsHeap = nil
 	}
 
 	*ti = tenantInfo{
-		waitingWorkHeap: ti.waitingWorkHeap,
-		openEpochsHeap:  ti.openEpochsHeap,
-		priorityStates:  makePriorityStates(ti.priorityStates.ps),
+		waitingForGranterHeap: ti.waitingForGranterHeap,
+		openEpochsHeap:        ti.openEpochsHeap,
+		priorityStates:        makePriorityStates(ti.priorityStates.ps),
 	}
 	tenantInfoPool.Put(ti)
 }
@@ -1483,13 +1802,13 @@ type waitingWork struct {
 	// heapIndex is used by the waitingWorkHeap and the openEpochsHeap since a
 	// waitingWork is only in one of them.
 	heapIndex int
-	// Set to true when added to waitingWorkHeap. Only used to disambiguate
-	// which heap the waitingWork is in, when we know it is in one of the heaps.
-	// The only state transition is from false => true, and never restored back
-	// to false.
-	inWaitingWorkHeap bool
-	enqueueingTime    time.Time
-	replicated        ReplicatedWorkInfo
+	// Used to disambiguate which heap the waitingWork is in, when we know it is
+	// in one of the heaps.
+	heapKind       heapForWaitingWorkKind
+	enqueueingTime time.Time
+	replicated     ReplicatedWorkInfo
+
+	waitForTenantTokens time.Duration
 }
 
 var waitingWorkPool = sync.Pool{
@@ -1652,7 +1971,6 @@ func (wwh *waitingWorkHeap) Push(x interface{}) {
 	n := len(*wwh)
 	item := x.(*waitingWork)
 	item.heapIndex = n
-	item.inWaitingWorkHeap = true
 	*wwh = append(*wwh, item)
 }
 
@@ -1983,16 +2301,16 @@ func (q *StoreWorkQueue) Admit(
 		info.CreateTime = q.sequenceReplicatedWork(info.CreateTime, info.ReplicatedWorkInfo)
 	}
 
-	enabled, err := q.q[wc].Admit(ctx, info.WorkInfo)
-	if err != nil {
-		return StoreWorkHandle{}, err
+	resp := q.q[wc].Admit(ctx, info.WorkInfo)
+	if resp.Err != nil {
+		return StoreWorkHandle{}, resp.Err
 	}
 
 	h := StoreWorkHandle{
 		tenantID:            info.TenantID,
 		workClass:           wc,
 		writeTokens:         info.RequestedCount,
-		useAdmittedWorkDone: enabled,
+		useAdmittedWorkDone: resp.Enabled,
 	}
 	if !info.ReplicatedWorkInfo.Enabled {
 		return h, nil
@@ -2338,4 +2656,35 @@ func (q *StoreWorkQueue) sequenceReplicatedWork(createTime int64, info Replicate
 	// We're assuming sequenceReplicatedWork is never invoked concurrently for a
 	// given RangeID.
 	return seq.sequence(createTime)
+}
+
+type meanCPUTokenEstimator struct {
+	// Reset to 0 periodically,
+	intWorkDoneCount     int64
+	intWorkDoneCPUTokens int64
+
+	// Smoothed estimation. Done in SetTenantCPUTokensBurstLimit.
+	meanWorkCPUTokens int64
+}
+
+func (e *meanCPUTokenEstimator) init(mean int64) {
+	*e = meanCPUTokenEstimator{meanWorkCPUTokens: mean}
+}
+
+// Caller periodically, at the same time as SetTenantCPUTokensBurstLimit.
+func (e *meanCPUTokenEstimator) updateEstimate() {
+	const alpha = 0.5
+	if e.intWorkDoneCount > 0 {
+		intMean := e.intWorkDoneCPUTokens / e.intWorkDoneCount
+		e.meanWorkCPUTokens = int64(alpha*float64(intMean) + (1-alpha)*float64(e.meanWorkCPUTokens))
+	}
+}
+
+func (e *meanCPUTokenEstimator) meanCPUTokens() int64 {
+	return max(1, e.meanWorkCPUTokens)
+}
+
+func (e *meanCPUTokenEstimator) workDone(cpuTokens int64) {
+	e.intWorkDoneCount++
+	e.intWorkDoneCPUTokens += cpuTokens
 }
