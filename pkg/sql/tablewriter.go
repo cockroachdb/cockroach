@@ -233,3 +233,11 @@ func (tb *tableWriterBase) close(ctx context.Context) {
 		tb.rows = nil
 	}
 }
+
+func (tb *tableWriterBase) createSavepoint(ctx context.Context) (kv.SavepointToken, error) {
+	return tb.txn.CreateSavepoint(ctx)
+}
+
+func (tb *tableWriterBase) rollbackToSavepoint(ctx context.Context, s kv.SavepointToken) error {
+	return tb.txn.RollbackToSavepoint(ctx, s)
+}
