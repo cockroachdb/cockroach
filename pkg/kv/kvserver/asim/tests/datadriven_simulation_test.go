@@ -220,7 +220,7 @@ func TestDataDriven(t *testing.T) {
 				var addToExisting bool
 				var placementTypeStr string = "even"
 				var leaseWeights, replicaWeights []float64
-
+				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
 				scanIfExists(t, d, "placement_type", &placementTypeStr)
@@ -239,6 +239,7 @@ func TestDataDriven(t *testing.T) {
 				var replicaPlacement state.Configuration
 				if placementType == gen.ReplicaPlacement {
 					parsed, err := state.Parse(d.Input)
+					buf.WriteString(parsed.String())
 					require.NoError(t, err)
 					replicaPlacement = parsed
 				}
@@ -260,7 +261,7 @@ func TestDataDriven(t *testing.T) {
 				} else {
 					rangeGen = gen.MultiRanges{nextRangeGen}
 				}
-				return ""
+				return buf.String()
 			case "topology":
 				var sample = len(runs)
 				scanIfExists(t, d, "sample", &sample)

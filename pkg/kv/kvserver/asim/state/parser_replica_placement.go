@@ -15,15 +15,20 @@ import (
 
 // TODO(wenyihu6): add more tests
 
+type StoreWeight struct {
+	StoreID StoreID
+	Weight  float64
+}
+
 // ReplicaConfig represents a replica configuration with its type and store weights
 type ReplicaConfig struct {
 	ReplicaType  roachpb.ReplicaType
-	StoreWeights map[StoreID]float64
+	StoreWeights []StoreWeight
 }
 
 // LeaseConfig represents lease weights for stores
 type LeaseConfig struct {
-	StoreWeights map[StoreID]float64
+	ReplicaIdx int
 }
 
 // Configuration represents the complete configuration for replicas and leases
@@ -32,9 +37,18 @@ type Configuration struct {
 	ReplicaConfigs []ReplicaConfig
 }
 
+func (c Configuration) String() string {
+	buf := strings.Builder{}
+	buf.WriteString(fmt.Sprintf("lease: %d\n", c.LeaseWeights.ReplicaIdx))
+	for i, replica := range c.ReplicaConfigs {
+		buf.WriteString(fmt.Sprintf("replica%d: store_weights=%v replica_type=%s\n", i+1, replica.StoreWeights, replica.ReplicaType))
+	}
+	return buf.String()
+}
+
 // parseStoreWeights parses store weights from a string in the format "[s1=1,s2=2,...]"
 // and returns normalized weights that sum to 1.0
-func parseStoreWeights(weightsStr string) (map[StoreID]float64, error) {
+func parseStoreWeights(weightsStr string) ([]StoreWeight, error) {
 	// Remove surrounding brackets
 	weightsStr = strings.Trim(weightsStr, "[]")
 
@@ -79,9 +93,12 @@ func parseStoreWeights(weightsStr string) (map[StoreID]float64, error) {
 	}
 
 	// Normalize weights
-	normalized := make(map[StoreID]float64)
+	normalized := make([]StoreWeight, 0)
 	for store, weight := range storeWeights {
-		normalized[store] = float64(weight) / float64(totalWeight)
+		normalized = append(normalized, StoreWeight{
+			StoreID: store,
+			Weight:  float64(weight) / float64(totalWeight),
+		})
 	}
 
 	return normalized, nil
@@ -95,7 +112,6 @@ func parseStoreWeights(weightsStr string) (map[StoreID]float64, error) {
 //	replica2: store_weights=[s1=2,s2=1,...] replica_type=NON_VOTER
 func Parse(input string) (Configuration, error) {
 	var res Configuration
-	res.LeaseWeights.StoreWeights = make(map[StoreID]float64)
 
 	for i, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
@@ -126,8 +142,7 @@ func Parse(input string) (Configuration, error) {
 			if err != nil {
 				return Configuration{}, fmt.Errorf("line %d: invalid replica number in lease specification", i+1)
 			}
-			// Set weight of 1.0 for the specified replica
-			res.LeaseWeights.StoreWeights = map[StoreID]float64{StoreID(replicaNum): 1.0}
+			res.LeaseWeights.ReplicaIdx = replicaNum
 			continue
 		}
 
