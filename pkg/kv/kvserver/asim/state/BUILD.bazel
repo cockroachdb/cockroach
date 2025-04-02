@@ -27,7 +27,6 @@ go_library(
         "//pkg/kv/kvserver/allocator/mma",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/load",
@@ -39,7 +38,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigreporter",
-        "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -47,7 +45,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_google_btree//:btree",
-        "@com_github_stretchr_testify//require",
         "@org_golang_google_protobuf//proto",
     ],
 )

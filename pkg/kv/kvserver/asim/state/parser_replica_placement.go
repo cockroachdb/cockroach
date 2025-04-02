@@ -90,7 +90,7 @@ func parseStoreWeights(weightsStr string) (map[StoreID]float64, error) {
 // Parse parses the configuration string and returns a Configuration struct.
 // The expected format is:
 //
-//	lease: lease_weights=[s1=1,s2=2,...]
+//	lease: r1
 //	replica1: store_weights=[s1=1,s2=2,...] replica_type=VOTER
 //	replica2: store_weights=[s1=2,s2=1,...] replica_type=NON_VOTER
 func Parse(input string) (Configuration, error) {
@@ -118,18 +118,16 @@ func Parse(input string) (Configuration, error) {
 			if len(fields) < 1 {
 				return Configuration{}, fmt.Errorf("line %d: insufficient fields", i+1)
 			}
-			// Parse weights field
-			weightsField := fields[0]
-			_, weightsStr, found := strings.Cut(weightsField, "=")
-			if !found {
-				return Configuration{}, fmt.Errorf("line %d: invalid weights field", i+1)
+			// Parse rN field
+			if len(fields[0]) < 2 || fields[0][0] != 'r' {
+				return Configuration{}, fmt.Errorf("line %d: lease must be specified as 'rN' where N is a number", i+1)
 			}
-
-			weights, err := parseStoreWeights(weightsStr)
+			replicaNum, err := strconv.Atoi(fields[0][1:])
 			if err != nil {
-				return Configuration{}, fmt.Errorf("line %d: %v", i+1, err)
+				return Configuration{}, fmt.Errorf("line %d: invalid replica number in lease specification", i+1)
 			}
-			res.LeaseWeights.StoreWeights = weights
+			// Set weight of 1.0 for the specified replica
+			res.LeaseWeights.StoreWeights = map[StoreID]float64{StoreID(replicaNum): 1.0}
 			continue
 		}
 
