@@ -68,6 +68,8 @@ var eventBufferPool = sync.Pool{
 	New: func() interface{} { return new(eventBuffer) },
 }
 
+// event is a single event that can be observed by the ingester.
+// At most one of transaction or statement will be non-nil.
 type event struct {
 	sessionID   clusterunique.ID
 	transaction *sqlstats.RecordedTxnStats
@@ -157,7 +159,7 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.registry.ObserveStatement(e.sessionID, e.statement)
+			i.registry.ObserveStatement(e.statement)
 		} else if e.transaction != nil {
 			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		} else if e.sessionID != (clusterunique.ID{}) {
@@ -167,41 +169,36 @@ func (i *ConcurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
-func (i *ConcurrentBufferIngester) ObserveStatement(
-	sessionID clusterunique.ID, statement *sqlstats.RecordedStmtStats,
-) {
+func (i *ConcurrentBufferIngester) ObserveStatement(statement *sqlstats.RecordedStmtStats) {
 	if !i.registry.enabled() {
 		return
 	}
 
 	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterStmtInterceptor != nil {
-		i.testingKnobs.InsightsWriterStmtInterceptor(sessionID, statement)
+		i.testingKnobs.InsightsWriterStmtInterceptor(statement.SessionID, statement)
 		return
 	}
 
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
-			sessionID: sessionID,
 			statement: statement,
 		}
 	})
 }
 
-func (i *ConcurrentBufferIngester) ObserveTransaction(
-	sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats,
-) {
+func (i *ConcurrentBufferIngester) ObserveTransaction(transaction *sqlstats.RecordedTxnStats) {
 	if !i.registry.enabled() {
 		return
 	}
 
 	if i.testingKnobs != nil && i.testingKnobs.InsightsWriterTxnInterceptor != nil {
-		i.testingKnobs.InsightsWriterTxnInterceptor(sessionID, transaction)
+		i.testingKnobs.InsightsWriterTxnInterceptor(transaction.SessionID, transaction)
 		return
 	}
 
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
-			sessionID:   sessionID,
+			sessionID:   transaction.SessionID,
 			transaction: transaction,
 		}
 	})

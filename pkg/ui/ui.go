@@ -31,29 +31,12 @@ import (
 )
 
 const (
-	utc int64 = iota
-	americaNewYork
 	cspHeader = "default-src 'self'; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"font-src 'self' data:; " +
 		"img-src 'self' data:; " +
 		"connect-src 'self' https://register.cockroachdb.com;"
 )
-
-var _ = settings.RegisterEnumSetting(
-	settings.ApplicationLevel,
-	"ui.display_timezone",
-	"the timezone used to format timestamps in the ui",
-	"Etc/UTC",
-	map[int64]string{
-		utc:            "Etc/UTC",
-		americaNewYork: "America/New_York",
-		// Adding new timezones?
-		// Add them to the allowlist of included timezones!
-		// See pkg/ui/workspaces/cluster-ui/webpack.config.js
-		// and pkg/ui/workspaces/db-console/webpack.config.js.
-	},
-	settings.WithPublic)
 
 // TODO(davidh): This setting can be removed after 24.3 since it only
 // affects legacy DB page.
