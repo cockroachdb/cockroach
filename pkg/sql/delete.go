@@ -41,6 +41,10 @@ type deleteRun struct {
 	// to BatchedNext() has completed the work already.
 	done bool
 
+	// resultRowBuffer is used to prepare a result row for accumulation
+	// into the row container above, when rowsNeeded is set.
+	resultRowBuffer tree.Datums
+
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
@@ -67,6 +71,10 @@ func (d *deleteNode) startExec(params runParams) error {
 		d.run.td.rows = rowcontainer.NewRowContainer(
 			params.p.Mon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(d.columns))
+		d.run.resultRowBuffer = make([]tree.Datum, len(d.columns))
+		for i := range d.run.resultRowBuffer {
+			d.run.resultRowBuffer[i] = tree.DNull
+		}
 	}
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -185,7 +193,6 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		//
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
-		resultValues := make(tree.Datums, d.run.td.rows.NumCols())
 		largestRetIdx := -1
 		for i := range d.run.rowIdxToRetIdx {
 			retIdx := d.run.rowIdxToRetIdx[i]
@@ -193,7 +200,7 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 				if retIdx >= largestRetIdx {
 					largestRetIdx = retIdx
 				}
-				resultValues[retIdx] = deleteVals[i]
+				d.run.resultRowBuffer[retIdx] = deleteVals[i]
 			}
 		}
 
@@ -207,12 +214,12 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 			for i := 0; i < d.run.numPassthrough; i++ {
 				largestRetIdx++
-				resultValues[largestRetIdx] = passthroughValues[i]
+				d.run.resultRowBuffer[largestRetIdx] = passthroughValues[i]
 			}
 
 		}
 
-		if _, err := d.run.td.rows.AddRow(params.ctx, resultValues); err != nil {
+		if _, err := d.run.td.rows.AddRow(params.ctx, d.run.resultRowBuffer); err != nil {
 			return err
 		}
 	}
