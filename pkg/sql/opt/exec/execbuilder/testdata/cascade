@@ -1067,12 +1067,14 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ from: loop_a
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 1
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • scan
@@ -1101,18 +1103,21 @@ quality of service: regular
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
         │   │ actual row count: 0
+        │   │ execution time: 0µs
         │   │ from: loop_b
         │   │
         │   └── • buffer
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
         │       │ actual row count: 1
+        │       │ execution time: 0µs
         │       │ label: buffer 1
         │       │
         │       └── • hash join (semi)
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
         │           │ actual row count: 1
+        │           │ execution time: 0µs
         │           │ estimated max memory allocated: 0 B
         │           │ equality: (cascade_delete) = (id)
         │           │
@@ -1136,6 +1141,7 @@ quality of service: regular
         │                 sql nodes: <hidden>
         │                 regions: <hidden>
         │                 actual row count: 1
+        │                 execution time: 0µs
         │                 estimated row count: 1
         │                 label: buffer 1000000
         │
@@ -1148,12 +1154,14 @@ quality of service: regular
                 │   │ sql nodes: <hidden>
                 │   │ regions: <hidden>
                 │   │ actual row count: 0
+                │   │ execution time: 0µs
                 │   │ from: loop_a
                 │   │
                 │   └── • buffer
                 │       │ sql nodes: <hidden>
                 │       │ regions: <hidden>
                 │       │ actual row count: 1
+                │       │ execution time: 0µs
                 │       │ label: buffer 1
                 │       │
                 │       └── • lookup join
@@ -1167,6 +1175,7 @@ quality of service: regular
                 │           │ KV pairs read: 2
                 │           │ KV bytes read: 8 B
                 │           │ KV gRPC calls: 1
+                │           │ execution time: 0µs
                 │           │ estimated max memory allocated: 0 B
                 │           │ table: loop_a@loop_a_cascade_delete_idx
                 │           │ equality: (id) = (cascade_delete)
@@ -1175,6 +1184,7 @@ quality of service: regular
                 │               │ sql nodes: <hidden>
                 │               │ regions: <hidden>
                 │               │ actual row count: 1
+                │               │ execution time: 0µs
                 │               │ estimated max memory allocated: 0 B
                 │               │ estimated row count: 1
                 │               │ distinct on: id
@@ -1183,6 +1193,7 @@ quality of service: regular
                 │                     sql nodes: <hidden>
                 │                     regions: <hidden>
                 │                     actual row count: 1
+                │                     execution time: 0µs
                 │                     estimated row count: 1
                 │                     label: buffer 1000000
                 │
@@ -1471,18 +1482,21 @@ quality of service: regular
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ actual row count: 1
+│   │ execution time: 0µs
 │   │ from: p138974
 │   │
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
 │       │ actual row count: 0
+│       │ execution time: 0µs
 │       │ label: buffer 1
 │       │
 │       └── • filter
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
+│           │ execution time: 0µs
 │           │ filter: v = 1
 │           │
 │           └── • scan

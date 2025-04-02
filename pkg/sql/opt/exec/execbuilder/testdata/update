@@ -1013,6 +1013,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1029,6 +1030,7 @@ quality of service: regular
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: ($1) = (k)
@@ -1039,6 +1041,7 @@ quality of service: regular
               sql nodes: <hidden>
               regions: <hidden>
               actual row count: 1
+              execution time: 0µs
               size: 1 column, 1 row
 
 statement ok
@@ -1066,6 +1069,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1081,6 +1085,7 @@ quality of service: regular
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: (k) = (k)
@@ -1097,6 +1102,7 @@ quality of service: regular
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ table: t137352@t137352_a_idx
             │ equality: ($1) = (a)
@@ -1106,6 +1112,7 @@ quality of service: regular
                   sql nodes: <hidden>
                   regions: <hidden>
                   actual row count: 1
+                  execution time: 0µs
                   size: 1 column, 1 row
 
 statement ok
@@ -1134,6 +1141,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1150,6 +1158,7 @@ quality of service: regular
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ table: t137352@t137352_pkey
         │ equality: ($1) = (k)
@@ -1160,6 +1169,7 @@ quality of service: regular
               sql nodes: <hidden>
               regions: <hidden>
               actual row count: 1
+              execution time: 0µs
               size: 1 column, 1 row
 
 statement ok
@@ -1200,6 +1210,7 @@ quality of service: regular
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 1
+│ execution time: 0µs
 │ table: t137352
 │ set: b
 │ auto commit
@@ -1218,6 +1229,7 @@ quality of service: regular
             │ KV rows decoded: 0
             │ KV bytes read: 0 B
             │ KV gRPC calls: 0
+            │ execution time: 0µs
             │ estimated max memory allocated: 0 B
             │ estimated row count: 10
             │ table: t137352@t137352_pkey
@@ -1233,6 +1245,7 @@ quality of service: regular
                 │ KV rows decoded: 0
                 │ KV bytes read: 0 B
                 │ KV gRPC calls: 0
+                │ execution time: 0µs
                 │ estimated max memory allocated: 0 B
                 │ estimated row count: 10
                 │ table: t137352@t137352_a_idx
@@ -1249,6 +1262,7 @@ quality of service: regular
                     │ KV rows decoded: 0
                     │ KV bytes read: 0 B
                     │ KV gRPC calls: 0
+                    │ execution time: 0µs
                     │ estimated max memory allocated: 0 B
                     │ estimated row count: 1
                     │ table: t137352@t137352_pkey
@@ -1259,4 +1273,5 @@ quality of service: regular
                           sql nodes: <hidden>
                           regions: <hidden>
                           actual row count: 1
+                          execution time: 0µs
                           size: 1 column, 1 row
