@@ -451,11 +451,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		} else {
 			mustEntryEq(t, thinCopy, test.thin)
 		}
-
-		if newEnt == nil {
-			newEnt = &thinCopy
-		}
-		mustEntryEq(t, *newEnt, test.fat)
+		mustEntryEq(t, newEnt, test.fat)
 
 		if dump := getRecAndFinish().String(); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
