@@ -35,8 +35,9 @@ func (env *InteractionEnv) handleCompact(t *testing.T, d datadriven.TestData) er
 
 // Compact compacts the given node's log to the supplied log index (inclusive).
 func (env *InteractionEnv) Compact(idx int, index uint64) error {
-	if err := env.Nodes[idx].Compact(index); err != nil {
+	if err := env.Nodes[idx].Storage.Compact(index); err != nil {
 		return err
 	}
+	env.Nodes[idx].RawNode.Compact()
 	return env.RaftLog(idx)
 }
