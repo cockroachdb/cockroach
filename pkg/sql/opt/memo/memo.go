@@ -205,6 +205,7 @@ type Memo struct {
 	minRowCount                                float64
 	checkInputMinRowCount                      float64
 	planLookupJoinsWithReverseScans            bool
+	useInsertFastPath                          bool
 	internal                                   bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
@@ -302,6 +303,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		minRowCount:                                evalCtx.SessionData().OptimizerMinRowCount,
 		checkInputMinRowCount:                      evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		planLookupJoinsWithReverseScans:            evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans,
+		useInsertFastPath:                          evalCtx.SessionData().InsertFastPath,
 		internal:                                   evalCtx.SessionData().Internal,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
@@ -476,6 +478,7 @@ func (m *Memo) IsStale(
 		m.minRowCount != evalCtx.SessionData().OptimizerMinRowCount ||
 		m.checkInputMinRowCount != evalCtx.SessionData().OptimizerCheckInputMinRowCount ||
 		m.planLookupJoinsWithReverseScans != evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans ||
+		m.useInsertFastPath != evalCtx.SessionData().InsertFastPath ||
 		m.internal != evalCtx.SessionData().Internal ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
