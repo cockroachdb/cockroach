@@ -117,8 +117,9 @@ func (s *hotRangesLoggingScheduler) shouldLog() bool {
 // logHotRanges collects the hot ranges from this node's status server and
 // sends them to the TELEMETRY log channel.
 func (s *hotRangesLoggingScheduler) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
+
 	resp, err := s.sServer.HotRangesV2(ctx,
-		&serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges})
+		&serverpb.HotRangesRequest{Nodes: []string{"local"}, PageSize: ReportTopHottestRanges})
 	if err != nil {
 		log.Warningf(ctx, "failed to get hot ranges: %s", err)
 		return
