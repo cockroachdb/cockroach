@@ -147,11 +147,14 @@ func (s *hotRangesLoggingScheduler) shouldLog() bool {
 // logHotRanges collects the hot ranges from this node's status server and
 // sends them to the TELEMETRY log channel.
 func (s *hotRangesLoggingScheduler) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
-	req := &serverpb.HotRangesRequest{NodeID: "local", PageSize: ReportTopHottestRanges}
+	req := &serverpb.HotRangesRequest{}
+
 	// if we are running in single tenant mode, only log the ranges on the status server.
 	if !s.multiTenant {
-		req.NodeID = "local"
+		req.Nodes = []string{"local"}
+		req.PageSize = ReportTopHottestRanges
 	}
+
 	resp, err := s.sServer.HotRangesV2(ctx, req)
 	if err != nil {
 		log.Warningf(ctx, "failed to get hot ranges: %s", err)

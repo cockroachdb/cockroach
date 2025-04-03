@@ -30,7 +30,7 @@ const HotRanges = (props: HotRangesProps) => {
 
   useEffect(() => {
     const request = new cockroach.server.serverpb.HotRangesRequest({
-      node_id: nodeId,
+      nodes: [nodeId],
       page_size: pageSize,
       page_token: pageToken,
     });

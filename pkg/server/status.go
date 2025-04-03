@@ -2887,32 +2887,35 @@ func (s *systemStatusServer) HotRangesV2(
 	}
 
 	var requestedNodes []roachpb.NodeID
-	if len(req.NodeID) > 0 {
-		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
-		if err != nil {
-			return nil, err
-		}
-		if local {
-			resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
+	if len(req.Nodes) > 0 {
+		requestedNodes = []roachpb.NodeID{}
+		for _, nodeID := range req.Nodes {
+			requestedNodeID, local, err := s.parseNodeID(nodeID)
 			if err != nil {
 				return nil, err
 			}
-
-			// If operating as the system tenant, add descriptor data to the reposnse.
-			if !tenantID.IsSet() {
-				err = s.addDescriptorsToHotRanges(ctx, resp)
+			if local {
+				resp, err := s.localHotRanges(ctx, tenantID, requestedNodeID)
 				if err != nil {
 					return nil, err
 				}
-			}
 
-			response.Ranges = append(response.Ranges, resp.Ranges...)
-			return response, nil
+				// If operating as the system tenant, add descriptor data to the reposnse.
+				if !tenantID.IsSet() {
+					err = s.addDescriptorsToHotRanges(ctx, resp)
+					if err != nil {
+						return nil, err
+					}
+				}
+
+				response.Ranges = append(response.Ranges, resp.Ranges...)
+				return response, nil
+			}
+			requestedNodes = append(requestedNodes, requestedNodeID)
 		}
-		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
+	remoteRequest := serverpb.HotRangesRequest{Nodes: []string{"local"}, TenantID: req.TenantID}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]*serverpb.HotRangesResponseV2_HotRange, error) {
 		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil {
