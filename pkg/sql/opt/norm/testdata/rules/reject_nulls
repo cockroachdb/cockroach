@@ -1673,21 +1673,22 @@ project
  ├── sort
  │    ├── columns: tab_3663.col2_3:2 tab_3663.col2_5:4 tab_3663.col2_6:5!null tab_3663.col2_9:6 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12
  │    ├── ordering: -11,-12,+4
- │    └── semi-join (hash)
+ │    └── semi-join-apply
  │         ├── columns: tab_3663.col2_3:2 tab_3663.col2_5:4 tab_3663.col2_6:5!null tab_3663.col2_9:6 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12
  │         ├── scan table2_89986 [as=tab_3663]
  │         │    └── columns: tab_3663.col2_3:2 tab_3663.col2_5:4 tab_3663.col2_6:5!null tab_3663.col2_9:6 tab_3663.crdb_internal_mvcc_timestamp:11 tab_3663.tableoid:12
- │         ├── inner-join (cross)
- │         │    ├── columns: tab_3664.col2_12:21!null col1_3:28!null col1_8:33!null tab_3666.col2_9:43 tab_3666.col2_11:45!null
- │         │    ├── fd: (33)==(45), (45)==(33), (21)==(28), (28)==(21)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: tab_3664.col2_12:21!null col1_3:28!null col1_8:33 tab_3666.col2_9:43!null tab_3666.col2_11:45 col2_9:62!null
+ │         │    ├── outer: (6)
+ │         │    ├── fd: ()-->(43,62), (43)==(62), (62)==(43), (21)==(28), (28)==(21)
+ │         │    ├── scan table2_89986 [as=tab_3664]
+ │         │    │    └── columns: tab_3664.col2_12:21
  │         │    ├── inner-join (hash)
- │         │    │    ├── columns: tab_3664.col2_12:21!null col1_3:28!null col1_8:33!null tab_3666.col2_9:43 tab_3666.col2_11:45!null
- │         │    │    ├── fd: (33)==(45), (45)==(33), (21)==(28), (28)==(21)
- │         │    │    ├── scan table2_89986 [as=tab_3664]
- │         │    │    │    └── columns: tab_3664.col2_12:21
- │         │    │    ├── inner-join (hash)
- │         │    │    │    ├── columns: col1_3:28!null col1_8:33!null tab_3666.col2_9:43 tab_3666.col2_11:45!null
- │         │    │    │    ├── fd: (33)==(45), (45)==(33)
+ │         │    │    ├── columns: col1_3:28 col1_8:33 tab_3666.col2_9:43!null tab_3666.col2_11:45 col2_9:62!null
+ │         │    │    ├── outer: (6)
+ │         │    │    ├── fd: ()-->(43,62), (43)==(62), (62)==(43)
+ │         │    │    ├── left-join (hash)
+ │         │    │    │    ├── columns: col1_3:28 col1_8:33 tab_3666.col2_9:43 tab_3666.col2_11:45
  │         │    │    │    ├── scan table2_89986 [as=tab_3666]
  │         │    │    │    │    └── columns: tab_3666.col2_9:43 tab_3666.col2_11:45
  │         │    │    │    ├── scan table1_89986
@@ -1699,12 +1700,18 @@ project
  │         │    │    │    │              └── col1_0:25 + col1_1:26
  │         │    │    │    └── filters
  │         │    │    │         └── col1_8:33 = tab_3666.col2_11:45 [outer=(33,45), constraints=(/33: (/NULL - ]; /45: (/NULL - ]), fd=(33)==(45), (45)==(33)]
+ │         │    │    ├── project
+ │         │    │    │    ├── columns: col2_9:62
+ │         │    │    │    ├── outer: (6)
+ │         │    │    │    ├── fd: ()-->(62)
+ │         │    │    │    ├── scan table2_89986 [as=tab_3667]
+ │         │    │    │    └── projections
+ │         │    │    │         └── tab_3663.col2_9:6 [as=col2_9:62, outer=(6)]
  │         │    │    └── filters
- │         │    │         └── tab_3664.col2_12:21 = col1_3:28 [outer=(21,28), constraints=(/21: (/NULL - ]; /28: (/NULL - ]), fd=(21)==(28), (28)==(21)]
- │         │    ├── scan table2_89986 [as=tab_3667]
- │         │    └── filters (true)
- │         └── filters
- │              └── tab_3666.col2_9:43 = tab_3663.col2_9:6 [outer=(6,43), constraints=(/6: (/NULL - ]; /43: (/NULL - ]), fd=(6)==(43), (43)==(6)]
+ │         │    │         └── tab_3666.col2_9:43 = col2_9:62 [outer=(43,62), constraints=(/43: (/NULL - ]; /62: (/NULL - ]), fd=(43)==(62), (62)==(43)]
+ │         │    └── filters
+ │         │         └── tab_3664.col2_12:21 = col1_3:28 [outer=(21,28), constraints=(/21: (/NULL - ]; /28: (/NULL - ]), fd=(21)==(28), (28)==(21)]
+ │         └── filters (true)
  └── projections
       ├── 0 [as="?column?":67]
       ├── '23:43:20-08:00:00' [as="?column?":68]

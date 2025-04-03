@@ -427,7 +427,16 @@ $left
     $right:(Project
         $input:*
         $projections:* &
-            (AllAreRemappingProjections $projections)
+            (AllAreRemappingProjections $projections) &
+
+            # Ensure that there are no outer-column references in the
+            # projections, since otherwise hoisting the Project could change
+            # the result of a left-join due to the NULL-extended rows.
+            # TODO(drewk): we could allow this for inner-joins.
+            (ColsAreSubset
+                (ProjectionOuterCols $projections)
+                (OutputCols $input)
+            )
         $passThrough:*
     )
     $on:*
